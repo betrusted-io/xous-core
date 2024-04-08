@@ -190,6 +190,14 @@ pub fn allocate_swap(cfg: &mut BootConfig) {
 pub fn copy_args(cfg: &mut BootConfig) {
     // With swap enabled, copy_args also merges the IniS arguments from the swap region into the kernel
     // arguments, and patches the length field accordingly.
+    //
+    // So much terrible, no-good awful code. This is basically not Rust code, because the whole thing
+    // is operating on pointers conjured out of thin air and confused senses of what is a byte-size
+    // versus a word-size. Deserves a re-write, but it would also require reworking a bunch of other
+    // bootloader code because the core issue is the way the kernel arguments are defined for parsing and
+    // iteration.
+    //
+    // Suspect many bugs in this code.
 
     // Read in the swap arguments: should be located at beginning of the first page of swap.
     // Safety: only safe because we know that the decrypt was setup by read_swap_config(), and no pages
@@ -202,9 +210,8 @@ pub fn copy_args(cfg: &mut BootConfig) {
 
     // Merge the args list to target RAM
     // Reserve space for the primary arg list + swap args - swap's XArg structure (7 words long)
-    println!("length of swap arg: {}", swap_xarg.data[0] as usize);
-    let final_len = cfg.args.size() + swap_xarg.data[0] as usize - 7;
-    cfg.init_size += final_len;
+    let final_len = cfg.args.size() / core::mem::size_of::<u32>() + swap_xarg.data[0] as usize - 7;
+    cfg.init_size += final_len * 4;
     let runtime_arg_buffer = cfg.get_top();
     // places the boot image kernel arguments
     unsafe {
@@ -217,8 +224,7 @@ pub fn copy_args(cfg: &mut BootConfig) {
     // untouched data is 0 or something and try an optimization based on that).
     let merged_arg_slice =
         unsafe { core::slice::from_raw_parts_mut(runtime_arg_buffer as *mut usize, final_len) };
-    let mut arg_index = cfg.args.size();
-    println!("orig arg size: {}, new size: {}", cfg.args.size(), final_len);
+    let mut arg_index = cfg.args.size() / core::mem::size_of::<u32>();
 
     // append the swap arguments, and patch the size field accordingly
     for a in j {
@@ -234,14 +240,16 @@ pub fn copy_args(cfg: &mut BootConfig) {
                     a.size as usize / core::mem::size_of::<usize>() + 2,
                 )
             };
-            println!(
-                "copying arg: 0x{:x}, size: {}. index: {}, len: {}, data: {:x?}",
-                a.name,
-                a.size,
-                arg_index,
-                arg_slice.len(),
-                arg_slice
-            );
+            if SDBG {
+                println!(
+                    "Extending args with: 0x{:x}, size: {}. index: {}, len: {}, data: {:x?}",
+                    a.name,
+                    a.size,
+                    arg_index,
+                    arg_slice.len(),
+                    arg_slice
+                );
+            }
             merged_arg_slice[arg_index..arg_index + arg_slice.len()].copy_from_slice(arg_slice);
             arg_index += arg_slice.len();
         } else {
@@ -474,7 +482,7 @@ fn copy_processes(cfg: &mut BootConfig) {
             TagType::IniS => {
                 // if swap is not enabled, don't pull this code in, to keep the bootloader light-weight
                 #[cfg(feature = "swap")]
-                if let Some(swap) = cfg.swap_hal.as_mut() {
+                {
                     // IniS does not necessarily exist in linear memory space, so it requires special
                     // handling. Instead of copying the IniS data into RAM, it's copied
                     // into encrypted swap (e.g. the RAM area (again, not necessarily in
@@ -523,15 +531,21 @@ fn copy_processes(cfg: &mut BootConfig) {
 
                         if let Some(swap_offset) = working_page_swap_offset {
                             if (last_copy_vaddr & !(PAGE_SIZE - 1)) != (dst_page_vaddr & !(PAGE_SIZE - 1)) {
+                                if SDBG {
+                                    println!(
+                                        "New section not aligned: last_copy_vaddr {:x}, dst_page_vaddr {:x}",
+                                        last_copy_vaddr, dst_page_vaddr
+                                    );
+                                }
                                 // handle case that the new section destination address is outside of the
                                 // current page
-                                swap.encrypt_swap_to(
+                                cfg.swap_hal.as_mut().expect("swap HAL uninit").encrypt_swap_to(
                                     &mut working_buf,
                                     swap_offset * 0x1000,
-                                    dst_page_vaddr & !(PAGE_SIZE - 1),
+                                    last_copy_vaddr & !(PAGE_SIZE - 1),
                                     _pid,
                                 );
-                                cfg.map_swap(swap_offset * 0x1000, dst_page_vaddr & !(PAGE_SIZE - 1), _pid);
+                                cfg.map_swap(swap_offset * 0x1000, last_copy_vaddr & !(PAGE_SIZE - 1), _pid);
                                 working_buf.fill(0);
                                 working_page_swap_offset = Some(cfg.swap_free_page);
                                 working_buf_dirty = false;
@@ -559,8 +573,13 @@ fn copy_processes(cfg: &mut BootConfig) {
                             let src_swap_img_page = src_swap_img_addr & !(PAGE_SIZE - 1);
                             let src_swap_img_offset = src_swap_img_addr & (PAGE_SIZE - 1);
                             // it's almost free to check, so we check at every loop start
-                            if swap.decrypt_page_addr() != src_swap_img_page {
-                                swap.decrypt_src_page_at(src_swap_img_page);
+                            if cfg.swap_hal.as_ref().expect("swap HAL uninit").decrypt_page_addr()
+                                != src_swap_img_page
+                            {
+                                cfg.swap_hal
+                                    .as_mut()
+                                    .expect("swap HAL uninit")
+                                    .decrypt_src_page_at(src_swap_img_page);
                             }
                             let decrypt_avail = remaining_in_page(src_swap_img_addr);
                             let dst_page_avail = remaining_in_page(dst_page_vaddr);
@@ -572,7 +591,8 @@ fn copy_processes(cfg: &mut BootConfig) {
                             };
                             if !section.no_copy() {
                                 working_buf[dst_page_offset..dst_page_offset + copyable].copy_from_slice(
-                                    &swap.buf_as_ref()[src_swap_img_offset..src_swap_img_offset + copyable],
+                                    &cfg.swap_hal.as_ref().expect("swap HAL uninit").buf_as_ref()
+                                        [src_swap_img_offset..src_swap_img_offset + copyable],
                                 );
                                 working_buf_dirty = true;
                             } else {
@@ -585,17 +605,20 @@ fn copy_processes(cfg: &mut BootConfig) {
                             src_swap_img_addr += copyable;
                             // if we filled up the destination, grab another page.
                             if (dst_page_vaddr & (PAGE_SIZE - 1)) == 0 {
+                                // the current vaddr is pointing to a new, empty vaddr; we want to write
+                                // out the previous, full page. Compute that here.
+                                let full_page_vaddr = dst_page_vaddr - PAGE_SIZE;
                                 // we copied exactly dst_page_avail, causing us to wrap around to 0
                                 // write the existing page to swap, and allocate a new swap page
-                                swap.encrypt_swap_to(
+                                cfg.swap_hal.as_mut().expect("swap HAL uninit").encrypt_swap_to(
                                     &mut working_buf,
                                     working_page_swap_offset.unwrap() * 0x1000,
-                                    dst_page_vaddr & !(PAGE_SIZE - 1),
+                                    full_page_vaddr & !(PAGE_SIZE - 1),
                                     _pid,
                                 );
                                 cfg.map_swap(
                                     working_page_swap_offset.take().unwrap() * 0x1000,
-                                    dst_page_vaddr & !(PAGE_SIZE - 1),
+                                    full_page_vaddr & !(PAGE_SIZE - 1),
                                     _pid,
                                 );
                                 working_buf.fill(0);
@@ -620,7 +643,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                     }
                     // flush the encryption buffer
                     if working_buf_dirty {
-                        swap.encrypt_swap_to(
+                        cfg.swap_hal.as_mut().expect("swap HAL uninit").encrypt_swap_to(
                             &mut working_buf,
                             working_page_swap_offset.unwrap() * 0x1000,
                             last_copy_vaddr & !(PAGE_SIZE - 1),
