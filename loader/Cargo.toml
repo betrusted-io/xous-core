@@ -55,7 +55,6 @@ renode = [
     "utralib/renode",
     "ed25519-dalek-loader/renode",
     "curve25519-dalek-loader/renode",
-    "resume",
     "secboot",
     "sha2-loader",
 ]
