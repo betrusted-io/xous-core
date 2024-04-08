@@ -175,6 +175,13 @@ fn main() {
                 .help("Output file to store swap image data")
         )
         .arg(
+            Arg::with_name("swap-debug-name")
+                .long("swap-debug-name")
+                .takes_value(true)
+                .value_name("OUTPUT")
+                .help("Output file to store swap debug data")
+        )
+        .arg(
             Arg::with_name("debug")
                 .short("d")
                 .long("debug")
@@ -479,6 +486,18 @@ fn main() {
 
         println!("Swap arguments: {}", sargs);
         println!("Swap data created in file {}", swap_filename);
+
+        match matches.value_of("swap-debug-name") {
+            Some(sf_dbg) => {
+                let sf =
+                    File::create(sf_dbg).unwrap_or_else(|_| panic!("Couldn't create debug file {}", sf_dbg));
+                sargs.write(&sf).expect("Couldn't write debug swap image");
+                println!("Swap debug created in file {}", sf_dbg);
+            }
+            None => {
+                // Argument wasn't specified, do nothing.
+            }
+        }
     }
     println!("Runtime will require {} bytes to track memory allocations", ram_config.memory_required);
     if let Some(s) = swap {
