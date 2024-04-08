@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{swap::SWAP_PT_VADDR, *};
 
 /// Phase 2 bootloader
 ///
@@ -92,12 +92,15 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             process_offset -= allocated;
             pid += 1;
         } else if tag.name == u32::from_le_bytes(*b"IniS") {
-            let inis = MiniElf::new(&tag);
-            println!("\n\nMapping IniS program into memory");
-            let allocated = inis.load(cfg, process_offset, pid, &env, IniType::IniS);
-            println!("IniS Allocated {:x}", allocated);
-            process_offset -= allocated;
-            pid += 1;
+            #[cfg(feature = "swap")]
+            {
+                let inis = MiniElf::new(&tag);
+                println!("\n\nMapping IniS program into memory");
+                let allocated = inis.load(cfg, process_offset, pid, &env, IniType::IniS);
+                println!("IniS Allocated {:x}", allocated);
+                process_offset -= allocated;
+                pid += 1;
+            }
         } else if tag.name == u32::from_le_bytes(*b"XKrn") {
             println!("\n\nCopying kernel into memory");
             let xkrn = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
@@ -176,6 +179,54 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             kernel_irq_sp,
             krn_struct_start,
         );
+    }
+    #[cfg(feature = "swap")]
+    {
+        // map the swap page table into PID space 2
+        let tt_address = cfg.processes[SWAPPER_PID as usize].satp << 12;
+        let root = unsafe { &mut *(tt_address as *mut PageTable) };
+        let mut swap_pt_vaddr_offset = 0;
+        // map page table roots
+        for p in 0..cfg.processes.len() {
+            // loop is "decomposed" because iterating over processes causes a borrow conflic
+            let swap_root = cfg.processes[p].swap_root;
+            println!(
+                "Mapping root swap PT to PID 2 @paddr {:x} -> vaddr {:x}",
+                swap_root,
+                SWAP_PT_VADDR + swap_pt_vaddr_offset
+            );
+            cfg.map_page(
+                root,
+                swap_root,
+                SWAP_PT_VADDR + swap_pt_vaddr_offset,
+                FLG_R | FLG_W | FLG_VALID,
+                SWAPPER_PID,
+            );
+            swap_pt_vaddr_offset += PAGE_SIZE;
+        }
+        // now chase down any entries in the roots, and map valid pages
+        for p in 0..cfg.processes.len() {
+            let root_pt = unsafe { &*(cfg.processes[p].swap_root as *const PageTable) };
+            for &entry in root_pt.entries.iter() {
+                if entry & FLG_VALID != 0 {
+                    let paddr = (entry & !0x3FF) << 2;
+                    println!(
+                        "Mapping L2 swap PT to PID 2 @paddr {:x} -> vaddr {:x}",
+                        paddr,
+                        SWAP_PT_VADDR + swap_pt_vaddr_offset
+                    );
+                    cfg.map_page(
+                        root,
+                        paddr,
+                        SWAP_PT_VADDR + swap_pt_vaddr_offset,
+                        FLG_R | FLG_W | FLG_VALID,
+                        SWAPPER_PID,
+                    );
+                    swap_pt_vaddr_offset += PAGE_SIZE;
+                }
+            }
+        }
+        // TODO: patch kernel arguments with Swap values...?
     }
 
     if VVDBG {
