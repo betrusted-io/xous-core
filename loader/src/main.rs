@@ -44,6 +44,8 @@ const STACK_PAGE_COUNT: usize = 8;
 
 const VDBG: bool = false; // verbose debug
 const VVDBG: bool = false; // very verbose debug
+#[cfg(feature = "swap")]
+const SDBG: bool = true; // swap debug
 
 #[cfg(test)]
 mod test;
