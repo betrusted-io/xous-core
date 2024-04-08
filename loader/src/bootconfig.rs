@@ -175,6 +175,7 @@ impl BootConfig {
         }
     }
 
+    #[cfg(feature = "swap")]
     fn alloc_swap(&mut self) -> *mut usize {
         self.init_size += PAGE_SIZE;
         let pg = self.get_top();
