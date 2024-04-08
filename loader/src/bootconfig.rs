@@ -62,11 +62,6 @@ pub struct BootConfig {
     #[cfg(feature = "swap")]
     pub swap: Option<&'static SwapDescriptor>,
 
-    /// Swap root page table. Array of root page tables, one per process.
-    /// Kernel does not get swap, so the first entry belongs to PID 2.
-    #[cfg(feature = "swap")]
-    pub swap_page_table: &'static mut [&'static mut PageTable],
-
     /// Offset of the current free page in swap
     #[cfg(feature = "swap")]
     pub swap_free_page: usize,
@@ -91,8 +86,6 @@ impl Default for BootConfig {
             swap_hal: None,
             #[cfg(feature = "swap")]
             swap: None,
-            #[cfg(feature = "swap")]
-            swap_page_table: Default::default(),
             #[cfg(feature = "swap")]
             swap_free_page: 0,
         }
@@ -180,6 +173,66 @@ impl BootConfig {
             8 => panic!("map_page doesn't work on 64-bit devices"),
             _ => panic!("unrecognized word size: {}", WORD_SIZE),
         }
+    }
+
+    fn alloc_swap(&mut self) -> *mut usize {
+        self.init_size += PAGE_SIZE;
+        let pg = self.get_top();
+        unsafe {
+            // Grab the page address and zero it out
+            bzero(pg as *mut usize, pg.add(PAGE_SIZE / mem::size_of::<usize>()) as *mut usize);
+        }
+        pg as *mut usize
+    }
+
+    #[cfg(feature = "swap")]
+    pub fn map_swap(&mut self, swap_phys: usize, virt: usize, owner: XousPid) {
+        if SDBG {
+            println!("    swap pa {:x} -> va {:x}", swap_phys, virt);
+        }
+        let ppn1 = (swap_phys >> 22) & ((1 << 12) - 1);
+        let ppn0 = (swap_phys >> 12) & ((1 << 10) - 1);
+
+        let vpn1 = (virt >> 22) & ((1 << 10) - 1);
+        let vpn0 = (virt >> 12) & ((1 << 10) - 1);
+        assert!(owner != 0);
+        let l1_pt = unsafe {
+            core::slice::from_raw_parts_mut(
+                self.processes[owner as usize - 1].swap_root as *mut usize,
+                mem::size_of::<PageTable>() / mem::size_of::<usize>(),
+            )
+        };
+
+        // Allocate a new level 1 pagetable entry if one doesn't exist.
+        if l1_pt[vpn1] & FLG_VALID == 0 {
+            let na = self.alloc_swap() as usize;
+            if SDBG {
+                println!(
+                    "Swap Level 1 page table is invalid ({:08x}) @ {:08x} -- allocating a new one @ {:08x}",
+                    unsafe { l1_pt.as_ptr().add(vpn1) } as usize,
+                    l1_pt[vpn1],
+                    na
+                );
+            }
+            // Mark this entry as a leaf node (WRX as 0), and indicate
+            // it is a valid page by setting "V".
+            l1_pt[vpn1] = ((na >> 12) << 10) | FLG_VALID;
+        }
+
+        let l0_pt_idx = unsafe { &mut (*(((l1_pt[vpn1] << 2) & !((1 << 12) - 1)) as *mut PageTable)) };
+        let l0_pt = &mut l0_pt_idx.entries;
+
+        // Ensure the entry hasn't already been mapped to a different address.
+        if l0_pt[vpn0] & 1 != 0 && (l0_pt[vpn0] & 0xffff_fc00) != ((ppn1 << 20) | (ppn0 << 10)) {
+            panic!(
+                "Swap page {:08x} was already allocated to {:08x}, so cannot map to {:08x}!",
+                swap_phys,
+                (l0_pt[vpn0] >> 10) << 12,
+                virt
+            );
+        }
+        let previous_flags = l0_pt[vpn0] & 0xf;
+        l0_pt[vpn0] = (ppn1 << 20) | (ppn0 << 10) | previous_flags | FLG_VALID;
     }
 
     pub fn map_page_32(
