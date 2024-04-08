@@ -22,6 +22,7 @@ pub const FLG_U: usize = 0x10;
 pub const FLG_A: usize = 0x40;
 #[cfg(not(feature = "atsama5d27"))]
 pub const FLG_D: usize = 0x80;
+pub const FLG_P: usize = 0x200;
 
 pub const MINIELF_FLG_W: u8 = 1;
 #[allow(dead_code)]
@@ -163,6 +164,20 @@ impl MiniElf {
 
             (translation_table, tt_address)
         };
+        /*
+        #[cfg(not(feature = "atsama5d27"))]
+        let (tt, _tt_address) = {
+            let tt_address = allocator.processes[pid as usize - 1].satp << 12;
+            let tt = unsafe { &mut *(tt_address as *mut PageTable) };
+
+            (tt, tt_address)
+        };
+        #[cfg(feature = "atsama5d27")]
+        let (tt, _tt_address) = {
+            let tt_address = allocator.processes[pid as usize - 1].ttbr0;
+            let translation_table = tt_address as *mut TranslationTableMemory;
+            (translation_table, tt_address)
+        }; */
 
         // Turn the satp address into a pointer
         println!("    Pagetable @ {:08x}", _tt_address);
@@ -228,14 +243,15 @@ impl MiniElf {
                 | FLG_X
                 | FLG_VALID
                 | if section.flags() & 1 == 1 { FLG_W } else { 0 }
-                | if section.flags() & 4 == 4 { FLG_X } else { 0 };
+                | if section.flags() & 4 == 4 { FLG_X } else { 0 }
+                | if ini_type == IniType::IniS { FLG_P } else { 0 };
 
             let copy_to_ram = ((section.flags() as u8) & MINIELF_FLG_W) != 0;
             if (section.virt as usize) < previous_addr {
                 panic!("init section addresses are not strictly increasing");
             }
 
-            if copy_to_ram || ini_type == IniType::IniE {
+            if (copy_to_ram || ini_type == IniType::IniE) && (ini_type != IniType::IniS) {
                 let mut this_page = section.virt as usize & !(PAGE_SIZE - 1);
                 let mut bytes_to_copy = section.len();
 
@@ -353,10 +369,7 @@ impl MiniElf {
                     println!("section is 0x{:x} bytes long; mapping {} pages", section.len(), pages_to_map);
                 }
 
-                // --- map FLASH pages to virtual memory ---
-                // TODO: handle mapping of swap-located pages to virtual memory
-                #[cfg(feature = "swap")]
-                todo!("Handle swap-located pages mapping into virtual memory");
+                // --- map FLASH or swap pages to virtual memory ---
                 while pages_to_map > 0 {
                     let map_phys_addr = (image_phys_base + section_map_phys_offset) & !(PAGE_SIZE - 1);
                     allocator.map_page(tt, map_phys_addr, virt_page, flag_defaults, pid as XousPid);
