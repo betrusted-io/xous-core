@@ -19,6 +19,9 @@ pub struct InitialProcess {
 
     /// Address of the start of the env block
     pub env: usize,
+
+    #[cfg(feature = "swap")]
+    pub swap_root: usize,
 }
 
 /// Phase 1:
@@ -59,6 +62,9 @@ pub fn phase_1(cfg: &mut BootConfig) {
 
     // All further allocations must be page-aligned.
     cfg.init_size = (cfg.init_size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+
+    #[cfg(feature = "swap")]
+    allocate_swap(cfg);
 
     // Additionally, from this point on all allocations come from
     // their respective processes rather than kernel memory.
@@ -131,6 +137,53 @@ pub fn allocate_processes(cfg: &mut BootConfig) {
     }
     cfg.processes =
         unsafe { slice::from_raw_parts_mut(processes as *mut InitialProcess, process_count as usize) };
+}
+
+#[cfg(feature = "swap")]
+pub fn allocate_swap(cfg: &mut BootConfig) {
+    let process_count = cfg.init_process_count + 1;
+    let swap_pt_size = process_count * mem::size_of::<PageTable>();
+    cfg.init_size += swap_pt_size;
+    let swap_pt_base = cfg.get_top();
+    unsafe { bzero(swap_pt_base, swap_pt_base.add(swap_pt_size / mem::size_of::<usize>())) }
+
+    for (index, proc) in cfg.processes.iter_mut().enumerate() {
+        proc.swap_root = swap_pt_base as usize + index * mem::size_of::<PageTable>();
+    }
+
+    // allocate a root PT entries - moved earlier in boot process because Swap needs it in Phase 1
+    /*
+    for pid in 2..process_count + 1 {
+        #[cfg(not(feature = "atsama5d27"))]
+        {
+            let tt_address = cfg.alloc() as usize;
+            let tt = unsafe { &mut *(tt_address as *mut PageTable) };
+            cfg.map_page(tt, tt_address, PAGE_TABLE_ROOT_OFFSET, FLG_R | FLG_W | FLG_VALID, pid as XousPid);
+            cfg.processes[pid - 1].satp = 0x8000_0000 | ((pid as usize) << 22) | (tt_address >> 12);
+        }
+        #[cfg(feature = "atsama5d27")]
+        {
+            let pid_idx = pid as usize - 1;
+
+            // Allocate a page to handle the top-level memory translation
+            let tt_address = cfg.alloc_l1_page_table(pid) as usize;
+            cfg.processes[pid_idx].ttbr0 = tt_address;
+
+            let translation_table = tt_address as *mut TranslationTableMemory;
+            // Map all four pages of the translation table to the process' virtual address space
+            for offset in 0..4 {
+                let offset = offset * PAGE_SIZE;
+                cfg.map_page(
+                    translation_table,
+                    tt_address + offset,
+                    PAGE_TABLE_ROOT_OFFSET + offset,
+                    FLG_R | FLG_W | FLG_VALID,
+                    pid as XousPid,
+                );
+            }
+            cfg.processes[pid - 1].asid = pid;
+        };
+    }*/
 }
 
 #[cfg(feature = "swap")]
@@ -219,7 +272,7 @@ pub fn copy_args(cfg: &mut BootConfig) {
     };
     digest.write(&xarg_data);
     // patch the CRC
-    let mut merged_arg_slice_u8 = unsafe {
+    let merged_arg_slice_u8 = unsafe {
         core::slice::from_raw_parts_mut(
             runtime_arg_buffer as *mut u8,
             final_len * core::mem::size_of::<u32>(),
@@ -465,8 +518,6 @@ fn copy_processes(cfg: &mut BootConfig) {
                     let mut last_copy_vaddr = 0;
 
                     for section in inis.sections.iter() {
-                        let flags = section.flags() as u8;
-
                         let mut dst_page_vaddr = section.virt as usize;
                         let mut bytes_to_copy = section.len();
 
@@ -480,9 +531,10 @@ fn copy_processes(cfg: &mut BootConfig) {
                                     dst_page_vaddr & !(PAGE_SIZE - 1),
                                     _pid,
                                 );
+                                cfg.map_swap(swap_offset * 0x1000, dst_page_vaddr & !(PAGE_SIZE - 1), _pid);
                                 working_buf.fill(0);
                                 working_page_swap_offset = Some(cfg.swap_free_page);
-                                let mut working_buf_dirty = false;
+                                working_buf_dirty = false;
                                 cfg.swap_free_page += 1;
                             }
                         } else {
@@ -537,13 +589,18 @@ fn copy_processes(cfg: &mut BootConfig) {
                                 // write the existing page to swap, and allocate a new swap page
                                 swap.encrypt_swap_to(
                                     &mut working_buf,
+                                    working_page_swap_offset.unwrap() * 0x1000,
+                                    dst_page_vaddr & !(PAGE_SIZE - 1),
+                                    _pid,
+                                );
+                                cfg.map_swap(
                                     working_page_swap_offset.take().unwrap() * 0x1000,
                                     dst_page_vaddr & !(PAGE_SIZE - 1),
                                     _pid,
                                 );
                                 working_buf.fill(0);
                                 working_page_swap_offset = Some(cfg.swap_free_page);
-                                let mut working_buf_dirty = false;
+                                working_buf_dirty = false;
                                 cfg.swap_free_page += 1;
                             }
                         }
@@ -552,9 +609,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                         // the section load address.
                         last_copy_vaddr = dst_page_vaddr;
 
-                        if true
-                        /* VDBG */
-                        {
+                        if SDBG {
                             println!("Looping to the next section (swap)");
                             println!(
                                 "  swap_free_page: {:x}, dst_page_vaddr: {:x}, src_swap_img_addr: {:x}",
@@ -567,6 +622,11 @@ fn copy_processes(cfg: &mut BootConfig) {
                     if working_buf_dirty {
                         swap.encrypt_swap_to(
                             &mut working_buf,
+                            working_page_swap_offset.unwrap() * 0x1000,
+                            last_copy_vaddr & !(PAGE_SIZE - 1),
+                            _pid,
+                        );
+                        cfg.map_swap(
                             working_page_swap_offset.take().unwrap() * 0x1000,
                             last_copy_vaddr & !(PAGE_SIZE - 1),
                             _pid,
