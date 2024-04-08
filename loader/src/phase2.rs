@@ -1,4 +1,6 @@
-use crate::{swap::SWAP_PT_VADDR, *};
+#[cfg(feature = "swap")]
+use crate::swap::SWAP_PT_VADDR;
+use crate::*;
 
 /// Phase 2 bootloader
 ///
@@ -76,6 +78,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
     let mut kernel_exception_sp = 0;
     #[cfg(feature = "atsama5d27")]
     let mut kernel_irq_sp = 0;
+    let mut xkrn: Option<&ProgramDescription> = None;
     for tag in args.iter() {
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
@@ -102,27 +105,33 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
                 pid += 1;
             }
         } else if tag.name == u32::from_le_bytes(*b"XKrn") {
-            println!("\n\nCopying kernel into memory");
-            let xkrn = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
-            let load_size_rounded = ((xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1))
-                + (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1));
-            #[cfg(not(feature = "atsama5d27"))]
-            {
-                xkrn.load(cfg, process_offset - load_size_rounded, 1);
-            }
-            #[cfg(feature = "atsama5d27")]
-            {
-                (ktext_offset, kdata_offset, kernel_exception_sp, kernel_irq_sp) =
-                    xkrn.load(cfg, process_offset - load_size_rounded, 1);
-                (ktext_size, kdata_size, ktext_virt_offset, kdata_virt_offset) = (
-                    (xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1),
-                    (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)),
-                    xkrn.text_offset as usize,
-                    xkrn.data_offset as usize,
-                );
-            }
-            process_offset -= load_size_rounded;
+            xkrn = Some(unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) });
         }
+    }
+    // Ensure that the kernel is loaded last, even if the arguments are out of order.
+    // This is necessary due to the swap-append arguments.
+    if let Some(xkrn) = xkrn {
+        println!("\n\nCopying kernel into memory");
+        let load_size_rounded = ((xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1))
+            + (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1));
+        #[cfg(not(feature = "atsama5d27"))]
+        {
+            xkrn.load(cfg, process_offset - load_size_rounded, 1);
+        }
+        #[cfg(feature = "atsama5d27")]
+        {
+            (ktext_offset, kdata_offset, kernel_exception_sp, kernel_irq_sp) =
+                xkrn.load(cfg, process_offset - load_size_rounded, 1);
+            (ktext_size, kdata_size, ktext_virt_offset, kdata_virt_offset) = (
+                (xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1),
+                (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)),
+                xkrn.text_offset as usize,
+                xkrn.data_offset as usize,
+            );
+        }
+        // process_offset -= load_size_rounded;
+    } else {
+        panic!("No kernel in arguments, can't boot.");
     }
 
     println!("Done loading.");
@@ -322,6 +331,9 @@ impl ProgramDescription {
 
         // Turn the satp address into a pointer
         let satp = unsafe { &mut *(satp_address as *mut PageTable) };
+        if SDBG {
+            println!("Kernel root PT address: {:x}", satp_address);
+        }
         allocator.map_page(
             satp,
             satp_address,
