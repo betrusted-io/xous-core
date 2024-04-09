@@ -19,9 +19,6 @@ pub struct InitialProcess {
 
     /// Address of the start of the env block
     pub env: usize,
-
-    #[cfg(feature = "swap")]
-    pub swap_root: usize,
 }
 
 /// Phase 1:
@@ -42,6 +39,7 @@ pub fn phase_1(cfg: &mut BootConfig) {
     //
     // As of Xous 0.8, the top page is bootloader stack, and the page below that is the 'clean suspend' page.
     cfg.init_size += GUARD_MEMORY_BYTES;
+    println!("Loader runtime stack should not exceed: {:x}", cfg.get_top() as usize);
 
     // The first region is defined as being "main RAM", which will be used
     // to keep track of allocations.
@@ -61,7 +59,15 @@ pub fn phase_1(cfg: &mut BootConfig) {
     }
 
     // All further allocations must be page-aligned.
+    #[cfg(feature = "swap")]
+    if SDBG {
+        println!(" -> cfg end pre-alignment: {:x}(-{:x})", cfg.get_top() as usize, cfg.init_size);
+    }
     cfg.init_size = (cfg.init_size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+    #[cfg(feature = "swap")]
+    if SDBG {
+        println!(" -> cfg end post-alignment: {:x}(-{:x})", cfg.get_top() as usize, cfg.init_size);
+    }
 
     #[cfg(feature = "swap")]
     allocate_swap(cfg);
@@ -73,6 +79,15 @@ pub fn phase_1(cfg: &mut BootConfig) {
     if !cfg.no_copy {
         println!("Copying processes");
         copy_processes(cfg);
+    }
+    // activate this to debug stack-smashing during copy_process(). The RPT is the first structure that gets
+    // smashed if the stack overflows! It should be all 0's if the stack did not overrun.
+    #[cfg(feature = "swap")]
+    if SDBG && VDBG {
+        for (i, r) in cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 1024..].chunks(32).enumerate()
+        {
+            println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + i * 32, r);
+        }
     }
 
     // Mark all pages as in-use by the kernel.
@@ -123,6 +138,14 @@ pub fn allocate_regions(cfg: &mut BootConfig) {
 
     cfg.runtime_page_tracker =
         unsafe { slice::from_raw_parts_mut(runtime_page_tracker as *mut XousPid, rpt_pages) };
+    #[cfg(feature = "swap")]
+    if SDBG {
+        println!(
+            " -> RPT range: {:x} - {:x}",
+            runtime_page_tracker as usize,
+            runtime_page_tracker as usize + rpt_pages * core::mem::size_of::<XousPid>()
+        );
+    }
 }
 
 pub fn allocate_processes(cfg: &mut BootConfig) {
@@ -137,6 +160,31 @@ pub fn allocate_processes(cfg: &mut BootConfig) {
     }
     cfg.processes =
         unsafe { slice::from_raw_parts_mut(processes as *mut InitialProcess, process_count as usize) };
+
+    #[cfg(feature = "swap")]
+    {
+        if SDBG {
+            println!(
+                " -> Processes range: {:x} - {:x}",
+                processes as usize,
+                processes as usize + cfg.processes.len() * mem::size_of::<InitialProcess>()
+            );
+        }
+        let swap_root_pt_size = process_count * mem::size_of::<usize>();
+        cfg.init_size += swap_root_pt_size;
+        let swap_root_pt = cfg.get_top();
+        unsafe {
+            bzero(swap_root_pt, swap_root_pt.add(process_count));
+        }
+        cfg.swap_root = unsafe { slice::from_raw_parts_mut(swap_root_pt, process_count as usize) };
+        if SDBG {
+            println!(
+                " -> Swap root pt range: {:x} - {:x}",
+                swap_root_pt as usize,
+                swap_root_pt as usize + cfg.swap_root.len() * mem::size_of::<usize>()
+            );
+        }
+    }
 }
 
 #[cfg(feature = "swap")]
@@ -144,46 +192,22 @@ pub fn allocate_swap(cfg: &mut BootConfig) {
     let process_count = cfg.init_process_count + 1;
     let swap_pt_size = process_count * mem::size_of::<PageTable>();
     cfg.init_size += swap_pt_size;
+    cfg.swap_offset += swap_pt_size;
     let swap_pt_base = cfg.get_top();
     unsafe { bzero(swap_pt_base, swap_pt_base.add(swap_pt_size / mem::size_of::<usize>())) }
-
-    for (index, proc) in cfg.processes.iter_mut().enumerate() {
-        proc.swap_root = swap_pt_base as usize + index * mem::size_of::<PageTable>();
+    // The page table proper is "unbound": we don't put it in a slice, we simply put references
+    // to each page in cfg.swap_root[]. I wonder if this is UB?
+    for (index, root) in cfg.swap_root.iter_mut().enumerate() {
+        *root = swap_pt_base as usize + index * mem::size_of::<PageTable>();
     }
 
-    // allocate a root PT entries - moved earlier in boot process because Swap needs it in Phase 1
-    /*
-    for pid in 2..process_count + 1 {
-        #[cfg(not(feature = "atsama5d27"))]
-        {
-            let tt_address = cfg.alloc() as usize;
-            let tt = unsafe { &mut *(tt_address as *mut PageTable) };
-            cfg.map_page(tt, tt_address, PAGE_TABLE_ROOT_OFFSET, FLG_R | FLG_W | FLG_VALID, pid as XousPid);
-            cfg.processes[pid - 1].satp = 0x8000_0000 | ((pid as usize) << 22) | (tt_address >> 12);
-        }
-        #[cfg(feature = "atsama5d27")]
-        {
-            let pid_idx = pid as usize - 1;
-
-            // Allocate a page to handle the top-level memory translation
-            let tt_address = cfg.alloc_l1_page_table(pid) as usize;
-            cfg.processes[pid_idx].ttbr0 = tt_address;
-
-            let translation_table = tt_address as *mut TranslationTableMemory;
-            // Map all four pages of the translation table to the process' virtual address space
-            for offset in 0..4 {
-                let offset = offset * PAGE_SIZE;
-                cfg.map_page(
-                    translation_table,
-                    tt_address + offset,
-                    PAGE_TABLE_ROOT_OFFSET + offset,
-                    FLG_R | FLG_W | FLG_VALID,
-                    pid as XousPid,
-                );
-            }
-            cfg.processes[pid - 1].asid = pid;
-        };
-    }*/
+    if SDBG {
+        println!(
+            " -> Swap pt data range: {:x} - {:x}",
+            swap_pt_base as usize,
+            swap_pt_base as usize + cfg.swap_root.len() * mem::size_of::<PageTable>()
+        );
+    }
 }
 
 #[cfg(feature = "swap")]
@@ -287,6 +311,14 @@ pub fn copy_args(cfg: &mut BootConfig) {
         )
     };
     merged_arg_slice_u8[4..6].copy_from_slice(&digest.sum16().to_le_bytes());
+
+    if SDBG {
+        println!(
+            " -> Patched kernel args range: {:x} - {:x}",
+            runtime_arg_buffer as usize,
+            runtime_arg_buffer as usize + final_len * mem::size_of::<usize>()
+        );
+    }
 }
 
 #[cfg(feature = "swap")]
@@ -515,8 +547,6 @@ fn copy_processes(cfg: &mut BootConfig) {
                     let mut working_buf = [0u8; 4096];
                     let mut working_buf_dirty = false;
 
-                    println!("tag size: {:x}", tag.size);
-                    println!("tag data: {:x?}", &tag.data);
                     let inis = MiniElf::new(&tag);
                     let mut src_swap_img_addr = inis.load_offset as usize;
 
@@ -545,7 +575,6 @@ fn copy_processes(cfg: &mut BootConfig) {
                                     last_copy_vaddr & !(PAGE_SIZE - 1),
                                     _pid,
                                 );
-                                cfg.map_swap(swap_offset * 0x1000, last_copy_vaddr & !(PAGE_SIZE - 1), _pid);
                                 working_buf.fill(0);
                                 working_page_swap_offset = Some(cfg.swap_free_page);
                                 working_buf_dirty = false;
@@ -616,11 +645,6 @@ fn copy_processes(cfg: &mut BootConfig) {
                                     full_page_vaddr & !(PAGE_SIZE - 1),
                                     _pid,
                                 );
-                                cfg.map_swap(
-                                    working_page_swap_offset.take().unwrap() * 0x1000,
-                                    full_page_vaddr & !(PAGE_SIZE - 1),
-                                    _pid,
-                                );
                                 working_buf.fill(0);
                                 working_page_swap_offset = Some(cfg.swap_free_page);
                                 working_buf_dirty = false;
@@ -646,11 +670,6 @@ fn copy_processes(cfg: &mut BootConfig) {
                         cfg.swap_hal.as_mut().expect("swap HAL uninit").encrypt_swap_to(
                             &mut working_buf,
                             working_page_swap_offset.unwrap() * 0x1000,
-                            last_copy_vaddr & !(PAGE_SIZE - 1),
-                            _pid,
-                        );
-                        cfg.map_swap(
-                            working_page_swap_offset.take().unwrap() * 0x1000,
                             last_copy_vaddr & !(PAGE_SIZE - 1),
                             _pid,
                         );
