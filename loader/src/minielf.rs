@@ -166,20 +166,6 @@ impl MiniElf {
 
             (translation_table, tt_address)
         };
-        /*
-        #[cfg(not(feature = "atsama5d27"))]
-        let (tt, _tt_address) = {
-            let tt_address = allocator.processes[pid as usize - 1].satp << 12;
-            let tt = unsafe { &mut *(tt_address as *mut PageTable) };
-
-            (tt, tt_address)
-        };
-        #[cfg(feature = "atsama5d27")]
-        let (tt, _tt_address) = {
-            let tt_address = allocator.processes[pid as usize - 1].ttbr0;
-            let translation_table = tt_address as *mut TranslationTableMemory;
-            (translation_table, tt_address)
-        }; */
 
         // Turn the satp address into a pointer
         println!("    Pagetable @ {:08x}", _tt_address);
