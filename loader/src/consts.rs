@@ -14,7 +14,10 @@ pub const KERNEL_STACK_TOP: usize = 0xfff8_0000;
 pub const KERNEL_LOAD_OFFSET: usize = 0xffd0_0000;
 pub const KERNEL_STACK_PAGE_COUNT: usize = 1;
 pub const KERNEL_ARGUMENT_OFFSET: usize = 0xffc0_0000;
+#[cfg(not(feature = "swap"))]
 pub const GUARD_MEMORY_BYTES: usize = 3 * crate::PAGE_SIZE;
+#[cfg(feature = "swap")]
+pub const GUARD_MEMORY_BYTES: usize = 4 * crate::PAGE_SIZE; // this is bare minimum. Increase more if we want to do resume!
 
 #[cfg(feature = "swap")]
 pub const SWAPPER_PID: u8 = 2;
