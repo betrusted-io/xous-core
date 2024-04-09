@@ -219,19 +219,20 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size + cfg.swap_offset;
         #[cfg(feature = "swap")]
         if SDBG && VDBG {
-            // activate to debug stack smashes. RPT should be 0's here if stack did not overflow.
+            // activate to debug stack smashes. RPT should be 0's here (or at least valid PIDs) if stack did
+            // not overflow.
             for (i, r) in
                 cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 1024..].chunks(32).enumerate()
             {
                 println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + i * 32, r);
             }
         }
-        // Add a static check for stack overflow, using a heuristic that the last 32 bytes of the RPT
-        // ought to be 0. This a valid assumption at least on Precursor, as it maps to some CSRs that should
-        // be unmapped at this point. TODO: check this assumption holds on other archs.
-        for &check in cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 32..].iter() {
+        // Add a static check for stack overflow, using a heuristic that the last 64 bytes of the RPT
+        // ought to be a valid PID. A stack smash is likely to write something that does not obey
+        // this heuristic within that range (any stack-stored pointer, for example, will break this).
+        for &check in cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 64..].iter() {
             assert!(
-                check == 0x0,
+                check <= cfg.processes.len() as u8,
                 "RPT looks corrupted, suspect stack overflow in loader. Increase GUARD_MEMORY_BYTES!"
             );
         }
