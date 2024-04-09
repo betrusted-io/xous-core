@@ -78,7 +78,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
     let mut kernel_exception_sp = 0;
     #[cfg(feature = "atsama5d27")]
     let mut kernel_irq_sp = 0;
-    let mut xkrn: Option<&ProgramDescription> = None;
+
     for tag in args.iter() {
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
@@ -105,38 +105,33 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
                 pid += 1;
             }
         } else if tag.name == u32::from_le_bytes(*b"XKrn") {
-            xkrn = Some(unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) });
-        }
-    }
-    // Ensure that the kernel is loaded last, even if the arguments are out of order.
-    // This is necessary due to the swap-append arguments.
-    if let Some(xkrn) = xkrn {
-        println!("\n\nCopying kernel into memory");
-        let load_size_rounded = ((xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1))
-            + (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1));
-        #[cfg(not(feature = "atsama5d27"))]
-        {
-            xkrn.load(cfg, process_offset - load_size_rounded, 1);
-        }
-        #[cfg(feature = "atsama5d27")]
-        {
-            (ktext_offset, kdata_offset, kernel_exception_sp, kernel_irq_sp) =
+            let xkrn = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
+            println!("\n\nCopying kernel into memory");
+            let load_size_rounded = ((xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1))
+                + (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1));
+            #[cfg(not(feature = "atsama5d27"))]
+            {
                 xkrn.load(cfg, process_offset - load_size_rounded, 1);
-            (ktext_size, kdata_size, ktext_virt_offset, kdata_virt_offset) = (
-                (xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1),
-                (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)),
-                xkrn.text_offset as usize,
-                xkrn.data_offset as usize,
-            );
+            }
+            #[cfg(feature = "atsama5d27")]
+            {
+                (ktext_offset, kdata_offset, kernel_exception_sp, kernel_irq_sp) =
+                    xkrn.load(cfg, process_offset - load_size_rounded, 1);
+                (ktext_size, kdata_size, ktext_virt_offset, kdata_virt_offset) = (
+                    (xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1),
+                    (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)),
+                    xkrn.text_offset as usize,
+                    xkrn.data_offset as usize,
+                );
+            }
+            process_offset -= load_size_rounded;
         }
-        // process_offset -= load_size_rounded;
-    } else {
-        panic!("No kernel in arguments, can't boot.");
     }
 
     println!("Done loading.");
 
-    let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size;
+    assert!(cfg.init_size & 0xFFF == 0); // check that we didn't mess this assumption up somewhere in the process
+    let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size + cfg.swap_offset;
     #[cfg(feature = "atsama5d27")]
     let krn_l1_pt_addr = cfg.processes[0].ttbr0;
     #[cfg(not(feature = "atsama5d27"))]
@@ -151,7 +146,9 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
 
         // Map boot-generated kernel structures into the kernel
         let satp = unsafe { &mut *(krn_l1_pt_addr as *mut PageTable) };
-        for addr in (0..cfg.init_size - GUARD_MEMORY_BYTES).step_by(PAGE_SIZE as usize) {
+        let kernel_arg_extents = cfg.init_size - (GUARD_MEMORY_BYTES + cfg.swap_offset);
+        assert!(kernel_arg_extents <= 0xA000, "Kernel init structures exceeded allocated region");
+        for addr in (0..kernel_arg_extents).step_by(PAGE_SIZE as usize) {
             cfg.map_page(
                 satp,
                 addr + krn_struct_start,
@@ -159,6 +156,15 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
                 FLG_R | FLG_W | FLG_VALID,
                 1 as XousPid,
             );
+        }
+        #[cfg(feature = "swap")]
+        if SDBG && VDBG {
+            // dumps the page with kernel struct data, so we can correlate offsets to data.
+            for i in (0..4096).step_by(32) {
+                println!("{:08x}: {:02x?}", krn_struct_start + i, unsafe {
+                    core::slice::from_raw_parts((krn_struct_start + i) as *const u8, 32)
+                });
+            }
         }
 
         // Copy the kernel's "MMU Page 1023" into every process.
@@ -198,7 +204,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
         // map page table roots
         for p in 0..cfg.processes.len() {
             // loop is "decomposed" because iterating over processes causes a borrow conflic
-            let swap_root = cfg.processes[p].swap_root;
+            let swap_root = cfg.swap_root[p];
             println!(
                 "Mapping root swap PT to PID 2 @paddr {:x} -> vaddr {:x}",
                 swap_root,
@@ -215,7 +221,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
         }
         // now chase down any entries in the roots, and map valid pages
         for p in 0..cfg.processes.len() {
-            let root_pt = unsafe { &*(cfg.processes[p].swap_root as *const PageTable) };
+            let root_pt = unsafe { &*(cfg.swap_root[p] as *const PageTable) };
             for &entry in root_pt.entries.iter() {
                 if entry & FLG_VALID != 0 {
                     let paddr = (entry & !0x3FF) << 2;
