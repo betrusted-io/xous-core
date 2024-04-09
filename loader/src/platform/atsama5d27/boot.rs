@@ -326,7 +326,7 @@ pub fn map_structs_to_kernel(cfg: &mut BootConfig, table_addr: usize, krn_struct
     dprintln!("Making the kernel arguments visible");
     cfg.map_page(translation_table, 0x20100000, 0x20100000, FLG_R | FLG_X | FLG_VALID, 1 as XousPid);
 
-    for addr in (0..cfg.init_size - GUARD_MEMORY_BYTES).step_by(PAGE_SIZE) {
+    for addr in (0..cfg.init_size - GUARD_MEMORY_BYTES + cfg.swap_offset).step_by(PAGE_SIZE) {
         cfg.map_page(
             tt,
             addr + krn_struct_start,
@@ -400,7 +400,7 @@ pub fn map_kernel_to_processes(
         }
 
         println!("Mapping kernel structures to PID{}", process.asid);
-        for addr in (0..cfg.init_size - GUARD_MEMORY_BYTES).step_by(PAGE_SIZE) {
+        for addr in (0..cfg.init_size - GUARD_MEMORY_BYTES + cfg.swap_offset).step_by(PAGE_SIZE) {
             cfg.map_page(
                 translation_table,
                 addr + krn_struct_start,
