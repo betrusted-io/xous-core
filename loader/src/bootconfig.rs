@@ -54,6 +54,14 @@ pub struct BootConfig {
     /// The number of 'Init' tags discovered
     pub init_process_count: usize,
 
+    /// Amount that init_size is offset by swap. We have to track this
+    /// separately because init_size is used during allocations to track
+    /// cfg_top(), but then re-used during page mapping with the assumption
+    /// that it also points to exclusive kernel memory. swap_offset allows
+    /// us to subtract out the memory we allocated and gave to swap in that
+    /// phase of boot. When swap is not enabled, it is set to 0.
+    pub swap_offset: usize,
+
     /// Swap HAL
     #[cfg(feature = "swap")]
     pub swap_hal: Option<SwapHal>,
@@ -65,6 +73,10 @@ pub struct BootConfig {
     /// Offset of the current free page in swap
     #[cfg(feature = "swap")]
     pub swap_free_page: usize,
+
+    /// root swap page table of the process
+    #[cfg(feature = "swap")]
+    pub swap_root: &'static mut [usize],
 }
 
 impl Default for BootConfig {
@@ -82,12 +94,15 @@ impl Default for BootConfig {
             runtime_page_tracker: Default::default(),
             init_process_count: 0,
             processes: Default::default(),
+            swap_offset: 0,
             #[cfg(feature = "swap")]
             swap_hal: None,
             #[cfg(feature = "swap")]
             swap: None,
             #[cfg(feature = "swap")]
             swap_free_page: 0,
+            #[cfg(feature = "swap")]
+            swap_root: Default::default(),
         }
     }
 }
@@ -176,17 +191,6 @@ impl BootConfig {
     }
 
     #[cfg(feature = "swap")]
-    fn alloc_swap(&mut self) -> *mut usize {
-        self.init_size += PAGE_SIZE;
-        let pg = self.get_top();
-        unsafe {
-            // Grab the page address and zero it out
-            bzero(pg as *mut usize, pg.add(PAGE_SIZE / mem::size_of::<usize>()) as *mut usize);
-        }
-        pg as *mut usize
-    }
-
-    #[cfg(feature = "swap")]
     pub fn map_swap(&mut self, swap_phys: usize, virt: usize, owner: XousPid) {
         if SDBG {
             println!("    swap pa {:x} -> va {:x}", swap_phys, virt);
@@ -199,14 +203,14 @@ impl BootConfig {
         assert!(owner != 0);
         let l1_pt = unsafe {
             core::slice::from_raw_parts_mut(
-                self.processes[owner as usize - 1].swap_root as *mut usize,
+                self.swap_root[owner as usize - 1] as *mut usize,
                 mem::size_of::<PageTable>() / mem::size_of::<usize>(),
             )
         };
 
         // Allocate a new level 1 pagetable entry if one doesn't exist.
         if l1_pt[vpn1] & FLG_VALID == 0 {
-            let na = self.alloc_swap() as usize;
+            let na = self.alloc() as usize;
             if SDBG {
                 println!(
                     "Swap Level 1 page table is invalid ({:08x}) @ {:08x} -- allocating a new one @ {:08x}",
