@@ -216,7 +216,25 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
     if !clean {
         // The MMU should be set up now, and memory pages assigned to their
         // respective processes.
-        let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size;
+        let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size + cfg.swap_offset;
+        #[cfg(feature = "swap")]
+        if SDBG && VDBG {
+            // activate to debug stack smashes. RPT should be 0's here if stack did not overflow.
+            for (i, r) in
+                cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 1024..].chunks(32).enumerate()
+            {
+                println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + i * 32, r);
+            }
+        }
+        // Add a static check for stack overflow, using a heuristic that the last 32 bytes of the RPT
+        // ought to be 0. This a valid assumption at least on Precursor, as it maps to some CSRs that should
+        // be unmapped at this point. TODO: check this assumption holds on other archs.
+        for &check in cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 32..].iter() {
+            assert!(
+                check == 0x0,
+                "RPT looks corrupted, suspect stack overflow in loader. Increase GUARD_MEMORY_BYTES!"
+            );
+        }
         let arg_offset = cfg.args.base as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let ip_offset = cfg.processes.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let rpt_offset =
@@ -345,6 +363,10 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
     }
     cfg.sram_start = xarg.data[2] as *mut usize;
     cfg.sram_size = xarg.data[3] as usize;
+    #[cfg(feature = "swap")]
+    if SDBG {
+        println!("XAarg // sram_start: {:x}, sram_size: {:x}", cfg.sram_start as usize, cfg.sram_size);
+    }
 
     let mut kernel_seen = false;
     let mut init_seen = false;
@@ -400,8 +422,10 @@ pub fn read_swap_config(cfg: &mut BootConfig) {
         } else if tag.name == u32::from_le_bytes(*b"XArg") {
             // these are actually specified inside the `Swap` arg, this is just
             // a mirror because this argument is added by default by the image creator
-            println!("swap start: {:x}", tag.data[2]);
-            println!("swap size:  {:x}", tag.data[3]);
+            if SDBG {
+                println!("Swap start: {:x}", tag.data[2]);
+                println!("Swap size:  {:x}", tag.data[3]);
+            }
         } else {
             println!("Unhandled argument in swap: {:x}", tag.name);
         }
