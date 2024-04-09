@@ -1035,11 +1035,7 @@ impl Spim {
         }
         while words_sent < total_words {
             // determine the valid length of data we could send
-            let tx_len = if (total_words - words_sent) >= self.tx_buf_len_bytes as usize {
-                self.tx_buf_len_bytes
-            } else {
-                total_words - words_sent
-            };
+            let tx_len = (total_words - words_sent).min(self.tx_buf_len_bytes);
             // setup the command list for data to send
             let cmd_list = [SpimCmd::TxData(
                 self.mode,

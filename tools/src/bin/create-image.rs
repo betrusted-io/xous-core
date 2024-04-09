@@ -431,7 +431,7 @@ fn main() {
     }
 
     if let Some(init_paths) = matches.values_of("inis") {
-        if let Some(ref mut sargs) = swap_args {
+        if let Some(sargs) = &mut swap_args {
             for init_path in init_paths {
                 let program_name = std::path::Path::new(init_path);
                 process_names.set(

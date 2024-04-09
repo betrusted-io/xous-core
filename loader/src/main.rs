@@ -134,7 +134,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         cfg.swap_hal = SwapHal::new(&cfg);
         read_swap_config(&mut cfg);
         #[cfg(feature = "resume")]
-        println!(
+        compile_error!(
             "WARNING WARNING WARNING: swap and resume selected - this is not a valid configuration because\
  the stack overlaps into the 'clean suspend' marker with swap. This needs to be fixed if resume is desired with swap."
         );
