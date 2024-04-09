@@ -1,7 +1,11 @@
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::thread::sleep;
 use std::time::Duration;
 
 use log::info;
+
+// put here to force a .sbss/.bss section for loader testing
+static mut LOOP_COUNT: AtomicU32 = AtomicU32::new(0);
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
@@ -11,7 +15,8 @@ fn main() -> ! {
     const DELAY_MS: u64 = 2000;
 
     for i in 0.. {
-        info!("Loop #{}, waiting {} ms", i, DELAY_MS);
+        unsafe { LOOP_COUNT.store(i, Ordering::SeqCst) };
+        info!("Loop #{}, waiting {} ms", unsafe { LOOP_COUNT.load(Ordering::SeqCst) }, DELAY_MS);
         sleep(Duration::from_millis(DELAY_MS));
     }
 

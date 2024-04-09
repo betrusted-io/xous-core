@@ -1,3 +1,5 @@
+#[cfg(feature = "swap")]
+use crate::swap::SWAP_PT_VADDR;
 use crate::*;
 
 /// Phase 2 bootloader
@@ -76,24 +78,35 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
     let mut kernel_exception_sp = 0;
     #[cfg(feature = "atsama5d27")]
     let mut kernel_irq_sp = 0;
+
     for tag in args.iter() {
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
             println!("\n\nCopying IniE program into memory");
-            let allocated = inie.load(cfg, process_offset, pid, &env, false);
+            let allocated = inie.load(cfg, process_offset, pid, &env, IniType::IniE);
             println!("IniE Allocated {:x}", allocated);
             process_offset -= allocated;
             pid += 1;
         } else if tag.name == u32::from_le_bytes(*b"IniF") {
             let inif = MiniElf::new(&tag);
             println!("\n\nMapping IniF program into memory");
-            let allocated = inif.load(cfg, process_offset, pid, &env, true);
+            let allocated = inif.load(cfg, process_offset, pid, &env, IniType::IniF);
             println!("IniF Allocated {:x}", allocated);
             process_offset -= allocated;
             pid += 1;
+        } else if tag.name == u32::from_le_bytes(*b"IniS") {
+            #[cfg(feature = "swap")]
+            {
+                let inis = MiniElf::new(&tag);
+                println!("\n\nMapping IniS program into memory");
+                let allocated = inis.load(cfg, process_offset, pid, &env, IniType::IniS);
+                println!("IniS Allocated {:x}", allocated);
+                process_offset -= allocated;
+                pid += 1;
+            }
         } else if tag.name == u32::from_le_bytes(*b"XKrn") {
-            println!("\n\nCopying kernel into memory");
             let xkrn = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
+            println!("\n\nCopying kernel into memory");
             let load_size_rounded = ((xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1))
                 + (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1));
             #[cfg(not(feature = "atsama5d27"))]
@@ -117,7 +130,8 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
 
     println!("Done loading.");
 
-    let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size;
+    assert!(cfg.init_size & 0xFFF == 0); // check that we didn't mess this assumption up somewhere in the process
+    let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size + cfg.swap_offset;
     #[cfg(feature = "atsama5d27")]
     let krn_l1_pt_addr = cfg.processes[0].ttbr0;
     #[cfg(not(feature = "atsama5d27"))]
@@ -132,7 +146,9 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
 
         // Map boot-generated kernel structures into the kernel
         let satp = unsafe { &mut *(krn_l1_pt_addr as *mut PageTable) };
-        for addr in (0..cfg.init_size - GUARD_MEMORY_BYTES).step_by(PAGE_SIZE as usize) {
+        let kernel_arg_extents = cfg.init_size - (GUARD_MEMORY_BYTES + cfg.swap_offset);
+        assert!(kernel_arg_extents <= 0xA000, "Kernel init structures exceeded allocated region");
+        for addr in (0..kernel_arg_extents).step_by(PAGE_SIZE as usize) {
             cfg.map_page(
                 satp,
                 addr + krn_struct_start,
@@ -140,6 +156,15 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
                 FLG_R | FLG_W | FLG_VALID,
                 1 as XousPid,
             );
+        }
+        #[cfg(feature = "swap")]
+        if SDBG && VDBG {
+            // dumps the page with kernel struct data, so we can correlate offsets to data.
+            for i in (0..4096).step_by(32) {
+                println!("{:08x}: {:02x?}", krn_struct_start + i, unsafe {
+                    core::slice::from_raw_parts((krn_struct_start + i) as *const u8, 32)
+                });
+            }
         }
 
         // Copy the kernel's "MMU Page 1023" into every process.
@@ -169,6 +194,54 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             kernel_irq_sp,
             krn_struct_start,
         );
+    }
+    #[cfg(feature = "swap")]
+    {
+        // map the swap page table into PID space 2
+        let tt_address = cfg.processes[SWAPPER_PID as usize].satp << 12;
+        let root = unsafe { &mut *(tt_address as *mut PageTable) };
+        let mut swap_pt_vaddr_offset = 0;
+        // map page table roots
+        for p in 0..cfg.processes.len() {
+            // loop is "decomposed" because iterating over processes causes a borrow conflic
+            let swap_root = cfg.swap_root[p];
+            println!(
+                "Mapping root swap PT to PID 2 @paddr {:x} -> vaddr {:x}",
+                swap_root,
+                SWAP_PT_VADDR + swap_pt_vaddr_offset
+            );
+            cfg.map_page(
+                root,
+                swap_root,
+                SWAP_PT_VADDR + swap_pt_vaddr_offset,
+                FLG_R | FLG_W | FLG_VALID,
+                SWAPPER_PID,
+            );
+            swap_pt_vaddr_offset += PAGE_SIZE;
+        }
+        // now chase down any entries in the roots, and map valid pages
+        for p in 0..cfg.processes.len() {
+            let root_pt = unsafe { &*(cfg.swap_root[p] as *const PageTable) };
+            for &entry in root_pt.entries.iter() {
+                if entry & FLG_VALID != 0 {
+                    let paddr = (entry & !0x3FF) << 2;
+                    println!(
+                        "Mapping L2 swap PT to PID 2 @paddr {:x} -> vaddr {:x}",
+                        paddr,
+                        SWAP_PT_VADDR + swap_pt_vaddr_offset
+                    );
+                    cfg.map_page(
+                        root,
+                        paddr,
+                        SWAP_PT_VADDR + swap_pt_vaddr_offset,
+                        FLG_R | FLG_W | FLG_VALID,
+                        SWAPPER_PID,
+                    );
+                    swap_pt_vaddr_offset += PAGE_SIZE;
+                }
+            }
+        }
+        // TODO: patch kernel arguments with Swap values...?
     }
 
     if VVDBG {
@@ -264,6 +337,9 @@ impl ProgramDescription {
 
         // Turn the satp address into a pointer
         let satp = unsafe { &mut *(satp_address as *mut PageTable) };
+        if SDBG {
+            println!("Kernel root PT address: {:x}", satp_address);
+        }
         allocator.map_page(
             satp,
             satp_address,

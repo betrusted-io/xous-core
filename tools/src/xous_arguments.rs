@@ -40,8 +40,8 @@ pub trait XousArgument: fmt::Display {
 }
 
 pub struct XousArguments {
-    ram_start: XousSize,
-    ram_length: XousSize,
+    pub ram_start: XousSize,
+    pub ram_length: XousSize,
     ram_name: u32,
     pub arguments: Vec<Box<dyn XousArgument>>,
 }

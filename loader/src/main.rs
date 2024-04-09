@@ -22,6 +22,8 @@ mod murmur3;
 mod phase1;
 mod phase2;
 mod platform;
+#[cfg(feature = "swap")]
+mod swap;
 
 use core::{mem, ptr, slice};
 
@@ -31,6 +33,8 @@ use consts::*;
 use minielf::*;
 use phase1::{phase_1, InitialProcess};
 use phase2::{phase_2, ProgramDescription};
+#[cfg(feature = "swap")]
+use platform::SwapHal;
 
 pub type XousPid = u8;
 pub const PAGE_SIZE: usize = 4096;
@@ -40,6 +44,7 @@ const STACK_PAGE_COUNT: usize = 8;
 
 const VDBG: bool = false; // verbose debug
 const VVDBG: bool = false; // very verbose debug
+const SDBG: bool = true; // swap debug
 
 #[cfg(test)]
 mod test;
@@ -57,6 +62,16 @@ pub struct MemoryRegionExtra {
 #[repr(C)]
 pub struct PageTable {
     entries: [usize; PAGE_SIZE / WORD_SIZE],
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum IniType {
+    // RAM
+    IniE,
+    // XIP
+    IniF,
+    // Swap
+    IniS,
 }
 
 /// Entrypoint
@@ -110,7 +125,20 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
     platform::platform_tests();
 
     let mut cfg = BootConfig { base_addr: args.base as *const usize, args, ..Default::default() };
+    #[cfg(feature = "swap")]
+    println!("Size of BootConfig: {:x}", core::mem::size_of::<BootConfig>());
     read_initial_config(&mut cfg);
+
+    #[cfg(feature = "swap")]
+    {
+        cfg.swap_hal = SwapHal::new(&cfg);
+        read_swap_config(&mut cfg);
+        #[cfg(feature = "resume")]
+        compile_error!(
+            "WARNING WARNING WARNING: swap and resume selected - this is not a valid configuration because\
+ the stack overlaps into the 'clean suspend' marker with swap. This needs to be fixed if resume is desired with swap."
+        );
+    }
 
     // check to see if we are recovering from a clean suspend or not
     #[cfg(feature = "resume")]
@@ -125,8 +153,8 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg, &fs_prehash);
-        #[cfg(feature = "debug-print")]
-        if VDBG {
+        #[cfg(any(feature = "debug-print", feature = "swap"))]
+        if VDBG || SDBG {
             check_load(&mut cfg);
         }
         println!("done initializing for cold boot.");
@@ -139,8 +167,8 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg, &fs_prehash);
-        #[cfg(feature = "debug-print")]
-        if VDBG {
+        #[cfg(any(feature = "debug-print", feature = "swap"))]
+        if VDBG || SDBG {
             check_load(&mut cfg);
         }
         println!("done initializing for cold boot.");
@@ -188,7 +216,26 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
     if !clean {
         // The MMU should be set up now, and memory pages assigned to their
         // respective processes.
-        let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size;
+        let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size + cfg.swap_offset;
+        #[cfg(feature = "swap")]
+        if SDBG && VDBG {
+            // activate to debug stack smashes. RPT should be 0's here (or at least valid PIDs) if stack did
+            // not overflow.
+            for (i, r) in
+                cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 1024..].chunks(32).enumerate()
+            {
+                println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + i * 32, r);
+            }
+        }
+        // Add a static check for stack overflow, using a heuristic that the last 64 bytes of the RPT
+        // ought to be a valid PID. A stack smash is likely to write something that does not obey
+        // this heuristic within that range (any stack-stored pointer, for example, will break this).
+        for &check in cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 64..].iter() {
+            assert!(
+                check <= cfg.processes.len() as u8,
+                "RPT looks corrupted, suspect stack overflow in loader. Increase GUARD_MEMORY_BYTES!"
+            );
+        }
         let arg_offset = cfg.args.base as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let ip_offset = cfg.processes.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let rpt_offset =
@@ -317,6 +364,10 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
     }
     cfg.sram_start = xarg.data[2] as *mut usize;
     cfg.sram_size = xarg.data[3] as usize;
+    #[cfg(feature = "swap")]
+    if SDBG {
+        println!("XAarg // sram_start: {:x}, sram_size: {:x}", cfg.sram_start as usize, cfg.sram_size);
+    }
 
     let mut kernel_seen = false;
     let mut init_seen = false;
@@ -349,10 +400,37 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
             init_seen = true;
             cfg.init_process_count += 1;
         }
+        #[cfg(feature = "swap")]
+        if tag.name == u32::from_le_bytes(*b"Swap") {
+            // safety: the image creator guarantees this data is aligned and initialized properly
+            cfg.swap = Some(unsafe { &*(tag.data.as_ptr() as *const crate::swap::SwapDescriptor) });
+        }
     }
 
     assert!(kernel_seen, "no kernel definition");
     assert!(init_seen, "no initial programs found");
+}
+
+#[cfg(feature = "swap")]
+pub fn read_swap_config(cfg: &mut BootConfig) {
+    // Read in the swap arguments: should be located at beginning of image in swap.
+    let page0 = cfg.swap_hal.as_mut().unwrap().decrypt_src_page_at(0x1000);
+    let swap_args = KernelArguments::new(page0.as_ptr() as *const usize);
+    for tag in swap_args.iter() {
+        if tag.name == u32::from_le_bytes(*b"IniS") {
+            assert!(tag.size >= 4, "invalid Init size");
+            cfg.init_process_count += 1;
+        } else if tag.name == u32::from_le_bytes(*b"XArg") {
+            // these are actually specified inside the `Swap` arg, this is just
+            // a mirror because this argument is added by default by the image creator
+            if SDBG {
+                println!("Swap start: {:x}", tag.data[2]);
+                println!("Swap size:  {:x}", tag.data[3]);
+            }
+        } else {
+            println!("Unhandled argument in swap: {:x}", tag.name);
+        }
+    }
 }
 
 /// Checks a reserved area of RAM for a pattern with a pre-defined mathematical
@@ -421,8 +499,12 @@ fn clear_ram(cfg: &mut BootConfig) {
     // stay there forever, if not explicitly cleared. This clear adds a couple seconds
     // to a cold boot, but it's probably worth it. Note that it doesn't happen on a suspend/resume.
     let ram: *mut u32 = cfg.sram_start as *mut u32;
+    let clear_limit = ((4096 + core::mem::size_of::<BootConfig>()) + 4095) & !4095;
+    if VDBG {
+        println!("Stack clearing limit: {:x}", clear_limit);
+    }
     unsafe {
-        for addr in 0..(cfg.sram_size - 8192) / 4 {
+        for addr in 0..(cfg.sram_size - clear_limit) / 4 {
             // 8k is reserved for our own stack
             ram.add(addr).write_volatile(0);
         }
@@ -446,7 +528,7 @@ where
 /// This function allows us to check the final loader results
 /// It will print to the console the first 32 bytes of each loaded
 /// region top/bottom, based upon extractions from the page table.
-#[cfg(feature = "debug-print")]
+#[cfg(any(feature = "debug-print", feature = "swap"))]
 fn check_load(cfg: &mut BootConfig) {
     let args = cfg.args;
 
@@ -460,12 +542,17 @@ fn check_load(cfg: &mut BootConfig) {
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
             println!("\n\nChecking IniE region");
-            inie.check(cfg, inie.load_offset as usize, pid, false);
+            inie.check(cfg, inie.load_offset as usize, pid, IniType::IniE);
             pid += 1;
         } else if tag.name == u32::from_le_bytes(*b"IniF") {
             let inif = MiniElf::new(&tag);
             println!("\n\nChecking IniF region");
-            inif.check(cfg, inif.load_offset as usize, pid, true);
+            inif.check(cfg, inif.load_offset as usize, pid, IniType::IniF);
+            pid += 1;
+        } else if tag.name == u32::from_le_bytes(*b"IniS") {
+            let inis = MiniElf::new(&tag);
+            println!("\n\nChecking IniS region");
+            inis.check(cfg, inis.load_offset as usize, pid, IniType::IniS);
             pid += 1;
         }
     }

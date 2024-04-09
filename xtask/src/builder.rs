@@ -933,7 +933,18 @@ impl Builder {
         memory_spec: Vec<String>,
     ) -> Result<PathBuf, DynError> {
         let stream = self.stream.as_str();
-        let mut args = vec!["run", "--package", "tools", "--bin", "create-image", "--"];
+        let mut args = vec!["run", "--package", "tools", "--bin", "create-image"];
+        args.push("--features");
+        if self.utra_target.contains("renode") {
+            args.push("renode");
+        } else if self.utra_target.contains("precursor") {
+            args.push("precursor");
+        } else if self.utra_target.contains("atsama5d2") {
+            args.push("atsama5d2");
+        } else if self.utra_target.contains("cramium-soc") {
+            args.push("cramium-soc")
+        }
+        args.push("--");
 
         let mut output_file = PathBuf::new();
         output_file.push("target");
@@ -971,9 +982,23 @@ impl Builder {
         } else {
             String::new()
         };
+        let mut swap_file = PathBuf::new();
+        let mut swap_dbg_file = PathBuf::new();
         if self.swap.is_some() {
             args.push("--swap");
             args.push(&swap_spec);
+            swap_file.push("target");
+            swap_file.push(self.target.as_ref().expect("target"));
+            swap_file.push(stream);
+            swap_file.push("swap.img");
+            args.push("--swap-name");
+            args.push(swap_file.to_str().unwrap());
+            swap_dbg_file.push("target");
+            swap_dbg_file.push(self.target.as_ref().expect("target"));
+            swap_dbg_file.push(stream);
+            swap_dbg_file.push("swap-debug.img");
+            args.push("--swap-debug-name");
+            args.push(swap_dbg_file.to_str().unwrap());
         }
 
         if memory_spec.len() == 1 {

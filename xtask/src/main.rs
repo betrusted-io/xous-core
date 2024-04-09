@@ -210,10 +210,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // ----- renode configs --------
         Some("renode-image") => {
             builder.target_renode().add_services(&user_pkgs).add_apps(&get_cratespecs());
+            builder.add_loader_feature("resume");
+            // builder.add_loader_feature("debug-print");
         }
         Some("renode-image-debug") => {
             builder
                 .target_renode()
+                .add_loader_feature("resume")
                 .add_services(&user_pkgs)
                 .stream(BuildStream::Debug)
                 .add_apps(&get_cratespecs());
@@ -244,9 +247,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("renode-swap") => {
             if !builder.is_swap_set() {
-                builder.set_swap(0x4040_0000, 8 * 1024 * 1024);
+                builder.set_swap(0x4080_0000, 8 * 1024 * 1024);
             }
             builder.target_renode();
+            // builder.target_cramium_soc();
+            builder.add_loader_feature("debug-print");
+            builder.add_loader_feature("swap");
+            builder.add_kernel_feature("swap");
+            builder.add_kernel_feature("debug-swap");
+
             // It is important that this is the first service added, because the swapper *must* be in PID 2
             builder.add_service("xous-swapper", LoaderRegion::Ram);
             builder.add_kernel_feature("swap");

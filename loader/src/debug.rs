@@ -91,11 +91,11 @@ pub fn print_pagetable(root: usize) {
         }
         let _superpage_addr = i as u32 * (1 << 22);
         println!(
-            "    {:4} Superpage for {:08x} @ {:08x} (flags: {:02x})",
+            "    {:4} Superpage for {:08x} @ {:08x} (flags: {:03x})",
             i,
             _superpage_addr,
             (*l1_entry >> 10) << 12,
-            l1_entry & 0xff
+            l1_entry & 0x3ff
         );
         // let l0_pt_addr = ((l1_entry >> 10) << 12) as *const u32;
         let l0_pt = unsafe { &mut (*(((*l1_entry >> 10) << 12) as *mut PageTable)) };
@@ -105,11 +105,11 @@ pub fn print_pagetable(root: usize) {
             }
             let _page_addr = j as u32 * (1 << 12);
             println!(
-                "        {:4} {:08x} -> {:08x} (flags: {:02x})",
+                "        {:4} {:08x} -> {:08x} (flags: {:03x})",
                 j,
                 _superpage_addr + _page_addr,
                 (*l0_entry >> 10) << 12,
-                l0_entry & 0xff
+                l0_entry & 0x3ff
             );
         }
     }

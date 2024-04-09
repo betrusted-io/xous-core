@@ -3,6 +3,8 @@ use core::mem;
 #[cfg(not(feature = "atsama5d27"))]
 use core::num::NonZeroUsize;
 
+#[cfg(feature = "swap")]
+use crate::swap::SwapDescriptor;
 use crate::*;
 
 /// In-memory copy of the configuration page. Stage 1 sets up the gross structure,
@@ -51,6 +53,30 @@ pub struct BootConfig {
 
     /// The number of 'Init' tags discovered
     pub init_process_count: usize,
+
+    /// Amount that init_size is offset by swap. We have to track this
+    /// separately because init_size is used during allocations to track
+    /// cfg_top(), but then re-used during page mapping with the assumption
+    /// that it also points to exclusive kernel memory. swap_offset allows
+    /// us to subtract out the memory we allocated and gave to swap in that
+    /// phase of boot. When swap is not enabled, it is set to 0.
+    pub swap_offset: usize,
+
+    /// Swap HAL
+    #[cfg(feature = "swap")]
+    pub swap_hal: Option<SwapHal>,
+
+    /// Swap descriptor
+    #[cfg(feature = "swap")]
+    pub swap: Option<&'static SwapDescriptor>,
+
+    /// Offset of the current free page in swap
+    #[cfg(feature = "swap")]
+    pub swap_free_page: usize,
+
+    /// root swap page table of the process
+    #[cfg(feature = "swap")]
+    pub swap_root: &'static mut [usize],
 }
 
 impl Default for BootConfig {
@@ -68,6 +94,15 @@ impl Default for BootConfig {
             runtime_page_tracker: Default::default(),
             init_process_count: 0,
             processes: Default::default(),
+            swap_offset: 0,
+            #[cfg(feature = "swap")]
+            swap_hal: None,
+            #[cfg(feature = "swap")]
+            swap: None,
+            #[cfg(feature = "swap")]
+            swap_free_page: 0,
+            #[cfg(feature = "swap")]
+            swap_root: Default::default(),
         }
     }
 }
@@ -153,6 +188,56 @@ impl BootConfig {
             8 => panic!("map_page doesn't work on 64-bit devices"),
             _ => panic!("unrecognized word size: {}", WORD_SIZE),
         }
+    }
+
+    #[cfg(feature = "swap")]
+    pub fn map_swap(&mut self, swap_phys: usize, virt: usize, owner: XousPid) {
+        if SDBG {
+            println!("    swap pa {:x} -> va {:x}", swap_phys, virt);
+        }
+        let ppn1 = (swap_phys >> 22) & ((1 << 12) - 1);
+        let ppn0 = (swap_phys >> 12) & ((1 << 10) - 1);
+
+        let vpn1 = (virt >> 22) & ((1 << 10) - 1);
+        let vpn0 = (virt >> 12) & ((1 << 10) - 1);
+        assert!(owner != 0);
+        let l1_pt = unsafe {
+            core::slice::from_raw_parts_mut(
+                self.swap_root[owner as usize - 1] as *mut usize,
+                mem::size_of::<PageTable>() / mem::size_of::<usize>(),
+            )
+        };
+
+        // Allocate a new level 1 pagetable entry if one doesn't exist.
+        if l1_pt[vpn1] & FLG_VALID == 0 {
+            let na = self.alloc() as usize;
+            if SDBG {
+                println!(
+                    "Swap Level 1 page table is invalid ({:08x}) @ {:08x} -- allocating a new one @ {:08x}",
+                    unsafe { l1_pt.as_ptr().add(vpn1) } as usize,
+                    l1_pt[vpn1],
+                    na
+                );
+            }
+            // Mark this entry as a leaf node (WRX as 0), and indicate
+            // it is a valid page by setting "V".
+            l1_pt[vpn1] = ((na >> 12) << 10) | FLG_VALID;
+        }
+
+        let l0_pt_idx = unsafe { &mut (*(((l1_pt[vpn1] << 2) & !((1 << 12) - 1)) as *mut PageTable)) };
+        let l0_pt = &mut l0_pt_idx.entries;
+
+        // Ensure the entry hasn't already been mapped to a different address.
+        if l0_pt[vpn0] & 1 != 0 && (l0_pt[vpn0] & 0xffff_fc00) != ((ppn1 << 20) | (ppn0 << 10)) {
+            panic!(
+                "Swap page {:08x} was already allocated to {:08x}, so cannot map to {:08x}!",
+                swap_phys,
+                (l0_pt[vpn0] >> 10) << 12,
+                virt
+            );
+        }
+        let previous_flags = l0_pt[vpn0] & 0xf;
+        l0_pt[vpn0] = (ppn1 << 20) | (ppn0 << 10) | previous_flags | FLG_VALID;
     }
 
     pub fn map_page_32(

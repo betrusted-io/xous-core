@@ -22,6 +22,7 @@ pub const FLG_U: usize = 0x10;
 pub const FLG_A: usize = 0x40;
 #[cfg(not(feature = "atsama5d27"))]
 pub const FLG_D: usize = 0x80;
+pub const FLG_P: usize = 0x200;
 
 pub const MINIELF_FLG_W: u8 = 1;
 #[allow(dead_code)]
@@ -93,7 +94,7 @@ impl MiniElf {
         load_offset: usize,
         pid: XousPid,
         params: &[u8],
-        xip: bool,
+        ini_type: IniType,
     ) -> usize {
         println!("Mapping PID {} starting at offset {:08x}", pid, load_offset);
         let mut allocated_bytes = 0;
@@ -101,19 +102,25 @@ impl MiniElf {
         let mut current_page_addr: usize = 0;
         let mut previous_addr: usize = 0;
         let mut last_mapped_xip = 0;
+        #[cfg(feature = "swap")]
+        let mut last_swap_page = 0;
         let image_phys_base = allocator.base_addr as usize + self.load_offset as usize;
         // It is a requirement that the image generator lay out the artifacts on disk such that
         // the page offsets line up for XIP sections. This assert confirms this necessary pre-condition.
-        if xip {
-            assert!(
-                (image_phys_base & (PAGE_SIZE - 1)) == self.sections[0].virt as usize & (PAGE_SIZE - 1),
-                "Image generator did not align load offsets to page offsets!"
-            );
+        match ini_type {
+            IniType::IniF => {
+                assert!(
+                    (image_phys_base & (PAGE_SIZE - 1)) == self.sections[0].virt as usize & (PAGE_SIZE - 1),
+                    "Image generator did not align load offsets to page offsets!"
+                );
+            }
+            _ => {
+                println!(
+                    "flash_map_offset: {:x} / base_addr {:x} load_offset {:x}",
+                    image_phys_base as usize, allocator.base_addr as usize, self.load_offset as usize
+                );
+            }
         }
-        println!(
-            "flash_map_offset: {:x} / base_addr {:x} load_offset {:x}",
-            image_phys_base as usize, allocator.base_addr as usize, self.load_offset as usize
-        );
 
         // The load offset is the end of this process.  Shift it down by one page
         // so we get the start of the first page.
@@ -231,7 +238,7 @@ impl MiniElf {
                 panic!("init section addresses are not strictly increasing");
             }
 
-            if copy_to_ram || !xip {
+            if (copy_to_ram || ini_type == IniType::IniE) && (ini_type != IniType::IniS) {
                 let mut this_page = section.virt as usize & !(PAGE_SIZE - 1);
                 let mut bytes_to_copy = section.len();
 
@@ -349,10 +356,24 @@ impl MiniElf {
                     println!("section is 0x{:x} bytes long; mapping {} pages", section.len(), pages_to_map);
                 }
 
-                // --- map FLASH pages to virtual memory ---
+                // --- map FLASH or swap pages to virtual memory ---
                 while pages_to_map > 0 {
-                    let map_phys_addr = (image_phys_base + section_map_phys_offset) & !(PAGE_SIZE - 1);
-                    allocator.map_page(tt, map_phys_addr, virt_page, flag_defaults, pid as XousPid);
+                    let map_phys_addr = if ini_type != IniType::IniS {
+                        (image_phys_base + section_map_phys_offset) & !(PAGE_SIZE - 1)
+                    } else {
+                        0 // IniS physical addresses are non-existent; make that abundantly clear
+                    };
+                    let flags = if ini_type == IniType::IniS {
+                        flag_defaults & !FLG_VALID | FLG_P
+                    } else {
+                        flag_defaults
+                    };
+                    allocator.map_page(tt, map_phys_addr, virt_page, flags, pid as XousPid);
+                    #[cfg(feature = "swap")]
+                    if ini_type == IniType::IniS {
+                        allocator.map_swap(last_swap_page * 0x1000, virt_page, pid);
+                        last_swap_page += 1;
+                    }
                     last_mapped_xip = virt_page;
 
                     section_map_phys_offset += PAGE_SIZE;
@@ -384,18 +405,28 @@ impl MiniElf {
     }
 
     /// Page through a processes allocated pages and check against the file spec.
-    #[cfg(feature = "debug-print")]
-    pub fn check(&self, allocator: &mut BootConfig, load_offset: usize, pid: XousPid, xip: bool) {
-        println!(
-            "Checking {} PID {} starting at offset {:08x}",
-            if xip { "xip" } else { "ram" },
-            pid,
-            load_offset
-        );
-        let image_phys_base = allocator.base_addr as usize + self.load_offset as usize;
+    #[cfg(any(feature = "debug-print", feature = "swap"))]
+    pub fn check(&self, allocator: &mut BootConfig, load_offset: usize, pid: XousPid, ini_type: IniType) {
+        println!("Checking {:?} PID {} starting at offset {:08x}", ini_type, pid, load_offset);
+        let image_phys_base = match ini_type {
+            IniType::IniE | IniType::IniF => allocator.base_addr as usize + self.load_offset as usize,
+            IniType::IniS => load_offset,
+        };
         // the process offset is always 1 less than the PID, because that's how we built the table.
         #[cfg(not(feature = "atsama5d27"))]
-        let tt = { allocator.processes[pid as usize - 1].satp };
+        let tt = match ini_type {
+            IniType::IniE | IniType::IniF => allocator.processes[pid as usize - 1].satp,
+            IniType::IniS => {
+                #[cfg(feature = "swap")]
+                {
+                    allocator.swap_root[pid as usize - 1] >> 12
+                }
+                #[cfg(not(feature = "swap"))]
+                {
+                    0
+                }
+            }
+        };
         #[cfg(feature = "atsama5d27")]
         let tt = { allocator.processes[pid as usize - 1].ttbr0 };
 
@@ -415,18 +446,63 @@ impl MiniElf {
                 let dump_pa_src = section_offset + image_phys_base;
                 let dump_pa_dst = dest_offset;
                 let dump_pa_end_dst = pt_walk(tt, section.virt as usize + section.len() - 20);
-                dump_addr(dump_pa_src, "    Src [:20]  ");
-                dump_addr(dump_pa_dst, "    Dst [:20]  ");
-                dump_addr(dump_pa_src + section.len() - 20, "    Src [-20:] ");
-                // recompute the end section mapping, because PA/VA mappings don't have to be linear (in fact
-                // they go in the opposite direction)
-                if let Some(pa_dst_end) = dump_pa_end_dst {
-                    dump_addr(pa_dst_end, "    Dst [-20:] ");
-                } else {
-                    println!(
-                        "   End of destination VA 0x{:x}, ERR UNMAPPED!",
-                        section.virt as usize + section.len() - 20
-                    );
+                match ini_type {
+                    IniType::IniE | IniType::IniF => {
+                        dump_addr(dump_pa_src, "    Src [:20]  ");
+                        dump_addr(dump_pa_dst, "    Dst [:20]  ");
+                        dump_addr(dump_pa_src + section.len() - 20, "    Src [-20:] ");
+                        // recompute the end section mapping, because PA/VA mappings don't have to be linear
+                        // (in fact they go in the opposite direction)
+                        if let Some(pa_dst_end) = dump_pa_end_dst {
+                            dump_addr(pa_dst_end, "    Dst [-20:] ");
+                        } else {
+                            println!(
+                                "   End of destination VA 0x{:x}, ERR UNMAPPED!",
+                                section.virt as usize + section.len() - 20
+                            );
+                        }
+                    }
+                    IniType::IniS => {
+                        #[cfg(feature = "swap")]
+                        if let Some(swap) = allocator.swap_hal.as_mut() {
+                            let dump_disk = swap.decrypt_src_page_at(dump_pa_src & !(PAGE_SIZE - 1));
+                            dump_slice(&dump_disk[dump_pa_src & (PAGE_SIZE - 1)..], "    Src [:20]  ");
+                            let dump_swap = swap.decrypt_swap_from(
+                                dest_offset & !(PAGE_SIZE - 1),
+                                (section.virt as usize) & !(PAGE_SIZE - 1),
+                                pid,
+                            );
+                            dump_slice(
+                                &dump_swap[(section.virt as usize) & (PAGE_SIZE - 1)..],
+                                "    Dst [:20]  ",
+                            );
+                            let dump_disk = swap
+                                .decrypt_src_page_at((dump_pa_src + section.len() - 20) & !(PAGE_SIZE - 1));
+                            dump_slice(
+                                &dump_disk[(dump_pa_src + section.len() - 20) & (PAGE_SIZE - 1)..],
+                                "    Src [-20:] ",
+                            );
+                            // recompute the end section mapping, because PA/VA mappings don't have to be
+                            // linear (in fact they go in the opposite direction)
+                            if let Some(pa_dst_end) = dump_pa_end_dst {
+                                let dump_swap = swap.decrypt_swap_from(
+                                    pa_dst_end & !(PAGE_SIZE - 1),
+                                    (section.virt as usize + section.len() - 20) & !(PAGE_SIZE - 1),
+                                    pid,
+                                );
+                                dump_slice(
+                                    &dump_swap
+                                        [(section.virt as usize + section.len() - 20) & (PAGE_SIZE - 1)..],
+                                    "    Dst [-20:] ",
+                                );
+                            } else {
+                                println!(
+                                    "   End of destination VA 0x{:x}, ERR UNMAPPED!",
+                                    section.virt as usize + section.len() - 20
+                                );
+                            }
+                        }
+                    }
                 }
             } else {
                 println!(
@@ -441,7 +517,7 @@ impl MiniElf {
     }
 }
 
-#[cfg(feature = "debug-print")]
+#[cfg(any(feature = "debug-print", feature = "swap"))]
 fn dump_addr(addr: usize, label: &str) {
     print!("{}", label);
     let slice = unsafe { core::slice::from_raw_parts(addr as *const u8, 20) };
@@ -450,8 +526,18 @@ fn dump_addr(addr: usize, label: &str) {
     }
     print!("\n\r");
 }
+#[cfg(feature = "swap")]
+fn dump_slice(slice: &[u8], label: &str) {
+    print!("{}", label);
+    // handle case that our decrypt region isn't 20 bytes long...
+    let len = slice.len().min(20);
+    for &b in &slice[..len] {
+        print!("{:02x}", b);
+    }
+    print!("\n\r");
+}
 
-#[cfg(all(feature = "debug-print", not(feature = "atsama5d27")))]
+#[cfg(all(any(feature = "debug-print", feature = "swap"), not(feature = "atsama5d27")))]
 pub fn pt_walk(root: usize, va: usize) -> Option<usize> {
     let l1_pt = unsafe { &mut (*((root << 12) as *mut PageTable)) };
     let l1_entry = l1_pt.entries[(va & 0xFFC0_0000) >> 22];

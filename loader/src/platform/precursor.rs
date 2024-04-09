@@ -1,4 +1,12 @@
+#[cfg(feature = "swap")]
+pub mod swap;
+#[cfg(feature = "swap")]
+pub use swap::*;
+
+#[cfg(not(feature = "swap"))]
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_EXT_MEM_LEN;
+#[cfg(feature = "swap")]
+pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_EXT_MEM_LEN / 2;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_EXT_MEM;
 
 /// Note that this memory test is "destructive" -- supend/resume will fail if it is enabled
