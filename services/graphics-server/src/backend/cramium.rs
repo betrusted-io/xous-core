@@ -142,6 +142,7 @@ impl XousDisplay {
                 // one extra line for handling the addressing setup
                 (FB_LINES + 1) * FB_WIDTH_WORDS * size_of::<u32>(),
                 0,
+                None,
             )
             .expect("Couldn't allocate SPI channel for LCD")
         };
