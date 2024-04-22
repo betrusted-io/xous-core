@@ -204,6 +204,9 @@ impl Modals {
     ///
     /// # Examples
     /// ```
+    /// use xous_names::XousNames;
+    /// use modals::Modals;
+    ///
     /// let xns = XousNames::new().unwrap();
     /// let modals = Modals::new(&xns).unwrap();
     /// modals.show_notification("Check the wiki:", Some("https://github.com/betrusted-io/betrusted-wiki/wiki")).unwrap();
