@@ -99,25 +99,27 @@ pub fn early_init() {
     // Set up the IO mux to map UART_A0:
     //  UART_RX_A[0] = PA3
     //  UART_TX_A[0] = PA4
+    //  UART_RX_A[1] = PD13
+    //  UART_RX_A[1] = PD14
     let mut iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-    iox.set_alternate_function(IoxPort::PA, 3, IoxFunction::AF1);
-    iox.set_alternate_function(IoxPort::PA, 4, IoxFunction::AF1);
+    iox.set_alternate_function(IoxPort::PD, 13, IoxFunction::AF1);
+    iox.set_alternate_function(IoxPort::PD, 14, IoxFunction::AF1);
     // rx as input, with pull-up
-    iox.set_gpio_dir(IoxPort::PA, 3, IoxDir::Input);
-    iox.set_gpio_pullup(IoxPort::PA, 3, IoxEnable::Enable);
+    iox.set_gpio_dir(IoxPort::PD, 13, IoxDir::Input);
+    iox.set_gpio_pullup(IoxPort::PD, 13, IoxEnable::Enable);
     // tx as output
-    iox.set_gpio_dir(IoxPort::PA, 4, IoxDir::Output);
+    iox.set_gpio_dir(IoxPort::PD, 14, IoxDir::Output);
 
     // Set up the UDMA_UART block to the correct baud rate and enable status
     let mut udma_global = udma::GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
-    udma_global.clock_on(udma::PeriphId::Uart0);
+    udma_global.clock_on(udma::PeriphId::Uart1);
     udma_global.map_event(
-        udma::PeriphId::Uart0,
+        udma::PeriphId::Uart1,
         udma::PeriphEventType::Uart(udma::EventUartOffset::Rx),
         udma::EventChannel::Channel0,
     );
     udma_global.map_event(
-        udma::PeriphId::Uart0,
+        udma::PeriphId::Uart1,
         udma::PeriphEventType::Uart(udma::EventUartOffset::Tx),
         udma::EventChannel::Channel1,
     );
@@ -131,7 +133,7 @@ pub fn early_init() {
     let uart_buf_addr = UART_IFRAM_ADDR;
     let mut udma_uart = unsafe {
         // safety: this is safe to call, because we set up clock and events prior to calling new.
-        udma::Uart::get_handle(utra::udma_uart_0::HW_UDMA_UART_0_BASE, uart_buf_addr, uart_buf_addr)
+        udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
     };
     udma_uart.set_baud(baudrate, freq);
 

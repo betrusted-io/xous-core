@@ -11,7 +11,7 @@ use utralib::*;
 
 #[repr(C, align(16))]
 #[derive(Default)]
-struct ChannelControl {
+pub struct ChannelControl {
     pub src_end_ptr: u32,
     pub dst_end_ptr: u32,
     pub control: u32,
@@ -20,7 +20,7 @@ struct ChannelControl {
 
 #[repr(C, align(256))]
 #[derive(Default)]
-struct ControlChannels {
+pub struct ControlChannels {
     pub channels: [ChannelControl; 8],
 }
 
