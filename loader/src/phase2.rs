@@ -244,7 +244,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
         // TODO: patch kernel arguments with Swap values...?
     }
 
-    if VVDBG {
+    if VVDBG || SDBG {
         println!("PID1 pagetables:");
         #[cfg(feature = "atsama5d27")]
         debug::print_pagetable(cfg.processes[0].ttbr0);
