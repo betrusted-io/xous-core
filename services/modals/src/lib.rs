@@ -196,7 +196,17 @@ impl Modals {
         }
     }
 
-    /// this blocks until the notification has been acknowledged.
+    /// Text/QR code notification modal dialog.
+    ///
+    /// - `qrtext` turns submitted text into a qr code.
+    /// - This dialog blocks until the notification has been acknowledged via [ Press any key ].
+    /// - Dialog does not scroll, burden is on the consumer to make sure text + qr code do not overflow available space.
+    ///
+    /// # Examples
+    /// ```
+    /// let modals = Modals::new(&xns).unwrap();
+    /// modals.show_notification("Check the wiki:", Some("https://github.com/betrusted-io/betrusted-wiki/wiki")).unwrap();
+    /// ```
     pub fn show_notification(&self, notification: &str, qrtext: Option<&str>) -> Result<(), xous::Error> {
         self.lock();
         let qrtext = match qrtext {
