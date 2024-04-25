@@ -203,7 +203,7 @@ impl Modals {
     /// - Dialog does not scroll, burden is on the consumer to make sure text + qr code do not overflow
     ///   available space.
     ///
-    /// ![Example Image](https://github.com/rowr111/xous-core/tree/main/docs/images/modals_show_notification.png)
+    /// ![Example Image](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_show_notification.png?raw=true)
     ///
     /// # Examples
     /// ```
