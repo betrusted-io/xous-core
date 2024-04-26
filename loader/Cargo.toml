@@ -66,6 +66,8 @@ cramium-soc = [
     "xous-pio",
     "xous-pl230",
     "rand_chacha",
+    "sram-margin",
+    "boot-delay",
 ]
 cramium-fpga = [
     "utralib/cramium-fpga",
@@ -81,6 +83,8 @@ renode-bypass = []
 secboot = []
 simulation-only = []
 board-bringup = []
+sram-margin = []
+boot-delay = []
 #default = ["debug-print"]
 swap = ["aes-gcm-siv"]
 resume = []            # suspend/resume pathway code
