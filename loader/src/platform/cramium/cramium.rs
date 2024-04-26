@@ -28,7 +28,8 @@ pub const SPIM_RAM_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRA
 pub const SPIM_FLASH_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4 * 4096;
 
 // location of kernel, as offset from the base of ReRAM. This needs to match up with what is in link.x.
-pub const KERNEL_OFFSET: usize = 0x4_0000;
+// inclusive of the signature block offset
+pub const KERNEL_OFFSET: usize = 0x4_1000;
 
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() {
