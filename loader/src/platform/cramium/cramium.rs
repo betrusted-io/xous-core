@@ -28,8 +28,8 @@ pub const SPIM_RAM_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRA
 pub const SPIM_FLASH_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4 * 4096;
 
 // location of kernel, as offset from the base of ReRAM. This needs to match up with what is in link.x.
-// inclusive of the signature block offset
-pub const KERNEL_OFFSET: usize = 0x4_1000;
+// exclusive of the signature block offset
+pub const KERNEL_OFFSET: usize = 0x4_0000;
 
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() {
@@ -60,11 +60,13 @@ pub fn early_init() {
     // this block is mandatory in all cases to get clocks set into some consistent, expected mode
     unsafe {
         let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
+        // conservative dividers
         daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x7f7f);
         daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x7f7f);
         daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x3f3f);
         daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x1f1f);
         daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x0f0f);
+        // ungate all clocks
         daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0xFF);
         daric_cgu.add(utra::sysctrl::SFR_HCLKGR.offset()).write_volatile(0xFF);
         daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0xFF);
@@ -83,8 +85,8 @@ pub fn early_init() {
         // this block should immediately follow the CGU setup
         let duart = utra::duart::HW_DUART_BASE as *mut u32;
         // ~2 second delay for debugger to attach
-        let msg = b"boot\r";
-        for j in 0..20_000 {
+        let msg = b"boot\n\r";
+        for j in 0..10_000 {
             // variable count of .'s to create a sense of motion on the console
             for _ in 0..j & 0x7 {
                 while duart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
@@ -197,13 +199,18 @@ pub fn early_init() {
     // makes things a little bit cleaner for JTAG ops, it seems.
     #[cfg(feature = "board-bringup")]
     {
+        // configure the SCE clocks to enable the TRNG
+        let mut sce = CSR::new(HW_SCE_GLBSFR_BASE as *mut u32);
+        sce.wo(utra::sce_glbsfr::SFR_SUBEN, 0xFF);
+        sce.wo(utra::sce_glbsfr::SFR_FFEN, 0x30);
+
         // do a quick TRNG test.
         let mut trng = cramium_hal::sce::trng::Trng::new(HW_TRNG_BASE);
-        trng.setup_raw_generation(256);
-        for _ in 0..8 {
+        trng.setup_raw_generation(32);
+        for _ in 0..12 {
             crate::println!("trng raw: {:x}", trng.get_u32().unwrap_or(0xDEAD_BEEF));
         }
-        let trng_csr = CSR::new(HW_TRNG_BASE as *mut u32);
+        let mut trng_csr = CSR::new(HW_TRNG_BASE as *mut u32);
         crate::println!("trng status: {:x}", trng_csr.r(utra::trng::SFR_SR));
 
         // do a PL230/PIO test. Toggles PB15 (PIO0) with an LFSR sequence.
