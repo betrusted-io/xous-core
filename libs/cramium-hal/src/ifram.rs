@@ -1,3 +1,4 @@
+#[cfg(feature = "std")]
 use xous::Result;
 use xous::{send_message, MemoryRange, Message};
 

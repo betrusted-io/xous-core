@@ -154,9 +154,9 @@ impl Trng {
 
     pub fn get_count_remaining(&self) -> u16 { self.count }
 
-    pub fn start(&mut self) { self.csr.wo(utra::trng::SFR_AR_GEN, 0x5A); }
+    pub fn start(&mut self) { self.csr.wo(utra::trng::SFR_AR_GEN, START_CODE); }
 
-    pub fn stop(&mut self) { self.csr.wo(utra::trng::SFR_AR_GEN, 0xA5); }
+    pub fn stop(&mut self) { self.csr.wo(utra::trng::SFR_AR_GEN, STOP_CODE); }
 }
 
 // some old test code
