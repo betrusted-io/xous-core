@@ -68,6 +68,7 @@ bitflags! {
     }
 }
 
+#[derive(PartialEq, Eq)]
 enum Mode {
     Uninit,
     Raw,
@@ -76,7 +77,7 @@ enum Mode {
 }
 
 pub struct Trng {
-    csr: CSR<u32>,
+    pub csr: CSR<u32>,
     count: u16,
     mode: Mode,
 }
@@ -132,7 +133,7 @@ impl Trng {
                     Some(self.csr.r(utra::trng::SFR_BUF))
                 } else {
                     // re-init generation automatically
-                    self.setup_raw_generation(256);
+                    self.setup_raw_generation(32);
                     self.count -= 1;
                     while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
                     Some(self.csr.r(utra::trng::SFR_BUF))
@@ -152,6 +153,10 @@ impl Trng {
     }
 
     pub fn get_count_remaining(&self) -> u16 { self.count }
+
+    pub fn start(&mut self) { self.csr.wo(utra::trng::SFR_AR_GEN, 0x5A); }
+
+    pub fn stop(&mut self) { self.csr.wo(utra::trng::SFR_AR_GEN, 0xA5); }
 }
 
 // some old test code
