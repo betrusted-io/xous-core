@@ -78,8 +78,6 @@ pub const FB_WIDTH_PIXELS: usize = WIDTH as usize;
 pub const FB_LINES: usize = LINES as usize;
 pub const FB_SIZE: usize = FB_WIDTH_WORDS * FB_LINES; // 44 bytes by 536 lines
 
-// TODO: need to confirm actual clock sent to UDMA block, but empirically, this is what I see
-// on the FPGA emulator
 const CONFIG_CLOCK_FREQUENCY: u32 = 50_000_000;
 
 const SPI_CS_PIN: u8 = 10;
