@@ -190,6 +190,7 @@ pub extern "C" fn trap_handler(
     {
         let pid = current_pid();
         let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
+        #[cfg(feature = "debug-print")]
         println!("IRQ -- KERNEL({}): RISC-V fault: {}", pid, ex);
     }
     match ex {

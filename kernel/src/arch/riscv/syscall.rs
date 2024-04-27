@@ -33,7 +33,7 @@ pub fn resume(supervisor: bool, thread: &Thread) -> ! {
 
     // Return to the appropriate CPU mode
     set_supervisor(supervisor);
-
+    #[cfg(feature = "debug-print")]
     println!(
         "Switching to PID {}, SP: {:08x}, PC: {:08x}",
         crate::arch::current_pid(),
