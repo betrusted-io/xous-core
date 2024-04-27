@@ -210,7 +210,7 @@ pub fn early_init() {
         for _ in 0..12 {
             crate::println!("trng raw: {:x}", trng.get_u32().unwrap_or(0xDEAD_BEEF));
         }
-        let mut trng_csr = CSR::new(HW_TRNG_BASE as *mut u32);
+        let trng_csr = CSR::new(HW_TRNG_BASE as *mut u32);
         crate::println!("trng status: {:x}", trng_csr.r(utra::trng::SFR_SR));
 
         // do a PL230/PIO test. Toggles PB15 (PIO0) with an LFSR sequence.
