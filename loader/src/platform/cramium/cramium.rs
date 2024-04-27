@@ -141,6 +141,11 @@ pub fn early_init() {
         }
     } */
 
+    // Now setup the clocks for real
+    // Safety: this can only be called in the early_init boot context
+    let perclk = unsafe { init_clock_asic(800_000_000) };
+    crate::println!("Perclk is {} Hz", perclk);
+
     // Configure the UDMA UART. This UART's settings will be used as the initial console UART.
     // This is configured in the loader so that the log crate does not have a dependency
     // on the cramium-hal crate to be functional.
@@ -174,7 +179,7 @@ pub fn early_init() {
     );
 
     let baudrate: u32 = 115200;
-    let freq: u32 = 45_882_000;
+    let freq: u32 = perclk / 2;
 
     // the address of the UART buffer is "hard-allocated" at an offset one page from the top of
     // IFRAM0. This is a convention that must be respected by the UDMA UART library implementation
@@ -184,6 +189,7 @@ pub fn early_init() {
         // safety: this is safe to call, because we set up clock and events prior to calling new.
         udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
     };
+    crate::println!("Baud freq is {} Hz, baudrate is {}", freq, baudrate);
     udma_uart.set_baud(baudrate, freq);
 
     // Board bring-up: send characters to confirm the UART is configured & ready to go for the logging crate!
@@ -282,50 +288,79 @@ fn test_duart() {
 #[cfg(feature = "platform-tests")]
 pub fn platform_tests() { test_duart(); }
 
-pub unsafe fn init_clock_asic(freq_hz: u32) {
+// returns the actual per_clk
+unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
+    use utra::sysctrl;
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
+    /*
+       Code notes from RTL:
+       assign pll_m = ipc_pllmn[16:12];
+       assign pll_n = ipc_pllmn[11: 0];
+       assign pll_f = ipc_pllf[23: 0];
+       assign pll_fen = ipc_pllf[24];
+       assign pll_q00 = ipc_pllq[ 2: 0];
+       assign pll_q10 = ipc_pllq[ 6: 4];
+       assign pll_q01 = ipc_pllq[10: 8];
+       assign pll_q11 = ipc_pllq[14:12];
 
-    const F_MHZ: u32 = 1_000_000;
-    const FREQ_0: u32 = 16 * F_MHZ;
+       Clko0 = Fvco / (pllq[ 2:0] + 1) / (pllq[ 6:4] + 1)
+       Clko1 = Fvco / (pllq[10:8] + 1) / (pllq[14:12] + 1)
+       Fvco target is 2GHz (1-3GHz range)
 
-    const TBL_Q: [u16; 7] = [
-        // keep later DIV even number as possible
-        0x7777, // 16-32 MHz
-        0x7737, // 32-64
-        0x3733, // 64-128
-        0x3313, // 128-256
-        0x3311, // 256-512 // keep ~ 100MHz
-        0x3301, // 512-1024
-        0x3301, /* 1024-1500
-                 * 0x1303, // 256-512
-                 * 0x0103, // 512-1024
-                 * 0x0001, // 1024-2048 */
-    ];
-    const TBL_MUL: [u32; 7] = [
-        64, // 16-32 MHz
-        32, // 32-64
-        16, // 64-128
-        8,  // 128-256
-        4,  // 256-512
-        2,  // 512-1024
-        2,  // 1024-2048
-    ];
-    const M: u32 = 24 - 1;
+      .gvco_bias ( pll_bias[7:6] ),
+      .cpp_bias  ( pll_bias[5:3] ),
+      .cpi_bias  ( pll_bias[2:0] ),
+    */
+    // Derive VCO frequency from legal, even dividers that get us close to our target frequency
+    const TARGET_VCO_HZ: u32 = 1_600_000_000; // 1.6GHz
+    let final_div: u32 = TARGET_VCO_HZ / freq_hz;
+    // fclk_div has to be a power of 2
+    let fclk_div =
+        if (1 << final_div.ilog2()) != final_div { 1 << (final_div.ilog2() + 1) } else { final_div };
+    let vco_actual: u32 = fclk_div * freq_hz;
+    if vco_actual < 1_000_000_000 || vco_actual > 3_000_000_000 {
+        crate::println!("Warning: VCO out of range: {}", vco_actual);
+    }
+    const TARGET_PERCLK_HZ: u32 = 100_000_000; // 100 MHz
+    let perclk_np_div: u32 = vco_actual / TARGET_PERCLK_HZ;
+    let perclk_div = if (1 << perclk_np_div.ilog2()) != perclk_np_div {
+        1 << (perclk_np_div.ilog2() + 1)
+    } else {
+        perclk_np_div
+    };
+    let ilog2_fdiv = fclk_div.ilog2();
+    let ilog2_pdiv = perclk_div.ilog2();
+    let pll_q0_0 = (1 << (ilog2_fdiv / 2)) - 1;
+    let pll_q1_0 = (1 << (ilog2_fdiv / 2 + ilog2_fdiv % 2)) - 1;
+    let pll_q0_1 = (1 << (ilog2_pdiv / 2)) - 1;
+    let pll_q1_1 = (1 << (ilog2_pdiv / 2 + ilog2_pdiv % 2)) - 1;
+    if pll_q0_0 > 7 || pll_q0_1 > 7 || pll_q1_0 > 7 || pll_q1_1 > 7 {
+        crate::println!(
+            "Warning: PLLQ out of range: 0_0:{} 1_0:{} 0_1:{} 1_1:{}",
+            pll_q0_0,
+            pll_q1_0,
+            pll_q0_1,
+            pll_q1_1
+        );
+    }
+    // this is the pllq value
+    let pllq = (pll_q0_0 & 7) | ((pll_q1_0 & 7) << 4) | ((pll_q0_1 & 7) << 8) | ((pll_q1_1 & 7) << 12);
 
-    report_api(0xc0c0_0000);
-    let f16_mhz_log2 = (freq_hz / FREQ_0).ilog2() as usize;
-    report_api(f16_mhz_log2 as u32);
-    let n_fxp24: u64 = (((freq_hz as u64) << 24) * TBL_MUL[f16_mhz_log2] as u64) / (2 * F_MHZ as u64);
-    report_api(n_fxp24 as u32);
-    report_api((n_fxp24 >> 32) as u32);
-    let n_frac: u32 = (n_fxp24 & 0x00ffffff) as u32;
-    report_api(n_frac);
-    let pllmn = ((M << 12) & 0x0001F000) | ((n_fxp24 >> 24) & 0x00000fff) as u32;
-    report_api(pllmn);
-    let pllf = n_frac | (if 0 == n_frac { 0 } else { 1 << 24 });
-    report_api(pllf);
-    let pllq = TBL_Q[f16_mhz_log2] as u32;
-    report_api(pllq);
+    // now, program the VCO to get to as close to vco_actual
+    const FREF_HZ: u32 = 48_000_000;
+    let ni = vco_actual / FREF_HZ;
+    if ni >= 4096 || ni < 8 {
+        crate::println!("Warning: ni out of range: {}", ni);
+    }
+    let pllmn = (1 << 12) | ni & 0xFFF; // m is set to 1, lower 12 bits is nf
+    let frac_n = ((vco_actual as f32 / FREF_HZ as f32) - ni as f32).max(0 as f32);
+    let pllf: u32 = (frac_n * ((1 << 24) as f32)) as u32;
+    if pllf >= 1 << 24 {
+        crate::println!("Warning nf out of range: 0x{:x}", pllf);
+    }
+    let n_frac = if pllf != 0 { pllf | 1 << 24 } else { 0 }; // set the frac enable bit if needed
+
+    crate::println!("pllq: 0x{:x}, pllmn: 0x{:x}, n_frac: 0x{:x}", pllq, pllmn, n_frac);
 
     daric_cgu.add(sysctrl::SFR_CGUSEL1.offset()).write_volatile(1); // 0: RC, 1: XTAL
     daric_cgu.add(sysctrl::SFR_CGUFSCR.offset()).write_volatile(48); // external crystal is 48MHz
@@ -352,22 +387,17 @@ pub unsafe fn init_clock_asic(freq_hz: u32) {
         for _ in 0..1024 {
             unsafe { core::arch::asm!("nop") };
         }
-        for _ in 0..4 {
-            report_api(0xc0c0_dddd);
-        }
+        crate::println!("PLL delay 1");
 
-        // printf ("%s(%4" PRIu32 "MHz) M = 24, N = %4lu.%08lu, Q = %2lu\n",
-        //     __FUNCTION__, freqHz / 1000000, (uint32_t)(n_fxp24 >>
-        // 24).write_volatile((uint32_t)((uint64_t)(n_fxp24 & 0x00ffffff) * 100000000/(1UL
-        // <<24)).write_volatile(TBL_MUL[f16MHzLog2]);
-        daric_cgu.add(sysctrl::SFR_IPCPLLMN.offset()).write_volatile(pllmn); // 0x1F598; // ??
-        daric_cgu.add(sysctrl::SFR_IPCPLLF.offset()).write_volatile(pllf); // ??
-        daric_cgu.add(sysctrl::SFR_IPCPLLQ.offset()).write_volatile(pllq); // ?? TODO select DIV for VCO freq
+        daric_cgu.add(sysctrl::SFR_IPCPLLMN.offset()).write_volatile(pllmn); // 0x1F598;
+        daric_cgu.add(sysctrl::SFR_IPCPLLF.offset()).write_volatile(n_frac); // 0x2812
+        daric_cgu.add(sysctrl::SFR_IPCPLLQ.offset()).write_volatile(pllq); // 0x2401 TODO select DIV for VCO freq
 
         //               VCO bias   CPP bias   CPI bias
         //                1          2          3
         // DARIC_IPC->ipc = (3 << 6) | (5 << 3) | (5);
         daric_cgu.add(sysctrl::SFR_IPCCR.offset()).write_volatile((1 << 6) | (2 << 3) | (3));
+        // daric_cgu.add(sysctrl::SFR_IPCCR.offset()).write_volatile((3 << 6) | (5 << 3) | (5));
         daric_cgu.add(sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x32); // commit, must write 32
 
         daric_cgu
@@ -379,22 +409,58 @@ pub unsafe fn init_clock_asic(freq_hz: u32) {
         for _ in 0..1024 {
             unsafe { core::arch::asm!("nop") };
         }
-        for _ in 0..4 {
-            report_api(0xc0c0_eeee);
-        }
-        // printf("read reg a0 : %08" PRIx32"\n", *((volatile uint32_t* )0x400400a0));
-        // printf("read reg a4 : %04" PRIx16"\n", *((volatile uint16_t* )0x400400a4));
-        // printf("read reg a8 : %04" PRIx16"\n", *((volatile uint16_t* )0x400400a8));
+        crate::println!("PLL delay 2");
 
-        // TODO wait/poll lock status?
         daric_cgu.add(sysctrl::SFR_CGUSEL0.offset()).write_volatile(1); // clktop sel, 0:clksys, 1:clkpll0
         daric_cgu.add(sysctrl::SFR_CGUSET.offset()).write_volatile(0x32); // commit
 
-        report_api(0xc0c0_ffff);
-        // printf ("    MN: 0x%05x, F: 0x%06x, Q: 0x%04x\n",
-        //     DARIC_IPC->pll_mn, DARIC_IPC->pll_f, DARIC_IPC->pll_q);
-        // printf ("    LPEN: 0x%01x, OSC: 0x%04x, BIAS: 0x%04x,\n",
-        //     DARIC_IPC->lpen, DARIC_IPC->osc, DARIC_IPC->ipc);
+        for _ in 0..1024 {
+            unsafe { core::arch::asm!("nop") };
+        }
+        crate::println!("PLL delay 3");
+
+        crate::println!("fsvalid: {}", daric_cgu.add(sysctrl::SFR_CGUFSVLD.offset()).read_volatile());
+        let cgufsfreq0 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ0.offset()).read_volatile();
+        let cgufsfreq1 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ1.offset()).read_volatile();
+        let cgufsfreq2 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ2.offset()).read_volatile();
+        let cgufsfreq3 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ3.offset()).read_volatile();
+        crate::println!(
+            "Internal osc: {} -> {} MHz ({} MHz)",
+            cgufsfreq0,
+            fsfreq_to_hz(cgufsfreq0),
+            fsfreq_to_hz_32(cgufsfreq0)
+        );
+        crate::println!(
+            "XTAL: {} -> {} MHz ({} MHz)",
+            cgufsfreq1,
+            fsfreq_to_hz(cgufsfreq1),
+            fsfreq_to_hz_32(cgufsfreq1)
+        );
+        crate::println!(
+            "pll output 0: {} -> {} MHz ({} MHz)",
+            cgufsfreq2,
+            fsfreq_to_hz(cgufsfreq2),
+            fsfreq_to_hz_32(cgufsfreq2)
+        );
+        crate::println!(
+            "pll output 1: {} -> {} MHz ({} MHz)",
+            cgufsfreq3,
+            fsfreq_to_hz(cgufsfreq3),
+            fsfreq_to_hz_32(cgufsfreq3)
+        );
+
+        // Hits a 16:8:4:2:1 ratio on fclk:aclk:hclk:iclk:pclk
+        // Resulting in 800:400:200:100:50 MHz assuming 800MHz fclk
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x7fff); // fclk
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x3f7f); // aclk
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x1f3f); // hclk
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x0f1f); // iclk
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x070f); // pclk
     }
-    report_api(0xc0c0_0007);
+    crate::println!("PLL configured to {} MHz", freq_hz / 1_000_000);
+
+    vco_actual / perclk_div
 }
+
+fn fsfreq_to_hz(fs_freq: u32) -> u32 { (fs_freq * (48_000_000 / 32)) / 1_000_000 }
+fn fsfreq_to_hz_32(fs_freq: u32) -> u32 { (fs_freq * (32_000_000 / 32)) / 1_000_000 }
