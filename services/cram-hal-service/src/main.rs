@@ -1,4 +1,7 @@
 mod api;
+#[cfg(feature = "quantum-timer")]
+use core::sync::atomic::{AtomicUsize, Ordering};
+
 use api::*;
 use cramium_hal::{
     iox,
@@ -11,9 +14,14 @@ use utralib::*;
 use xous::sender::Sender;
 use xous_pio::*;
 
+struct PreemptionHw {
+    pub timer_sm: PioSm,
+    pub irq_csr: CSR<u32>,
+}
+
 #[cfg(feature = "quantum-timer")]
 fn timer_tick(_irq_no: usize, arg: *mut usize) {
-    let sm_a = unsafe { &mut *(arg as *mut PioSm) };
+    let ptimer = unsafe { &mut *(arg as *mut PreemptionHw) };
     // this call forces preemption every timer tick
     // rsyscalls are "raw syscalls" -- used for syscalls that don't have a friendly wrapper around them
     // since ReturnToParent is only used here, we haven't wrapped it, so we use an rsyscall
@@ -21,7 +29,9 @@ fn timer_tick(_irq_no: usize, arg: *mut usize) {
         .expect("couldn't return to parent");
 
     // acknowledge the timer
-    sm_a.sm_interrupt_clear(1);
+    ptimer.timer_sm.sm_interrupt_clear(0);
+    // clear the pending bit
+    ptimer.irq_csr.wo(utra::irqarray18::EV_PENDING, ptimer.irq_csr.r(utra::irqarray18::EV_PENDING));
 }
 
 fn try_alloc(ifram_allocs: &mut Vec<Option<Sender>>, size: usize, sender: Sender) -> Option<usize> {
@@ -113,47 +123,51 @@ fn main() {
     .expect("couldn't map UDMA global control");
     let mut udma_global = GlobalConfig::new(udma_global_csr.as_mut_ptr() as *mut u32);
 
+    let mut pio_ss = xous_pio::PioSharedState::new();
+    // map and enable the interrupt for the PIO system timer
+    let irq18_page = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utralib::generated::HW_IRQARRAY18_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't claim irq18 csr");
+    let mut ptimer = PreemptionHw {
+        timer_sm: pio_ss.alloc_sm().unwrap(),
+        irq_csr: CSR::new(irq18_page.as_mut_ptr() as *mut u32),
+    };
+
+    // claim the IRQ for the quanta timer
+    xous::claim_interrupt(
+        utralib::LITEX_IRQARRAY18_INTERRUPT,
+        timer_tick,
+        &mut ptimer as *mut PreemptionHw as *mut usize,
+    )
+    .expect("couldn't claim IRQ");
+
+    pio_ss.clear_instruction_memory();
+    pio_ss.pio.rmwf(utra::rp_pio::SFR_CTRL_EN, 0);
+    #[rustfmt::skip]
+    let timer_code = pio_proc::pio_asm!(
+        "restart:",
+        "set x, 31",  // 4 cycles overhead gets us to 10 iterations per pulse
+        "waitloop:",
+        "jmp x-- waitloop",
+        "irq set 0",
+        "jmp restart",
+    );
+    let a_prog = LoadedProg::load(timer_code.program, &mut pio_ss).unwrap();
+    ptimer.timer_sm.sm_set_enabled(false);
+    a_prog.setup_default_config(&mut ptimer.timer_sm);
+    ptimer.timer_sm.config_set_clkdiv(50_000.0f32); // set to 1ms per cycle
+    ptimer.timer_sm.sm_init(a_prog.entry());
+    ptimer.timer_sm.sm_irq0_source_enabled(PioIntSource::Sm, true);
+    ptimer.timer_sm.sm_set_enabled(true);
+
     #[cfg(feature = "quantum-timer")]
     {
-        let mut pio_ss = xous_pio::PioSharedState::new();
-        let mut sm_a = pio_ss.alloc_sm().unwrap();
-        // claim the IRQ for the quanta timer
-        xous::claim_interrupt(
-            utralib::LITEX_IRQARRAY18_INTERRUPT,
-            timer_tick,
-            &mut sm_a as *mut PioSm as *mut usize,
-        )
-        .expect("couldn't claim IRQ");
-
-        pio_ss.clear_instruction_memory();
-        pio_ss.pio.rmwf(utra::rp_pio::SFR_CTRL_EN, 0);
-        #[rustfmt::skip]
-        let timer_code = pio_proc::pio_asm!(
-            "restart:",
-            "set x, 6",  // 4 cycles overhead gets us to 10 iterations per pulse
-            "waitloop:",
-            "jmp x-- waitloop",
-            "irq set 0",
-            "jmp restart",
-        );
-        let a_prog = LoadedProg::load(timer_code.program, &mut pio_ss).unwrap();
-        sm_a.sm_set_enabled(false);
-        a_prog.setup_default_config(&mut sm_a);
-        sm_a.config_set_clkdiv(50_000.0f32); // set to 1ms per iteration
-        sm_a.sm_init(a_prog.entry());
-        sm_a.sm_irq0_source_enabled(PioIntSource::Sm, true);
-        sm_a.sm_set_enabled(true);
-
-        // map and enable the interrupt for the PIO system timer
-        let irq18_page = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utralib::generated::HW_IOX_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't claim irq18 csr");
-        let mut irq18_csr = CSR::new(irq18_page.as_mut_ptr() as *mut u32);
-        irq18_csr.wfo(utra::irqarray18::EV_ENABLE_PIOIRQ0_DUPE, 1);
+        ptimer.irq_csr.wfo(utra::irqarray18::EV_ENABLE_PIOIRQ0_DUPE, 1);
+        log::info!("Quantum timer setup!");
     }
 
     let mut msg_opt = None;
