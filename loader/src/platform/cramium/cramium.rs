@@ -218,6 +218,58 @@ pub fn early_init() {
         xous_pl230::pl230_tests::units::basic_tests(&mut pl230);
         // xous_pl230::pl230_tests::units::pio_test(&mut pl230);
 
+        // Quantum timer stub
+        #[cfg(feature = "quantum-timer-test")]
+        {
+            let mut pio_ss = xous_pio::PioSharedState::new();
+            let mut sm_a = pio_ss.alloc_sm().unwrap();
+
+            pio_ss.clear_instruction_memory();
+            #[rustfmt::skip]
+            let timer_code = pio_proc::pio_asm!(
+                "restart:",
+                "set x, 6",  // 4 cycles overhead gets us to 10 iterations per pulse
+                "waitloop:",
+                "mov pins, x",
+                "jmp x-- waitloop",
+                "irq set 0",
+                "jmp restart",
+            );
+            // iox.set_gpio_dir(cramium_hal::iox::IoxPort::PB, 15, cramium_hal::iox::IoxDir::Output);
+            let a_prog = xous_pio::LoadedProg::load(timer_code.program, &mut pio_ss).unwrap();
+            sm_a.sm_set_enabled(false);
+            a_prog.setup_default_config(&mut sm_a);
+            sm_a.config_set_out_pins(16, 8);
+            sm_a.config_set_clkdiv(50_000.0f32); // set to 1ms per cycle
+            iox.set_pio_bit_from_port_and_pin(cramium_hal::iox::IoxPort::PC, 2).unwrap();
+            iox.set_pio_bit_from_port_and_pin(cramium_hal::iox::IoxPort::PC, 1).unwrap();
+            let pin = iox.set_pio_bit_from_port_and_pin(cramium_hal::iox::IoxPort::PC, 0).unwrap();
+            let pin = 0;
+            sm_a.sm_set_pindirs_with_mask(7 << 16, 7 << 16);
+            sm_a.sm_set_pins_with_mask(7 << 16, 7 << 16);
+            //sm_a.sm_set_pindirs_with_mask(1 << pin as usize, 1 << pin as usize);
+            //sm_a.sm_set_pins_with_mask(1 << pin as usize, 1 << pin as usize);
+            sm_a.sm_init(a_prog.entry());
+            sm_a.sm_irq0_source_enabled(xous_pio::PioIntSource::Sm, true);
+            sm_a.sm_set_enabled(true);
+            crate::println!("pio setup: pin {}", pin);
+            loop {
+                let status = sm_a.sm_irq0_status(None);
+                crate::println!(
+                    "pio irq {}({:x}), {}, {:x}, {:x}/{:x}",
+                    status,
+                    sm_a.pio.r(utra::rp_pio::SFR_IRQ0_INTS),
+                    sm_a.sm_address(),
+                    sm_a.pio.r(utra::rp_pio::SFR_DBG_PADOUT),
+                    sm_a.pio.r(utra::rp_pio::SFR_DBG_PADOE),
+                    iox.csr.r(utra::iox::SFR_PIOSEL),
+                );
+                if status {
+                    sm_a.sm_interrupt_clear(0);
+                }
+            }
+        }
+
         const BANNER: &'static str = "\n\rKeep pressing keys to continue boot...\r\n";
         udma_uart.write(BANNER.as_bytes());
 
