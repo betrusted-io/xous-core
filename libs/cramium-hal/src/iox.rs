@@ -79,7 +79,7 @@ impl From<u32> for IoxValue {
 }
 
 pub struct Iox {
-    csr: CSR<u32>,
+    pub csr: CSR<u32>,
 }
 
 impl Iox {
