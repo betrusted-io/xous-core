@@ -746,7 +746,7 @@ pub struct Spim {
     eot_wait: u8,
     event_channel: Option<EventChannel>,
     mode: SpimMode,
-    align: SpimByteAlign,
+    _align: SpimByteAlign,
     ifram: IframRange,
     // starts at the base of ifram range
     tx_buf_len_bytes: usize,
@@ -827,7 +827,7 @@ impl Spim {
                 sot_wait,
                 eot_wait,
                 event_channel,
-                align: SpimByteAlign::Disable,
+                _align: SpimByteAlign::Disable,
                 mode: SpimMode::Standard,
                 ifram,
                 tx_buf_len_bytes: max_tx_len_bytes,
@@ -897,18 +897,13 @@ impl Spim {
         // but at least you find out.
         assert!(clk_div < 256, "SPI clock divider is out of range");
 
-        let mut reqlen = max_tx_len_bytes + max_rx_len_bytes + SPIM_CMD_BUF_LEN_BYTES;
-        if reqlen % 4096 != 0 {
-            // round up to the nearest page size
-            reqlen = (reqlen + 4096) & !4095;
-        }
         let mut spim = Spim {
             csr,
             cs: chip_select,
             sot_wait,
             eot_wait,
             event_channel,
-            align: SpimByteAlign::Disable,
+            _align: SpimByteAlign::Disable,
             mode: SpimMode::Standard,
             ifram,
             tx_buf_len_bytes: max_tx_len_bytes,
@@ -1147,7 +1142,10 @@ impl Spim {
         // read back the ID result
         let cmd_list =
             [SpimCmd::RxData(SpimMode::Standard, SpimWordsPerXfer::Words1, 8, SpimEndian::MsbFirst, 3)];
-        while self.udma_busy(Bank::Tx) {
+        self.send_cmd_list(&cmd_list);
+        // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
+        unsafe { self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u8>()[..3], CFG_EN | CFG_SIZE_8) };
+        while self.udma_busy(Bank::Rx) {
             #[cfg(feature = "std")]
             xous::yield_slice();
         }
@@ -1234,7 +1232,7 @@ impl Spim {
                 SpimEndian::MsbFirst,
                 chunk.len() as u32,
             )];
-            self.send_cmd_list(&cmd_list);
+            self.send_cmd_list(&rd_cmd);
             // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
             unsafe {
                 self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u8>()[..chunk.len()], CFG_EN | CFG_SIZE_8)
@@ -1278,7 +1276,7 @@ impl Spim {
                 SpimEndian::MsbFirst,
                 chunk.len() as u32,
             )];
-            self.send_cmd_list(&cmd_list);
+            self.send_cmd_list(&wr_cmd);
             self.tx_buf_mut()[..chunk.len()].copy_from_slice(chunk);
             // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
             unsafe {
