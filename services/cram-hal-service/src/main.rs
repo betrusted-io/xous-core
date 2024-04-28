@@ -1,6 +1,4 @@
 mod api;
-#[cfg(feature = "quantum-timer")]
-use core::sync::atomic::{AtomicUsize, Ordering};
 
 use api::*;
 use cramium_hal::{
