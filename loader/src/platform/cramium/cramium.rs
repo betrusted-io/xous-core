@@ -273,8 +273,40 @@ pub fn early_init() {
         }
         #[cfg(feature = "spim-test")]
         {
+            use cramium_hal::ifram::IframRange;
             use cramium_hal::iox::*;
             use cramium_hal::udma::*;
+
+            fn setup_port(
+                iox: &mut Iox,
+                port: IoxPort,
+                pin: u8,
+                function: Option<IoxFunction>,
+                direction: Option<IoxDir>,
+                drive: Option<IoxDriveStrength>,
+                slow_slew: Option<IoxEnable>,
+                schmitt: Option<IoxEnable>,
+                pullup: Option<IoxEnable>,
+            ) {
+                if let Some(f) = function {
+                    iox.set_alternate_function(port, pin, f);
+                }
+                if let Some(d) = direction {
+                    iox.set_gpio_dir(port, pin, d);
+                }
+                if let Some(t) = schmitt {
+                    iox.set_gpio_schmitt_trigger(port, pin, t);
+                }
+                if let Some(p) = pullup {
+                    iox.set_gpio_pullup(port, pin, p);
+                }
+                if let Some(s) = slow_slew {
+                    iox.set_slow_slew_rate(port, pin, s);
+                }
+                if let Some(s) = drive {
+                    iox.set_drive_strength(port, pin, s);
+                }
+            }
 
             // setup the I/O pins
             let mut iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
@@ -386,17 +418,17 @@ pub fn early_init() {
 
             let mut chk_buf = [0u8; 32];
             flash_spim.mem_read(0x0, &mut chk_buf);
-            crate::println!("flash: {:x}", chk_buf);
+            crate::println!("flash: {:x?}", chk_buf);
             ram_spim.mem_read(0x0, &mut chk_buf);
-            crate::println!("RAM: {:x}", chk_buf);
+            crate::println!("RAM: {:x?}", chk_buf);
             for (i, d) in chk_buf.iter_mut().enumerate() {
                 *d = i as u8;
             }
             ram_spim.mem_ram_write(0x0, &chk_buf);
             chk_buf.fill(0);
-            crate::println!("empty buf: {:x}", chk_buf);
+            crate::println!("empty buf: {:x?}", chk_buf);
             ram_spim.mem_read(0x0, &mut chk_buf);
-            crate::println!("RAM checked: {:x}", chk_buf);
+            crate::println!("RAM checked: {:x?}", chk_buf);
         }
 
         const BANNER: &'static str = "\n\rKeep pressing keys to continue boot...\r\n";
