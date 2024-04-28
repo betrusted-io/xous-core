@@ -460,6 +460,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for service in cramium_pkgs {
                 builder.add_service(service, LoaderRegion::Flash);
             }
+            builder.add_feature("quantum-timer");
         }
 
         // ------ ARM hardware image configs ------
