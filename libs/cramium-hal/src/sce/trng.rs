@@ -72,8 +72,10 @@ bitflags! {
 enum Mode {
     Uninit,
     Raw,
-    Lfsr,
-    Aes,
+    /// TODO
+    _Lfsr,
+    /// TODO
+    _Aes,
 }
 
 pub struct Trng {
@@ -139,10 +141,10 @@ impl Trng {
                     Some(self.csr.r(utra::trng::SFR_BUF))
                 }
             }
-            Mode::Lfsr => {
+            Mode::_Lfsr => {
                 todo!("LFSR mode not yet implemented");
             }
-            Mode::Aes => {
+            Mode::_Aes => {
                 todo!("AES mode not yet implemented");
             }
         }
