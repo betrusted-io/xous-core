@@ -90,5 +90,6 @@ boot-delay = []
 #default = ["debug-print"]
 swap = ["aes-gcm-siv"]
 quantum-timer-test = ["pio", "pio-proc"]
+spim-test = []
 resume = []                              # suspend/resume pathway code
 default = []
