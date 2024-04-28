@@ -101,7 +101,6 @@ pub struct XousDisplay {
     next_free_line: usize,
     spim: udma::Spim,
     devboot: bool,
-    iox: IoxHal,
 }
 
 impl XousDisplay {
@@ -183,7 +182,7 @@ impl XousDisplay {
             Some(iox::IoxDriveStrength::Drive2mA),
         );
 
-        let mut display = XousDisplay { fb, spim, next_free_line: 0, devboot: false, iox };
+        let mut display = XousDisplay { fb, spim, next_free_line: 0, devboot: false };
 
         // initialize the DMA buffer with valid mode/address lines & blank data
         for line in 0..FB_LINES {
@@ -223,10 +222,12 @@ impl XousDisplay {
         unimplemented!("Cramium platform does not yet support suspend/resume");
     }
 
+    #[allow(dead_code)]
     pub fn suspend(&mut self) {
         unimplemented!("Cramium platform does not yet support suspend/resume");
     }
 
+    #[allow(dead_code)]
     pub fn resume(&mut self) {
         unimplemented!("Cramium platform does not yet support suspend/resume");
     }
