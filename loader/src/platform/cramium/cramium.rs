@@ -22,9 +22,11 @@ pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 // Locate the hard-wired IFRAM allocations for UDMA
 pub const UART_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096;
 // RAM needs two buffers of 1k + 16 bytes = 2048 + 16 = 2064 bytes; round up to one page
+#[allow(dead_code)]
 pub const SPIM_RAM_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 2 * 4096;
 // Flash will be released after the loader is done: it's only accessed to copy the IniS sectors into swap,
 // then abandoned. It needs 4096 bytes for Rx, and 0 bytes for Tx + 16 bytes for cmd.
+#[allow(dead_code)]
 pub const SPIM_FLASH_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4 * 4096;
 
 // location of kernel, as offset from the base of ReRAM. This needs to match up with what is in link.x.
@@ -268,6 +270,133 @@ pub fn early_init() {
                     sm_a.sm_interrupt_clear(0);
                 }
             }
+        }
+        #[cfg(feature = "spim-test")]
+        {
+            use cramium_hal::iox::*;
+            use cramium_hal::udma::*;
+
+            // setup the I/O pins
+            let mut iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
+            // JQSPI1
+            // SPIM_CLK_A[0]
+            setup_port(
+                &mut iox,
+                IoxPort::PD,
+                4,
+                Some(IoxFunction::AF1),
+                Some(IoxDir::Output),
+                Some(IoxDriveStrength::Drive2mA),
+                Some(IoxEnable::Disable),
+                None,
+                None,
+            );
+            // SPIM_SD[0-3]_A[0]
+            for i in 0..3 {
+                setup_port(
+                    &mut iox,
+                    IoxPort::PD,
+                    i,
+                    Some(IoxFunction::AF1),
+                    None,
+                    Some(IoxDriveStrength::Drive2mA),
+                    Some(IoxEnable::Enable),
+                    None,
+                    None,
+                );
+            }
+            // SPIM_CSN0_A[0]
+            setup_port(
+                &mut iox,
+                IoxPort::PD,
+                5,
+                Some(IoxFunction::AF1),
+                Some(IoxDir::Output),
+                Some(IoxDriveStrength::Drive2mA),
+                Some(IoxEnable::Enable),
+                None,
+                None,
+            );
+            // SPIM_CSN0_A[1]
+            setup_port(
+                &mut iox,
+                IoxPort::PD,
+                6,
+                Some(IoxFunction::AF1),
+                Some(IoxDir::Output),
+                Some(IoxDriveStrength::Drive2mA),
+                Some(IoxEnable::Enable),
+                None,
+                None,
+            );
+            let mut udma_global = GlobalConfig::new(utralib::generated::HW_UDMA_CTRL_BASE as *mut u32);
+            udma_global.clock_on(PeriphId::Spim0); // JQSPI1
+
+            // safety: this is safe because clocks have been set up
+            let mut flash_spim = unsafe {
+                Spim::new_with_ifram(
+                    SpimChannel::Channel0,
+                    100_000_000,
+                    100_000_000,
+                    SpimClkPol::LeadingEdgeRise,
+                    SpimClkPha::CaptureOnLeading,
+                    SpimCs::Cs0,
+                    0,
+                    0,
+                    None,
+                    0, // we will never write to flash
+                    4096,
+                    Some(8),
+                    IframRange::from_raw_parts(SPIM_FLASH_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, 4096 * 2),
+                )
+            };
+
+            let mut ram_spim = unsafe {
+                Spim::new_with_ifram(
+                    SpimChannel::Channel0,
+                    100_000_000,
+                    100_000_000,
+                    SpimClkPol::LeadingEdgeRise,
+                    SpimClkPha::CaptureOnLeading,
+                    SpimCs::Cs1,
+                    0,
+                    0,
+                    None,
+                    1024, // this is limited by the page length
+                    1024,
+                    Some(6),
+                    IframRange::from_raw_parts(SPIM_RAM_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR, 4096 * 2),
+                )
+            };
+            // sanity check: read ID
+            crate::println!("flash ID: {:x}", flash_spim.mem_read_id());
+            crate::println!("ram ID: {:x}", ram_spim.mem_read_id());
+
+            // setup FLASH
+            //  - QE enable
+            //  - dummy cycles = 8
+            flash_spim.mem_write_status_register(0b01_0000_00, 0b10_00_0_111);
+
+            // set SPI devices to QPI mode
+            // We expect a MX25L12833F (3.3V) on CS0
+            // We expect a ISS66WVS4M8BLL (3.3V) on CS1
+            // Both support QPI.
+            flash_spim.mem_qpi_mode(true);
+            ram_spim.mem_qpi_mode(true);
+
+            let mut chk_buf = [0u8; 32];
+            flash_spim.mem_read(0x0, &mut chk_buf);
+            crate::println!("flash: {:x}", chk_buf);
+            ram_spim.mem_read(0x0, &mut chk_buf);
+            crate::println!("RAM: {:x}", chk_buf);
+            for (i, d) in chk_buf.iter_mut().enumerate() {
+                *d = i as u8;
+            }
+            ram_spim.mem_ram_write(0x0, &chk_buf);
+            chk_buf.fill(0);
+            crate::println!("empty buf: {:x}", chk_buf);
+            ram_spim.mem_read(0x0, &mut chk_buf);
+            crate::println!("RAM checked: {:x}", chk_buf);
         }
 
         const BANNER: &'static str = "\n\rKeep pressing keys to continue boot...\r\n";
