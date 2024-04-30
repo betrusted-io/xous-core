@@ -315,7 +315,7 @@ impl MemoryMapping {
                 i,
                 _superpage_addr,
                 (*l1_entry >> 10) << 12,
-                MMUFlags::from_bits(l1_entry & 0xff).unwrap()
+                MMUFlags::from_bits(l1_entry & 0x3ff).unwrap()
             );
 
             // Page 1023 is only available to PID1
@@ -335,7 +335,7 @@ impl MemoryMapping {
                     j,
                     _superpage_addr + _page_addr,
                     (*l0_entry >> 10) << 12,
-                    MMUFlags::from_bits(l0_entry & 0xff).unwrap()
+                    MMUFlags::from_bits(l0_entry & 0x3ff).unwrap()
                 );
             }
         }
