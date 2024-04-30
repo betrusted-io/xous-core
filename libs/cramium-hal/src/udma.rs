@@ -340,6 +340,13 @@ pub trait Udma {
     unsafe fn udma_enqueue<T>(&self, bank: Bank, buf: &[T], config: u32) {
         let bank_addr = self.csr().base().add(bank as usize);
         let buf_addr = buf.as_ptr() as u32;
+        /*
+        crate::println!(
+            "udma_enqueue: @{:x}[{}]/{:x}",
+            buf_addr,
+            (buf.len() * size_of::<T>()) as u32,
+            config | CFG_EN
+        ); */
         bank_addr.add(DmaReg::Saddr.into()).write_volatile(buf_addr);
         bank_addr.add(DmaReg::Size.into()).write_volatile((buf.len() * size_of::<T>()) as u32);
         bank_addr.add(DmaReg::Cfg.into()).write_volatile(config | CFG_EN)
@@ -733,6 +740,8 @@ impl Into<u32> for SpimCmd {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy)]
 pub enum SpimChannel {
     Channel0,
     Channel1,
@@ -747,11 +756,11 @@ pub struct Spim {
     event_channel: Option<EventChannel>,
     mode: SpimMode,
     _align: SpimByteAlign,
-    ifram: IframRange,
+    pub ifram: IframRange,
     // starts at the base of ifram range
-    tx_buf_len_bytes: usize,
+    pub tx_buf_len_bytes: usize,
     // immediately after the tx buf len
-    rx_buf_len_bytes: usize,
+    pub rx_buf_len_bytes: usize,
     dummy_cycles: u8,
 }
 
@@ -1120,28 +1129,25 @@ impl Spim {
     }
 
     fn mem_send_cmd(&mut self, cmd: u8) {
-        let cmd_list = [SpimCmd::SendCmd(self.mode, 8, (cmd as u16) << 8)];
+        let cmd_list = [SpimCmd::SendCmd(self.mode, 8, cmd as u16)];
         self.send_cmd_list(&cmd_list);
-        while self.udma_busy(Bank::Tx) {
+        while self.udma_busy(Bank::Custom) {
             #[cfg(feature = "std")]
             xous::yield_slice();
         }
     }
 
-    /// Side-effects: unsets QPI mode if it was previously set
-    pub fn mem_read_id(&mut self) -> u32 {
-        if self.mode != SpimMode::Standard {
-            self.mem_qpi_mode(false);
-        }
-
+    pub fn mem_read_id_flash(&mut self) -> u32 {
         self.mem_cs(true);
 
         // send the RDID command
-        self.mem_send_cmd(0x9F);
+        match self.mode {
+            SpimMode::Standard => self.mem_send_cmd(0x9F),
+            SpimMode::Quad => self.mem_send_cmd(0xAF),
+        }
 
         // read back the ID result
-        let cmd_list =
-            [SpimCmd::RxData(SpimMode::Standard, SpimWordsPerXfer::Words1, 8, SpimEndian::MsbFirst, 3)];
+        let cmd_list = [SpimCmd::RxData(self.mode, SpimWordsPerXfer::Words1, 8, SpimEndian::MsbFirst, 3)];
         self.send_cmd_list(&cmd_list);
         // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
         unsafe { self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u8>()[..3], CFG_EN | CFG_SIZE_8) };
@@ -1150,7 +1156,33 @@ impl Spim {
             xous::yield_slice();
         }
 
-        let ret = u32::from_le_bytes([0x0, self.rx_buf()[0], self.rx_buf()[1], self.rx_buf()[2]]);
+        let ret = u32::from_le_bytes([self.rx_buf()[0], self.rx_buf()[1], self.rx_buf()[2], 0x0]);
+
+        self.mem_cs(false);
+        ret
+    }
+
+    /// Side-effects: unsets QPI mode if it was previously set
+    pub fn mem_read_id_ram(&mut self) -> u32 {
+        self.mem_cs(true);
+
+        // send the RDID command
+        self.mem_send_cmd(0x9F);
+
+        // read back the ID result
+        // The ID requires 24 bits "dummy" address field, then followed by 2 bytes ID + KGD, and then
+        // 48 bits of unique ID -- we only retrieve the top 16 of that here.
+        let cmd_list = [SpimCmd::RxData(self.mode, SpimWordsPerXfer::Words1, 8, SpimEndian::MsbFirst, 7)];
+        self.send_cmd_list(&cmd_list);
+        // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
+        unsafe { self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u8>()[..7], CFG_EN | CFG_SIZE_8) };
+        while self.udma_busy(Bank::Rx) {
+            #[cfg(feature = "std")]
+            xous::yield_slice();
+        }
+
+        let ret =
+            u32::from_le_bytes([self.rx_buf()[3], self.rx_buf()[4], self.rx_buf()[5], self.rx_buf()[6]]);
 
         self.mem_cs(false);
         ret
@@ -1160,12 +1192,16 @@ impl Spim {
         self.mem_cs(true);
         if activate {
             self.mem_send_cmd(0x35);
-            self.mode = SpimMode::Quad;
         } else {
             self.mem_send_cmd(0xF5);
-            self.mode = SpimMode::Standard;
         }
         self.mem_cs(false);
+        // change the mode only after the command has been sent
+        if activate {
+            self.mode = SpimMode::Quad;
+        } else {
+            self.mode = SpimMode::Standard;
+        }
     }
 
     /// Side-effects: unsets QPI mode if it was previously set
@@ -1200,7 +1236,7 @@ impl Spim {
             let chunk_addr = addr as usize + offset;
             let addr_plus_dummy = (24 / 8) + self.dummy_cycles / 2;
             let cmd_list = [
-                SpimCmd::SendCmd(self.mode, 8, 0xEB << 8),
+                SpimCmd::SendCmd(self.mode, 8, 0xEB),
                 SpimCmd::TxData(
                     self.mode,
                     SpimWordsPerXfer::Words1,
@@ -1257,7 +1293,7 @@ impl Spim {
             self.mem_cs(true);
             let chunk_addr = addr as usize + offset;
             let cmd_list = [
-                SpimCmd::SendCmd(self.mode, 8, 0x38 << 8),
+                SpimCmd::SendCmd(self.mode, 8, 0x38),
                 SpimCmd::TxData(self.mode, SpimWordsPerXfer::Words1, 8 as u8, SpimEndian::MsbFirst, 3),
             ];
             self.send_cmd_list(&cmd_list);
