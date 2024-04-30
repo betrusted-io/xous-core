@@ -220,6 +220,9 @@ pub fn early_init() {
         xous_pl230::pl230_tests::units::basic_tests(&mut pl230);
         // xous_pl230::pl230_tests::units::pio_test(&mut pl230);
 
+        const BANNER: &'static str = "\n\rKeep pressing keys to continue boot...\r\n";
+        udma_uart.write(BANNER.as_bytes());
+
         // Quantum timer stub
         #[cfg(feature = "quantum-timer-test")]
         {
@@ -271,6 +274,9 @@ pub fn early_init() {
                 }
             }
         }
+        // space for one character, plus appending CRLF for the return
+        let mut rx_buf = [0u8; 3];
+
         #[cfg(feature = "spim-test")]
         {
             use cramium_hal::ifram::IframRange;
@@ -310,73 +316,133 @@ pub fn early_init() {
 
             // setup the I/O pins
             let mut iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
-            // JQSPI1
-            // SPIM_CLK_A[0]
-            setup_port(
-                &mut iox,
-                IoxPort::PD,
-                4,
-                Some(IoxFunction::AF1),
-                Some(IoxDir::Output),
-                Some(IoxDriveStrength::Drive2mA),
-                Some(IoxEnable::Disable),
-                None,
-                None,
-            );
-            // SPIM_SD[0-3]_A[0]
-            for i in 0..3 {
+            let mut udma_global = GlobalConfig::new(utralib::generated::HW_UDMA_CTRL_BASE as *mut u32);
+            #[cfg(not(feature = "spi-alt-channel"))]
+            let channel = {
+                // JQSPI1
+                // SPIM_CLK_A[0]
                 setup_port(
                     &mut iox,
                     IoxPort::PD,
-                    i,
+                    4,
                     Some(IoxFunction::AF1),
+                    Some(IoxDir::Output),
+                    Some(IoxDriveStrength::Drive4mA),
+                    Some(IoxEnable::Enable),
                     None,
+                    None,
+                );
+                // SPIM_SD[0-3]_A[0]
+                for i in 0..3 {
+                    setup_port(
+                        &mut iox,
+                        IoxPort::PD,
+                        i,
+                        Some(IoxFunction::AF1),
+                        None,
+                        Some(IoxDriveStrength::Drive2mA),
+                        Some(IoxEnable::Enable),
+                        None,
+                        None,
+                    );
+                }
+                // SPIM_CSN0_A[0]
+                setup_port(
+                    &mut iox,
+                    IoxPort::PD,
+                    5,
+                    Some(IoxFunction::AF1),
+                    Some(IoxDir::Output),
                     Some(IoxDriveStrength::Drive2mA),
                     Some(IoxEnable::Enable),
                     None,
                     None,
                 );
-            }
-            // SPIM_CSN0_A[0]
-            setup_port(
-                &mut iox,
-                IoxPort::PD,
-                5,
-                Some(IoxFunction::AF1),
-                Some(IoxDir::Output),
-                Some(IoxDriveStrength::Drive2mA),
-                Some(IoxEnable::Enable),
-                None,
-                None,
-            );
-            // SPIM_CSN0_A[1]
-            setup_port(
-                &mut iox,
-                IoxPort::PD,
-                6,
-                Some(IoxFunction::AF1),
-                Some(IoxDir::Output),
-                Some(IoxDriveStrength::Drive2mA),
-                Some(IoxEnable::Enable),
-                None,
-                None,
-            );
-            let mut udma_global = GlobalConfig::new(utralib::generated::HW_UDMA_CTRL_BASE as *mut u32);
-            udma_global.clock_on(PeriphId::Spim0); // JQSPI1
-
+                // SPIM_CSN0_A[1]
+                setup_port(
+                    &mut iox,
+                    IoxPort::PD,
+                    6,
+                    Some(IoxFunction::AF1),
+                    Some(IoxDir::Output),
+                    Some(IoxDriveStrength::Drive2mA),
+                    Some(IoxEnable::Enable),
+                    None,
+                    None,
+                );
+                udma_global.clock_on(PeriphId::Spim0); // JQSPI1
+                SpimChannel::Channel0
+            };
+            #[cfg(feature = "spi-alt-channel")]
+            let channel = {
+                // JPC7_13
+                // SPIM_CLK_A[1]
+                setup_port(
+                    &mut iox,
+                    IoxPort::PC,
+                    11,
+                    Some(IoxFunction::AF1),
+                    Some(IoxDir::Output),
+                    Some(IoxDriveStrength::Drive4mA),
+                    Some(IoxEnable::Enable),
+                    None,
+                    None,
+                );
+                // SPIM_SD[0-3]_A[1]
+                for i in 7..11 {
+                    setup_port(
+                        &mut iox,
+                        IoxPort::PC,
+                        i,
+                        Some(IoxFunction::AF1),
+                        None,
+                        Some(IoxDriveStrength::Drive2mA),
+                        Some(IoxEnable::Enable),
+                        None,
+                        None,
+                    );
+                }
+                // SPIM_CSN0_A[1]
+                setup_port(
+                    &mut iox,
+                    IoxPort::PC,
+                    12,
+                    Some(IoxFunction::AF1),
+                    Some(IoxDir::Output),
+                    Some(IoxDriveStrength::Drive2mA),
+                    Some(IoxEnable::Enable),
+                    None,
+                    None,
+                );
+                // SPIM_CSN0_A[1]
+                setup_port(
+                    &mut iox,
+                    IoxPort::PC,
+                    13,
+                    Some(IoxFunction::AF1),
+                    Some(IoxDir::Output),
+                    Some(IoxDriveStrength::Drive2mA),
+                    Some(IoxEnable::Enable),
+                    None,
+                    None,
+                );
+                udma_global.clock_on(PeriphId::Spim1); // JPC7_13
+                SpimChannel::Channel1
+            };
+            crate::println!("Configuring SPI channel: {:?}", channel);
             // safety: this is safe because clocks have been set up
             let mut flash_spim = unsafe {
                 Spim::new_with_ifram(
-                    SpimChannel::Channel0,
-                    100_000_000,
-                    100_000_000,
+                    channel,
+                    50_000_000,
+                    50_000_000,
                     SpimClkPol::LeadingEdgeRise,
                     SpimClkPha::CaptureOnLeading,
                     SpimCs::Cs0,
                     0,
                     0,
                     None,
-                    0, // we will never write to flash
+                    16, // just enough space to send commands
                     4096,
                     Some(8),
                     IframRange::from_raw_parts(SPIM_FLASH_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, 4096 * 2),
@@ -385,9 +451,9 @@ pub fn early_init() {
 
             let mut ram_spim = unsafe {
                 Spim::new_with_ifram(
-                    SpimChannel::Channel0,
-                    100_000_000,
-                    100_000_000,
+                    channel,
+                    50_000_000,
+                    50_000_000,
                     SpimClkPol::LeadingEdgeRise,
                     SpimClkPha::CaptureOnLeading,
                     SpimCs::Cs1,
@@ -400,23 +466,70 @@ pub fn early_init() {
                     IframRange::from_raw_parts(SPIM_RAM_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR, 4096 * 2),
                 )
             };
+            crate::println!("spim init done");
+
+            crate::println!(
+                "Flash RxBuf: {:x}[{:x}] / {:x}[{:x}]",
+                flash_spim.rx_buf::<u8>().as_ptr() as usize,
+                flash_spim.rx_buf::<u8>().len(),
+                unsafe { flash_spim.rx_buf_phys::<u8>().as_ptr() as usize },
+                unsafe { flash_spim.rx_buf_phys::<u8>().len() },
+            );
+            crate::println!(
+                "Ram RxBuf: {:x}[{:x}] / {:x}[{:x}]",
+                ram_spim.rx_buf::<u8>().as_ptr() as usize,
+                ram_spim.rx_buf::<u8>().len(),
+                unsafe { ram_spim.rx_buf_phys::<u8>().as_ptr() as usize },
+                unsafe { ram_spim.rx_buf_phys::<u8>().len() }
+            );
+
+            // turn off QPI mode, in case it was set from a reboot in a bad state
+            flash_spim.mem_qpi_mode(false);
+            ram_spim.mem_qpi_mode(false);
+
             // sanity check: read ID
-            crate::println!("flash ID: {:x}", flash_spim.mem_read_id());
-            crate::println!("ram ID: {:x}", ram_spim.mem_read_id());
+            crate::println!("read ID...");
+            udma_uart.read(&mut rx_buf[..1]);
+            let flash_id = flash_spim.mem_read_id_flash();
+            let ram_id = ram_spim.mem_read_id_ram();
+            crate::println!("flash ID: {:x}", flash_id);
+            crate::println!("ram ID: {:x}", ram_id);
+            // density 18, memory type 20, mfg ID C2 ==> MX25L128833F
+            assert!(flash_id & 0xFF_FF_FF == 0x1820C2);
+            // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
+            assert!(ram_id & 0xFF_FF == 0x5D9D);
 
             // setup FLASH
             //  - QE enable
             //  - dummy cycles = 8
+            crate::println!("write SR...");
+            udma_uart.read(&mut rx_buf[..1]);
             flash_spim.mem_write_status_register(0b01_0000_00, 0b10_00_0_111);
 
             // set SPI devices to QPI mode
             // We expect a MX25L12833F (3.3V) on CS0
             // We expect a ISS66WVS4M8BLL (3.3V) on CS1
             // Both support QPI.
+            crate::println!("set QPI mode...");
+            udma_uart.read(&mut rx_buf[..1]);
             flash_spim.mem_qpi_mode(true);
             ram_spim.mem_qpi_mode(true);
+            // density 18, memory type 20, mfg ID C2 ==> MX25L128833F
+            assert!(flash_id & 0xFF_FF_FF == 0x1820C2);
+            // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
+            assert!(ram_id & 0xFF_FF == 0x5D9D);
+
+            crate::println!("read ID QPI mode...");
+            udma_uart.read(&mut rx_buf[..1]);
+            let flash_id = flash_spim.mem_read_id_flash();
+            let ram_id = ram_spim.mem_read_id_ram();
+            crate::println!("QPI flash ID: {:x}", flash_id);
+            crate::println!("QPI ram ID: {:x}", ram_id);
 
             let mut chk_buf = [0u8; 32];
+            crate::println!("first read...");
+            udma_uart.read(&mut rx_buf[..1]);
+            crate::println!("flash read");
             flash_spim.mem_read(0x0, &mut chk_buf);
             crate::println!("flash: {:x?}", chk_buf);
             ram_spim.mem_read(0x0, &mut chk_buf);
@@ -424,18 +537,24 @@ pub fn early_init() {
             for (i, d) in chk_buf.iter_mut().enumerate() {
                 *d = i as u8;
             }
+            crate::println!("ram write...");
+            udma_uart.read(&mut rx_buf[..1]);
             ram_spim.mem_ram_write(0x0, &chk_buf);
             chk_buf.fill(0);
             crate::println!("empty buf: {:x?}", chk_buf);
+
+            crate::println!("ram read...");
+            udma_uart.read(&mut rx_buf[..1]);
             ram_spim.mem_read(0x0, &mut chk_buf);
             crate::println!("RAM checked: {:x?}", chk_buf);
+
+            /*
+            crate::println!("looping around, turning off QPI mode!");
+            udma_uart.read(&mut rx_buf[..1]);
+            flash_spim.mem_qpi_mode(false);
+            ram_spim.mem_qpi_mode(false);
+            */
         }
-
-        const BANNER: &'static str = "\n\rKeep pressing keys to continue boot...\r\n";
-        udma_uart.write(BANNER.as_bytes());
-
-        // space for one character, plus appending CRLF for the return
-        let mut rx_buf = [0u8; 3];
 
         // receive characters -- print them back. just to prove that this works. no other reason than that.
         for _ in 0..4 {
