@@ -10,7 +10,7 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
     #[cfg(any(feature = "precursor", feature = "renode"))]
     let _kernel_args = _kernel_args;
     #[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
-    let _kernel_args = _start as *const usize as usize + platform::KERNEL_OFFSET;
+    let _kernel_args = platform::FLASH_BASE + platform::KERNEL_OFFSET;
     unsafe {
         #[rustfmt::skip]
         asm! (

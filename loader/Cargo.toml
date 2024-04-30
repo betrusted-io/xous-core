@@ -34,6 +34,8 @@ aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
 ], optional = true }
 crc = { version = "1.8.1", default-features = false }
 rand_chacha = { version = "0.3.1", optional = true, default_features = false }
+pio-proc = { version = "0.2.2", optional = true }
+pio = { version = "0.2.1", optional = true }
 
 [dependencies.com_rs]
 git = "https://github.com/betrusted-io/com_rs"
@@ -66,6 +68,8 @@ cramium-soc = [
     "xous-pio",
     "xous-pl230",
     "rand_chacha",
+    "sram-margin",
+    "boot-delay",
 ]
 cramium-fpga = [
     "utralib/cramium-fpga",
@@ -81,7 +85,12 @@ renode-bypass = []
 secboot = []
 simulation-only = []
 board-bringup = []
+sram-margin = []
+boot-delay = []
 #default = ["debug-print"]
 swap = ["aes-gcm-siv"]
-resume = []            # suspend/resume pathway code
+quantum-timer-test = ["pio", "pio-proc"]
+spim-test = []
+spi-alt-channel = []
+resume = []                              # suspend/resume pathway code
 default = []

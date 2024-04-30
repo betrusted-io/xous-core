@@ -865,25 +865,48 @@ impl Builder {
                 return Err("cargo build failed".into());
             }
 
-            let status = Command::new(cargo())
-                .current_dir(project_root())
-                .args([
-                    "run",
-                    "--package",
-                    "tools",
-                    "--bin",
-                    "sign-image",
-                    "--",
-                    "--loader-image",
-                    loader_presign.to_str().unwrap(),
-                    "--loader-key",
-                    &self.loader_key,
-                    "--loader-output",
-                    loader_bin.to_str().unwrap(),
-                    "--min-xous-ver",
-                    &self.min_ver,
-                ])
-                .status()?;
+            let status = if self.utra_target.contains("cramium") {
+                Command::new(cargo())
+                    .current_dir(project_root())
+                    .args([
+                        "run",
+                        "--package",
+                        "tools",
+                        "--bin",
+                        "sign-image",
+                        "--",
+                        "--loader-image",
+                        loader_presign.to_str().unwrap(),
+                        "--loader-key",
+                        &self.loader_key,
+                        "--loader-output",
+                        loader_bin.to_str().unwrap(),
+                        "--min-xous-ver",
+                        &self.min_ver,
+                        "--with-jump", // cramium target has a jump inserted in the loader sig block
+                    ])
+                    .status()?
+            } else {
+                Command::new(cargo())
+                    .current_dir(project_root())
+                    .args([
+                        "run",
+                        "--package",
+                        "tools",
+                        "--bin",
+                        "sign-image",
+                        "--",
+                        "--loader-image",
+                        loader_presign.to_str().unwrap(),
+                        "--loader-key",
+                        &self.loader_key,
+                        "--loader-output",
+                        loader_bin.to_str().unwrap(),
+                        "--min-xous-ver",
+                        &self.min_ver,
+                    ])
+                    .status()?
+            };
             if !status.success() {
                 return Err("loader image sign failed".into());
             }

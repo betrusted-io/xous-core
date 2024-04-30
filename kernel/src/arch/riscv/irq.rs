@@ -187,6 +187,12 @@ pub extern "C" fn trap_handler(
     let epc = sepc::read();
 
     let ex = RiscvException::from_regs(sc.bits(), epc, stval::read());
+    #[cfg(feature = "debug-print")]
+    {
+        let pid = current_pid();
+        let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
+        println!("IRQ -- KERNEL({}): RISC-V fault: {}", pid, ex);
+    }
     match ex {
         // Syscall
         RiscvException::CallFromSMode(_epc, _) | RiscvException::CallFromUMode(_epc, _) => {
@@ -250,7 +256,7 @@ pub extern "C" fn trap_handler(
         // and return right away.
         RiscvException::StorePageFault(_pc, addr) | RiscvException::LoadPageFault(_pc, addr) => {
             #[cfg(all(feature = "debug-print", feature = "print-panics"))]
-            print!("KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ", pid, ex, _pc, addr);
+            println!("KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ", pid, ex, _pc, addr);
             crate::arch::mem::ensure_page_exists_inner(addr)
                 .map(|_new_page| {
                     #[cfg(all(feature = "debug-print", feature = "print-panics"))]
@@ -359,6 +365,27 @@ pub extern "C" fn trap_handler(
                     unsafe { _xous_syscall_return_result(&response, thread) };
                 });
             }
+        }
+
+        // Handle faulted instruction pages, because we can now actually have instruction pages that are
+        // swapped out.
+
+        // TODO: this probably needs custom handling.
+        // TODO: check the bounds of the address, it should be in the expected area for code. If outside,
+        // fault. This is just to reduce potential attack surface.
+        #[cfg(feature = "swap")]
+        RiscvException::InstructionPageFault(_pc, addr) => {
+            #[cfg(all(feature = "debug-print", feature = "print-panics"))]
+            println!("KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ", pid, ex, _pc, addr);
+            crate::arch::mem::ensure_page_exists_inner(addr)
+                .map(|_new_page| {
+                    #[cfg(all(feature = "debug-print", feature = "print-panics"))]
+                    klog!("Handing page {:08x} to process", _new_page);
+                    ArchProcess::with_current_mut(|process| {
+                        crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
+                    });
+                })
+                .ok(); // If this fails, fall through.
         }
 
         #[cfg(feature = "gdb-stub")]
