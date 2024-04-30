@@ -206,7 +206,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_show_notification.png?raw=true)
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_show_notification.png?raw=true)
     ///
     /// </details>
     ///
