@@ -178,8 +178,8 @@ impl SwapHal {
             let mut flash_spim = unsafe {
                 Spim::new_with_ifram(
                     SpimChannel::Channel0,
-                    100_000_000,
-                    100_000_000,
+                    50_000_000,
+                    50_000_000,
                     SpimClkPol::LeadingEdgeRise,
                     SpimClkPha::CaptureOnLeading,
                     SpimCs::Cs0,
@@ -196,8 +196,8 @@ impl SwapHal {
             let mut ram_spim = unsafe {
                 Spim::new_with_ifram(
                     SpimChannel::Channel0,
-                    100_000_000,
-                    100_000_000,
+                    50_000_000,
+                    50_000_000,
                     SpimClkPol::LeadingEdgeRise,
                     SpimClkPha::CaptureOnLeading,
                     SpimCs::Cs1,
