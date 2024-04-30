@@ -1,6 +1,7 @@
 use std::fmt;
 use std::io;
 
+use crate::elf::MiniElfFlags;
 use crate::elf::MiniElfSection;
 use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 
@@ -74,11 +75,29 @@ impl XousArgument for IniF {
         let mut written = 0;
         written += output.write(&self.load_offset.to_le_bytes())?;
         written += output.write(&self.entrypoint.to_le_bytes())?;
+        let mut flash_offset = self.load_offset;
         for section in &self.sections {
+            log::debug!("section.virt: {:x} <> flash_offset: {:x}", section.virt, flash_offset);
+            // Check that the padding fix worked
+            if section.flags & MiniElfFlags::NOCOPY == MiniElfFlags::NONE {
+                // Only modestly informative panic, because we're deep in a serialize
+                // routine and we don't have metadata about the process or anything:
+                // But if these offsets don't line up, it's definitely a problem.
+                assert!(
+                    section.virt & 0xFFF == flash_offset & 0xFFF,
+                    "IniF page offsets must align: ({:x}){:x} <> ({:x}){:x} ({:x?})",
+                    section.virt >> 12,
+                    section.virt & 0xFFF,
+                    flash_offset >> 12,
+                    flash_offset & 0xFFF,
+                    section
+                );
+            }
             written += output.write(&section.virt.to_le_bytes())?;
             let mut word2 = section.size.to_le_bytes();
             word2[3] = section.flags.bits();
             written += output.write(&word2)?;
+            flash_offset += section.size;
         }
         Ok(written)
     }
