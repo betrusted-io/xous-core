@@ -514,10 +514,6 @@ pub fn early_init() {
             udma_uart.read(&mut rx_buf[..1]);
             flash_spim.mem_qpi_mode(true);
             ram_spim.mem_qpi_mode(true);
-            // density 18, memory type 20, mfg ID C2 ==> MX25L128833F
-            assert!(flash_id & 0xFF_FF_FF == 0x1820C2);
-            // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
-            assert!(ram_id & 0xFF_FF == 0x5D9D);
 
             crate::println!("read ID QPI mode...");
             udma_uart.read(&mut rx_buf[..1]);
@@ -525,6 +521,10 @@ pub fn early_init() {
             let ram_id = ram_spim.mem_read_id_ram();
             crate::println!("QPI flash ID: {:x}", flash_id);
             crate::println!("QPI ram ID: {:x}", ram_id);
+            // density 18, memory type 20, mfg ID C2 ==> MX25L128833F
+            assert!(flash_id & 0xFF_FF_FF == 0x1820C2);
+            // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
+            assert!(ram_id & 0xFF_FF == 0x5D9D);
 
             let mut chk_buf = [0u8; 32];
             crate::println!("first read...");
