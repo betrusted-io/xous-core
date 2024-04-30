@@ -450,6 +450,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .to_vec();
             builder.add_loader_feature("debug-print");
             builder.add_loader_feature("board-bringup");
+            // builder.add_loader_feature("spim-test");
+            // builder.add_loader_feature("spi-alt-channel");
             builder.add_kernel_feature("v2p");
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),
