@@ -295,12 +295,17 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
     // This keeps a running offset of where data is getting copied.
     let mut program_offset = 0;
     let mut section_iter = elf.section_iter().peekable();
+    let mut init_offset = 0;
     while let Some(s) = section_iter.next() {
         let mut flags = MiniElfFlags::NONE;
         let name = s.get_name(&elf).unwrap_or("<<error>>");
 
         if s.address() == 0 {
             debug!("(Skipping section {} -- invalid address)", name);
+            // only extract the initial offset once per ELF file
+            if init_offset == 0 {
+                init_offset = if let Some(s) = section_iter.peek() { s.offset() } else { 0 };
+            }
             continue;
         }
         if alignment_offset == 0 {
@@ -308,8 +313,7 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
         }
 
         debug!("Section {}:", name);
-        debug!("Official header:");
-        debug!("{:?}", s);
+        debug!("{} official header: {:x?}", name, s);
         debug!("Interpreted:");
         debug!("    flags:            {:?}", s.flags());
         debug!("    type:             {:?}", s.get_type());
@@ -354,9 +358,13 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
         if s.get_type() != Ok(ShType::NoBits) {
             let section_data = s.raw_data(&elf);
             let pad_amount = if let Some(next_section) = section_iter.peek() {
-                if section_data.len() % next_section.align() as usize != 0 {
-                    let pad_amount =
-                        next_section.align() as usize - (section_data.len() % next_section.align() as usize);
+                if (section_data.len() + program_offset as usize + init_offset as usize)
+                    % next_section.align() as usize
+                    != 0
+                {
+                    let pad_amount = next_section.align() as usize
+                        - ((section_data.len() + program_offset as usize + init_offset as usize)
+                            % next_section.align() as usize);
                     if s.address() + size + pad_amount as u64 > next_section.address() {
                         (next_section.address() - (s.address() + size)) as usize
                     } else {
