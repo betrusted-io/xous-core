@@ -24,7 +24,7 @@ pub fn init() -> Output {
     // to is the DUART.
     #[cfg(feature = "cramium-soc")]
     let uart = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utra::udma_uart_0::HW_UDMA_UART_0_BASE),
+        xous::MemoryAddress::new(utra::udma_uart_1::HW_UDMA_UART_1_BASE),
         None,
         4096,
         xous::MemoryFlags::R | xous::MemoryFlags::W,

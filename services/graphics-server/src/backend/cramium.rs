@@ -78,8 +78,6 @@ pub const FB_WIDTH_PIXELS: usize = WIDTH as usize;
 pub const FB_LINES: usize = LINES as usize;
 pub const FB_SIZE: usize = FB_WIDTH_WORDS * FB_LINES; // 44 bytes by 536 lines
 
-// TODO: need to confirm actual clock sent to UDMA block, but empirically, this is what I see
-// on the FPGA emulator
 const CONFIG_CLOCK_FREQUENCY: u32 = 50_000_000;
 
 const SPI_CS_PIN: u8 = 10;
@@ -103,7 +101,6 @@ pub struct XousDisplay {
     next_free_line: usize,
     spim: udma::Spim,
     devboot: bool,
-    iox: IoxHal,
 }
 
 impl XousDisplay {
@@ -185,7 +182,7 @@ impl XousDisplay {
             Some(iox::IoxDriveStrength::Drive2mA),
         );
 
-        let mut display = XousDisplay { fb, spim, next_free_line: 0, devboot: false, iox };
+        let mut display = XousDisplay { fb, spim, next_free_line: 0, devboot: false };
 
         // initialize the DMA buffer with valid mode/address lines & blank data
         for line in 0..FB_LINES {
@@ -225,10 +222,12 @@ impl XousDisplay {
         unimplemented!("Cramium platform does not yet support suspend/resume");
     }
 
+    #[allow(dead_code)]
     pub fn suspend(&mut self) {
         unimplemented!("Cramium platform does not yet support suspend/resume");
     }
 
+    #[allow(dead_code)]
     pub fn resume(&mut self) {
         unimplemented!("Cramium platform does not yet support suspend/resume");
     }

@@ -1,3 +1,4 @@
+#[cfg(feature = "std")]
 use xous::Result;
 use xous::{send_message, MemoryRange, Message};
 
@@ -8,8 +9,8 @@ pub enum IframBank {
 
 /// `IframRange` is a range of memory that is suitable for use as a DMA target.
 pub struct IframRange {
-    pub(crate) phys_range: MemoryRange,
-    pub(crate) virt_range: MemoryRange,
+    pub phys_range: MemoryRange,
+    pub virt_range: MemoryRange,
     /// The connection is optional, because in some special cases the range "outlives"
     /// the OS (e.g. serial ports handed to us from the loader), and thus also can't
     /// be "dropped".

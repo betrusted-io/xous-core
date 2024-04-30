@@ -255,6 +255,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
             builder.add_kernel_feature("debug-swap");
+            builder.add_kernel_feature("debug-print");
 
             // It is important that this is the first service added, because the swapper *must* be in PID 2
             builder.add_service("xous-swapper", LoaderRegion::Ram);
@@ -438,10 +439,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // ------ Cramium hardware image configs ------
         Some("cramium-fpga") | Some("cramium-soc") => {
-            let cramium_pkgs =
-                ["xous-log", "xous-names", "xous-ticktimer", "cram-hal-service", "graphics-server"].to_vec();
+            let cramium_pkgs = [
+                "xous-log",
+                "xous-names",
+                "xous-ticktimer",
+                "cram-hal-service",
+                "graphics-server",
+                "cram-console",
+            ]
+            .to_vec();
             builder.add_loader_feature("debug-print");
             builder.add_loader_feature("board-bringup");
+            // builder.add_loader_feature("spim-test");
+            // builder.add_loader_feature("spi-alt-channel");
             builder.add_kernel_feature("v2p");
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),
@@ -452,6 +462,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for service in cramium_pkgs {
                 builder.add_service(service, LoaderRegion::Flash);
             }
+            builder.add_feature("quantum-timer");
         }
 
         // ------ ARM hardware image configs ------
