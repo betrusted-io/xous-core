@@ -898,7 +898,7 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
     // })?;
     let current_entry = unsafe { entry.read_volatile() };
 
-    let flags = current_entry & 0x1ff;
+    let flags = current_entry & 0x3ff;
 
     #[cfg(not(feature = "swap"))]
     if flags & MMUFlags::VALID.bits() != 0 {
@@ -924,13 +924,13 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
     let ppn0 = (new_page >> 12) & ((1 << 10) - 1);
     unsafe {
         #[cfg(feature = "swap")]
-        if flags & MMUFlags::P.bits() == 1 {
+        if flags & MMUFlags::P.bits() != 0 {
             // page is swapped; fill page, map and return
             Swap::with_mut(|s| s.retrieve_page(crate::arch::process::current_pid(), virt, new_page))
 
             // the execution flow diverges from here: it returns via the interrupt context handler. -> !
         } else {
-            // page is reserved: simple zero it out
+            // page is reserved: simply zero it out
             // Map the page to our process
             *entry =
                 (ppn1 << 20) | (ppn0 << 10) | (flags | FLG_VALID /* valid */ | FLG_D /* D */ | FLG_A/* A */);
