@@ -376,11 +376,11 @@ pub extern "C" fn trap_handler(
         #[cfg(feature = "swap")]
         RiscvException::InstructionPageFault(_pc, addr) => {
             #[cfg(all(feature = "debug-print", feature = "print-panics"))]
-            println!("KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ", pid, ex, _pc, addr);
+            println!("IPF swap KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ", pid, ex, _pc, addr);
             crate::arch::mem::ensure_page_exists_inner(addr)
                 .map(|_new_page| {
                     #[cfg(all(feature = "debug-print", feature = "print-panics"))]
-                    klog!("Handing page {:08x} to process", _new_page);
+                    println!("Handing page {:08x} to process", _new_page);
                     ArchProcess::with_current_mut(|process| {
                         crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
                     });
