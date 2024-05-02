@@ -20,6 +20,8 @@ pub struct SwapHal {
     dst_cipher: Aes256GcmSiv,
     buf_addr: usize,
     buf: RawPage,
+    mac_offset: u32,
+    mac_len: u32,
 }
 
 impl SwapHal {
@@ -92,6 +94,8 @@ impl SwapHal {
                 dst_cipher: Aes256GcmSiv::new(&ram_swap_key.into()),
                 buf_addr: 0,
                 buf: RawPage { data: [0u8; 4096] },
+                mac_offset: ssh.mac_offset,
+                mac_len: mac_size as u32,
             };
             hal.partial_nonce.copy_from_slice(&ssh.parital_nonce);
             Some(hal)
@@ -134,6 +138,8 @@ impl SwapHal {
     pub fn buf_as_mut(&mut self) -> &mut [u8] { &mut self.buf.data }
 
     pub fn buf_as_ref(&self) -> &[u8] { &self.buf.data }
+
+    pub fn mac_base_bounds(&self) -> (u32, u32) { (self.mac_offset as u32, self.mac_len as u32) }
 
     /// Swap count is fixed at 0 by this routine. The data to be encrypted is provided in
     /// `buf`, and is replaced with part of the encrypted data upon completion of the routine.

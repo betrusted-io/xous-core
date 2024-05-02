@@ -376,6 +376,8 @@ impl SwapHal {
 
     pub fn buf_as_ref(&self) -> &[u8] { &self.buf.data }
 
+    pub fn mac_base_bounds(&self) -> (u32, u32) { (self.swap_mac_start as u32, self.swap_mac_len as u32) }
+
     /// Swap count is fixed at 0 by this routine. The data to be encrypted is
     /// assumed to already be in `self.buf`
     pub fn encrypt_swap_to(&mut self, buf: &mut [u8], dest_offset: usize, src_vaddr: usize, src_pid: u8) {
