@@ -33,10 +33,6 @@ pub struct AdviseUnmap {
 #[cfg(baremetal)]
 #[no_mangle]
 static mut SWAP: Swap = Swap {
-    spt_ptr: 0,
-    smt_base: 0,
-    smt_bounds: 0,
-    rpt_ptr: 0,
     sid: SID::from_u32(0, 0, 0, 0),
     pc: 0,
     prev_op: None,
@@ -47,14 +43,6 @@ static mut SWAP: Swap = Swap {
 };
 
 pub struct Swap {
-    /// Pointer to the swap page table base
-    spt_ptr: usize,
-    /// SMT base and bounds: address meanings can vary depending on the target system,
-    /// if swap is memory-mapped, or if behind a SPI register interface.
-    smt_base: usize,
-    smt_bounds: usize,
-    /// Pointer to runtime page tracker
-    rpt_ptr: usize,
     /// SID for the swapper
     sid: SID,
     /// PC for blocking handler
@@ -84,22 +72,6 @@ impl Swap {
         SWAP.with(|ss| f(&mut ss.borrow_mut()))
     }
 
-    pub fn init_from_args(
-        &mut self,
-        args: &crate::args::KernelArguments,
-    ) -> Result<xous_kernel::Result, xous_kernel::Error> {
-        for tag in args.iter() {
-            if tag.name == u32::from_le_bytes(*b"Swap") {
-                self.spt_ptr = tag.data[0] as usize;
-                self.smt_base = tag.data[1] as usize;
-                self.smt_bounds = tag.data[2] as usize;
-                self.rpt_ptr = tag.data[3] as usize;
-                return Ok(xous_kernel::Result::Ok);
-            }
-        }
-        Err(xous_kernel::Error::UseBeforeInit)
-    }
-
     pub fn register_handler(
         &mut self,
         s0: u32,
@@ -118,7 +90,7 @@ impl Swap {
                 "handler registered: sid {:?} pc {:?} state {:?}",
                 self.sid, self.pc, self.swapper_state
             );
-            Ok(xous_kernel::Result::Scalar5(self.spt_ptr, self.smt_base, self.smt_bounds, self.rpt_ptr, 0))
+            Ok(xous_kernel::Result::Scalar5(0, 0, 0, 0, 0))
         } else {
             // someone is trying to steal the swapper's privileges!
             #[cfg(feature = "debug-swap")]
