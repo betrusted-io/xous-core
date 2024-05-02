@@ -42,9 +42,6 @@ use xous_kernel::*;
 ///
 /// This is safe to call only to initialize the kernel.
 pub unsafe extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offset: *mut u32) {
-    #[cfg(feature = "swap")]
-    use crate::swap::Swap;
-
     args::KernelArguments::init(arg_offset);
     let args = args::KernelArguments::get();
     // Everything needs memory, so the first thing we should do is initialize the memory manager.
@@ -52,9 +49,6 @@ pub unsafe extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, r
         mm.init_from_memory(rpt_offset, &args).expect("couldn't initialize memory manager")
     });
     SystemServices::with_mut(|system_services| system_services.init_from_memory(init_offset, &args));
-
-    #[cfg(feature = "swap")]
-    Swap::with_mut(|swap| swap.init_from_args(&args)).expect("couldn't initialize swap");
 
     // Now that the memory manager is set up, perform any architecture and
     // platform specific initializations.
