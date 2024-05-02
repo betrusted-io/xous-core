@@ -6396,6 +6396,7 @@ dependencies = [
 name = "xous-swapper"
 version = "0.1.0"
 dependencies = [
+ "loader",
  "log",
  "num-derive 0.3.3",
  "num-traits",
