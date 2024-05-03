@@ -926,7 +926,14 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
         #[cfg(feature = "swap")]
         if flags & MMUFlags::P.bits() != 0 {
             // page is swapped; fill page, map and return
-            Swap::with_mut(|s| s.retrieve_page(crate::arch::process::current_pid(), virt, new_page))
+            Swap::with_mut(|s| {
+                s.retrieve_page(
+                    crate::arch::process::current_pid(),
+                    crate::arch::process::current_tid(),
+                    virt,
+                    new_page,
+                )
+            })
 
             // the execution flow diverges from here: it returns via the interrupt context handler. -> !
         } else {
