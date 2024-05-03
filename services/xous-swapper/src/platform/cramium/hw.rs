@@ -1,7 +1,7 @@
 use core::fmt::Write;
 use core::mem::size_of;
 
-use aes_gcm_siv::{aead::Aead, AeadInPlace, Aes256GcmSiv, Error, KeyInit, Nonce, Tag};
+use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, Error, KeyInit, Nonce, Tag};
 use cramium_hal::udma::*;
 use loader::swap::{SwapSpec, SPIM_RAM_IFRAM_ADDR, SWAP_HAL_VADDR};
 use num_traits::ToBytes;

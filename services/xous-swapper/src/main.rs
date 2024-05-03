@@ -204,18 +204,6 @@ fn main() {
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
-    // check that we got called by the kernel -- this should happen really early in the process
-    // due to the advisory allocs that start piling up very quickly
-    if let Some(ss) = sss.inner {
-        log::info!(
-            "Swap params: key: root: {:x}, rpt: {:?}",
-            ss.pts.roots[0].entries[0],
-            &ss.rpt.allocs[..8]
-        );
-    } else {
-        log::info!("Swapper did not get called to initialize its shared state.")
-    }
-
     let mut msg_opt = None;
     loop {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
