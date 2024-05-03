@@ -9,7 +9,7 @@ use cramium_hal::{
 use utralib::utra;
 #[cfg(feature = "quantum-timer")]
 use utralib::*;
-use xous::sender::Sender;
+use xous::{sender::Sender, SWAPPER_PID};
 use xous_pio::*;
 
 struct PreemptionHw {
@@ -102,6 +102,9 @@ fn main() {
     // Top page of IFRAM0 is occupied by the log server's Tx buffer. We can't know the
     // `Sender` of it, so fill it with a value for `Some` that can't map to any PID.
     ifram_allocs[0][31] = Some(Sender::from_usize(usize::MAX));
+    // Second page from top of IFRAM0 is occupied by the swap handler. This was allocated
+    // by the loader, before the kernel even started.
+    ifram_allocs[0][30] = Some(Sender::from_usize(SWAPPER_PID as usize));
 
     let iox_page = xous::syscall::map_memory(
         xous::MemoryAddress::new(utralib::generated::HW_IOX_BASE),
