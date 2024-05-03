@@ -42,6 +42,12 @@ pub const SWAP_PT_VADDR: usize = 0xE000_0000;
 // E000_0000 - E100_0000 => 16 MiB of vaddr space for page tables; should be more than enough
 pub const SWAP_CFG_VADDR: usize = 0xE100_0000;
 pub const SWAP_RPT_VADDR: usize = 0xE100_1000;
+pub const SWAP_APP_UART_VADDR: usize = 0xE180_0000;
+#[cfg(feature = "cramium-soc")]
+pub const SWAP_APP_UART_IFRAM_VADDR: usize = 0xE180_1000;
+// open a large aperture from A000-E000 for a potential RAM-mapped swap area: this gives us up to 1GiB swap
+// space. Please don't actually use all of it: performance will be unimaginably bad.
+pub const SWAP_HAL_VADDR: usize = 0xA000_0000;
 
 /// Structure passed by the loader into this process at SWAP_RPT_VADDR
 #[cfg(feature = "swap")]
@@ -71,8 +77,11 @@ pub const UART_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_M
 #[allow(dead_code)]
 #[cfg(feature = "cramium-soc")]
 pub const SPIM_RAM_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 2 * 4096;
+#[allow(dead_code)]
+#[cfg(feature = "cramium-soc")]
+pub const APP_UART_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 3 * 4096;
 // Flash will be released after the loader is done: it's only accessed to copy the IniS sectors into swap,
 // then abandoned. It needs 4096 bytes for Rx, and 0 bytes for Tx + 16 bytes for cmd.
 #[allow(dead_code)]
 #[cfg(feature = "cramium-soc")]
-pub const SPIM_FLASH_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4 * 4096;
+pub const SPIM_FLASH_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 5 * 4096;
