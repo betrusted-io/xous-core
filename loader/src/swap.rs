@@ -69,17 +69,10 @@ pub struct SwapSpec {
     pub mac_len: u32,
 }
 
-// Locate the hard-wired IFRAM allocations for UDMA
-#[allow(dead_code)]
-#[cfg(feature = "cramium-soc")]
-pub const UART_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096;
 // RAM needs two buffers of 1k + 16 bytes = 2048 + 16 = 2064 bytes; round up to one page
 #[allow(dead_code)]
 #[cfg(feature = "cramium-soc")]
 pub const SPIM_RAM_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 2 * 4096;
-#[allow(dead_code)]
-#[cfg(feature = "cramium-soc")]
-pub const APP_UART_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 3 * 4096;
 // Flash will be released after the loader is done: it's only accessed to copy the IniS sectors into swap,
 // then abandoned. It needs 4096 bytes for Rx, and 0 bytes for Tx + 16 bytes for cmd.
 #[allow(dead_code)]

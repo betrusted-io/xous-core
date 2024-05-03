@@ -178,7 +178,7 @@ pub fn early_init() {
     // the address of the UART buffer is "hard-allocated" at an offset one page from the top of
     // IFRAM0. This is a convention that must be respected by the UDMA UART library implementation
     // for things to work.
-    let uart_buf_addr = UART_IFRAM_ADDR;
+    let uart_buf_addr = loader::UART_IFRAM_ADDR;
     let mut udma_uart = unsafe {
         // safety: this is safe to call, because we set up clock and events prior to calling new.
         udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
