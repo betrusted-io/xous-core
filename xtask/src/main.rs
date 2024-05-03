@@ -246,6 +246,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_loader_feature("renode-bypass");
         }
         Some("renode-swap") => {
+            let swap_pkgs = ["xous-ticktimer", "xous-log", "xous-names", "xous-susres"];
             if !builder.is_swap_set() {
                 builder.set_swap(0x4080_0000, 8 * 1024 * 1024);
             }
@@ -254,14 +255,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_loader_feature("debug-print");
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
-            builder.add_kernel_feature("debug-swap");
-            builder.add_kernel_feature("debug-print");
+            builder.add_feature("swap");
+            // builder.add_kernel_feature("debug-swap");
+            // builder.add_kernel_feature("debug-print");
 
             // It is important that this is the first service added, because the swapper *must* be in PID 2
             builder.add_service("xous-swapper", LoaderRegion::Ram);
             builder.add_kernel_feature("swap");
 
-            for service in base_pkgs {
+            for service in swap_pkgs {
                 builder.add_service(service, LoaderRegion::Flash);
             }
             builder.add_service("test-swapper", LoaderRegion::Swap); // when we implement loaded-but-swapped, use that instead
