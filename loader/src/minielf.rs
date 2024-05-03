@@ -472,6 +472,7 @@ impl MiniElf {
                     }
                 }
                 IniType::IniS => {
+                    #[cfg(feature = "swap")]
                     if let Some(dest_offset) = pt_walk_swap(
                         tt,
                         section.virt as usize,
@@ -586,7 +587,7 @@ pub fn pt_walk(root: usize, va: usize) -> Option<usize> {
     }
 }
 
-#[cfg(all(any(feature = "debug-print", feature = "swap"), not(feature = "atsama5d27")))]
+#[cfg(all(feature = "debug-print", feature = "swap", not(feature = "atsama5d27")))]
 pub fn pt_walk_swap(root: usize, va: usize, swap_root: usize) -> Option<usize> {
     let l1_pt = unsafe { &mut (*((root << 12) as *mut PageTable)) };
     let l1_entry_va = (l1_pt.entries[(va & 0xFFC0_0000) >> 22] >> 10) << 12;
