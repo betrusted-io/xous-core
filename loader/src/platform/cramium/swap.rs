@@ -5,16 +5,15 @@ use cramium_hal::ifram::IframRange;
 use cramium_hal::iox::*;
 use cramium_hal::sce;
 use cramium_hal::udma::*;
+use loader::swap::SPIM_RAM_IFRAM_ADDR;
 use rand_chacha::rand_core::RngCore;
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
 use crate::bootconfig::BootConfig;
 use crate::platform::{SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR};
-use crate::println;
 use crate::swap::*;
-use crate::PAGE_SIZE;
-use crate::SDBG;
+use crate::*;
 
 /// hard coded at offset 0 of SPI FLASH for now, until we figure out if and how to move this around.
 const SWAP_IMG_START: usize = 0;
@@ -38,6 +37,7 @@ pub struct SwapHal {
     dst_cipher: Aes256GcmSiv,
     buf_addr: usize,
     buf: RawPage,
+    ram_swap_key: [u8; 32],
 }
 
 fn setup_port(
@@ -329,6 +329,7 @@ impl SwapHal {
                 dst_cipher: Aes256GcmSiv::new((&dest_key).into()),
                 buf_addr: 0,
                 buf,
+                ram_swap_key: dest_key,
             };
             hal.aad_storage[..ssh.aad_len as usize].copy_from_slice(&ssh.aad[..ssh.aad_len as usize]);
             hal.aad_len = ssh.aad_len as usize;
@@ -338,6 +339,8 @@ impl SwapHal {
             None
         }
     }
+
+    pub fn get_swap_key(&self) -> &[u8] { &self.ram_swap_key }
 
     fn aad(&self) -> &[u8] { &self.aad_storage[..self.aad_len] }
 
@@ -434,4 +437,78 @@ impl SwapHal {
     /// between elements of the bootloader (saving us from redundant decrypt ops),
     /// but extremely unsafe because we have to track the use of this buffer manually.
     pub unsafe fn get_decrypt(&self) -> &[u8] { &self.buf.data }
+}
+
+/// Function for initializing any PTE mappings needed by the swapper to be functional
+/// at boot -- the swapper userspace cannot itself invoke page maps to initialize itself
+/// because this would cause a circular dependency.
+pub fn userspace_maps(cfg: &mut BootConfig) {
+    let tt_address = cfg.processes[SWAPPER_PID as usize - 1].satp << 12;
+    let root = unsafe { &mut *(tt_address as *mut crate::PageTable) };
+
+    // map the IFRAM structure into userspace
+    // use map_page_32 because we don't track this in the RPT.
+    cfg.map_page_32(
+        root,
+        SPIM_RAM_IFRAM_ADDR,
+        SWAP_HAL_VADDR,
+        FLG_R | FLG_W | FLG_U | FLG_VALID,
+        SWAPPER_PID,
+    );
+
+    let mut iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+    iox.set_alternate_function(IoxPort::PD, 2, IoxFunction::AF2);
+    iox.set_alternate_function(IoxPort::PD, 3, IoxFunction::AF2);
+    // rx as input, with pull-up
+    iox.set_gpio_dir(IoxPort::PD, 2, IoxDir::Input);
+    iox.set_gpio_pullup(IoxPort::PD, 2, IoxEnable::Enable);
+    // tx as output
+    iox.set_gpio_dir(IoxPort::PD, 3, IoxDir::Output);
+
+    // Set up the UDMA_UART block to the correct baud rate and enable status
+    let mut udma_global = udma::GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
+    udma_global.clock_on(udma::PeriphId::Uart0);
+    udma_global.map_event(
+        udma::PeriphId::Uart0,
+        udma::PeriphEventType::Uart(udma::EventUartOffset::Rx),
+        udma::EventChannel::Channel2,
+    );
+    udma_global.map_event(
+        udma::PeriphId::Uart0,
+        udma::PeriphEventType::Uart(udma::EventUartOffset::Tx),
+        udma::EventChannel::Channel3,
+    );
+
+    let baudrate: u32 = 115200;
+    let freq: u32 = perclk / 2;
+
+    // the address of the UART buffer is "hard-allocated" at an offset one page from the top of
+    // IFRAM0. This is a convention that must be respected by the UDMA UART library implementation
+    // for things to work.
+    let uart_buf_addr = UART_IFRAM_ADDR;
+    let mut udma_uart = unsafe {
+        // safety: this is safe to call, because we set up clock and events prior to calling new.
+        udma::Uart::get_handle(utra::udma_uart_0::HW_UDMA_UART_0_BASE, uart_buf_addr, uart_buf_addr)
+    };
+    crate::println!("Baud freq is {} Hz, baudrate is {}", freq, baudrate);
+    udma_uart.set_baud(baudrate, freq);
+
+    // map the debug UART HW page
+    cfg.map_page_32(
+        root,
+        // TODO: use PD2/3 AF2 for this UART; set up the IOs for this
+        utra::udma_uart_0::HW_UDMA_UART_0_BASE,
+        SWAP_APP_UART_VADDR,
+        FLG_R | FLG_W | FLG_U | FLG_VALID,
+        SWAPPER_PID,
+    );
+    // map the debug UART IFRAM page
+    cfg.map_page_32(
+        root,
+        // TODO: use PD2/3 AF2 for this UART; set up the IOs for this
+        APP_UART_IFRAM_ADDR,
+        SWAP_APP_UART_IFRAM_VADDR,
+        FLG_R | FLG_W | FLG_U | FLG_VALID,
+        SWAPPER_PID,
+    );
 }

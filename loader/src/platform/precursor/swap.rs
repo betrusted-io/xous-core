@@ -4,10 +4,8 @@ use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, KeyInit, Nonce, Tag};
 use utralib::generated::*;
 
 use crate::bootconfig::BootConfig;
-use crate::println;
 use crate::swap::*;
-use crate::PAGE_SIZE;
-use crate::SDBG;
+use crate::*;
 
 pub struct SwapHal {
     src_data_area: &'static [u8],
@@ -22,6 +20,7 @@ pub struct SwapHal {
     buf: RawPage,
     mac_offset: u32,
     mac_len: u32,
+    ram_swap_key: [u8; 32],
 }
 
 impl SwapHal {
@@ -96,6 +95,7 @@ impl SwapHal {
                 buf: RawPage { data: [0u8; 4096] },
                 mac_offset: ssh.mac_offset,
                 mac_len: mac_size as u32,
+                ram_swap_key,
             };
             hal.partial_nonce.copy_from_slice(&ssh.parital_nonce);
             Some(hal)
@@ -103,6 +103,8 @@ impl SwapHal {
             None
         }
     }
+
+    pub fn get_swap_key(&self) -> &[u8] { &self.ram_swap_key }
 
     pub fn decrypt_src_page_at(&mut self, offset: usize) -> &[u8] {
         assert!((offset & 0xFFF) == 0, "offset is not page-aligned");
@@ -170,8 +172,8 @@ impl SwapHal {
     /// Used to examine contents of swap RAM. Swap count is fixed at 0 by this routine. Decrypted data is
     /// returned as a slice.
     pub fn decrypt_swap_from(&mut self, src_offset: usize, dst_vaddr: usize, dst_pid: u8) -> &[u8] {
-        // println!("Decrypt swap:");
-        // println!("  offset: {:x}, vaddr: {:x}, pid: {}", src_offset, dst_vaddr, dst_pid);
+        println!("Decrypt swap:");
+        println!("  offset: {:x}, vaddr: {:x}, pid: {}", src_offset, dst_vaddr, dst_pid);
         assert!(src_offset & (PAGE_SIZE - 1) == 0);
         let mut nonce = [0u8; size_of::<Nonce>()];
         nonce[0..4].copy_from_slice(&[0u8; 4]); // this is the `swap_count` field
@@ -184,9 +186,9 @@ impl SwapHal {
         let mut tag = [0u8; size_of::<Tag>()];
         let mac_offset = (src_offset / PAGE_SIZE) * size_of::<Tag>();
         tag.copy_from_slice(&self.dst_mac_area[mac_offset..mac_offset + size_of::<Tag>()]);
-        // println!("dst_mac_area: {:x?}", &self.dst_mac_area[..32]);
+        println!("dst_mac_area: {:x?}", &self.dst_mac_area[..32]);
         self.buf.data.copy_from_slice(&self.dst_data_area[src_offset..src_offset + PAGE_SIZE]);
-        // println!("Nonce: {:x?}, tag: {:x?}", &nonce, &tag);
+        println!("Nonce: {:x?}, tag: {:x?}", &nonce, &tag);
         match self.dst_cipher.decrypt_in_place_detached(
             Nonce::from_slice(&nonce),
             aad,
@@ -202,4 +204,37 @@ impl SwapHal {
     /// between elements of the bootloader (saving us from redundant decrypt ops),
     /// but extremely unsafe because we have to track the use of this buffer manually.
     pub unsafe fn get_decrypt(&self) -> &[u8] { &self.buf.data }
+}
+
+/// Function for initializing any PTE mappings needed by the swapper to be functional
+/// at boot -- the swapper userspace cannot itself invoke page maps to initialize itself
+/// because this would cause a circular dependency.
+pub fn userspace_maps(cfg: &mut BootConfig) {
+    let tt_address = cfg.processes[SWAPPER_PID as usize - 1].satp << 12;
+    let root = unsafe { &mut *(tt_address as *mut crate::PageTable) };
+
+    let swap = cfg.swap.unwrap();
+    let base = swap.ram_offset as usize;
+    let bounds = swap.ram_size as usize;
+
+    // map the entire swap RAM space into the swapper
+    // use map_page_32 because we don't track this region in the RPT
+    for (i, addr) in (base..base + bounds).step_by(PAGE_SIZE).enumerate() {
+        cfg.map_page_32(
+            root,
+            addr,
+            SWAP_HAL_VADDR + PAGE_SIZE * i,
+            FLG_R | FLG_W | FLG_U | FLG_VALID,
+            SWAPPER_PID,
+        );
+    }
+
+    // map the debug UART
+    cfg.map_page_32(
+        root,
+        utra::app_uart::HW_APP_UART_BASE,
+        SWAP_APP_UART_VADDR,
+        FLG_R | FLG_W | FLG_U | FLG_VALID,
+        SWAPPER_PID,
+    )
 }
