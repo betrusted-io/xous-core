@@ -260,7 +260,7 @@ pub extern "C" fn trap_handler(
             crate::arch::mem::ensure_page_exists_inner(addr)
                 .map(|_new_page| {
                     #[cfg(all(feature = "debug-print", feature = "print-panics"))]
-                    klog!("Handing page {:08x} to process", _new_page);
+                    println!("SPF Handing page {:08x} to process", _new_page);
                     ArchProcess::with_current_mut(|process| {
                         crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
                     });
@@ -361,6 +361,7 @@ pub extern "C" fn trap_handler(
             } else {
                 ArchProcess::with_current_mut(|p| {
                     let thread = p.current_thread();
+                    #[cfg(feature = "debug-swap")]
                     println!("Returning to address {:08x}", thread.sepc);
                     unsafe { _xous_syscall_return_result(&response, thread) };
                 });
@@ -369,10 +370,6 @@ pub extern "C" fn trap_handler(
 
         // Handle faulted instruction pages, because we can now actually have instruction pages that are
         // swapped out.
-
-        // TODO: this probably needs custom handling.
-        // TODO: check the bounds of the address, it should be in the expected area for code. If outside,
-        // fault. This is just to reduce potential attack surface.
         #[cfg(feature = "swap")]
         RiscvException::InstructionPageFault(_pc, addr) => {
             #[cfg(all(feature = "debug-print", feature = "print-panics"))]
@@ -380,7 +377,7 @@ pub extern "C" fn trap_handler(
             crate::arch::mem::ensure_page_exists_inner(addr)
                 .map(|_new_page| {
                     #[cfg(all(feature = "debug-print", feature = "print-panics"))]
-                    println!("Handing page {:08x} to process", _new_page);
+                    println!("IPF Handing page {:08x} to process", _new_page);
                     ArchProcess::with_current_mut(|process| {
                         crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
                     });
