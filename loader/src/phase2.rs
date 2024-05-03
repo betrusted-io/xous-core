@@ -249,7 +249,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
         //   - SwapSpec is a Repr(C), and every element of the struct is valid with a 0's initialization.
         let swap_spec = unsafe { (swap_spec_ptr as *mut SwapSpec).as_mut().unwrap() };
         if let Some(desc) = cfg.swap {
-            swap_spec.key.copy_from_slice(&desc.key);
+            swap_spec.key.copy_from_slice(&cfg.swap_hal.as_ref().unwrap().get_swap_key());
             swap_spec.pid_count = cfg.init_process_count as u32 + 1;
             swap_spec.rpt_len_bytes = cfg.runtime_page_tracker.len() as u32;
             swap_spec.swap_base = desc.ram_offset;
@@ -287,6 +287,9 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
                 dest[..rpt_page.len()].copy_from_slice(rpt_page);
             }
         }
+
+        // map any hardware-specific pages into the userspace swapper
+        crate::platform::userspace_maps(cfg);
     }
 
     if VVDBG || SDBG {
