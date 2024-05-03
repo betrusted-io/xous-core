@@ -1,45 +1,35 @@
 use core::mem::size_of;
 
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, Error, KeyInit, Nonce, Tag};
-use loader::swap::SwapSpec;
-use xous::MemoryRange;
+use loader::swap::{SwapSpec, SWAP_HAL_VADDR};
 
 pub const PAGE_SIZE: usize = 4096;
 
 /// This defines a set of functions to get and receive MACs (message
 /// authentication codes, also referred to as the tag in AES-GCM-SIV.
 pub struct SwapHal {
-    swap_mem: MemoryRange,
     dst_data_area: &'static mut [u8],
     dst_mac_area: &'static mut [u8],
     cipher: Aes256GcmSiv,
 }
 impl SwapHal {
     pub fn new(spec: &SwapSpec) -> Self {
-        let swap_mem = xous::syscall::map_memory(
-            xous::MemoryAddress::new(spec.swap_base as usize),
-            None,
-            spec.swap_len as usize,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("Couldn't map swap area into swapper");
         // compute the MAC area needed for the total RAM size. This is a slight over-estimate
         // because once we remove the MAC area, we need even less storage, but it's a small error.
         let mac_size = (spec.swap_len as usize / 4096) * size_of::<Tag>();
         let mac_size_to_page = (mac_size + (PAGE_SIZE - 1)) & !(PAGE_SIZE - 1);
         let ram_size_actual = (spec.swap_len as usize & !(PAGE_SIZE - 1)) - mac_size_to_page;
 
-        // safety: this is safe because all values within the memory region can be represented in `u8`
-        let swap_slice = swap_mem.as_mut_ptr();
         Self {
-            swap_mem,
-            // safety: the ram swap area is guaranteed aligned by the ram_offset specifier, and our
+            // safety: the ram swap area is pre-mapped into our virtual address by the loader, and our
             // calculations on lengths ensure area alignment
-            dst_data_area: unsafe { core::slice::from_raw_parts_mut(swap_slice as *mut u8, ram_size_actual) },
-            // safety: the ram swap area is guaranteed aligned by the ram_offset specifier, and our
+            dst_data_area: unsafe {
+                core::slice::from_raw_parts_mut(SWAP_HAL_VADDR as *mut u8, ram_size_actual)
+            },
+            // safety: the ram swap area is pre-mapped into our virtual address by the loader, and our
             // calculations on lengths ensure area alignment
             dst_mac_area: unsafe {
-                core::slice::from_raw_parts_mut((swap_slice as *mut u8).add(ram_size_actual), mac_size)
+                core::slice::from_raw_parts_mut((SWAP_HAL_VADDR as *mut u8).add(ram_size_actual), mac_size)
             },
             cipher: Aes256GcmSiv::new((&spec.key).into()),
         }
@@ -87,8 +77,11 @@ impl SwapHal {
         dst_vaddr: usize,
         dst_pid: u8,
     ) -> Result<(), Error> {
-        // println!("Decrypt swap:");
-        // println!("  offset: {:x}, vaddr: {:x}, pid: {}", src_offset, dst_vaddr, dst_pid);
+        // use core::fmt::Write;
+        // use crate::debug::*;
+        // writeln!(DebugUart {}, "Decrypt swap:").ok();
+        // writeln!(DebugUart {}, "  offset: {:x}, vaddr: {:x}, pid: {}", src_offset, dst_vaddr,
+        // dst_pid).ok();
         assert!(src_offset & (PAGE_SIZE - 1) == 0);
         assert!(buf.len() == PAGE_SIZE);
 
@@ -103,9 +96,12 @@ impl SwapHal {
         let mut tag = [0u8; size_of::<Tag>()];
         let mac_offset = (src_offset / PAGE_SIZE) * size_of::<Tag>();
         tag.copy_from_slice(&self.dst_mac_area[mac_offset..mac_offset + size_of::<Tag>()]);
-        // println!("dst_mac_area: {:x?}", &self.dst_mac_area[..32]);
+        // writeln!(DebugUart {}, "dst_mac_area: {:x?}", &self.dst_mac_area[..32]).ok();
         buf.copy_from_slice(&self.dst_data_area[src_offset..src_offset + PAGE_SIZE]);
-        // println!("Nonce: {:x?}, tag: {:x?}", &nonce, &tag);
-        self.cipher.decrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf, (&tag).into())
+        // writeln!(DebugUart {}, "Nonce: {:x?}, tag: {:x?}", &nonce, &tag).ok();
+        let result =
+            self.cipher.decrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf, (&tag).into());
+        // writeln!(DebugUart {}, "result: {:?}, buf: {:x?}", result, &buf[..16]).ok();
+        result
     }
 }

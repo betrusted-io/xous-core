@@ -1,14 +1,12 @@
+mod debug;
 mod platform;
+use core::fmt::Write;
+use std::fmt::Debug;
 
-use core::fmt::{Error, Write};
-use core::sync::atomic::{AtomicUsize, Ordering};
-
+use debug::*;
 use loader::swap::{SwapSpec, SWAP_CFG_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
 use num_traits::FromPrimitive;
-use platform::SwapHal;
-use utralib::*;
-
-static DUART_CSR_PA: AtomicUsize = AtomicUsize::new(0);
+use platform::{SwapHal, PAGE_SIZE};
 
 pub struct PtPage {
     pub entries: [u32; 1024],
@@ -34,43 +32,6 @@ pub enum Opcode {
     AllocateAdvisory = 2,
     /// A message from the kernel handler context to evaluate if a trim is needed
     EvalTrim = 256,
-}
-
-pub struct DebugUart {}
-impl DebugUart {
-    #[cfg(feature = "debug-print")]
-    pub fn putc(&mut self, c: u8) {
-        let mut csr_ptr = DUART_CSR_PA.load(Ordering::SeqCst);
-        // map it if it doesn't exist
-        if csr_ptr == 0 {
-            let debug_uart_mem = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::app_uart::HW_APP_UART_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't claim the debug UART");
-            DUART_CSR_PA.store(csr_ptr, Ordering::SeqCst);
-            csr_ptr = debug_uart_mem.as_ptr() as usize;
-        }
-        let mut csr = CSR::new(csr_ptr as *mut u32);
-
-        // Wait until TXFULL is `0`
-        while csr.r(utra::app_uart::TXFULL) != 0 {}
-        csr.wfo(utra::app_uart::RXTX_RXTX, c as u32);
-    }
-
-    #[cfg(not(feature = "debug-print"))]
-    pub fn putc(&self, _c: u8) {}
-}
-
-impl Write for DebugUart {
-    fn write_str(&mut self, s: &str) -> Result<(), Error> {
-        for c in s.bytes() {
-            self.putc(c);
-        }
-        Ok(())
-    }
 }
 
 /// This structure contains shared state accessible between the userspace code and the blocking swap call
@@ -187,7 +148,9 @@ fn swap_handler(
             )
             .ok();
             // walk the PT to find the swap data
-            let paddr_in_swap = ss.pt_walk(pid as u8, vaddr_in_pid);
+            let paddr_in_swap = ss
+                .pt_walk(pid as u8, vaddr_in_pid)
+                .expect("Couldn't resolve swapped data. Was the page actually swapped?");
             writeln!(
                 DebugUart {},
                 "resolved address in swap for 0x{:x}:{} -> 0x{:x?}",
@@ -196,6 +159,14 @@ fn swap_handler(
                 paddr_in_swap
             )
             .ok();
+            // safety: this is only safe because the pointer we're passed from the kernel is guaranteed to be
+            // a valid u8-page in memory
+            let buf = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
+            // TODO: manage swap_count
+            ss.hal
+                .decrypt_swap_from(buf, 0, paddr_in_swap, vaddr_in_pid, pid)
+                .expect("Decryption error: swap image corrupted, the tag does not match the data!");
+            // at this point, the `buf` has our desired data, we're done, modulo updating the count.
         }
         Some(Opcode::AllocateAdvisory) => {
             let advisories = [
