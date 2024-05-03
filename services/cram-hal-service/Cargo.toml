@@ -31,6 +31,7 @@ rkyv = { version = "0.4.3", default-features = false, features = [
 ] }
 
 [features]
+app-uart = []
 # add this feature to enable pre-emption
 quantum-timer = ["utralib"]
-default = ["quantum-timer"]
+default = ["quantum-timer", "app-uart"]

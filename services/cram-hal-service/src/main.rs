@@ -105,6 +105,8 @@ fn main() {
     // Second page from top of IFRAM0 is occupied by the swap handler. This was allocated
     // by the loader, before the kernel even started.
     ifram_allocs[0][30] = Some(Sender::from_usize(SWAPPER_PID as usize));
+    #[cfg(feature="app-uart")]
+    ifram_allocs[0][29] = Some(Sender::from_usize(SWAPPER_PID as usize)); // currently allocated to swapper for debug
 
     let iox_page = xous::syscall::map_memory(
         xous::MemoryAddress::new(utralib::generated::HW_IOX_BASE),
