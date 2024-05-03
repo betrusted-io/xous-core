@@ -221,22 +221,15 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
         }
         // now chase down any entries in the roots, and map valid pages
         for p in 0..cfg.processes.len() {
-            let root_pt = unsafe { &*(cfg.swap_root[p] as *const PageTable) };
-            for &entry in root_pt.entries.iter() {
-                if entry & FLG_VALID != 0 {
-                    let paddr = (entry & !0x3FF) << 2;
-                    println!(
-                        "Mapping L2 swap PT to PID 2 @paddr {:x} -> vaddr {:x}",
-                        paddr,
-                        SWAP_PT_VADDR + swap_pt_vaddr_offset
-                    );
-                    cfg.map_page(
-                        root,
-                        paddr,
-                        SWAP_PT_VADDR + swap_pt_vaddr_offset,
-                        FLG_R | FLG_W | FLG_U | FLG_VALID,
-                        SWAPPER_PID,
-                    );
+            let root_pt = unsafe { &mut *(cfg.swap_root[p] as *mut PageTable) };
+            for entry in root_pt.entries.iter_mut() {
+                if *entry & FLG_VALID != 0 {
+                    let paddr = (*entry & !0x3FF) << 2;
+                    let vaddr = SWAP_PT_VADDR + swap_pt_vaddr_offset;
+                    cfg.map_page(root, paddr, vaddr, FLG_R | FLG_W | FLG_U | FLG_VALID, SWAPPER_PID);
+                    // patch the entry to point at the virtual address
+                    *entry &= 0x3FF;
+                    *entry |= (vaddr & !0xFFF) >> 2;
                     swap_pt_vaddr_offset += PAGE_SIZE;
                 }
             }
@@ -257,7 +250,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
         let swap_spec = unsafe { (swap_spec_ptr as *mut SwapSpec).as_mut().unwrap() };
         if let Some(desc) = cfg.swap {
             swap_spec.key.copy_from_slice(&desc.key);
-            swap_spec.pid_count = cfg.init_process_count as u32;
+            swap_spec.pid_count = cfg.init_process_count as u32 + 1;
             swap_spec.rpt_len_bytes = cfg.runtime_page_tracker.len() as u32;
             swap_spec.swap_base = desc.ram_offset;
             swap_spec.swap_len = desc.ram_size;
