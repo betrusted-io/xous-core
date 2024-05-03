@@ -4,6 +4,7 @@ use aes_gcm_siv::{aead::Aead, AeadInPlace, Aes256GcmSiv, Error, KeyInit, Nonce, 
 use cramium_hal::udma::*;
 use loader::swap::{SwapSpec, SPIM_RAM_IFRAM_ADDR};
 use num_traits::ToBytes;
+use xous::MemoryRange;
 
 pub const PAGE_SIZE: usize = 4096;
 
@@ -11,12 +12,21 @@ pub const PAGE_SIZE: usize = 4096;
 /// register interface. The base and bounds must be translated to SPI accesses
 /// in a hardware-specific manner.
 pub struct SwapHal {
+    ifram_range: MemoryRange,
     swap_mac_start: usize,
     cipher: Aes256GcmSiv,
     ram_spim: Spim,
 }
 impl SwapHal {
     pub fn new(spec: &SwapSpec) -> Self {
+        let ifram_range = xous::syscall::map_memory(
+            xous::MemoryAddress::new(SPIM_RAM_IFRAM_ADDR),
+            None,
+            PAGE_SIZE,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("Couldn't map IFRAM area into swapper");
+
         // compute the MAC area needed for the total RAM size. This is a slight over-estimate
         // because once we remove the MAC area, we need even less storage, but it's a small error.
         let mac_size = (spec.swap_len as usize / 4096) * size_of::<Tag>();
@@ -28,6 +38,7 @@ impl SwapHal {
         #[cfg(not(feature = "spi-alt-channel"))]
         let channel = SpimChannel::Channel1;
         SwapMac {
+            ifram_range,
             swap_mac_start: ram_size_actual,
             cipher: Aes256GcmSiv::new((spec.key).into()),
             // safety: this is safe because the global clocks were gated on by the bootloader
@@ -46,7 +57,7 @@ impl SwapHal {
                     1024, // this is limited by the page length
                     1024,
                     Some(6),
-                    IframRange::from_raw_parts(SPIM_RAM_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR, 4096),
+                    IframRange::from_raw_parts(SPIM_RAM_IFRAM_ADDR, ifram_range.as_ptr() as usize, PAGE_SIZE),
                 )
             },
         }
