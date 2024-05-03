@@ -5,7 +5,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use loader::swap::{SwapSpec, SWAP_CFG_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
 use num_traits::FromPrimitive;
-use platform::SwapMac;
+use platform::SwapHal;
 use utralib::*;
 
 static DUART_CSR_PA: AtomicUsize = AtomicUsize::new(0);
@@ -76,10 +76,30 @@ impl Write for DebugUart {
 /// This structure contains shared state accessible between the userspace code and the blocking swap call
 /// handler.
 struct SwapperSharedState {
-    pub key: [u8; 32],
     pub pts: SwapPageTables,
-    pub macs: SwapMac,
+    pub hal: SwapHal,
     pub rpt: RuntimePageTracker,
+}
+impl SwapperSharedState {
+    pub fn pt_walk(&self, pid: u8, va: usize) -> Option<usize> {
+        let l1_pt = &self.pts.roots[pid as usize - 1];
+        let l1_entry = (l1_pt.entries[(va & 0xFFC0_0000) >> 22] >> 10) << 12;
+
+        if l1_entry != 0 {
+            // this is safe because all possible values can be represented as `u32`, the pointer
+            // is valid, aligned, and the bounds are known.
+            let l0_pt = unsafe { core::slice::from_raw_parts(l1_entry as *const u32, 1024) };
+            let l0_entry = l0_pt[(va & 0x003F_F000) >> 12];
+            if l0_entry & 1 != 0 {
+                // bit 1 is the "valid" bit
+                Some(((l0_entry as usize >> 10) << 12) | va & 0xFFF)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
 }
 struct SharedStateStorage {
     pub inner: Option<SwapperSharedState>,
@@ -113,16 +133,12 @@ fn swap_handler(
         //     have to do mapping requests because it's already done for us!
         let swap_spec = unsafe { &*(SWAP_CFG_VADDR as *mut SwapSpec) };
 
-        // extract our key
-        let mut key = [0u8; 32];
-        key.copy_from_slice(&swap_spec.key);
         // swapper is not allowed to use `log` for debugging under most circumstances, because
         // the swapper can't send messages when handling a swap call. Instead, we use a local
         // debug UART to handle this. This needs to be enabled with the "debug-print" feature
         // and is mutually exclusive with the "gdb-stub" feature in the kernel since it uses
         // the same physical hardware.
         sss.inner = Some(SwapperSharedState {
-            key,
             // safety: this is only safe because:
             //   - the loader puts the swap root page table pages starting at SWAP_PT_VADDR
             //   - all the page table entries are fully initialized and contains only representable data
@@ -135,7 +151,7 @@ fn swap_handler(
                     )
                 },
             },
-            macs: SwapMac::new(swap_spec.mac_base as usize, swap_spec.mac_len as usize),
+            hal: SwapHal::new(swap_spec),
             // safety: this is only safe because the loader guarantees this raw pointer is initialized and
             // aligned correctly
             rpt: RuntimePageTracker {
@@ -164,14 +180,22 @@ fn swap_handler(
             let vaddr_in_swap = a4;
             writeln!(
                 DebugUart {},
-                "rfs PID{}, vaddr_pid {:x}, vaddr_swap {:x}",
+                "rfs ptw PID{}, vaddr_pid {:x}, vaddr_swap {:x}",
                 pid,
                 vaddr_in_pid,
                 vaddr_in_swap
             )
             .ok();
             // walk the PT to find the swap data
-            // ss.pts[pid as usize]
+            let paddr_in_swap = ss.pt_walk(pid as u8, vaddr_in_pid);
+            writeln!(
+                DebugUart {},
+                "resolved address in swap for 0x{:x}:{} -> 0x{:x?}",
+                vaddr_in_pid,
+                pid,
+                paddr_in_swap
+            )
+            .ok();
         }
         Some(Opcode::AllocateAdvisory) => {
             let advisories = [
@@ -213,8 +237,7 @@ fn main() {
     // due to the advisory allocs that start piling up very quickly
     if let Some(ss) = sss.inner {
         log::info!(
-            "Swap params: key: {:x?}, root: {:x}, rpt: {:?}",
-            ss.key,
+            "Swap params: key: root: {:x}, rpt: {:?}",
             ss.pts.roots[0].entries[0],
             &ss.rpt.allocs[..8]
         );
