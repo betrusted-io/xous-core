@@ -432,22 +432,23 @@ impl MiniElf {
 
         let mut section_offset = 0;
         for (index, section) in self.sections.iter().enumerate() {
-            if let Some(dest_offset) = pt_walk(tt, section.virt as usize) {
-                println!(
-                    "  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), 0x{:x}(PA dst) len {}/0x{:x}",
-                    index,
-                    section_offset + image_phys_base,
-                    section.virt as usize,
-                    dest_offset,
-                    section.len(),
-                    section.len()
-                );
-                // dumping routines
-                let dump_pa_src = section_offset + image_phys_base;
-                let dump_pa_dst = dest_offset;
-                let dump_pa_end_dst = pt_walk(tt, section.virt as usize + section.len() - 20);
-                match ini_type {
-                    IniType::IniE | IniType::IniF => {
+            match ini_type {
+                IniType::IniE | IniType::IniF => {
+                    if let Some(dest_offset) = pt_walk(tt, section.virt as usize) {
+                        println!(
+                            "  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), 0x{:x}(PA dst) len {}/0x{:x}",
+                            index,
+                            section_offset + image_phys_base,
+                            section.virt as usize,
+                            dest_offset,
+                            section.len(),
+                            section.len()
+                        );
+                        // dumping routines
+                        let dump_pa_src = section_offset + image_phys_base;
+                        let dump_pa_dst = dest_offset;
+                        let dump_pa_end_dst = pt_walk(tt, section.virt as usize + section.len() - 20);
+
                         dump_addr(dump_pa_src, "    Src [:20]  ");
                         dump_addr(dump_pa_dst, "    Dst [:20]  ");
                         dump_addr(dump_pa_src + section.len() - 20, "    Src [-20:] ");
@@ -461,8 +462,38 @@ impl MiniElf {
                                 section.virt as usize + section.len() - 20
                             );
                         }
+                    } else {
+                        println!(
+                            "  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), ERR UNMAPPED!!",
+                            index,
+                            section_offset + image_phys_base,
+                            section.virt as usize + section_offset
+                        );
                     }
-                    IniType::IniS => {
+                }
+                IniType::IniS => {
+                    if let Some(dest_offset) = pt_walk_swap(
+                        tt,
+                        section.virt as usize,
+                        allocator.processes[SWAPPER_PID as usize - 1].satp,
+                    ) {
+                        println!(
+                            "  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), 0x{:x}(PA dst) len {}/0x{:x}",
+                            index,
+                            section_offset + image_phys_base,
+                            section.virt as usize,
+                            dest_offset,
+                            section.len(),
+                            section.len()
+                        );
+
+                        // dumping routines
+                        let dump_pa_src = section_offset + image_phys_base;
+                        let dump_pa_end_dst = pt_walk_swap(
+                            tt,
+                            section.virt as usize + section.len() - 20,
+                            allocator.processes[SWAPPER_PID as usize - 1].satp,
+                        );
                         #[cfg(feature = "swap")]
                         if let Some(swap) = allocator.swap_hal.as_mut() {
                             let dump_disk = swap.decrypt_src_page_at(dump_pa_src & !(PAGE_SIZE - 1));
@@ -502,15 +533,15 @@ impl MiniElf {
                                 );
                             }
                         }
+                    } else {
+                        println!(
+                            "  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), ERR UNMAPPED!!",
+                            index,
+                            section_offset + image_phys_base,
+                            section.virt as usize + section_offset
+                        );
                     }
                 }
-            } else {
-                println!(
-                    "  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), ERR UNMAPPED!!",
-                    index,
-                    section_offset + image_phys_base,
-                    section.virt as usize + section_offset
-                );
             }
             section_offset += section.len();
         }
@@ -543,6 +574,27 @@ pub fn pt_walk(root: usize, va: usize) -> Option<usize> {
     let l1_entry = l1_pt.entries[(va & 0xFFC0_0000) >> 22];
     if l1_entry != 0 {
         let l0_pt = unsafe { &mut (*(((l1_entry >> 10) << 12) as *mut PageTable)) };
+        let l0_entry = l0_pt.entries[(va & 0x003F_F000) >> 12];
+        if l0_entry & 1 != 0 {
+            // bit 1 is the "valid" bit
+            Some(((l0_entry >> 10) << 12) | va & 0xFFF)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+#[cfg(all(any(feature = "debug-print", feature = "swap"), not(feature = "atsama5d27")))]
+pub fn pt_walk_swap(root: usize, va: usize, swap_root: usize) -> Option<usize> {
+    let l1_pt = unsafe { &mut (*((root << 12) as *mut PageTable)) };
+    let l1_entry_va = (l1_pt.entries[(va & 0xFFC0_0000) >> 22] >> 10) << 12;
+    if l1_entry_va != 0 {
+        // this entry is a *virtual address*, mapped into the PID 2 space. Resolve it.
+        let l1_entry = pt_walk(swap_root, l1_entry_va).expect("Physical address should exist!");
+
+        let l0_pt = unsafe { &mut (*(l1_entry as *mut PageTable)) };
         let l0_entry = l0_pt.entries[(va & 0x003F_F000) >> 12];
         if l0_entry & 1 != 0 {
             // bit 1 is the "valid" bit
