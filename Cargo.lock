@@ -2805,6 +2805,7 @@ dependencies = [
  "utralib 0.1.24",
  "xous-pio",
  "xous-pl230",
+ "xous-riscv",
 ]
 
 [[package]]
