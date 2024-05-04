@@ -36,10 +36,12 @@ pub enum Opcode {
 
 /// This structure contains shared state accessible between the userspace code and the blocking swap call
 /// handler.
-struct SwapperSharedState {
+pub struct SwapperSharedState {
     pub pts: SwapPageTables,
     pub hal: SwapHal,
     pub rpt: RuntimePageTracker,
+    pub sram_start: usize,
+    pub sram_size: usize,
 }
 impl SwapperSharedState {
     pub fn pt_walk(&self, pid: u8, va: usize) -> Option<usize> {
@@ -64,6 +66,17 @@ impl SwapperSharedState {
 }
 struct SharedStateStorage {
     pub inner: Option<SwapperSharedState>,
+}
+
+pub fn change_owner(ss: &mut SwapperSharedState, pid: u8, paddr: usize) {
+    // First, check to see if the region is in RAM,
+    if paddr >= ss.sram_start && paddr < ss.sram_start + ss.sram_size {
+        // Mark this page as in-use by the kernel
+        ss.rpt.allocs[(paddr - ss.sram_start as usize) / PAGE_SIZE] = pid;
+        return;
+    }
+    // The region isn't in RAM. We're in the swapper, we can't handle errors - drop straight to panic.
+    panic!("Tried to swap region {:08x} that isn't in RAM!", paddr);
 }
 
 /// blocking swap call handler
@@ -123,6 +136,8 @@ fn swap_handler(
                     )
                 },
             },
+            sram_start: swap_spec.sram_start as usize,
+            sram_size: swap_spec.sram_size as usize,
         });
     }
     let ss = sss.inner.as_mut().expect("Shared state should be initialized");
@@ -174,6 +189,17 @@ fn swap_handler(
                 xous::AllocAdvice::deserialize(a4, a5),
                 xous::AllocAdvice::deserialize(a6, a7),
             ];
+            for advice in advisories {
+                match advice {
+                    xous::AllocAdvice::Allocate(pid, _vaddr, paddr) => {
+                        change_owner(ss, pid.get(), paddr);
+                    }
+                    xous::AllocAdvice::Free(_pid, _vaddr, paddr) => {
+                        change_owner(ss, 0, paddr);
+                    }
+                    xous::AllocAdvice::Uninit => {} // not all the records have to be populated
+                }
+            }
         }
         _ => {
             writeln!(DebugUart {}, "Unimplemented or unknown opcode: {}", opcode).ok();

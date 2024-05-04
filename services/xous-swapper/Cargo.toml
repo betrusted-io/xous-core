@@ -28,8 +28,8 @@ utralib = { version = "0.1.24", optional = true, default-features = false }
 [target.'cfg(any(windows,unix))'.dependencies]
 
 [features]
-cramium-soc = ["utralib/cramium-soc", "cramium-hal"]
-spi-alt-channel = []                                 # needs to match loader setting!
+cramium-soc = ["utralib/cramium-soc", "cramium-hal", "loader/cramium-soc"]
+spi-alt-channel = []                                                       # needs to match loader setting!
 cramium-fpga = ["utralib/cramium-fpga"]
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]

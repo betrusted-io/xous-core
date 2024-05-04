@@ -2,10 +2,9 @@ use core::fmt::Write;
 use core::mem::size_of;
 
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, Error, KeyInit, Nonce, Tag};
+use cramium_hal::ifram::IframRange;
 use cramium_hal::udma::*;
 use loader::swap::{SwapSpec, SPIM_RAM_IFRAM_ADDR, SWAP_HAL_VADDR};
-use num_traits::ToBytes;
-use xous::MemoryRange;
 
 use crate::debug::*;
 
@@ -31,9 +30,9 @@ impl SwapHal {
         let channel = SpimChannel::Channel0;
         #[cfg(not(feature = "spi-alt-channel"))]
         let channel = SpimChannel::Channel1;
-        SwapMac {
+        Self {
             swap_mac_start: ram_size_actual,
-            cipher: Aes256GcmSiv::new((spec.key).into()),
+            cipher: Aes256GcmSiv::new((&spec.key).into()),
             // safety: this is safe because the global clocks were gated on by the bootloader
             // note that also the IFRAM0 range is pre-allocated by the bootloader, and pre-mapped
             // into the correct virtual address as well.

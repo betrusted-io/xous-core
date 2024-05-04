@@ -1,7 +1,5 @@
 use core::fmt::{Error, Write};
 
-use utralib::*;
-
 pub struct DebugUart {}
 impl DebugUart {
     #[cfg(all(feature = "debug-print", any(feature = "precursor", feature = "renode")))]
@@ -23,7 +21,7 @@ impl DebugUart {
         let mut uart = unsafe {
             udma::Uart::get_handle(
                 loader::swap::SWAP_APP_UART_VADDR as usize,
-                loader::swap::APP_UART_IFRAM_ADDR as usize,
+                loader::APP_UART_IFRAM_ADDR as usize,
                 loader::swap::SWAP_APP_UART_IFRAM_VADDR as usize,
             )
         };
