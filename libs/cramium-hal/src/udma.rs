@@ -1193,6 +1193,7 @@ impl Spim {
         if activate {
             self.mem_send_cmd(0x35);
         } else {
+            self.mode = SpimMode::Quad; // pre-assumes quad mode
             self.mem_send_cmd(0xF5);
         }
         self.mem_cs(false);
