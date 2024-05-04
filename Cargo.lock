@@ -6396,6 +6396,8 @@ dependencies = [
 name = "xous-swapper"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm-siv",
+ "cramium-hal",
  "loader",
  "log",
  "num-derive 0.3.3",
