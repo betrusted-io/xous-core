@@ -272,6 +272,8 @@ pub fn early_init() {
             use cramium_hal::ifram::IframRange;
             use cramium_hal::iox::*;
             use cramium_hal::udma::*;
+            use loader::swap::SPIM_FLASH_IFRAM_ADDR;
+            use loader::swap::SPIM_RAM_IFRAM_ADDR;
 
             fn setup_port(
                 iox: &mut Iox,
@@ -307,7 +309,7 @@ pub fn early_init() {
             // setup the I/O pins
             let mut iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
             let mut udma_global = GlobalConfig::new(utralib::generated::HW_UDMA_CTRL_BASE as *mut u32);
-            #[cfg(not(feature = "spi-alt-channel"))]
+            #[cfg(feature = "spi-alt-channel")]
             let channel = {
                 // JQSPI1
                 // SPIM_CLK_A[0]
@@ -363,7 +365,7 @@ pub fn early_init() {
                 udma_global.clock_on(PeriphId::Spim0); // JQSPI1
                 SpimChannel::Channel0
             };
-            #[cfg(feature = "spi-alt-channel")]
+            #[cfg(not(feature = "spi-alt-channel"))]
             let channel = {
                 // JPC7_13
                 // SPIM_CLK_A[1]

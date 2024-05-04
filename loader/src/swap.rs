@@ -67,6 +67,10 @@ pub struct SwapSpec {
     pub mac_base: u32,
     /// Length of the MAC region in bytes
     pub mac_len: u32,
+    /// Start of the main memory
+    pub sram_start: u32,
+    /// Size of the main memory
+    pub sram_size: u32,
 }
 
 // RAM needs two buffers of 1k + 16 bytes = 2048 + 16 = 2064 bytes; round up to one page

@@ -255,6 +255,8 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             swap_spec.swap_base = desc.ram_offset;
             swap_spec.swap_len = desc.ram_size;
             (swap_spec.mac_base, swap_spec.mac_len) = cfg.swap_hal.as_ref().unwrap().mac_base_bounds();
+            swap_spec.sram_start = cfg.sram_start as u32;
+            swap_spec.sram_size = cfg.sram_size as u32;
         }
 
         // copy the RPT into PID 2

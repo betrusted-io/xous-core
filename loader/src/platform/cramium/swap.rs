@@ -6,12 +6,12 @@ use cramium_hal::iox::*;
 use cramium_hal::sce;
 use cramium_hal::udma::*;
 use loader::swap::SPIM_RAM_IFRAM_ADDR;
+use loader::{APP_UART_IFRAM_ADDR, UART_IFRAM_ADDR};
 use rand_chacha::rand_core::RngCore;
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
 use crate::bootconfig::BootConfig;
-use crate::platform::{SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR};
 use crate::swap::*;
 use crate::*;
 
@@ -28,10 +28,6 @@ pub struct SwapHal {
     src_cipher: Aes256GcmSiv,
     flash_spim: Spim,
     ram_spim: Spim,
-    iox: Iox,
-    udma_global: GlobalConfig,
-    swap_start: usize,
-    swap_len: usize,
     swap_mac_start: usize,
     swap_mac_len: usize,
     dst_cipher: Aes256GcmSiv,
@@ -76,6 +72,8 @@ impl SwapHal {
         if let Some(swap) = cfg.swap {
             // sanity check this structure
             assert_eq!(core::mem::size_of::<SwapSourceHeader>(), 4096);
+
+            let mut udma_global = GlobalConfig::new(utralib::generated::HW_UDMA_CTRL_BASE as *mut u32);
 
             // setup the I/O pins
             let mut iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
@@ -191,10 +189,6 @@ impl SwapHal {
                 udma_global.clock_on(PeriphId::Spim1); // JPC7_13
                 SpimChannel::Channel1
             };
-
-            let mut udma_global = GlobalConfig::new(utralib::generated::HW_UDMA_CTRL_BASE as *mut u32);
-            udma_global.clock_on(PeriphId::Spim0); // JQSPI1
-            // udma_global.clock_on(PeriphId::Spim1); // JPC7_13
 
             // safety: this is safe because clocks have been set up
             let mut flash_spim = unsafe {
@@ -320,10 +314,6 @@ impl SwapHal {
                 src_cipher: Aes256GcmSiv::new((&swap.key).into()),
                 flash_spim,
                 ram_spim,
-                iox,
-                udma_global,
-                swap_start: 0,
-                swap_len: ram_size_actual,
                 swap_mac_start: ram_size_actual,
                 swap_mac_len: mac_size,
                 dst_cipher: Aes256GcmSiv::new((&dest_key).into()),
@@ -456,7 +446,7 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
         SWAPPER_PID,
     );
 
-    let mut iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+    let mut iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
     iox.set_alternate_function(IoxPort::PD, 2, IoxFunction::AF2);
     iox.set_alternate_function(IoxPort::PD, 3, IoxFunction::AF2);
     // rx as input, with pull-up
@@ -466,29 +456,35 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
     iox.set_gpio_dir(IoxPort::PD, 3, IoxDir::Output);
 
     // Set up the UDMA_UART block to the correct baud rate and enable status
-    let mut udma_global = udma::GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
-    udma_global.clock_on(udma::PeriphId::Uart0);
+    let mut udma_global =
+        cramium_hal::udma::GlobalConfig::new(utralib::utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
+    udma_global.clock_on(cramium_hal::udma::PeriphId::Uart0);
     udma_global.map_event(
-        udma::PeriphId::Uart0,
-        udma::PeriphEventType::Uart(udma::EventUartOffset::Rx),
-        udma::EventChannel::Channel2,
+        cramium_hal::udma::PeriphId::Uart0,
+        cramium_hal::udma::PeriphEventType::Uart(cramium_hal::udma::EventUartOffset::Rx),
+        cramium_hal::udma::EventChannel::Channel2,
     );
     udma_global.map_event(
-        udma::PeriphId::Uart0,
-        udma::PeriphEventType::Uart(udma::EventUartOffset::Tx),
-        udma::EventChannel::Channel3,
+        cramium_hal::udma::PeriphId::Uart0,
+        cramium_hal::udma::PeriphEventType::Uart(cramium_hal::udma::EventUartOffset::Tx),
+        cramium_hal::udma::EventChannel::Channel3,
     );
 
     let baudrate: u32 = 115200;
+    let perclk = 100_000_000; // TODO: turn this into a symbolic const, or better yet, pass in from the loader
     let freq: u32 = perclk / 2;
 
     // the address of the UART buffer is "hard-allocated" at an offset one page from the top of
     // IFRAM0. This is a convention that must be respected by the UDMA UART library implementation
     // for things to work.
     let uart_buf_addr = UART_IFRAM_ADDR;
-    let mut udma_uart = unsafe {
+    let udma_uart = unsafe {
         // safety: this is safe to call, because we set up clock and events prior to calling new.
-        udma::Uart::get_handle(utra::udma_uart_0::HW_UDMA_UART_0_BASE, uart_buf_addr, uart_buf_addr)
+        cramium_hal::udma::Uart::get_handle(
+            utralib::utra::udma_uart_0::HW_UDMA_UART_0_BASE,
+            uart_buf_addr,
+            uart_buf_addr,
+        )
     };
     crate::println!("Baud freq is {} Hz, baudrate is {}", freq, baudrate);
     udma_uart.set_baud(baudrate, freq);
@@ -497,7 +493,7 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
     cfg.map_page_32(
         root,
         // TODO: use PD2/3 AF2 for this UART; set up the IOs for this
-        utra::udma_uart_0::HW_UDMA_UART_0_BASE,
+        utralib::utra::udma_uart_0::HW_UDMA_UART_0_BASE,
         SWAP_APP_UART_VADDR,
         FLG_R | FLG_W | FLG_U | FLG_VALID,
         SWAPPER_PID,
