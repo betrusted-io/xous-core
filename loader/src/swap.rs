@@ -26,14 +26,14 @@ pub struct SwapDescriptor {
 #[repr(C)]
 pub struct SwapSourceHeader {
     pub version: u32,
-    pub parital_nonce: [u8; 8],
+    pub partial_nonce: [u8; 8],
     pub mac_offset: u32,
     pub aad_len: u32,
     // aad is limited to 64 bytes!
     pub aad: [u8; 64],
 }
 
-#[repr(C)]
+#[repr(C, align(16))]
 pub struct RawPage {
     pub data: [u8; 4096],
 }
