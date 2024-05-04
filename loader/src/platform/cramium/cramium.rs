@@ -78,7 +78,7 @@ pub fn early_init() {
         let duart = utra::duart::HW_DUART_BASE as *mut u32;
         // ~2 second delay for debugger to attach
         let msg = b"boot\n\r";
-        for j in 0..10_000 {
+        for j in 0..5_000 {
             // variable count of .'s to create a sense of motion on the console
             for _ in 0..j & 0x7 {
                 while duart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
