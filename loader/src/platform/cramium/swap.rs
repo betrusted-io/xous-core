@@ -70,9 +70,6 @@ fn setup_port(
 impl SwapHal {
     pub fn new(cfg: &BootConfig) -> Option<SwapHal> {
         if let Some(swap) = cfg.swap {
-            // sanity check this structure
-            assert_eq!(core::mem::size_of::<SwapSourceHeader>(), 4096);
-
             let mut udma_global = GlobalConfig::new(utralib::generated::HW_UDMA_CTRL_BASE as *mut u32);
 
             // setup the I/O pins
@@ -202,7 +199,7 @@ impl SwapHal {
                     0,
                     0,
                     None,
-                    0, // we will never write to flash
+                    16, // just enough space to send commands
                     4096,
                     Some(8),
                     IframRange::from_raw_parts(SPIM_FLASH_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, 4096 * 2),
