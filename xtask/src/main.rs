@@ -441,30 +441,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // ------ Cramium hardware image configs ------
         Some("cramium-fpga") | Some("cramium-soc") => {
-            let cramium_pkgs = [
-                "xous-log",
-                "xous-names",
-                "xous-ticktimer",
-                "cram-hal-service",
-                "graphics-server",
-                "cram-console",
-            ]
-            .to_vec();
+            let cramium_flash_pkgs =
+                ["xous-log", "xous-names", "xous-ticktimer", "cram-hal-service"].to_vec();
+            let cramium_swap_pkgs = ["graphics-server", "cram-console", "test-swapper"].to_vec();
+            if !builder.is_swap_set() {
+                builder.set_swap(0, 4 * 1024 * 1024);
+            }
             builder.add_loader_feature("debug-print");
             builder.add_loader_feature("board-bringup");
-            // builder.add_loader_feature("spim-test");
-            // builder.add_loader_feature("spi-alt-channel");
+            builder.add_loader_feature("spim-test");
+            // builder.add_loader_feature("spi-alt-channel"); // this flag, when asserted, uses the J_QSPI
+            // header. By default, we use JPC7_13 (J_QSPI does not work, for some reason; bit 3 is stuck
+            // high...)
             builder.add_kernel_feature("v2p");
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),
                 Some("cramium-soc") => builder.target_cramium_soc(),
                 _ => panic!("should be unreachable"),
             };
+
+            // It is important that this is the first service added, because the swapper *must* be in PID 2
+            builder.add_service("xous-swapper", LoaderRegion::Flash);
+            builder.add_loader_feature("swap");
+            builder.add_kernel_feature("swap");
+            builder.add_feature("swap");
+
             builder.add_services(&get_cratespecs());
-            for service in cramium_pkgs {
+            for service in cramium_flash_pkgs {
                 builder.add_service(service, LoaderRegion::Flash);
             }
+            builder.add_services(&get_cratespecs());
+            for service in cramium_swap_pkgs {
+                builder.add_service(service, LoaderRegion::Swap);
+            }
             builder.add_feature("quantum-timer");
+
+            builder.add_kernel_feature("debug-swap");
+            builder.add_kernel_feature("debug-print");
         }
 
         // ------ ARM hardware image configs ------
