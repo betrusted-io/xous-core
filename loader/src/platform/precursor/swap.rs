@@ -97,7 +97,7 @@ impl SwapHal {
                 mac_len: mac_size as u32,
                 ram_swap_key,
             };
-            hal.partial_nonce.copy_from_slice(&ssh.parital_nonce);
+            hal.partial_nonce.copy_from_slice(&ssh.partial_nonce);
             Some(hal)
         } else {
             None
