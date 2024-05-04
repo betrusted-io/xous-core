@@ -25,15 +25,15 @@ pub struct SwapHal {
     // overflow AAD with panic if it's longer than this!
     aad_storage: [u8; 64],
     aad_len: usize,
-    src_cipher: Aes256GcmSiv,
-    flash_spim: Spim,
-    ram_spim: Spim,
     swap_mac_start: usize,
     swap_mac_len: usize,
-    dst_cipher: Aes256GcmSiv,
     buf_addr: usize,
-    buf: RawPage,
     ram_swap_key: [u8; 32],
+    src_cipher: Aes256GcmSiv,
+    dst_cipher: Aes256GcmSiv,
+    flash_spim: Spim,
+    ram_spim: Spim,
+    buf: RawPage,
 }
 
 fn setup_port(
@@ -201,7 +201,7 @@ impl SwapHal {
                     None,
                     16, // just enough space to send commands
                     4096,
-                    Some(8),
+                    Some(6),
                     IframRange::from_raw_parts(SPIM_FLASH_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, 4096 * 2),
                 )
             };
@@ -239,8 +239,8 @@ impl SwapHal {
 
             // setup FLASH
             //  - QE enable
-            //  - dummy cycles = 8
-            flash_spim.mem_write_status_register(0b01_0000_00, 0b10_00_0_111);
+            //  - dummy cycles = 6
+            flash_spim.mem_write_status_register(0b01_0000_00, 0b00_00_0_111);
 
             // set SPI devices to QPI mode
             // We expect a MX25L12833F (3.3V) on CS0
@@ -301,7 +301,9 @@ impl SwapHal {
             }
 
             // safety: buf.data is aligned to 4096-byte boundary and filled with initialized data
-            let ssh: &SwapSourceHeader = unsafe { &*(buf.data.as_ptr() as *const &SwapSourceHeader) };
+            let ssh: &SwapSourceHeader =
+                unsafe { (buf.data.as_ptr() as *const SwapSourceHeader).as_ref().unwrap() };
+            println!("SwapSourceHeader: {:x?}", ssh);
             let mut hal = SwapHal {
                 image_start: SWAP_IMG_START as usize + 4096,
                 image_mac_start: SWAP_IMG_START as usize + 4096 + ssh.mac_offset as usize,
@@ -320,7 +322,7 @@ impl SwapHal {
             };
             hal.aad_storage[..ssh.aad_len as usize].copy_from_slice(&ssh.aad[..ssh.aad_len as usize]);
             hal.aad_len = ssh.aad_len as usize;
-            hal.partial_nonce.copy_from_slice(&ssh.parital_nonce);
+            hal.partial_nonce.copy_from_slice(&ssh.partial_nonce);
             Some(hal)
         } else {
             None
@@ -332,11 +334,13 @@ impl SwapHal {
     fn aad(&self) -> &[u8] { &self.aad_storage[..self.aad_len] }
 
     pub fn decrypt_src_page_at(&mut self, offset: usize) -> &[u8] {
+        println!("in decrypt_page_at");
         assert!((offset & 0xFFF) == 0, "offset is not page-aligned");
         assert!(offset >= 0x1000);
         // compensate for the unencrypted header that is not included in the `src_data_area` slice
         let offset = offset - 0x1000;
         self.buf_addr = offset;
+        println!("bef second read");
         self.flash_spim.mem_read((self.image_start + offset) as u32, &mut self.buf.data);
         let mut nonce = [0u8; size_of::<Nonce>()];
         nonce[..4].copy_from_slice(&(offset as u32).to_be_bytes());
