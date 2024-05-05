@@ -102,8 +102,6 @@ impl MiniElf {
         let mut current_page_addr: usize = 0;
         let mut previous_addr: usize = 0;
         let mut last_mapped_xip = 0;
-        #[cfg(feature = "swap")]
-        let mut last_swap_page = 0;
         let image_phys_base = allocator.base_addr as usize + self.load_offset as usize;
         // It is a requirement that the image generator lay out the artifacts on disk such that
         // the page offsets line up for XIP sections. This assert confirms this necessary pre-condition.
@@ -371,8 +369,8 @@ impl MiniElf {
                     allocator.map_page(tt, map_phys_addr, virt_page, flags, pid as XousPid);
                     #[cfg(feature = "swap")]
                     if ini_type == IniType::IniS {
-                        allocator.map_swap(last_swap_page * 0x1000, virt_page, pid);
-                        last_swap_page += 1;
+                        allocator.map_swap(allocator.last_swap_page * 0x1000, virt_page, pid);
+                        allocator.last_swap_page += 1;
                     }
                     last_mapped_xip = virt_page;
 
