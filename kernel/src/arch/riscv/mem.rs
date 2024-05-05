@@ -1167,7 +1167,7 @@ pub fn map_page_to_swapper(paddr: usize) -> Result<usize, xous_kernel::Error> {
         let payload_virt = MemoryManager::with_mut(|mm| {
             let payload_virt = mm
                 .find_virtual_address(core::ptr::null_mut(), PAGE_SIZE, xous_kernel::MemoryType::Messages)
-                .expect("couldn't find virtuall address in swapper space for target page")
+                .expect("couldn't find virtual address in swapper space for target page")
                 as usize;
             let _result =
                 map_page_inner(mm, swapper_pid, paddr, payload_virt, MemoryFlags::R | MemoryFlags::W, true);
