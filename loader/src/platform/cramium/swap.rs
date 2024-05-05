@@ -240,7 +240,10 @@ impl SwapHal {
             // setup FLASH
             //  - QE enable
             //  - dummy cycles = 6
-            flash_spim.mem_write_status_register(0b01_0000_00, 0b00_00_0_111);
+            // This is not necessary: QE should be set by the external FLASH
+            // provisioning routine.
+            // TODO: figure out why writing this causes reads to break (every other read works)
+            // flash_spim.mem_write_status_register(0b01_0000_00, 0b00_00_0_111);
 
             // set SPI devices to QPI mode
             // We expect a MX25L12833F (3.3V) on CS0
@@ -303,7 +306,12 @@ impl SwapHal {
             // safety: buf.data is aligned to 4096-byte boundary and filled with initialized data
             let ssh: &SwapSourceHeader =
                 unsafe { (buf.data.as_ptr() as *const SwapSourceHeader).as_ref().unwrap() };
-            println!("SwapSourceHeader: {:x?}", ssh);
+            #[cfg(feature = "debug-print")]
+            {
+                println!("SwapSourceHeader: {:x?}", ssh);
+                println!("Swap key: {:x?}", &swap.key);
+                println!("Dest key: {:x?}", &dest_key);
+            }
             let mut hal = SwapHal {
                 image_start: SWAP_IMG_START as usize + 4096,
                 image_mac_start: SWAP_IMG_START as usize + 4096 + ssh.mac_offset as usize,
@@ -334,13 +342,11 @@ impl SwapHal {
     fn aad(&self) -> &[u8] { &self.aad_storage[..self.aad_len] }
 
     pub fn decrypt_src_page_at(&mut self, offset: usize) -> &[u8] {
-        println!("in decrypt_page_at");
         assert!((offset & 0xFFF) == 0, "offset is not page-aligned");
         assert!(offset >= 0x1000);
         // compensate for the unencrypted header that is not included in the `src_data_area` slice
         let offset = offset - 0x1000;
         self.buf_addr = offset;
-        println!("bef second read");
         self.flash_spim.mem_read((self.image_start + offset) as u32, &mut self.buf.data);
         let mut nonce = [0u8; size_of::<Nonce>()];
         nonce[..4].copy_from_slice(&(offset as u32).to_be_bytes());

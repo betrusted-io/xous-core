@@ -206,8 +206,8 @@ pub fn early_init() {
         crate::println!("trng status: {:x}", trng_csr.r(utra::trng::SFR_SR));
 
         // do a PL230/PIO test. Toggles PB15 (PIO0) with an LFSR sequence.
-        let mut pl230 = xous_pl230::Pl230::new();
-        xous_pl230::pl230_tests::units::basic_tests(&mut pl230);
+        // let mut pl230 = xous_pl230::Pl230::new();
+        // xous_pl230::pl230_tests::units::basic_tests(&mut pl230);
         // xous_pl230::pl230_tests::units::pio_test(&mut pl230);
 
         const BANNER: &'static str = "\n\rKeep pressing keys to continue boot...\r\n";
@@ -481,7 +481,7 @@ pub fn early_init() {
 
             // sanity check: read ID
             crate::println!("read ID...");
-            udma_uart.read(&mut rx_buf[..1]);
+            // getc();
             let flash_id = flash_spim.mem_read_id_flash();
             let ram_id = ram_spim.mem_read_id_ram();
             crate::println!("flash ID: {:x}", flash_id);
@@ -495,7 +495,7 @@ pub fn early_init() {
             //  - QE enable
             //  - dummy cycles = 8
             crate::println!("write SR...");
-            udma_uart.read(&mut rx_buf[..1]);
+            // getc();
             flash_spim.mem_write_status_register(0b01_0000_00, 0b10_00_0_111);
 
             // set SPI devices to QPI mode
@@ -503,12 +503,12 @@ pub fn early_init() {
             // We expect a ISS66WVS4M8BLL (3.3V) on CS1
             // Both support QPI.
             crate::println!("set QPI mode...");
-            udma_uart.read(&mut rx_buf[..1]);
+            // getc();
             flash_spim.mem_qpi_mode(true);
             ram_spim.mem_qpi_mode(true);
 
             crate::println!("read ID QPI mode...");
-            udma_uart.read(&mut rx_buf[..1]);
+            // getc();
             let flash_id = flash_spim.mem_read_id_flash();
             let ram_id = ram_spim.mem_read_id_ram();
             crate::println!("QPI flash ID: {:x}", flash_id);
@@ -520,7 +520,6 @@ pub fn early_init() {
 
             let mut chk_buf = [0u8; 32];
             crate::println!("first read...");
-            udma_uart.read(&mut rx_buf[..1]);
             crate::println!("flash read");
             flash_spim.mem_read(0x0, &mut chk_buf);
             crate::println!("flash: {:x?}", chk_buf);
@@ -530,16 +529,58 @@ pub fn early_init() {
                 *d = i as u8;
             }
             crate::println!("ram write...");
-            udma_uart.read(&mut rx_buf[..1]);
             ram_spim.mem_ram_write(0x0, &chk_buf);
             chk_buf.fill(0);
             crate::println!("empty buf: {:x?}", chk_buf);
 
             crate::println!("ram read...");
-            udma_uart.read(&mut rx_buf[..1]);
             ram_spim.mem_read(0x0, &mut chk_buf);
             crate::println!("RAM checked: {:x?}", chk_buf);
 
+            /*
+            crate::println!("Press any key to start SPIM RAM write test");
+            let test_blocks = 4;
+            getc();
+            let mut big_buf = [0u8; 4096];
+            for offset in (0..0x1000 * test_blocks).step_by(0x1000) {
+                let mut test_pat = TestPattern::new(Some(offset));
+                for d in big_buf.chunks_mut(4) {
+                    d.copy_from_slice(&test_pat.next().to_le_bytes());
+                }
+                ram_spim.mem_ram_write(offset, &mut big_buf);
+                crate::println!(
+                    "Offset: {:x} -> {:x?}..{:x?}",
+                    offset,
+                    &big_buf[..16],
+                    &big_buf[big_buf.len() - 16..]
+                );
+            }
+
+            crate::println!("Press any key to start SPIM RAM read test");
+            getc();
+            let mut failures = 0;
+            use core::convert::TryInto;
+            for offset in (0..0x1000 * test_blocks).step_by(0x1000) {
+                let mut test_pat = TestPattern::new(Some(offset));
+                ram_spim.mem_read(offset, &mut big_buf);
+                crate::println!(
+                    "Offset: {:x} -> {:x?}..{:x?}",
+                    offset,
+                    &big_buf[..16],
+                    &big_buf[big_buf.len() - 16..]
+                );
+                for d in big_buf.chunks(4) {
+                    let val = u32::from_le_bytes(d.try_into().unwrap());
+                    let expected = test_pat.next();
+                    if val != expected {
+                        failures += 1;
+                    }
+                }
+            }
+            crate::println!("total failures: {}", failures);
+            crate::println!("SPIM ram test done; press any key to continue...");
+            getc();
+            */
             /*
             crate::println!("looping around, turning off QPI mode!");
             udma_uart.read(&mut rx_buf[..1]);
@@ -559,8 +600,9 @@ pub fn early_init() {
         }
     }
 
-    const ONWARD: &'static str = "\n\rBooting!\n\r";
-    udma_uart.write(&ONWARD.as_bytes());
+    crate::println!("Press any key to continue...");
+    getc();
+    crate::println!("\n\rBooting!\n\r");
 }
 
 #[cfg(feature = "platform-tests")]
@@ -795,3 +837,40 @@ unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
 
 fn fsfreq_to_hz(fs_freq: u32) -> u32 { (fs_freq * (48_000_000 / 32)) / 1_000_000 }
 fn fsfreq_to_hz_32(fs_freq: u32) -> u32 { (fs_freq * (32_000_000 / 32)) / 1_000_000 }
+
+#[allow(dead_code)]
+/// Used mainly for debug breaks. Not used in every configuration.
+pub fn getc() -> char {
+    let uart_buf_addr = loader::UART_IFRAM_ADDR;
+    let mut udma_uart = unsafe {
+        // safety: this is safe to call, because we set up clock and events prior to calling new.
+        udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
+    };
+    let mut rx_buf = [0u8; 1];
+    udma_uart.read(&mut rx_buf);
+    char::from_u32(rx_buf[0] as u32).unwrap_or(' ')
+}
+
+#[allow(dead_code)]
+pub struct TestPattern {
+    x: u32,
+}
+#[allow(dead_code)]
+impl TestPattern {
+    pub fn new(seed: Option<u32>) -> Self { Self { x: seed.unwrap_or(0) } }
+
+    /// from https://github.com/skeeto/hash-prospector
+    pub fn next(&mut self) -> u32 {
+        if self.x == 0 {
+            self.x += 1;
+        }
+        self.x ^= self.x >> 17;
+        self.x *= 0xed5ad4bb;
+        self.x ^= self.x >> 11;
+        self.x *= 0xac4c1b51;
+        self.x ^= self.x >> 15;
+        self.x *= 0x31848bab;
+        self.x ^= self.x >> 14;
+        return self.x;
+    }
+}
