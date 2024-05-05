@@ -1307,10 +1307,6 @@ impl Spim {
             self.send_cmd_list(&cmd_list);
             // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
             unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..3], CFG_EN | CFG_SIZE_8) }
-            while self.udma_busy(Bank::Tx) {
-                #[cfg(feature = "std")]
-                xous::yield_slice();
-            }
             let wr_cmd = [SpimCmd::TxData(
                 self.mode,
                 SpimWordsPerXfer::Words1,
@@ -1318,6 +1314,10 @@ impl Spim {
                 SpimEndian::MsbFirst,
                 chunk.len() as u32,
             )];
+            while self.udma_busy(Bank::Tx) {
+                #[cfg(feature = "std")]
+                xous::yield_slice();
+            }
             self.send_cmd_list(&wr_cmd);
             self.tx_buf_mut()[..chunk.len()].copy_from_slice(chunk);
             // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
