@@ -41,7 +41,7 @@ impl SwapHal {
             ram_spim: unsafe {
                 Spim::new_with_ifram(
                     channel,
-                    50_000_000,
+                    25_000_000,
                     50_000_000,
                     SpimClkPol::LeadingEdgeRise,
                     SpimClkPha::CaptureOnLeading,

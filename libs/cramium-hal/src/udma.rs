@@ -819,7 +819,7 @@ impl Spim {
         .expect("couldn't map serial port");
         let csr = CSR::new(csr_range.as_mut_ptr() as *mut u32);
 
-        let clk_div = sys_clk_freq / spi_clk_freq;
+        let clk_div = sys_clk_freq / (2 * spi_clk_freq);
         // make this a hard panic -- you'll find out at runtime that you f'd up
         // but at least you find out.
         assert!(clk_div < 256, "SPI clock divider is out of range");
@@ -902,7 +902,7 @@ impl Spim {
         #[cfg(not(target_os = "xous"))]
         let csr = CSR::new(base_addr as *mut u32);
 
-        let clk_div = sys_clk_freq / spi_clk_freq;
+        let clk_div = sys_clk_freq / (2 * spi_clk_freq);
         // make this a hard panic -- you'll find out at runtime that you f'd up
         // but at least you find out.
         assert!(clk_div < 256, "SPI clock divider is out of range");
