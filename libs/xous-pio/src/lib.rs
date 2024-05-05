@@ -134,7 +134,7 @@ pub struct PioSharedState {
     used_machines: [bool; 4],
 }
 impl PioSharedState {
-    #[cfg(all(feature = "baremetal", not(feature = "rp2040")))]
+    #[cfg(all(feature = "baremetal", not(feature = "rp2040"), not(target_os = "xous")))]
     pub fn new() -> Self {
         PioSharedState {
             pio: CSR::new(rp_pio::HW_RP_PIO_BASE as *mut u32),
@@ -149,7 +149,7 @@ impl PioSharedState {
         PioSharedState { pio: CSR::new(0x5020_0000 as *mut u32), used_mask: 0, used_machines: [false; 4] }
     }
 
-    #[cfg(not(feature = "baremetal"))]
+    #[cfg(target_os = "xous")]
     pub fn new() -> Self {
         // Note: this requires a memory region window to be manually specified in create-image
         // so that the loader maps the pages for the PIO block. This is because the PIO block is
