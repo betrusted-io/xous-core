@@ -1302,7 +1302,7 @@ impl Spim {
                 SpimCmd::TxData(self.mode, SpimWordsPerXfer::Words1, 8 as u8, SpimEndian::MsbFirst, 3),
             ];
             let a = chunk_addr.to_be_bytes();
-            self.tx_buf_mut()[..3].copy_from_slice(&[a[2], a[1], a[0]]);
+            self.tx_buf_mut()[..3].copy_from_slice(&[a[1], a[2], a[3]]);
             self.mem_cs(true);
             self.send_cmd_list(&cmd_list);
             // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
