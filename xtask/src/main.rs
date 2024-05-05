@@ -197,10 +197,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // manage an ugly patch we have to do to selectively configure AES for only cramium-soc targets
     match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
         Ok(false) => {
-            println!(
-                "Build configuration is out of sync: cramium-soc patch on AES crate was not cleared out"
-            );
-            return Err("services/aes/Cargo.toml is in a bad state! Revert any patches to the file.".into());
+            builder::search_and_replace_in_file(
+                "services/aes/Cargo.toml",
+                "default = [\"cramium-soc\"]",
+                "default = []",
+            )
+            .expect("couldn't patch AES");
+
+            match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
+                Ok(false) => {
+                    return Err(
+                        "Couldn't revert services/aes/Cargo.toml -- is the file writeable or corrupted?"
+                            .into(),
+                    );
+                }
+                _ => (),
+            }
         }
         _ => {}
     }
@@ -460,6 +472,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 builder.set_swap(0, 4 * 1024 * 1024);
             }
             builder.add_loader_feature("board-bringup");
+            builder.add_loader_feature("spim-test");
+            // builder.add_loader_feature("spi-alt-channel"); // this flag, when asserted, uses the J_QSPI
+            // header. By default, we use JPC7_13 (J_QSPI does not work, for some reason; bit 3 is stuck
+            // high...)
             builder.add_loader_feature("debug-print");
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("debug-print");
@@ -467,10 +483,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_kernel_feature("swap");
             builder.add_feature("swap");
             builder.add_feature("quantum-timer");
-            // builder.add_loader_feature("spim-test");
-            // builder.add_loader_feature("spi-alt-channel"); // this flag, when asserted, uses the J_QSPI
-            // header. By default, we use JPC7_13 (J_QSPI does not work, for some reason; bit 3 is stuck
-            // high...)
             builder.add_kernel_feature("v2p");
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),
