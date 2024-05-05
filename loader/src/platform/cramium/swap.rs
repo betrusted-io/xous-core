@@ -202,6 +202,7 @@ impl SwapHal {
                     16, // just enough space to send commands
                     4096,
                     Some(6),
+                    None,
                     IframRange::from_raw_parts(SPIM_FLASH_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, 4096 * 2),
                 )
             };
@@ -220,7 +221,8 @@ impl SwapHal {
                     1024, // this is limited by the page length
                     1024,
                     Some(6),
-                    IframRange::from_raw_parts(SPIM_RAM_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR, 4096 * 2),
+                    None,
+                    IframRange::from_raw_parts(SPIM_RAM_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR, 4096),
                 )
             };
             // turn off QPI mode, in case it was set from a reboot in a bad state
@@ -265,7 +267,7 @@ impl SwapHal {
             // allocate the buf
             let mut buf = RawPage { data: [0u8; 4096] };
             // fetch the header
-            flash_spim.mem_read(SWAP_IMG_START as u32, &mut buf.data);
+            flash_spim.mem_read(SWAP_IMG_START as u32, &mut buf.data, false);
 
             // compute offsets for swap
             let mac_size = (swap.ram_size as usize / 4096) * size_of::<Tag>();
@@ -347,7 +349,7 @@ impl SwapHal {
         // compensate for the unencrypted header that is not included in the `src_data_area` slice
         let offset = offset - 0x1000;
         self.buf_addr = offset;
-        self.flash_spim.mem_read((self.image_start + offset) as u32, &mut self.buf.data);
+        self.flash_spim.mem_read((self.image_start + offset) as u32, &mut self.buf.data, false);
         let mut nonce = [0u8; size_of::<Nonce>()];
         nonce[..4].copy_from_slice(&(offset as u32).to_be_bytes());
         nonce[4..].copy_from_slice(&self.partial_nonce);
@@ -357,8 +359,11 @@ impl SwapHal {
         // cheaper than the Refcell bookkeeping.
         let mut aad = [0u8; 64];
         aad[..self.aad_len].copy_from_slice(self.aad());
-        self.flash_spim
-            .mem_read((self.image_mac_start + (offset / 4096) * size_of::<Tag>()) as u32, &mut tag);
+        self.flash_spim.mem_read(
+            (self.image_mac_start + (offset / 4096) * size_of::<Tag>()) as u32,
+            &mut tag,
+            false,
+        );
         match self.src_cipher.decrypt_in_place_detached(
             Nonce::from_slice(&nonce),
             &aad[..self.aad_len],
@@ -393,10 +398,11 @@ impl SwapHal {
         let aad: &[u8] = &[];
         match self.dst_cipher.encrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf) {
             Ok(tag) => {
-                self.ram_spim.mem_ram_write(dest_offset as u32, buf);
+                self.ram_spim.mem_ram_write(dest_offset as u32, buf, false);
                 self.ram_spim.mem_ram_write(
                     (self.swap_mac_start + (dest_offset / PAGE_SIZE) * size_of::<Tag>()) as u32,
                     tag.as_slice(),
+                    false,
                 );
             }
             Err(e) => panic!("Encryption error to swap ram: {:?}", e),
@@ -416,9 +422,12 @@ impl SwapHal {
         nonce[9..12].copy_from_slice(&(vpage_masked as u32).to_be_bytes()[..3]);
         let aad: &[u8] = &[];
         let mut tag = [0u8; size_of::<Tag>()];
-        self.ram_spim
-            .mem_read((self.swap_mac_start + (src_offset / PAGE_SIZE) * size_of::<Tag>()) as u32, &mut tag);
-        self.ram_spim.mem_read(src_offset as u32, &mut self.buf.data);
+        self.ram_spim.mem_read(
+            (self.swap_mac_start + (src_offset / PAGE_SIZE) * size_of::<Tag>()) as u32,
+            &mut tag,
+            false,
+        );
+        self.ram_spim.mem_read(src_offset as u32, &mut self.buf.data, false);
         match self.dst_cipher.decrypt_in_place_detached(
             Nonce::from_slice(&nonce),
             aad,

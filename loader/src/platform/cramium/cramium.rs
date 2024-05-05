@@ -437,6 +437,7 @@ pub fn early_init() {
                     16, // just enough space to send commands
                     4096,
                     Some(8),
+                    None,
                     IframRange::from_raw_parts(SPIM_FLASH_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, 4096 * 2),
                 )
             };
@@ -455,6 +456,7 @@ pub fn early_init() {
                     1024, // this is limited by the page length
                     1024,
                     Some(6),
+                    None,
                     IframRange::from_raw_parts(SPIM_RAM_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR, 4096 * 2),
                 )
             };
@@ -600,7 +602,7 @@ pub fn early_init() {
         }
     }
 
-    crate::println!("Press any key to continue...");
+    udma_uart.write("Press any key to continue...".as_bytes());
     getc();
     crate::println!("\n\rBooting!\n\r");
 }
