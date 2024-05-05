@@ -52,6 +52,7 @@ impl SwapHal {
                     1024, // this is limited by the page length
                     1024,
                     Some(6),
+                    Some(SpimMode::Quad),
                     IframRange::from_raw_parts(SPIM_RAM_IFRAM_ADDR, SWAP_HAL_VADDR, PAGE_SIZE),
                 )
             },
@@ -79,10 +80,11 @@ impl SwapHal {
         let aad: &[u8] = &[];
         match self.cipher.encrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf) {
             Ok(tag) => {
-                self.ram_spim.mem_ram_write(dest_offset as u32, buf);
+                self.ram_spim.mem_ram_write(dest_offset as u32, buf, false);
                 self.ram_spim.mem_ram_write(
                     (self.swap_mac_start + (dest_offset / PAGE_SIZE) * size_of::<Tag>()) as u32,
                     tag.as_slice(),
+                    false,
                 );
             }
             Err(e) => panic!("Encryption error to swap ram: {:?}", e),
@@ -108,9 +110,12 @@ impl SwapHal {
         nonce[9..12].copy_from_slice(&(vpage_masked as u32).to_be_bytes()[..3]);
         let aad: &[u8] = &[];
         let mut tag = [0u8; size_of::<Tag>()];
-        self.ram_spim
-            .mem_read((self.swap_mac_start + (src_offset / PAGE_SIZE) * size_of::<Tag>()) as u32, &mut tag);
-        self.ram_spim.mem_read(src_offset as u32, buf);
+        self.ram_spim.mem_read(
+            (self.swap_mac_start + (src_offset / PAGE_SIZE) * size_of::<Tag>()) as u32,
+            &mut tag,
+            false,
+        );
+        self.ram_spim.mem_read(src_offset as u32, buf, false);
         self.cipher.decrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf, (&tag).into())
     }
 }
