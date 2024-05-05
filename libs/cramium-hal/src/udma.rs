@@ -1206,6 +1206,10 @@ impl Spim {
     }
 
     /// Side-effects: unsets QPI mode if it was previously set
+    /// TODO: this does not seem to work. Setting it causes some strange behaviors
+    /// on reads (but QE mode is enabled, so something must have worked). This
+    /// needs to be looked into more. Oddly enough, it looks "fine" on the logic
+    /// analyzer when I checked it early on, but obviously something is not right.
     pub fn mem_write_status_register(&mut self, status: u8, config: u8) {
         if self.mode != SpimMode::Standard {
             self.mem_qpi_mode(false);
@@ -1233,7 +1237,6 @@ impl Spim {
         // target device's memory page (i.e., the point at which you'd wrap when reading)
         let mut offset = 0;
         for chunk in buf.chunks_mut(self.rx_buf_len_bytes) {
-            self.mem_cs(true);
             let chunk_addr = addr as usize + offset;
             let addr_plus_dummy = (24 / 8) + self.dummy_cycles / 2;
             let cmd_list = [
@@ -1246,10 +1249,12 @@ impl Spim {
                     addr_plus_dummy as u32,
                 ),
             ];
-            self.send_cmd_list(&cmd_list);
             let a = chunk_addr.to_be_bytes();
-            self.tx_buf_mut()[..3].copy_from_slice(&[a[2], a[1], a[0]]);
-            // the remaining bytes are just junk and ignored
+            self.tx_buf_mut()[..3].copy_from_slice(&[a[1], a[2], a[3]]);
+            // the remaining bytes are junk
+            self.tx_buf_mut()[3..6].copy_from_slice(&[0xFFu8, 0xFFu8, 0xFFu8]);
+            self.mem_cs(true);
+            self.send_cmd_list(&cmd_list);
             // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
             unsafe {
                 self.udma_enqueue(
@@ -1278,9 +1283,9 @@ impl Spim {
                 #[cfg(feature = "std")]
                 xous::yield_slice();
             }
+            self.mem_cs(false);
             chunk.copy_from_slice(&self.rx_buf()[..chunk.len()]);
             offset += chunk.len();
-            self.mem_cs(false);
         }
     }
 
@@ -1291,15 +1296,15 @@ impl Spim {
         // target device's memory page (i.e., the point at which you'd wrap when reading)
         let mut offset = 0;
         for chunk in buf.chunks(self.tx_buf_len_bytes) {
-            self.mem_cs(true);
             let chunk_addr = addr as usize + offset;
             let cmd_list = [
                 SpimCmd::SendCmd(self.mode, 8, 0x38),
                 SpimCmd::TxData(self.mode, SpimWordsPerXfer::Words1, 8 as u8, SpimEndian::MsbFirst, 3),
             ];
-            self.send_cmd_list(&cmd_list);
             let a = chunk_addr.to_be_bytes();
             self.tx_buf_mut()[..3].copy_from_slice(&[a[2], a[1], a[0]]);
+            self.mem_cs(true);
+            self.send_cmd_list(&cmd_list);
             // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
             unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..3], CFG_EN | CFG_SIZE_8) }
             while self.udma_busy(Bank::Tx) {
@@ -1323,8 +1328,8 @@ impl Spim {
                 #[cfg(feature = "std")]
                 xous::yield_slice();
             }
-            offset += chunk.len();
             self.mem_cs(false);
+            offset += chunk.len();
         }
     }
 }
