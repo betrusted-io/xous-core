@@ -1263,10 +1263,6 @@ impl Spim {
                     CFG_EN | CFG_SIZE_8,
                 )
             }
-            while self.udma_busy(Bank::Tx) {
-                #[cfg(feature = "std")]
-                xous::yield_slice();
-            }
             let rd_cmd = [SpimCmd::RxData(
                 self.mode,
                 SpimWordsPerXfer::Words1,
@@ -1274,6 +1270,10 @@ impl Spim {
                 SpimEndian::MsbFirst,
                 chunk.len() as u32,
             )];
+            while self.udma_busy(Bank::Tx) {
+                #[cfg(feature = "std")]
+                xous::yield_slice();
+            }
             self.send_cmd_list(&rd_cmd);
             // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
             unsafe {
