@@ -166,14 +166,6 @@ fn swap_handler(
             let paddr_in_swap = ss
                 .pt_walk(pid as u8, vaddr_in_pid)
                 .expect("Couldn't resolve swapped data. Was the page actually swapped?");
-            writeln!(
-                DebugUart {},
-                "resolved address in swap for 0x{:x}:{} -> 0x{:x?}",
-                vaddr_in_pid,
-                pid,
-                paddr_in_swap
-            )
-            .ok();
             // safety: this is only safe because the pointer we're passed from the kernel is guaranteed to be
             // a valid u8-page in memory
             let buf = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
