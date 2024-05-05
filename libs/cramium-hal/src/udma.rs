@@ -876,6 +876,7 @@ impl Spim {
         max_tx_len_bytes: usize,
         max_rx_len_bytes: usize,
         dummy_cycles: Option<u8>,
+        mode: Option<SpimMode>,
         ifram: IframRange,
     ) -> Self {
         // this is a hardware limit - the DMA pointer is only this long!
@@ -913,7 +914,7 @@ impl Spim {
             eot_wait,
             event_channel,
             _align: SpimByteAlign::Disable,
-            mode: SpimMode::Standard,
+            mode: mode.unwrap_or(SpimMode::Standard),
             ifram,
             tx_buf_len_bytes: max_tx_len_bytes,
             rx_buf_len_bytes: max_rx_len_bytes,
@@ -1231,7 +1232,8 @@ impl Spim {
         self.mem_cs(false);
     }
 
-    pub fn mem_read(&mut self, addr: u32, buf: &mut [u8]) {
+    /// Note that `use_yield` is disallowed in interrupt contexts (e.g. swapper)
+    pub fn mem_read(&mut self, addr: u32, buf: &mut [u8], _use_yield: bool) {
         // divide into buffer-sized chunks + repeat cycle on each buffer increment
         // this is because the size of the buffer is meant to represent the limit of the
         // target device's memory page (i.e., the point at which you'd wrap when reading)
@@ -1272,7 +1274,9 @@ impl Spim {
             )];
             while self.udma_busy(Bank::Tx) {
                 #[cfg(feature = "std")]
-                xous::yield_slice();
+                if _use_yield {
+                    xous::yield_slice();
+                }
             }
             self.send_cmd_list(&rd_cmd);
             // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
@@ -1281,7 +1285,9 @@ impl Spim {
             };
             while self.udma_busy(Bank::Rx) {
                 #[cfg(feature = "std")]
-                xous::yield_slice();
+                if _use_yield {
+                    xous::yield_slice();
+                }
             }
             self.mem_cs(false);
             chunk.copy_from_slice(&self.rx_buf()[..chunk.len()]);
@@ -1290,7 +1296,8 @@ impl Spim {
     }
 
     /// This should only be called on SPI RAM -- not valid for FLASH devices, they need a programming routine!
-    pub fn mem_ram_write(&mut self, addr: u32, buf: &[u8]) {
+    /// Note that `use_yield` is disallowed in interrupt contexts
+    pub fn mem_ram_write(&mut self, addr: u32, buf: &[u8], _use_yield: bool) {
         // divide into buffer-sized chunks + repeat cycle on each buffer increment
         // this is because the size of the buffer is meant to represent the limit of the
         // target device's memory page (i.e., the point at which you'd wrap when reading)
@@ -1316,7 +1323,9 @@ impl Spim {
             )];
             while self.udma_busy(Bank::Tx) {
                 #[cfg(feature = "std")]
-                xous::yield_slice();
+                if _use_yield {
+                    xous::yield_slice();
+                }
             }
             self.send_cmd_list(&wr_cmd);
             self.tx_buf_mut()[..chunk.len()].copy_from_slice(chunk);
@@ -1326,7 +1335,9 @@ impl Spim {
             };
             while self.udma_busy(Bank::Tx) {
                 #[cfg(feature = "std")]
-                xous::yield_slice();
+                if _use_yield {
+                    xous::yield_slice();
+                }
             }
             self.mem_cs(false);
             offset += chunk.len();
