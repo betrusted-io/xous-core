@@ -194,10 +194,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         builder.add_global_flag("--offline");
     }
 
+    // manage an ugly patch we have to do to selectively configure AES for only cramium-soc targets
+    match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
+        Ok(false) => {
+            println!(
+                "Build configuration is out of sync: cramium-soc patch on AES crate was not cleared out"
+            );
+            return Err("services/aes/Cargo.toml is in a bad state! Revert any patches to the file.".into());
+        }
+        _ => {}
+    }
+    let mut broken_aes_cleanup = false;
+
     // ---- now process the verb plus position dependent arguments ----
     let mut args = env::args();
     let task = args.nth(1);
-    let mut broken_aes_cleanup = false;
     match task.as_deref() {
         Some("install-toolkit") | Some("install-toolchain") => {
             let arg = env::args().nth(2);
@@ -515,6 +526,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "default = []",
         )
         .expect("couldn't patch AES");
+    }
+    match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
+        Ok(false) => {
+            println!(
+                "Build configuration is out of sync: cramium-soc patch on AES crate was not cleared out"
+            );
+            return Err("services/aes/Cargo.toml is in a bad state! Revert any patches to the file.".into());
+        }
+        _ => {}
     }
     // the intent of this call is to check that crates we are sourcing from crates.io
     // match the crates in our local source. The usual cause of an inconsistency is

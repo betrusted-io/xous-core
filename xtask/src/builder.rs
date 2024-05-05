@@ -1128,11 +1128,9 @@ pub fn project_root() -> PathBuf {
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 pub fn search_and_replace_in_file(filename: &str, search: &str, replace: &str) -> io::Result<()> {
-    // Open the file for reading
     let file = File::open(filename)?;
     let reader = BufReader::new(file);
 
-    // Read lines from the file and perform replacement
     let mut modified_content = String::new();
     for line in reader.lines() {
         let line = line?;
@@ -1141,9 +1139,21 @@ pub fn search_and_replace_in_file(filename: &str, search: &str, replace: &str) -
         modified_content.push('\n');
     }
 
-    // Write the modified content back to the file
     let mut file = File::create(filename)?;
     file.write_all(modified_content.as_bytes())?;
 
     Ok(())
+}
+
+pub fn search_in_file(filename: &str, search: &str) -> io::Result<bool> {
+    let file = File::open(filename)?;
+    let reader = BufReader::new(file);
+
+    for line in reader.lines() {
+        let line = line?;
+        if line.contains(search) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
