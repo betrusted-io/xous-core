@@ -20,6 +20,8 @@ pub struct SwapHal {
 }
 impl SwapHal {
     pub fn new(spec: &SwapSpec) -> Self {
+        writeln!(DebugUart {}, "Swap HAL init",).ok();
+
         // compute the MAC area needed for the total RAM size. This is a slight over-estimate
         // because once we remove the MAC area, we need even less storage, but it's a small error.
         let mac_size = (spec.swap_len as usize / 4096) * size_of::<Tag>();
