@@ -1,3 +1,4 @@
+use xous_kernel::SWAPPER_PID;
 use xous_kernel::{AllocAdvice, MemoryRange, SysCallResult, PID, SID, TID};
 
 /* for non-blocking calls
@@ -15,7 +16,7 @@ pub enum BlockingSwapOp {
     WriteToSwap(PID, usize, usize),
     /// PID of the target block, current paddr of block, original vaddr in the space of target block PID,
     /// physical address of block
-    ReadFromSwap(PID, usize, usize, usize),
+    ReadFromSwap(PID, TID, usize, usize, usize),
     /// PID of the process to return to after the allocate advisory - if incurred during a page fault
     AllocateAdvisory(PID, TID),
     /// advisory issued as part of a syscall - e.g., unmap
@@ -33,10 +34,6 @@ pub struct AdviseUnmap {
 #[cfg(baremetal)]
 #[no_mangle]
 static mut SWAP: Swap = Swap {
-    spt_ptr: 0,
-    smt_base: 0,
-    smt_bounds: 0,
-    rpt_ptr: 0,
     sid: SID::from_u32(0, 0, 0, 0),
     pc: 0,
     prev_op: None,
@@ -47,14 +44,6 @@ static mut SWAP: Swap = Swap {
 };
 
 pub struct Swap {
-    /// Pointer to the swap page table base
-    spt_ptr: usize,
-    /// SMT base and bounds: address meanings can vary depending on the target system,
-    /// if swap is memory-mapped, or if behind a SPI register interface.
-    smt_base: usize,
-    smt_bounds: usize,
-    /// Pointer to runtime page tracker
-    rpt_ptr: usize,
     /// SID for the swapper
     sid: SID,
     /// PC for blocking handler
@@ -84,22 +73,6 @@ impl Swap {
         SWAP.with(|ss| f(&mut ss.borrow_mut()))
     }
 
-    pub fn init_from_args(
-        &mut self,
-        args: &crate::args::KernelArguments,
-    ) -> Result<xous_kernel::Result, xous_kernel::Error> {
-        for tag in args.iter() {
-            if tag.name == u32::from_le_bytes(*b"Swap") {
-                self.spt_ptr = tag.data[0] as usize;
-                self.smt_base = tag.data[1] as usize;
-                self.smt_bounds = tag.data[2] as usize;
-                self.rpt_ptr = tag.data[3] as usize;
-                return Ok(xous_kernel::Result::Ok);
-            }
-        }
-        Err(xous_kernel::Error::UseBeforeInit)
-    }
-
     pub fn register_handler(
         &mut self,
         s0: u32,
@@ -118,7 +91,7 @@ impl Swap {
                 "handler registered: sid {:?} pc {:?} state {:?}",
                 self.sid, self.pc, self.swapper_state
             );
-            Ok(xous_kernel::Result::Scalar5(self.spt_ptr, self.smt_base, self.smt_bounds, self.rpt_ptr, 0))
+            Ok(xous_kernel::Result::Scalar5(0, 0, 0, 0, 0))
         } else {
             // someone is trying to steal the swapper's privileges!
             #[cfg(feature = "debug-swap")]
@@ -190,7 +163,7 @@ impl Swap {
                 self.swapper_args[3] = vaddr_in_pid;
                 self.swapper_args[4] = vaddr_in_swap;
             }
-            BlockingSwapOp::ReadFromSwap(pid, vaddr_in_pid, vaddr_in_swap, _paddr) => {
+            BlockingSwapOp::ReadFromSwap(pid, _tid, vaddr_in_pid, vaddr_in_swap, _paddr) => {
                 self.swapper_args[0] = self.swapper_state;
                 self.swapper_args[1] = 1; // ReadFromSwap opcode
                 self.swapper_args[2] = pid.get() as usize;
@@ -248,13 +221,13 @@ impl Swap {
                 // this will resume into the swapper, because that is our memory space right now
                 Ok(xous_kernel::Result::ResumeProcess)
             }
-            Some(BlockingSwapOp::ReadFromSwap(pid, vaddr_in_pid, vaddr_in_swap, paddr)) => {
+            Some(BlockingSwapOp::ReadFromSwap(pid, tid, vaddr_in_pid, vaddr_in_swap, paddr)) => {
                 MemoryManager::with_mut(|mm| {
                     // we are in the swapper's memory space a this point
                     // unmap the page from the swapper
                     crate::arch::mem::unmap_page_inner(mm, vaddr_in_swap)?;
 
-                    // return to the target PID
+                    // Access target PID page tables
                     SystemServices::with(|system_services| {
                         // swap to the swapper space
                         let target_map = system_services.get_process(pid).unwrap().mapping;
@@ -266,7 +239,7 @@ impl Swap {
                         .or(Err(xous_kernel::Error::BadAddress))?;
                     let current_entry = entry.read_volatile();
                     // clear the swapped flag
-                    let flags = current_entry & 0x1ff & !MMUFlags::P.bits();
+                    let flags = current_entry & 0x3ff & !MMUFlags::P.bits();
                     let ppn1 = (paddr >> 22) & ((1 << 12) - 1);
                     let ppn0 = (paddr >> 12) & ((1 << 10) - 1);
                     // Map the retrieved page to the target memory space, and set valid. I don't think `A`/`D`
@@ -279,6 +252,21 @@ impl Swap {
                         | crate::arch::mem::FLG_D/* D */
                         | crate::arch::mem::FLG_U/* USER */);
                     crate::arch::mem::flush_mmu();
+
+                    // Return to swapper PID's address space, because that's what the
+                    // finish_callback_and_resume assumes...slightly inefficient but
+                    // better code re-use.
+                    SystemServices::with(|system_services| {
+                        // swap to the swapper space
+                        let target_map =
+                            system_services.get_process(PID::new(SWAPPER_PID).unwrap()).unwrap().mapping;
+                        crate::arch::process::set_current_pid(PID::new(SWAPPER_PID).unwrap());
+                        target_map.activate()
+                    })?;
+                    // Switch to the previous process' address space.
+                    SystemServices::with_mut(|ss| {
+                        ss.finish_callback_and_resume(pid, tid).expect("unable to resume previous PID")
+                    });
                     // the current memory space is the target PID, so we will resume into the target PID
                     Ok(xous_kernel::Result::ResumeProcess)
                 })
@@ -338,7 +326,13 @@ impl Swap {
     ///
     /// Also takes as argument the virtual address of the target page in the target PID,
     /// as well as the physical address of the page.
-    pub fn retrieve_page(&mut self, target_pid: PID, target_vaddr_in_pid: usize, paddr: usize) -> ! {
+    pub fn retrieve_page(
+        &mut self,
+        target_pid: PID,
+        target_tid: TID,
+        target_vaddr_in_pid: usize,
+        paddr: usize,
+    ) -> ! {
         let block_vaddr_in_swap =
             crate::arch::mem::map_page_to_swapper(paddr).expect("couldn't map target page to swapper");
         // we are now in the swapper's memory space
@@ -349,6 +343,7 @@ impl Swap {
         unsafe {
             self.blocking_activate_swapper(BlockingSwapOp::ReadFromSwap(
                 target_pid,
+                target_tid,
                 target_vaddr_in_pid,
                 block_vaddr_in_swap,
                 paddr,

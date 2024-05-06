@@ -13,7 +13,7 @@ i @peripherals/ABRTCMC.cs
 i @peripherals/BetrustedEcI2C.cs
 i @peripherals/BetrustedSocI2C.cs
 i @peripherals/BetrustedSpinor.cs
-i @peripherals/BetrustedWatchdog.cs
+# i @peripherals/BetrustedWatchdog.cs
 i @peripherals/BQ24157.cs
 i @peripherals/BQ27421.cs
 i @peripherals/BtEvents.cs
@@ -54,7 +54,7 @@ emulation CreateComConnector "com"
 
 ############### Define the Betrusted SoC ###############
 mach create "SoC"
-machine LoadPlatformDescription @soc/betrusted-soc.repl
+machine LoadPlatformDescription @soc/betrusted-swap.repl
 
 machine StartGdbServer 3333 true
 showAnalyzer uart

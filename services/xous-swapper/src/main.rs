@@ -1,51 +1,24 @@
-use core::fmt::{Error, Write};
+mod debug;
+mod platform;
+use core::fmt::Write;
+use std::fmt::Debug;
 
+use debug::*;
+use loader::swap::{SwapSpec, SWAP_CFG_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
 use num_traits::FromPrimitive;
-use utralib::*;
+use platform::{SwapHal, PAGE_SIZE};
 
-/// This trait defines a set of functions to get and receive MACs (message
-/// authentication codes, also referred to as the tag in AES-GCM-SIV.
-///
-/// The implementation of the MAC table depends on the details of the hardware;
-/// we cannot always guarantee that the MACs are memory mapped, as they could
-/// be stored in an off-chip SPI RAM that is accessible only through a register
-/// interface.
-pub trait SmtAccessor {
-    /// Lookup the MAC corresponding to a given page in swap. Offsets are
-    /// relative to the base of the swap region, and are given in units of pages, not bytes.
-    fn lookup_mac(swap_page_offset: usize) -> [u8; 16];
-    /// Store a MAC for a given page in swap.
-    fn store_mac(swap_page_offset: usize, mac: &[u8; 16]);
+pub struct PtPage {
+    pub entries: [u32; 1024],
 }
 
-/// An array of pointers to the SATPs (root page table) of all the processes.
+/// An array of pointers to the root page tables of all the processes.
 pub struct SwapPageTables {
-    satps: &'static mut [usize],
+    pub roots: &'static mut [PtPage],
 }
-/// This is an implementation for SMTs that are memory mapped. Directly mapped
-/// tables are just as lice of MACs
-pub struct SwapMacTableMemMap {
-    macs: &'static mut [[u8; 16]],
-}
-impl SmtAccessor for SwapMacTableMemMap {
-    fn lookup_mac(swap_page_offset: usize) -> [u8; 16] { todo!() }
 
-    fn store_mac(swap_page_offset: usize, mac: &[u8; 16]) { todo!() }
-}
-/// This is an implementation for SMTs that are accessible only through a SPI
-/// register interface. The base and bounds must be translated to SPI accesses
-/// in a hardware-specific manner.
-pub struct SwapMacTableSpi {
-    base: usize,
-    bounds: usize,
-}
-impl SmtAccessor for SwapMacTableSpi {
-    fn lookup_mac(swap_page_offset: usize) -> [u8; 16] { todo!() }
-
-    fn store_mac(swap_page_offset: usize, mac: &[u8; 16]) { todo!() }
-}
 pub struct RuntimePageTracker {
-    allocs: &'static mut [u8],
+    pub allocs: &'static mut [u8],
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -61,55 +34,49 @@ pub enum Opcode {
     EvalTrim = 256,
 }
 
-pub struct DebugUart {
-    #[cfg(feature = "debug-print")]
-    csr: CSR<u32>,
-}
-impl DebugUart {
-    #[cfg(feature = "debug-print")]
-    pub fn new() -> Self {
-        let debug_uart_mem = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::app_uart::HW_APP_UART_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't claim the debug UART");
-        let debug_uart = CSR::new(debug_uart_mem.as_mut_ptr() as *mut u32);
-
-        Self { csr: debug_uart }
-    }
-
-    #[cfg(feature = "debug-print")]
-    pub fn putc(&mut self, c: u8) {
-        // Wait until TXFULL is `0`
-        while self.csr.r(utra::app_uart::TXFULL) != 0 {}
-        self.csr.wfo(utra::app_uart::RXTX_RXTX, c as u32);
-    }
-
-    #[cfg(not(feature = "debug-print"))]
-    pub fn new() -> Self { Self {} }
-
-    #[cfg(not(feature = "debug-print"))]
-    pub fn putc(&self, _c: u8) {}
-}
-
-impl Write for DebugUart {
-    fn write_str(&mut self, s: &str) -> Result<(), Error> {
-        for c in s.bytes() {
-            self.putc(c);
-        }
-        Ok(())
-    }
-}
-
 /// This structure contains shared state accessible between the userspace code and the blocking swap call
 /// handler.
-struct SwapperSharedState {
-    duart: DebugUart,
+pub struct SwapperSharedState {
+    pub pts: SwapPageTables,
+    pub hal: SwapHal,
+    pub rpt: RuntimePageTracker,
+    pub sram_start: usize,
+    pub sram_size: usize,
 }
 impl SwapperSharedState {
-    pub fn new() -> Self { Self { duart: DebugUart::new() } }
+    pub fn pt_walk(&self, pid: u8, va: usize) -> Option<usize> {
+        let l1_pt = &self.pts.roots[pid as usize - 1];
+        let l1_entry = (l1_pt.entries[(va & 0xFFC0_0000) >> 22] >> 10) << 12;
+
+        if l1_entry != 0 {
+            // this is safe because all possible values can be represented as `u32`, the pointer
+            // is valid, aligned, and the bounds are known.
+            let l0_pt = unsafe { core::slice::from_raw_parts(l1_entry as *const u32, 1024) };
+            let l0_entry = l0_pt[(va & 0x003F_F000) >> 12];
+            if l0_entry & 1 != 0 {
+                // bit 1 is the "valid" bit
+                Some(((l0_entry as usize >> 10) << 12) | va & 0xFFF)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+}
+struct SharedStateStorage {
+    pub inner: Option<SwapperSharedState>,
+}
+
+pub fn change_owner(ss: &mut SwapperSharedState, pid: u8, paddr: usize) {
+    // First, check to see if the region is in RAM,
+    if paddr >= ss.sram_start && paddr < ss.sram_start + ss.sram_size {
+        // Mark this page as in-use by the kernel
+        ss.rpt.allocs[(paddr - ss.sram_start as usize) / PAGE_SIZE] = pid;
+        return;
+    }
+    // The region isn't in RAM. We're in the swapper, we can't handle errors - drop straight to panic.
+    panic!("Tried to swap region {:08x} that isn't in RAM!", paddr);
 }
 
 /// blocking swap call handler
@@ -127,13 +94,56 @@ fn swap_handler(
     a7: usize,
 ) {
     // safety: lots of footguns actually, but this is the only way to get this pointer into
-    // our context. SwapperSharedState is a Rust structure that is aligned and initialized,
+    // our context. SharedStateStorage is a Rust structure that is aligned and initialized,
     // so the cast is safe enough, but we have to be careful because this is executed in an
     // interrupt context: we can't wait on locks (they'll hang forever if they are locked).
-    let ss = unsafe { &mut *(shared_state as *mut SwapperSharedState) };
+    let sss = unsafe { &mut *(shared_state as *mut SharedStateStorage) };
+    if sss.inner.is_none() {
+        // Unearth all of our data trackers in the spots on the map where the loader should have buried them.
+
+        // safety: this is only safe because the loader initializes and aligns the SwapSpec structure:
+        //   - The SwapSpec structure is Repr(C), page-aligned, and fully initialized.
+        //   - Furthermore, SWAP_CFG_VADDR is already mapped into our address space by the loader; we don't
+        //     have to do mapping requests because it's already done for us!
+        let swap_spec = unsafe { &*(SWAP_CFG_VADDR as *mut SwapSpec) };
+
+        // swapper is not allowed to use `log` for debugging under most circumstances, because
+        // the swapper can't send messages when handling a swap call. Instead, we use a local
+        // debug UART to handle this. This needs to be enabled with the "debug-print" feature
+        // and is mutually exclusive with the "gdb-stub" feature in the kernel since it uses
+        // the same physical hardware.
+        sss.inner = Some(SwapperSharedState {
+            // safety: this is only safe because:
+            //   - the loader puts the swap root page table pages starting at SWAP_PT_VADDR
+            //   - all the page table entries are fully initialized and contains only representable data
+            //   - the length of the region is guaranteed by the loader
+            pts: SwapPageTables {
+                roots: unsafe {
+                    core::slice::from_raw_parts_mut(
+                        SWAP_PT_VADDR as *mut PtPage,
+                        swap_spec.pid_count as usize,
+                    )
+                },
+            },
+            hal: SwapHal::new(swap_spec),
+            // safety: this is only safe because the loader guarantees this raw pointer is initialized and
+            // aligned correctly
+            rpt: RuntimePageTracker {
+                allocs: unsafe {
+                    core::slice::from_raw_parts_mut(
+                        SWAP_RPT_VADDR as *mut u8,
+                        swap_spec.rpt_len_bytes as usize,
+                    )
+                },
+            },
+            sram_start: swap_spec.sram_start as usize,
+            sram_size: swap_spec.sram_size as usize,
+        });
+    }
+    let ss = sss.inner.as_mut().expect("Shared state should be initialized");
 
     let op: Option<Opcode> = FromPrimitive::from_usize(opcode);
-    writeln!(ss.duart, "got Opcode: {:?}", op).ok();
+    writeln!(DebugUart {}, "got Opcode: {:?}", op).ok();
     match op {
         Some(Opcode::WriteToSwap) => {
             let pid = a2 as u8;
@@ -144,6 +154,26 @@ fn swap_handler(
             let pid = a2 as u8;
             let vaddr_in_pid = a3;
             let vaddr_in_swap = a4;
+            writeln!(
+                DebugUart {},
+                "rfs ptw PID{}, vaddr_pid {:x}, vaddr_swap {:x}",
+                pid,
+                vaddr_in_pid,
+                vaddr_in_swap
+            )
+            .ok();
+            // walk the PT to find the swap data
+            let paddr_in_swap = ss
+                .pt_walk(pid as u8, vaddr_in_pid)
+                .expect("Couldn't resolve swapped data. Was the page actually swapped?");
+            // safety: this is only safe because the pointer we're passed from the kernel is guaranteed to be
+            // a valid u8-page in memory
+            let buf = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
+            // TODO: manage swap_count
+            ss.hal
+                .decrypt_swap_from(buf, 0, paddr_in_swap, vaddr_in_pid, pid)
+                .expect("Decryption error: swap image corrupted, the tag does not match the data!");
+            // at this point, the `buf` has our desired data, we're done, modulo updating the count.
         }
         Some(Opcode::AllocateAdvisory) => {
             let advisories = [
@@ -151,84 +181,60 @@ fn swap_handler(
                 xous::AllocAdvice::deserialize(a4, a5),
                 xous::AllocAdvice::deserialize(a6, a7),
             ];
+            for advice in advisories {
+                match advice {
+                    xous::AllocAdvice::Allocate(pid, _vaddr, paddr) => {
+                        change_owner(ss, pid.get(), paddr);
+                    }
+                    xous::AllocAdvice::Free(_pid, _vaddr, paddr) => {
+                        change_owner(ss, 0, paddr);
+                    }
+                    xous::AllocAdvice::Uninit => {} // not all the records have to be populated
+                }
+            }
         }
         _ => {
-            writeln!(ss.duart, "Unimplemented or unknown opcode: {}", opcode).ok();
+            writeln!(DebugUart {}, "Unimplemented or unknown opcode: {}", opcode).ok();
         }
     }
 }
 
 fn main() {
-    // swapper is not allowed to use `log` for debugging under most circumstances, because
-    // the swapper can't send messages when handling a swap call. Instead, we use a local
-    // debug UART to handle this. This needs to be enabled with the "debug-print" feature
-    // and is mutually exclusive with the "gdb-stub" feature in the kernel since it uses
-    // the same physical hardware.
-    let mut ss = SwapperSharedState::new();
-
     let sid = xous::create_server().unwrap();
+    let mut sss = SharedStateStorage { inner: None };
     // Register the swapper with the kernel. Written as a raw syscall, since this is
     // the only instance of its use (no point in use-once code to wrap it).
+    // This is an "early registration" which allows us to see debug output quickly,
+    // even before we can constitute all of our shared state
     let (s0, s1, s2, s3) = sid.to_u32();
-    let (spt_init, smt_base_init, smt_bounds_init, rpt_init) =
-        xous::rsyscall(xous::SysCall::RegisterSwapper(
-            s0,
-            s1,
-            s2,
-            s3,
-            swap_handler as *mut usize as usize,
-            &mut ss as *mut SwapperSharedState as usize,
-        ))
-        .and_then(|result| {
-            if let xous::Result::Scalar5(spt, smt_base, smt_bounds, rpt, _) = result {
-                Ok((spt, smt_base, smt_bounds, rpt))
-            } else {
-                panic!("Failed to register swapper");
-            }
-        })
-        .unwrap();
-    // safety: this is only safe because the loader guarantees this raw pointer is initialized and aligned
-    // correctly
-    let spt = unsafe { &mut *(spt_init as *mut SwapPageTables) };
-    #[cfg(feature = "precursor")]
-    let smt = SwapMacTableMemMap {
-        // safety: this is only safe because the loader guarantees memory-mapped SMT is initialized and
-        // aligned and properly mapped into the swapper's memory space.
-        macs: unsafe { core::slice::from_raw_parts_mut(smt_base_init as *mut [u8; 16], smt_bounds_init) },
-    };
-    #[cfg(feature = "cramium-soc")]
-    let smt = SwapMacTableSpi { base: smt_base_init, bounds: smt_bounds_init };
-    // safety: this is only safe because the loader guarantees this raw pointer is initialized and aligned
-    // correctly
-    let rpt = unsafe { &mut *(rpt_init as *mut RuntimePageTracker) };
-
-    writeln!(
-        ss.duart,
-        "Swap params: spt {:x}, base {:x}, bounds: {:x}, rpt: {:x}",
-        spt_init, smt_base_init, smt_bounds_init, rpt_init
-    )
-    .ok();
+    xous::rsyscall(xous::SysCall::RegisterSwapper(
+        s0,
+        s1,
+        s2,
+        s3,
+        swap_handler as *mut usize as usize,
+        &mut sss as *mut SharedStateStorage as usize,
+    ))
+    .unwrap();
 
     // init the log, but this is mostly unused.
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
-    // test the debug serial port
-    writeln!(ss.duart, "Swapper started.").ok();
 
     let mut msg_opt = None;
     loop {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();
         let op: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
-        writeln!(ss.duart, "Swapper got {:?}", msg).ok();
+        log::info!("Swapper got {:?}", msg);
         match op {
             Some(Opcode::WriteToSwap) => {
                 unimplemented!();
             }
             // ... todo, other opcodes.
             _ => {
-                write!(ss.duart, "Unknown opcode {:?}", op).ok();
+                log::info!("Unknown opcode {:?}", op);
             }
         }
     }

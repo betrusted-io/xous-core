@@ -45,6 +45,7 @@ cramium-soc = [
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
+spi-alt-channel = []
 debugprint = []
 braille = []
 gfx-testing = []

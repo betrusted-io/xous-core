@@ -2805,6 +2805,7 @@ dependencies = [
  "utralib 0.1.24",
  "xous-pio",
  "xous-pl230",
+ "xous-riscv",
 ]
 
 [[package]]
@@ -6396,6 +6397,9 @@ dependencies = [
 name = "xous-swapper"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm-siv",
+ "cramium-hal",
+ "loader",
  "log",
  "num-derive 0.3.3",
  "num-traits",

@@ -70,9 +70,13 @@ pub struct BootConfig {
     #[cfg(feature = "swap")]
     pub swap: Option<&'static SwapDescriptor>,
 
-    /// Offset of the current free page in swap
+    /// Offset of the current free page in swap, used in phase 1
     #[cfg(feature = "swap")]
     pub swap_free_page: usize,
+
+    #[cfg(feature = "swap")]
+    /// Offset of the current page in swap, used in phase 2
+    pub last_swap_page: usize,
 
     /// root swap page table of the process
     #[cfg(feature = "swap")]
@@ -101,6 +105,8 @@ impl Default for BootConfig {
             swap: None,
             #[cfg(feature = "swap")]
             swap_free_page: 0,
+            #[cfg(feature = "swap")]
+            last_swap_page: 0,
             #[cfg(feature = "swap")]
             swap_root: Default::default(),
         }

@@ -12,7 +12,7 @@ fn main() -> ! {
     log::set_max_level(log::LevelFilter::Trace);
     info!("my PID is {}", xous::process::id());
 
-    const DELAY_MS: u64 = 2000;
+    const DELAY_MS: u64 = 1000;
 
     for i in 0.. {
         unsafe { LOOP_COUNT.store(i, Ordering::SeqCst) };

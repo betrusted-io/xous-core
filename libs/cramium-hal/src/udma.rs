@@ -819,7 +819,7 @@ impl Spim {
         .expect("couldn't map serial port");
         let csr = CSR::new(csr_range.as_mut_ptr() as *mut u32);
 
-        let clk_div = sys_clk_freq / spi_clk_freq;
+        let clk_div = sys_clk_freq / (2 * spi_clk_freq);
         // make this a hard panic -- you'll find out at runtime that you f'd up
         // but at least you find out.
         assert!(clk_div < 256, "SPI clock divider is out of range");
@@ -876,6 +876,7 @@ impl Spim {
         max_tx_len_bytes: usize,
         max_rx_len_bytes: usize,
         dummy_cycles: Option<u8>,
+        mode: Option<SpimMode>,
         ifram: IframRange,
     ) -> Self {
         // this is a hardware limit - the DMA pointer is only this long!
@@ -901,7 +902,7 @@ impl Spim {
         #[cfg(not(target_os = "xous"))]
         let csr = CSR::new(base_addr as *mut u32);
 
-        let clk_div = sys_clk_freq / spi_clk_freq;
+        let clk_div = sys_clk_freq / (2 * spi_clk_freq);
         // make this a hard panic -- you'll find out at runtime that you f'd up
         // but at least you find out.
         assert!(clk_div < 256, "SPI clock divider is out of range");
@@ -913,7 +914,7 @@ impl Spim {
             eot_wait,
             event_channel,
             _align: SpimByteAlign::Disable,
-            mode: SpimMode::Standard,
+            mode: mode.unwrap_or(SpimMode::Standard),
             ifram,
             tx_buf_len_bytes: max_tx_len_bytes,
             rx_buf_len_bytes: max_rx_len_bytes,
@@ -1193,6 +1194,7 @@ impl Spim {
         if activate {
             self.mem_send_cmd(0x35);
         } else {
+            self.mode = SpimMode::Quad; // pre-assumes quad mode
             self.mem_send_cmd(0xF5);
         }
         self.mem_cs(false);
@@ -1205,6 +1207,10 @@ impl Spim {
     }
 
     /// Side-effects: unsets QPI mode if it was previously set
+    /// TODO: this does not seem to work. Setting it causes some strange behaviors
+    /// on reads (but QE mode is enabled, so something must have worked). This
+    /// needs to be looked into more. Oddly enough, it looks "fine" on the logic
+    /// analyzer when I checked it early on, but obviously something is not right.
     pub fn mem_write_status_register(&mut self, status: u8, config: u8) {
         if self.mode != SpimMode::Standard {
             self.mem_qpi_mode(false);
@@ -1226,13 +1232,13 @@ impl Spim {
         self.mem_cs(false);
     }
 
-    pub fn mem_read(&mut self, addr: u32, buf: &mut [u8]) {
+    /// Note that `use_yield` is disallowed in interrupt contexts (e.g. swapper)
+    pub fn mem_read(&mut self, addr: u32, buf: &mut [u8], _use_yield: bool) {
         // divide into buffer-sized chunks + repeat cycle on each buffer increment
         // this is because the size of the buffer is meant to represent the limit of the
         // target device's memory page (i.e., the point at which you'd wrap when reading)
         let mut offset = 0;
         for chunk in buf.chunks_mut(self.rx_buf_len_bytes) {
-            self.mem_cs(true);
             let chunk_addr = addr as usize + offset;
             let addr_plus_dummy = (24 / 8) + self.dummy_cycles / 2;
             let cmd_list = [
@@ -1245,10 +1251,12 @@ impl Spim {
                     addr_plus_dummy as u32,
                 ),
             ];
-            self.send_cmd_list(&cmd_list);
             let a = chunk_addr.to_be_bytes();
-            self.tx_buf_mut()[..3].copy_from_slice(&[a[2], a[1], a[0]]);
-            // the remaining bytes are just junk and ignored
+            self.tx_buf_mut()[..3].copy_from_slice(&[a[1], a[2], a[3]]);
+            // the remaining bytes are junk
+            self.tx_buf_mut()[3..6].copy_from_slice(&[0xFFu8, 0xFFu8, 0xFFu8]);
+            self.mem_cs(true);
+            self.send_cmd_list(&cmd_list);
             // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
             unsafe {
                 self.udma_enqueue(
@@ -1257,10 +1265,6 @@ impl Spim {
                     CFG_EN | CFG_SIZE_8,
                 )
             }
-            while self.udma_busy(Bank::Tx) {
-                #[cfg(feature = "std")]
-                xous::yield_slice();
-            }
             let rd_cmd = [SpimCmd::RxData(
                 self.mode,
                 SpimWordsPerXfer::Words1,
@@ -1268,6 +1272,12 @@ impl Spim {
                 SpimEndian::MsbFirst,
                 chunk.len() as u32,
             )];
+            while self.udma_busy(Bank::Tx) {
+                #[cfg(feature = "std")]
+                if _use_yield {
+                    xous::yield_slice();
+                }
+            }
             self.send_cmd_list(&rd_cmd);
             // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
             unsafe {
@@ -1275,36 +1285,35 @@ impl Spim {
             };
             while self.udma_busy(Bank::Rx) {
                 #[cfg(feature = "std")]
-                xous::yield_slice();
+                if _use_yield {
+                    xous::yield_slice();
+                }
             }
+            self.mem_cs(false);
             chunk.copy_from_slice(&self.rx_buf()[..chunk.len()]);
             offset += chunk.len();
-            self.mem_cs(false);
         }
     }
 
     /// This should only be called on SPI RAM -- not valid for FLASH devices, they need a programming routine!
-    pub fn mem_ram_write(&mut self, addr: u32, buf: &[u8]) {
+    /// Note that `use_yield` is disallowed in interrupt contexts
+    pub fn mem_ram_write(&mut self, addr: u32, buf: &[u8], _use_yield: bool) {
         // divide into buffer-sized chunks + repeat cycle on each buffer increment
         // this is because the size of the buffer is meant to represent the limit of the
         // target device's memory page (i.e., the point at which you'd wrap when reading)
         let mut offset = 0;
         for chunk in buf.chunks(self.tx_buf_len_bytes) {
-            self.mem_cs(true);
             let chunk_addr = addr as usize + offset;
             let cmd_list = [
                 SpimCmd::SendCmd(self.mode, 8, 0x38),
                 SpimCmd::TxData(self.mode, SpimWordsPerXfer::Words1, 8 as u8, SpimEndian::MsbFirst, 3),
             ];
-            self.send_cmd_list(&cmd_list);
             let a = chunk_addr.to_be_bytes();
-            self.tx_buf_mut()[..3].copy_from_slice(&[a[2], a[1], a[0]]);
+            self.tx_buf_mut()[..3].copy_from_slice(&[a[1], a[2], a[3]]);
+            self.mem_cs(true);
+            self.send_cmd_list(&cmd_list);
             // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
             unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..3], CFG_EN | CFG_SIZE_8) }
-            while self.udma_busy(Bank::Tx) {
-                #[cfg(feature = "std")]
-                xous::yield_slice();
-            }
             let wr_cmd = [SpimCmd::TxData(
                 self.mode,
                 SpimWordsPerXfer::Words1,
@@ -1312,6 +1321,12 @@ impl Spim {
                 SpimEndian::MsbFirst,
                 chunk.len() as u32,
             )];
+            while self.udma_busy(Bank::Tx) {
+                #[cfg(feature = "std")]
+                if _use_yield {
+                    xous::yield_slice();
+                }
+            }
             self.send_cmd_list(&wr_cmd);
             self.tx_buf_mut()[..chunk.len()].copy_from_slice(chunk);
             // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
@@ -1320,10 +1335,12 @@ impl Spim {
             };
             while self.udma_busy(Bank::Tx) {
                 #[cfg(feature = "std")]
-                xous::yield_slice();
+                if _use_yield {
+                    xous::yield_slice();
+                }
             }
-            offset += chunk.len();
             self.mem_cs(false);
+            offset += chunk.len();
         }
     }
 }

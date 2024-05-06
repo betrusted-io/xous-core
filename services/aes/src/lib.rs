@@ -25,17 +25,20 @@ pub type Block = GenericArray<u8, U16>;
 pub type Block8 = GenericArray<Block, U8>;
 
 // vex patches
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", not(feature = "cramium-soc")))]
 mod vex;
 // Note that we can't use 'feature' flags (for precursor, renode, hosted) because the AES
 // library is patched into functions that are oblivious to these features.
 // so this library has to fall back on the legacy method of determining which build target
 // is being specified.
-#[cfg(all(not(target_arch = "riscv32"), not(target_os = "none"), not(target_os = "xous"),))]
+#[cfg(not(all(target_arch = "riscv32", not(feature = "cramium-soc"))))]
 pub use soft::Aes128Soft as Aes128;
-#[cfg(all(not(target_arch = "riscv32"), not(target_os = "none"), not(target_os = "xous"),))]
+#[cfg(not(all(target_arch = "riscv32", not(feature = "cramium-soc"))))]
 pub use soft::Aes256Soft as Aes256;
-#[cfg(all(target_arch = "riscv32", any(target_os = "none", target_os = "xous"),))]
+#[cfg(all(
+    all(target_arch = "riscv32", not(feature = "cramium-soc")),
+    any(target_os = "none", target_os = "xous"),
+))]
 pub use vex::{Aes128, Aes256};
 
 /// Size of an AES block (128-bits; 16-bytes)

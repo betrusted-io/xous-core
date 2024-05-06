@@ -323,6 +323,8 @@ impl Builder {
         self.run_svd2repl = false;
         self.loader = CrateSpec::Local("loader".to_string(), LoaderRegion::Ram);
         self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
+        search_and_replace_in_file("services/aes/Cargo.toml", "default = []", "default = [\"cramium-soc\"]")
+            .expect("couldn't patch AES");
         self
     }
 
@@ -1121,4 +1123,37 @@ pub fn cargo() -> String { env::var("CARGO").unwrap_or_else(|_| "cargo".to_strin
 
 pub fn project_root() -> PathBuf {
     Path::new(&env!("CARGO_MANIFEST_DIR")).ancestors().nth(1).unwrap().to_path_buf()
+}
+
+use std::fs::File;
+use std::io::{self, BufRead, BufReader};
+pub fn search_and_replace_in_file(filename: &str, search: &str, replace: &str) -> io::Result<()> {
+    let file = File::open(filename)?;
+    let reader = BufReader::new(file);
+
+    let mut modified_content = String::new();
+    for line in reader.lines() {
+        let line = line?;
+        let modified_line = line.replace(search, replace);
+        modified_content.push_str(&modified_line);
+        modified_content.push('\n');
+    }
+
+    let mut file = File::create(filename)?;
+    file.write_all(modified_content.as_bytes())?;
+
+    Ok(())
+}
+
+pub fn search_in_file(filename: &str, search: &str) -> io::Result<bool> {
+    let file = File::open(filename)?;
+    let reader = BufReader::new(file);
+
+    for line in reader.lines() {
+        let line = line?;
+        if line.contains(search) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }

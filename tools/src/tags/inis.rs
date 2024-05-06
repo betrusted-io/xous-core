@@ -17,9 +17,6 @@ pub struct IniS {
 
     /// Actual program data
     data: Vec<u8>,
-
-    /// Alignment offset
-    alignment_offset: usize,
 }
 
 impl fmt::Display for IniS {
@@ -39,17 +36,12 @@ impl fmt::Display for IniS {
 }
 
 impl IniS {
-    pub fn new(
-        entrypoint: u32,
-        sections: Vec<MiniElfSection>,
-        mut data: Vec<u8>,
-        alignment_offset: usize,
-    ) -> IniS {
+    pub fn new(entrypoint: u32, sections: Vec<MiniElfSection>, mut data: Vec<u8>) -> IniS {
         // pad the data to 4 bytes
         while data.len() & 3 != 0 {
             data.push(0);
         }
-        IniS { load_offset: 0, entrypoint, sections, data, alignment_offset }
+        IniS { load_offset: 0, entrypoint, sections, data }
     }
 }
 
@@ -61,14 +53,14 @@ impl XousArgument for IniS {
     fn finalize(&mut self, offset: usize) -> usize {
         self.load_offset = offset as u32;
 
-        assert!(offset % crate::tags::PAGE_SIZE == self.alignment_offset, "IniS load offset is not aligned");
+        assert!(offset % crate::tags::PAGE_SIZE == 0, "IniS load offset is not aligned");
         self.data = crate::tags::align_data_up(&self.data, 0);
         self.data.len()
     }
 
     fn last_data(&self) -> &[u8] { &self.data }
 
-    fn alignment_offset(&self) -> usize { self.alignment_offset }
+    fn alignment_offset(&self) -> usize { 0 }
 
     fn serialize(&self, output: &mut dyn io::Write) -> io::Result<usize> {
         let mut written = 0;
@@ -82,4 +74,6 @@ impl XousArgument for IniS {
         }
         Ok(written)
     }
+
+    fn load_offset(&self) -> usize { self.load_offset as usize }
 }

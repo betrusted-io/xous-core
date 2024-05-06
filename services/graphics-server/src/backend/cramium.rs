@@ -80,11 +80,6 @@ pub const FB_SIZE: usize = FB_WIDTH_WORDS * FB_LINES; // 44 bytes by 536 lines
 
 const CONFIG_CLOCK_FREQUENCY: u32 = 50_000_000;
 
-const SPI_CS_PIN: u8 = 10;
-const SPI_CLK_PIN: u8 = 7;
-const SPI_DAT_PIN: u8 = 8;
-const SPI_PORT: iox::IoxPort = iox::IoxPort::PD;
-
 pub struct MainThreadToken(());
 
 pub enum Never {}
@@ -120,14 +115,109 @@ impl XousDisplay {
         }
 
         let udma_global = cram_hal_service::UdmaGlobal::new();
-        // using bank SPIM_B[1]
-        udma_global.udma_clock_config(PeriphId::Spim1, true);
 
+        // setup the I/O pins
+        let iox = IoxHal::new();
+        #[cfg(feature = "spi-alt-channel")]
+        let channel = {
+            const SPI_CS_PIN: u8 = 10;
+            const SPI_CLK_PIN: u8 = 7;
+            const SPI_DAT_PIN: u8 = 8;
+            const SPI_PORT: iox::IoxPort = iox::IoxPort::PD;
+
+            // SPIM_CLK_B[1]
+            iox.setup_io_pin(
+                SPI_PORT,
+                SPI_CLK_PIN,
+                Some(iox::IoxDir::Output),
+                Some(iox::IoxFunction::AF2),
+                None,
+                None,
+                Some(iox::IoxEnable::Enable),
+                Some(iox::IoxDriveStrength::Drive2mA),
+            );
+            // SPIM_SD0_B[1]
+            iox.setup_io_pin(
+                SPI_PORT,
+                SPI_DAT_PIN,
+                Some(iox::IoxDir::Output),
+                Some(iox::IoxFunction::AF2),
+                None,
+                None,
+                Some(iox::IoxEnable::Enable),
+                Some(iox::IoxDriveStrength::Drive2mA),
+            );
+            // SPIM_SCSN0_B[1]
+            // chip select toggle by UDMA has ~6 cycles setup and 1 cycles hold time, which
+            // meets the requirements for the display.
+            iox.setup_io_pin(
+                SPI_PORT,
+                SPI_CS_PIN,
+                Some(iox::IoxDir::Output),
+                Some(iox::IoxFunction::AF2),
+                None,
+                Some(iox::IoxEnable::Enable),
+                Some(iox::IoxEnable::Enable),
+                Some(iox::IoxDriveStrength::Drive2mA),
+            );
+            // using bank SPIM_B[1]
+            udma_global.udma_clock_config(PeriphId::Spim1, true);
+            udma::SpimChannel::Channel1
+        };
+
+        #[cfg(not(feature = "spi-alt-channel"))]
+        let channel = {
+            const SPI_CS_PIN: u8 = 5;
+            const SPI_CLK_PIN: u8 = 4;
+            const SPI_DAT_PIN: u8 = 0;
+            const SPI_PORT: iox::IoxPort = iox::IoxPort::PD;
+
+            // SPIM_CLK_A[0]
+            iox.setup_io_pin(
+                SPI_PORT,
+                SPI_CLK_PIN,
+                Some(iox::IoxDir::Output),
+                Some(iox::IoxFunction::AF1),
+                None,
+                None,
+                Some(iox::IoxEnable::Enable),
+                Some(iox::IoxDriveStrength::Drive2mA),
+            );
+            // SPIM_SD0_A[0]
+            iox.setup_io_pin(
+                SPI_PORT,
+                SPI_DAT_PIN,
+                Some(iox::IoxDir::Output),
+                Some(iox::IoxFunction::AF1),
+                None,
+                None,
+                Some(iox::IoxEnable::Enable),
+                Some(iox::IoxDriveStrength::Drive2mA),
+            );
+            // SPIM_CSN0_A[0]
+            // chip select toggle by UDMA has ~6 cycles setup and 1 cycles hold time, which
+            // meets the requirements for the display.
+            iox.setup_io_pin(
+                SPI_PORT,
+                SPI_CS_PIN,
+                Some(iox::IoxDir::Output),
+                Some(iox::IoxFunction::AF1),
+                None,
+                Some(iox::IoxEnable::Enable),
+                Some(iox::IoxEnable::Enable),
+                Some(iox::IoxDriveStrength::Drive2mA),
+            );
+            // using bank SPIM_B[1]
+            udma_global.udma_clock_config(PeriphId::Spim0, true);
+            udma::SpimChannel::Channel0
+        };
+
+        log::info!("gfx using spi channel {:?}", channel);
         // safety: this is safe because we remembered to set up the clock config; and,
         // this binding should live for the lifetime of Xous so we don't have to worry about unmapping.
         let spim = unsafe {
             cramium_hal::udma::Spim::new(
-                udma::SpimChannel::Channel1,
+                channel,
                 2_000_000,
                 CONFIG_CLOCK_FREQUENCY,
                 udma::SpimClkPol::LeadingEdgeRise,
@@ -143,44 +233,6 @@ impl XousDisplay {
             )
             .expect("Couldn't allocate SPI channel for LCD")
         };
-
-        // setup the I/O pins
-        let iox = IoxHal::new();
-        // SPIM_CLK_B[1]
-        iox.setup_io_pin(
-            SPI_PORT,
-            SPI_CLK_PIN,
-            Some(iox::IoxDir::Output),
-            Some(iox::IoxFunction::AF2),
-            None,
-            None,
-            Some(iox::IoxEnable::Enable),
-            Some(iox::IoxDriveStrength::Drive2mA),
-        );
-        // SPIM_SD0_B[1]
-        iox.setup_io_pin(
-            SPI_PORT,
-            SPI_DAT_PIN,
-            Some(iox::IoxDir::Output),
-            Some(iox::IoxFunction::AF2),
-            None,
-            None,
-            Some(iox::IoxEnable::Enable),
-            Some(iox::IoxDriveStrength::Drive2mA),
-        );
-        // SPIM_SCSN0_B[1]
-        // chip select toggle by UDMA has ~6 cycles setup and 1 cycles hold time, which
-        // meets the requirements for the display.
-        iox.setup_io_pin(
-            SPI_PORT,
-            SPI_CS_PIN,
-            Some(iox::IoxDir::Output),
-            Some(iox::IoxFunction::AF2),
-            None,
-            Some(iox::IoxEnable::Enable),
-            Some(iox::IoxEnable::Enable),
-            Some(iox::IoxDriveStrength::Drive2mA),
-        );
 
         let mut display = XousDisplay { fb, spim, next_free_line: 0, devboot: false };
 

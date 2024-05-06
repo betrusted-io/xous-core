@@ -53,7 +53,8 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
 #[link_section = ".text.init"]
 #[export_name = "abort"]
 /// This is only used in debug mode
-pub extern "C" fn abort() {
+pub extern "C" fn abort() -> ! {
+    #[cfg(not(feature = "cramium-soc"))]
     unsafe {
         #[rustfmt::skip]
         asm!(
@@ -61,6 +62,39 @@ pub extern "C" fn abort() {
             "j 300b",
             options(noreturn)
         );
+    }
+    #[cfg(feature = "cramium-soc")]
+    unsafe {
+        use utralib::generated::*;
+        let uart = utra::duart::HW_DUART_BASE as *mut u32;
+
+        while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+        uart.add(utra::duart::SFR_TXD.offset()).write_volatile(0xa as u32);
+        while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+        uart.add(utra::duart::SFR_TXD.offset()).write_volatile(0xd as u32);
+        while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+        uart.add(utra::duart::SFR_TXD.offset()).write_volatile('0' as char as u32);
+        while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+        uart.add(utra::duart::SFR_TXD.offset()).write_volatile('x' as char as u32);
+        let sc = riscv::register::scause::read();
+        for &byte in sc.bits().to_be_bytes().iter() {
+            let d = byte >> 4;
+            let nyb = d & 0xF;
+            let c = if nyb < 10 { nyb + 0x30 } else { nyb + 0x61 - 10 };
+            while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+            uart.add(utra::duart::SFR_TXD.offset()).write_volatile(c as u32);
+            let d = byte & 0xF;
+            let nyb = d & 0xF;
+            let c = if nyb < 10 { nyb + 0x30 } else { nyb + 0x61 - 10 };
+            while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+            uart.add(utra::duart::SFR_TXD.offset()).write_volatile(c as u32);
+        }
+        while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+        uart.add(utra::duart::SFR_TXD.offset()).write_volatile(0xa as u32);
+        while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+        uart.add(utra::duart::SFR_TXD.offset()).write_volatile(0xd as u32);
+
+        loop {}
     }
 }
 

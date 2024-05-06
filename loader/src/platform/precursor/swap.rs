@@ -4,10 +4,8 @@ use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, KeyInit, Nonce, Tag};
 use utralib::generated::*;
 
 use crate::bootconfig::BootConfig;
-use crate::println;
 use crate::swap::*;
-use crate::PAGE_SIZE;
-use crate::SDBG;
+use crate::*;
 
 pub struct SwapHal {
     src_data_area: &'static [u8],
@@ -20,6 +18,9 @@ pub struct SwapHal {
     dst_cipher: Aes256GcmSiv,
     buf_addr: usize,
     buf: RawPage,
+    mac_offset: u32,
+    mac_len: u32,
+    ram_swap_key: [u8; 32],
 }
 
 impl SwapHal {
@@ -92,19 +93,22 @@ impl SwapHal {
                 dst_cipher: Aes256GcmSiv::new(&ram_swap_key.into()),
                 buf_addr: 0,
                 buf: RawPage { data: [0u8; 4096] },
+                mac_offset: ssh.mac_offset,
+                mac_len: mac_size as u32,
+                ram_swap_key,
             };
-            hal.partial_nonce.copy_from_slice(&ssh.parital_nonce);
+            hal.partial_nonce.copy_from_slice(&ssh.partial_nonce);
             Some(hal)
         } else {
             None
         }
     }
 
+    pub fn get_swap_key(&self) -> &[u8] { &self.ram_swap_key }
+
+    /// `offset` is the offset from the beginning of the encrypted region (not full disk region)
     pub fn decrypt_src_page_at(&mut self, offset: usize) -> &[u8] {
         assert!((offset & 0xFFF) == 0, "offset is not page-aligned");
-        assert!(offset >= 0x1000);
-        // compensate for the unencrypted header that is not included in the `src_data_area` slice
-        let offset = offset - 0x1000;
         self.buf_addr = offset;
         // println!("data area: {:x?}", &self.src_data_area[..4]);
         // println!("offset: {:x}", offset);
@@ -134,6 +138,8 @@ impl SwapHal {
     pub fn buf_as_mut(&mut self) -> &mut [u8] { &mut self.buf.data }
 
     pub fn buf_as_ref(&self) -> &[u8] { &self.buf.data }
+
+    pub fn mac_base_bounds(&self) -> (u32, u32) { (self.mac_offset as u32, self.mac_len as u32) }
 
     /// Swap count is fixed at 0 by this routine. The data to be encrypted is provided in
     /// `buf`, and is replaced with part of the encrypted data upon completion of the routine.
@@ -196,4 +202,37 @@ impl SwapHal {
     /// between elements of the bootloader (saving us from redundant decrypt ops),
     /// but extremely unsafe because we have to track the use of this buffer manually.
     pub unsafe fn get_decrypt(&self) -> &[u8] { &self.buf.data }
+}
+
+/// Function for initializing any PTE mappings needed by the swapper to be functional
+/// at boot -- the swapper userspace cannot itself invoke page maps to initialize itself
+/// because this would cause a circular dependency.
+pub fn userspace_maps(cfg: &mut BootConfig) {
+    let tt_address = cfg.processes[SWAPPER_PID as usize - 1].satp << 12;
+    let root = unsafe { &mut *(tt_address as *mut crate::PageTable) };
+
+    let swap = cfg.swap.unwrap();
+    let base = swap.ram_offset as usize;
+    let bounds = swap.ram_size as usize;
+
+    // map the entire swap RAM space into the swapper
+    // use map_page_32 because we don't track this region in the RPT
+    for (i, addr) in (base..base + bounds).step_by(PAGE_SIZE).enumerate() {
+        cfg.map_page_32(
+            root,
+            addr,
+            SWAP_HAL_VADDR + PAGE_SIZE * i,
+            FLG_R | FLG_W | FLG_U | FLG_VALID,
+            SWAPPER_PID,
+        );
+    }
+
+    // map the debug UART
+    cfg.map_page_32(
+        root,
+        utra::app_uart::HW_APP_UART_BASE,
+        SWAP_APP_UART_VADDR,
+        FLG_R | FLG_W | FLG_U | FLG_VALID,
+        SWAPPER_PID,
+    )
 }

@@ -1,5 +1,5 @@
 #[cfg(feature = "swap")]
-use crate::swap::SWAP_PT_VADDR;
+use crate::swap::*;
 use crate::*;
 
 /// Phase 2 bootloader
@@ -198,7 +198,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
     #[cfg(feature = "swap")]
     {
         // map the swap page table into PID space 2
-        let tt_address = cfg.processes[SWAPPER_PID as usize].satp << 12;
+        let tt_address = cfg.processes[SWAPPER_PID as usize - 1].satp << 12;
         let root = unsafe { &mut *(tt_address as *mut PageTable) };
         let mut swap_pt_vaddr_offset = 0;
         // map page table roots
@@ -214,34 +214,85 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
                 root,
                 swap_root,
                 SWAP_PT_VADDR + swap_pt_vaddr_offset,
-                FLG_R | FLG_W | FLG_VALID,
+                FLG_R | FLG_W | FLG_U | FLG_VALID,
                 SWAPPER_PID,
             );
             swap_pt_vaddr_offset += PAGE_SIZE;
         }
         // now chase down any entries in the roots, and map valid pages
         for p in 0..cfg.processes.len() {
-            let root_pt = unsafe { &*(cfg.swap_root[p] as *const PageTable) };
-            for &entry in root_pt.entries.iter() {
-                if entry & FLG_VALID != 0 {
-                    let paddr = (entry & !0x3FF) << 2;
-                    println!(
-                        "Mapping L2 swap PT to PID 2 @paddr {:x} -> vaddr {:x}",
-                        paddr,
-                        SWAP_PT_VADDR + swap_pt_vaddr_offset
-                    );
-                    cfg.map_page(
-                        root,
-                        paddr,
-                        SWAP_PT_VADDR + swap_pt_vaddr_offset,
-                        FLG_R | FLG_W | FLG_VALID,
-                        SWAPPER_PID,
-                    );
+            let root_pt = unsafe { &mut *(cfg.swap_root[p] as *mut PageTable) };
+            for entry in root_pt.entries.iter_mut() {
+                if *entry & FLG_VALID != 0 {
+                    let paddr = (*entry & !0x3FF) << 2;
+                    let vaddr = SWAP_PT_VADDR + swap_pt_vaddr_offset;
+                    cfg.map_page(root, paddr, vaddr, FLG_R | FLG_W | FLG_U | FLG_VALID, SWAPPER_PID);
+                    // patch the entry to point at the virtual address
+                    *entry &= 0x3FF;
+                    *entry |= (vaddr & !0xFFF) >> 2;
+                    println!("Remapping L2 PT @paddr {:x} -> vaddr {:x}", paddr, vaddr);
                     swap_pt_vaddr_offset += PAGE_SIZE;
                 }
             }
         }
-        // TODO: patch kernel arguments with Swap values...?
+        // map the arguments into PID 2
+        let swap_spec_ptr = cfg.alloc();
+        cfg.map_page(
+            root,
+            swap_spec_ptr as usize,
+            SWAP_CFG_VADDR,
+            FLG_R | FLG_W | FLG_U | FLG_VALID,
+            SWAPPER_PID,
+        );
+        // this is safe because:
+        //   - swap_spec_ptr is aligned (it's page-aligned even)
+        //   - alloc() zeroes the contents
+        //   - SwapSpec is a Repr(C), and every element of the struct is valid with a 0's initialization.
+        let swap_spec = unsafe { (swap_spec_ptr as *mut SwapSpec).as_mut().unwrap() };
+        if let Some(desc) = cfg.swap {
+            swap_spec.key.copy_from_slice(&cfg.swap_hal.as_ref().unwrap().get_swap_key());
+            swap_spec.pid_count = cfg.init_process_count as u32 + 1;
+            swap_spec.rpt_len_bytes = cfg.runtime_page_tracker.len() as u32;
+            swap_spec.swap_base = desc.ram_offset;
+            swap_spec.swap_len = desc.ram_size;
+            (swap_spec.mac_base, swap_spec.mac_len) = cfg.swap_hal.as_ref().unwrap().mac_base_bounds();
+            swap_spec.sram_start = cfg.sram_start as u32;
+            swap_spec.sram_size = cfg.sram_size as u32;
+        }
+
+        // copy the RPT into PID 2
+        {
+            // safety: This is safe because we know that:
+            //   - RPT is fully initialized at this point
+            //   - rpt_alias is scoped in a block so it can't be abused later by accident
+            //   - We are only going to read data from the alias pointer
+            //   - There is no borrow conflict in the upcoming for loop
+            // This is done to avoid adding a RefCell around the runtime page tracker to work around
+            // interior mutability issues in a very performance-sensitive region, and in a manner that
+            // only ever affects the `swap` configuration (i.e., if we did this as a RefCell we'd have
+            // to pay the performance penalty for all configurations, and/or we'd have to add `cfg`
+            // directives in lots of places). Mea culpa, this is not how you're supposed to write Rust.
+            let terrible_rpt_alias = unsafe {
+                core::slice::from_raw_parts(cfg.runtime_page_tracker.as_ptr(), cfg.runtime_page_tracker.len())
+            };
+            for (i, rpt_page) in terrible_rpt_alias.chunks(4096).enumerate() {
+                let swap_rpt = cfg.alloc() as usize;
+                cfg.map_page(
+                    root,
+                    swap_rpt,
+                    SWAP_RPT_VADDR + i * 4096,
+                    FLG_R | FLG_W | FLG_U | FLG_VALID,
+                    SWAPPER_PID,
+                );
+                // safety: this is safe because the allocator aligns it and initializes it, and all underlying
+                // data has defined behavior as initialized
+                let dest = unsafe { core::slice::from_raw_parts_mut(swap_rpt as *mut u8, 4096) };
+                dest[..rpt_page.len()].copy_from_slice(rpt_page);
+            }
+        }
+
+        // map any hardware-specific pages into the userspace swapper
+        crate::platform::userspace_maps(cfg);
     }
 
     if VVDBG || SDBG {

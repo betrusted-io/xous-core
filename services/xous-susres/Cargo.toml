@@ -30,6 +30,7 @@ utralib = { version = "0.1.24", optional = true, default-features = false }
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
+swap = []
 sus_reboot = [
 ] # when selected, suspend triggers an immediate reboot instead of suspend. For testing only.
 debugprint = []

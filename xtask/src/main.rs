@@ -194,6 +194,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         builder.add_global_flag("--offline");
     }
 
+    // manage an ugly patch we have to do to selectively configure AES for only cramium-soc targets
+    match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
+        Ok(false) => {
+            builder::search_and_replace_in_file(
+                "services/aes/Cargo.toml",
+                "default = [\"cramium-soc\"]",
+                "default = []",
+            )
+            .expect("couldn't patch AES");
+
+            match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
+                Ok(false) => {
+                    return Err(
+                        "Couldn't revert services/aes/Cargo.toml -- is the file writeable or corrupted?"
+                            .into(),
+                    );
+                }
+                _ => (),
+            }
+        }
+        _ => {}
+    }
+    let mut broken_aes_cleanup = false;
+
     // ---- now process the verb plus position dependent arguments ----
     let mut args = env::args();
     let task = args.nth(1);
@@ -246,6 +270,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_loader_feature("renode-bypass");
         }
         Some("renode-swap") => {
+            let swap_pkgs = ["xous-ticktimer", "xous-log", "xous-susres", "xous-names"];
             if !builder.is_swap_set() {
                 builder.set_swap(0x4080_0000, 8 * 1024 * 1024);
             }
@@ -254,18 +279,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_loader_feature("debug-print");
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
+            builder.add_feature("swap");
             builder.add_kernel_feature("debug-swap");
-            builder.add_kernel_feature("debug-print");
-
+            // builder.add_kernel_feature("debug-print");
             // It is important that this is the first service added, because the swapper *must* be in PID 2
-            builder.add_service("xous-swapper", LoaderRegion::Ram);
+            builder.add_service("xous-swapper", LoaderRegion::Flash);
             builder.add_kernel_feature("swap");
 
-            for service in base_pkgs {
+            for service in swap_pkgs {
                 builder.add_service(service, LoaderRegion::Flash);
             }
             builder.add_service("test-swapper", LoaderRegion::Swap); // when we implement loaded-but-swapped, use that instead
-            builder.add_apps(&get_cratespecs());
+            builder.add_service("graphics-server", LoaderRegion::Swap);
+            builder.add_service("trng", LoaderRegion::Swap);
+            builder.add_apps(get_cratespecs());
         }
 
         // ------- hosted mode configs -------
@@ -439,30 +466,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // ------ Cramium hardware image configs ------
         Some("cramium-fpga") | Some("cramium-soc") => {
-            let cramium_pkgs = [
-                "xous-log",
-                "xous-names",
-                "xous-ticktimer",
-                "cram-hal-service",
-                "graphics-server",
-                "cram-console",
-            ]
-            .to_vec();
-            builder.add_loader_feature("debug-print");
-            builder.add_loader_feature("board-bringup");
+            let cramium_flash_pkgs =
+                ["xous-ticktimer", "xous-log", "xous-names", "cram-hal-service"].to_vec();
+            let cramium_swap_pkgs = ["test-swapper", "graphics-server", "cram-console"].to_vec();
+            if !builder.is_swap_set() {
+                builder.set_swap(0, 4 * 1024 * 1024);
+            }
+            // builder.add_loader_feature("board-bringup");
             // builder.add_loader_feature("spim-test");
-            // builder.add_loader_feature("spi-alt-channel");
+            // builder.add_loader_feature("spi-alt-channel"); // this flag, when asserted, uses the J_QSPI
+            // header. By default, we use JPC7_13 (J_QSPI does not work, for some reason; bit 3 is stuck
+            // high...)
+            builder.add_loader_feature("debug-print");
+            builder.add_loader_feature("swap");
+            // builder.add_kernel_feature("debug-print");
+            builder.add_kernel_feature("debug-swap");
+            builder.add_kernel_feature("swap");
+            builder.add_feature("swap");
+            builder.add_feature("quantum-timer");
             builder.add_kernel_feature("v2p");
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),
                 Some("cramium-soc") => builder.target_cramium_soc(),
                 _ => panic!("should be unreachable"),
             };
+            broken_aes_cleanup = true;
+
+            // It is important that this is the first service added, because the swapper *must* be in PID 2
+            builder.add_service("xous-swapper", LoaderRegion::Flash);
+
             builder.add_services(&get_cratespecs());
-            for service in cramium_pkgs {
+            for service in cramium_flash_pkgs {
                 builder.add_service(service, LoaderRegion::Flash);
             }
-            builder.add_feature("quantum-timer");
+            builder.add_services(&get_cratespecs());
+            for service in cramium_swap_pkgs {
+                builder.add_service(service, LoaderRegion::Swap);
+            }
         }
 
         // ------ ARM hardware image configs ------
@@ -490,6 +530,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     builder.build()?;
 
+    // AES is broken in the current rev of the Cramium SoC. This unpatches the crate so other builds can
+    // work properly.
+    if broken_aes_cleanup {
+        builder::search_and_replace_in_file(
+            "services/aes/Cargo.toml",
+            "default = [\"cramium-soc\"]",
+            "default = []",
+        )
+        .expect("couldn't patch AES");
+    }
+    match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
+        Ok(false) => {
+            println!(
+                "Build configuration is out of sync: cramium-soc patch on AES crate was not cleared out"
+            );
+            return Err("services/aes/Cargo.toml is in a bad state! Revert any patches to the file.".into());
+        }
+        _ => {}
+    }
     // the intent of this call is to check that crates we are sourcing from crates.io
     // match the crates in our local source. The usual cause of an inconsistency is
     // a maintainer forgot to publish a change to crates.io.
