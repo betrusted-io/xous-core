@@ -10,16 +10,23 @@ use crate::arch::mem::PAGE_SIZE;
 use crate::mem::MemoryManager;
 use crate::services::SystemServices;
 
+/// This ABI is copy-paste synchronized with what's in the userspace handler. It's left out of
+/// xous-rs so that we can change it without having to push crates to crates.io.
+/// Since there is only one place the ABI could be used, we're going to stick with
+/// this primitive method of synchronization because it reduces the activation barrier
+/// to fix bugs.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SwapAbi {
     Invalid = 0,
     Evict = 1,
+    GetFreeMem = 2,
 }
 impl SwapAbi {
     pub fn from(val: usize) -> SwapAbi {
         use SwapAbi::*;
         match val {
             1 => Evict,
+            2 => GetFreeMem,
             _ => Invalid,
         }
     }
@@ -86,6 +93,20 @@ impl Swap {
 
         #[cfg(not(baremetal))]
         SWAP.with(|ss| f(&mut ss.borrow_mut()))
+    }
+
+    #[cfg(baremetal)]
+    pub fn with<F, R>(f: F) -> R
+    where
+        F: FnOnce(&Swap) -> R,
+    {
+        #[cfg(baremetal)]
+        unsafe {
+            f(&*core::ptr::addr_of!(SWAP))
+        }
+
+        #[cfg(not(baremetal))]
+        SWAP.with(|ss| f(&ss.borrow_mut()))
     }
 
     pub fn register_handler(
@@ -340,6 +361,42 @@ impl Swap {
                 evicted_ptr,
             ));
         }
+    }
+
+    pub fn get_free_mem(&self) -> SysCallResult {
+        println!("RAM usage:");
+        let mut total_bytes = 0;
+        let mut ram_size = 0;
+        crate::services::SystemServices::with(|system_services| {
+            crate::mem::MemoryManager::with(|mm| {
+                for process in &system_services.processes {
+                    if !process.free() {
+                        let bytes_used = mm.ram_used_by(process.pid);
+                        total_bytes += bytes_used;
+                        println!(
+                            "    PID {:>3}: {:>4} k {}",
+                            process.pid,
+                            bytes_used / 1024,
+                            system_services.process_name(process.pid).unwrap_or("")
+                        );
+                    }
+                }
+                ram_size = mm.ram_size();
+            });
+        });
+        println!("{} k total", total_bytes / 1024);
+
+        /*
+        crate::services::SystemServices::with(|system_services| {
+            let current_pid = system_services.current_pid();
+            let process = system_services.get_process(PID::new(9).unwrap()).unwrap();
+            println!("PID {} {}:", process.pid, system_services.process_name(process.pid).unwrap_or(""));
+            process.activate().unwrap();
+            crate::arch::mem::MemoryMapping::current().print_map();
+            system_services.get_process(current_pid).unwrap().activate().unwrap();
+        }); */
+
+        Ok(xous_kernel::Result::Scalar5(total_bytes, ram_size, 0, 0, 0))
     }
 
     /// The address space on entry to `retrieve_page` is `target_pid`; it must ensure
