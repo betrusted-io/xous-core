@@ -521,21 +521,26 @@ pub enum SysCall {
     #[cfg(feature = "swap")]
     RegisterSwapper(u32, u32, u32, u32, usize, usize),
 
-    /// Evict a page.
+    /// Swapper operation.
     ///
-    /// This syscall can only be called by PID 2, the swapper.
+    /// This syscall can only be called by PID 2, the swapper. The form of the
+    /// call is deliberately left flexible, so that the swapper ABI can evolve
+    /// without impacting version compatibility with application ABIs.
     ///
     /// ## Arguments
-    ///     * **pid**: PID of target process
-    ///     * **vaddr**: The virtual address to evict
+    ///     * Up to 7 `usize` values, whose ABI is determined by the swapper's implementation.
     ///
     /// ## Returns
-    /// No return value
+    /// Returns a Scalar5, whose ABI is determined by the swapper's implementation.
     ///
     /// ## Errors
     ///     * **BadAddress**: The mapping does not exist
+    ///     * **AccessDenied**: Called by a PID that does not belong to the swapper
+    ///     * **MappingInUse**: A requested operation could not be performed because the mapping is wired
+    ///     * **UnhandledSyscall**: The ABI encoding doesn't map to the current implementation
+    ///     * Other errors may be added as the swapper ABI evolves
     #[cfg(feature = "swap")]
-    EvictPage(PID, usize),
+    SwapOp(usize, usize, usize, usize, usize, usize, usize),
 
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
@@ -544,6 +549,7 @@ pub enum SysCall {
 
 // #[derive(FromPrimitive)]
 pub enum SysCallNumber {
+    Invalid = 0,
     MapMemory = 2,
     Yield = 3,
     ReturnToParent = 4,
@@ -590,8 +596,7 @@ pub enum SysCallNumber {
     #[cfg(feature = "swap")]
     RegisterSwapper = 43,
     #[cfg(feature = "swap")]
-    EvictPage = 44,
-    Invalid,
+    SwapOp = 44,
 }
 
 impl SysCallNumber {
@@ -644,7 +649,7 @@ impl SysCallNumber {
             #[cfg(feature = "swap")]
             43 => RegisterSwapper,
             #[cfg(feature = "swap")]
-            44 => EvictPage,
+            44 => SwapOp,
             _ => Invalid,
         }
     }
@@ -891,8 +896,8 @@ impl SysCall {
                 0,
             ],
             #[cfg(feature = "swap")]
-            SysCall::EvictPage(pid, vaddr) => {
-                [SysCallNumber::EvictPage as usize, pid.get() as usize, *vaddr, 0, 0, 0, 0, 0]
+            SysCall::SwapOp(a1, a2, a3, a4, a5, a6, a7) => {
+                [SysCallNumber::SwapOp as usize, *a1, *a2, *a3, *a4, *a5, *a6, *a7]
             }
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => {
                 [SysCallNumber::Invalid as usize, *a1, *a2, *a3, *a4, *a5, *a6, *a7]
@@ -1045,7 +1050,7 @@ impl SysCall {
                 SysCall::RegisterSwapper(a1 as u32, a2 as u32, a3 as u32, a4 as u32, a5 as usize, a6 as usize)
             }
             #[cfg(feature = "swap")]
-            SysCallNumber::EvictPage => SysCall::EvictPage(pid_from_usize(a1)?, a2 as _),
+            SysCallNumber::SwapOp => SysCall::SwapOp(a1, a2, a3, a4, a5, a6, a7),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
