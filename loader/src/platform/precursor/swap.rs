@@ -106,11 +106,9 @@ impl SwapHal {
 
     pub fn get_swap_key(&self) -> &[u8] { &self.ram_swap_key }
 
+    /// `offset` is the offset from the beginning of the encrypted region (not full disk region)
     pub fn decrypt_src_page_at(&mut self, offset: usize) -> &[u8] {
         assert!((offset & 0xFFF) == 0, "offset is not page-aligned");
-        assert!(offset >= 0x1000);
-        // compensate for the unencrypted header that is not included in the `src_data_area` slice
-        let offset = offset - 0x1000;
         self.buf_addr = offset;
         // println!("data area: {:x?}", &self.src_data_area[..4]);
         // println!("offset: {:x}", offset);
@@ -172,8 +170,8 @@ impl SwapHal {
     /// Used to examine contents of swap RAM. Swap count is fixed at 0 by this routine. Decrypted data is
     /// returned as a slice.
     pub fn decrypt_swap_from(&mut self, src_offset: usize, dst_vaddr: usize, dst_pid: u8) -> &[u8] {
-        println!("Decrypt swap:");
-        println!("  offset: {:x}, vaddr: {:x}, pid: {}", src_offset, dst_vaddr, dst_pid);
+        // println!("Decrypt swap:");
+        // println!("  offset: {:x}, vaddr: {:x}, pid: {}", src_offset, dst_vaddr, dst_pid);
         assert!(src_offset & (PAGE_SIZE - 1) == 0);
         let mut nonce = [0u8; size_of::<Nonce>()];
         nonce[0..4].copy_from_slice(&[0u8; 4]); // this is the `swap_count` field
@@ -186,9 +184,9 @@ impl SwapHal {
         let mut tag = [0u8; size_of::<Tag>()];
         let mac_offset = (src_offset / PAGE_SIZE) * size_of::<Tag>();
         tag.copy_from_slice(&self.dst_mac_area[mac_offset..mac_offset + size_of::<Tag>()]);
-        println!("dst_mac_area: {:x?}", &self.dst_mac_area[..32]);
+        // println!("dst_mac_area: {:x?}", &self.dst_mac_area[..32]);
         self.buf.data.copy_from_slice(&self.dst_data_area[src_offset..src_offset + PAGE_SIZE]);
-        println!("Nonce: {:x?}, tag: {:x?}", &nonce, &tag);
+        // println!("Nonce: {:x?}, tag: {:x?}", &nonce, &tag);
         match self.dst_cipher.decrypt_in_place_detached(
             Nonce::from_slice(&nonce),
             aad,

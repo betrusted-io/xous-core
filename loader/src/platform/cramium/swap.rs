@@ -343,11 +343,9 @@ impl SwapHal {
 
     fn aad(&self) -> &[u8] { &self.aad_storage[..self.aad_len] }
 
+    /// `offset` is the offset from the beginning of the encrypted region (not full disk region)
     pub fn decrypt_src_page_at(&mut self, offset: usize) -> &[u8] {
         assert!((offset & 0xFFF) == 0, "offset is not page-aligned");
-        assert!(offset >= 0x1000);
-        // compensate for the unencrypted header that is not included in the `src_data_area` slice
-        let offset = offset - 0x1000;
         self.buf_addr = offset;
         self.flash_spim.mem_read((self.image_start + offset) as u32, &mut self.buf.data, false);
         let mut nonce = [0u8; size_of::<Nonce>()];

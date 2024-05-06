@@ -280,11 +280,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
             builder.add_feature("swap");
-            // builder.add_kernel_feature("debug-swap");
+            builder.add_kernel_feature("debug-swap");
             // builder.add_kernel_feature("debug-print");
-
             // It is important that this is the first service added, because the swapper *must* be in PID 2
-            builder.add_service("xous-swapper", LoaderRegion::Ram);
+            builder.add_service("xous-swapper", LoaderRegion::Flash);
             builder.add_kernel_feature("swap");
 
             for service in swap_pkgs {
@@ -468,8 +467,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // ------ Cramium hardware image configs ------
         Some("cramium-fpga") | Some("cramium-soc") => {
             let cramium_flash_pkgs =
-                ["xous-ticktimer", "xous-log", "xous-names", "cram-hal-service", "cram-console"].to_vec();
-            let cramium_swap_pkgs = ["test-swapper", "graphics-server"].to_vec();
+                ["xous-ticktimer", "xous-log", "xous-names", "cram-hal-service"].to_vec();
+            let cramium_swap_pkgs = ["test-swapper", "graphics-server", "cram-console"].to_vec();
             if !builder.is_swap_set() {
                 builder.set_swap(0, 4 * 1024 * 1024);
             }

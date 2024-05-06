@@ -230,6 +230,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
                     // patch the entry to point at the virtual address
                     *entry &= 0x3FF;
                     *entry |= (vaddr & !0xFFF) >> 2;
+                    println!("Remapping L2 PT @paddr {:x} -> vaddr {:x}", paddr, vaddr);
                     swap_pt_vaddr_offset += PAGE_SIZE;
                 }
             }
