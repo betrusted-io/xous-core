@@ -15,7 +15,7 @@ pio = "0.2.1"
 cramium-hal = { path = "../cramium-hal", optional = true, default-features = false }
 
 [target.'cfg(target_os = "xous")'.dependencies]
-xous = "0.9.59"
+xous = "0.9.60"
 
 [features]
 cramium-soc = ["utralib/cramium-soc"]

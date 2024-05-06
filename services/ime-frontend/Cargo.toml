@@ -12,12 +12,12 @@ graphics-server = { path = "../graphics-server" }
 ime-plugin-api = { path = "../ime-plugin-api" }
 keyboard = { path = "../keyboard" }
 log = "0.4.14"
-log-server = { package = "xous-api-log", version = "0.1.55" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.55" }
-xous = "0.9.59"
+log-server = { package = "xous-api-log", version = "0.1.56" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.56" }
+xous = "0.9.60"
 locales = { path = "../../locales" }
-xous-ipc = "0.9.59"
-xous-names = { package = "xous-api-names", version = "0.9.57" }
+xous-ipc = "0.9.60"
+xous-names = { package = "xous-api-names", version = "0.9.58" }
 
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
