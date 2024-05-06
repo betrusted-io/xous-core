@@ -146,6 +146,7 @@ pub(crate) struct Builder {
     no_image: bool,
     /// when Some, specifies a swap region as offset, size
     swap: Option<(u32, u32)>,
+    change_target: bool,
 }
 
 impl Builder {
@@ -174,6 +175,7 @@ impl Builder {
             dry_run: false,
             no_image: false,
             swap: None,
+            change_target: false,
         }
     }
 
@@ -223,6 +225,11 @@ impl Builder {
 
     pub fn add_global_flag(&mut self, flag: &str) -> &mut Builder {
         self.global_flags.push(flag.to_string());
+        self
+    }
+
+    pub fn set_change_target_flag(&mut self) -> &mut Builder {
+        self.change_target = true;
         self
     }
 
@@ -764,6 +771,15 @@ impl Builder {
                 println!("Dry run requested: only building and not running");
             }
         } else {
+            let svd_spec_path = format!(
+                "target/{}/{}/build/SVD_PATH",
+                self.target.as_ref().expect("target"),
+                self.stream.as_str()
+            );
+            if self.change_target {
+                std::fs::remove_file(&svd_spec_path).ok(); // don't fail if the file does not exist
+            }
+
             // ------ build the kernel ------
             let mut kernel_extra = vec![];
             if self.kernel_disable_defaults {
@@ -823,11 +839,6 @@ impl Builder {
             }
 
             // ---------- extract SVD file path, as computed by utralib ----------
-            let svd_spec_path = format!(
-                "target/{}/{}/build/SVD_PATH",
-                self.target.as_ref().expect("target"),
-                self.stream.as_str()
-            );
             let mut svd_spec_file = OpenOptions::new().read(true).open(svd_spec_path)?;
             let mut svd_path_str = String::new();
             svd_spec_file.read_to_string(&mut svd_path_str)?;

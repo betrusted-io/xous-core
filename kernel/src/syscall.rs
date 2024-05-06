@@ -12,7 +12,7 @@ use crate::mem::{MemoryManager, PAGE_SIZE};
 use crate::server::{SenderID, WaitingMessage};
 use crate::services::SystemServices;
 #[cfg(feature = "swap")]
-use crate::swap::Swap;
+use crate::swap::{Swap, SwapAbi};
 
 /* Quoth Xobs:
  The idea behind SWITCHTO_CALLER was that you'd have a process act as a scheduler,
@@ -1022,12 +1022,21 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             Swap::with_mut(|swap| swap.register_handler(s0, s1, s2, s3, handler, state))
         }
         #[cfg(feature = "swap")]
-        SysCall::EvictPage(target_pid, vaddr) => {
+        SysCall::SwapOp(op, a1, a2, a3, a4, a5, a6) => {
             if pid.get() != xous_kernel::SWAPPER_PID {
                 klog!("Illegal caller"); // only PID 2 can call this
                 return Err(xous_kernel::Error::AccessDenied);
             }
-            Swap::with_mut(|swap| swap.evict_page(target_pid, vaddr))
+            match SwapAbi::from(op) {
+                SwapAbi::Evict => Swap::with_mut(|swap| swap.evict_page(a1, a2)),
+                SwapAbi::Invalid => {
+                    println!(
+                        "Invalid SwapOp: {:x} {:x} {:x} {:x} {:x} {:x} {:x}",
+                        op, a1, a2, a3, a4, a5, a6
+                    );
+                    Err(xous_kernel::Error::UnhandledSyscall)
+                }
+            }
         }
 
         /* https://github.com/betrusted-io/xous-core/issues/90

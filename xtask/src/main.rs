@@ -193,6 +193,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if env::args().filter(|x| x == "--offline").count() != 0 {
         builder.add_global_flag("--offline");
     }
+    if env::args().filter(|x| x == "--change-target").count() != 0 {
+        builder.set_change_target_flag();
+    }
 
     // manage an ugly patch we have to do to selectively configure AES for only cramium-soc targets
     match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
@@ -596,6 +599,7 @@ fn print_help() {
     [--gdb-stub]
     [--debug-loader]
     [--offline]
+    [--change-target]
 
 [cratespecs] is a list of 0 or more items of the following syntax:
    [name]                crate 'name' to be built from local source
@@ -620,6 +624,8 @@ be merged in with explicit app/service treatment with the following flags:
 [--debug-loader]         Enable debug printing in the loader
 [--offline]              Avoid network traffic
 [--swap offset:size]     Specify a region for swap memory. The behavior of this depends on the target.
+[--change-target]        Used to clean the cached target/*/*/build/SVD_PATH when changing build targets.
+                         This will also force a full rebuild every time the flag is specified.
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.

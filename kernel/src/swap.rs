@@ -10,6 +10,21 @@ use crate::arch::mem::PAGE_SIZE;
 use crate::mem::MemoryManager;
 use crate::services::SystemServices;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum SwapAbi {
+    Invalid = 0,
+    Evict = 1,
+}
+impl SwapAbi {
+    pub fn from(val: usize) -> SwapAbi {
+        use SwapAbi::*;
+        match val {
+            1 => Evict,
+            _ => Invalid,
+        }
+    }
+}
+
 #[derive(Copy, Clone)]
 pub enum BlockingSwapOp {
     /// PID of source, vaddr of source, vaddr in swap space (block must already be mapped into swap space)
@@ -310,14 +325,20 @@ impl Swap {
         }
     }
 
-    pub fn evict_page(&mut self, target_pid: PID, vaddr: usize) -> ! {
-        let evicted_ptr = crate::arch::mem::evict_page_inner(target_pid, vaddr).expect("couldn't evict page");
+    pub fn evict_page(&mut self, target_pid: usize, vaddr: usize) -> SysCallResult {
+        let evicted_ptr =
+            crate::arch::mem::evict_page_inner(PID::new(target_pid as u8).expect("Invalid PID"), vaddr)
+                .expect("couldn't evict page");
 
         // this is safe because evict_page() leaves us in the swapper memory context
         #[cfg(feature = "debug-swap")]
         println!("evict_page - swapper activate, PC: {:08x}", self.pc);
         unsafe {
-            self.blocking_activate_swapper(BlockingSwapOp::WriteToSwap(target_pid, vaddr, evicted_ptr));
+            self.blocking_activate_swapper(BlockingSwapOp::WriteToSwap(
+                PID::new(target_pid as u8).expect("Invalid PID"),
+                vaddr,
+                evicted_ptr,
+            ));
         }
     }
 
