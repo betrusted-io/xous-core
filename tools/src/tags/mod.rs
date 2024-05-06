@@ -9,6 +9,10 @@ pub mod xkrn;
 
 pub(crate) const PAGE_SIZE: usize = 4096;
 
+/// Given a current `offset`, compute the next possible page address that can
+/// produce a page offset that is aligned with `alignment_offset`. This is
+/// not the same as the aligning to a page boundary -- this is aligning to
+/// an offset within a page boundary.
 pub fn align_size_up(offset: usize, alignment_offset: usize) -> usize {
     if offset % PAGE_SIZE == alignment_offset {
         offset

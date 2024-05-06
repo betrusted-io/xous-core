@@ -37,6 +37,8 @@ pub trait XousArgument: fmt::Display {
     fn last_data(&self) -> &[u8] { &[] }
 
     fn alignment_offset(&self) -> usize { 0 }
+
+    fn load_offset(&self) -> usize { 0 }
 }
 
 pub struct XousArguments {
@@ -111,6 +113,10 @@ impl XousArguments {
         assert!(tag_data.get_ref().len().trailing_zeros() >= 2, "tag data was not a multiple of 4 bytes!");
 
         let mut digest = crc16::Digest::new(crc16::X25);
+
+        // store the header offset
+        let header_offset = w.stream_position()?;
+
         // XArg tag header
         w.write_all(&u32::from_le_bytes(*b"XArg").to_le_bytes())?;
         digest.write(tag_data.get_ref());
@@ -153,10 +159,45 @@ impl XousArguments {
         for arg in &self.arguments {
             // align for FLASH mapping
             let pos = w.stream_position()?;
+            // find the next padding that allows us to align our data such that page sizes align.
             let pad_len = crate::tags::align_size_up(pos as usize, arg.alignment_offset()) - pos as usize;
+            // println!("padding from {:x}, align {:x}, with {:x} bytes", pos, arg.alignment_offset(),
+            // pad_len);
             let pad = vec![0u8; pad_len];
             w.write_all(&pad)?;
 
+            // only do this check on the IniS section (swap generation). Rationale: the
+            // arg.load_offset() function is only implemented for IniS. It may be trivial to
+            // copy this to the other sections, but, the original idea was to make a targeted check of
+            // the swap format at this point in the image creation cycle.
+            if arg.code() == u32::from_le_bytes(*b"IniS") {
+                // println!("header_offset: {:x}", header_offset);
+                // - 0x0 is the valid offset in the case that we are being called by the encrypted partition
+                //   writer, since it computes offsets from the start of the encrypted partition.
+                // - 0x1000 is the expected length of the header when writing the full plaintext version for
+                //   sanity checking
+                assert!(
+                    header_offset == 0x1000 || header_offset == 0x0,
+                    "Header offset assumption for IniS was not met: loader hard-codes this size"
+                );
+                /*
+                println!(
+                    "load offset: {:x}, pos: {:x}",
+                    arg.load_offset(),
+                    w.stream_position()? - header_offset
+                ); */
+                // Debugging tips
+                // If this assert fails, what's happened is that the position of the loader stream
+                // is offset from where it's expected to be. There is a "just so" arrangement that isn't
+                // strictly enforced: the first IniS happens to load at 0x1000; and the XArgs block
+                // will generally fit within a size constraint of 0x1000. If either of these assumptions
+                // break, then, this assert will trigger.
+                assert!(
+                    arg.load_offset() as u64 == w.stream_position()? - header_offset,
+                    "IniS alignment assumption not satisfied, did XArgs overflow? \
+                    Did the IniS section trigger an alignment edge case with align_size_up()?"
+                );
+            }
             // println!("position: {:x}", w.stream_position()?);
             w.write_all(arg.last_data()).expect("couldn't write extra arg data");
         }

@@ -1,19 +1,43 @@
 use std::convert::TryInto;
 use std::io::{Cursor, Result, Seek, SeekFrom, Write};
+use std::process::Command;
 
 use aes_gcm_siv::{
     aead::{Aead, KeyInit, Payload},
     Aes256GcmSiv, Nonce,
 };
-use rand::Rng;
 
 const SWAP_VERSION: u32 = 0x01_01_0000;
+
+pub fn git_rev() -> u64 {
+    // Execute the git command
+    let output =
+        Command::new("git").args(&["rev-parse", "HEAD"]).output().expect("Failed to execute command");
+
+    // Check if the command was successful
+    if output.status.success() {
+        // Convert the output bytes to a string
+        let hash = std::str::from_utf8(&output.stdout).expect("Failed to convert output to string");
+
+        // Print the commit hash
+        let partial_hash =
+            u64::from_str_radix(&hash.trim_end_matches('\n')[hash.trim_end_matches('\n').len() - 16..], 16)
+                .expect("couldn't convert git hash");
+        println!("Current commit hash: {}  Extracted nonce: {:x}", hash, partial_hash);
+        partial_hash
+    } else {
+        // Print an error message if the command failed
+        let error_message =
+            std::str::from_utf8(&output.stderr).expect("Failed to convert error message to string");
+        panic!("Failed to get commit hash: {}", error_message);
+    }
+}
 
 pub struct SwapWriter {
     pub buffer: Cursor<Vec<u8>>,
 }
 
-struct SwapHeader {
+pub struct SwapHeader {
     aad: Vec<u8>,
     partial_nonce: u64,
     /// offset, starting from the top of payload data (so, +0x1000 to get absolute offset after the header)
@@ -21,10 +45,9 @@ struct SwapHeader {
 }
 impl SwapHeader {
     pub fn new(swap_len: usize) -> Self {
-        let mut rng = rand::thread_rng();
         SwapHeader {
             aad: "swap".as_bytes().to_vec(),
-            partial_nonce: rng.gen(),
+            partial_nonce: git_rev(),
             mac_offset: ((swap_len + 0xFFF) / 0x1000) * 0x1000,
         }
     }

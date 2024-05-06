@@ -81,7 +81,7 @@ fn csr_to_config(hv: tools::utils::CsrConfig, ram_config: &mut RamConfig) {
     ram_config.regions.add(candidate_region);
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let matches = App::new("Xous Image Creator")
         .version(crate_version!())
@@ -211,23 +211,20 @@ fn main() {
     if let Some(val) = matches.value_of("ram") {
         let ram_parts: Vec<&str> = val.split(':').collect();
         if ram_parts.len() != 2 {
-            eprintln!("Error: --ram argument should be of the form [offset]:[size]");
-            return;
+            return Err("Error: --ram argument should be of the form [offset]:[size]".into());
         }
 
         ram_config.offset = match parse_u32(ram_parts[0]) {
             Ok(o) => o,
             Err(e) => {
-                eprintln!("Error: Unable to parse {}: {:?}", ram_parts[0], e);
-                return;
+                return Err(format!("Error: Unable to parse {}: {:?}", ram_parts[0], e).into());
             }
         };
 
         ram_config.size = match parse_u32(ram_parts[1]) {
             Ok(o) => o,
             Err(e) => {
-                eprintln!("Error: Unable to parse {}: {:?}", ram_parts[1], e);
-                return;
+                return Err(format!("Error: Unable to parse {}: {:?}", ram_parts[1], e).into());
             }
         };
 
@@ -333,23 +330,20 @@ fn main() {
     if let Some(val) = matches.value_of("swap") {
         let swap_parts: Vec<&str> = val.split(':').collect();
         if swap_parts.len() != 2 {
-            eprintln!("Error: --swap argument should be of the form [offset]:[size]");
-            return;
+            return Err("Error: --swap argument should be of the form [offset]:[size]".into());
         }
 
         let offset = match parse_u32(swap_parts[0]) {
             Ok(o) => o,
             Err(e) => {
-                eprintln!("Error: Unable to parse {}: {:?}", swap_parts[0], e);
-                return;
+                return Err(format!("Error: Unable to parse {}: {:?}", swap_parts[0], e).into());
             }
         };
 
         let size = match parse_u32(swap_parts[1]) {
             Ok(o) => o,
             Err(e) => {
-                eprintln!("Error: Unable to parse {}: {:?}", swap_parts[1], e);
-                return;
+                return Err(format!("Error: Unable to parse {}: {:?}", swap_parts[1], e).into());
             }
         };
 
@@ -444,7 +438,7 @@ fn main() {
                 );
                 pid += 1;
                 let init = read_minielf(init_path).expect("couldn't parse init file");
-                sargs.add(IniS::new(init.entry_point, init.sections, init.program, init.alignment_offset));
+                sargs.add(IniS::new(init.entry_point, init.sections, init.program));
             }
         } else {
             println!("Warning: inis regions specified, but no swap region specified. Ignoring inis regions!");
@@ -477,8 +471,11 @@ fn main() {
 
     if let Some(mut sargs) = swap_args {
         let mut swap_buffer = SwapWriter::new();
+        // Transfer our unencrypted data inside sargs to swap_buffer
         sargs.write(&mut swap_buffer).expect("Couldn't write out swap args");
+        let buf_len = swap_buffer.buffer.get_ref().len();
 
+        // Create the swap target image and encrypt swap_buffer to it
         let swap_filename = matches.value_of("swap-name").expect("swap filename not present");
         let sf = File::create(swap_filename)
             .unwrap_or_else(|_| panic!("Couldn't create output file {}", swap_filename));
@@ -489,8 +486,14 @@ fn main() {
 
         match matches.value_of("swap-debug-name") {
             Some(sf_dbg) => {
-                let sf =
+                use std::io::Write;
+                let mut sf =
                     File::create(sf_dbg).unwrap_or_else(|_| panic!("Couldn't create debug file {}", sf_dbg));
+                // serialize the unencrypted header into the debug image
+                let header = tools::swap_writer::SwapHeader::new(buf_len);
+                sf.write(&header.serialize()?)?;
+                // directly write our unencrypted data from sargs into file sf. It's an exact copy of
+                // what ended up in swap_buffer.
                 sargs.write(&sf).expect("Couldn't write debug swap image");
                 println!("Swap debug created in file {}", sf_dbg);
             }
@@ -504,4 +507,5 @@ fn main() {
         println!("Runtime will also require {} bytes to track swap", s.size / 4096);
     }
     println!("Image created in file {}", output_filename);
+    Ok(())
 }
