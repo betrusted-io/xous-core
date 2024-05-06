@@ -415,9 +415,9 @@ pub extern "C" fn trap_handler(
 
         _ => {
             #[cfg(not(any(feature = "precursor", feature = "renode")))]
-            println!("!!! Unrecognized exception: {:?}", ex);
+            println!("!!! Unrecognized exception: {:x?}", ex);
             #[cfg(any(feature = "precursor", feature = "renode"))]
-            panic!("!!! Unrecognized exception: {:?}", ex);
+            panic!("!!! Unrecognized exception: {:x?}", ex);
         }
     }
 
