@@ -2,11 +2,37 @@ mod debug;
 mod platform;
 use core::fmt::Write;
 use std::fmt::Debug;
+use std::thread;
+use std::thread::sleep;
+use std::time::Duration;
 
 use debug::*;
 use loader::swap::{SwapSpec, SWAP_CFG_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
 use num_traits::FromPrimitive;
 use platform::{SwapHal, PAGE_SIZE};
+use xous::Result;
+
+/// This ABI is copy-paste synchronized with what's in the kernel. It's left out of
+/// xous-rs so that we can change it without having to push crates to crates.io.
+/// Since there is only one place the ABI could be used, we're going to stick with
+/// this primitive method of synchronization because it reduces the activation barrier
+/// to fix bugs.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum SwapAbi {
+    Invalid = 0,
+    Evict = 1,
+    GetFreeMem = 2,
+}
+impl SwapAbi {
+    pub fn from(val: usize) -> SwapAbi {
+        use SwapAbi::*;
+        match val {
+            1 => Evict,
+            2 => GetFreeMem,
+            _ => Invalid,
+        }
+    }
+}
 
 pub struct PtPage {
     pub entries: [u32; 1024],
@@ -149,6 +175,21 @@ fn swap_handler(
             let pid = a2 as u8;
             let vaddr_in_pid = a3;
             let vaddr_in_swap = a4;
+            // next steps on the swap journey:
+            //  - create a "dummy" Evictor routine that just tell the kernel to evict one of our resident
+            //    processes
+            //  - this should trigger WriteToSwap here
+            //  - implement the routine here
+            //  - also implement some routines to track free memory to check that things are doing what we
+            //    expect them to do
+            //
+            //  - Do something with allocate advisories (e.g. LRU cache with pre-defined capacity)
+            //  - Replace the Evictor routine with a thing that checks free memory level, and then more
+            //    intelligently swaps stuff out to create free space for the kernel
+            //
+            //  - Somehow come up with some test cases for stress-testing the swapper...probably some function
+            //    that allocates a bunch of heap, and occasionally touches the contents, while other system
+            //    processes trundle on.
         }
         Some(Opcode::ReadFromSwap) => {
             let pid = a2 as u8;
@@ -221,6 +262,21 @@ fn main() {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
+
+    thread::spawn({
+        move || {
+            loop {
+                match xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::GetFreeMem as usize, 0, 0, 0, 0, 0, 0)) {
+                    Ok(Result::Scalar5(mem, total, _, _, _)) => {
+                        log::info!("Free mem: {}kiB / {}kiB", mem / 1024, total / 1024)
+                    }
+                    Ok(e) => log::warn!("Unexpected response: {:?}", e),
+                    Err(e) => log::warn!("Error: {:?}", e),
+                }
+                sleep(Duration::from_millis(1000));
+            }
+        }
+    });
 
     let mut msg_opt = None;
     loop {
