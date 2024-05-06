@@ -178,6 +178,8 @@ impl MemoryManager {
         owned_bytes
     }
 
+    pub fn ram_size(&self) -> usize { self.ram_size }
+
     #[cfg(all(baremetal, feature = "print-debug"))]
     pub fn print_ownership(&self) {
         println!("Ownership ({} bytes in all):", unsafe { MEMORY_ALLOCATIONS.len() });

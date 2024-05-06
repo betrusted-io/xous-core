@@ -1029,6 +1029,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             }
             match SwapAbi::from(op) {
                 SwapAbi::Evict => Swap::with_mut(|swap| swap.evict_page(a1, a2)),
+                SwapAbi::GetFreeMem => Swap::with(|swap| swap.get_free_mem()),
                 SwapAbi::Invalid => {
                     println!(
                         "Invalid SwapOp: {:x} {:x} {:x} {:x} {:x} {:x} {:x}",
