@@ -1,16 +1,27 @@
 mod debug;
 mod platform;
 use core::fmt::Write;
-use std::fmt::Debug;
+use std::num::NonZeroUsize;
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
+use std::{fmt::Debug, num::NonZeroU8};
 
 use debug::*;
+use heapless::LinearMap;
 use loader::swap::{SwapSpec, SWAP_CFG_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
-use num_traits::FromPrimitive;
+use lru::LruCache;
+use num_traits::*;
 use platform::{SwapHal, PAGE_SIZE};
-use xous::Result;
+use xous::{AllocAdvice, Message, Result, CID, PID};
+
+/// This controls how deep we aggregate advisories before passing them into true
+/// userspace. The trade-off is performance (bigger depth takes longer to search),
+/// precision (a larger aggregation can make our tracking less accurate, as updates
+/// happen less frequently), and performance (aggregating advisories reduces expensive
+/// updates of the allocation LRU cache). This should also be a power of 2 for
+/// best performance, because the underlying primitive is `heapless`.
+const ADVISORY_AGGREGATE_DEPTH: usize = 8;
 
 /// This ABI is copy-paste synchronized with what's in the kernel. It's left out of
 /// xous-rs so that we can change it without having to push crates to crates.io.
@@ -44,7 +55,7 @@ pub struct SwapPageTables {
 }
 
 pub struct RuntimePageTracker {
-    pub allocs: &'static mut [u8],
+    pub allocs: &'static mut [Option<PID>],
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -56,6 +67,8 @@ pub enum Opcode {
     ReadFromSwap = 1,
     /// Kernel message advising us that a page of RAM was allocated
     AllocateAdvisory = 2,
+    /// Test messages
+    Test0 = 128,
     /// A message from the kernel handler context to evaluate if a trim is needed
     EvalTrim = 256,
 }
@@ -68,6 +81,7 @@ pub struct SwapperSharedState {
     pub rpt: RuntimePageTracker,
     pub sram_start: usize,
     pub sram_size: usize,
+    pub alloc_aggregator: LinearMap<usize, AllocAdvice, ADVISORY_AGGREGATE_DEPTH>,
 }
 impl SwapperSharedState {
     pub fn pt_walk(&self, pid: u8, va: usize) -> Option<usize> {
@@ -92,13 +106,14 @@ impl SwapperSharedState {
 }
 struct SharedStateStorage {
     pub inner: Option<SwapperSharedState>,
+    pub conn: CID,
 }
 
 pub fn change_owner(ss: &mut SwapperSharedState, pid: u8, paddr: usize) {
     // First, check to see if the region is in RAM,
     if paddr >= ss.sram_start && paddr < ss.sram_start + ss.sram_size {
         // Mark this page as in-use by the kernel
-        ss.rpt.allocs[(paddr - ss.sram_start as usize) / PAGE_SIZE] = pid;
+        ss.rpt.allocs[(paddr - ss.sram_start as usize) / PAGE_SIZE] = PID::new(pid);
         return;
     }
     // The region isn't in RAM. We're in the swapper, we can't handle errors - drop straight to panic.
@@ -157,13 +172,14 @@ fn swap_handler(
             rpt: RuntimePageTracker {
                 allocs: unsafe {
                     core::slice::from_raw_parts_mut(
-                        SWAP_RPT_VADDR as *mut u8,
+                        SWAP_RPT_VADDR as *mut Option<NonZeroU8>,
                         swap_spec.rpt_len_bytes as usize,
                     )
                 },
             },
             sram_start: swap_spec.sram_start as usize,
             sram_size: swap_spec.sram_size as usize,
+            alloc_aggregator: LinearMap::new(),
         });
     }
     let ss = sss.inner.as_mut().expect("Shared state should be initialized");
@@ -222,15 +238,73 @@ fn swap_handler(
                 xous::AllocAdvice::deserialize(a4, a5),
                 xous::AllocAdvice::deserialize(a6, a7),
             ];
+            // Record all the advice into a short LinearMap. We desires the keys (physical addresses) to
+            // be overwritten if multiple advisories are issued to a single physical address -- no need to
+            // track all that activity down to the userspace. A hot page is a hot page: LRU cache will get
+            // touched, touching it twice in a row doesn't make it significantly less recently used.
             for advice in advisories {
                 match advice {
-                    xous::AllocAdvice::Allocate(pid, _vaddr, paddr) => {
+                    xous::AllocAdvice::Allocate(pid, vaddr, paddr) => {
                         change_owner(ss, pid.get(), paddr);
+                        match ss.alloc_aggregator.insert(paddr, AllocAdvice::Allocate(pid, vaddr, paddr)) {
+                            Ok(_) => {}
+                            Err((a, _advice)) => {
+                                writeln!(
+                                    DebugUart {},
+                                    "alloc_aggregator capacity exceeded, dropping request @ PA {:x}",
+                                    a,
+                                )
+                                .ok();
+                            }
+                        }
                     }
-                    xous::AllocAdvice::Free(_pid, _vaddr, paddr) => {
+                    xous::AllocAdvice::Free(pid, vaddr, paddr) => {
                         change_owner(ss, 0, paddr);
+                        match ss.alloc_aggregator.insert(paddr, AllocAdvice::Free(pid, vaddr, paddr)) {
+                            Ok(_) => {}
+                            Err((a, _advice)) => {
+                                writeln!(
+                                    DebugUart {},
+                                    "alloc_aggregator capacity exceeded, dropping request @ PA {:x}",
+                                    a,
+                                )
+                                .ok();
+                            }
+                        }
                     }
                     xous::AllocAdvice::Uninit => {} // not all the records have to be populated
+                }
+            }
+            // flush what entries we can, filling an even multiple of messages so we are efficiently
+            // utilizing the expensive messaging channel to userspace
+            let mut removed_pa = [0usize; 2]; // track removals to avoid interior mutability problems
+            while ss.alloc_aggregator.len() >= 2 {
+                {
+                    let mut removed_entries: [Option<AllocAdvice>; 2] = [None; 2];
+                    for (index, (&pa, &entry)) in ss.alloc_aggregator.iter().enumerate() {
+                        if index == removed_pa.len() {
+                            break;
+                        }
+                        removed_pa[index] = pa;
+                        removed_entries[index] = Some(entry)
+                    }
+                    let (a1, a2) = removed_entries[0].take().unwrap().serialize();
+                    let (a3, a4) = removed_entries[1].take().unwrap().serialize();
+                    match xous::try_send_message(
+                        sss.conn,
+                        Message::new_scalar(Opcode::AllocateAdvisory as usize, a1, a2, a3, a4),
+                    ) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            // report the error, and just...lose the message, don't retry or anything like
+                            // that.
+                            writeln!(DebugUart {}, "Couldn't send advisory to userspace: {:?}", e).ok();
+                        }
+                    }
+                }
+                // do the removals, outside of the previous for loop
+                for entry in removed_pa.iter() {
+                    ss.alloc_aggregator.remove(entry);
                 }
             }
         }
@@ -242,7 +316,8 @@ fn swap_handler(
 
 fn main() {
     let sid = xous::create_server().unwrap();
-    let mut sss = SharedStateStorage { inner: None };
+    let conn = xous::connect(sid).unwrap();
+    let mut sss = SharedStateStorage { conn, inner: None };
     // Register the swapper with the kernel. Written as a raw syscall, since this is
     // the only instance of its use (no point in use-once code to wrap it).
     // This is an "early registration" which allows us to see debug output quickly,
@@ -263,7 +338,17 @@ fn main() {
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
+    // LRU cache
+    // We want to be able to ask it, "give me the next page to evict". The answer should be the
+    // least recently used page, and the format of the answer is a physical page number.
+    //
+    // The cache is keyed by physical page number; the values are an Option<(PID, vaddr)> tuple that
+    // corresponds to the current owner of that page.
+    let (_free, total) = get_free_mem();
+    let mut lru = LruCache::new(NonZeroUsize::new(total / 4096).unwrap());
+
     thread::spawn({
+        let conn = conn.clone();
         move || {
             loop {
                 match xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::GetFreeMem as usize, 0, 0, 0, 0, 0, 0)) {
@@ -273,6 +358,8 @@ fn main() {
                     Ok(e) => log::warn!("Unexpected response: {:?}", e),
                     Err(e) => log::warn!("Error: {:?}", e),
                 }
+                xous::send_message(conn, Message::new_scalar(Opcode::Test0.to_usize().unwrap(), 0, 0, 0, 0))
+                    .ok();
                 sleep(Duration::from_millis(1000));
             }
         }
@@ -288,10 +375,49 @@ fn main() {
             Some(Opcode::WriteToSwap) => {
                 unimplemented!();
             }
+            Some(Opcode::AllocateAdvisory) => {
+                if let Some(scalar) = msg.body.scalar_message() {
+                    let advisories = [
+                        AllocAdvice::deserialize(scalar.arg1, scalar.arg2),
+                        AllocAdvice::deserialize(scalar.arg3, scalar.arg4),
+                    ];
+                    for advice in advisories {
+                        match advice {
+                            AllocAdvice::Allocate(pid, vaddr, paddr) => {
+                                lru.push(paddr, Some((pid, vaddr)));
+                            }
+                            AllocAdvice::Free(_pid, _vaddr, paddr) => {
+                                lru.pop(&paddr);
+                            }
+                            _ => { // it's okay to have an unutilized entry
+                            }
+                        }
+                    }
+                }
+            }
+            Some(Opcode::Test0) => {
+                // this test routine computes our view of free space from the RPT.
+                if let Some(ss) = &sss.inner {
+                    let mut total_mem = 0;
+                    for &page in ss.rpt.allocs.iter() {
+                        if let Some(_pid) = page {
+                            total_mem += 4096;
+                        }
+                    }
+                    log::info!("Computed mem: {}kiB", total_mem / 1024);
+                }
+            }
             // ... todo, other opcodes.
             _ => {
                 log::info!("Unknown opcode {:?}", op);
             }
         }
+    }
+}
+
+fn get_free_mem() -> (usize, usize) {
+    match xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::GetFreeMem as usize, 0, 0, 0, 0, 0, 0)) {
+        Ok(Result::Scalar5(mem, total, _, _, _)) => (mem, total),
+        _ => panic!("GetFreeMem sycall failed"),
     }
 }
