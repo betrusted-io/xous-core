@@ -690,12 +690,6 @@ impl SystemServices {
                     );
                 }
                 CallbackType::Swap(args) => {
-                    #[cfg(feature = "debug-swap")]
-                    {
-                        let pid = crate::arch::process::current_pid();
-                        let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
-                        println!("bef invoke PROCESS_TABLE.current: {}, hw_pid: {}", pid.get(), hardware_pid);
-                    }
                     arch::syscall::invoke(
                         arch_process.current_thread_mut(),
                         pid.get() == 1,
