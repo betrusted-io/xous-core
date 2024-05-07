@@ -318,6 +318,7 @@ pub extern "C" fn trap_handler(
         }
         #[cfg(feature = "swap")]
         RiscvException::InstructionPageFault(RETURN_FROM_SWAPPER, _offset) => {
+            /*
             #[cfg(feature = "debug-swap")]
             {
                 let pid = crate::arch::process::current_pid();
@@ -327,7 +328,7 @@ pub extern "C" fn trap_handler(
                     pid.get(),
                     hardware_pid
                 );
-            }
+            } */
             // Cleanup after the swapper
             let response = Swap::with_mut(|s|
                 // safety: this is safe because on return from swapper, we're in the swapper's memory space.
@@ -336,19 +337,12 @@ pub extern "C" fn trap_handler(
 
             #[cfg(feature = "debug-swap")]
             {
-                let pid = crate::arch::process::current_pid();
-                let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
-                println!(
-                    "aft swapper cleanup PROCESS_TABLE.current: {}, hw_pid: {}",
-                    pid.get(),
-                    hardware_pid
-                );
-
                 // debugging
                 SystemServices::with(|ss| {
+                    let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
                     let current = ss.get_process(current_pid()).unwrap();
                     let state = current.state();
-                    println!("state after swapper switch: {} {:?}", current.pid.get(), state);
+                    println!("swapper returning: PID{}(hw{})-{:?}", current.pid.get(), hardware_pid, state);
                 });
             }
             // Re-enable interrupts now that we're out of the swap context
@@ -361,8 +355,6 @@ pub extern "C" fn trap_handler(
             } else {
                 ArchProcess::with_current_mut(|p| {
                     let thread = p.current_thread();
-                    #[cfg(feature = "debug-swap")]
-                    println!("Returning to address {:08x}", thread.sepc);
                     unsafe { _xous_syscall_return_result(&response, thread) };
                 });
             }
