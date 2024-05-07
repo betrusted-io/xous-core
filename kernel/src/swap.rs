@@ -59,6 +59,7 @@ static mut SWAP: Swap = Swap {
     sid: SID::from_u32(0, 0, 0, 0),
     pc: 0,
     prev_op: None,
+    nested_op: None,
     swapper_state: 0,
     swapper_args: [0usize; 8],
     alloc_advisories: [AllocAdvice::Uninit, AllocAdvice::Uninit, AllocAdvice::Uninit],
@@ -72,6 +73,10 @@ pub struct Swap {
     pc: usize,
     /// previous op
     prev_op: Option<BlockingSwapOp>,
+    /// previous previous op - I think that structurally, we can only get a nesting of depth = 2, and this
+    /// is due to things like an alloc advisory pulling in a new superpage while handling the advisory...?
+    /// Anyways, there is an assert that checks for the overflow condition of nesting.
+    nested_op: Option<BlockingSwapOp>,
     /// state for the swapper. this is a PID-2 local virtual address, passed from the swapper on registration
     swapper_state: usize,
     /// storage for args
@@ -218,6 +223,10 @@ impl Swap {
                 }
             }
         }
+        if let Some(op) = self.prev_op.take() {
+            assert!(self.nested_op.is_none(), "Nesting depth of 2 exceeded!");
+            self.nested_op = Some(op);
+        }
         self.prev_op = Some(op);
         let swapper_pid: PID = PID::new(xous_kernel::SWAPPER_PID).unwrap();
 
@@ -245,7 +254,7 @@ impl Swap {
     ///
     /// Safety: this call must only be invoked in the swapper's memory context
     pub unsafe fn exit_blocking_call(&mut self) -> Result<xous_kernel::Result, xous_kernel::Error> {
-        match self.prev_op.take() {
+        let result = match self.prev_op.take() {
             Some(BlockingSwapOp::WriteToSwap(pid, addr, _virt_addr)) => {
                 // update the RPT: mark the physical memory as free. The physical page is
                 // in the swapper's context at this point, so free it there (it's already been
@@ -343,7 +352,11 @@ impl Swap {
                 }
             }
             None => panic!("No previous swap op was set"),
+        };
+        if let Some(op) = self.nested_op {
+            self.prev_op = Some(op);
         }
+        result
     }
 
     pub fn evict_page(&mut self, target_pid: usize, vaddr: usize) -> SysCallResult {
