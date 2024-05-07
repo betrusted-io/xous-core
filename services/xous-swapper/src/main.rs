@@ -13,7 +13,7 @@ use loader::swap::{SwapSpec, SWAP_CFG_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
 use lru::LruCache;
 use num_traits::*;
 use platform::{SwapHal, PAGE_SIZE};
-use xous::{AllocAdvice, Message, Result, CID, PID};
+use xous::{AllocAdvice, Message, Result, CID, PID, SID};
 
 /// This controls how deep we aggregate advisories before passing them into true
 /// userspace. The trade-off is performance (bigger depth takes longer to search),
@@ -81,6 +81,7 @@ pub struct SwapperSharedState {
     pub rpt: RuntimePageTracker,
     pub sram_start: usize,
     pub sram_size: usize,
+    pub swap_size: usize,
     pub alloc_aggregator: LinearMap<usize, AllocAdvice, ADVISORY_AGGREGATE_DEPTH>,
 }
 impl SwapperSharedState {
@@ -107,6 +108,24 @@ impl SwapperSharedState {
 struct SharedStateStorage {
     pub inner: Option<SwapperSharedState>,
     pub conn: CID,
+}
+impl SharedStateStorage {
+    pub fn init(&mut self, sid: SID) {
+        // Register the swapper with the kernel. Written as a raw syscall, since this is
+        // the only instance of its use (no point in use-once code to wrap it).
+        // This is an "early registration" which allows us to see debug output quickly,
+        // even before we can constitute all of our shared state
+        let (s0, s1, s2, s3) = sid.to_u32();
+        xous::rsyscall(xous::SysCall::RegisterSwapper(
+            s0,
+            s1,
+            s2,
+            s3,
+            swap_handler as *mut usize as usize,
+            self as *mut SharedStateStorage as usize,
+        ))
+        .unwrap();
+    }
 }
 
 pub fn change_owner(ss: &mut SwapperSharedState, pid: u8, paddr: usize) {
@@ -179,6 +198,7 @@ fn swap_handler(
             },
             sram_start: swap_spec.sram_start as usize,
             sram_size: swap_spec.sram_size as usize,
+            swap_size: swap_spec.swap_len as usize,
             alloc_aggregator: LinearMap::new(),
         });
     }
@@ -317,26 +337,20 @@ fn swap_handler(
 fn main() {
     let sid = xous::create_server().unwrap();
     let conn = xous::connect(sid).unwrap();
-    let mut sss = SharedStateStorage { conn, inner: None };
-    // Register the swapper with the kernel. Written as a raw syscall, since this is
-    // the only instance of its use (no point in use-once code to wrap it).
-    // This is an "early registration" which allows us to see debug output quickly,
-    // even before we can constitute all of our shared state
-    let (s0, s1, s2, s3) = sid.to_u32();
-    xous::rsyscall(xous::SysCall::RegisterSwapper(
-        s0,
-        s1,
-        s2,
-        s3,
-        swap_handler as *mut usize as usize,
-        &mut sss as *mut SharedStateStorage as usize,
-    ))
-    .unwrap();
+    let mut sss = Box::new(SharedStateStorage { conn, inner: None });
+    sss.init(sid);
 
     // init the log, but this is mostly unused.
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
+
+    // wait for the share storage to become initialized, happens inside the handler
+    // on the first call the kernel makes back. Usually it's done by now (by an alloc
+    // advisory), but this check just ensures that happens.
+    while sss.inner.is_none() {
+        xous::yield_slice();
+    }
 
     // LRU cache
     // We want to be able to ask it, "give me the next page to evict". The answer should be the
@@ -344,20 +358,32 @@ fn main() {
     //
     // The cache is keyed by physical page number; the values are an Option<(PID, vaddr)> tuple that
     // corresponds to the current owner of that page.
-    let (_free, total) = get_free_mem();
-    let mut lru = LruCache::new(NonZeroUsize::new(total / 4096).unwrap());
+    let total_ram = sss.inner.as_ref().unwrap().sram_size;
+    let total_swap = sss.inner.as_ref().unwrap().swap_size;
+    let mut lru = LruCache::new(NonZeroUsize::new(total_ram / PAGE_SIZE).unwrap());
+    // Offset tracker
+    // Track an offset count for every page that gets written to swap.
+
+    // TODO: find a way to bind this into the swapper's exclusive state in the interrupt context...maybe
+    // even just have the loader allocate this block directly?
+    let mut offset = vec![0u32; total_swap / PAGE_SIZE];
+    /*
+    for (index, pa) in (start..(start + total)).step_by(PAGE_SIZE).enumerate() {
+        if let Some(pid) = sss.inner.as_ref().unwrap().rpt.allocs[index] {
+            if pid.get() != 1 && pid.get() != 2 {
+                // track all processes except kernel and loader; kernel and loader
+                // are "wired" and should never be up for swapping
+                // lru.push(pa, (pid, todo!("reverse lookup pa to va for a given process...")));
+            }
+        }
+    }
+    */
 
     thread::spawn({
         let conn = conn.clone();
         move || {
             loop {
-                match xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::GetFreeMem as usize, 0, 0, 0, 0, 0, 0)) {
-                    Ok(Result::Scalar5(mem, total, _, _, _)) => {
-                        log::info!("Free mem: {}kiB / {}kiB", mem / 1024, total / 1024)
-                    }
-                    Ok(e) => log::warn!("Unexpected response: {:?}", e),
-                    Err(e) => log::warn!("Error: {:?}", e),
-                }
+                log::info!("Kernel reports free mem: {}kiB", get_free_mem() / 1024);
                 xous::send_message(conn, Message::new_scalar(Opcode::Test0.to_usize().unwrap(), 0, 0, 0, 0))
                     .ok();
                 sleep(Duration::from_millis(1000));
@@ -384,7 +410,7 @@ fn main() {
                     for advice in advisories {
                         match advice {
                             AllocAdvice::Allocate(pid, vaddr, paddr) => {
-                                lru.push(paddr, Some((pid, vaddr)));
+                                lru.push(paddr, (pid, vaddr));
                             }
                             AllocAdvice::Free(_pid, _vaddr, paddr) => {
                                 lru.pop(&paddr);
@@ -398,14 +424,15 @@ fn main() {
             Some(Opcode::Test0) => {
                 // this test routine computes our view of free space from the RPT.
                 if let Some(ss) = &sss.inner {
-                    let mut total_mem = 0;
+                    let mut used_mem = 0;
                     for &page in ss.rpt.allocs.iter() {
                         if let Some(_pid) = page {
-                            total_mem += 4096;
+                            used_mem += 4096;
                         }
                     }
-                    log::info!("Computed mem: {}kiB", total_mem / 1024);
+                    log::info!("Computed mem: {}kiB", used_mem / 1024);
                 }
+                log::info!("LRU entry is: {:x?}", lru.peek_lru());
             }
             // ... todo, other opcodes.
             _ => {
@@ -415,9 +442,9 @@ fn main() {
     }
 }
 
-fn get_free_mem() -> (usize, usize) {
+fn get_free_mem() -> usize {
     match xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::GetFreeMem as usize, 0, 0, 0, 0, 0, 0)) {
-        Ok(Result::Scalar5(mem, total, _, _, _)) => (mem, total),
+        Ok(Result::Scalar5(mem, _, _, _, _)) => mem,
         _ => panic!("GetFreeMem sycall failed"),
     }
 }
