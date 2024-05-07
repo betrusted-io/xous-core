@@ -32,7 +32,7 @@ impl SwapAbi {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum BlockingSwapOp {
     /// PID of source, vaddr of source, vaddr in swap space (block must already be mapped into swap space)
     WriteToSwap(PID, usize, usize),
@@ -224,7 +224,10 @@ impl Swap {
             }
         }
         if let Some(op) = self.prev_op.take() {
-            assert!(self.nested_op.is_none(), "Nesting depth of 2 exceeded!");
+            if let Some(dop) = self.nested_op {
+                println!("ERR: nesting depth of 2 exceeded! {:?}", dop);
+                panic!("Nesting depth of 2 exceeded!");
+            }
             self.nested_op = Some(op);
         }
         self.prev_op = Some(op);
@@ -353,7 +356,7 @@ impl Swap {
             }
             None => panic!("No previous swap op was set"),
         };
-        if let Some(op) = self.nested_op {
+        if let Some(op) = self.nested_op.take() {
             self.prev_op = Some(op);
         }
         result
@@ -379,7 +382,6 @@ impl Swap {
     pub fn get_free_mem(&self) -> SysCallResult {
         println!("RAM usage:");
         let mut total_bytes = 0;
-        let mut ram_size = 0;
         crate::services::SystemServices::with(|system_services| {
             crate::mem::MemoryManager::with(|mm| {
                 for process in &system_services.processes {
@@ -394,7 +396,6 @@ impl Swap {
                         );
                     }
                 }
-                ram_size = mm.ram_size();
             });
         });
         println!("{} k total", total_bytes / 1024);
@@ -409,7 +410,7 @@ impl Swap {
             system_services.get_process(current_pid).unwrap().activate().unwrap();
         }); */
 
-        Ok(xous_kernel::Result::Scalar5(total_bytes, ram_size, 0, 0, 0))
+        Ok(xous_kernel::Result::Scalar5(total_bytes, 0, 0, 0, 0))
     }
 
     /// The address space on entry to `retrieve_page` is `target_pid`; it must ensure
@@ -456,28 +457,46 @@ impl Swap {
         let mut last_index: usize = 0;
         let mut overflow = false;
         for (index, advisory) in self.alloc_advisories.iter_mut().enumerate() {
-            if *advisory == AllocAdvice::Uninit {
-                if maybe_unmap.is_none() {
-                    *advisory = AllocAdvice::Allocate(target_pid, target_vaddr_in_pid, paddr);
-                } else {
-                    *advisory = AllocAdvice::Free(target_pid, target_vaddr_in_pid, paddr);
+            match advisory {
+                AllocAdvice::Allocate(_, _, pa) => {
+                    // If the cached advisory is an allocate, see if the incoming advisory is
+                    // a free that matches the address of the existing op. If so, remove it from
+                    // the advisory cache to save on reporting.
+                    if *pa == paddr && maybe_unmap.is_some() {
+                        *advisory = AllocAdvice::Uninit;
+                        return;
+                    }
+                    last_index = index;
+                    overflow = true;
                 }
-                last_index = index;
-                overflow = false;
-                break;
-            } else {
-                overflow = true;
-                last_index = index;
+                AllocAdvice::Free(_, _, _) => {
+                    last_index = index;
+                    overflow = true;
+                }
+                AllocAdvice::Uninit => {
+                    if maybe_unmap.is_none() {
+                        *advisory = AllocAdvice::Allocate(target_pid, target_vaddr_in_pid, paddr);
+                    } else {
+                        *advisory = AllocAdvice::Free(target_pid, target_vaddr_in_pid, paddr);
+                    }
+                    last_index = index;
+                    overflow = false;
+                }
             }
         }
         if self.pc != 0 {
             if last_index >= self.alloc_advisories.len() - 1 {
+                #[cfg(feature = "debug-swap")]
                 {
                     // debugging
                     SystemServices::with(|ss| {
                         let current = ss.get_process(current_pid()).unwrap();
                         let state = current.state();
-                        println!("state before swapper switch: {} {:?}", current.pid.get(), state);
+                        println!(
+                            "advise_alloc: switching to userspace from PID{}-{:?}",
+                            current.pid.get(),
+                            state
+                        );
                     });
                 }
 
@@ -485,8 +504,6 @@ impl Swap {
                 SystemServices::with(|ss| ss.get_process(swapper_pid).unwrap().mapping.activate().unwrap());
 
                 // this is safe because we've changed into the swapper's memory space
-                #[cfg(feature = "debug-swap")]
-                println!("advise_alloc - swapper activate, PC: {:08x}", self.pc);
                 if let Some(unmap_advice) = maybe_unmap {
                     // not an allocate -> this came through the unmap syscall
                     unsafe {
@@ -518,7 +535,7 @@ impl Swap {
             // we actually miss no pages.
             if overflow {
                 self.missing_pages += 1;
-                println!("missed advisory: {}", self.missing_pages);
+                println!("advise_alloc: missed advisory: {}", self.missing_pages);
             }
         }
     }
