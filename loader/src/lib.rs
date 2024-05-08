@@ -3,6 +3,8 @@
 #[cfg(feature = "swap")]
 pub mod swap;
 
+pub const PAGE_SIZE: usize = 4096;
+
 // Locate the hard-wired IFRAM allocations for UDMA
 #[allow(dead_code)]
 #[cfg(feature = "cramium-soc")]

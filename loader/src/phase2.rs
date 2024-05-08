@@ -291,6 +291,22 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             }
         }
 
+        // allocate swap offset tracker
+        {
+            // note that this computation is mirrored in xous-swapper
+            let swap_size_usable = crate::swap::derive_usable_swap(swap_spec.swap_len as usize);
+            for offset in (0..(swap_size_usable / PAGE_SIZE) * core::mem::size_of::<u32>()).step_by(4096) {
+                let offset_page = cfg.alloc() as usize; // this also zeroes the page
+                cfg.map_page(
+                    root,
+                    offset_page,
+                    SWAP_OFFSET_VADDR + offset,
+                    FLG_R | FLG_W | FLG_U | FLG_VALID,
+                    SWAPPER_PID,
+                );
+            }
+        }
+
         // map any hardware-specific pages into the userspace swapper
         crate::platform::userspace_maps(cfg);
     }

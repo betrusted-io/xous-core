@@ -1,3 +1,9 @@
+use core::mem::size_of;
+
+use aes_gcm_siv::Tag;
+
+use crate::PAGE_SIZE;
+
 /// Virtual address fields:
 ///  31            22 21               12 11               0
 /// |    L1 index    |      L2 index     |    LSB of addr   |
@@ -42,6 +48,7 @@ pub const SWAP_PT_VADDR: usize = 0xE000_0000;
 // E000_0000 - E100_0000 => 16 MiB of vaddr space for page tables; should be more than enough
 pub const SWAP_CFG_VADDR: usize = 0xE100_0000;
 pub const SWAP_RPT_VADDR: usize = 0xE100_1000;
+pub const SWAP_OFFSET_VADDR: usize = 0xE110_0000;
 pub const SWAP_APP_UART_VADDR: usize = 0xE180_0000;
 #[cfg(feature = "cramium-soc")]
 pub const SWAP_APP_UART_IFRAM_VADDR: usize = 0xE180_1000;
@@ -82,3 +89,18 @@ pub const SPIM_RAM_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRA
 #[allow(dead_code)]
 #[cfg(feature = "cramium-soc")]
 pub const SPIM_FLASH_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 5 * 4096;
+
+/// Function that derives the usable amount of swap space from the total length of swap memory available.
+/// This is used repeatedly in the initialization process to define the boundary between the swap page
+/// storage and the message authentication code (MAC) tables.
+///
+/// This is a slight over-estimate because once we remove the MAC area, we need even less storage,
+/// but it's a small error.
+pub fn derive_usable_swap(swap_len: usize) -> usize {
+    let mac_size = (swap_len as usize / 4096) * size_of::<Tag>();
+    let mac_size_to_page = (mac_size + (PAGE_SIZE - 1)) & !(PAGE_SIZE - 1);
+    let swap_size_usable = (swap_len as usize & !(PAGE_SIZE - 1)) - mac_size_to_page;
+    swap_size_usable
+}
+
+pub fn derive_mac_size(swap_len: usize) -> usize { (swap_len / 4096) * size_of::<Tag>() }

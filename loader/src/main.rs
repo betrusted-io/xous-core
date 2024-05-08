@@ -30,14 +30,13 @@ use core::{mem, ptr, slice};
 use asm::*;
 use bootconfig::BootConfig;
 use consts::*;
+pub use loader::PAGE_SIZE;
 use minielf::*;
 use phase1::{phase_1, InitialProcess};
 use phase2::{phase_2, ProgramDescription};
 #[cfg(feature = "swap")]
 use platform::SwapHal;
-
 pub type XousPid = u8;
-pub const PAGE_SIZE: usize = 4096;
 const WORD_SIZE: usize = mem::size_of::<usize>();
 pub const SIGBLOCK_SIZE: usize = 0x1000;
 const STACK_PAGE_COUNT: usize = 8;
