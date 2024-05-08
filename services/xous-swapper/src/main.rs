@@ -9,7 +9,7 @@ use std::{fmt::Debug, num::NonZeroU8};
 
 use debug::*;
 use heapless::LinearMap;
-use loader::swap::{SwapSpec, SWAP_CFG_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
+use loader::swap::{SwapSpec, SWAP_CFG_VADDR, SWAP_OFFSET_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
 use lru::LruCache;
 use num_traits::*;
 use platform::{SwapHal, PAGE_SIZE};
@@ -58,6 +58,10 @@ pub struct RuntimePageTracker {
     pub allocs: &'static mut [Option<PID>],
 }
 
+pub struct OffsetTracker {
+    pub offsets: &'static mut [u32],
+}
+
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 #[repr(usize)]
 pub enum Opcode {
@@ -79,6 +83,7 @@ pub struct SwapperSharedState {
     pub pts: SwapPageTables,
     pub hal: SwapHal,
     pub rpt: RuntimePageTracker,
+    pub ot: OffsetTracker,
     pub sram_start: usize,
     pub sram_size: usize,
     pub swap_size: usize,
@@ -193,6 +198,18 @@ fn swap_handler(
                     core::slice::from_raw_parts_mut(
                         SWAP_RPT_VADDR as *mut Option<NonZeroU8>,
                         swap_spec.rpt_len_bytes as usize,
+                    )
+                },
+            },
+            // safety: this is safe because the loader has allocated this region and zeroed the contents,
+            // and the length is correctly set up by the loader. Note that the length is slightly
+            // longer than it needs to be -- the region that has to be tracked does not include the
+            // area of swap dedicated to the MAC table, which swap_len includes.
+            ot: OffsetTracker {
+                offsets: unsafe {
+                    core::slice::from_raw_parts_mut(
+                        SWAP_OFFSET_VADDR as *mut u32,
+                        loader::swap::derive_usable_swap(swap_spec.swap_len as usize) / PAGE_SIZE,
                     )
                 },
             },
@@ -359,14 +376,10 @@ fn main() {
     // The cache is keyed by physical page number; the values are an Option<(PID, vaddr)> tuple that
     // corresponds to the current owner of that page.
     let total_ram = sss.inner.as_ref().unwrap().sram_size;
-    let total_swap = sss.inner.as_ref().unwrap().swap_size;
     let mut lru = LruCache::new(NonZeroUsize::new(total_ram / PAGE_SIZE).unwrap());
     // Offset tracker
     // Track an offset count for every page that gets written to swap.
 
-    // TODO: find a way to bind this into the swapper's exclusive state in the interrupt context...maybe
-    // even just have the loader allocate this block directly?
-    let mut offset = vec![0u32; total_swap / PAGE_SIZE];
     /*
     for (index, pa) in (start..(start + total)).step_by(PAGE_SIZE).enumerate() {
         if let Some(pid) = sss.inner.as_ref().unwrap().rpt.allocs[index] {

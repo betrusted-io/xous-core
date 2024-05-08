@@ -14,12 +14,7 @@ pub struct SwapHal {
 }
 impl SwapHal {
     pub fn new(spec: &SwapSpec) -> Self {
-        // compute the MAC area needed for the total RAM size. This is a slight over-estimate
-        // because once we remove the MAC area, we need even less storage, but it's a small error.
-        let mac_size = (spec.swap_len as usize / 4096) * size_of::<Tag>();
-        let mac_size_to_page = (mac_size + (PAGE_SIZE - 1)) & !(PAGE_SIZE - 1);
-        let ram_size_actual = (spec.swap_len as usize & !(PAGE_SIZE - 1)) - mac_size_to_page;
-
+        let ram_size_actual = loader::swap::derive_usable_swap(spec.swap_len as usize);
         Self {
             // safety: the ram swap area is pre-mapped into our virtual address by the loader, and our
             // calculations on lengths ensure area alignment
@@ -29,7 +24,10 @@ impl SwapHal {
             // safety: the ram swap area is pre-mapped into our virtual address by the loader, and our
             // calculations on lengths ensure area alignment
             dst_mac_area: unsafe {
-                core::slice::from_raw_parts_mut((SWAP_HAL_VADDR as *mut u8).add(ram_size_actual), mac_size)
+                core::slice::from_raw_parts_mut(
+                    (SWAP_HAL_VADDR as *mut u8).add(ram_size_actual),
+                    loader::swap::derive_mac_size(spec.swap_len as usize),
+                )
             },
             cipher: Aes256GcmSiv::new((&spec.key).into()),
         }
