@@ -305,7 +305,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_services(&user_pkgs)
                 .add_feature("pddbtest")
                 .add_feature("ditherpunk")
-                .add_feature("tracking-alloc")
                 .add_feature("tls")
                 // .add_feature("test-rekey")
                 .add_apps(&get_cratespecs());
