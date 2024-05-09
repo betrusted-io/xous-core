@@ -98,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // security
             "root-keys",
             "trng",
-            "sha2@0.10.8",
+            "sha2",
             // "engine-25519",
             "jtag",
             // GUI front end
