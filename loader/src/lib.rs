@@ -4,6 +4,7 @@
 pub mod swap;
 
 pub const PAGE_SIZE: usize = 4096;
+pub const FLG_SWAP_USED: u32 = 0x8000_0000;
 
 // Locate the hard-wired IFRAM allocations for UDMA
 #[allow(dead_code)]
