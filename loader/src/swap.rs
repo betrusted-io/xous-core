@@ -74,9 +74,9 @@ pub struct SwapSpec {
     pub mac_base: u32,
     /// Length of the MAC region in bytes
     pub mac_len: u32,
-    /// Start of the main memory
+    /// Start of the main memory (i.e., actual physical RAM available for OS use)
     pub sram_start: u32,
-    /// Size of the main memory
+    /// Size of the main memory in bytes
     pub sram_size: u32,
 }
 
