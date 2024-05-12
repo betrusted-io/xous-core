@@ -98,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // security
             "root-keys",
             "trng",
-            "sha2@0.10.8",
+            "sha2",
             // "engine-25519",
             "jtag",
             // GUI front end
@@ -305,7 +305,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_services(&user_pkgs)
                 .add_feature("pddbtest")
                 .add_feature("ditherpunk")
-                .add_feature("tracking-alloc")
                 .add_feature("tls")
                 // .add_feature("test-rekey")
                 .add_apps(&get_cratespecs());
