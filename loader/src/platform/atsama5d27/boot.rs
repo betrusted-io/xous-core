@@ -65,7 +65,8 @@ impl BootConfig {
         }
         // Mark this page as in-use by the kernel
         let extra_bytes = self.extra_pages * PAGE_SIZE;
-        self.runtime_page_tracker[(self.sram_size - (extra_bytes + self.init_size)) / PAGE_SIZE] = 1;
+        self.runtime_page_tracker[(self.sram_size - (extra_bytes + self.init_size)) / PAGE_SIZE] =
+            XousPid::from(1);
 
         dprintln!("Allocated a physical page: {:08x}", pg as usize);
 
@@ -126,7 +127,7 @@ impl BootConfig {
         // First, check to see if the region is in RAM,
         if addr >= self.sram_start as usize && addr < self.sram_start as usize + self.sram_size {
             // Mark this page as in-use by the PID
-            self.runtime_page_tracker[(addr - self.sram_start as usize) / PAGE_SIZE] = pid;
+            self.runtime_page_tracker[(addr - self.sram_start as usize) / PAGE_SIZE] = XousPid::from(pid);
             return;
         }
         // The region isn't in RAM, so check the other memory regions.
@@ -136,7 +137,7 @@ impl BootConfig {
             let rstart = region.start as usize;
             let rlen = region.length as usize;
             if addr >= rstart && addr < rstart + rlen {
-                self.runtime_page_tracker[rpt_offset + (addr - rstart) / PAGE_SIZE] = pid;
+                self.runtime_page_tracker[rpt_offset + (addr - rstart) / PAGE_SIZE] = XousPid::from(pid);
                 return;
             }
             rpt_offset += rlen / PAGE_SIZE;

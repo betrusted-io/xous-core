@@ -23,20 +23,20 @@ mod phase1;
 mod phase2;
 mod platform;
 #[cfg(feature = "swap")]
-mod swap;
+pub mod swap;
 
 use core::{mem, ptr, slice};
 
 use asm::*;
 use bootconfig::BootConfig;
 use consts::*;
-pub use loader::PAGE_SIZE;
+pub use loader::*;
 use minielf::*;
 use phase1::{phase_1, InitialProcess};
 use phase2::{phase_2, ProgramDescription};
 #[cfg(feature = "swap")]
 use platform::SwapHal;
-pub type XousPid = u8;
+
 const WORD_SIZE: usize = mem::size_of::<usize>();
 pub const SIGBLOCK_SIZE: usize = 0x1000;
 const STACK_PAGE_COUNT: usize = 8;
@@ -231,7 +231,9 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         // this heuristic within that range (any stack-stored pointer, for example, will break this).
         for &check in cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 64..].iter() {
             assert!(
-                check <= cfg.processes.len() as u8,
+                // use .to_le() to access the structure because SwapAlloc can either be a u8 or a composite
+                // type, and .to_le() can do the right thing for both cases.
+                check.to_le() <= cfg.processes.len() as u8,
                 "RPT looks corrupted, suspect stack overflow in loader. Increase GUARD_MEMORY_BYTES!"
             );
         }

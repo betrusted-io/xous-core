@@ -169,8 +169,8 @@ impl SwapHal {
     /// Used to examine contents of swap RAM. Swap count is fixed at 0 by this routine. Decrypted data is
     /// returned as a slice.
     pub fn decrypt_swap_from(&mut self, src_offset: usize, dst_vaddr: usize, dst_pid: u8) -> &[u8] {
-        // println!("Decrypt swap:");
-        // println!("  offset: {:x}, vaddr: {:x}, pid: {}", src_offset, dst_vaddr, dst_pid);
+        println!("Decrypt swap:");
+        println!("  offset: {:x}, vaddr: {:x}, pid: {}", src_offset, dst_vaddr, dst_pid);
         assert!(src_offset & (PAGE_SIZE - 1) == 0);
         let mut nonce = [0u8; size_of::<Nonce>()];
         nonce[0..4].copy_from_slice(&[0u8; 4]); // this is the `swap_count` field

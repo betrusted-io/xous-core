@@ -1,7 +1,9 @@
+use core::fmt;
 use core::mem::size_of;
 
 use aes_gcm_siv::Tag;
 
+use crate::XousPid;
 use crate::PAGE_SIZE;
 
 /// Virtual address fields:
@@ -48,7 +50,7 @@ pub const SWAP_PT_VADDR: usize = 0xE000_0000;
 // E000_0000 - E100_0000 => 16 MiB of vaddr space for page tables; should be more than enough
 pub const SWAP_CFG_VADDR: usize = 0xE100_0000;
 pub const SWAP_RPT_VADDR: usize = 0xE100_1000;
-pub const SWAP_OFFSET_VADDR: usize = 0xE110_0000;
+pub const SWAP_COUNT_VADDR: usize = 0xE110_0000;
 pub const SWAP_APP_UART_VADDR: usize = 0xE180_0000;
 #[cfg(feature = "cramium-soc")]
 pub const SWAP_APP_UART_IFRAM_VADDR: usize = 0xE180_1000;
@@ -104,3 +106,32 @@ pub fn derive_usable_swap(swap_len: usize) -> usize {
 }
 
 pub fn derive_mac_size(swap_len: usize) -> usize { (swap_len / 4096) * size_of::<Tag>() }
+
+/// This needs to be synchronized with what's in kernel/src/mem.rs
+pub const SWAP_FLG_WIRED: u32 = 0x1_00;
+
+#[derive(Copy, Clone)]
+
+pub struct SwapAlloc {
+    timestamp: u32,
+    /// virtual_page_number[19:0] | flags[3:0] | pid[7:0]
+    vpn: u32,
+}
+
+impl SwapAlloc {
+    pub fn from(pid: u8) -> SwapAlloc { SwapAlloc { timestamp: 0, vpn: pid as u32 | SWAP_FLG_WIRED } }
+
+    /// This is a slight abuse of the naming system to provide us cross-compatibility with the case where the
+    /// structure is defined as an overload of the `u8` type
+    pub fn to_le(&self) -> u8 { self.vpn as u8 }
+}
+
+impl fmt::Debug for SwapAlloc {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SwapAlloc")
+            .field("pid", &(self.vpn as u8))
+            .field("vaddr", &(self.vpn & !0xFFF))
+            .field("flags", &(if self.vpn & SWAP_FLG_WIRED != 0 { "WIRED" } else { "NONE" }))
+            .finish()
+    }
+}

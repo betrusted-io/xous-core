@@ -45,7 +45,7 @@ pub struct BootConfig {
 
     /// This structure keeps track of which pages are owned
     /// and which are free. A PID of `0` indicates it's free.
-    pub runtime_page_tracker: &'static mut [XousPid],
+    pub runtime_page_tracker: &'static mut [XousAlloc],
 
     /// A list of processes that were set up.  The first element
     /// is the kernel, and any subsequent elements are init processes.
@@ -147,7 +147,8 @@ impl BootConfig {
         }
         // Mark this page as in-use by the kernel
         let extra_bytes = self.extra_pages * PAGE_SIZE;
-        self.runtime_page_tracker[(self.sram_size - (extra_bytes + self.init_size)) / PAGE_SIZE] = 1;
+        self.runtime_page_tracker[(self.sram_size - (extra_bytes + self.init_size)) / PAGE_SIZE] =
+            XousAlloc::from(1);
 
         // Return the address
         pg as *mut usize
@@ -157,7 +158,7 @@ impl BootConfig {
         // First, check to see if the region is in RAM,
         if addr >= self.sram_start as usize && addr < self.sram_start as usize + self.sram_size {
             // Mark this page as in-use by the kernel
-            self.runtime_page_tracker[(addr - self.sram_start as usize) / PAGE_SIZE] = pid;
+            self.runtime_page_tracker[(addr - self.sram_start as usize) / PAGE_SIZE] = XousAlloc::from(pid);
             return;
         }
         // The region isn't in RAM, so check the other memory regions.
@@ -167,7 +168,7 @@ impl BootConfig {
             let rstart = region.start as usize;
             let rlen = region.length as usize;
             if addr >= rstart && addr < rstart + rlen {
-                self.runtime_page_tracker[rpt_offset + (addr - rstart) / PAGE_SIZE] = pid;
+                self.runtime_page_tracker[rpt_offset + (addr - rstart) / PAGE_SIZE] = XousAlloc::from(pid);
                 return;
             }
             rpt_offset += rlen / PAGE_SIZE;
@@ -242,7 +243,7 @@ impl BootConfig {
                 virt
             );
         }
-        let previous_flags = l0_pt[vpn0] & 0xf;
+        let previous_flags = l0_pt[vpn0] & 0x3f;
         l0_pt[vpn0] = (ppn1 << 20) | (ppn0 << 10) | previous_flags | FLG_VALID;
     }
 
@@ -301,7 +302,7 @@ impl BootConfig {
                 virt
             );
         }
-        let previous_flags = l0_pt[vpn0] & 0xf;
+        let previous_flags = l0_pt[vpn0] & 0x3f;
         l0_pt[vpn0] = (ppn1 << 20) | (ppn0 << 10) | flags | previous_flags | FLG_D | FLG_A;
 
         // If we had to allocate a level 1 pagetable entry, ensure that it's

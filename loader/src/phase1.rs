@@ -101,7 +101,7 @@ pub fn phase_1(cfg: &mut BootConfig) {
     // Lower numbered indices corresponding to higher address pages.
     println!("Marking pages as in-use");
     for i in 4..(cfg.init_size / PAGE_SIZE) {
-        cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - i] = 1;
+        cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - i] = XousAlloc::from(1);
     }
 }
 
@@ -123,27 +123,46 @@ pub fn allocate_regions(cfg: &mut BootConfig) {
         rpt_pages += region_length_rounded / PAGE_SIZE;
     }
 
-    // Round the tracker to a multiple of the pointer size, so as to keep memory
-    // operations fast.
-    rpt_pages = (rpt_pages + mem::size_of::<usize>() - 1) & !(mem::size_of::<usize>() - 1);
+    #[cfg(not(feature = "swap"))]
+    {
+        // Round the tracker to a multiple of the pointer size, so as to keep memory
+        // operations fast.
+        rpt_pages = (rpt_pages + mem::size_of::<usize>() - 1) & !(mem::size_of::<usize>() - 1);
+    }
+    #[cfg(feature = "swap")]
+    {
+        // Round the tracker to a multiple of the page size, so that it can be mapped into userspace
+        rpt_pages = (rpt_pages + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+    }
+    println!(
+        "init_size bef: {:x}, ext pages: {:x}, rpt alloc: {:x}",
+        cfg.init_size,
+        cfg.extra_pages,
+        rpt_pages * mem::size_of::<XousAlloc>()
+    );
 
-    cfg.init_size += rpt_pages * mem::size_of::<XousPid>();
+    cfg.init_size += rpt_pages * mem::size_of::<XousAlloc>();
 
     // Clear all memory pages such that they're not owned by anyone
     let runtime_page_tracker = cfg.get_top();
+    println!("rpt value: {:x}", runtime_page_tracker as usize);
+    #[cfg(feature = "swap")]
+    {
+        assert!(runtime_page_tracker as usize & 0xFFF == 0); // this needs to be page-aligned for swap to work
+    }
     assert!((runtime_page_tracker as usize) < (cfg.sram_start as usize) + cfg.sram_size);
     unsafe {
         bzero(runtime_page_tracker, runtime_page_tracker.add(rpt_pages / mem::size_of::<usize>()));
     }
 
     cfg.runtime_page_tracker =
-        unsafe { slice::from_raw_parts_mut(runtime_page_tracker as *mut XousPid, rpt_pages) };
+        unsafe { slice::from_raw_parts_mut(runtime_page_tracker as *mut XousAlloc, rpt_pages) };
     #[cfg(feature = "swap")]
     if SDBG {
         println!(
             " -> RPT range: {:x} - {:x}",
             runtime_page_tracker as usize,
-            runtime_page_tracker as usize + rpt_pages * core::mem::size_of::<XousPid>()
+            runtime_page_tracker as usize + rpt_pages * core::mem::size_of::<XousAlloc>()
         );
     }
 }

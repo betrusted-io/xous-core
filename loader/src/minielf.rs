@@ -13,17 +13,6 @@ use armv7::{
 
 use crate::*;
 
-pub const FLG_VALID: usize = 0x1;
-pub const FLG_X: usize = 0x8;
-pub const FLG_W: usize = 0x4;
-pub const FLG_R: usize = 0x2;
-pub const FLG_U: usize = 0x10;
-#[cfg(not(feature = "atsama5d27"))]
-pub const FLG_A: usize = 0x40;
-#[cfg(not(feature = "atsama5d27"))]
-pub const FLG_D: usize = 0x80;
-pub const FLG_P: usize = 0x200;
-
 pub const MINIELF_FLG_W: u8 = 1;
 #[allow(dead_code)]
 pub const MINIELF_FLG_NC: u8 = 2;

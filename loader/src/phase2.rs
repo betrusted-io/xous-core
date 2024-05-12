@@ -261,66 +261,32 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             swap_spec.sram_size = cfg.sram_size as u32;
         }
 
-        // allocate swap offset tracker
+        // allocate swap count tracker
         {
-            // note that this computation is mirrored in xous-swapper
             let swap_size_usable = crate::swap::derive_usable_swap(swap_spec.swap_len as usize);
-            let mut offset_start = 0;
+            let mut swap_count_start = 0;
             for offset in (0..(swap_size_usable / PAGE_SIZE) * core::mem::size_of::<u32>()).step_by(4096) {
-                let offset_page = cfg.alloc() as usize; // this also zeroes the page
+                let count_page = cfg.alloc() as usize; // this also zeroes the page
                 // we want the start page to keep refreshing, because allocations grow *down*, so the
-                // last iteration actually contains the base pointer of the offset tracker
-                offset_start = offset_page;
+                // last iteration actually contains the base pointer of the count tracker
+                swap_count_start = count_page;
                 cfg.map_page(
                     root,
-                    offset_page,
-                    SWAP_OFFSET_VADDR + offset,
+                    count_page,
+                    SWAP_COUNT_VADDR + offset,
                     FLG_R | FLG_W | FLG_U | FLG_VALID,
                     SWAPPER_PID,
                 );
             }
-            // initialize which pages are used inside the offset tracker by marking the MSB
-            // this is safe because the offset range is contiguous (just freshly allocated), initialized
+            // initialize which pages are used inside the count tracker by marking the MSB
+            // this is safe because the count range is contiguous (just freshly allocated), initialized
             // to 0's, and all values are representable inside u32
-            let offsets: &mut [u32] = unsafe {
-                core::slice::from_raw_parts_mut(offset_start as *mut u32, swap_size_usable / PAGE_SIZE)
+            let counts: &mut [u32] = unsafe {
+                core::slice::from_raw_parts_mut(swap_count_start as *mut u32, swap_size_usable / PAGE_SIZE)
             };
             for i in 0..cfg.last_swap_page {
-                offsets[i] = loader::FLG_SWAP_USED;
+                counts[i] = loader::FLG_SWAP_USED;
             }
-        }
-
-        // copy the RPT into PID 2
-        {
-            // safety: This is safe because we know that:
-            //   - RPT is fully initialized at this point
-            //   - rpt_alias is scoped in a block so it can't be abused later by accident
-            //   - We are only going to read data from the alias pointer
-            //   - There is no borrow conflict in the upcoming for loop
-            // This is done to avoid adding a RefCell around the runtime page tracker to work around
-            // interior mutability issues in a very performance-sensitive region, and in a manner that
-            // only ever affects the `swap` configuration (i.e., if we did this as a RefCell we'd have
-            // to pay the performance penalty for all configurations, and/or we'd have to add `cfg`
-            // directives in lots of places). Mea culpa, this is not how you're supposed to write Rust.
-            let mut rpt_start = 0;
-            for i in (0..swap_spec.rpt_len_bytes as usize).step_by(4096) {
-                let swap_rpt = cfg.alloc() as usize;
-                // track rpt_start as the allocator allocates *down*
-                rpt_start = swap_rpt;
-                cfg.map_page(
-                    root,
-                    swap_rpt,
-                    SWAP_RPT_VADDR + i,
-                    FLG_R | FLG_W | FLG_U | FLG_VALID,
-                    SWAPPER_PID,
-                );
-            }
-            // safety: this is safe because the allocator aligns it and initializes it, and all underlying
-            // data has defined behavior as initialized, and all the pages are contiguous
-            let rpt_copy: &mut [u8] = unsafe {
-                core::slice::from_raw_parts_mut(rpt_start as *mut u8, swap_spec.rpt_len_bytes as usize)
-            };
-            rpt_copy.copy_from_slice(&cfg.runtime_page_tracker[..swap_spec.rpt_len_bytes as usize]);
         }
 
         // map any hardware-specific pages into the userspace swapper
@@ -347,9 +313,9 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
     }
     println!("Runtime Page Tracker: {} bytes", cfg.runtime_page_tracker.len());
     // mark pages used by suspend/resume according to their needs
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = 1; // claim the loader stack -- do not allow tampering, as it contains backup kernel args
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = 1; // 8k in total (to allow for digital signatures to be computed)
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 3] = 0; // allow clean suspend page to be mapped in Xous
+    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = XousAlloc::from(1); // claim the loader stack -- do not allow tampering, as it contains backup kernel args
+    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = XousAlloc::from(1); // 8k in total (to allow for digital signatures to be computed)
+    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 3] = XousAlloc::from(0); // allow clean suspend page to be mapped in Xous
 }
 
 /// This describes the kernel as well as initially-loaded processes
