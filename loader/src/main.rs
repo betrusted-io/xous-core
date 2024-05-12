@@ -212,6 +212,8 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         resume_csr.wfo(utra::susres::INTERRUPT_INTERRUPT, 1);
     }
 
+    // condense debug and resume arguments into a single register, so we have space for XPT
+    let debug_resume = if cfg.debug { 0x1 } else { 0x0 } | if clean { 0x2 } else { 0x0 };
     if !clean {
         // The MMU should be set up now, and memory pages assigned to their
         // respective processes.
@@ -241,13 +243,20 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         let ip_offset = cfg.processes.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let rpt_offset =
             cfg.runtime_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
+        let xpt_offset = cfg.extra_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         #[cfg(not(feature = "atsama5d27"))]
         let _tt_addr = { cfg.processes[0].satp };
         #[cfg(feature = "atsama5d27")]
         let _tt_addr = { cfg.processes[0].ttbr0 };
         println!(
-            "Jumping to kernel @ {:08x} with map @ {:08x} and stack @ {:08x} (kargs: {:08x}, ip: {:08x}, rpt: {:08x})",
-            cfg.processes[0].entrypoint, _tt_addr, cfg.processes[0].sp, arg_offset, ip_offset, rpt_offset,
+            "Jumping to kernel @ {:08x} with map @ {:08x} and stack @ {:08x} (kargs: {:08x}, ip: {:08x}, rpt: {:08x}, xpt: {:08x})",
+            cfg.processes[0].entrypoint,
+            _tt_addr,
+            cfg.processes[0].sp,
+            arg_offset,
+            ip_offset,
+            rpt_offset,
+            xpt_offset,
         );
 
         // save a copy of the computed kernel registers at the bottom of the page reserved
@@ -260,7 +269,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         // critical parameters like these kernel arguments.
         #[cfg(not(feature = "atsama5d27"))]
         unsafe {
-            let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut [u32; 7];
+            let backup_args: *mut [u32; 8] = BACKUP_ARGS_ADDR as *mut [u32; 8];
             (*backup_args)[0] = arg_offset as u32;
             (*backup_args)[1] = ip_offset as u32;
             (*backup_args)[2] = rpt_offset as u32;
@@ -268,12 +277,13 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
             (*backup_args)[4] = cfg.processes[0].entrypoint as u32;
             (*backup_args)[5] = cfg.processes[0].sp as u32;
             (*backup_args)[6] = if cfg.debug { 1 } else { 0 };
+            (*backup_args)[7] = xpt_offset as u32;
             #[cfg(feature = "debug-print")]
             {
                 if VDBG {
                     println!("Backup kernel args:");
-                    for i in 0..7 {
-                        println!("0x{:08x}", (*backup_args)[i]);
+                    for &arg in (*backup_args).iter() {
+                        println!("0x{:08x}", arg);
                     }
                 }
             }
@@ -293,11 +303,11 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
                 arg_offset,
                 ip_offset,
                 rpt_offset,
+                xpt_offset,
                 cfg.processes[0].satp,
                 cfg.processes[0].entrypoint,
                 cfg.processes[0].sp,
-                cfg.debug,
-                clean,
+                debug_resume,
             );
         }
 
@@ -310,19 +320,19 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
                 arg_offset,
                 ip_offset,
                 rpt_offset,
-                cfg.debug,
-                clean,
+                xpt_offset,
+                debug_resume,
             )
         }
     } else {
         #[cfg(feature = "resume")]
         unsafe {
-            let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut [u32; 7];
+            let backup_args: *mut [u32; 8] = BACKUP_ARGS_ADDR as *mut [u32; 8];
             #[cfg(feature = "debug-print")]
             {
                 println!("Using backed up kernel args:");
-                for i in 0..7 {
-                    println!("0x{:08x}", (*backup_args)[i]);
+                for &arg in (*backup_args).iter() {
+                    println!("0x{:08x}", arg);
                 }
             }
             let satp = ((*backup_args)[3] as usize) & 0x803F_FFFF | (((susres_pid as usize) & 0x1FF) << 22);
@@ -344,11 +354,11 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
                 (*backup_args)[0] as usize,
                 (*backup_args)[1] as usize,
                 (*backup_args)[2] as usize,
+                (*backup_args)[7] as usize,
                 satp as usize,
                 (*backup_args)[4] as usize,
                 (*backup_args)[5] as usize,
-                if (*backup_args)[6] == 0 { false } else { true },
-                clean,
+                debug_resume,
             );
         }
         #[cfg(not(feature = "resume"))]

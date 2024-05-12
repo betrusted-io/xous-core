@@ -44,8 +44,15 @@ pub struct BootConfig {
     pub extra_pages: usize,
 
     /// This structure keeps track of which pages are owned
-    /// and which are free. A PID of `0` indicates it's free.
+    /// and which are free in main RAM. A PID of `0` indicates it's free.
+    /// Because this area is swappable, a type alias of XousAlloc allows
+    /// us to expand the tracking for the RAM area.
     pub runtime_page_tracker: &'static mut [XousAlloc],
+
+    /// This structure keeps track of which pages are owned
+    /// and which are free in non-RAM areas. A PID of `0` indicates it's free.
+    /// These areas are non-swappable, so the tracking is a simple XousPid
+    pub extra_page_tracker: &'static mut [XousPid],
 
     /// A list of processes that were set up.  The first element
     /// is the kernel, and any subsequent elements are init processes.
@@ -96,6 +103,7 @@ impl Default for BootConfig {
             init_size: 0,
             extra_pages: 0,
             runtime_page_tracker: Default::default(),
+            extra_page_tracker: Default::default(),
             init_process_count: 0,
             processes: Default::default(),
             swap_offset: 0,
@@ -162,16 +170,16 @@ impl BootConfig {
             return;
         }
         // The region isn't in RAM, so check the other memory regions.
-        let mut rpt_offset = self.sram_size / PAGE_SIZE;
+        let mut xpt_offset = 0;
 
         for region in self.regions.iter() {
             let rstart = region.start as usize;
             let rlen = region.length as usize;
             if addr >= rstart && addr < rstart + rlen {
-                self.runtime_page_tracker[rpt_offset + (addr - rstart) / PAGE_SIZE] = XousAlloc::from(pid);
+                self.extra_page_tracker[xpt_offset + (addr - rstart) / PAGE_SIZE] = XousPid::from(pid);
                 return;
             }
-            rpt_offset += rlen / PAGE_SIZE;
+            xpt_offset += rlen / PAGE_SIZE;
         }
         panic!("Tried to change region {:08x} that isn't in defined memory!", addr);
     }

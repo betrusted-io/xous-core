@@ -100,7 +100,7 @@ pub fn phase_1(cfg: &mut BootConfig) {
     // needs to be claimed by the susres server before the kernel allocates it.
     // Lower numbered indices corresponding to higher address pages.
     println!("Marking pages as in-use");
-    for i in 4..(cfg.init_size / PAGE_SIZE) {
+    for i in ((GUARD_MEMORY_BYTES / PAGE_SIZE) + 1)..(cfg.init_size / PAGE_SIZE) {
         cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - i] = XousAlloc::from(1);
     }
 }
@@ -111,18 +111,7 @@ pub fn allocate_regions(cfg: &mut BootConfig) {
     // Number of individual pages in the system
     let mut rpt_pages = cfg.sram_size / PAGE_SIZE;
 
-    for region in cfg.regions.iter() {
-        println!(
-            "Discovered memory region {:08x} ({:08x} - {:08x}) -- {} bytes",
-            region.name,
-            region.start,
-            region.start + region.length,
-            region.length
-        );
-        let region_length_rounded = (region.length as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-        rpt_pages += region_length_rounded / PAGE_SIZE;
-    }
-
+    // allocate the RPT
     #[cfg(not(feature = "swap"))]
     {
         // Round the tracker to a multiple of the pointer size, so as to keep memory
@@ -135,7 +124,7 @@ pub fn allocate_regions(cfg: &mut BootConfig) {
         rpt_pages = (rpt_pages + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
     }
     println!(
-        "init_size bef: {:x}, ext pages: {:x}, rpt alloc: {:x}",
+        "RPT ALLOC init_size before: {:x}, ext pages: {:x}, rpt alloc: {:x}",
         cfg.init_size,
         cfg.extra_pages,
         rpt_pages * mem::size_of::<XousAlloc>()
@@ -163,6 +152,50 @@ pub fn allocate_regions(cfg: &mut BootConfig) {
             " -> RPT range: {:x} - {:x}",
             runtime_page_tracker as usize,
             runtime_page_tracker as usize + rpt_pages * core::mem::size_of::<XousAlloc>()
+        );
+    }
+
+    // allocate the XPT
+    let mut xpt_pages = 0;
+    for region in cfg.regions.iter() {
+        println!(
+            "Discovered memory region {:08x} ({:08x} - {:08x}) -- {} bytes",
+            region.name,
+            region.start,
+            region.start + region.length,
+            region.length
+        );
+        let region_length_rounded = (region.length as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        xpt_pages += region_length_rounded / PAGE_SIZE;
+    }
+    // Round the tracker to a multiple of the pointer size, so as to keep memory
+    // operations fast.
+    xpt_pages = (xpt_pages + mem::size_of::<usize>() - 1) & !(mem::size_of::<usize>() - 1);
+    println!(
+        "XPT ALLOC init_size bef: {:x}, ext pages: {:x}, rpt alloc: {:x}",
+        cfg.init_size,
+        cfg.extra_pages,
+        xpt_pages * mem::size_of::<XousPid>()
+    );
+
+    cfg.init_size += xpt_pages * mem::size_of::<XousPid>();
+
+    // Clear all memory pages such that they're not owned by anyone
+    let extra_page_tracker = cfg.get_top();
+    println!("rpt value: {:x}", extra_page_tracker as usize);
+    assert!((extra_page_tracker as usize) < (cfg.sram_start as usize) + cfg.sram_size);
+    unsafe {
+        bzero(extra_page_tracker, extra_page_tracker.add(xpt_pages / mem::size_of::<usize>()));
+    }
+
+    cfg.extra_page_tracker =
+        unsafe { slice::from_raw_parts_mut(extra_page_tracker as *mut XousPid, xpt_pages) };
+    #[cfg(feature = "swap")]
+    if SDBG {
+        println!(
+            " -> XPT range: {:x} - {:x}",
+            extra_page_tracker as usize,
+            extra_page_tracker as usize + xpt_pages * core::mem::size_of::<XousPid>()
         );
     }
 }
