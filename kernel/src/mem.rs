@@ -55,13 +55,59 @@ impl Default for MemoryManager {
     fn default() -> Self { Self::default_hack() }
 }
 
+#[cfg(feature = "swap")]
+use loader::swap::SWAP_FLG_WIRED;
+
+#[cfg(feature = "swap")]
+pub struct SwapAlloc {
+    timestamp: u32,
+    /// virtual_page_number[19:0] | flags[3:0] | pid[7:0]
+    vpn: u32,
+}
+#[cfg(feature = "swap")]
+impl SwapAlloc {
+    pub fn is_pid(&self, pid: PID) -> bool { self.vpn as u8 == pid.get() }
+
+    pub fn is_some(&self) -> bool { self.vpn as u8 != 0 }
+
+    pub fn is_none(&self) -> bool { self.vpn as u8 == 0 }
+
+    pub fn get_pid(&self) -> Option<PID> {
+        if self.vpn as u8 == 0 { None } else { Some(PID::new(self.vpn as u8).unwrap()) }
+    }
+
+    pub unsafe fn update(&mut self, pid: Option<PID>, vaddr: Option<usize>) {
+        self.timestamp = crate::swap::Swap::with_mut(|s| s.next_epoch());
+        if let Some(pid) = pid {
+            if let Some(va) = vaddr {
+                self.vpn = (va as u32) & !0xFFF | pid.get() as u32;
+            } else {
+                self.vpn = SWAP_FLG_WIRED | pid.get() as u32;
+            }
+        } else {
+            self.vpn = 0;
+        }
+    }
+
+    pub unsafe fn reparent(&mut self, pid: PID) {
+        self.timestamp = crate::swap::Swap::with_mut(|s| s.next_epoch());
+        self.vpn = self.vpn & !&0xFFu32 | pid.get() as u32;
+    }
+}
+
 #[cfg(not(baremetal))]
 std::thread_local!(static MEMORY_MANAGER: core::cell::RefCell<MemoryManager> = core::cell::RefCell::new(MemoryManager::default()));
 
 #[cfg(baremetal)]
 static mut MEMORY_MANAGER: MemoryManager = MemoryManager::default_hack();
 #[cfg(baremetal)]
+#[cfg(feature = "swap")]
+static mut MEMORY_ALLOCATIONS: &mut [SwapAlloc] = &mut [];
+#[cfg(baremetal)]
+#[cfg(not(feature = "swap"))]
 static mut MEMORY_ALLOCATIONS: &mut [Option<PID>] = &mut [];
+#[cfg(feature = "swap")]
+static mut SWAP_TIMESTAMP: u64 = 0;
 #[cfg(baremetal)]
 static mut EXTRA_REGIONS: &[MemoryRangeExtra] = &[];
 
@@ -157,8 +203,14 @@ impl MemoryManager {
                 mem_size += range.mem_size as usize / PAGE_SIZE;
             }
         }
-
-        unsafe { MEMORY_ALLOCATIONS = slice::from_raw_parts_mut(base as *mut Option<PID>, mem_size) };
+        #[cfg(feature = "swap")]
+        unsafe {
+            MEMORY_ALLOCATIONS = slice::from_raw_parts_mut(base as *mut SwapAlloc, mem_size)
+        };
+        #[cfg(not(feature = "swap"))]
+        unsafe {
+            MEMORY_ALLOCATIONS = slice::from_raw_parts_mut(base as *mut Option<PID>, mem_size)
+        };
         Ok(())
     }
 
@@ -168,9 +220,19 @@ impl MemoryManager {
     pub fn ram_used_by(&self, pid: PID) -> usize {
         let mut owned_bytes = 0;
         #[cfg(baremetal)]
+        #[cfg(not(feature = "swap"))]
         unsafe {
             for owner in &MEMORY_ALLOCATIONS[0..self.ram_size / PAGE_SIZE] {
                 if owner == &Some(pid) {
+                    owned_bytes += PAGE_SIZE;
+                }
+            }
+        }
+        #[cfg(baremetal)]
+        #[cfg(feature = "swap")]
+        unsafe {
+            for owner in &MEMORY_ALLOCATIONS[0..self.ram_size / PAGE_SIZE] {
+                if owner.is_pid(pid) {
                     owned_bytes += PAGE_SIZE;
                 }
             }
@@ -199,7 +261,7 @@ impl MemoryManager {
         };
         for o in 0..self.ram_size / PAGE_SIZE {
             unsafe {
-                if let Some(_allocation) = MEMORY_ALLOCATIONS[offset + o] {
+                if MEMORY_ALLOCATIONS[offset + o].is_some() {
                     println!("        {:08x} => {}", self.ram_size + o * PAGE_SIZE, _allocation.get());
                 }
             }
@@ -213,7 +275,7 @@ impl MemoryManager {
             for region in EXTRA_REGIONS {
                 println!("    Region {}:", region);
                 for o in 0..(region.mem_size as usize) / PAGE_SIZE {
-                    if let Some(_allocation) = MEMORY_ALLOCATIONS[offset + o] {
+                    if MEMORY_ALLOCATIONS[offset + o].is_some() {
                         println!(
                             "        {:08x} => {}",
                             (region.mem_start as usize) + o * PAGE_SIZE,
@@ -229,6 +291,7 @@ impl MemoryManager {
     /// Allocate a single page to the given process. DOES NOT ZERO THE PAGE!!!
     /// This function CANNOT zero the page, as it hasn't been mapped yet.
     #[cfg(baremetal)]
+    #[cfg(not(feature = "swap"))]
     pub fn alloc_page(&mut self, pid: PID) -> Result<usize, xous_kernel::Error> {
         // Go through all RAM pages looking for a free page.
         // println!("Allocating page for PID {}", pid);
@@ -242,6 +305,30 @@ impl MemoryManager {
             {
                 if allocation.is_none() {
                     *allocation = Some(pid);
+                    self.last_ram_page = index + 1;
+                    let page = index * PAGE_SIZE + self.ram_start;
+                    return Ok(page);
+                }
+            }
+        }
+        Err(xous_kernel::Error::OutOfMemory)
+    }
+
+    #[cfg(baremetal)]
+    #[cfg(feature = "swap")]
+    pub fn alloc_page(&mut self, pid: PID, vaddr: Option<usize>) -> Result<usize, xous_kernel::Error> {
+        // Go through all RAM pages looking for a free page.
+        // println!("Allocating page for PID {}", pid);
+        unsafe {
+            let end_point = self.ram_size / PAGE_SIZE;
+            let starting_point = self.last_ram_page.max(end_point);
+            for (allocation, index) in MEMORY_ALLOCATIONS[starting_point..end_point]
+                .iter_mut()
+                .zip(starting_point..)
+                .chain(MEMORY_ALLOCATIONS[..starting_point].iter_mut().zip(0..))
+            {
+                if allocation.is_none() {
+                    allocation.update(Some(pid), vaddr);
                     self.last_ram_page = index + 1;
                     let page = index * PAGE_SIZE + self.ram_start;
                     return Ok(page);
@@ -365,7 +452,10 @@ impl MemoryManager {
                 as usize;
 
         // Grab the next available page.  This claims it for this process.
+        #[cfg(not(feature = "swap"))]
         let phys = self.alloc_page(pid)?;
+        #[cfg(feature = "swap")]
+        let phys = self.alloc_page(pid, Some(virt))?;
 
         // Actually perform the map.  At this stage, every physical page should be owned by us.
         if let Err(e) = crate::arch::mem::map_page_inner(
@@ -573,6 +663,7 @@ impl MemoryManager {
     ) -> Result<(), xous_kernel::Error> {
         /// Modify the memory tracking table to note which process owns
         /// the specified address.
+        #[cfg(not(feature = "swap"))]
         fn action_inner(
             owner_addr: &mut Option<PID>,
             pid: PID,
@@ -607,6 +698,42 @@ impl MemoryManager {
             }
             Ok(())
         }
+        #[cfg(feature = "swap")]
+        fn action_inner(
+            owner_addr: &mut SwapAlloc,
+            pid: PID,
+            action: ClaimReleaseMove,
+            addr: usize,
+        ) -> Result<(), xous_kernel::Error> {
+            if let Some(current_pid) = owner_addr.get_pid() {
+                if current_pid != pid {
+                    // klog!(
+                    //     "In claim_or_release({}, {}, {:?}) -- addr is owned by {} not {}",
+                    //     owner_addr.map(|v| v.get()).unwrap_or_default(),
+                    //     pid,
+                    //     action,
+                    //     current_pid,
+                    //     pid
+                    // );
+                    if let ClaimReleaseMove::Move(existing_pid) = action {
+                        if existing_pid != current_pid {
+                            return Err(xous_kernel::Error::MemoryInUse);
+                        }
+                    } else {
+                        return Err(xous_kernel::Error::MemoryInUse);
+                    }
+                }
+            }
+            match action {
+                ClaimReleaseMove::Claim | ClaimReleaseMove::Move(_) => {
+                    unsafe { owner_addr.update(Some(pid), Some(addr)) };
+                }
+                ClaimReleaseMove::Release => {
+                    unsafe { owner_addr.update(None, None) };
+                }
+            }
+            Ok(())
+        }
         let addr = addr as usize;
 
         // Ensure the address lies on a page boundary
@@ -618,7 +745,10 @@ impl MemoryManager {
         // Happy path: The address is in main RAM
         if addr >= self.ram_start && addr < self.ram_start + self.ram_size {
             offset += (addr - self.ram_start) / PAGE_SIZE;
+            #[cfg(not(feature = "swap"))]
             return unsafe { action_inner(&mut MEMORY_ALLOCATIONS[offset], pid, action) };
+            #[cfg(feature = "swap")]
+            return unsafe { action_inner(&mut MEMORY_ALLOCATIONS[offset], pid, action, addr) };
         }
 
         offset += self.ram_size / PAGE_SIZE;
@@ -647,7 +777,10 @@ impl MemoryManager {
                     // -------------------------------
 
                     offset += (addr - (region.mem_start as usize)) / PAGE_SIZE;
+                    #[cfg(not(feature = "swap"))]
                     return action_inner(&mut MEMORY_ALLOCATIONS[offset], pid, action);
+                    #[cfg(feature = "swap")]
+                    return action_inner(&mut MEMORY_ALLOCATIONS[offset], pid, action, addr);
                 }
                 offset += region.mem_size as usize / PAGE_SIZE;
             }
@@ -714,6 +847,7 @@ impl MemoryManager {
         for (idx, owner) in MEMORY_ALLOCATIONS.iter_mut().enumerate() {
             // If this address has been allocated to this process, consider
             // freeing it or reparenting it.
+            #[cfg(not(feature = "swap"))]
             if owner == &mut Some(_pid) {
                 let phys_addr = self.allocation_offset_to_address(idx).unwrap();
                 if crate::arch::mem::page_is_lent(phys_addr as *mut u8) {
@@ -723,6 +857,18 @@ impl MemoryManager {
                 } else {
                     // Mark this page as free, which allows it to be re-allocated.
                     *owner = None;
+                }
+            }
+            #[cfg(feature = "swap")]
+            if owner.is_pid(_pid) {
+                let phys_addr = self.allocation_offset_to_address(idx).unwrap();
+                if crate::arch::mem::page_is_lent(phys_addr as *mut u8) {
+                    // If the page is lent, reparent it to PID 1 so it will
+                    // get freed when it is returned.
+                    owner.reparent(PID::new(1).unwrap());
+                } else {
+                    // Mark this page as free, which allows it to be re-allocated.
+                    owner.update(None, None);
                 }
             }
         }
@@ -776,7 +922,7 @@ impl MemoryManager {
         SystemServices::with(|system_services| {
             let current_pid = system_services.current_pid();
 
-            // Actiavte the debugging process and iterate through it,
+            // Activate the debugging process and iterate through it,
             // noting down each active thread.
             for phys in (self.ram_start..self.ram_start + self.ram_size).step_by(PAGE_SIZE) {
                 let mut owner = None;
@@ -796,12 +942,16 @@ impl MemoryManager {
                         Ok(None) => continue,
                         Ok(Some(virt)) => {
                             let allocation_offset = (phys - self.ram_start) / PAGE_SIZE;
-                            let existing_owner = unsafe { MEMORY_ALLOCATIONS[allocation_offset] };
-                            if existing_owner != Some(pid) {
+                            let existing_owner = unsafe { &MEMORY_ALLOCATIONS[allocation_offset] };
+                            #[cfg(feature = "swap")]
+                            let eo = &existing_owner.get_pid();
+                            #[cfg(not(feature = "swap"))]
+                            let eo = existing_owner;
+                            if eo != &Some(pid) {
                                 let is_lent = {
-                                    if let Some(existing_owner) = existing_owner {
+                                    if let Some(existing_owner) = eo {
                                         system_services
-                                            .get_process(existing_owner)
+                                            .get_process(*existing_owner)
                                             .unwrap()
                                             .activate()
                                             .unwrap();
@@ -821,9 +971,8 @@ impl MemoryManager {
                                 println!(
                                     "!!! 0x{:08x} is owned by {} ({}) but is mapped to {} ({}) -- {}",
                                     phys,
-                                    existing_owner.map(|v| v.get() as isize).unwrap_or(-1),
-                                    existing_owner
-                                        .map(|v| system_services.process_name(v).unwrap_or("<unknown>"))
+                                    eo.map(|v| v.get() as isize).unwrap_or(-1),
+                                    eo.map(|v| system_services.process_name(v).unwrap_or("<unknown>"))
                                         .unwrap_or("<none>"),
                                     pid.get(),
                                     system_services.process_name(pid).unwrap_or("<unknown>"),

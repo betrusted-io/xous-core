@@ -17,6 +17,7 @@ xous-kernel = { package = "xous", version = "0.9.60", features = [
 utralib = { version = "0.1.24", optional = true, default_features = false }
 rand_chacha = { version = "0.3.1", optional = true, default_features = false }
 cramium-hal = { path = "../libs/cramium-hal", optional = true, default_features = false }
+loader = { path = "../loader", optional = true, features = ["swap"] }
 
 [target.'cfg(any(windows,unix))'.dev-dependencies]
 xous-kernel = { package = "xous", version = "0.9.60", features = [
@@ -51,16 +52,16 @@ gdb-stub = ["gdbstub", "gdbstub_arch"]
 print-panics = []
 report-memory = ["stats_alloc"]
 wrap-print = []
-big-heap = []                          # Cause heaps to start at 12 MM instead of 512 kB
+big-heap = []                              # Cause heaps to start at 12 MM instead of 512 kB
 v2p = ["xous-kernel/v2p"]
-swap = ["xous-kernel/swap"]
+swap = ["xous-kernel/swap", "loader/swap"]
 debug-swap = []
 
 # patches for simulation targets ONLY. Applying these flags will result in totally broken security.
 hwsim = []
 
 # default = ["print-panics", "debug-print", "wrap-print"]
-default = ["print-panics"]
+default = ["print-panics", "debug-swap"]
 
 [target.'cfg(any(windows, unix))'.dependencies]
 crossbeam-channel = "0.5"
