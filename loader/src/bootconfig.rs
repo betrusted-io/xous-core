@@ -184,6 +184,28 @@ impl BootConfig {
         panic!("Tried to change region {:08x} that isn't in defined memory!", addr);
     }
 
+    #[cfg(feature = "swap")]
+    pub fn change_owner_tracking(&mut self, pid: XousPid, addr: usize, vaddr: usize) {
+        // First, check to see if the region is in RAM,
+        if addr >= self.sram_start as usize && addr < self.sram_start as usize + self.sram_size {
+            self.runtime_page_tracker[(addr - self.sram_start as usize) / PAGE_SIZE]
+                .update(pid, vaddr as u32);
+            return;
+        }
+        // The region isn't in RAM, so check the other memory regions.
+        let mut xpt_offset = 0;
+        for region in self.regions.iter() {
+            let rstart = region.start as usize;
+            let rlen = region.length as usize;
+            if addr >= rstart && addr < rstart + rlen {
+                self.extra_page_tracker[xpt_offset + (addr - rstart) / PAGE_SIZE] = XousPid::from(pid);
+                return;
+            }
+            xpt_offset += rlen / PAGE_SIZE;
+        }
+        panic!("Tried to change region {:08x} that isn't in defined memory!", addr);
+    }
+
     /// Map the given page to the specified process table.  If necessary,
     /// allocate a new page.
     ///
@@ -196,7 +218,10 @@ impl BootConfig {
         }
         assert!(!(phys == 0 && flags & FLG_VALID != 0), "cannot map zero page");
         if flags & FLG_VALID != 0 {
+            #[cfg(not(feature = "swap"))]
             self.change_owner(owner, phys);
+            #[cfg(feature = "swap")]
+            self.change_owner_tracking(owner, phys, virt);
         }
         match WORD_SIZE {
             4 => self.map_page_32(root, phys, virt, flags, owner),

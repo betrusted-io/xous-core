@@ -5,6 +5,7 @@ use aes_gcm_siv::Tag;
 
 use crate::XousPid;
 use crate::PAGE_SIZE;
+use crate::SWAPPER_PID;
 
 /// Virtual address fields:
 ///  31            22 21               12 11               0
@@ -113,13 +114,22 @@ pub const SWAP_FLG_WIRED: u32 = 0x1_00;
 #[derive(Copy, Clone)]
 
 pub struct SwapAlloc {
-    timestamp: u32,
+    _timestamp: u32,
     /// virtual_page_number[19:0] | flags[3:0] | pid[7:0]
     vpn: u32,
 }
 
 impl SwapAlloc {
-    pub fn from(pid: u8) -> SwapAlloc { SwapAlloc { timestamp: 0, vpn: pid as u32 | SWAP_FLG_WIRED } }
+    /// Allocations in the loader all start out as "wired", with no virtual address for tracking.
+    pub fn from(pid: u8) -> SwapAlloc { SwapAlloc { _timestamp: 0, vpn: pid as u32 | SWAP_FLG_WIRED } }
+
+    /// As the page tables are laid in, we can update the tracker with the virtual address. If
+    /// the page it belongs to the kernel or swapper, mark it as unswappable (WIRED)
+    pub fn update(&mut self, pid: u8, vaddr: u32) {
+        self.vpn = pid as u32
+            | vaddr & !0xFFFu32
+            | if (pid == 1) || (pid == SWAPPER_PID) { SWAP_FLG_WIRED } else { 0 };
+    }
 
     /// This is a slight abuse of the naming system to provide us cross-compatibility with the case where the
     /// structure is defined as an overload of the `u8` type
