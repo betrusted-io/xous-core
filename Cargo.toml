@@ -137,8 +137,6 @@ opt-level = "s" # z,s: Optimize for size instead of performance; 1 for easier de
 [patch.crates-io]
 sha2 = { git = "https://github.com/betrusted-io/hashes.git", branch = "sha2-v0.10.8-xous" }
 # sha2 = { path = "../hashes/sha2" }
-# This is needed by `p256`, currently the last holdout (a `vault` depenedncy)
-sha2_legacy = { git = "https://github.com/RustCrypto/hashes.git", tag = "sha2-v0.9.9", package = "sha2" }
 
 [patch.crates-io.aes]
 path = "services/aes"
