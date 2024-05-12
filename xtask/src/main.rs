@@ -285,6 +285,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_feature("swap");
             builder.add_kernel_feature("debug-swap");
             // builder.add_kernel_feature("debug-print");
+            builder.add_loader_feature("resume");
             // It is important that this is the first service added, because the swapper *must* be in PID 2
             builder.add_service("xous-swapper", LoaderRegion::Flash);
             builder.add_kernel_feature("swap");
