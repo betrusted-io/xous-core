@@ -30,3 +30,17 @@ pub const UART_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_M
 #[allow(dead_code)]
 #[cfg(feature = "cramium-soc")]
 pub const APP_UART_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 3 * 4096;
+
+/// This is the amount of space that the loader stack will occupy as it runs, assuming no swap and giving one
+/// page for the clean suspend marker
+#[cfg(not(feature = "swap"))]
+pub const GUARD_MEMORY_BYTES: usize = 3 * crate::PAGE_SIZE;
+/// Amount of space for loader stack only, with swap
+#[cfg(all(feature = "swap", not(feature = "resume")))]
+pub const GUARD_MEMORY_BYTES: usize = 7 * crate::PAGE_SIZE;
+/// Amount of space for loader stack plus clean suspend, with swap
+#[cfg(all(feature = "swap", feature = "resume"))]
+pub const GUARD_MEMORY_BYTES: usize = 8 * crate::PAGE_SIZE; // 1 extra page for clean suspend
+
+#[cfg(feature = "swap")]
+pub const SWAPPER_PID: u8 = 2;

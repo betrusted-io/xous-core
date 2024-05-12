@@ -33,8 +33,9 @@ pub struct InitialProcess {
 pub fn phase_1(cfg: &mut BootConfig) {
     // Allocate space for the stack pointer.
     // The bootloader should have placed the stack pointer at the end of RAM
-    // prior to jumping to our program, so allocate one page of data for
-    // stack.
+    // prior to jumping to our program. Reserve space for the stack, so that it does not smash
+    // run time allocations.
+    //
     // All other allocations will be placed below the stack pointer.
     //
     // As of Xous 0.8, the top page is bootloader stack, and the page below that is the 'clean suspend' page.
@@ -110,27 +111,34 @@ pub fn phase_1(cfg: &mut BootConfig) {
 pub fn allocate_regions(cfg: &mut BootConfig) {
     // Number of individual pages in the system
     let mut rpt_pages = cfg.sram_size / PAGE_SIZE;
+    // Round the tracker to a multiple of the pointer size, so as to keep memory
+    // operations fast.
+    rpt_pages = (rpt_pages + mem::size_of::<usize>() - 1) & !(mem::size_of::<usize>() - 1);
 
     // allocate the RPT
     #[cfg(not(feature = "swap"))]
     {
-        // Round the tracker to a multiple of the pointer size, so as to keep memory
-        // operations fast.
-        rpt_pages = (rpt_pages + mem::size_of::<usize>() - 1) & !(mem::size_of::<usize>() - 1);
+        cfg.init_size += rpt_pages * mem::size_of::<XousAlloc>();
     }
     #[cfg(feature = "swap")]
     {
-        // Round the tracker to a multiple of the page size, so that it can be mapped into userspace
-        rpt_pages = (rpt_pages + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-    }
-    println!(
-        "RPT ALLOC init_size before: {:x}, ext pages: {:x}, rpt alloc: {:x}",
-        cfg.init_size,
-        cfg.extra_pages,
-        rpt_pages * mem::size_of::<XousAlloc>()
-    );
+        println!("RPT raw pages: {:x}", rpt_pages);
 
-    cfg.init_size += rpt_pages * mem::size_of::<XousAlloc>();
+        // Round the allocation to a multiple of the page size, so that it can be mapped into userspace
+        let proposed_alloc = rpt_pages * mem::size_of::<XousAlloc>();
+        let page_aligned_alloc = (proposed_alloc + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        assert!(cfg.init_size & 0xFFF == 0, "init_size should be page aligned going into the RPT alloc");
+        cfg.init_size += page_aligned_alloc;
+        assert!(cfg.init_size & 0xFFF == 0, "init_size should be page aligned leaving the RPT alloc");
+        println!(
+            "RPT ALLOC init_size before: {:x}, ext pages: {:x}, minimal alloc: {:x}, page-aligned alloc: {:x}, sizeof entry: {:x}",
+            cfg.init_size,
+            cfg.extra_pages,
+            proposed_alloc,
+            page_aligned_alloc,
+            mem::size_of::<XousAlloc>(),
+        );
+    }
 
     // Clear all memory pages such that they're not owned by anyone
     let runtime_page_tracker = cfg.get_top();
@@ -182,7 +190,7 @@ pub fn allocate_regions(cfg: &mut BootConfig) {
 
     // Clear all memory pages such that they're not owned by anyone
     let extra_page_tracker = cfg.get_top();
-    println!("rpt value: {:x}", extra_page_tracker as usize);
+    println!("xpt value: {:x}", extra_page_tracker as usize);
     assert!((extra_page_tracker as usize) < (cfg.sram_start as usize) + cfg.sram_size);
     unsafe {
         bzero(extra_page_tracker, extra_page_tracker.add(xpt_pages / mem::size_of::<usize>()));

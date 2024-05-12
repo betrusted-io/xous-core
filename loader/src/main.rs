@@ -132,11 +132,6 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
     {
         cfg.swap_hal = SwapHal::new(&cfg);
         read_swap_config(&mut cfg);
-        #[cfg(feature = "resume")]
-        compile_error!(
-            "WARNING WARNING WARNING: swap and resume selected - this is not a valid configuration because\
- the stack overlaps into the 'clean suspend' marker with swap. This needs to be fixed if resume is desired with swap."
-        );
     }
 
     // check to see if we are recovering from a clean suspend or not
@@ -454,7 +449,7 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
     const NUM_SECTORS: usize = 8;
     const WORDS_PER_PAGE: usize = PAGE_SIZE / 4;
 
-    let suspend_marker = cfg.sram_start as usize + cfg.sram_size - PAGE_SIZE * 3;
+    let suspend_marker = cfg.sram_start as usize + cfg.sram_size - GUARD_MEMORY_BYTES;
     let marker: *mut [u32; WORDS_PER_PAGE] = suspend_marker as *mut [u32; WORDS_PER_PAGE];
 
     let boot_seed = CSR::new(utra::seed::HW_SEED_BASE as *mut u32);

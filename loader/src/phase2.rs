@@ -147,7 +147,9 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
         // Map boot-generated kernel structures into the kernel
         let satp = unsafe { &mut *(krn_l1_pt_addr as *mut PageTable) };
         let kernel_arg_extents = cfg.init_size - (GUARD_MEMORY_BYTES + cfg.swap_offset);
-        assert!(kernel_arg_extents <= 0xA000, "Kernel init structures exceeded allocated region");
+        println!("Kernel argument extents: {:x}", kernel_arg_extents);
+        // this is just a manual sanity check, the actual limit varies depending on system config parameters
+        assert!(kernel_arg_extents <= 0xD000, "Kernel init structures exceeded allocated region");
         for addr in (0..kernel_arg_extents).step_by(PAGE_SIZE as usize) {
             cfg.map_page(
                 satp,
