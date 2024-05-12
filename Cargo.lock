@@ -2878,8 +2878,9 @@ checksum = "c3c8dda44ff03a2f238717214da50f65d5a53b45cd213a7370424ffdb6fae815"
 
 [[package]]
 name = "minifb"
-version = "0.25.0"
-source = "git+https://github.com/emoon/rust_minifb.git?rev=633e6cd4f8f55fd9cbedc461976dde0f408bea35#633e6cd4f8f55fd9cbedc461976dde0f408bea35"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36eac3001258de903d8e8f79b91b6c03cb19214f823c01db1505ef250cb980f9"
 dependencies = [
  "cc",
  "dlib",

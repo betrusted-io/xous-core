@@ -33,7 +33,7 @@ cramium-hal = { path = "../../libs/cramium-hal", optional = true, features = [
 ] }
 
 [target.'cfg(any(windows,unix))'.dependencies]
-minifb = { git = "https://github.com/emoon/rust_minifb.git", rev = "633e6cd4f8f55fd9cbedc461976dde0f408bea35" }
+minifb = "0.26.0"
 
 [features]
 cramium-soc = [
