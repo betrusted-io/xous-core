@@ -1,7 +1,10 @@
 use core::mem::size_of;
+use std::fmt::Write;
 
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, Error, KeyInit, Nonce, Tag};
 use loader::swap::{SwapSpec, SWAP_HAL_VADDR};
+
+use crate::debug::DebugUart;
 
 pub const PAGE_SIZE: usize = 4096;
 
@@ -43,7 +46,17 @@ impl SwapHal {
         src_vaddr: usize,
         src_pid: u8,
     ) {
-        // println!("enc_to: pid: {}, src_vaddr: {:x} dest_offset: {:x}", src_pid, src_vaddr, dest_offset);
+        /*
+            writeln!(
+                DebugUart {},
+                "enc_to: pid: {}, src_vaddr: {:x} dest_offset: {:x}, buf addr: {:x}",
+                src_pid,
+                src_vaddr,
+                dest_offset,
+                buf.as_ptr() as usize
+            )
+            .ok();
+        */
         assert!(buf.len() == PAGE_SIZE);
         assert!(dest_offset & (PAGE_SIZE - 1) == 0);
         let mut nonce = [0u8; size_of::<Nonce>()];
@@ -54,15 +67,19 @@ impl SwapHal {
         let vpage_masked = src_vaddr & !(PAGE_SIZE - 1);
         nonce[9..12].copy_from_slice(&(vpage_masked as u32).to_be_bytes()[..3]);
         let aad: &[u8] = &[];
+        writeln!(DebugUart {}, "bef enc: nonce {:x?} aad {:x?} buf {:x?}", &nonce, aad, &buf[..32]).ok();
         match self.cipher.encrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf) {
             Ok(tag) => {
+                // writeln!(DebugUart {}, "Nonce: {:x?}, tag: {:x?}", &nonce, tag.as_slice()).ok();
                 self.dst_data_area[dest_offset..dest_offset + PAGE_SIZE].copy_from_slice(buf);
                 let mac_offset = (dest_offset / PAGE_SIZE) * size_of::<Tag>();
                 self.dst_mac_area[mac_offset..mac_offset + size_of::<Tag>()].copy_from_slice(tag.as_slice());
-                // println!("Nonce: {:x?}, tag: {:x?}", &nonce, tag.as_slice());
-                // println!("dst_mac_area: {:x?}", &self.dst_mac_area[..32]);
+                // writeln!(DebugUart {}, "dst_mac_area: {:x?}", &self.dst_mac_area[..32]).ok();
             }
-            Err(e) => panic!("Encryption error to swap ram: {:?}", e),
+            Err(e) => {
+                writeln!(DebugUart {}, "Encryption error to swap ram: {:?}", e).ok();
+                panic!("Encryption error to swap ram: {:?}", e)
+            }
         }
     }
 
