@@ -509,12 +509,13 @@ impl Swap {
                 MemoryManager::with_mut(|mm| {
                     let paddr = crate::arch::mem::virt_to_phys(swapper_virt_page).unwrap() as usize;
                     println!("WTS releasing vaddr {:x}, paddr {:x}", swapper_virt_page, paddr);
-                    // this call releases the physical page from the RPT - the pid has to match that of the
-                    // original owner.
-                    mm.release_page_swap(paddr as *mut usize, pid)
-                        .expect("couldn't free page that was swapped out");
                     // this call unmaps the virtual page from the page table
                     crate::arch::mem::unmap_page_inner(mm, swapper_virt_page).expect("couldn't unmap page");
+                    // This call releases the physical page from the RPT - the pid has to match that of the
+                    // original owner. This is the "pointy end" of the stick; after this call, the memory is
+                    // now back into the free pool.
+                    mm.release_page_swap(paddr as *mut usize, pid)
+                        .expect("couldn't free page that was swapped out");
                 });
 
                 // Switch back to the Swapper's userland thread
