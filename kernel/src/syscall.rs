@@ -1018,11 +1018,13 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 klog!("Illegal caller"); // only PID 2 can call this
                 return Err(xous_kernel::Error::AccessDenied);
             }
+            #[cfg(feature = "debug-swap")]
             println!("Swap ABI via syscall: {:?}", SwapAbi::from(op));
             match SwapAbi::from(op) {
                 SwapAbi::Evict => Swap::with_mut(|swap| swap.evict_page(a1, a2)),
                 SwapAbi::GetFreeMem => Swap::with(|swap| swap.get_free_mem()),
                 SwapAbi::FetchAllocs => Swap::with_mut(|swap| swap.fetch_allocs()),
+                SwapAbi::SetOomThresh => Swap::with_mut(|swap| swap.set_oom_thresh(a1)),
                 SwapAbi::Invalid => {
                     println!(
                         "Invalid SwapOp: {:x} {:x} {:x} {:x} {:x} {:x} {:x}",
