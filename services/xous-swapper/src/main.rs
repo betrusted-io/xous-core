@@ -52,17 +52,19 @@
 //  - [done] implement the WriteToSwap routine - look for the next free page, increment offset counter, write
 //    memory to swap
 //  - [done] refactor memory allocation tracking
-//  - add kernel OOM callback
+//  - [done] add kernel OOM callback
 //  - add test command to force eviction of some variable number of pages
 //  - create test program that over provisions heap versus available memory and prove that swap really works.
 //  - Implement Evictor routine with a thing that checks free memory level, and then more intelligently swaps
 //    stuff out to create free space for the kernel
+//  - hook the kernel OOM callback somewhere...reasonable.
 
 mod debug;
 mod platform;
 use core::fmt::Write;
 use std::collections::BinaryHeap;
 use std::fmt::Debug;
+use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
@@ -83,7 +85,7 @@ use xous::{MemoryFlags, Message, Result, CID, PID, SID};
 pub enum SwapAbi {
     Invalid = 0,
     Evict = 1,
-    GetFreeMem = 2,
+    GetFreePages = 2,
     FetchAllocs = 3,
     SetOomThresh = 4,
 }
@@ -93,7 +95,7 @@ impl SwapAbi {
         use SwapAbi::*;
         match val {
             1 => Evict,
-            2 => GetFreeMem,
+            2 => GetFreePages,
             3 => FetchAllocs,
             4 => SetOomThresh,
             _ => Invalid,
@@ -334,6 +336,14 @@ fn swap_handler(
             let pid = a2 as u8;
             let vaddr_in_pid = a3;
             let vaddr_in_swap = a4;
+            writeln!(
+                DebugUart {},
+                "WTS PID{}, vaddr_pid {:x}, vaddr_swap {:x}",
+                pid,
+                vaddr_in_pid,
+                vaddr_in_swap
+            )
+            .ok();
             // this is safe because the page is aligned and initialized as it comes from the kernel
             // renember that this page is overwritten with encrypted data
             let buf: &mut [u8] =
@@ -341,14 +351,19 @@ fn swap_handler(
 
             // search the swap page tables for the next free page
             let mut next_free_page: Option<usize> = None;
+            writeln!(DebugUart {}, "free_swap_origin {:x}", ss.free_swap_search_origin).ok();
+            let mut searched = 0;
             for slot in 0..ss.sct.counts.len() {
                 let candidate = (ss.free_swap_search_origin + slot) % ss.sct.counts.len();
+                searched += 1;
                 if ss.sct.counts[candidate] & loader::FLG_SWAP_USED != 0 {
                     next_free_page = Some(candidate);
                     break;
                 }
             }
             if let Some(free_page_number) = next_free_page {
+                writeln!(DebugUart {}, "searched {} pages; free page {:x}", searched, free_page_number).ok();
+                ss.free_swap_search_origin = free_page_number + 1; // start search at next page beyond the one about to be used
                 // increment the swap counter by one, rolling over if full. Note that we only have 31
                 // bits; the MSB is the "swap used" status bit
                 let mut count = ss.sct.counts[free_page_number] & !loader::FLG_SWAP_USED;
@@ -358,11 +373,12 @@ fn swap_handler(
                 // add a PT mapping for the swap entry
                 map_swap(ss, free_page_number, vaddr_in_pid, pid);
 
-                ss.hal.encrypt_swap_to(buf, count, free_page_number, vaddr_in_pid, pid);
+                ss.hal.encrypt_swap_to(buf, count, free_page_number * PAGE_SIZE, vaddr_in_pid, pid);
             } else {
                 // OOS path
                 panic!("Ran out of swap space, hard OOM!");
             }
+            writeln!(DebugUart {}, "WTS exit").ok();
         }
         Some(KernelOp::ReadFromSwap) => {
             let pid = a2 as u8;
@@ -370,7 +386,7 @@ fn swap_handler(
             let vaddr_in_swap = a4;
             writeln!(
                 DebugUart {},
-                "rfs ptw PID{}, vaddr_pid {:x}, vaddr_swap {:x}",
+                "RFS PID{}, vaddr_pid {:x}, vaddr_swap {:x}",
                 pid,
                 vaddr_in_pid,
                 vaddr_in_swap
@@ -406,15 +422,12 @@ fn swap_handler(
                         alloc_heap.push(entry);
                     }
                 }
-                writeln!(DebugUart {}, "Allocs have been copied").ok();
                 xous::try_send_message(
                     sss.conn,
                     Message::new_scalar(Opcode::FetchAllocsDone.to_usize().unwrap(), 0, 0, 0, 0),
                 )
                 .ok();
-                writeln!(DebugUart {}, "FetchAllocsDone sent").ok();
             }
-            writeln!(DebugUart {}, "Dummy ExecFetchAllocs").ok();
         }
         _ => {
             writeln!(DebugUart {}, "Unimplemented or unknown opcode: {}", opcode).ok();
@@ -446,23 +459,66 @@ fn main() {
     // handle for the current sorted vector of swap-out candidates
     let mut swap_candidates: Option<Vec<SwapAlloc>> = None;
 
+    /// Poll interval for OOMer
+    const OOM_POLL_INTERVAL_MS: u64 = 1000;
     /// Threshold for OomDoom callback
     const OOM_THRESH_PAGES: usize = 16;
     /// Target of free pages we want to get to after OomDoom call
     const FREE_PAGE_TARGET: usize = 32;
+    // track the current amount of pages to be freed
+    let mut pages_to_free = FREE_PAGE_TARGET;
     // set OOM threshold - first argument is the threshold, in pages, below which we ping the swapper to start
-    // clearing memory
-    xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::SetOomThresh as usize, OOM_THRESH_PAGES, 0, 0, 0, 0, 0))
-        .ok();
+    // clearing memory; second argument is how many pages to request clearing on OOM doom.
+    xous::rsyscall(xous::SysCall::SwapOp(
+        SwapAbi::SetOomThresh as usize,
+        OOM_THRESH_PAGES,
+        FREE_PAGE_TARGET - OOM_THRESH_PAGES,
+        0,
+        0,
+        0,
+        0,
+    ))
+    .ok();
+    // track if the oom_doom process is running - so we don't get multiple spawns if the oom runner is taking
+    // a long time
+    let oom_doom_running = Arc::new(AtomicBool::new(false));
 
+    // This thread is the active OOM monitor
+    thread::spawn({
+        let conn = conn.clone();
+        let oom_doom_running = oom_doom_running.clone();
+        move || {
+            loop {
+                let free_mem_pages = get_free_pages();
+                if free_mem_pages < OOM_THRESH_PAGES {
+                    let pages_to_free = FREE_PAGE_TARGET - free_mem_pages;
+                    if !oom_doom_running.swap(true, Ordering::SeqCst) {
+                        xous::send_message(
+                            conn,
+                            Message::new_scalar(
+                                Opcode::HandleOomDoom.to_usize().unwrap(),
+                                pages_to_free,
+                                0,
+                                0,
+                                0,
+                            ),
+                        )
+                        .ok();
+                    }
+                }
+                sleep(Duration::from_millis(OOM_POLL_INTERVAL_MS));
+            }
+        }
+    });
+
+    // This thread is for testing
     thread::spawn({
         let conn = conn.clone();
         move || {
             loop {
-                log::info!("Kernel reports free mem: {}kiB", get_free_mem() / 1024);
+                sleep(Duration::from_millis(5000));
                 xous::send_message(conn, Message::new_scalar(Opcode::Test0.to_usize().unwrap(), 0, 0, 0, 0))
                     .ok();
-                sleep(Duration::from_millis(5000));
             }
         }
     });
@@ -477,25 +533,80 @@ fn main() {
             Some(Opcode::FetchAllocsDone) => {
                 let ss = sss.inner.as_mut().unwrap();
                 if let Some(alloc_heap) = ss.alloc_heap.take() {
-                    let candidates = alloc_heap.into_sorted_vec();
-                    for (i, candidate) in candidates[..8.min(candidates.len())].iter().enumerate() {
-                        log::info!("Candidate for swap-out #{}: {:x?}", i, candidate);
+                    // de-allocate the existing candidate list, so our heap has free memory
+                    {
+                        let _ = swap_candidates.take();
+                    } // this close brace ensures Drop is called on the former Vec inside swap_candidates
+                    let mut candidates = alloc_heap.into_sorted_vec();
+                    log::info!("Attempting to free {} pages", pages_to_free);
+                    loop {
+                        if pages_to_free == 0 {
+                            break;
+                        }
+                        if let Some(candidate) = candidates.pop() {
+                            match xous::rsyscall(xous::SysCall::SwapOp(
+                                SwapAbi::Evict as usize,
+                                candidate.raw_pid() as usize,
+                                candidate.vaddr(),
+                                0,
+                                0,
+                                0,
+                                0,
+                            )) {
+                                Ok(_) => {
+                                    log::info!("Swapped out {:x?}", candidate);
+                                    pages_to_free -= 1;
+                                }
+                                Err(e) => {
+                                    log::warn!(
+                                        "Page {:x?} was rejected by kernel for swap, skipping it: {:?}",
+                                        candidate,
+                                        e
+                                    );
+                                }
+                            }
+                        } else {
+                            log::warn!(
+                                "Ran out of swappable candidates before we could free the requested number of pages!"
+                            );
+                            break;
+                        }
                     }
+                    log::info!("Exiting swap free loop");
+                    // store the remaining candidates, since they are already allocated. We might be able to
+                    // use them later?
                     swap_candidates = Some(candidates);
                 }
                 // restore the allocation for the binary heap
                 ss.alloc_heap = Some(BinaryHeap::with_capacity(total_ram / PAGE_SIZE));
+
+                // clear the running flag on exit
+                oom_doom_running.store(false, Ordering::SeqCst);
+            }
+            Some(Opcode::HandleOomDoom) => {
+                if let Some(scalar) = msg.body.scalar_message() {
+                    pages_to_free = scalar.arg1;
+                    // trigger alloc fetch so we know what to free up
+                    xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::FetchAllocs as usize, 0, 0, 0, 0, 0, 0))
+                        .ok();
+                } else {
+                    panic!("Wrong message type for HandleOomDoom");
+                }
             }
             Some(Opcode::Test0) => {
                 if let Some(candidates) = &swap_candidates {
-                    for (i, candidate) in candidates[..3.min(candidates.len())].iter().enumerate() {
-                        log::info!("Test0 replay swap-out #{}: {:x?}", i, candidate);
+                    if candidates.len() > 0 {
+                        log::info!("Next swap candidate {:x?}", candidates[candidates.len() - 1]);
                     }
                 }
-                log::info!(
-                    "FetchAllocs result: {:?}",
-                    xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::FetchAllocs as usize, 0, 0, 0, 0, 0, 0))
-                );
+                log::info!("Free mem before clearing: {}kiB", get_free_pages() * PAGE_SIZE / 1024);
+                // Try to free some number of pages
+                xous::send_message(
+                    conn,
+                    Message::new_scalar(Opcode::HandleOomDoom.to_usize().unwrap(), 8, 0, 0, 0),
+                )
+                .ok();
+                log::info!("Free mem after clearing: {}kiB", get_free_pages() * PAGE_SIZE / 1024);
             }
             _ => {
                 log::info!("Unknown opcode {:?}", op);
@@ -504,8 +615,8 @@ fn main() {
     }
 }
 
-fn get_free_mem() -> usize {
-    match xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::GetFreeMem as usize, 0, 0, 0, 0, 0, 0)) {
+fn get_free_pages() -> usize {
+    match xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::GetFreePages as usize, 0, 0, 0, 0, 0, 0)) {
         Ok(Result::Scalar5(mem, _, _, _, _)) => mem,
         _ => panic!("GetFreeMem sycall failed"),
     }
