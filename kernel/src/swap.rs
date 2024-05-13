@@ -12,6 +12,13 @@ use crate::arch::mem::PAGE_SIZE;
 use crate::mem::MemoryManager;
 use crate::services::SystemServices;
 
+/// Initial number of pages to free up in case of an OOM is tripped inside the kernel. This is different
+/// from the number used by the userspace OOM trigger -- this one is hard-coded into the kernel.
+const KERNEL_OOM_DOOM_PAGES_TO_FREE: usize = 22;
+
+/// Initial threshold for triggering the OOM doom handler
+const KERNEL_OOM_DOOM_THRESH_PAGES: usize = 10;
+
 /// userspace swapper -> kernel ABI (see kernel/src/syscall.rs)
 /// This ABI is copy-paste synchronized with what's in the userspace handler. It's left out of
 /// xous-rs so that we can change it without having to push crates to crates.io.
@@ -22,7 +29,7 @@ use crate::services::SystemServices;
 pub enum SwapAbi {
     Invalid = 0,
     Evict = 1,
-    GetFreeMem = 2,
+    GetFreePages = 2,
     FetchAllocs = 3,
     SetOomThresh = 4,
 }
@@ -32,7 +39,7 @@ impl SwapAbi {
         use SwapAbi::*;
         match val {
             1 => Evict,
-            2 => GetFreeMem,
+            2 => GetFreePages,
             3 => FetchAllocs,
             4 => SetOomThresh,
             _ => Invalid,
@@ -122,7 +129,8 @@ static mut SWAP: Swap = Swap {
     free_pages: 0,
     mem_alloc_tracker_paddr: 0,
     mem_alloc_tracker_pages: 0,
-    oom_doom_thresh_pages: 10, // arbitrary number, may need tweaking later on
+    oom_doom_thresh_pages: KERNEL_OOM_DOOM_THRESH_PAGES,
+    oom_pages_to_free: KERNEL_OOM_DOOM_PAGES_TO_FREE,
 };
 
 pub struct Swap {
@@ -151,6 +159,8 @@ pub struct Swap {
     mem_alloc_tracker_pages: usize,
     /// Imminent OOM threshold, in pages
     oom_doom_thresh_pages: usize,
+    /// Number of pages to free on an OOM doom handler invocation
+    oom_pages_to_free: usize,
 }
 impl Swap {
     pub fn with_mut<F, R>(f: F) -> R
@@ -203,8 +213,9 @@ impl Swap {
         }
     }
 
-    pub fn set_oom_thresh(&mut self, thresh_pages: usize) -> SysCallResult {
+    pub fn set_oom_thresh(&mut self, thresh_pages: usize, pages_to_free: usize) -> SysCallResult {
         self.oom_doom_thresh_pages = thresh_pages;
+        self.oom_pages_to_free = pages_to_free;
         Ok(xous_kernel::Result::Scalar5(0, 0, 0, 0, 0))
     }
 
@@ -354,16 +365,22 @@ impl Swap {
         }
     }
 
-    /// This call diverges into the userspace swapper.
-    pub fn evict_page(&mut self, target_pid: usize, vaddr: usize) -> ! {
+    /// This call normally diverges into the userspace swapper. It will return a SysCallResult
+    /// if the requested pages fail sanity checks.
+    pub fn evict_page(&mut self, target_pid: usize, vaddr: usize) -> SysCallResult {
         let (tid, sepc) = crate::arch::process::Process::with_current(|p| {
             let thread = p.current_thread();
             let tid = p.current_tid();
             (tid, thread.sepc)
         });
+        // This call can fail for legitimate reasons: for example, the address given was already swapped, or
+        // invalid.
         let evicted_ptr =
-            crate::arch::mem::evict_page_inner(PID::new(target_pid as u8).expect("Invalid PID"), vaddr)
-                .expect("couldn't evict page");
+            match crate::arch::mem::evict_page_inner(PID::new(target_pid as u8).expect("Invalid PID"), vaddr)
+            {
+                Ok(ptr) => ptr,
+                Err(e) => return Err(e),
+            };
 
         #[cfg(feature = "debug-swap")]
         println!("evict_page - swapper activate");
@@ -440,6 +457,7 @@ impl Swap {
             BlockingSwapOp::OomDoom(_tid, _pid) => {
                 self.swapper_args[0] = self.swapper_state;
                 self.swapper_args[1] = 3; // OomDoom
+                self.swapper_args[2] = KERNEL_OOM_DOOM_PAGES_TO_FREE;
             }
         }
         if let Some(op) = self.prev_op.take() {
