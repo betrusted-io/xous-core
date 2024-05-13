@@ -1021,10 +1021,18 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             #[cfg(feature = "debug-swap")]
             println!("Swap ABI via syscall: {:?}", SwapAbi::from(op));
             match SwapAbi::from(op) {
-                SwapAbi::Evict => Swap::with_mut(|swap| swap.evict_page(a1, a2)),
-                SwapAbi::GetFreeMem => Swap::with(|swap| swap.get_free_mem()),
+                SwapAbi::Evict => {
+                    let pid = a1;
+                    if pid != 0 && pid != 1 && pid != 2 {
+                        Swap::with_mut(|swap| swap.evict_page(pid, a2))
+                    } else {
+                        // don't allow kernel or swapper to be swapped out
+                        Err(xous_kernel::Error::InvalidPID)
+                    }
+                }
+                SwapAbi::GetFreePages => Swap::with(|swap| swap.get_free_mem()),
                 SwapAbi::FetchAllocs => Swap::with_mut(|swap| swap.fetch_allocs()),
-                SwapAbi::SetOomThresh => Swap::with_mut(|swap| swap.set_oom_thresh(a1)),
+                SwapAbi::SetOomThresh => Swap::with_mut(|swap| swap.set_oom_thresh(a1, a2)),
                 SwapAbi::Invalid => {
                     println!(
                         "Invalid SwapOp: {:x} {:x} {:x} {:x} {:x} {:x} {:x}",
