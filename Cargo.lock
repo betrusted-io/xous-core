@@ -6306,6 +6306,7 @@ dependencies = [
  "gdbstub_arch",
  "hex 0.4.3",
  "lazy_static",
+ "loader",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "stats_alloc",
@@ -6390,6 +6391,7 @@ checksum = "6ed3278bb4e7be4895c1c597434e5269f7357ffb800ebc644f0398bb008a15ad"
 name = "xous-susres"
 version = "0.1.36"
 dependencies = [
+ "loader",
  "log",
  "num-derive 0.3.3",
  "num-traits",
