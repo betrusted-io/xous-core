@@ -141,6 +141,10 @@ impl SwapAlloc {
     pub fn is_wired(&self) -> bool { self.vpn & SWAP_FLG_WIRED != 0 }
 
     pub fn is_valid(&self) -> bool { self.timestamp != 0 || self.vpn != 0 }
+
+    pub fn raw_pid(&self) -> u8 { self.vpn as u8 }
+
+    pub fn vaddr(&self) -> usize { (self.vpn & !0xFFFu32) as usize }
 }
 
 impl fmt::Debug for SwapAlloc {
@@ -164,9 +168,9 @@ impl PartialOrd for SwapAlloc {
 }
 
 impl Ord for SwapAlloc {
-    // Note: the ordering will give us a min-heap (reversed from the "usual sense")
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering { other.timestamp.cmp(&self.timestamp) }
+    // Select this for min-heap (smallest timestamps at lower indices)
+    // fn cmp(&self, other: &Self) -> core::cmp::Ordering { other.timestamp.cmp(&self.timestamp) }
 
-    // Note: the ordering will give us a max-heap (keep comment around for debugging)
-    // fn cmp(&self, other: &Self) -> core::cmp::Ordering { self.timestamp.cmp(&other.timestamp) }
+    // Select this for max-heap (biggest timestamps at lower indices)
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering { self.timestamp.cmp(&other.timestamp) }
 }
