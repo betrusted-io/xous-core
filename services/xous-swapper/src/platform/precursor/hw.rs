@@ -67,6 +67,8 @@ impl SwapHal {
     }
 
     /// Used to examine contents of swap RAM. Decrypted data is returned as a slice.
+    /// Swap is a 0-offset slice, allowing src_offset to be used by the offset
+    /// tracker (outside this crate) directly
     pub fn decrypt_swap_from(
         &mut self,
         buf: &mut [u8],

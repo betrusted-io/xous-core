@@ -89,6 +89,8 @@ impl SwapHal {
         }
     }
 
+    /// Swap is assumed to start at offset 0 in the target device, allowing src_offset to be used
+    /// by the offset tracker (outside this crate) directly
     pub fn decrypt_swap_from(
         &mut self,
         buf: &mut [u8],
