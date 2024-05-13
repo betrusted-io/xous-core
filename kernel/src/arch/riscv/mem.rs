@@ -1141,7 +1141,14 @@ pub fn evict_page_inner(target_pid: PID, vaddr: usize) -> Result<usize, xous_ker
                 .find_virtual_address(core::ptr::null_mut(), PAGE_SIZE, xous_kernel::MemoryType::Messages)
                 .expect("couldn't find virtual address in swapper space for target page")
                 as usize;
-            let _result = map_page_inner(mm, swapper_pid, target_paddr, payload_virt, MemoryFlags::R, true);
+            let _result = map_page_inner(
+                mm,
+                swapper_pid,
+                target_paddr,
+                payload_virt,
+                MemoryFlags::R | MemoryFlags::W, // write flag needed because encryption is in-place
+                true,
+            );
             unsafe { flush_mmu() };
             payload_virt
         });
