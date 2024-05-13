@@ -7,6 +7,8 @@ use xous_kernel::{MemoryFlags, MemoryRange, PID};
 
 pub use crate::arch::mem::{MemoryMapping, PAGE_SIZE};
 use crate::arch::process::Process;
+#[cfg(feature = "swap")]
+use crate::swap::SwapAlloc;
 
 #[derive(Debug)]
 // below suppresses warning from unused Move argument in hosted mode
@@ -53,51 +55,6 @@ pub struct MemoryManager {
 
 impl Default for MemoryManager {
     fn default() -> Self { Self::default_hack() }
-}
-
-#[cfg(feature = "swap")]
-use loader::swap::SWAP_FLG_WIRED;
-
-#[cfg(feature = "swap")]
-pub struct SwapAlloc {
-    timestamp: u32,
-    /// virtual_page_number[19:0] | flags[3:0] | pid[7:0]
-    vpn: u32,
-}
-#[cfg(feature = "swap")]
-impl SwapAlloc {
-    pub fn is_pid(&self, pid: PID) -> bool { self.vpn as u8 == pid.get() }
-
-    #[allow(dead_code)]
-    pub fn is_some(&self) -> bool { self.vpn as u8 != 0 }
-
-    pub fn is_none(&self) -> bool { self.vpn as u8 == 0 }
-
-    pub fn get_pid(&self) -> Option<PID> {
-        if self.vpn as u8 == 0 { None } else { Some(PID::new(self.vpn as u8).unwrap()) }
-    }
-
-    pub unsafe fn update(&mut self, pid: Option<PID>, vaddr: Option<usize>) {
-        crate::swap::Swap::with_mut(|s| {
-            self.timestamp = s.next_epoch();
-            if let Some(pid) = pid {
-                s.track_alloc(true);
-                if let Some(va) = vaddr {
-                    self.vpn = (va as u32) & !0xFFF | pid.get() as u32;
-                } else {
-                    self.vpn = SWAP_FLG_WIRED | pid.get() as u32;
-                }
-            } else {
-                s.track_alloc(false);
-                self.vpn = 0;
-            }
-        });
-    }
-
-    pub unsafe fn reparent(&mut self, pid: PID) {
-        self.timestamp = crate::swap::Swap::with_mut(|s| s.next_epoch());
-        self.vpn = self.vpn & !&0xFFu32 | pid.get() as u32;
-    }
 }
 
 #[cfg(not(baremetal))]

@@ -1,15 +1,54 @@
+use loader::swap::SWAP_FLG_WIRED;
 use loader::swap::SWAP_RPT_VADDR;
 use xous_kernel::SWAPPER_PID;
 use xous_kernel::{SysCallResult, PID, SID, TID};
 
-/* for non-blocking calls
-use xous_Kernel::{try_send_message, MemoryFlags, Message, MessageEnvelope, SysCallResult, TID};
-use crate::server::SenderID; */
 use crate::arch::current_pid;
 use crate::arch::mem::MMUFlags;
 use crate::arch::mem::PAGE_SIZE;
 use crate::mem::MemoryManager;
 use crate::services::SystemServices;
+
+pub struct SwapAlloc {
+    timestamp: u32,
+    /// virtual_page_number[19:0] | flags[3:0] | pid[7:0]
+    vpn: u32,
+}
+
+impl SwapAlloc {
+    pub fn is_pid(&self, pid: PID) -> bool { self.vpn as u8 == pid.get() }
+
+    #[allow(dead_code)]
+    pub fn is_some(&self) -> bool { self.vpn as u8 != 0 }
+
+    pub fn is_none(&self) -> bool { self.vpn as u8 == 0 }
+
+    pub fn get_pid(&self) -> Option<PID> {
+        if self.vpn as u8 == 0 { None } else { Some(PID::new(self.vpn as u8).unwrap()) }
+    }
+
+    pub unsafe fn update(&mut self, pid: Option<PID>, vaddr: Option<usize>) {
+        crate::swap::Swap::with_mut(|s| {
+            self.timestamp = s.next_epoch();
+            if let Some(pid) = pid {
+                s.track_alloc(true);
+                if let Some(va) = vaddr {
+                    self.vpn = (va as u32) & !0xFFF | pid.get() as u32;
+                } else {
+                    self.vpn = SWAP_FLG_WIRED | pid.get() as u32;
+                }
+            } else {
+                s.track_alloc(false);
+                self.vpn = 0;
+            }
+        });
+    }
+
+    pub unsafe fn reparent(&mut self, pid: PID) {
+        self.timestamp = crate::swap::Swap::with_mut(|s| s.next_epoch());
+        self.vpn = self.vpn & !&0xFFu32 | pid.get() as u32;
+    }
+}
 
 /// This ABI is copy-paste synchronized with what's in the userspace handler. It's left out of
 /// xous-rs so that we can change it without having to push crates to crates.io.
