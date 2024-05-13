@@ -1,5 +1,6 @@
+use loader::swap::SWAP_RPT_VADDR;
 use xous_kernel::SWAPPER_PID;
-use xous_kernel::{AllocAdvice, MemoryRange, SysCallResult, PID, SID, TID};
+use xous_kernel::{SysCallResult, PID, SID, TID};
 
 /* for non-blocking calls
 use xous_Kernel::{try_send_message, MemoryFlags, Message, MessageEnvelope, SysCallResult, TID};
@@ -20,13 +21,16 @@ pub enum SwapAbi {
     Invalid = 0,
     Evict = 1,
     GetFreeMem = 2,
+    FetchAllocs = 3,
 }
+/// SYNC WITH `xous-swapper/src/main.rs`
 impl SwapAbi {
     pub fn from(val: usize) -> SwapAbi {
         use SwapAbi::*;
         match val {
             1 => Evict,
             2 => GetFreeMem,
+            3 => FetchAllocs,
             _ => Invalid,
         }
     }
@@ -39,20 +43,8 @@ pub enum BlockingSwapOp {
     /// PID of the target block, current paddr of block, original vaddr in the space of target block PID,
     /// physical address of block
     ReadFromSwap(PID, TID, usize, usize, usize),
-    /*
-    /// PID of the process to return to after the allocate advisory - if incurred during a page fault
-    AllocateAdvisory(PID, TID),
-    /// advisory issued as part of a syscall - e.g., unmap
-    AllocateAdvisorySyscall(PID, TID, usize, AdviseUnmap),
-    */
-}
-
-/// Tracks the entire range of the structure being unmapped. May require multiple
-/// iterations of calls if this structure is large.
-#[derive(Copy, Clone, Debug)]
-pub struct AdviseUnmap {
-    base: usize,
-    size: usize,
+    /// Argument is the original thread ID and `sepc` for return
+    FetchAllocs(TID, usize),
 }
 
 #[cfg(baremetal)]
@@ -64,9 +56,10 @@ static mut SWAP: Swap = Swap {
     nested_op: None,
     swapper_state: 0,
     swapper_args: [0usize; 8],
-    alloc_advisories: [AllocAdvice::Uninit; 8],
-    missing_pages: 0,
     epoch: 0,
+    free_pages: 0,
+    mem_alloc_tracker_paddr: 0,
+    mem_alloc_tracker_pages: 0,
 };
 
 pub struct Swap {
@@ -85,12 +78,14 @@ pub struct Swap {
     swapper_state: usize,
     /// storage for args
     swapper_args: [usize; 8],
-    /// track advisories to the allocator
-    alloc_advisories: [AllocAdvice; 8],
-    /// count missing advisories because the advisory list overflowed
-    missing_pages: usize,
     /// swap epoch tracker
     epoch: u32,
+    /// approximate free memory, in pages
+    free_pages: usize,
+    /// physical base of memory allocation tracker
+    mem_alloc_tracker_paddr: usize,
+    /// number of pages to map when handling the tracker
+    mem_alloc_tracker_pages: usize,
 }
 impl Swap {
     pub fn with_mut<F, R>(f: F) -> R
@@ -135,6 +130,14 @@ impl Swap {
         }
     }
 
+    pub fn track_alloc(&mut self, is_alloc: bool) {
+        if is_alloc {
+            self.free_pages = self.free_pages.saturating_add(1);
+        } else {
+            self.free_pages = self.free_pages.saturating_sub(1);
+        }
+    }
+
     pub fn register_handler(
         &mut self,
         s0: u32,
@@ -144,6 +147,21 @@ impl Swap {
         handler: usize,
         state: usize,
     ) -> Result<xous_kernel::Result, xous_kernel::Error> {
+        // initialize free_pages with a comprehensive count of RAM usage
+        let mut total_bytes = 0;
+        crate::services::SystemServices::with(|system_services| {
+            crate::mem::MemoryManager::with(|mm| {
+                for process in &system_services.processes {
+                    if !process.free() {
+                        let bytes_used = mm.ram_used_by(process.pid);
+                        total_bytes += bytes_used;
+                    }
+                }
+            });
+        });
+        self.free_pages = total_bytes / PAGE_SIZE;
+
+        // now register the swapper
         if self.sid == SID::from_u32(0, 0, 0, 0) {
             self.sid = SID::from_u32(s0, s1, s2, s3);
             self.pc = handler;
@@ -162,55 +180,52 @@ impl Swap {
         }
     }
 
-    /*
-    /// This will insert a message into the swapper's server queue. Useful for informational messages to the
-    /// swapper.
-    fn nonblocking_activate_swapper(&self, swapper_msg: Message) -> SysCallResult {
-        assert!(!swapper_msg.is_blocking(), "Only non-blocking messages may be sent to the the swapper");
+    pub fn init_rpt(&mut self, base: usize, pages: usize) {
+        self.mem_alloc_tracker_paddr = crate::arch::mem::virt_to_phys(base).unwrap() as usize;
+        self.mem_alloc_tracker_pages = pages;
+    }
 
-        let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
-        SystemServices::with_mut(|ss| {
-            let sidx = ss.sidx_from_sid(self.sid, swapper_pid).expect("Couldn't find swapper server");
-            let server = ss.server_from_sidx_mut(sidx).expect("swapper couldn't be located");
-            let server_pid = server.pid;
-
-            if let Some(server_tid) = server.take_available_thread() {
-                // if the swapper can respond, send the message and switch to it
-                // note: swapper_msg must be a non-blocking type of message for this code path
-                let sender = SenderID::new(sidx, 0, Some(swapper_pid));
-                let envelope = MessageEnvelope { sender: sender.into(), body: swapper_msg };
-
-                // Mark the swapper's context as "Ready".
-                #[cfg(baremetal)]
-                ss.ready_thread(swapper_pid, server_tid)?;
-
-                if cfg!(baremetal) {
-                    ss.set_thread_result(
-                        server_pid,
-                        server_tid,
-                        xous_kernel::Result::MessageEnvelope(envelope),
-                    )
-                    .map(|_| xous_kernel::Result::Ok)
-                } else {
-                    // "Switch to" the server PID when not running on bare metal. This ensures
-                    // that it's "Running".
-                    ss.switch_to_thread(server_pid, Some(server_tid))?;
-                    ss.set_thread_result(
-                        server_pid,
-                        server_tid,
-                        xous_kernel::Result::MessageEnvelope(envelope),
-                    )
-                    .map(|_| xous_kernel::Result::Ok)
-                };
-            } else {
-                // else, queue it for processing later
-                let tid: TID = ss.get_process(swapper_pid).unwrap().current_thread;
-                // this will error-out if the swapper queue is full, leading to much badness. However,
-                // I don't think there is a defined behavior if the swapper can just miss messages.
-                let _queue_idx = ss.queue_server_message(sidx, swapper_pid, tid, swapper_msg, None)?;
-            }
+    /// This call diverges into the userspace swapper.
+    pub fn fetch_allocs(&mut self) -> ! {
+        let (tid, sepc) = crate::arch::process::Process::with_current(|p| {
+            let thread = p.current_thread();
+            let tid = p.current_tid();
+            (tid, thread.sepc)
         });
-    } */
+
+        SystemServices::with(|system_services| {
+            let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
+            // swap to the swapper space
+            let swapper_map = system_services.get_process(swapper_pid).unwrap().mapping;
+            swapper_map.activate().unwrap();
+
+            // map the RPT into userspace
+            // note that this technically makes the RPT shared with kernel and userspace, but,
+            // the userspace version is read-only, and the next section runs in an interrupt context,
+            // so I think it's safe for it to be shared for that duration.
+            MemoryManager::with_mut(|mm| {
+                for page in 0..self.mem_alloc_tracker_pages {
+                    crate::arch::mem::map_page_inner(
+                        mm,
+                        swapper_pid,
+                        self.mem_alloc_tracker_paddr + page * PAGE_SIZE,
+                        SWAP_RPT_VADDR + page * PAGE_SIZE,
+                        xous_kernel::MemoryFlags::R,
+                        true,
+                    )
+                    .ok();
+                    unsafe { crate::arch::mem::flush_mmu() };
+                }
+            });
+        });
+
+        #[cfg(feature = "debug-swap")]
+        println!("fetch_allocs - userspace activate");
+        // this is safe because we entered the swapper memory context above
+        unsafe {
+            self.blocking_activate_swapper(BlockingSwapOp::FetchAllocs(tid, sepc));
+        }
+    }
 
     /// Safety: the current page table mapping context must be PID 2 (the swapper's PID) for this to work
     /// `op` contains the opcode data
@@ -232,16 +247,10 @@ impl Swap {
                 self.swapper_args[3] = vaddr_in_pid;
                 self.swapper_args[4] = vaddr_in_swap;
             }
-            // AllocateAdvisory and AllocateAdvisorySyscall patterns
-            _ => {
+            BlockingSwapOp::FetchAllocs(_tid, _sepc) => {
                 self.swapper_args[0] = self.swapper_state;
-                self.swapper_args[1] = 2; // AllocateAdvisory
-                for (index, advisory) in self.alloc_advisories.iter_mut().enumerate() {
-                    let (varg, parg) = advisory.serialize();
-                    self.swapper_args[2 + index * 2] = varg;
-                    self.swapper_args[3 + index * 2] = parg;
-                    *advisory = AllocAdvice::Uninit;
-                }
+                self.swapper_args[1] = 2; // ExecFetchAllocs opcode
+                self.swapper_args[2] = self.mem_alloc_tracker_pages;
             }
         }
         if let Some(op) = self.prev_op.take() {
@@ -249,8 +258,10 @@ impl Swap {
                 println!("ERR: nesting depth of 2 exceeded! {:?}", dop);
                 panic!("Nesting depth of 2 exceeded!");
             }
+            // println!("Nesting {:?}", op);
             self.nested_op = Some(op);
         }
+        // println!("Setting prev_op to {:?}", op);
         self.prev_op = Some(op);
         let swapper_pid: PID = PID::new(xous_kernel::SWAPPER_PID).unwrap();
 
@@ -340,45 +351,31 @@ impl Swap {
                     Ok(xous_kernel::Result::ResumeProcess)
                 })
             }
-            /*
-            Some(BlockingSwapOp::AllocateAdvisory(pid, tid)) => {
-                // Switch to the previous process' address space.
-                SystemServices::with_mut(|ss| {
-                    ss.finish_callback_and_resume(pid, tid).expect("unable to resume previous PID")
-                });
-                Ok(xous_kernel::Result::ResumeProcess)
-            }
-            Some(BlockingSwapOp::AllocateAdvisorySyscall(pid, tid, virt, mapping)) => {
-                // We're in the swapper's address space here. We need to get back to the original process'
-                // address space first.
-                SystemServices::with_mut(|ss| {
-                    ss.finish_callback_and_resume(pid, tid).expect("unable to resume previous PID")
-                });
-
-                println!("Exit from allocate advisory: {:x}/{:x?}", virt, mapping);
-                // Free the virtual address.
-                let result =
-                    MemoryManager::with_mut(|mm| crate::arch::mem::unmap_page_inner(mm, virt as usize))
-                        .map(|_| xous_kernel::Result::Ok);
-                if result.is_ok() {
-                    // We might be resuming from a previous call that went to the swapper to advise on
-                    // unmapped pages, and we have to resume the loop.
-                    let next_page = virt + PAGE_SIZE; // start the loop on the next page
-                    let mut result = Ok(xous_kernel::Result::Ok);
-                    for addr in (next_page..(mapping.base + mapping.size)).step_by(PAGE_SIZE) {
-                        result = self.unmap_inner(pid, tid, addr, mapping).map(|_| xous_kernel::Result::Ok);
-                        if result.is_err() {
-                            break;
-                        }
+            Some(BlockingSwapOp::FetchAllocs(tid, sepc)) => {
+                // unmap RPT from userspace
+                MemoryManager::with_mut(|mm| {
+                    for page in 0..self.mem_alloc_tracker_pages {
+                        crate::arch::mem::unmap_page_inner(mm, SWAP_RPT_VADDR + page * PAGE_SIZE).ok();
+                        unsafe { crate::arch::mem::flush_mmu() };
                     }
-                    result
-                } else {
-                    result
-                }
-            } */
+                });
+                // Switch back to the Swapper's userland thread
+                SystemServices::with_mut(|ss| {
+                    ss.finish_callback_and_resume(PID::new(SWAPPER_PID).unwrap(), tid)
+                        .expect("Unable to resume to swapper");
+                });
+                // restore the `sepc` for that thread
+                crate::arch::process::Process::with_current_mut(|p| {
+                    let thread = p.current_thread_mut();
+                    thread.sepc = sepc;
+                });
+                // return as a SysCall
+                Ok(xous_kernel::Result::Scalar5(0, 0, 0, 0, 0))
+            }
             None => panic!("No previous swap op was set"),
         };
         if let Some(op) = self.nested_op.take() {
+            // println!("Popping nested_op into prev_op with {:?}", op);
             self.prev_op = Some(op);
         }
         result
@@ -420,19 +417,12 @@ impl Swap {
                 }
             });
         });
-        println!("{} k total", total_bytes / 1024);
+        println!("Via count: {} k total", total_bytes / 1024);
+        println!("Via tracked alloc: {} k total", self.free_pages * PAGE_SIZE / 1024);
 
-        /*
-        crate::services::SystemServices::with(|system_services| {
-            let current_pid = system_services.current_pid();
-            let process = system_services.get_process(PID::new(9).unwrap()).unwrap();
-            println!("PID {} {}:", process.pid, system_services.process_name(process.pid).unwrap_or(""));
-            process.activate().unwrap();
-            crate::arch::mem::MemoryMapping::current().print_map();
-            system_services.get_process(current_pid).unwrap().activate().unwrap();
-        }); */
-
-        Ok(xous_kernel::Result::Scalar5(total_bytes, 0, 0, 0, 0))
+        // TODO: use self.free_pages and eliminate the population count once we have confidence that the
+        // scheme works!
+        Ok(xous_kernel::Result::Scalar5(total_bytes, self.free_pages, 0, 0, 0))
     }
 
     /// The address space on entry to `retrieve_page` is `target_pid`; it must ensure
@@ -451,9 +441,9 @@ impl Swap {
             crate::arch::mem::map_page_to_swapper(paddr).expect("couldn't map target page to swapper");
         // we are now in the swapper's memory space
 
-        // this is safe because map_page_to_swapper() leaves us in the swapper memory context
         #[cfg(feature = "debug-swap")]
-        println!("retrieve_page - swapper activate, PC: {:08x}", self.pc);
+        println!("retrieve_page - userspace activate");
+        // this is safe because map_page_to_swapper() leaves us in the swapper memory context
         unsafe {
             self.blocking_activate_swapper(BlockingSwapOp::ReadFromSwap(
                 target_pid,
@@ -464,127 +454,4 @@ impl Swap {
             ));
         }
     }
-    /*
-    /// Update the alloc scoreboard to transmit to the swapper
-    pub fn tally_alloc_free(
-        &mut self,
-        // also the PID to return from after reporting to the swapper
-        target_pid: PID,
-        target_tid: TID,
-        target_vaddr_in_pid: usize,
-        paddr: usize,
-        is_free: bool,
-    ) {
-        let new_advice = if is_unmap.is_some() {
-            AllocAdvice::Free(target_pid, target_vaddr_in_pid, paddr)
-        } else {
-            AllocAdvice::Allocate(target_pid, target_vaddr_in_pid, paddr)
-        };
-        // First, search the advisories for existing, cached advice that matches a previous op
-        // advisories are tracked on tables that are keyed off of the physical address,
-        // so what we need to look for are items that match on the physical address.
-        let mut stored = false;
-        for (index, advisory) in self.alloc_advisories.iter_mut().enumerate() {
-            match advisory {
-                AllocAdvice::Allocate(_, _, pa) => {
-                    if *pa == paddr {
-                        *advisory = new_advice;
-                        stored = true;
-                        break;
-                    }
-                }
-                AllocAdvice::Free(_, _, pa) => {
-                    if *pa == paddr {
-                        *advisory = new_advice;
-                        stored = true;
-                        break;
-                    }
-                }
-                AllocAdvice::Uninit => {
-                    self.alloc_advisories[index] = new_advice;
-                    stored = true;
-                    break;
-                }
-            }
-        }
-        if !stored {
-            self.missing_pages += 1;
-            println!("advise_alloc total missed advisories: {}", self.missing_pages);
-        }
-        if self.pc != 0 {
-            self.flush_advisories();
-        }
-    }
-
-    // This should be called between quantum if advisories exist to be flushed.
-    pub fn flush_advisories(&mut self) {
-        assert!(self.pc != 0);
-        let mut alloc_handoff = [AllocAdvice::Uninit; 2];
-
-        // take the first two items and send them
-        for (index, advisory) in self.alloc_advisories.iter().enumerate() {}
-
-        // LEFT OFF at:
-        // I think advisories have diverged from their original design intent
-        // We don't want to advise the swapper of every map/unmap -- doing so causes
-        // a lot of overhead because message passing between processes leads to lots
-        // of useless advisories. We only want to advise on allocations of heap, stack,
-        // and text (code) pages. Everything else (memory messages, etc.) would be data
-        // in active use and probably should not be unmapped?
-        //
-        // Also, for efficiency, we want to advise allocations in pairs, to reduce
-        // expensive user-space transitions; but I think unmaps may have to be advised
-        // individually because they could be syscalls that have to be returned to.
-        //
-        // There is also the problem of having to send multiple advisories to clear
-        // out the advisory cache, which means we need to have a way to re-enter
-        // the loop when the call returns.
-        //
-        // Questions:
-        //   - can we differentiate between allocates of these types?
-        //   - can we differentiate between the unmap calls?
-        //   - how do we do a loop around advisories being sent to clear the advisory cache?
-        //   - are unmaps special in that they need some specific return handling?
-        //
-
-        if last_index >= self.alloc_advisories.len() - 1 {
-            #[cfg(feature = "debug-swap")]
-            {
-                // debugging
-                SystemServices::with(|ss| {
-                    let current = ss.get_process(current_pid()).unwrap();
-                    let state = current.state();
-                    println!(
-                        "advise_alloc: switching to userspace from PID{}-{:?}",
-                        current.pid.get(),
-                        state
-                    );
-                });
-            }
-
-            let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
-            SystemServices::with(|ss| ss.get_process(swapper_pid).unwrap().mapping.activate().unwrap());
-
-            // this is safe because we've changed into the swapper's memory space
-            if let Some(unmap_advice) = is_unmap {
-                // not an allocate -> this came through the unmap syscall
-                unsafe {
-                    self.blocking_activate_swapper(BlockingSwapOp::AllocateAdvisorySyscall(
-                        target_pid,
-                        target_tid,
-                        target_vaddr_in_pid,
-                        unmap_advice,
-                    ));
-                }
-            } else {
-                unsafe {
-                    self.blocking_activate_swapper(BlockingSwapOp::AllocateAdvisory(target_pid, target_tid));
-                }
-            }
-            // ^^ also note this has the side effect of clearing the advisory storage table
-            // call proceeds to swapper space -> we've diverged and will return via the
-            // swapper return path
-        }
-    }
-    */
 }

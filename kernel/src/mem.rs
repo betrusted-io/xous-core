@@ -68,6 +68,7 @@ pub struct SwapAlloc {
 impl SwapAlloc {
     pub fn is_pid(&self, pid: PID) -> bool { self.vpn as u8 == pid.get() }
 
+    #[allow(dead_code)]
     pub fn is_some(&self) -> bool { self.vpn as u8 != 0 }
 
     pub fn is_none(&self) -> bool { self.vpn as u8 == 0 }
@@ -77,16 +78,20 @@ impl SwapAlloc {
     }
 
     pub unsafe fn update(&mut self, pid: Option<PID>, vaddr: Option<usize>) {
-        self.timestamp = crate::swap::Swap::with_mut(|s| s.next_epoch());
-        if let Some(pid) = pid {
-            if let Some(va) = vaddr {
-                self.vpn = (va as u32) & !0xFFF | pid.get() as u32;
+        crate::swap::Swap::with_mut(|s| {
+            self.timestamp = s.next_epoch();
+            if let Some(pid) = pid {
+                s.track_alloc(true);
+                if let Some(va) = vaddr {
+                    self.vpn = (va as u32) & !0xFFF | pid.get() as u32;
+                } else {
+                    self.vpn = SWAP_FLG_WIRED | pid.get() as u32;
+                }
             } else {
-                self.vpn = SWAP_FLG_WIRED | pid.get() as u32;
+                s.track_alloc(false);
+                self.vpn = 0;
             }
-        } else {
-            self.vpn = 0;
-        }
+        });
     }
 
     pub unsafe fn reparent(&mut self, pid: PID) {
@@ -107,8 +112,6 @@ static mut MEMORY_ALLOCATIONS: &mut [SwapAlloc] = &mut [];
 #[cfg(not(feature = "swap"))]
 static mut MEMORY_ALLOCATIONS: &mut [Option<PID>] = &mut [];
 static mut EXTRA_ALLOCATIONS: &mut [Option<PID>] = &mut [];
-#[cfg(feature = "swap")]
-static mut SWAP_TIMESTAMP: u64 = 0;
 #[cfg(baremetal)]
 static mut EXTRA_REGIONS: &[MemoryRangeExtra] = &[];
 
@@ -208,8 +211,16 @@ impl MemoryManager {
         }
         #[cfg(feature = "swap")]
         unsafe {
-            MEMORY_ALLOCATIONS = slice::from_raw_parts_mut(rpt_base as *mut SwapAlloc, mem_size)
-        };
+            MEMORY_ALLOCATIONS = slice::from_raw_parts_mut(rpt_base as *mut SwapAlloc, mem_size);
+            crate::swap::Swap::with_mut(|s| {
+                s.init_rpt(
+                    rpt_base,
+                    ((mem_size * core::mem::size_of::<loader::swap::SwapAlloc>() + PAGE_SIZE - 1)
+                        & !(PAGE_SIZE - 1))
+                        / PAGE_SIZE,
+                )
+            });
+        }
         #[cfg(not(feature = "swap"))]
         unsafe {
             MEMORY_ALLOCATIONS = slice::from_raw_parts_mut(rpt_base as *mut Option<PID>, mem_size)

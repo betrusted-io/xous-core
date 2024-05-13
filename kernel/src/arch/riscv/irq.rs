@@ -318,16 +318,11 @@ pub extern "C" fn trap_handler(
         }
         #[cfg(feature = "swap")]
         RiscvException::InstructionPageFault(RETURN_FROM_SWAPPER, _offset) => {
-            /*
-            #[cfg(feature = "debug-swap")]
+            /* #[cfg(feature = "debug-swap")]
             {
                 let pid = crate::arch::process::current_pid();
                 let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
-                println!(
-                    "RETURN_FROM_SWAPPER PROCESS_TABLE.current: {}, hw_pid: {}",
-                    pid.get(),
-                    hardware_pid
-                );
+                println!("IPF RFS from PID{}, hw{}, offset {:x}", pid.get(), hardware_pid, _offset);
             } */
             // Cleanup after the swapper
             let response = Swap::with_mut(|s|
@@ -342,7 +337,13 @@ pub extern "C" fn trap_handler(
                     let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
                     let current = ss.get_process(current_pid()).unwrap();
                     let state = current.state();
-                    println!("swapper returning: PID{}(hw{})-{:?}", current.pid.get(), hardware_pid, state);
+                    println!(
+                        "swapper returning: PID{}(hw{})-{:?} result {:?}",
+                        current.pid.get(),
+                        hardware_pid,
+                        state,
+                        response
+                    );
                 });
             }
             // Re-enable interrupts now that we're out of the swap context
@@ -355,6 +356,7 @@ pub extern "C" fn trap_handler(
             } else {
                 ArchProcess::with_current_mut(|p| {
                     let thread = p.current_thread();
+                    println!("Swap syscall returning to address {:08x}", thread.sepc);
                     unsafe { _xous_syscall_return_result(&response, thread) };
                 });
             }
