@@ -310,6 +310,12 @@ impl MemoryMapping {
                 continue;
             }
             let _superpage_addr = i as u32 * (1 << 22);
+            #[cfg(all(feature = "swap", feature = "renode"))]
+            // skip printing the mem-mapped swap for renode targets in swap debug, makes the PT dumps a lot
+            // more compact
+            if _superpage_addr & 0xF000_0000 == 0xA000_0000 {
+                continue;
+            }
             println!(
                 "    {:4} Superpage for {:08x} @ {:08x} (flags: {:?})",
                 i,
