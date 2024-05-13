@@ -75,6 +75,7 @@ pub enum BlockingSwapOp {
 /// which increments `next_epoch` -- these can't be migrated into the swapper, and Rust
 /// does not allow extensions to types that aren't native to your crate. So, we're left
 /// with redundant copies of the structure definition.
+#[derive(Debug)]
 pub struct SwapAlloc {
     timestamp: u32,
     /// virtual_page_number[19:0] | flags[3:0] | pid[7:0]
@@ -415,7 +416,10 @@ impl Swap {
         // we are now in the swapper's memory space
 
         #[cfg(feature = "debug-swap")]
-        println!("retrieve_page - userspace activate");
+        println!(
+            "retrieve_page - userspace activate from pid{:?} for vaddr {:x?}",
+            target_pid, target_vaddr_in_pid
+        );
         // this is safe because map_page_to_swapper() leaves us in the swapper memory context
         unsafe {
             self.blocking_activate_swapper(BlockingSwapOp::ReadFromSwap(
@@ -497,13 +501,20 @@ impl Swap {
     /// Safety: this call must only be invoked in the swapper's memory context
     pub unsafe fn exit_blocking_call(&mut self) -> Result<xous_kernel::Result, xous_kernel::Error> {
         let result = match self.prev_op.take() {
-            Some(BlockingSwapOp::WriteToSwap(tid, sepc, pid, addr, _virt_addr)) => {
-                // update the RPT: mark the physical memory as free. The physical page is
+            Some(BlockingSwapOp::WriteToSwap(tid, sepc, pid, _addr, swapper_virt_page)) => {
+                // Update the RPT: mark the physical memory as free. The virtual address is
                 // in the swapper's context at this point, so free it there (it's already been
-                // remapped as swapped in the target's context)
+                // remapped as swapped in the target's context). Note that the swapped page now contains
+                // encrypted data, as the encryption happens in-place.
                 MemoryManager::with_mut(|mm| {
-                    mm.release_page_swap(addr as *mut usize, pid)
-                        .expect("couldn't clear the RPT after flushing swap")
+                    let paddr = crate::arch::mem::virt_to_phys(swapper_virt_page).unwrap() as usize;
+                    println!("WTS releasing vaddr {:x}, paddr {:x}", swapper_virt_page, paddr);
+                    // this call releases the physical page from the RPT - the pid has to match that of the
+                    // original owner.
+                    mm.release_page_swap(paddr as *mut usize, pid)
+                        .expect("couldn't free page that was swapped out");
+                    // this call unmaps the virtual page from the page table
+                    crate::arch::mem::unmap_page_inner(mm, swapper_virt_page).expect("couldn't unmap page");
                 });
 
                 // Switch back to the Swapper's userland thread
@@ -574,7 +585,6 @@ impl Swap {
                 MemoryManager::with_mut(|mm| {
                     for page in 0..self.mem_alloc_tracker_pages {
                         crate::arch::mem::unmap_page_inner(mm, SWAP_RPT_VADDR + page * PAGE_SIZE).ok();
-                        unsafe { crate::arch::mem::flush_mmu() };
                     }
                 });
                 // Switch back to the Swapper's userland thread
