@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 bunnie <bunnie@kosagi.com>
+// SPDX-License-Identifier: Apache-2.0
+
 use loader::swap::SWAP_FLG_WIRED;
 use loader::swap::SWAP_RPT_VADDR;
 use xous_kernel::SWAPPER_PID;
@@ -9,6 +12,16 @@ use crate::arch::mem::PAGE_SIZE;
 use crate::mem::MemoryManager;
 use crate::services::SystemServices;
 
+/// This structure is a copy of what's defined in the loader's swap module. The reason
+/// we can't condense the two APIs is because PID is actually defined differently in the
+/// kernel than in the loader: a PID for the loader is a `u8`. A PID for the kernel is a
+/// NonZeroU8. Thus the APIs are not compatible, and we have to maintain two sets of
+/// calls.
+///
+/// Also, critically, `SwapAlloc` in the kernel needs an `update` and `reparent` call,
+/// which increments `next_epoch` -- these can't be migrated into the swapper, and Rust
+/// does not allow extensions to types that aren't native to your crate. So, we're left
+/// with redundant copies of the structure definition.
 pub struct SwapAlloc {
     timestamp: u32,
     /// virtual_page_number[19:0] | flags[3:0] | pid[7:0]
