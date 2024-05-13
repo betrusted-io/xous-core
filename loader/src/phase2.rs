@@ -254,8 +254,12 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
         if let Some(desc) = cfg.swap {
             swap_spec.key.copy_from_slice(&cfg.swap_hal.as_ref().unwrap().get_swap_key());
             swap_spec.pid_count = cfg.init_process_count as u32 + 1;
-            // we only track main ram area (which is also the only swappable memory) to save space
-            swap_spec.rpt_len_bytes = (cfg.sram_size / 4096) as u32;
+            // duplicated code from loader/src/phase1.rs/allocate_regions()
+            let rpt_pages = cfg.sram_size / PAGE_SIZE;
+            let proposed_alloc = rpt_pages * mem::size_of::<XousAlloc>();
+            let page_aligned_alloc = (proposed_alloc + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+            swap_spec.rpt_len_pages = (page_aligned_alloc / PAGE_SIZE) as u32;
+            swap_spec.rpt_base_phys = cfg.runtime_page_tracker.as_ptr() as usize as u32;
             swap_spec.swap_base = desc.ram_offset;
             swap_spec.swap_len = desc.ram_size;
             (swap_spec.mac_base, swap_spec.mac_len) = cfg.swap_hal.as_ref().unwrap().mac_base_bounds();

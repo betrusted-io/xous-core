@@ -234,6 +234,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
                 "RPT looks corrupted, suspect stack overflow in loader. Increase GUARD_MEMORY_BYTES!"
             );
         }
+        // compute the virtual addresses of all of these "manually"
         let arg_offset = cfg.args.base as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let ip_offset = cfg.processes.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let rpt_offset =

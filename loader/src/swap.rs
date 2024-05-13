@@ -3,7 +3,6 @@ use core::mem::size_of;
 
 use aes_gcm_siv::Tag;
 
-use crate::XousPid;
 use crate::PAGE_SIZE;
 use crate::SWAPPER_PID;
 
@@ -67,7 +66,11 @@ pub struct SwapSpec {
     /// Count of PIDs in the system. Could be a u8, but, make it a u32 because we have
     /// the space and word alignment is good for stuff being tossed through unsafe pointers.
     pub pid_count: u32,
-    pub rpt_len_bytes: u32,
+    /// Physical address of the RPT base (the table for main RAM allocs)
+    pub rpt_base_phys: u32,
+    /// Length of the memory tracker mapping region in *pages*. This can correspond to a region
+    /// that is strictly larger than needed by the RPT.
+    pub rpt_len_pages: u32,
     /// Base address of swap memory. If swap is memory-mapped, this is a virtual address.
     /// If swap is device-mapped, it's the physical offset in the device.
     pub swap_base: u32,
@@ -114,14 +117,14 @@ pub const SWAP_FLG_WIRED: u32 = 0x1_00;
 #[derive(Copy, Clone)]
 
 pub struct SwapAlloc {
-    _timestamp: u32,
+    timestamp: u32,
     /// virtual_page_number[19:0] | flags[3:0] | pid[7:0]
     vpn: u32,
 }
 
 impl SwapAlloc {
     /// Allocations in the loader all start out as "wired", with no virtual address for tracking.
-    pub fn from(pid: u8) -> SwapAlloc { SwapAlloc { _timestamp: 0, vpn: pid as u32 | SWAP_FLG_WIRED } }
+    pub fn from(pid: u8) -> SwapAlloc { SwapAlloc { timestamp: 0, vpn: pid as u32 | SWAP_FLG_WIRED } }
 
     /// As the page tables are laid in, we can update the tracker with the virtual address. If
     /// the page it belongs to the kernel or swapper, mark it as unswappable (WIRED)
@@ -134,6 +137,10 @@ impl SwapAlloc {
     /// This is a slight abuse of the naming system to provide us cross-compatibility with the case where the
     /// structure is defined as an overload of the `u8` type
     pub fn to_le(&self) -> u8 { self.vpn as u8 }
+
+    pub fn is_wired(&self) -> bool { self.vpn & SWAP_FLG_WIRED != 0 }
+
+    pub fn is_valid(&self) -> bool { self.timestamp != 0 || self.vpn != 0 }
 }
 
 impl fmt::Debug for SwapAlloc {
@@ -144,4 +151,22 @@ impl fmt::Debug for SwapAlloc {
             .field("flags", &(if self.vpn & SWAP_FLG_WIRED != 0 { "WIRED" } else { "NONE" }))
             .finish()
     }
+}
+
+impl PartialEq for SwapAlloc {
+    fn eq(&self, other: &Self) -> bool { self.timestamp == other.timestamp }
+}
+
+impl Eq for SwapAlloc {}
+
+impl PartialOrd for SwapAlloc {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> { Some(self.cmp(other)) }
+}
+
+impl Ord for SwapAlloc {
+    // Note: the ordering will give us a min-heap (reversed from the "usual sense")
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering { other.timestamp.cmp(&self.timestamp) }
+
+    // Note: the ordering will give us a max-heap (keep comment around for debugging)
+    // fn cmp(&self, other: &Self) -> core::cmp::Ordering { self.timestamp.cmp(&other.timestamp) }
 }
