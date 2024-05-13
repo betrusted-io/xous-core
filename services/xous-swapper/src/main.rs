@@ -1,27 +1,77 @@
+//! The swapper needs to come up with an answer for which page to swap out, and it
+//! also needs to know when to do it (OOM pressure).
+//!
+//! OOM pressure is handled with a syscall to the kernel to query the current `MEMORY_ALLOCATIONS`
+//! table and return the available RAM. This is queried periodically with a timer, and if we
+//! fall below a certain threshold, the swapper will try to suggest pages to the kernel to Evict.
+//!
+//! When `swap` is active, `MEMORY_ALLOCATIONS` is upgraded to be a table of
+//! `timestamp | VPN | PID | FLAGS`, where the timestamp is a u32 that is monotonically
+//! incremented with every modification to the page, and the VPN | PID | FLAGS portion
+//! is condensed to fit into a u32. The FLAGS can specify if the address is `wired`, which
+//! would be the case of e.g. a page table page, and the VPN would be considered invalid
+//! in this case (and the page should never be swapped).
+//!
+//! A u32 is used instead of a u64 because due to alignment issues, if we used a u64 we'd
+//! waste 4 bytes per tracking slot, and the penalty is not worth it in a memory-constrained
+//! system. Instead, we have a callback to handle when the "epoch" rolls over.
+//!
+//! The `MEMORY_ALLOCATIONS` table is page-aligned, so that it can be mapped into PID 2 inside
+//! an interrupt context. When the free memory level hits the low water mark, PID 2 invokes
+//! a request to the kernel to call the swapper interrupt context with `MEMORY_ALLOCATIONS`
+//! mapped into its memory space. At this point, PID 2 will copy the current `MEMORY_ALLOCATIONS`
+//! table into a pre-allocated BinaryHeap in the shared state structure, indexed by the timestamp.
+//! On completion of the interrupt context, a message is sent back into the swapper userspace
+//! using `try_send_message` to trigger the Evict operation. At this point, the Evict operation
+//! can work through a sorted vector of allocations to pick the pages it wants to remove.
+//!
+//! This trades off making the Evict computation a bit more expensive for making all other
+//! allocation bookkepping a bit cheaper, because we no longer need to send AllocAdvice messages
+//! to the userspace swapper. However, keep in mind that a 2MiB main memory means we have
+//! a `MEMORY_ALLOCATIONS` table with only 512 entries, so processing a binary heap of this
+//! should have a cost less than decrypting a single page of memory. By ensuring that every
+//! Evict pushes out at least 10 or so pages, we can amortize the cost of computing the heap.
+//! We also have the advantage that because we have an absolute sorted list of all allocations,
+//! we can keep trying evictions from oldest entry to newest entry until we have the correct
+//! number of *successes* -- meaning the kernel can override any requested Evictions without
+//! impacting the amount of memory that ultimately gets freed up.
+//!
+//! One thing to note is that the Eviction process should be kicked off when there is sufficient
+//! free memory available to complete the BinaryHeap generation + sorted Vec output. One option
+//! is to pre-allocate those quantities, potentially with Heapless.
+//!
+//! A final feature that should be introduced is the kernel needs to have an API call into the
+//! swapper, so that it can invoke a chain of events that clears out memory in case it sees
+//! the OOM condition. This is done by having the kernel enter the swapper via the interrupt
+//! context, and the swapper then issuing the a message that the userspace then handles.
+
+// TODO:
+//  - [done] refactor loader to have a swap allocation tracker (MSB of `count` table)
+//    - move the alloc earlier in the boot process; update page map at the end
+//    - have phase 1 mark the table
+//  - [done] implement the WriteToSwap routine - look for the next free page, increment offset counter, write
+//    memory to swap
+//  - [done] refactor memory allocation tracking
+//  - add kernel OOM callback
+//  - add test command to force eviction of some variable number of pages
+//  - create test program that over provisions heap versus available memory and prove that swap really works.
+//  - Implement Evictor routine with a thing that checks free memory level, and then more intelligently swaps
+//    stuff out to create free space for the kernel
+
 mod debug;
 mod platform;
 use core::fmt::Write;
-use std::num::NonZeroUsize;
+use std::collections::BinaryHeap;
+use std::fmt::Debug;
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
-use std::{fmt::Debug, num::NonZeroU8};
 
 use debug::*;
-use heapless::LinearMap;
-use loader::swap::{SwapSpec, SWAP_CFG_VADDR, SWAP_OFFSET_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
-use lru::LruCache;
+use loader::swap::{SwapAlloc, SwapSpec, SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
 use num_traits::*;
 use platform::{SwapHal, PAGE_SIZE};
-use xous::{AllocAdvice, Message, Result, CID, PID, SID};
-
-/// This controls how deep we aggregate advisories before passing them into true
-/// userspace. The trade-off is performance (bigger depth takes longer to search),
-/// precision (a larger aggregation can make our tracking less accurate, as updates
-/// happen less frequently), and performance (aggregating advisories reduces expensive
-/// updates of the allocation LRU cache). This should also be a power of 2 for
-/// best performance, because the underlying primitive is `heapless`.
-const ADVISORY_AGGREGATE_DEPTH: usize = 8;
+use xous::{MemoryFlags, Message, Result, CID, PID, SID};
 
 /// This ABI is copy-paste synchronized with what's in the kernel. It's left out of
 /// xous-rs so that we can change it without having to push crates to crates.io.
@@ -33,13 +83,16 @@ pub enum SwapAbi {
     Invalid = 0,
     Evict = 1,
     GetFreeMem = 2,
+    FetchAllocs = 3,
 }
+/// SYNC WITH `kernel/src/swap.rs`
 impl SwapAbi {
     pub fn from(val: usize) -> SwapAbi {
         use SwapAbi::*;
         match val {
             1 => Evict,
             2 => GetFreeMem,
+            3 => FetchAllocs,
             _ => Invalid,
         }
     }
@@ -58,36 +111,55 @@ pub struct RuntimePageTracker {
     pub allocs: &'static mut [Option<PID>],
 }
 
-pub struct OffsetTracker {
-    pub offsets: &'static mut [u32],
+pub struct SwapCountTracker {
+    pub counts: &'static mut [u32],
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 #[repr(usize)]
-pub enum Opcode {
+pub enum KernelOp {
     /// Take the page lent to us, encrypt it and write it to swap
     WriteToSwap = 0,
     /// Find the requested page, decrypt it, and return it
     ReadFromSwap = 1,
     /// Kernel message advising us that a page of RAM was allocated
-    AllocateAdvisory = 2,
+    ExecFetchAllocs = 2,
     /// Test messages
     Test0 = 128,
     /// A message from the kernel handler context to evaluate if a trim is needed
     EvalTrim = 256,
 }
 
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+#[repr(usize)]
+pub enum Opcode {
+    /// Trigger back to userspace to indicate that alloc fetching is done.
+    FetchAllocsDone,
+    /// Test messages
+    Test0,
+}
 /// This structure contains shared state accessible between the userspace code and the blocking swap call
 /// handler.
 pub struct SwapperSharedState {
+    /// Mapping of (PID, virtual address) -> (physical offset in swap), organized as a table of page tables
+    /// indexed by PID
     pub pts: SwapPageTables,
+    /// Contains all the structures specific to the HAL for accessing swap memory
     pub hal: SwapHal,
-    pub rpt: RuntimePageTracker,
-    pub ot: OffsetTracker,
+    /// This is a table of `u32` per page of swap memory, which tracks the count of how many times
+    /// the swap page has been used with a 31-bit count, and the remaining 1 MSB dedicated to tracking
+    /// if the page is currently used at all. The purpose of this count is to drive nonces up in a
+    /// deterministic factor to deter page-reuse attacks.
+    pub sct: SwapCountTracker,
+    /// Address of main RAM start
     pub sram_start: usize,
+    /// Size of main RAM in bytes
     pub sram_size: usize,
-    pub swap_size: usize,
-    pub alloc_aggregator: LinearMap<usize, AllocAdvice, ADVISORY_AGGREGATE_DEPTH>,
+    /// Starting point for a search for free swap pages. A simple linear ascending search is done,
+    /// starting from the free swap search origin. The unit of this variable is in pages, so it
+    /// can be used to directly index the `sct` `SwapCountTracker`.
+    pub free_swap_search_origin: usize,
+    pub alloc_heap: Option<BinaryHeap<SwapAlloc>>,
 }
 impl SwapperSharedState {
     pub fn pt_walk(&self, pid: u8, va: usize) -> Option<usize> {
@@ -133,15 +205,50 @@ impl SharedStateStorage {
     }
 }
 
-pub fn change_owner(ss: &mut SwapperSharedState, pid: u8, paddr: usize) {
-    // First, check to see if the region is in RAM,
-    if paddr >= ss.sram_start && paddr < ss.sram_start + ss.sram_size {
-        // Mark this page as in-use by the kernel
-        ss.rpt.allocs[(paddr - ss.sram_start as usize) / PAGE_SIZE] = PID::new(pid);
-        return;
+fn map_swap(ss: &mut SwapperSharedState, swap_phys: usize, virt: usize, owner: u8) {
+    writeln!(DebugUart {}, "    swap pa {:x} -> va {:x}", swap_phys, virt).ok();
+    let ppn1 = (swap_phys >> 22) & ((1 << 12) - 1);
+    let ppn0 = (swap_phys >> 12) & ((1 << 10) - 1);
+
+    let vpn1 = (virt >> 22) & ((1 << 10) - 1);
+    let vpn0 = (virt >> 12) & ((1 << 10) - 1);
+    assert!(owner != 0);
+    let l1_pt = &mut ss.pts.roots[owner as usize - 1].entries;
+
+    // Allocate a new level 1 pagetable entry if one doesn't exist.
+    if l1_pt[vpn1] as usize & loader::FLG_VALID == 0 {
+        let na = xous::map_memory(None, None, PAGE_SIZE, MemoryFlags::R | MemoryFlags::W)
+            .expect("couldn't allocate a swap page table page")
+            .as_ptr() as usize;
+        writeln!(
+            DebugUart {},
+            "Swap Level 1 page table is invalid ({:08x}) @ {:08x} -- allocating a new one @ {:08x}",
+            unsafe { l1_pt.as_ptr().add(vpn1) } as usize,
+            l1_pt[vpn1],
+            na
+        )
+        .ok();
+        // Mark this entry as a leaf node (WRX as 0), and indicate
+        // it is a valid page by setting "V".
+        l1_pt[vpn1] = (((na >> 12) << 10) | loader::FLG_VALID) as u32;
     }
-    // The region isn't in RAM. We're in the swapper, we can't handle errors - drop straight to panic.
-    panic!("Tried to swap region {:08x} that isn't in RAM!", paddr);
+
+    let l0_pt_idx = unsafe { &mut (*(((l1_pt[vpn1] << 2) & !((1 << 12) - 1)) as *mut PtPage)) };
+    let l0_pt = &mut l0_pt_idx.entries;
+
+    // Ensure the entry hasn't already been mapped to a different address.
+    if (l0_pt[vpn0] as usize) & 1 != 0
+        && (l0_pt[vpn0] as usize & 0xffff_fc00) != ((ppn1 << 20) | (ppn0 << 10))
+    {
+        panic!(
+            "Swap page {:08x} was already allocated to {:08x}, so cannot map to {:08x}!",
+            swap_phys,
+            (l0_pt[vpn0] >> 10) << 12,
+            virt
+        );
+    }
+    let previous_flags = l0_pt[vpn0] as usize & 0x3f;
+    l0_pt[vpn0] = ((ppn1 << 20) | (ppn0 << 10) | previous_flags | loader::FLG_VALID) as u32;
 }
 
 /// blocking swap call handler
@@ -154,9 +261,9 @@ fn swap_handler(
     a2: usize,
     a3: usize,
     a4: usize,
-    a5: usize,
-    a6: usize,
-    a7: usize,
+    _a5: usize,
+    _a6: usize,
+    _a7: usize,
 ) {
     // safety: lots of footguns actually, but this is the only way to get this pointer into
     // our context. SharedStateStorage is a Rust structure that is aligned and initialized,
@@ -191,60 +298,64 @@ fn swap_handler(
                 },
             },
             hal: SwapHal::new(swap_spec),
-            // safety: this is only safe because the loader guarantees this raw pointer is initialized and
-            // aligned correctly
-            rpt: RuntimePageTracker {
-                allocs: unsafe {
-                    core::slice::from_raw_parts_mut(
-                        SWAP_RPT_VADDR as *mut Option<NonZeroU8>,
-                        swap_spec.rpt_len_bytes as usize,
-                    )
-                },
-            },
             // safety: this is safe because the loader has allocated this region and zeroed the contents,
             // and the length is correctly set up by the loader. Note that the length is slightly
             // longer than it needs to be -- the region that has to be tracked does not include the
             // area of swap dedicated to the MAC table, which swap_len includes.
-            ot: OffsetTracker {
-                offsets: unsafe {
+            sct: SwapCountTracker {
+                counts: unsafe {
                     core::slice::from_raw_parts_mut(
-                        SWAP_OFFSET_VADDR as *mut u32,
+                        SWAP_COUNT_VADDR as *mut u32,
                         loader::swap::derive_usable_swap(swap_spec.swap_len as usize) / PAGE_SIZE,
                     )
                 },
             },
             sram_start: swap_spec.sram_start as usize,
             sram_size: swap_spec.sram_size as usize,
-            swap_size: swap_spec.swap_len as usize,
-            alloc_aggregator: LinearMap::new(),
+            free_swap_search_origin: 0,
+            alloc_heap: None,
         });
     }
     let ss = sss.inner.as_mut().expect("Shared state should be initialized");
 
-    let op: Option<Opcode> = FromPrimitive::from_usize(opcode);
+    let op: Option<KernelOp> = FromPrimitive::from_usize(opcode);
     writeln!(DebugUart {}, "got Opcode: {:?}", op).ok();
     match op {
-        Some(Opcode::WriteToSwap) => {
+        Some(KernelOp::WriteToSwap) => {
             let pid = a2 as u8;
             let vaddr_in_pid = a3;
             let vaddr_in_swap = a4;
-            // next steps on the swap journey:
-            //  - create a "dummy" Evictor routine that just tell the kernel to evict one of our resident
-            //    processes
-            //  - this should trigger WriteToSwap here
-            //  - implement the routine here
-            //  - also implement some routines to track free memory to check that things are doing what we
-            //    expect them to do
-            //
-            //  - Do something with allocate advisories (e.g. LRU cache with pre-defined capacity)
-            //  - Replace the Evictor routine with a thing that checks free memory level, and then more
-            //    intelligently swaps stuff out to create free space for the kernel
-            //
-            //  - Somehow come up with some test cases for stress-testing the swapper...probably some function
-            //    that allocates a bunch of heap, and occasionally touches the contents, while other system
-            //    processes trundle on.
+            // this is safe because the page is aligned and initialized as it comes from the kernel
+            // renember that this page is overwritten with encrypted data
+            let buf: &mut [u8] =
+                unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
+
+            // search the swap page tables for the next free page
+            let mut next_free_page: Option<usize> = None;
+            for slot in 0..ss.sct.counts.len() {
+                let candidate = (ss.free_swap_search_origin + slot) % ss.sct.counts.len();
+                if ss.sct.counts[candidate] & loader::FLG_SWAP_USED != 0 {
+                    next_free_page = Some(candidate);
+                    break;
+                }
+            }
+            if let Some(free_page_number) = next_free_page {
+                // increment the swap counter by one, rolling over if full. Note that we only have 31
+                // bits; the MSB is the "swap used" status bit
+                let mut count = ss.sct.counts[free_page_number] & !loader::FLG_SWAP_USED;
+                count = (count + 1) & !loader::FLG_SWAP_USED;
+                ss.sct.counts[free_page_number] = count;
+
+                // add a PT mapping for the swap entry
+                map_swap(ss, free_page_number, vaddr_in_pid, pid);
+
+                ss.hal.encrypt_swap_to(buf, count, free_page_number, vaddr_in_pid, pid);
+            } else {
+                // OOS path
+                panic!("Ran out of swap space, hard OOM!");
+            }
         }
-        Some(Opcode::ReadFromSwap) => {
+        Some(KernelOp::ReadFromSwap) => {
             let pid = a2 as u8;
             let vaddr_in_pid = a3;
             let vaddr_in_swap = a4;
@@ -263,87 +374,38 @@ fn swap_handler(
             // safety: this is only safe because the pointer we're passed from the kernel is guaranteed to be
             // a valid u8-page in memory
             let buf = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
-            // TODO: manage swap_count
             ss.hal
-                .decrypt_swap_from(buf, 0, paddr_in_swap, vaddr_in_pid, pid)
+                .decrypt_swap_from(
+                    buf,
+                    ss.sct.counts[paddr_in_swap / PAGE_SIZE],
+                    paddr_in_swap,
+                    vaddr_in_pid,
+                    pid,
+                )
                 .expect("Decryption error: swap image corrupted, the tag does not match the data!");
             // at this point, the `buf` has our desired data, we're done, modulo updating the count.
         }
-        Some(Opcode::AllocateAdvisory) => {
-            let advisories = [
-                xous::AllocAdvice::deserialize(a2, a3),
-                xous::AllocAdvice::deserialize(a4, a5),
-                xous::AllocAdvice::deserialize(a6, a7),
-            ];
-            // Record all the advice into a short LinearMap. We desires the keys (physical addresses) to
-            // be overwritten if multiple advisories are issued to a single physical address -- no need to
-            // track all that activity down to the userspace. A hot page is a hot page: LRU cache will get
-            // touched, touching it twice in a row doesn't make it significantly less recently used.
-            for advice in advisories {
-                match advice {
-                    xous::AllocAdvice::Allocate(pid, vaddr, paddr) => {
-                        change_owner(ss, pid.get(), paddr);
-                        match ss.alloc_aggregator.insert(paddr, AllocAdvice::Allocate(pid, vaddr, paddr)) {
-                            Ok(_) => {}
-                            Err((a, _advice)) => {
-                                writeln!(
-                                    DebugUart {},
-                                    "alloc_aggregator capacity exceeded, dropping request @ PA {:x}",
-                                    a,
-                                )
-                                .ok();
-                            }
-                        }
+        Some(KernelOp::ExecFetchAllocs) => {
+            if let Some(alloc_heap) = &mut ss.alloc_heap {
+                alloc_heap.clear();
+                let rpt = unsafe {
+                    core::slice::from_raw_parts(SWAP_RPT_VADDR as *const SwapAlloc, ss.sram_size / PAGE_SIZE)
+                };
+                for &entry in rpt.iter() {
+                    if !entry.is_wired() && entry.is_valid() {
+                        //  writeln!(DebugUart {}, "Pushing {:x?}", entry).ok();
+                        alloc_heap.push(entry);
                     }
-                    xous::AllocAdvice::Free(pid, vaddr, paddr) => {
-                        change_owner(ss, 0, paddr);
-                        match ss.alloc_aggregator.insert(paddr, AllocAdvice::Free(pid, vaddr, paddr)) {
-                            Ok(_) => {}
-                            Err((a, _advice)) => {
-                                writeln!(
-                                    DebugUart {},
-                                    "alloc_aggregator capacity exceeded, dropping request @ PA {:x}",
-                                    a,
-                                )
-                                .ok();
-                            }
-                        }
-                    }
-                    xous::AllocAdvice::Uninit => {} // not all the records have to be populated
                 }
+                writeln!(DebugUart {}, "Allocs have been copied").ok();
+                xous::try_send_message(
+                    sss.conn,
+                    Message::new_scalar(Opcode::FetchAllocsDone.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
+                writeln!(DebugUart {}, "FetchAllocsDone sent").ok();
             }
-            // flush what entries we can, filling an even multiple of messages so we are efficiently
-            // utilizing the expensive messaging channel to userspace
-            let mut removed_pa = [0usize; 2]; // track removals to avoid interior mutability problems
-            while ss.alloc_aggregator.len() >= 2 {
-                {
-                    let mut removed_entries: [Option<AllocAdvice>; 2] = [None; 2];
-                    for (index, (&pa, &entry)) in ss.alloc_aggregator.iter().enumerate() {
-                        if index == removed_pa.len() {
-                            break;
-                        }
-                        removed_pa[index] = pa;
-                        removed_entries[index] = Some(entry)
-                    }
-                    let (a1, a2) = removed_entries[0].take().unwrap().serialize();
-                    let (a3, a4) = removed_entries[1].take().unwrap().serialize();
-                    match xous::try_send_message(
-                        sss.conn,
-                        Message::new_scalar(Opcode::AllocateAdvisory as usize, a1, a2, a3, a4),
-                    ) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            // report the error, and just...lose the message, don't retry or anything like
-                            // that.
-                            writeln!(DebugUart {}, "Couldn't send advisory to userspace: {:?}", e).ok();
-                        }
-                    }
-                }
-                // do the removals, outside of the previous for loop
-                for entry in removed_pa.iter() {
-                    ss.alloc_aggregator.remove(entry);
-                }
-            }
+            writeln!(DebugUart {}, "Dummy ExecFetchAllocs").ok();
         }
         _ => {
             writeln!(DebugUart {}, "Unimplemented or unknown opcode: {}", opcode).ok();
@@ -369,28 +431,11 @@ fn main() {
         xous::yield_slice();
     }
 
-    // LRU cache
-    // We want to be able to ask it, "give me the next page to evict". The answer should be the
-    // least recently used page, and the format of the answer is a physical page number.
-    //
-    // The cache is keyed by physical page number; the values are an Option<(PID, vaddr)> tuple that
-    // corresponds to the current owner of that page.
     let total_ram = sss.inner.as_ref().unwrap().sram_size;
-    let mut lru = LruCache::new(NonZeroUsize::new(total_ram / PAGE_SIZE).unwrap());
-    // Offset tracker
-    // Track an offset count for every page that gets written to swap.
-
-    /*
-    for (index, pa) in (start..(start + total)).step_by(PAGE_SIZE).enumerate() {
-        if let Some(pid) = sss.inner.as_ref().unwrap().rpt.allocs[index] {
-            if pid.get() != 1 && pid.get() != 2 {
-                // track all processes except kernel and loader; kernel and loader
-                // are "wired" and should never be up for swapping
-                // lru.push(pa, (pid, todo!("reverse lookup pa to va for a given process...")));
-            }
-        }
-    }
-    */
+    // Binary heap for storing the view of the memory allocations.
+    sss.inner.as_mut().unwrap().alloc_heap = Some(BinaryHeap::with_capacity(total_ram / PAGE_SIZE));
+    // handle for the current sorted vector of swap-out candidates
+    let mut swap_candidates: Option<Vec<SwapAlloc>> = None;
 
     thread::spawn({
         let conn = conn.clone();
@@ -399,7 +444,7 @@ fn main() {
                 log::info!("Kernel reports free mem: {}kiB", get_free_mem() / 1024);
                 xous::send_message(conn, Message::new_scalar(Opcode::Test0.to_usize().unwrap(), 0, 0, 0, 0))
                     .ok();
-                sleep(Duration::from_millis(1000));
+                sleep(Duration::from_millis(5000));
             }
         }
     });
@@ -409,45 +454,31 @@ fn main() {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();
         let op: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
-        log::info!("Swapper got {:?}", msg);
+        log::info!("Swapper got {:x?}", op);
         match op {
-            Some(Opcode::WriteToSwap) => {
-                unimplemented!();
-            }
-            Some(Opcode::AllocateAdvisory) => {
-                if let Some(scalar) = msg.body.scalar_message() {
-                    let advisories = [
-                        AllocAdvice::deserialize(scalar.arg1, scalar.arg2),
-                        AllocAdvice::deserialize(scalar.arg3, scalar.arg4),
-                    ];
-                    for advice in advisories {
-                        match advice {
-                            AllocAdvice::Allocate(pid, vaddr, paddr) => {
-                                lru.push(paddr, (pid, vaddr));
-                            }
-                            AllocAdvice::Free(_pid, _vaddr, paddr) => {
-                                lru.pop(&paddr);
-                            }
-                            _ => { // it's okay to have an unutilized entry
-                            }
-                        }
+            Some(Opcode::FetchAllocsDone) => {
+                let ss = sss.inner.as_mut().unwrap();
+                if let Some(alloc_heap) = ss.alloc_heap.take() {
+                    let candidates = alloc_heap.into_sorted_vec();
+                    for (i, candidate) in candidates[..8.min(candidates.len())].iter().enumerate() {
+                        log::info!("Candidate for swap-out #{}: {:x?}", i, candidate);
                     }
+                    swap_candidates = Some(candidates);
                 }
+                // restore the allocation for the binary heap
+                ss.alloc_heap = Some(BinaryHeap::with_capacity(total_ram / PAGE_SIZE));
             }
             Some(Opcode::Test0) => {
-                // this test routine computes our view of free space from the RPT.
-                if let Some(ss) = &sss.inner {
-                    let mut used_mem = 0;
-                    for &page in ss.rpt.allocs.iter() {
-                        if let Some(_pid) = page {
-                            used_mem += 4096;
-                        }
+                if let Some(candidates) = &swap_candidates {
+                    for (i, candidate) in candidates[..3.min(candidates.len())].iter().enumerate() {
+                        log::info!("Test0 replay swap-out #{}: {:x?}", i, candidate);
                     }
-                    log::info!("Computed mem: {}kiB", used_mem / 1024);
                 }
-                log::info!("LRU entry is: {:x?}", lru.peek_lru());
+                log::info!(
+                    "FetchAllocs result: {:?}",
+                    xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::FetchAllocs as usize, 0, 0, 0, 0, 0, 0))
+                );
             }
-            // ... todo, other opcodes.
             _ => {
                 log::info!("Unknown opcode {:?}", op);
             }
