@@ -73,6 +73,7 @@ use num_traits::*;
 use platform::{SwapHal, PAGE_SIZE};
 use xous::{MemoryFlags, Message, Result, CID, PID, SID};
 
+/// userspace swapper -> kernel ABI
 /// This ABI is copy-paste synchronized with what's in the kernel. It's left out of
 /// xous-rs so that we can change it without having to push crates to crates.io.
 /// Since there is only one place the ABI could be used, we're going to stick with
@@ -84,6 +85,7 @@ pub enum SwapAbi {
     Evict = 1,
     GetFreeMem = 2,
     FetchAllocs = 3,
+    SetOomThresh = 4,
 }
 /// SYNC WITH `kernel/src/swap.rs`
 impl SwapAbi {
@@ -93,9 +95,39 @@ impl SwapAbi {
             1 => Evict,
             2 => GetFreeMem,
             3 => FetchAllocs,
+            4 => SetOomThresh,
             _ => Invalid,
         }
     }
+}
+
+/// kernel -> swapper handler ABI
+/// This structure mirrors the BlockingSwapOp's that the kernel can issue to userspace.
+/// The actual numbers for the opcode are transcribed manually into the kernel, as the
+/// kernel's encoding of its enum is composite to track call state.
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+#[repr(usize)]
+pub enum KernelOp {
+    /// Take the page lent to us, encrypt it and write it to swap
+    WriteToSwap = 0,
+    /// Find the requested page, decrypt it, and return it
+    ReadFromSwap = 1,
+    /// Kernel message advising us that a page of RAM was allocated
+    ExecFetchAllocs = 2,
+    /// OOM warning from the kernel
+    OomDoom = 3,
+}
+
+/// public userspace & swapper handler -> swapper userspace ABI
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+#[repr(usize)]
+pub enum Opcode {
+    /// Trigger back to userspace to indicate that alloc fetching is done.
+    FetchAllocsDone,
+    /// Trigger the OOM routine
+    HandleOomDoom,
+    /// Test messages
+    Test0,
 }
 
 pub struct PtPage {
@@ -115,29 +147,6 @@ pub struct SwapCountTracker {
     pub counts: &'static mut [u32],
 }
 
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-#[repr(usize)]
-pub enum KernelOp {
-    /// Take the page lent to us, encrypt it and write it to swap
-    WriteToSwap = 0,
-    /// Find the requested page, decrypt it, and return it
-    ReadFromSwap = 1,
-    /// Kernel message advising us that a page of RAM was allocated
-    ExecFetchAllocs = 2,
-    /// Test messages
-    Test0 = 128,
-    /// A message from the kernel handler context to evaluate if a trim is needed
-    EvalTrim = 256,
-}
-
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-#[repr(usize)]
-pub enum Opcode {
-    /// Trigger back to userspace to indicate that alloc fetching is done.
-    FetchAllocsDone,
-    /// Test messages
-    Test0,
-}
 /// This structure contains shared state accessible between the userspace code and the blocking swap call
 /// handler.
 pub struct SwapperSharedState {
@@ -436,6 +445,15 @@ fn main() {
     sss.inner.as_mut().unwrap().alloc_heap = Some(BinaryHeap::with_capacity(total_ram / PAGE_SIZE));
     // handle for the current sorted vector of swap-out candidates
     let mut swap_candidates: Option<Vec<SwapAlloc>> = None;
+
+    /// Threshold for OomDoom callback
+    const OOM_THRESH_PAGES: usize = 16;
+    /// Target of free pages we want to get to after OomDoom call
+    const FREE_PAGE_TARGET: usize = 32;
+    // set OOM threshold - first argument is the threshold, in pages, below which we ping the swapper to start
+    // clearing memory
+    xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::SetOomThresh as usize, OOM_THRESH_PAGES, 0, 0, 0, 0, 0))
+        .ok();
 
     thread::spawn({
         let conn = conn.clone();
