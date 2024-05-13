@@ -22,8 +22,6 @@ aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
     "aes",
 ] }
 cramium-hal = { path = "../../libs/cramium-hal", optional = true, default_features = false }
-lru = "0.12.3"
-heapless = "0.8.0"
 
 utralib = { version = "0.1.24", optional = true, default-features = false }
 
