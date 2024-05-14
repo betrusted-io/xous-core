@@ -85,6 +85,8 @@ impl BootConfig {
         let mut num_alloc_pages = 0;
         for _ in 0..4 {
             let mut allocated_page_ptr = self.alloc();
+            #[cfg(feature = "swap")]
+            self.mark_as_wired(allocated_page_ptr);
             num_alloc_pages += 1;
             let is_aligned = allocated_page_ptr as usize & (ALIGNMENT_16K - 1) == 0;
             self.change_owner(pid, allocated_page_ptr as usize);
@@ -104,6 +106,8 @@ impl BootConfig {
                             pid
                         );
                         allocated_page_ptr = self.alloc();
+                        #[cfg(feature = "swap")]
+                        self.mark_as_wired(allocated_page_ptr);
                         self.change_owner(pid, allocated_page_ptr as usize);
                     }
 
@@ -207,6 +211,8 @@ impl BootConfig {
             dprintln!("Previously unmapped L1 entry");
 
             let na = self.alloc();
+            #[cfg(feature = "swap")]
+            self.mark_as_wired(na);
             let phys = PhysicalAddress::from_ptr(na);
             let entry_flags =
                 u32::from(PAGE_TABLE_FLAGS::VALID::Enable) | u32::from(PAGE_TABLE_FLAGS::DOMAIN.val(0xf));

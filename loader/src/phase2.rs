@@ -271,10 +271,13 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
         {
             let swap_size_usable = crate::swap::derive_usable_swap(swap_spec.swap_len as usize);
             let mut swap_count_start = 0;
-            for offset in (0..(swap_size_usable / PAGE_SIZE) * core::mem::size_of::<u32>()).step_by(4096) {
+            for offset in
+                (0..(swap_size_usable / PAGE_SIZE) * core::mem::size_of::<u32>()).step_by(4096).rev()
+            {
                 let count_page = cfg.alloc() as usize; // this also zeroes the page
                 // we want the start page to keep refreshing, because allocations grow *down*, so the
-                // last iteration actually contains the base pointer of the count tracker
+                // last iteration actually contains the base pointer of the count tracker (due to the .rev()
+                // on the iterator)
                 swap_count_start = count_page;
                 cfg.map_page(
                     root,
@@ -290,6 +293,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             let counts: &mut [u32] = unsafe {
                 core::slice::from_raw_parts_mut(swap_count_start as *mut u32, swap_size_usable / PAGE_SIZE)
             };
+            println!("Claiming 0x{:x} swap pages as used", cfg.last_swap_page);
             for i in 0..cfg.last_swap_page {
                 counts[i] = loader::FLG_SWAP_USED;
             }
@@ -317,11 +321,32 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             println!();
         }
     }
+
+    // Mark pages used by suspend/resume, otherwise they will be handed out to userspace.
+    // However, when not doing suspend/resume, it's safe to hand this out because it's always zeroized
+    // before use and never re-used on a resume cycle.
+    #[cfg(feature = "resume")]
+    {
+        // Mark all of stack as owned by the kernel, because this region contains the backup arguments.
+        // tampering in userspace of the loader stack prior to a resume can be a potent attack vector.
+        let rtp_len = cfg.runtime_page_tracker.len();
+        for page in cfg.runtime_page_tracker[1 + rtp_len - GUARD_MEMORY_BYTES / PAGE_SIZE..].iter_mut() {
+            *page = XousAlloc::from(1);
+        }
+        // allow susres to claim the suspend/resume marker, assumed to be at the limit of the guard memory
+        cfg.runtime_page_tracker[rtp_len - GUARD_MEMORY_BYTES / PAGE_SIZE] = XousAlloc::from(0);
+    }
+
     println!("Runtime Page Tracker: {} bytes", cfg.runtime_page_tracker.len());
-    // mark pages used by suspend/resume according to their needs
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = XousAlloc::from(1); // claim the loader stack -- do not allow tampering, as it contains backup kernel args
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = XousAlloc::from(1); // 8k in total (to allow for digital signatures to be computed)
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 3] = XousAlloc::from(0); // allow clean suspend page to be mapped in Xous
+    #[cfg(feature = "swap")]
+    if SDBG {
+        println!("Occupied RPT entries:");
+        for (i, entry) in cfg.runtime_page_tracker.iter().enumerate() {
+            if entry.raw_vpn() != 0 {
+                println!("  {:x}: {:x} [{}]", i, entry.raw_vpn(), entry.timestamp());
+            }
+        }
+    }
 }
 
 /// This describes the kernel as well as initially-loaded processes
@@ -402,6 +427,8 @@ impl ProgramDescription {
             FLG_R | FLG_W | FLG_VALID,
             pid as XousPid,
         );
+        #[cfg(feature = "swap")]
+        allocator.mark_as_wired(satp_address); // don't allow the root PT to be swapped in any process
 
         // Allocate context for this process
         let thread_address = allocator.alloc() as usize;

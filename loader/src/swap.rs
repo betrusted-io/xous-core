@@ -134,17 +134,24 @@ impl SwapAlloc {
             | if (pid == 1) || (pid == SWAPPER_PID) { SWAP_FLG_WIRED } else { 0 };
     }
 
+    /// Sets the wired bit. Used for marking page table elements as unswappable.
+    pub fn set_wired(&mut self) { self.vpn |= SWAP_FLG_WIRED; }
+
     /// This is a slight abuse of the naming system to provide us cross-compatibility with the case where the
     /// structure is defined as an overload of the `u8` type
     pub fn to_le(&self) -> u8 { self.vpn as u8 }
 
-    pub fn is_wired(&self) -> bool { self.vpn & SWAP_FLG_WIRED != 0 }
+    pub fn is_wired(&self) -> bool { (self.vpn & SWAP_FLG_WIRED) != 0 }
 
-    pub fn is_valid(&self) -> bool { self.timestamp != 0 || self.vpn != 0 }
+    pub fn is_valid(&self) -> bool { self.vpn != 0 }
 
     pub fn raw_pid(&self) -> u8 { self.vpn as u8 }
 
     pub fn vaddr(&self) -> usize { (self.vpn & !0xFFFu32) as usize }
+
+    pub fn raw_vpn(&self) -> u32 { self.vpn }
+
+    pub fn timestamp(&self) -> u32 { self.timestamp }
 }
 
 impl fmt::Debug for SwapAlloc {

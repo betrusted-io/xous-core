@@ -716,7 +716,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                         // the section load address.
                         last_copy_vaddr = dst_page_vaddr;
 
-                        if SDBG {
+                        if SDBG && VVDBG {
                             println!("Looping to the next section (swap)");
                             println!(
                                 "  swap_free_page: {:x}, dst_page_vaddr: {:x}, src_swap_img_addr: {:x}",

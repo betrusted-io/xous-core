@@ -206,6 +206,15 @@ impl BootConfig {
         panic!("Tried to change region {:08x} that isn't in defined memory!", addr);
     }
 
+    #[cfg(feature = "swap")]
+    pub fn mark_as_wired(&mut self, paddr: usize) {
+        if paddr >= self.sram_start as usize && paddr < self.sram_start as usize + self.sram_size {
+            self.runtime_page_tracker[(paddr - self.sram_start as usize) / PAGE_SIZE].set_wired();
+        } else {
+            panic!("Tried to wire address {:08x} that isn't in main RAM!", paddr);
+        }
+    }
+
     /// Map the given page to the specified process table.  If necessary,
     /// allocate a new page.
     ///
@@ -355,6 +364,8 @@ impl BootConfig {
                 FLG_R | FLG_W | FLG_VALID,
                 owner,
             );
+            #[cfg(feature = "swap")]
+            self.mark_as_wired(addr.get()); // page table entries should never be swapped.
             if VDBG {
                 println!("<<< Done mapping new address");
             }
