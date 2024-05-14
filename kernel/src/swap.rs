@@ -52,16 +52,17 @@ impl SwapAbi {
 /// necessary for proper return from these calls.
 #[derive(Debug, Copy, Clone)]
 pub enum BlockingSwapOp {
-    /// TID, `sepc` of swapper; PID of source, vaddr of source, vaddr in swap space (block must already be
-    /// mapped into swap space)
-    WriteToSwap(TID, usize, PID, usize, usize),
+    /// TID, PID of source, vaddr of source, vaddr in swap space (block must already be
+    /// mapped into swap space). Returns to Swapper, as this can only originate from the Swapper.
+    WriteToSwap(TID, PID, usize, usize),
     /// PID of the target block, current paddr of block, original vaddr in the space of target block PID,
-    /// physical address of block
+    /// physical address of block. Returns to PID of the target block.
     ReadFromSwap(PID, TID, usize, usize, usize),
-    /// Argument is the original thread ID of swapper and `sepc` for return
-    FetchAllocs(TID, usize),
+    /// Argument is the original thread ID of swapper. Returns to the swapper, as it can only
+    /// originate from the Swapper.
+    FetchAllocs(TID),
     /// OOM is nigh warning to swapper. Argument is TID, PID of the thing we were running that triggered
-    /// OomDoom.
+    /// OomDoom - returns to the PID/TID of the OOM Doomer.
     OomDoom(TID, PID),
 }
 
@@ -91,7 +92,7 @@ impl SwapAlloc {
     pub fn is_none(&self) -> bool { self.vpn as u8 == 0 }
 
     pub fn get_pid(&self) -> Option<PID> {
-        if self.vpn as u8 == 0 { None } else { Some(PID::new(self.vpn as u8).unwrap()) }
+        if (self.vpn & 0xFF) as u8 == 0 { None } else { Some(PID::new(self.vpn as u8).unwrap()) }
     }
 
     pub unsafe fn update(&mut self, pid: Option<PID>, vaddr: Option<usize>) {
@@ -100,12 +101,14 @@ impl SwapAlloc {
             if let Some(pid) = pid {
                 s.track_alloc(true);
                 if let Some(va) = vaddr {
-                    self.vpn = (va as u32) & !0xFFF | pid.get() as u32;
+                    // preserve the wired flag if it was set previously by the loader
+                    self.vpn = (va as u32) & !0xFFF | pid.get() as u32 | self.vpn & SWAP_FLG_WIRED;
                 } else {
                     self.vpn = SWAP_FLG_WIRED | pid.get() as u32;
                 }
             } else {
                 s.track_alloc(false);
+                // allow the wired flag to clear if the page is actively de-allocated
                 self.vpn = 0;
             }
         });
@@ -298,6 +301,7 @@ impl Swap {
     }
 
     /// This call diverges into the swapper to inform it of imminent OOM DOOM. Otherwise it returns normally.
+    /// Divergent calls must turn of IRQs before memory spaces are changed.
     ///
     /// Figuring out where to insert this call is a bit tricky, because it diverges and after the call
     /// we'd have to resume execution. Normally, the swapper should poll memory levels and prevent this
@@ -306,6 +310,7 @@ impl Swap {
     ///
     /// TODO: figure out where to insert this.
     pub fn oom_doom(&mut self) -> ! {
+        crate::arch::irq::disable_all_irqs();
         let original_pid = crate::arch::process::current_pid();
         let original_tid = crate::arch::process::current_tid();
 
@@ -325,12 +330,10 @@ impl Swap {
     }
 
     /// This call diverges into the userspace swapper.
+    /// Divergent calls must turn of IRQs before memory spaces are changed.
     pub fn fetch_allocs(&mut self) -> ! {
-        let (tid, sepc) = crate::arch::process::Process::with_current(|p| {
-            let thread = p.current_thread();
-            let tid = p.current_tid();
-            (tid, thread.sepc)
-        });
+        crate::arch::irq::disable_all_irqs();
+        let tid = crate::arch::process::Process::with_current(|p| p.current_tid());
 
         SystemServices::with(|system_services| {
             let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
@@ -362,34 +365,38 @@ impl Swap {
         println!("fetch_allocs - userspace activate");
         // this is safe because we entered the swapper memory context above
         unsafe {
-            self.blocking_activate_swapper(BlockingSwapOp::FetchAllocs(tid, sepc));
+            self.blocking_activate_swapper(BlockingSwapOp::FetchAllocs(tid));
         }
     }
 
     /// This call normally diverges into the userspace swapper. It will return a SysCallResult
     /// if the requested pages fail sanity checks.
+    /// Divergent calls must turn of IRQs before memory spaces are changed.
     pub fn evict_page(&mut self, target_pid: usize, vaddr: usize) -> SysCallResult {
-        let (tid, sepc) = crate::arch::process::Process::with_current(|p| {
-            let thread = p.current_thread();
-            let tid = p.current_tid();
-            (tid, thread.sepc)
-        });
+        crate::arch::irq::disable_all_irqs();
         // This call can fail for legitimate reasons: for example, the address given was already swapped, or
         // invalid.
         let evicted_ptr =
             match crate::arch::mem::evict_page_inner(PID::new(target_pid as u8).expect("Invalid PID"), vaddr)
             {
                 Ok(ptr) => ptr,
-                Err(e) => return Err(e),
+                Err(e) => {
+                    #[cfg(feature = "debug-swap")]
+                    println!("evict_page rejecting request for pid{}/{:x}: {:?}", target_pid, vaddr, e);
+                    // evict_page_inner guarantees we are in the swapper PID even on an error edge case
+                    crate::arch::irq::enable_all_irqs();
+                    return Err(e);
+                }
             };
 
+        // remember the TID of the swapper we're returning to
+        let tid = crate::arch::process::Process::with_current(|p| p.current_tid());
         #[cfg(feature = "debug-swap")]
-        println!("evict_page - swapper activate");
+        println!("evict_page from pid{}/{:x} - swapper activate", target_pid, vaddr);
         // this is safe because evict_page() leaves us in the swapper memory context
         unsafe {
             self.blocking_activate_swapper(BlockingSwapOp::WriteToSwap(
                 tid,
-                sepc,
                 PID::new(target_pid as u8).expect("Invalid PID"),
                 vaddr,
                 evicted_ptr,
@@ -404,6 +411,7 @@ impl Swap {
     /// as well as the physical address of the page.
     ///
     /// This call diverges into the userspace swapper.
+    /// Divergent calls must turn of IRQs before memory spaces are changed.
     pub fn retrieve_page(
         &mut self,
         target_pid: PID,
@@ -411,14 +419,15 @@ impl Swap {
         target_vaddr_in_pid: usize,
         paddr: usize,
     ) -> ! {
+        crate::arch::irq::disable_all_irqs();
         let block_vaddr_in_swap =
             crate::arch::mem::map_page_to_swapper(paddr).expect("couldn't map target page to swapper");
         // we are now in the swapper's memory space
 
         #[cfg(feature = "debug-swap")]
         println!(
-            "retrieve_page - userspace activate from pid{:?} for vaddr {:x?}",
-            target_pid, target_vaddr_in_pid
+            "retrieve_page - userspace activate from pid{:?}/tid{:?} for vaddr {:x?}",
+            target_pid, target_tid, target_vaddr_in_pid
         );
         // this is safe because map_page_to_swapper() leaves us in the swapper memory context
         unsafe {
@@ -432,14 +441,16 @@ impl Swap {
         }
     }
 
-    /// Safety: the current page table mapping context must be PID 2 (the swapper's PID) for this to work
+    /// Safety:
+    ///   - the current page table mapping context must be PID 2 (the swapper's PID) for this to work
+    ///   - interrupts must have been disabled prior to setting the context to PID 2
     /// `op` contains the opcode data
     /// `payload_ptr` is the pointer to the virtual address of the swapped block in PID2 space
     unsafe fn blocking_activate_swapper(&mut self, op: BlockingSwapOp) -> ! {
         // setup the argument block
         match op {
             // Note to self: get opcode number from `KernelOp` structure in services/xous-swapper/main.rs
-            BlockingSwapOp::WriteToSwap(_tid, _sepc, pid, vaddr_in_pid, vaddr_in_swap) => {
+            BlockingSwapOp::WriteToSwap(_tid, pid, vaddr_in_pid, vaddr_in_swap) => {
                 self.swapper_args[0] = self.swapper_state;
                 self.swapper_args[1] = 0; // WriteToSwap
                 self.swapper_args[2] = pid.get() as usize;
@@ -453,7 +464,7 @@ impl Swap {
                 self.swapper_args[3] = vaddr_in_pid;
                 self.swapper_args[4] = vaddr_in_swap;
             }
-            BlockingSwapOp::FetchAllocs(_tid, _sepc) => {
+            BlockingSwapOp::FetchAllocs(_tid) => {
                 self.swapper_args[0] = self.swapper_state;
                 self.swapper_args[1] = 2; // ExecFetchAllocs
                 self.swapper_args[2] = self.mem_alloc_tracker_pages;
@@ -476,9 +487,9 @@ impl Swap {
         self.prev_op = Some(op);
         let swapper_pid: PID = PID::new(xous_kernel::SWAPPER_PID).unwrap();
 
+        // Prepare to enter into the swapper space "as if it were an IRQ"
+        // Disable all other IRQs and redirect into userspace
         SystemServices::with_mut(|ss| {
-            // Disable all other IRQs and redirect into userspace
-            crate::arch::irq::disable_all_irqs();
             ss.make_callback_to(
                 swapper_pid,
                 self.pc as *const usize,
@@ -486,8 +497,8 @@ impl Swap {
             )
         })
         .expect("couldn't switch to handler");
-        // unmap args and payload
 
+        // The current process/TID is now setup, "resume" into the handler
         crate::services::ArchProcess::with_current_mut(|process| {
             crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
         })
@@ -501,36 +512,9 @@ impl Swap {
     /// Safety: this call must only be invoked in the swapper's memory context
     pub unsafe fn exit_blocking_call(&mut self) -> Result<xous_kernel::Result, xous_kernel::Error> {
         let result = match self.prev_op.take() {
-            Some(BlockingSwapOp::WriteToSwap(tid, sepc, pid, _addr, swapper_virt_page)) => {
-                // Update the RPT: mark the physical memory as free. The virtual address is
-                // in the swapper's context at this point, so free it there (it's already been
-                // remapped as swapped in the target's context). Note that the swapped page now contains
-                // encrypted data, as the encryption happens in-place.
-                MemoryManager::with_mut(|mm| {
-                    let paddr = crate::arch::mem::virt_to_phys(swapper_virt_page).unwrap() as usize;
-                    println!("WTS releasing vaddr {:x}, paddr {:x}", swapper_virt_page, paddr);
-                    // this call unmaps the virtual page from the page table
-                    crate::arch::mem::unmap_page_inner(mm, swapper_virt_page).expect("couldn't unmap page");
-                    // This call releases the physical page from the RPT - the pid has to match that of the
-                    // original owner. This is the "pointy end" of the stick; after this call, the memory is
-                    // now back into the free pool.
-                    mm.release_page_swap(paddr as *mut usize, pid)
-                        .expect("couldn't free page that was swapped out");
-                });
-
-                // Switch back to the Swapper's userland thread
-                SystemServices::with_mut(|ss| {
-                    ss.finish_callback_and_resume(PID::new(SWAPPER_PID).unwrap(), tid)
-                        .expect("Unable to resume to swapper");
-                });
-                // restore the `sepc` for that thread
-                crate::arch::process::Process::with_current_mut(|p| {
-                    let thread = p.current_thread_mut();
-                    thread.sepc = sepc;
-                });
-                // return as a SysCall
-                Ok(xous_kernel::Result::Scalar5(0, 0, 0, 0, 0))
-            }
+            // Called from any process. Resume as if recovering from a page fault; absorb the rest of the
+            // page fault handler code into this routine at the point where it would have
+            // divereged.
             Some(BlockingSwapOp::ReadFromSwap(pid, tid, vaddr_in_pid, vaddr_in_swap, paddr)) => {
                 MemoryManager::with_mut(|mm| {
                     // we are in the swapper's memory space a this point
@@ -573,6 +557,8 @@ impl Swap {
                         crate::arch::process::set_current_pid(PID::new(SWAPPER_PID).unwrap());
                         target_map.activate()
                     })?;
+                    flush_dcache();
+                    println!("RFS - exit pid{} tid{}", pid.get(), tid);
                     // Switch to the previous process' address space.
                     SystemServices::with_mut(|ss| {
                         ss.finish_callback_and_resume(pid, tid).expect("unable to resume previous PID")
@@ -581,7 +567,36 @@ impl Swap {
                     Ok(xous_kernel::Result::ResumeProcess)
                 })
             }
-            Some(BlockingSwapOp::FetchAllocs(tid, sepc)) => {
+            // Called only from PID2. Resume to the original TID within PID2, as a syscall return.
+            Some(BlockingSwapOp::WriteToSwap(tid, pid, _addr, swapper_virt_page)) => {
+                // Update the RPT: mark the physical memory as free. The virtual address is
+                // in the swapper's context at this point, so free it there (it's already been
+                // remapped as swapped in the target's context). Note that the swapped page now contains
+                // encrypted data, as the encryption happens in-place.
+                MemoryManager::with_mut(|mm| {
+                    let paddr = crate::arch::mem::virt_to_phys(swapper_virt_page).unwrap() as usize;
+                    println!("WTS releasing vaddr {:x}, paddr {:x}", swapper_virt_page, paddr);
+                    // this call unmaps the virtual page from the page table
+                    crate::arch::mem::unmap_page_inner(mm, swapper_virt_page).expect("couldn't unmap page");
+                    // This call releases the physical page from the RPT - the pid has to match that of the
+                    // original owner. This is the "pointy end" of the stick; after this call, the memory is
+                    // now back into the free pool.
+                    mm.release_page_swap(paddr as *mut usize, pid)
+                        .expect("couldn't free page that was swapped out");
+                    // clear the caches
+                    flush_dcache();
+                });
+
+                // Switch back to the Swapper's userland thread
+                SystemServices::with_mut(|ss| {
+                    ss.finish_callback_and_resume(PID::new(SWAPPER_PID).unwrap(), tid)
+                        .expect("Unable to resume to swapper");
+                });
+                // return as a SysCall
+                Ok(xous_kernel::Result::Scalar5(0, 0, 0, 0, 0))
+            }
+            // Called only from PID2. Resume to the original TID within PID2, as a syscall return.
+            Some(BlockingSwapOp::FetchAllocs(tid)) => {
                 // unmap RPT from userspace
                 MemoryManager::with_mut(|mm| {
                     for page in 0..self.mem_alloc_tracker_pages {
@@ -593,14 +608,14 @@ impl Swap {
                     ss.finish_callback_and_resume(PID::new(SWAPPER_PID).unwrap(), tid)
                         .expect("Unable to resume to swapper");
                 });
-                // restore the `sepc` for that thread
-                crate::arch::process::Process::with_current_mut(|p| {
-                    let thread = p.current_thread_mut();
-                    thread.sepc = sepc;
-                });
                 // return as a SysCall
                 Ok(xous_kernel::Result::Scalar5(0, 0, 0, 0, 0))
             }
+            // The caller point is still TBD. This is complicated because ideally we want the OOM'ing
+            // process to stop trying to do allocate memory until the swapper has had some time to run,
+            // *but* the swapper is running as a userspace process which means it could be interrupted.
+            // We might be able to play shenanigans with disabling IRQs *very carefully* though, so as
+            // to kill pre-emption and make the swapper the only thing that can possibly run.
             Some(BlockingSwapOp::OomDoom(tid, pid)) => {
                 // Switch to the previous process' address space.
                 SystemServices::with_mut(|ss| {
@@ -616,5 +631,24 @@ impl Swap {
             self.prev_op = Some(op);
         }
         result
+    }
+}
+
+#[inline]
+fn flush_dcache() {
+    unsafe {
+        #[rustfmt::skip]
+        core::arch::asm!(
+            ".word 0x500F",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+            "fence",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+        );
     }
 }
