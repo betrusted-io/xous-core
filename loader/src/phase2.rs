@@ -433,6 +433,8 @@ impl ProgramDescription {
         // Allocate context for this process
         let thread_address = allocator.alloc() as usize;
         allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W | FLG_VALID, pid as XousPid);
+        #[cfg(feature = "swap")]
+        allocator.mark_as_wired(thread_address); // don't allow the process descriptor to be swapped in any process
 
         // Allocate stack pages.
         for i in 0..if is_kernel { KERNEL_STACK_PAGE_COUNT } else { STACK_PAGE_COUNT } {

@@ -127,6 +127,8 @@ impl MiniElf {
                 FLG_R | FLG_W | FLG_VALID,
                 pid as XousPid,
             );
+            #[cfg(feature = "swap")]
+            allocator.mark_as_wired(tt_address); // don't allow the tt to be swapped in any process
 
             (tt, tt_address)
         };
@@ -149,6 +151,8 @@ impl MiniElf {
                     FLG_R | FLG_W | FLG_VALID,
                     pid as XousPid,
                 );
+                #[cfg(feature = "swap")]
+                allocator.mark_as_wired(tt_address + offset); // don't allow the tt to be swapped in any process
             }
 
             (translation_table, tt_address)
@@ -161,6 +165,8 @@ impl MiniElf {
         let thread_address = allocator.alloc() as usize;
         println!("    Thread 1 @ {:08x}", thread_address);
         allocator.map_page(tt, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W | FLG_VALID, pid);
+        #[cfg(feature = "swap")]
+        allocator.mark_as_wired(thread_address); // don't allow the process descriptor to be swapped in any process
 
         // Allocate stack pages.
         println!("    Stack");
