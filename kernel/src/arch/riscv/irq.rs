@@ -30,6 +30,8 @@ static IRQ_ENABLED: AtomicBool = AtomicBool::new(true);
 // Indicate when we handle an IRQ
 static HANDLING_IRQ: AtomicBool = AtomicBool::new(false);
 
+pub fn is_handling_irq() -> bool { HANDLING_IRQ.load(Ordering::SeqCst) }
+
 fn sim_read() -> usize {
     let existing: usize;
     unsafe { core::arch::asm!("csrrs {0}, 0x9C0, zero", out(reg) existing) };
@@ -241,6 +243,12 @@ pub extern "C" fn trap_handler(
             unsafe {
                 if PREVIOUS_PAIR.is_none() {
                     let tid = crate::arch::process::current_tid();
+                    // This is pretty verbose, so leave it commented out unless we're debugging a process
+                    // transition
+                    // #[cfg(feature = "debug-print")]
+                    // if pid.get() != 1 {
+                    //    println!("Hardware IRQ set PID{:?}, TID{:?}", pid, tid);
+                    // }
                     PREVIOUS_PAIR = Some((pid, tid));
                 }
             }
@@ -346,17 +354,19 @@ pub extern "C" fn trap_handler(
                     );
                 });
             }
-            // Re-enable interrupts now that we're out of the swap context
-            enable_all_irqs();
 
             if response == xous_kernel::Result::ResumeProcess {
                 ArchProcess::with_current_mut(|process| {
+                    // re-enable IRQs as late as possible
+                    enable_all_irqs();
                     crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
                 });
             } else {
                 ArchProcess::with_current_mut(|p| {
                     let thread = p.current_thread();
                     println!("Swap syscall returning to address {:08x}", thread.sepc);
+                    // re-enable IRQs as late as possible
+                    enable_all_irqs();
                     unsafe { _xous_syscall_return_result(&response, thread) };
                 });
             }
