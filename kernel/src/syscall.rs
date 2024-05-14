@@ -1027,6 +1027,8 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                         Swap::with_mut(|swap| swap.evict_page(pid, a2))
                     } else {
                         // don't allow kernel or swapper to be swapped out
+                        #[cfg(feature = "debug-swap")]
+                        println!("evict_page rejecting request for pid{}/{:x}: InvalidPID", pid, a2);
                         Err(xous_kernel::Error::InvalidPID)
                     }
                 }
