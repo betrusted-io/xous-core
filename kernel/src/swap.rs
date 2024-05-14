@@ -420,6 +420,13 @@ impl Swap {
         paddr: usize,
     ) -> ! {
         crate::arch::irq::disable_all_irqs();
+
+        if crate::arch::irq::is_handling_irq() {
+            crate::arch::process::Process::with_current(|process| {
+                println!("IRQ ENTRY: pid{}, {:x?}", current_pid().get(), process.current_thread());
+            });
+        }
+
         let block_vaddr_in_swap =
             crate::arch::mem::map_page_to_swapper(paddr).expect("couldn't map target page to swapper");
         // we are now in the swapper's memory space
@@ -490,13 +497,22 @@ impl Swap {
         // Prepare to enter into the swapper space "as if it were an IRQ"
         // Disable all other IRQs and redirect into userspace
         SystemServices::with_mut(|ss| {
-            ss.make_callback_to(
-                swapper_pid,
-                self.pc as *const usize,
-                crate::services::CallbackType::Swap(self.swapper_args),
-            )
-        })
-        .expect("couldn't switch to handler");
+            if !crate::arch::irq::is_handling_irq() {
+                ss.make_callback_to(
+                    swapper_pid,
+                    self.pc as *const usize,
+                    crate::services::CallbackType::Swap(self.swapper_args),
+                )
+                .expect("couldn't switch to handler");
+            } else {
+                ss.make_callback_to(
+                    swapper_pid,
+                    self.pc as *const usize,
+                    crate::services::CallbackType::SwapInIrq(self.swapper_args),
+                )
+                .expect("couldn't switch to handler");
+            };
+        });
 
         // The current process/TID is now setup, "resume" into the handler
         crate::services::ArchProcess::with_current_mut(|process| {
@@ -521,14 +537,24 @@ impl Swap {
                     // unmap the page from the swapper
                     crate::arch::mem::unmap_page_inner(mm, vaddr_in_swap)?;
 
-                    // Access target PID page tables
-                    SystemServices::with(|system_services| {
-                        // swap to the swapper space
-                        let target_map = system_services.get_process(pid).unwrap().mapping;
-                        crate::arch::process::set_current_pid(pid);
-                        target_map.activate()
-                    })?;
+                    SystemServices::with_mut(|system_services| {
+                        // Cleanup the swapper
+                        system_services.finish_swap();
 
+                        if !crate::arch::irq::is_handling_irq() {
+                            system_services.swap_resume_to_userspace(pid, tid).expect("couldn't swap_resume");
+                        }
+
+                        // Switch to target process
+                        let process = system_services.get_process_mut(pid).unwrap();
+                        process.mapping.activate().unwrap();
+                        process.activate().unwrap();
+                        // Activate the current context
+                        crate::arch::process::Process::current().set_tid(tid).unwrap();
+                        process.current_thread = tid;
+                    });
+
+                    // Finish up the page table manipulations that were aborted by the original swap call
                     let entry = crate::arch::mem::pagetable_entry(vaddr_in_pid)
                         .or(Err(xous_kernel::Error::BadAddress))?;
                     let current_entry = entry.read_volatile();
@@ -546,25 +572,24 @@ impl Swap {
                         | crate::arch::mem::FLG_D/* D */
                         | crate::arch::mem::FLG_U/* USER */);
                     crate::arch::mem::flush_mmu();
-
-                    // Return to swapper PID's address space, because that's what the
-                    // finish_callback_and_resume assumes...slightly inefficient but
-                    // better code re-use.
-                    SystemServices::with(|system_services| {
-                        // swap to the swapper space
-                        let target_map =
-                            system_services.get_process(PID::new(SWAPPER_PID).unwrap()).unwrap().mapping;
-                        crate::arch::process::set_current_pid(PID::new(SWAPPER_PID).unwrap());
-                        target_map.activate()
-                    })?;
                     flush_dcache();
-                    println!("RFS - exit pid{} tid{}", pid.get(), tid);
-                    // Switch to the previous process' address space.
-                    SystemServices::with_mut(|ss| {
-                        ss.finish_callback_and_resume(pid, tid).expect("unable to resume previous PID")
-                    });
-                    // the current memory space is the target PID, so we will resume into the target PID
-                    Ok(xous_kernel::Result::ResumeProcess)
+
+                    if !crate::arch::irq::is_handling_irq() {
+                        println!("RFS - exit pid{} tid{}", pid.get(), tid);
+                        Ok(xous_kernel::Result::ResumeProcess)
+                    } else {
+                        // Don't use the resume provided by the wrapper -- instead resume directly here,
+                        // as we don't want to re-enable IRQs
+                        crate::arch::process::Process::with_current(|process| {
+                            println!(
+                                "Swapper returning from page fault in IRQ: pid{}/tid{}-{:x?}",
+                                pid.get(),
+                                tid,
+                                process.current_thread()
+                            );
+                            crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
+                        })
+                    }
                 })
             }
             // Called only from PID2. Resume to the original TID within PID2, as a syscall return.
