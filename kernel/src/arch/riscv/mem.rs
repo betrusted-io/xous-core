@@ -934,7 +934,8 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
     });
     #[cfg(feature = "swap")]
     let new_page = MemoryManager::with_mut(|mm| {
-        mm.alloc_page(crate::arch::process::current_pid(), Some(address)).expect("Couldn't allocate new page")
+        mm.alloc_page_oomable(crate::arch::process::current_pid(), Some(address))
+            .expect("Couldn't allocate new page")
     });
 
     let ppn1 = (new_page >> 22) & ((1 << 12) - 1);
@@ -1128,9 +1129,16 @@ pub fn evict_page_inner(target_pid: PID, vaddr: usize) -> Result<usize, xous_ker
 
         // sanity check
         if (target_pte & MMUFlags::VALID.bits() == 0) || (target_pte & MMUFlags::P.bits() != 0) {
+            // return us to the swapper PID -- this call can only originate in the swapper
+            let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
+            let swapper_map = system_services.get_process(swapper_pid).unwrap().mapping;
+            swapper_map.activate()?;
             return Err(xous_kernel::Error::BadAddress);
         }
         if target_pte & MMUFlags::S.bits() != 0 {
+            let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
+            let swapper_map = system_services.get_process(swapper_pid).unwrap().mapping;
+            swapper_map.activate()?;
             return Err(xous_kernel::Error::ShareViolation);
         }
 
@@ -1155,7 +1163,6 @@ pub fn evict_page_inner(target_pid: PID, vaddr: usize) -> Result<usize, xous_ker
                 MemoryFlags::R | MemoryFlags::W, // write flag needed because encryption is in-place
                 true,
             );
-            unsafe { flush_mmu() };
             payload_virt
         });
         Ok(payload_virt)
@@ -1178,7 +1185,6 @@ pub fn map_page_to_swapper(paddr: usize) -> Result<usize, xous_kernel::Error> {
                 as usize;
             let _result =
                 map_page_inner(mm, swapper_pid, paddr, payload_virt, MemoryFlags::R | MemoryFlags::W, true);
-            unsafe { flush_mmu() };
             payload_virt
         });
         Ok(payload_virt)
