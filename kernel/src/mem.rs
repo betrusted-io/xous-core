@@ -290,6 +290,11 @@ impl MemoryManager {
 
     #[cfg(baremetal)]
     #[cfg(feature = "swap")]
+    /// This is an infalliable alloc_page, but, the number of cases where this may be called is small:
+    ///   - mapping an L1 page table page
+    ///   - creating a process
+    /// As long the swapper manages to keep a handful of pages free, we should be able to absorb this
+    /// so long as we don't do something like spawn a bazillion processes in a single quantum.
     pub fn alloc_page(&mut self, pid: PID, vaddr: Option<usize>) -> Result<usize, xous_kernel::Error> {
         // Go through all RAM pages looking for a free page.
         // println!("Allocating page for PID {}", pid);
@@ -309,6 +314,45 @@ impl MemoryManager {
                 }
             }
         }
+        Err(xous_kernel::Error::OutOfMemory)
+    }
+
+    #[cfg(baremetal)]
+    #[cfg(feature = "swap")]
+    /// Similar to alloc_page(), but this implementation can only be called in one location because
+    /// we need to know where to resume from after the OOM is recovered.
+    pub fn alloc_page_oomable(
+        &mut self,
+        pid: PID,
+        vaddr: Option<usize>,
+    ) -> Result<usize, xous_kernel::Error> {
+        // Go through all RAM pages looking for a free page.
+        // println!("Allocating page for PID {}", pid);
+        unsafe {
+            let end_point = self.ram_size / PAGE_SIZE;
+            let starting_point = self.last_ram_page.max(end_point);
+            for (allocation, index) in MEMORY_ALLOCATIONS[starting_point..end_point]
+                .iter_mut()
+                .zip(starting_point..)
+                .chain(MEMORY_ALLOCATIONS[..starting_point].iter_mut().zip(0..))
+            {
+                if allocation.is_none() {
+                    allocation.update(Some(pid), vaddr);
+                    self.last_ram_page = index + 1;
+                    let page = index * PAGE_SIZE + self.ram_start;
+                    return Ok(page);
+                }
+            }
+        }
+
+        // TODO:
+        //   - remember the calling processes' pid, tid
+        //   - disable irqs - or at least make the calling process non-schedulable? unclear. maybe that comes
+        //     for free because we're already here.
+        //   - call the OOM-er
+        //   - resume the process, but also including all of the code that would happen after
+        //     alloc_page_oomable. Since we could only get here from one place, we just need to copy all that
+        //     code here.
         Err(xous_kernel::Error::OutOfMemory)
     }
 
@@ -693,6 +737,7 @@ impl MemoryManager {
                             return Err(xous_kernel::Error::MemoryInUse);
                         }
                     } else {
+                        println!("ERR: {:?} != {:?}", current_pid, pid);
                         return Err(xous_kernel::Error::MemoryInUse);
                     }
                 }
