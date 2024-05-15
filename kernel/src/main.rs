@@ -112,7 +112,7 @@ pub extern "C" fn kmain() {
         match pid {
             Some(pid) => {
                 #[cfg(feature = "debug-print")]
-                println!("  PID{:?}->{:?}", last_pid.unwrap_or(0), pid); // keep this succinct as it happens often
+                println!("  PID{:?}->{:?}", last_pid, pid); // keep this succinct as it happens often
                 xous_kernel::rsyscall(xous_kernel::SysCall::SwitchTo(pid, 0))
                     .expect("couldn't switch to pid");
             }
