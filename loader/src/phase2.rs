@@ -339,7 +339,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
 
     println!("Runtime Page Tracker: {} bytes", cfg.runtime_page_tracker.len());
     #[cfg(feature = "swap")]
-    if SDBG {
+    if SDBG && VVDBG {
         println!("Occupied RPT entries:");
         for (i, entry) in cfg.runtime_page_tracker.iter().enumerate() {
             if entry.raw_vpn() != 0 {
