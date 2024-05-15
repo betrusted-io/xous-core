@@ -161,12 +161,12 @@ impl MiniElf {
         // Turn the satp address into a pointer
         println!("    Pagetable @ {:08x}", _tt_address);
 
-        // Allocate thread 1 for this process
+        // Allocate thread contexts
         let thread_address = allocator.alloc() as usize;
-        println!("    Thread 1 @ {:08x}", thread_address);
+        println!("    Thread contexts @ {:08x}", thread_address);
         allocator.map_page(tt, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W | FLG_VALID, pid);
         #[cfg(feature = "swap")]
-        allocator.mark_as_wired(thread_address); // don't allow the process descriptor to be swapped in any process
+        allocator.mark_as_wired(thread_address); // don't allow the thread contexts to be swapped in any process
 
         // Allocate stack pages.
         println!("    Stack");
