@@ -67,7 +67,7 @@ impl SwapHal {
         let vpage_masked = src_vaddr & !(PAGE_SIZE - 1);
         nonce[9..12].copy_from_slice(&(vpage_masked as u32).to_be_bytes()[..3]);
         let aad: &[u8] = &[];
-        writeln!(DebugUart {}, "bef enc: nonce {:x?} aad {:x?} buf {:x?}", &nonce, aad, &buf[..32]).ok();
+        // writeln!(DebugUart {}, "bef enc: nonce {:x?} aad {:x?} buf {:x?}", &nonce, aad, &buf[..32]).ok();
         match self.cipher.encrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf) {
             Ok(tag) => {
                 // writeln!(DebugUart {}, "Nonce: {:x?}, tag: {:x?}", &nonce, tag.as_slice()).ok();
