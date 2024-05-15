@@ -77,6 +77,7 @@ pub enum BlockingSwapOp {
 /// does not allow extensions to types that aren't native to your crate. So, we're left
 /// with redundant copies of the structure definition.
 #[derive(Debug)]
+#[repr(C)]
 pub struct SwapAlloc {
     timestamp: u32,
     /// virtual_page_number[19:0] | flags[3:0] | pid[7:0]
@@ -101,18 +102,37 @@ impl SwapAlloc {
             if let Some(pid) = pid {
                 s.track_alloc(true);
                 if let Some(va) = vaddr {
+                    /*
+                    println!(
+                        "-- update {}/{:x} <- {}/{:x} @ {:x}",
+                        pid.get(),
+                        va,
+                        va as u8,
+                        va & !0xfff,
+                        self as *const Self as usize
+                    ); */
                     // preserve the wired flag if it was set previously by the loader
                     self.vpn = (va as u32) & !0xFFF | pid.get() as u32 | self.vpn & SWAP_FLG_WIRED;
                 } else {
                     self.vpn = SWAP_FLG_WIRED | pid.get() as u32;
                 }
             } else {
+                // println!("-- release of pid{}/{:x}", self.vpn as u8, self.vpn & !0xfff);
                 s.track_alloc(false);
                 // allow the wired flag to clear if the page is actively de-allocated
                 self.vpn = 0;
             }
         });
     }
+
+    pub unsafe fn touch(&mut self) {
+        crate::swap::Swap::with_mut(|s| {
+            self.timestamp = s.next_epoch();
+        });
+    }
+
+    #[cfg(feature = "debug-swap")]
+    pub fn get_timestamp(&self) -> u32 { self.timestamp }
 
     pub unsafe fn reparent(&mut self, pid: PID) {
         self.timestamp = crate::swap::Swap::with_mut(|s| s.next_epoch());
@@ -410,6 +430,10 @@ impl Swap {
     /// Also takes as argument the virtual address of the target page in the target PID,
     /// as well as the physical address of the page.
     ///
+    /// Note that the originating caller to this will update the epoch of the memory
+    /// alloc counter, so, we don't have to update it explicitly her (as we do with
+    /// evict_page)
+    ///
     /// This call diverges into the userspace swapper.
     /// Divergent calls must turn of IRQs before memory spaces are changed.
     pub fn retrieve_page(
@@ -419,12 +443,20 @@ impl Swap {
         target_vaddr_in_pid: usize,
         paddr: usize,
     ) -> ! {
-        crate::arch::irq::disable_all_irqs();
-
         if crate::arch::irq::is_handling_irq() {
+            #[cfg(feature = "debug-swap")]
             crate::arch::process::Process::with_current(|process| {
                 println!("IRQ ENTRY: pid{}, {:x?}", current_pid().get(), process.current_thread());
             });
+            #[cfg(feature = "debug-swap")]
+            println!(
+                "sstatus {:x?} spp: {:?}",
+                riscv::register::sstatus::read(),
+                riscv::register::sstatus::read().spp()
+            );
+            // crate::arch::mem::MemoryMapping::current().print_map();
+        } else {
+            crate::arch::irq::disable_all_irqs();
         }
 
         let block_vaddr_in_swap =
@@ -562,15 +594,10 @@ impl Swap {
                     let flags = current_entry & 0x3ff & !MMUFlags::P.bits();
                     let ppn1 = (paddr >> 22) & ((1 << 12) - 1);
                     let ppn0 = (paddr >> 12) & ((1 << 10) - 1);
-                    // Map the retrieved page to the target memory space, and set valid. I don't think `A`/`D`
-                    // has any meaning, but we set it because the regular path would set
-                    // that.
-                    *entry = (ppn1 << 20)
-                        | (ppn0 << 10)
-                        | (flags | crate::arch::mem::FLG_VALID /* valid */
-                        | crate::arch::mem::FLG_A/* A */
-                        | crate::arch::mem::FLG_D/* D */
-                        | crate::arch::mem::FLG_U/* USER */);
+                    // Map the retrieved page to the target memory space, and set valid. We rely
+                    // on the fact that the USER bit, etc. was correctly setup and stored when the
+                    // page was originally allocated.
+                    *entry = (ppn1 << 20) | (ppn0 << 10) | (flags | crate::arch::mem::FLG_VALID);
                     crate::arch::mem::flush_mmu();
                     flush_dcache();
 
@@ -581,12 +608,15 @@ impl Swap {
                         // Don't use the resume provided by the wrapper -- instead resume directly here,
                         // as we don't want to re-enable IRQs
                         crate::arch::process::Process::with_current(|process| {
+                            #[cfg(feature = "debug-swap")]
                             println!(
                                 "Swapper returning from page fault in IRQ: pid{}/tid{}-{:x?}",
                                 pid.get(),
                                 tid,
                                 process.current_thread()
                             );
+                            crate::arch::mem::flush_mmu();
+                            flush_dcache();
                             crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
                         })
                     }
