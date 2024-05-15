@@ -356,16 +356,15 @@ fn swap_handler(
             )
             .ok();
             // this is safe because the page is aligned and initialized as it comes from the kernel
-            // renember that this page is overwritten with encrypted data
+            // remember that this page is overwritten with encrypted data
             let buf: &mut [u8] =
                 unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
 
             // search the swap page tables for the next free page
             let mut next_free_page: Option<usize> = None;
-            // writeln!(DebugUart {}, "free_swap_origin {:x}", ss.free_swap_search_origin).ok();
             for slot in 0..ss.sct.counts.len() {
                 let candidate = (ss.free_swap_search_origin + slot) % ss.sct.counts.len();
-                if ss.sct.counts[candidate] & loader::FLG_SWAP_USED != 0 {
+                if (ss.sct.counts[candidate] & loader::FLG_SWAP_USED) == 0 {
                     next_free_page = Some(candidate);
                     break;
                 }
@@ -376,15 +375,28 @@ fn swap_handler(
                 // bits; the MSB is the "swap used" status bit
                 let mut count = ss.sct.counts[free_page_number] & !loader::FLG_SWAP_USED;
                 count = (count + 1) & !loader::FLG_SWAP_USED;
-                ss.sct.counts[free_page_number] = count;
+                ss.sct.counts[free_page_number] = count | loader::FLG_SWAP_USED;
 
                 // add a PT mapping for the swap entry
                 map_swap(ss, free_page_number * PAGE_SIZE, vaddr_in_pid, pid);
 
                 ss.hal.encrypt_swap_to(buf, count, free_page_number * PAGE_SIZE, vaddr_in_pid, pid);
             } else {
+                writeln!(DebugUart {}, "OOM detected, dumping all swap allocs:").ok();
+                for (i, &entry) in ss.sct.counts.iter().enumerate() {
+                    writeln!(DebugUart {}, "  {:04}:{:x}", i, entry).ok();
+                }
                 // OOS path
                 panic!("Ran out of swap space, hard OOM!");
+            }
+            #[cfg(feature = "debug-verbose")]
+            {
+                writeln!(DebugUart {}, "Swap count & usage table:").ok();
+                for (i, &entry) in ss.sct.counts.iter().enumerate() {
+                    if entry != 0 {
+                        writeln!(DebugUart {}, "  {:04}:{:x}", i, entry).ok();
+                    }
+                }
             }
             // writeln!(DebugUart {}, "WTS exit").ok();
         }
@@ -424,12 +436,15 @@ fn swap_handler(
         Some(KernelOp::ExecFetchAllocs) => {
             if let Some(alloc_heap) = &mut ss.alloc_heap {
                 alloc_heap.clear();
+                assert!(alloc_heap.len() == 0);
                 let rpt = unsafe {
                     core::slice::from_raw_parts(SWAP_RPT_VADDR as *const SwapAlloc, ss.sram_size / PAGE_SIZE)
                 };
-                for (i, &entry) in rpt.iter().enumerate() {
+                for (_i, &entry) in rpt.iter().enumerate() {
+                    #[cfg(feature = "debug-verbose")]
                     if entry.raw_vpn() != 0 {
-                        writeln!(DebugUart {}, "{:x}: {:x} [{}]", i, entry.raw_vpn(), entry.timestamp()).ok();
+                        writeln!(DebugUart {}, "{:x}: {:x} [{}]", _i, entry.raw_vpn(), entry.timestamp())
+                            .ok();
                     }
                     // filter out invalid, wired, or kernel/swapper candidates.
                     if !entry.is_wired() && entry.is_valid() && entry.raw_pid() != 1 && entry.raw_pid() != 2 {
@@ -437,6 +452,7 @@ fn swap_handler(
                         alloc_heap.push(entry);
                     }
                 }
+                #[cfg(feature = "debug-verbose")]
                 writeln!(DebugUart {}, "Created heap with {} entries", alloc_heap.len()).ok();
                 xous::try_send_message(
                     sss.conn,
@@ -553,12 +569,26 @@ fn main() {
                     let target_pages = pages_to_free;
                     let mut errs = 0;
                     let mut wired = 0;
+                    /* // for debugging ordering of suggested pages
+                    use std::collections::VecDeque;
+                    let mut preview_vec = VecDeque::new();
+                    for _ in 0..16 {
+                        preview_vec.push_back(alloc_heap.pop().unwrap());
+                    }
+                    for (i, entry) in preview_vec.iter().enumerate() {
+                        println!("  {:x}: {:x} [{}]", i, entry.raw_vpn(), entry.timestamp());
+                    } */
                     // avoid log calls inside this loop, as we want to process all of these pages without
                     // context switches
                     loop {
                         if pages_to_free == 0 {
                             break;
                         }
+                        /*
+                        if let Some(candidate) =
+                            Some(preview_vec.pop_front().unwrap_or(alloc_heap.pop().unwrap()))
+                        {
+                        */
                         if let Some(candidate) = alloc_heap.pop() {
                             if candidate.is_wired()
                                 || !candidate.is_valid()
