@@ -319,6 +319,30 @@ impl MemoryManager {
 
     #[cfg(baremetal)]
     #[cfg(feature = "swap")]
+    // Take a physical address and indicate that it's been queried so it doesn't get suggested as LRU any time
+    // soon. Addresses outside of RAM are just ignored.
+    pub fn touch(&self, paddr: usize) {
+        if paddr >= self.ram_start && paddr < self.ram_start + self.ram_size {
+            unsafe {
+                MEMORY_ALLOCATIONS[(paddr - self.ram_start) / PAGE_SIZE].touch();
+            }
+        }
+    }
+
+    #[cfg(feature = "debug-swap")]
+    /// This function is "improper" in that it returns a bogus value if the memory allocations are
+    /// out of range, but its purpose is only for debugging. This is not suitable for use in any
+    /// other context.
+    pub unsafe fn get_timestamp(&self, paddr: usize) -> u32 {
+        if paddr >= self.ram_start && paddr < self.ram_start + self.ram_size {
+            unsafe { MEMORY_ALLOCATIONS[(paddr - self.ram_start) / PAGE_SIZE].get_timestamp() }
+        } else {
+            0xDEAD_BEEF
+        }
+    }
+
+    #[cfg(baremetal)]
+    #[cfg(feature = "swap")]
     /// Similar to alloc_page(), but this implementation can only be called in one location because
     /// we need to know where to resume from after the OOM is recovered.
     pub fn alloc_page_oomable(
@@ -473,6 +497,8 @@ impl MemoryManager {
         #[cfg(not(feature = "swap"))]
         let phys = self.alloc_page(pid)?;
         #[cfg(feature = "swap")]
+        // this should not be OOMable because the callers for map_zeroed page are exclusively from kernel
+        // services (process creation, queue creation)
         let phys = self.alloc_page(pid, Some(virt))?;
 
         // Actually perform the map.  At this stage, every physical page should be owned by us.
