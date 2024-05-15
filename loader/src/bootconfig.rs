@@ -133,7 +133,7 @@ impl BootConfig {
         assert!((val as usize) >= (self.sram_start as usize));
         assert!(
             (val as usize) < (self.sram_start as usize) + self.sram_size,
-            "top address {:08x} > (start + size) {:08x} + {} = {:08x}",
+            "top address {:08x} > (start + size) {:08x} + {:08x} = {:08x}",
             val as usize,
             self.sram_start as usize,
             self.sram_size,
