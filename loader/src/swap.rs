@@ -114,6 +114,7 @@ pub fn derive_mac_size(swap_len: usize) -> usize { (swap_len / 4096) * size_of::
 /// This needs to be synchronized with what's in kernel/src/mem.rs
 pub const SWAP_FLG_WIRED: u32 = 0x1_00;
 
+#[repr(C)]
 #[derive(Copy, Clone)]
 
 pub struct SwapAlloc {
@@ -175,9 +176,9 @@ impl PartialOrd for SwapAlloc {
 }
 
 impl Ord for SwapAlloc {
-    // Select this for min-heap (smallest timestamps at lower indices)
-    // fn cmp(&self, other: &Self) -> core::cmp::Ordering { other.timestamp.cmp(&self.timestamp) }
+    // Select this for smallest timestamps on pop()
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering { other.timestamp.cmp(&self.timestamp) }
 
-    // Select this for max-heap (biggest timestamps at lower indices)
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering { self.timestamp.cmp(&other.timestamp) }
+    // Select this for biggest timestamps on pop()
+    // fn cmp(&self, other: &Self) -> core::cmp::Ordering { self.timestamp.cmp(&other.timestamp) }
 }
