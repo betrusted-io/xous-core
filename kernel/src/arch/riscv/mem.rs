@@ -368,7 +368,7 @@ impl MemoryMapping {
             #[cfg(not(feature = "swap"))]
             let l0pt_phys = mm.alloc_page(pid)?;
             #[cfg(feature = "swap")]
-            let l0pt_phys = mm.alloc_page(pid, Some(addr))?;
+            let l0pt_phys = mm.alloc_page(pid, None)?;
 
             // Mark this entry as a leaf node (WRX as 0), and indicate
             // it is a valid page by setting "V".
@@ -630,7 +630,7 @@ pub fn map_page_inner(
         #[cfg(not(feature = "swap"))]
         let l0_pt_phys = mm.alloc_page(pid)?;
         #[cfg(feature = "swap")]
-        let l0_pt_phys = mm.alloc_page(pid, Some(virt))?;
+        let l0_pt_phys = mm.alloc_page(pid, None)?;
 
         // Mark this entry as a leaf node (WRX as 0), and indicate
         // it is a valid page by setting "V".
@@ -1127,6 +1127,19 @@ pub fn evict_page_inner(target_pid: PID, vaddr: usize) -> Result<usize, xous_ker
         let target_pte = unsafe { entry.read_volatile() };
         let target_paddr = (target_pte >> 10) << 12;
 
+        #[cfg(feature = "debug-swap")]
+        println!(
+            "-- evict: {:08x} -> {:08x} (flags: {:?}), count {}",
+            vaddr,
+            target_paddr,
+            MMUFlags::from_bits(target_pte & 0x3ff).unwrap(),
+            unsafe { MemoryManager::with(|mm| mm.get_timestamp(target_paddr)) }
+        );
+
+        // mark the page as "touched" even if the eviction checks fail: the page is definitely not LRU if
+        // it's not swappable.
+        MemoryManager::with(|mm| mm.touch(target_paddr));
+
         // sanity check
         if (target_pte & MMUFlags::VALID.bits() == 0) || (target_pte & MMUFlags::P.bits() != 0) {
             // return us to the swapper PID -- this call can only originate in the swapper
@@ -1135,6 +1148,13 @@ pub fn evict_page_inner(target_pid: PID, vaddr: usize) -> Result<usize, xous_ker
             swapper_map.activate()?;
             return Err(xous_kernel::Error::BadAddress);
         }
+        // don't allow swapping of kernel pages
+        if target_pte & MMUFlags::USER.bits() == 0 {
+            let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
+            let swapper_map = system_services.get_process(swapper_pid).unwrap().mapping;
+            swapper_map.activate()?;
+            return Err(xous_kernel::Error::AccessDenied);
+        }
         if target_pte & MMUFlags::S.bits() != 0 {
             let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
             let swapper_map = system_services.get_process(swapper_pid).unwrap().mapping;
@@ -1142,7 +1162,7 @@ pub fn evict_page_inner(target_pid: PID, vaddr: usize) -> Result<usize, xous_ker
             return Err(xous_kernel::Error::ShareViolation);
         }
 
-        // clear the valid bit, mark as swapped
+        // clear the valid bit, mark as swapped, preserve all other flags
         let new_pte = (target_pte & !MMUFlags::VALID.bits()) | MMUFlags::P.bits();
         unsafe { entry.write_volatile(new_pte) };
 
