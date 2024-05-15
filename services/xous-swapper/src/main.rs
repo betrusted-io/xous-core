@@ -53,11 +53,12 @@
 //    memory to swap
 //  - [done] refactor memory allocation tracking
 //  - [done] add kernel OOM callback
-//  - add test command to force eviction of some variable number of pages
-//  - create test program that over provisions heap versus available memory and prove that swap really works.
-//  - Implement Evictor routine with a thing that checks free memory level, and then more intelligently swaps
-//    stuff out to create free space for the kernel
+//  - [done] add test command to force eviction of some variable number of pages
+//  - handle epoch rollovers
 //  - hook the kernel OOM callback somewhere...reasonable.
+//  - [partially done] Implement Evictor routine with a thing that checks free memory level, and then more
+//    intelligently swaps stuff out to create free space for the kernel
+//  - create test program that over provisions heap versus available memory and prove that swap really works.
 
 mod debug;
 mod platform;
