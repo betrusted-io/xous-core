@@ -33,7 +33,7 @@ cramium-hal = { path = "../../libs/cramium-hal", optional = true, features = [
 ] }
 
 [target.'cfg(any(windows,unix))'.dependencies]
-minifb = "0.23.0"
+minifb = "0.26.0"
 
 [features]
 cramium-soc = [
