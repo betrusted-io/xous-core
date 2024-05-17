@@ -26,6 +26,7 @@ mod platform;
 mod server;
 mod services;
 mod syscall;
+mod utils;
 
 #[cfg(feature = "swap")]
 mod swap;
