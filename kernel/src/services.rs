@@ -269,7 +269,7 @@ impl Process {
     }
 
     /// Reveal state for debugging outside the crate.
-    #[cfg(all(feature = "swap", baremetal))]
+    #[cfg(all(feature = "debug-swap-verbose", baremetal))]
     pub fn state(&self) -> ProcessState { self.state }
 }
 
@@ -523,6 +523,7 @@ impl SystemServices {
     pub fn current_pid(&self) -> PID { arch::process::current_pid() }
 
     /// Must be called from the swapper's context. Resets the runnable states of the swapper.
+    #[cfg(feature = "swap")]
     pub fn finish_swap(&mut self) {
         let current_pid = self.current_pid();
         let current = self.get_process_mut(current_pid).expect("couldn't get current PID");
@@ -535,6 +536,7 @@ impl SystemServices {
         };
     }
 
+    #[cfg(feature = "swap")]
     pub fn swap_resume_to_userspace(&mut self, pid: PID, tid: TID) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
         #[cfg(feature = "gdb-stub")]
