@@ -68,9 +68,66 @@ static mut MEMORY_ALLOCATIONS: &mut [SwapAlloc] = &mut [];
 #[cfg(baremetal)]
 #[cfg(not(feature = "swap"))]
 static mut MEMORY_ALLOCATIONS: &mut [Option<PID>] = &mut [];
+#[cfg(baremetal)]
 static mut EXTRA_ALLOCATIONS: &mut [Option<PID>] = &mut [];
 #[cfg(baremetal)]
 static mut EXTRA_REGIONS: &[MemoryRangeExtra] = &[];
+
+#[cfg(feature = "swap")]
+/// Epoch rollover handling -- two options:
+///   - Fast epoch rollover, but long-lasting performance impact: just reset all counters to 0, and let the
+///     system re-discover LRU order based on usage patterns again
+///   - Slow epoch rollover, with no performance impact: go through all pages and "compact" the count down to
+///     the lowest level, resetting the epoch counter to the next available epoch. LRU patterns are
+///     maintained, but the search could take a long time.
+///
+/// In this implementation, we go with the slow epoch rollover, under the theory that (a) the
+/// actual size of the list to normalize is "small" (few hundred to thousands of
+/// entries) compared to the cost of re-discovering the LRU order by swapping out (e.g.
+/// encrypting and decrypting) 4096-byte pages. The implementation itself could be more
+/// efficient if we could, for example, make a full copy of the table, but we don't
+/// want to blow out the kernel stack or allocate a static structure for temporary
+/// data, so the entire algorithm is implemented with about a dozen entries of scratch
+/// space, iterating over the list until every item is renormalized.
+///
+/// The code is in the `mem` crate instead of `swap`, because it has to directly access the locally scoped
+/// MEM_ALLOCATIONS variable. The loop is likewise marked unsafe, because it accesses this static mut.
+pub unsafe fn renormalize_allocs() -> u32 {
+    #[cfg(feature = "debug-swap-verbose")]
+    for (i, alloc) in MEMORY_ALLOCATIONS.iter().enumerate() {
+        if alloc.get_raw_vpn() != 0 || alloc.get_timestamp() != 0 {
+            println!("  {:x}: {:08x}[{:x}]", i, alloc.get_raw_vpn(), alloc.get_timestamp());
+        }
+    }
+    // min_search_limit tracks the window of values we can renormalize in a single pass.
+    // It is guaranteed to increase by exactly RENORM_PASS_SIZE every pass, except for the final pass.
+    let mut min_search_limit = 0;
+    loop {
+        let mut ms = crate::utils::MinSet::new();
+        for d in MEMORY_ALLOCATIONS.iter() {
+            if d.get_timestamp() >= min_search_limit {
+                ms.insert(d.get_timestamp());
+            }
+        }
+        // remap elements in d that match the minset
+        for d in MEMORY_ALLOCATIONS.iter_mut() {
+            if let Some(i) = ms.index_of(d.get_timestamp()) {
+                d.set_timestamp(i as u32 + min_search_limit);
+            }
+        }
+        min_search_limit += crate::utils::RENORM_PASS_SIZE as u32;
+        if ms.max() == u32::MAX {
+            break;
+        }
+    }
+    #[cfg(feature = "debug-swap-verbose")]
+    for (i, alloc) in MEMORY_ALLOCATIONS.iter().enumerate() {
+        if alloc.get_raw_vpn() != 0 || alloc.get_timestamp() != 0 {
+            println!("  {:x}: {:08x}[{:x}]", i, alloc.get_raw_vpn(), alloc.get_timestamp());
+        }
+    }
+    MEMORY_ALLOCATIONS.iter().max().unwrap().get_timestamp()
+}
 
 /// Initialize the memory map.
 /// This will go through memory and map anything that the kernel is
