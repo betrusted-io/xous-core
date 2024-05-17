@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2024 bunnie <bunnie@kosagi.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use core::cmp::Ordering;
+
 use loader::swap::SWAP_FLG_WIRED;
 use loader::swap::SWAP_RPT_VADDR;
 use xous_kernel::SWAPPER_PID;
@@ -131,13 +133,33 @@ impl SwapAlloc {
         });
     }
 
-    #[cfg(feature = "debug-swap")]
+    #[cfg(feature = "debug-swap-verbose")]
+    pub fn get_raw_vpn(&self) -> u32 { self.vpn }
+
     pub fn get_timestamp(&self) -> u32 { self.timestamp }
+
+    pub fn set_timestamp(&mut self, val: u32) { self.timestamp = val }
 
     pub unsafe fn reparent(&mut self, pid: PID) {
         self.timestamp = crate::swap::Swap::with_mut(|s| s.next_epoch());
         self.vpn = self.vpn & !&0xFFu32 | pid.get() as u32;
     }
+}
+
+impl PartialEq for SwapAlloc {
+    fn eq(&self, other: &Self) -> bool {
+        self.timestamp == other.timestamp && self.timestamp == other.timestamp
+    }
+}
+
+impl Eq for SwapAlloc {}
+
+impl PartialOrd for SwapAlloc {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { self.timestamp.partial_cmp(&other.timestamp) }
+}
+
+impl Ord for SwapAlloc {
+    fn cmp(&self, other: &Self) -> Ordering { self.partial_cmp(other).unwrap() }
 }
 
 #[cfg(baremetal)]
@@ -215,18 +237,30 @@ impl Swap {
     }
 
     pub fn next_epoch(&mut self) -> u32 {
-        if self.epoch < u32::MAX {
+        // we save u32::MAX as a search-stop sentinel for the renormalization algorithm
+        // we can set this even lower if we want to stress-test epoch renormalization
+        if self.epoch < u32::MAX - 1 {
+            #[cfg(feature = "debug-swap-verbose")]
+            println!("Epoch {}", self.epoch);
             self.epoch += 1;
-            self.epoch
         } else {
-            // Epoch rollover handling -- two proposals:
-            //   - Fast epoch rollover, but long-lasting performance impact: just reset all counters to 0, and
-            //     let the system re-discover LRU order based on usage patterns again
-            //   - Slow epoch rollover, with no performance impact: go through all pages and "compact" the
-            //     count down to the lowest level, resetting the epoch counter to the next available epoch.
-            //     LRU patterns are maintained, but the search could take a long time.
-            todo!("Handle swap epoch rollover");
+            println!("Epoch before renormalization: {:x}", self.epoch);
+            // disable interrupts prior to renormalize
+            let sim_backing = sim_read();
+            sim_write(0x0);
+            // safety: this happens only within an exception handler, with interrupts disabled, and thus there
+            // should no concurrent access to the underlying data structure. The function itself
+            // promises not to create page faults, as it is coded to use only limited stack allocations.
+            self.epoch = unsafe {
+                crate::mem::renormalize_allocs()
+                // enable interrupts after renormalize
+            };
+            sim_write(sim_backing);
+            // the returned value is the greatest used epoch timestamp, so we have to add one for correctness
+            self.epoch += 1;
+            println!("Epoch after renormalization: {:x}", self.epoch);
         }
+        self.epoch
     }
 
     pub fn track_alloc(&mut self, is_alloc: bool) {
@@ -630,7 +664,7 @@ impl Swap {
                 // encrypted data, as the encryption happens in-place.
                 MemoryManager::with_mut(|mm| {
                     let paddr = crate::arch::mem::virt_to_phys(swapper_virt_page).unwrap() as usize;
-                    println!("WTS releasing vaddr {:x}, paddr {:x}", swapper_virt_page, paddr);
+                    println!("WTS releasing paddr {:x}", paddr);
                     // this call unmaps the virtual page from the page table
                     crate::arch::mem::unmap_page_inner(mm, swapper_virt_page).expect("couldn't unmap page");
                     // This call releases the physical page from the RPT - the pid has to match that of the
@@ -689,6 +723,8 @@ impl Swap {
     }
 }
 
+// Various in-line assembly thunks go below this line.
+
 #[inline]
 fn flush_dcache() {
     unsafe {
@@ -707,3 +743,11 @@ fn flush_dcache() {
         );
     }
 }
+
+fn sim_read() -> usize {
+    let existing: usize;
+    unsafe { core::arch::asm!("csrrs {0}, 0x9C0, zero", out(reg) existing) };
+    existing
+}
+
+fn sim_write(new: usize) { unsafe { core::arch::asm!("csrrw zero, 0x9C0, {0}", in(reg) new) }; }
