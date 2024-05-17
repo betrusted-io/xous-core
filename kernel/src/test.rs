@@ -1133,3 +1133,80 @@ fn process_restart_server() {
 
     main_thread.join().expect("couldn't join kernel process");
 }
+
+#[test]
+fn renormalizer() {
+    const PASS_SIZE: usize = crate::utils::RENORM_PASS_SIZE;
+    const TEST_LEN: usize = 512;
+
+    fn generate_random_u32_slice(size: usize, limit: u32) -> Vec<u32> {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let mut vec = Vec::with_capacity(size);
+        for _ in 0..size {
+            vec.push(rng.gen::<u32>() % limit);
+        }
+        vec
+    }
+
+    let cases =
+        [41u32, 512u32, 778u32, 2017u32, 2048u32, u32::MAX - 1, u32::MAX - 1, u32::MAX - 1, u32::MAX - 1];
+
+    for case in cases {
+        println!("Renorm test case with max val {}", case);
+        let mut data = generate_random_u32_slice(TEST_LEN, case);
+        let mut orig = Vec::new();
+        for &d in data.iter() {
+            orig.push(d);
+        }
+        println!("Input data: {:x?}", &data);
+
+        let mut min_search_limit = 0;
+        loop {
+            let mut ms = crate::utils::MinSet::new();
+            for &d in &data {
+                if d >= min_search_limit {
+                    ms.insert(d);
+                }
+            }
+            // remap elements in d that match the minset
+            for d in data.iter_mut() {
+                if let Some(i) = ms.index_of(*d) {
+                    *d = i as u32 + min_search_limit;
+                }
+            }
+            min_search_limit += PASS_SIZE as u32;
+            if ms.max() == u32::MAX {
+                break;
+            }
+        }
+
+        println!("Renormalized data: {:x?}", &data);
+
+        let max_index = orig.iter().enumerate().max_by_key(|&(_, value)| value).map(|(index, _)| index);
+        let max_index_renorm =
+            data.iter().enumerate().max_by_key(|&(_, value)| value).map(|(index, _)| index);
+        println!("max indices: {:?}, {:?}", max_index, max_index_renorm);
+        println!("val @ max: {:x}", data[max_index_renorm.unwrap()]);
+        // this isn't a comprehensive test, but the index of the min value should not have changed
+        assert!(max_index == max_index_renorm);
+        let min_index = orig.iter().enumerate().min_by_key(|&(_, value)| value).map(|(index, _)| index);
+        let min_index_renorm =
+            data.iter().enumerate().min_by_key(|&(_, value)| value).map(|(index, _)| index);
+        // this isn't a comprehensive test, but the index of the max value should not have changed
+        println!("min indices: {:?}, {:?}", min_index, min_index_renorm);
+        assert!(min_index == min_index_renorm);
+        // the input values may go all the way up to u32::MAX - 1, but the biggest renormed value should be
+        // less than the TEST_LEN
+        assert!(data[max_index.unwrap()] < TEST_LEN as u32);
+        // check that the bounds on the search limit are correct
+        let unique_elements: Vec<_> = {
+            let mut set = std::collections::HashSet::new();
+            orig.into_iter().filter(|x| set.insert(*x)).collect()
+        };
+        let max_element = *data.iter().max().unwrap();
+        println!("max element {}, unique_elements {}", max_element, unique_elements.len());
+        assert!(max_element == unique_elements.len() as u32 - 1);
+        assert!(max_element < TEST_LEN as u32);
+    }
+}
