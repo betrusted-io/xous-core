@@ -30,6 +30,7 @@ static IRQ_ENABLED: AtomicBool = AtomicBool::new(true);
 // Indicate when we handle an IRQ
 static HANDLING_IRQ: AtomicBool = AtomicBool::new(false);
 
+#[cfg(feature = "swap")]
 pub fn is_handling_irq() -> bool { HANDLING_IRQ.load(Ordering::SeqCst) }
 
 fn sim_read() -> usize {
@@ -338,7 +339,7 @@ pub extern "C" fn trap_handler(
                 unsafe { s.exit_blocking_call() })
             .unwrap_or_else(xous_kernel::Result::Error);
 
-            #[cfg(feature = "debug-swap")]
+            #[cfg(feature = "debug-swap-verbose")]
             {
                 // debugging
                 SystemServices::with(|ss| {
@@ -346,7 +347,7 @@ pub extern "C" fn trap_handler(
                     let current = ss.get_process(current_pid()).unwrap();
                     let state = current.state();
                     println!(
-                        "swapper returning: PID{}(hw{})-{:?} result {:?}",
+                        "Swapper irq-like handler returning to PID{}(hw{})-{:?} with result {:?}",
                         current.pid.get(),
                         hardware_pid,
                         state,
@@ -364,7 +365,8 @@ pub extern "C" fn trap_handler(
             } else {
                 ArchProcess::with_current_mut(|p| {
                     let thread = p.current_thread();
-                    println!("Swap syscall returning to address {:08x}", thread.sepc);
+                    #[cfg(feature = "debug-swap-verbose")]
+                    println!("Swapper syscall returning to address {:08x}", thread.sepc);
                     // re-enable IRQs as late as possible
                     enable_all_irqs();
                     unsafe { _xous_syscall_return_result(&response, thread) };
