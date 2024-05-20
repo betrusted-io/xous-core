@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: 2022 Foundation Devices, Inc. <hello@foundationdevices.com>
+// SPDX-FileCopyrightText: 2024 bunnie <bunnie@kosagi.com>
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod rand;

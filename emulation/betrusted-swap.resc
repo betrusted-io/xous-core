@@ -118,32 +118,4 @@ runMacro $reset
 
 mach clear
 
-############### Define the Betrusted EC ###############
-mach create "EC"
-machine LoadPlatformDescription @ec/betrusted-ec.repl
-
-# logLevel -1 i2c
-# logLevel -1 i2c.bq27421
-# logLevel -1 wifi
-# logLevel 0 wifi.wf200
-# sysbus LogPeripheralAccess wifi true
-
-machine StartGdbServer 3334 true
-showAnalyzer uart
-
-# Connect the EC to the SPI bus
-connector Connect sysbus.com com
-
-macro reset
-"""
-    sysbus LoadBinary @ec/bt-ec.bin 0x20000000
-    sysbus LoadBinary @ec/wf200_fw.bin 0x2009C000
-    sysbus LoadBinary @ec/loader.bin 0x00000000
-    cpu PC 0
-    cpu SP 0x1001FFFC
-"""
-runMacro $reset
-
-mach clear
-
 start

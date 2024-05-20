@@ -153,7 +153,7 @@ _prep_args:
 
   # Prepare arguments for the kernel `init` function (entrypoint)
   mov r0, r3
-  pop {r2, r1}
+  pop {r3, r2, r1}
 
   # Restore kernel stack pointer from the r4
   mov sp, r4

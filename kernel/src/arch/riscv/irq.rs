@@ -30,6 +30,9 @@ static IRQ_ENABLED: AtomicBool = AtomicBool::new(true);
 // Indicate when we handle an IRQ
 static HANDLING_IRQ: AtomicBool = AtomicBool::new(false);
 
+#[cfg(feature = "swap")]
+pub fn is_handling_irq() -> bool { HANDLING_IRQ.load(Ordering::SeqCst) }
+
 fn sim_read() -> usize {
     let existing: usize;
     unsafe { core::arch::asm!("csrrs {0}, 0x9C0, zero", out(reg) existing) };
@@ -50,6 +53,12 @@ pub fn disable_all_irqs() {
     IRQ_ENABLED.store(false, Ordering::Relaxed);
     sim_write(0x0);
 }
+
+/// Used by the swapper to put the correct value into SIM_BACKING, because
+/// on recovery from OOM we may skip the read from swap pre-amble that would
+/// normally set this up.
+#[cfg(feature = "swap")]
+pub fn set_sim_backing(sim: usize) { SIM_BACKING.store(sim, Ordering::SeqCst); }
 
 /// Enable external interrupts
 #[export_name = "_enable_all_irqs"]
@@ -241,6 +250,12 @@ pub extern "C" fn trap_handler(
             unsafe {
                 if PREVIOUS_PAIR.is_none() {
                     let tid = crate::arch::process::current_tid();
+                    // This is pretty verbose, so leave it commented out unless we're debugging a process
+                    // transition
+                    // #[cfg(feature = "debug-print")]
+                    // if pid.get() != 1 {
+                    //    println!("Hardware IRQ set PID{:?}, TID{:?}", pid, tid);
+                    // }
                     PREVIOUS_PAIR = Some((pid, tid));
                 }
             }
@@ -259,9 +274,15 @@ pub extern "C" fn trap_handler(
             println!("KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ", pid, ex, _pc, addr);
             crate::arch::mem::ensure_page_exists_inner(addr)
                 .map(|_new_page| {
-                    #[cfg(all(feature = "debug-print", feature = "print-panics"))]
-                    println!("SPF Handing page {:08x} to process", _new_page);
                     ArchProcess::with_current_mut(|process| {
+                        #[cfg(all(feature = "debug-print", feature = "print-panics"))]
+                        println!(
+                            "SPF Handing page {:08x} to pid {} tid {} sepc {:x}",
+                            _new_page,
+                            process.pid().get(),
+                            process.current_tid(),
+                            process.current_thread().sepc,
+                        );
                         crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
                     });
                 })
@@ -318,51 +339,57 @@ pub extern "C" fn trap_handler(
         }
         #[cfg(feature = "swap")]
         RiscvException::InstructionPageFault(RETURN_FROM_SWAPPER, _offset) => {
-            #[cfg(feature = "debug-swap")]
+            /* #[cfg(feature = "debug-swap")]
             {
                 let pid = crate::arch::process::current_pid();
                 let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
-                println!(
-                    "RETURN_FROM_SWAPPER PROCESS_TABLE.current: {}, hw_pid: {}",
-                    pid.get(),
-                    hardware_pid
-                );
-            }
+                println!("IPF RFS from PID{}, hw{}, offset {:x}", pid.get(), hardware_pid, _offset);
+            } */
             // Cleanup after the swapper
             let response = Swap::with_mut(|s|
                 // safety: this is safe because on return from swapper, we're in the swapper's memory space.
                 unsafe { s.exit_blocking_call() })
             .unwrap_or_else(xous_kernel::Result::Error);
 
-            #[cfg(feature = "debug-swap")]
+            #[cfg(feature = "debug-swap-verbose")]
             {
-                let pid = crate::arch::process::current_pid();
-                let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
-                println!(
-                    "aft swapper cleanup PROCESS_TABLE.current: {}, hw_pid: {}",
-                    pid.get(),
-                    hardware_pid
-                );
-
                 // debugging
                 SystemServices::with(|ss| {
+                    let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
                     let current = ss.get_process(current_pid()).unwrap();
                     let state = current.state();
-                    println!("state after swapper switch: {} {:?}", current.pid.get(), state);
+                    ArchProcess::with_current(|p| {
+                        println!(
+                            "Swapper userspace handler returning to PID{}(hw{})-{:?} with result {:?}; tid {}, sepc {:x}\n{:x?}",
+                            current.pid.get(),
+                            hardware_pid,
+                            state,
+                            response,
+                            p.current_tid(),
+                            p.current_thread().sepc,
+                            p.current_thread().registers,
+                        );
+                    });
                 });
             }
-            // Re-enable interrupts now that we're out of the swap context
-            enable_all_irqs();
 
             if response == xous_kernel::Result::ResumeProcess {
                 ArchProcess::with_current_mut(|process| {
+                    // re-enable IRQs as late as possible
+                    enable_all_irqs();
                     crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
                 });
             } else {
                 ArchProcess::with_current_mut(|p| {
                     let thread = p.current_thread();
-                    #[cfg(feature = "debug-swap")]
-                    println!("Returning to address {:08x}", thread.sepc);
+                    #[cfg(feature = "debug-swap-verbose")]
+                    println!(
+                        "Swapper syscall returning to address {:08x} in pid {}",
+                        thread.sepc,
+                        p.pid().get()
+                    );
+                    // re-enable IRQs as late as possible
+                    enable_all_irqs();
                     unsafe { _xous_syscall_return_result(&response, thread) };
                 });
             }

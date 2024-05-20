@@ -8,9 +8,11 @@
         "--target-dir",
         "target/analyzer",
         "--features",
-        "cramium-soc",
+        "precursor",
         "--features",
-        "utralib/cramium-soc",
+        "utralib/precursor",
+        "--features",
+        "utralib/precursor-pvt",
         "--message-format",
         "json"
     ],
@@ -18,7 +20,7 @@
         "XOUS_SVD_FILE": "../precursors/soc.svd"
     },
     "rust-analyzer.cargo.features": [
-        "cramium-soc",
+        "precursor",
         "swap",
         "mass-storage"
     ],

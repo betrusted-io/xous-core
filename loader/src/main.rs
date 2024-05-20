@@ -23,21 +23,20 @@ mod phase1;
 mod phase2;
 mod platform;
 #[cfg(feature = "swap")]
-mod swap;
+pub mod swap;
 
 use core::{mem, ptr, slice};
 
 use asm::*;
 use bootconfig::BootConfig;
 use consts::*;
+pub use loader::*;
 use minielf::*;
 use phase1::{phase_1, InitialProcess};
 use phase2::{phase_2, ProgramDescription};
 #[cfg(feature = "swap")]
 use platform::SwapHal;
 
-pub type XousPid = u8;
-pub const PAGE_SIZE: usize = 4096;
 const WORD_SIZE: usize = mem::size_of::<usize>();
 pub const SIGBLOCK_SIZE: usize = 0x1000;
 const STACK_PAGE_COUNT: usize = 8;
@@ -133,11 +132,6 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
     {
         cfg.swap_hal = SwapHal::new(&cfg);
         read_swap_config(&mut cfg);
-        #[cfg(feature = "resume")]
-        compile_error!(
-            "WARNING WARNING WARNING: swap and resume selected - this is not a valid configuration because\
- the stack overlaps into the 'clean suspend' marker with swap. This needs to be fixed if resume is desired with swap."
-        );
     }
 
     // check to see if we are recovering from a clean suspend or not
@@ -213,6 +207,8 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         resume_csr.wfo(utra::susres::INTERRUPT_INTERRUPT, 1);
     }
 
+    // condense debug and resume arguments into a single register, so we have space for XPT
+    let debug_resume = if cfg.debug { 0x1 } else { 0x0 } | if clean { 0x2 } else { 0x0 };
     if !clean {
         // The MMU should be set up now, and memory pages assigned to their
         // respective processes.
@@ -221,10 +217,10 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         if SDBG && VDBG {
             // activate to debug stack smashes. RPT should be 0's here (or at least valid PIDs) if stack did
             // not overflow.
-            for (i, r) in
+            for (_i, _r) in
                 cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 1024..].chunks(32).enumerate()
             {
-                println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + i * 32, r);
+                println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + _i * 32, _r);
             }
         }
         // Add a static check for stack overflow, using a heuristic that the last 64 bytes of the RPT
@@ -232,21 +228,31 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         // this heuristic within that range (any stack-stored pointer, for example, will break this).
         for &check in cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 64..].iter() {
             assert!(
-                check <= cfg.processes.len() as u8,
+                // use .to_le() to access the structure because SwapAlloc can either be a u8 or a composite
+                // type, and .to_le() can do the right thing for both cases.
+                check.to_le() <= cfg.processes.len() as u8,
                 "RPT looks corrupted, suspect stack overflow in loader. Increase GUARD_MEMORY_BYTES!"
             );
         }
+        // compute the virtual addresses of all of these "manually"
         let arg_offset = cfg.args.base as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let ip_offset = cfg.processes.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let rpt_offset =
             cfg.runtime_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
+        let xpt_offset = cfg.extra_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         #[cfg(not(feature = "atsama5d27"))]
         let _tt_addr = { cfg.processes[0].satp };
         #[cfg(feature = "atsama5d27")]
         let _tt_addr = { cfg.processes[0].ttbr0 };
         println!(
-            "Jumping to kernel @ {:08x} with map @ {:08x} and stack @ {:08x} (kargs: {:08x}, ip: {:08x}, rpt: {:08x})",
-            cfg.processes[0].entrypoint, _tt_addr, cfg.processes[0].sp, arg_offset, ip_offset, rpt_offset,
+            "Jumping to kernel @ {:08x} with map @ {:08x} and stack @ {:08x} (kargs: {:08x}, ip: {:08x}, rpt: {:08x}, xpt: {:08x})",
+            cfg.processes[0].entrypoint,
+            _tt_addr,
+            cfg.processes[0].sp,
+            arg_offset,
+            ip_offset,
+            rpt_offset,
+            xpt_offset,
         );
 
         // save a copy of the computed kernel registers at the bottom of the page reserved
@@ -259,7 +265,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         // critical parameters like these kernel arguments.
         #[cfg(not(feature = "atsama5d27"))]
         unsafe {
-            let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut [u32; 7];
+            let backup_args: *mut [u32; 8] = BACKUP_ARGS_ADDR as *mut [u32; 8];
             (*backup_args)[0] = arg_offset as u32;
             (*backup_args)[1] = ip_offset as u32;
             (*backup_args)[2] = rpt_offset as u32;
@@ -267,12 +273,13 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
             (*backup_args)[4] = cfg.processes[0].entrypoint as u32;
             (*backup_args)[5] = cfg.processes[0].sp as u32;
             (*backup_args)[6] = if cfg.debug { 1 } else { 0 };
+            (*backup_args)[7] = xpt_offset as u32;
             #[cfg(feature = "debug-print")]
             {
                 if VDBG {
                     println!("Backup kernel args:");
-                    for i in 0..7 {
-                        println!("0x{:08x}", (*backup_args)[i]);
+                    for &arg in (*backup_args).iter() {
+                        println!("0x{:08x}", arg);
                     }
                 }
             }
@@ -292,11 +299,11 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
                 arg_offset,
                 ip_offset,
                 rpt_offset,
+                xpt_offset,
                 cfg.processes[0].satp,
                 cfg.processes[0].entrypoint,
                 cfg.processes[0].sp,
-                cfg.debug,
-                clean,
+                debug_resume,
             );
         }
 
@@ -309,19 +316,19 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
                 arg_offset,
                 ip_offset,
                 rpt_offset,
-                cfg.debug,
-                clean,
+                xpt_offset,
+                debug_resume,
             )
         }
     } else {
         #[cfg(feature = "resume")]
         unsafe {
-            let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut [u32; 7];
+            let backup_args: *mut [u32; 8] = BACKUP_ARGS_ADDR as *mut [u32; 8];
             #[cfg(feature = "debug-print")]
             {
                 println!("Using backed up kernel args:");
-                for i in 0..7 {
-                    println!("0x{:08x}", (*backup_args)[i]);
+                for &arg in (*backup_args).iter() {
+                    println!("0x{:08x}", arg);
                 }
             }
             let satp = ((*backup_args)[3] as usize) & 0x803F_FFFF | (((susres_pid as usize) & 0x1FF) << 22);
@@ -343,11 +350,11 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
                 (*backup_args)[0] as usize,
                 (*backup_args)[1] as usize,
                 (*backup_args)[2] as usize,
+                (*backup_args)[7] as usize,
                 satp as usize,
                 (*backup_args)[4] as usize,
                 (*backup_args)[5] as usize,
-                if (*backup_args)[6] == 0 { false } else { true },
-                clean,
+                debug_resume,
             );
         }
         #[cfg(not(feature = "resume"))]
@@ -443,7 +450,7 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
     const NUM_SECTORS: usize = 8;
     const WORDS_PER_PAGE: usize = PAGE_SIZE / 4;
 
-    let suspend_marker = cfg.sram_start as usize + cfg.sram_size - PAGE_SIZE * 3;
+    let suspend_marker = cfg.sram_start as usize + cfg.sram_size - GUARD_MEMORY_BYTES;
     let marker: *mut [u32; WORDS_PER_PAGE] = suspend_marker as *mut [u32; WORDS_PER_PAGE];
 
     let boot_seed = CSR::new(utra::seed::HW_SEED_BASE as *mut u32);

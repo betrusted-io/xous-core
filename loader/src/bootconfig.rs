@@ -44,8 +44,15 @@ pub struct BootConfig {
     pub extra_pages: usize,
 
     /// This structure keeps track of which pages are owned
-    /// and which are free. A PID of `0` indicates it's free.
-    pub runtime_page_tracker: &'static mut [XousPid],
+    /// and which are free in main RAM. A PID of `0` indicates it's free.
+    /// Because this area is swappable, a type alias of XousAlloc allows
+    /// us to expand the tracking for the RAM area.
+    pub runtime_page_tracker: &'static mut [XousAlloc],
+
+    /// This structure keeps track of which pages are owned
+    /// and which are free in non-RAM areas. A PID of `0` indicates it's free.
+    /// These areas are non-swappable, so the tracking is a simple XousPid
+    pub extra_page_tracker: &'static mut [XousPid],
 
     /// A list of processes that were set up.  The first element
     /// is the kernel, and any subsequent elements are init processes.
@@ -96,6 +103,7 @@ impl Default for BootConfig {
             init_size: 0,
             extra_pages: 0,
             runtime_page_tracker: Default::default(),
+            extra_page_tracker: Default::default(),
             init_process_count: 0,
             processes: Default::default(),
             swap_offset: 0,
@@ -125,7 +133,7 @@ impl BootConfig {
         assert!((val as usize) >= (self.sram_start as usize));
         assert!(
             (val as usize) < (self.sram_start as usize) + self.sram_size,
-            "top address {:08x} > (start + size) {:08x} + {} = {:08x}",
+            "top address {:08x} > (start + size) {:08x} + {:08x} = {:08x}",
             val as usize,
             self.sram_start as usize,
             self.sram_size,
@@ -147,7 +155,8 @@ impl BootConfig {
         }
         // Mark this page as in-use by the kernel
         let extra_bytes = self.extra_pages * PAGE_SIZE;
-        self.runtime_page_tracker[(self.sram_size - (extra_bytes + self.init_size)) / PAGE_SIZE] = 1;
+        self.runtime_page_tracker[(self.sram_size - (extra_bytes + self.init_size)) / PAGE_SIZE] =
+            XousAlloc::from(1);
 
         // Return the address
         pg as *mut usize
@@ -157,22 +166,53 @@ impl BootConfig {
         // First, check to see if the region is in RAM,
         if addr >= self.sram_start as usize && addr < self.sram_start as usize + self.sram_size {
             // Mark this page as in-use by the kernel
-            self.runtime_page_tracker[(addr - self.sram_start as usize) / PAGE_SIZE] = pid;
+            self.runtime_page_tracker[(addr - self.sram_start as usize) / PAGE_SIZE] = XousAlloc::from(pid);
             return;
         }
         // The region isn't in RAM, so check the other memory regions.
-        let mut rpt_offset = self.sram_size / PAGE_SIZE;
+        let mut xpt_offset = 0;
 
         for region in self.regions.iter() {
             let rstart = region.start as usize;
             let rlen = region.length as usize;
             if addr >= rstart && addr < rstart + rlen {
-                self.runtime_page_tracker[rpt_offset + (addr - rstart) / PAGE_SIZE] = pid;
+                self.extra_page_tracker[xpt_offset + (addr - rstart) / PAGE_SIZE] = XousPid::from(pid);
                 return;
             }
-            rpt_offset += rlen / PAGE_SIZE;
+            xpt_offset += rlen / PAGE_SIZE;
         }
         panic!("Tried to change region {:08x} that isn't in defined memory!", addr);
+    }
+
+    #[cfg(feature = "swap")]
+    pub fn change_owner_tracking(&mut self, pid: XousPid, addr: usize, vaddr: usize) {
+        // First, check to see if the region is in RAM,
+        if addr >= self.sram_start as usize && addr < self.sram_start as usize + self.sram_size {
+            self.runtime_page_tracker[(addr - self.sram_start as usize) / PAGE_SIZE]
+                .update(pid, vaddr as u32);
+            return;
+        }
+        // The region isn't in RAM, so check the other memory regions.
+        let mut xpt_offset = 0;
+        for region in self.regions.iter() {
+            let rstart = region.start as usize;
+            let rlen = region.length as usize;
+            if addr >= rstart && addr < rstart + rlen {
+                self.extra_page_tracker[xpt_offset + (addr - rstart) / PAGE_SIZE] = XousPid::from(pid);
+                return;
+            }
+            xpt_offset += rlen / PAGE_SIZE;
+        }
+        panic!("Tried to change region {:08x} that isn't in defined memory!", addr);
+    }
+
+    #[cfg(feature = "swap")]
+    pub fn mark_as_wired(&mut self, paddr: usize) {
+        if paddr >= self.sram_start as usize && paddr < self.sram_start as usize + self.sram_size {
+            self.runtime_page_tracker[(paddr - self.sram_start as usize) / PAGE_SIZE].set_wired();
+        } else {
+            panic!("Tried to wire address {:08x} that isn't in main RAM!", paddr);
+        }
     }
 
     /// Map the given page to the specified process table.  If necessary,
@@ -187,7 +227,10 @@ impl BootConfig {
         }
         assert!(!(phys == 0 && flags & FLG_VALID != 0), "cannot map zero page");
         if flags & FLG_VALID != 0 {
+            #[cfg(not(feature = "swap"))]
             self.change_owner(owner, phys);
+            #[cfg(feature = "swap")]
+            self.change_owner_tracking(owner, phys, virt);
         }
         match WORD_SIZE {
             4 => self.map_page_32(root, phys, virt, flags, owner),
@@ -242,7 +285,7 @@ impl BootConfig {
                 virt
             );
         }
-        let previous_flags = l0_pt[vpn0] & 0xf;
+        let previous_flags = l0_pt[vpn0] & 0x3f;
         l0_pt[vpn0] = (ppn1 << 20) | (ppn0 << 10) | previous_flags | FLG_VALID;
     }
 
@@ -301,7 +344,7 @@ impl BootConfig {
                 virt
             );
         }
-        let previous_flags = l0_pt[vpn0] & 0xf;
+        let previous_flags = l0_pt[vpn0] & 0x3f;
         l0_pt[vpn0] = (ppn1 << 20) | (ppn0 << 10) | flags | previous_flags | FLG_D | FLG_A;
 
         // If we had to allocate a level 1 pagetable entry, ensure that it's
@@ -321,6 +364,8 @@ impl BootConfig {
                 FLG_R | FLG_W | FLG_VALID,
                 owner,
             );
+            #[cfg(feature = "swap")]
+            self.mark_as_wired(addr.get()); // page table entries should never be swapped.
             if VDBG {
                 println!("<<< Done mapping new address");
             }

@@ -34,9 +34,8 @@ impl SwapHal {
 
             // compute the MAC area needed for the total RAM size. This is a slight over-estimate
             // because once we remove the MAC area, we need even less storage, but it's a small error.
-            let mac_size = (swap.ram_size as usize / 4096) * size_of::<Tag>();
-            let mac_size_to_page = (mac_size + (PAGE_SIZE - 1)) & !(PAGE_SIZE - 1);
-            let ram_size_actual = (swap.ram_size as usize & !(PAGE_SIZE - 1)) - mac_size_to_page;
+            let ram_size_actual = crate::swap::derive_usable_swap(swap.ram_size as usize);
+            let mac_size = crate::swap::derive_mac_size(swap.ram_size as usize);
             if SDBG {
                 println!(
                     "mac area size: {:x}, ram_size_actual: {:x}, swap.ram_size: {:x}, mac offset: {:x}",

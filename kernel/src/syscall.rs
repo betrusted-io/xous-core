@@ -731,31 +731,22 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 Ok(xous_kernel::Result::MemoryRange(range))
             })
         }
-        SysCall::UnmapMemory(range) => {
-            #[cfg(feature = "swap")]
-            // this call may diverge if it generates an advisory to the swapper
-            let result = crate::swap::Swap::with_mut(|s| s.unmap(range));
-            #[cfg(not(feature = "swap"))]
-            let result = {
-                MemoryManager::with_mut(|mm| {
-                    let mut result = Ok(xous_kernel::Result::Ok);
-                    let virt = range.as_ptr() as usize;
-                    let size = range.len();
-                    if cfg!(baremetal) && virt & 0xfff != 0 {
-                        return Err(xous_kernel::Error::BadAlignment);
+        SysCall::UnmapMemory(range) => MemoryManager::with_mut(|mm| {
+            let mut result = Ok(xous_kernel::Result::Ok);
+            let virt = range.as_ptr() as usize;
+            let size = range.len();
+            if cfg!(baremetal) && virt & 0xfff != 0 {
+                return Err(xous_kernel::Error::BadAlignment);
+            }
+            for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
+                if let Err(e) = mm.unmap_page(addr as *mut usize) {
+                    if result.is_ok() {
+                        result = Err(e);
                     }
-                    for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
-                        if let Err(e) = mm.unmap_page(addr as *mut usize) {
-                            if result.is_ok() {
-                                result = Err(e);
-                            }
-                        }
-                    }
-                    result
-                })
-            };
+                }
+            }
             result
-        }
+        }),
         SysCall::IncreaseHeap(delta, flags) => {
             if delta & 0xfff != 0 {
                 return Err(xous_kernel::Error::BadAlignment);
@@ -1027,8 +1018,58 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 klog!("Illegal caller"); // only PID 2 can call this
                 return Err(xous_kernel::Error::AccessDenied);
             }
+            #[cfg(feature = "debug-swap")]
+            println!("Swap ABI via syscall: {:?}", SwapAbi::from(op));
             match SwapAbi::from(op) {
-                SwapAbi::Evict => Swap::with_mut(|swap| swap.evict_page(a1, a2)),
+                SwapAbi::Evict => {
+                    let pid = a1;
+                    if pid != 0 && pid != 1 && pid != 2 {
+                        Swap::with_mut(|swap| swap.evict_page(pid, a2))
+                    } else {
+                        // don't allow kernel or swapper to be swapped out
+                        #[cfg(feature = "debug-swap")]
+                        println!("evict_page rejecting request for pid{}/{:x}: InvalidPID", pid, a2);
+                        Err(xous_kernel::Error::InvalidPID)
+                    }
+                }
+                SwapAbi::GetFreePages => Swap::with(|swap| swap.get_free_mem()),
+                SwapAbi::FetchAllocs => Swap::with_mut(|swap| swap.fetch_allocs()),
+                // SwapAbi::SetOomThresh => Swap::with_mut(|swap| swap.set_oom_thresh(a1, a2)),
+                SwapAbi::StealPage => {
+                    let target_pid = a1 as u8;
+                    let vaddr = a2;
+                    match crate::arch::mem::evict_page_inner(
+                        PID::new(target_pid as u8).expect("Invalid PID"),
+                        vaddr,
+                    ) {
+                        Ok(ptr) => Ok(xous_kernel::Result::Scalar5(ptr, 0, 0, 0, 0)),
+                        Err(e) => {
+                            println!(
+                                "steal_page rejecting request for pid{}/{:x}: {:?}",
+                                target_pid, vaddr, e
+                            );
+                            Err(xous_kernel::Error::BadAddress)
+                        }
+                    }
+                }
+                SwapAbi::ReleaseMemory => {
+                    let vaddr_to_release = a1;
+                    let original_pid = a2 as u8;
+                    MemoryManager::with_mut(|mm| {
+                        let paddr = crate::arch::mem::virt_to_phys(vaddr_to_release).unwrap() as usize;
+                        #[cfg(feature = "debug-swap")]
+                        println!("ReleaseMemory - paddr {:x}", paddr);
+                        // this call unmaps the virtual page from the page table
+                        crate::arch::mem::unmap_page_inner(mm, vaddr_to_release)
+                            .expect("couldn't unmap page");
+                        // This call releases the physical page from the RPT - the pid has to match that of
+                        // the original owner. This is the "pointy end" of the stick;
+                        // after this call, the memory is now back into the free pool.
+                        mm.release_page_swap(paddr as *mut usize, PID::new(original_pid).unwrap())
+                            .expect("couldn't free page that was swapped out");
+                        Ok(xous_kernel::Result::Ok)
+                    })
+                }
                 SwapAbi::Invalid => {
                     println!(
                         "Invalid SwapOp: {:x} {:x} {:x} {:x} {:x} {:x} {:x}",

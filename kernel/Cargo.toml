@@ -17,12 +17,14 @@ xous-kernel = { package = "xous", version = "0.9.60", features = [
 utralib = { version = "0.1.24", optional = true, default_features = false }
 rand_chacha = { version = "0.3.1", optional = true, default_features = false }
 cramium-hal = { path = "../libs/cramium-hal", optional = true, default_features = false }
+loader = { path = "../loader", optional = true, features = ["swap"] }
 
 [target.'cfg(any(windows,unix))'.dev-dependencies]
 xous-kernel = { package = "xous", version = "0.9.60", features = [
     "forget-memory-messages",
     "processes-as-threads",
 ] }
+rand = "0.8.5"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 riscv = { version = "0.5.6", package = "xous-riscv" }                           # source is in "../imports/riscv-0.5.6"
@@ -51,10 +53,11 @@ gdb-stub = ["gdbstub", "gdbstub_arch"]
 print-panics = []
 report-memory = ["stats_alloc"]
 wrap-print = []
-big-heap = []                          # Cause heaps to start at 12 MM instead of 512 kB
+big-heap = []                              # Cause heaps to start at 12 MM instead of 512 kB
 v2p = ["xous-kernel/v2p"]
-swap = ["xous-kernel/swap"]
+swap = ["xous-kernel/swap", "loader/swap"]
 debug-swap = []
+debug-swap-verbose = []
 
 # patches for simulation targets ONLY. Applying these flags will result in totally broken security.
 hwsim = []

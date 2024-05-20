@@ -24,9 +24,7 @@ impl SwapHal {
 
         // compute the MAC area needed for the total RAM size. This is a slight over-estimate
         // because once we remove the MAC area, we need even less storage, but it's a small error.
-        let mac_size = (spec.swap_len as usize / 4096) * size_of::<Tag>();
-        let mac_size_to_page = (mac_size + (PAGE_SIZE - 1)) & !(PAGE_SIZE - 1);
-        let ram_size_actual = (spec.swap_len as usize & !(PAGE_SIZE - 1)) - mac_size_to_page;
+        let ram_size_actual = loader::swap::derive_usable_swap(spec.swap_len as usize);
 
         #[cfg(feature = "spi-alt-channel")]
         let channel = SpimChannel::Channel0;
@@ -91,6 +89,8 @@ impl SwapHal {
         }
     }
 
+    /// Swap is assumed to start at offset 0 in the target device, allowing src_offset to be used
+    /// by the offset tracker (outside this crate) directly
     pub fn decrypt_swap_from(
         &mut self,
         buf: &mut [u8],

@@ -38,6 +38,7 @@ pub enum CallbackType {
     /// args: irq_no, arg
     Interrupt(usize, *mut usize),
     Swap([usize; 8]),
+    SwapInIrq([usize; 8]),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -268,7 +269,7 @@ impl Process {
     }
 
     /// Reveal state for debugging outside the crate.
-    #[cfg(all(feature = "swap", baremetal))]
+    #[cfg(all(feature = "debug-swap-verbose", baremetal))]
     pub fn state(&self) -> ProcessState { self.state }
 }
 
@@ -521,6 +522,44 @@ impl SystemServices {
 
     pub fn current_pid(&self) -> PID { arch::process::current_pid() }
 
+    /// Must be called from the swapper's context. Resets the runnable states of the swapper.
+    #[cfg(feature = "swap")]
+    pub fn finish_swap(&mut self) {
+        let current_pid = self.current_pid();
+        let current = self.get_process_mut(current_pid).expect("couldn't get current PID");
+        current.state = match current.state {
+            ProcessState::Running(0) => ProcessState::Sleeping,
+            ProcessState::Running(x) => ProcessState::Ready(x),
+            #[cfg(feature = "gdb-stub")]
+            ProcessState::DebugIrq(x) => ProcessState::Debug(x),
+            y => panic!("current process was {:?}, not 'Running(_)'", y),
+        };
+    }
+
+    #[cfg(feature = "swap")]
+    pub fn swap_resume_to_userspace(&mut self, pid: PID, tid: TID) -> Result<(), xous_kernel::Error> {
+        let process = self.get_process_mut(pid)?;
+        #[cfg(feature = "gdb-stub")]
+        let ppid = process.ppid;
+        // Ensure the new context is available to be run
+        let available_threads = match process.state {
+            ProcessState::Ready(x) if x & 1 << tid != 0 => x & !(1 << tid),
+            // If we're currently debugging the process, return to its parent.
+            // This can happen when the process handles a debug interrupt.
+            #[cfg(feature = "gdb-stub")]
+            ProcessState::Debug(_) => {
+                crate::syscall::reset_switchto_caller();
+                return self.switch_to_thread(ppid, None);
+            }
+            other => panic!(
+                "process {} was in an invalid state {:?} -- thread {} not available to run",
+                pid, other, tid
+            ),
+        };
+        process.state = ProcessState::Running(available_threads);
+        Ok(())
+    }
+
     /// Create a stack frame in the specified process and jump to it.
     /// 1. Pause the current process and switch to the new one
     /// 2. Save the process state, if it hasn't already been saved
@@ -602,21 +641,26 @@ impl SystemServices {
         // isn't running, that means the system has gotten into an invalid
         // state.
 
-        {
-            let current_pid = self.current_pid();
-            let current = self.get_process_mut(current_pid).expect("couldn't get current PID");
-            // The current thread should never be 0, but for some reason it ends up
-            // as 0 after resuming from suspend. It's unclear how this happens.
-            if current.current_thread == 0 {
-                current.current_thread = arch::process::current_tid();
+        match cb_type {
+            CallbackType::SwapInIrq(_) => {
+                // don't manipulate current PID state at all if handling an IRQ fault
             }
-            // let old_state = current.state;
-            current.state = match current.state {
-                ProcessState::Running(x) => ProcessState::Ready(x | (1 << current.current_thread)),
-                y => panic!("current process was {:?}, not 'Running(_)'", y),
-            };
-            // log_process_update(file!(), line!(), current, old_state);
-            // println!("Making PID {} state {:?}", current_pid, current.state);
+            _ => {
+                let current_pid = self.current_pid();
+                let current = self.get_process_mut(current_pid).expect("couldn't get current PID");
+                // The current thread should never be 0, but for some reason it ends up
+                // as 0 after resuming from suspend. It's unclear how this happens.
+                if current.current_thread == 0 {
+                    current.current_thread = arch::process::current_tid();
+                }
+                // let old_state = current.state;
+                current.state = match current.state {
+                    ProcessState::Running(x) => ProcessState::Ready(x | (1 << current.current_thread)),
+                    y => panic!("current process was {:?}, not 'Running(_)'", y),
+                };
+                // log_process_update(file!(), line!(), current, old_state);
+                // println!("Making PID {} state {:?}", current_pid, current.state);
+            }
         }
 
         // Get the new process, and ensure that it is in a state where it's fit
@@ -689,13 +733,7 @@ impl SystemServices {
                         &[irq_no, arg as usize],
                     );
                 }
-                CallbackType::Swap(args) => {
-                    #[cfg(feature = "debug-swap")]
-                    {
-                        let pid = crate::arch::process::current_pid();
-                        let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
-                        println!("bef invoke PROCESS_TABLE.current: {}, hw_pid: {}", pid.get(), hardware_pid);
-                    }
+                CallbackType::Swap(args) | CallbackType::SwapInIrq(args) => {
                     arch::syscall::invoke(
                         arch_process.current_thread_mut(),
                         pid.get() == 1,

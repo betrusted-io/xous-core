@@ -33,8 +33,9 @@ pub struct InitialProcess {
 pub fn phase_1(cfg: &mut BootConfig) {
     // Allocate space for the stack pointer.
     // The bootloader should have placed the stack pointer at the end of RAM
-    // prior to jumping to our program, so allocate one page of data for
-    // stack.
+    // prior to jumping to our program. Reserve space for the stack, so that it does not smash
+    // run time allocations.
+    //
     // All other allocations will be placed below the stack pointer.
     //
     // As of Xous 0.8, the top page is bootloader stack, and the page below that is the 'clean suspend' page.
@@ -84,9 +85,10 @@ pub fn phase_1(cfg: &mut BootConfig) {
     // smashed if the stack overflows! It should be all 0's if the stack did not overrun.
     #[cfg(feature = "swap")]
     if SDBG && VDBG {
-        for (i, r) in cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 1024..].chunks(32).enumerate()
+        for (_i, _r) in
+            cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 1024..].chunks(32).enumerate()
         {
-            println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + i * 32, r);
+            println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + _i * 32, _r);
         }
     }
 
@@ -100,8 +102,8 @@ pub fn phase_1(cfg: &mut BootConfig) {
     // needs to be claimed by the susres server before the kernel allocates it.
     // Lower numbered indices corresponding to higher address pages.
     println!("Marking pages as in-use");
-    for i in 4..(cfg.init_size / PAGE_SIZE) {
-        cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - i] = 1;
+    for i in ((GUARD_MEMORY_BYTES / PAGE_SIZE) + 1)..(cfg.init_size / PAGE_SIZE) {
+        cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - i] = XousAlloc::from(1);
     }
 }
 
@@ -110,7 +112,60 @@ pub fn phase_1(cfg: &mut BootConfig) {
 pub fn allocate_regions(cfg: &mut BootConfig) {
     // Number of individual pages in the system
     let mut rpt_pages = cfg.sram_size / PAGE_SIZE;
+    // Round the tracker to a multiple of the pointer size, so as to keep memory
+    // operations fast.
+    rpt_pages = (rpt_pages + mem::size_of::<usize>() - 1) & !(mem::size_of::<usize>() - 1);
 
+    // allocate the RPT
+    #[cfg(not(feature = "swap"))]
+    {
+        cfg.init_size += rpt_pages * mem::size_of::<XousAlloc>();
+    }
+    #[cfg(feature = "swap")]
+    {
+        println!("RPT raw pages: {:x}", rpt_pages);
+
+        // Round the allocation to a multiple of the page size, so that it can be mapped into userspace
+        let proposed_alloc = rpt_pages * mem::size_of::<XousAlloc>();
+        let page_aligned_alloc = (proposed_alloc + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        assert!(cfg.init_size & 0xFFF == 0, "init_size should be page aligned going into the RPT alloc");
+        cfg.init_size += page_aligned_alloc;
+        assert!(cfg.init_size & 0xFFF == 0, "init_size should be page aligned leaving the RPT alloc");
+        println!(
+            "RPT ALLOC init_size before: {:x}, ext pages: {:x}, minimal alloc: {:x}, page-aligned alloc: {:x}, sizeof entry: {:x}",
+            cfg.init_size,
+            cfg.extra_pages,
+            proposed_alloc,
+            page_aligned_alloc,
+            mem::size_of::<XousAlloc>(),
+        );
+    }
+
+    // Clear all memory pages such that they're not owned by anyone
+    let runtime_page_tracker = cfg.get_top();
+    println!("rpt value: {:x}", runtime_page_tracker as usize);
+    #[cfg(feature = "swap")]
+    {
+        assert!(runtime_page_tracker as usize & 0xFFF == 0); // this needs to be page-aligned for swap to work
+    }
+    assert!((runtime_page_tracker as usize) < (cfg.sram_start as usize) + cfg.sram_size);
+    unsafe {
+        bzero(runtime_page_tracker, runtime_page_tracker.add(rpt_pages / mem::size_of::<usize>()));
+    }
+
+    cfg.runtime_page_tracker =
+        unsafe { slice::from_raw_parts_mut(runtime_page_tracker as *mut XousAlloc, rpt_pages) };
+    #[cfg(feature = "swap")]
+    if SDBG {
+        println!(
+            " -> RPT range: {:x} - {:x}",
+            runtime_page_tracker as usize,
+            runtime_page_tracker as usize + rpt_pages * core::mem::size_of::<XousAlloc>()
+        );
+    }
+
+    // allocate the XPT
+    let mut xpt_pages = 0;
     for region in cfg.regions.iter() {
         println!(
             "Discovered memory region {:08x} ({:08x} - {:08x}) -- {} bytes",
@@ -120,30 +175,36 @@ pub fn allocate_regions(cfg: &mut BootConfig) {
             region.length
         );
         let region_length_rounded = (region.length as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-        rpt_pages += region_length_rounded / PAGE_SIZE;
+        xpt_pages += region_length_rounded / PAGE_SIZE;
     }
-
     // Round the tracker to a multiple of the pointer size, so as to keep memory
     // operations fast.
-    rpt_pages = (rpt_pages + mem::size_of::<usize>() - 1) & !(mem::size_of::<usize>() - 1);
+    xpt_pages = (xpt_pages + mem::size_of::<usize>() - 1) & !(mem::size_of::<usize>() - 1);
+    println!(
+        "XPT ALLOC init_size bef: {:x}, ext pages: {:x}, rpt alloc: {:x}",
+        cfg.init_size,
+        cfg.extra_pages,
+        xpt_pages * mem::size_of::<XousPid>()
+    );
 
-    cfg.init_size += rpt_pages * mem::size_of::<XousPid>();
+    cfg.init_size += xpt_pages * mem::size_of::<XousPid>();
 
     // Clear all memory pages such that they're not owned by anyone
-    let runtime_page_tracker = cfg.get_top();
-    assert!((runtime_page_tracker as usize) < (cfg.sram_start as usize) + cfg.sram_size);
+    let extra_page_tracker = cfg.get_top();
+    println!("xpt value: {:x}", extra_page_tracker as usize);
+    assert!((extra_page_tracker as usize) < (cfg.sram_start as usize) + cfg.sram_size);
     unsafe {
-        bzero(runtime_page_tracker, runtime_page_tracker.add(rpt_pages / mem::size_of::<usize>()));
+        bzero(extra_page_tracker, extra_page_tracker.add(xpt_pages / mem::size_of::<usize>()));
     }
 
-    cfg.runtime_page_tracker =
-        unsafe { slice::from_raw_parts_mut(runtime_page_tracker as *mut XousPid, rpt_pages) };
+    cfg.extra_page_tracker =
+        unsafe { slice::from_raw_parts_mut(extra_page_tracker as *mut XousPid, xpt_pages) };
     #[cfg(feature = "swap")]
     if SDBG {
         println!(
-            " -> RPT range: {:x} - {:x}",
-            runtime_page_tracker as usize,
-            runtime_page_tracker as usize + rpt_pages * core::mem::size_of::<XousPid>()
+            " -> XPT range: {:x} - {:x}",
+            extra_page_tracker as usize,
+            extra_page_tracker as usize + xpt_pages * core::mem::size_of::<XousPid>()
         );
     }
 }
@@ -656,7 +717,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                         // the section load address.
                         last_copy_vaddr = dst_page_vaddr;
 
-                        if SDBG {
+                        if SDBG && VVDBG {
                             println!("Looping to the next section (swap)");
                             println!(
                                 "  swap_free_page: {:x}, dst_page_vaddr: {:x}, src_swap_img_addr: {:x}",
