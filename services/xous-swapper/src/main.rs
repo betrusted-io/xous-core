@@ -315,6 +315,7 @@ impl SharedStateStorage {
 fn map_swap(ss: &mut SwapperSharedState, swap_phys: usize, virt: usize, owner: u8) {
     assert!(swap_phys & 0xFFF == 0, "PA is not page aligned");
     assert!(virt & 0xFFF == 0, "VA is not page aligned");
+    #[cfg(feature = "debug-verbose")]
     writeln!(DebugUart {}, "    swap pa {:x} -> va {:x}", swap_phys, virt).ok();
     let ppn1 = (swap_phys >> 22) & ((1 << 12) - 1);
     let ppn0 = (swap_phys >> 12) & ((1 << 10) - 1);
@@ -448,6 +449,7 @@ fn swap_handler(
     let ss = sss.inner.as_mut().expect("Shared state should be initialized");
 
     let op: Option<KernelOp> = FromPrimitive::from_usize(opcode);
+    #[cfg(feature = "debug-print")]
     writeln!(DebugUart {}, "got Opcode: {:?}", op).ok();
     match op {
         Some(KernelOp::WriteToSwap) => {
@@ -470,6 +472,7 @@ fn swap_handler(
             let pid = a2 as u8;
             let vaddr_in_pid = a3;
             let vaddr_in_swap = a4;
+            #[cfg(feature = "debug-print")]
             writeln!(
                 DebugUart {},
                 "RFS PID{}, vaddr_pid {:x}, vaddr_swap {:x}",
@@ -487,6 +490,7 @@ fn swap_handler(
                     panic!("Couldn't resolve swapped data. Was the page actually swapped?")
                 }
             };
+            #[cfg(feature = "debug-verbose")]
             writeln!(DebugUart {}, "   resolved paddr_in_swap {:x}", paddr_in_swap).ok();
             // clear the used bit in swap
             ss.sct.counts[paddr_in_swap / PAGE_SIZE] &= !loader::FLG_SWAP_USED;
@@ -905,6 +909,7 @@ fn get_free_pages() -> usize {
 
 /// Core of write_to_swap: this is also used by HardOom.
 fn write_to_swap_inner(ss: &mut SwapperSharedState, pid: u8, vaddr_in_pid: usize, vaddr_in_swap: usize) {
+    #[cfg(feature = "debug-print")]
     writeln!(DebugUart {}, "WTS PID{}, vaddr_pid {:x}, vaddr_swap {:x}", pid, vaddr_in_pid, vaddr_in_swap)
         .ok();
     // this is safe because the page is aligned and initialized as it comes from the kernel

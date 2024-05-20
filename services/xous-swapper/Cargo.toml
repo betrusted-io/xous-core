@@ -39,4 +39,4 @@ swap-userspace-testing = []
 # for now, debug-print only works on Precursor targets
 debug-print = []
 debug-verbose = []
-default = ["debug-print"]
+default = []
