@@ -162,6 +162,8 @@ impl SwapAlloc {
 
     pub fn vaddr(&self) -> usize { (self.vpn & !0xFFFu32) as usize }
 
+    pub fn vaddr_prefix(&self) -> u8 { (self.vpn >> 24) as u8 }
+
     pub fn raw_vpn(&self) -> u32 { self.vpn }
 
     pub fn timestamp(&self) -> u32 { self.timestamp }
