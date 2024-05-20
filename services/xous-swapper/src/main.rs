@@ -123,7 +123,7 @@
 mod debug;
 mod platform;
 use core::fmt::Write;
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, VecDeque};
 use std::fmt::Debug;
 use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
 use std::thread;
@@ -135,6 +135,17 @@ use loader::swap::{SwapAlloc, SwapSpec, SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_P
 use num_traits::*;
 use platform::{SwapHal, PAGE_SIZE};
 use xous::{MemoryFlags, MemoryRange, Message, Result, CID, PID, SID};
+
+/// Threshold for OomDoom callback
+const OOM_THRESH_PAGES: usize = 16;
+/// Target of free pages we want to get to after OomDoom call
+const FREE_PAGE_TARGET: usize = 32;
+/// Target of pages to free in case of a Hard OOM
+const HARD_OOM_PAGE_TARGET: usize = 48;
+/// Virtual address prefixes to de-prioritize in the OomDoom sweep
+///   0 - text region
+///   4 - message region
+const KEEP_VADDR_PREFIXES: [u8; 2] = [0u8, 4u8];
 
 /// userspace swapper -> kernel ABI
 /// This ABI is copy-paste synchronized with what's in the kernel. It's left out of
@@ -148,7 +159,7 @@ pub enum SwapAbi {
     Evict = 1,
     GetFreePages = 2,
     FetchAllocs = 3,
-    SetOomThresh = 4,
+    // SetOomThresh = 4,
     StealPage = 5,
     ReleaseMemory = 6,
 }
@@ -160,7 +171,7 @@ impl SwapAbi {
             1 => Evict,
             2 => GetFreePages,
             3 => FetchAllocs,
-            4 => SetOomThresh,
+            // 4 => SetOomThresh,
             5 => StealPage,
             6 => ReleaseMemory,
             _ => Invalid,
@@ -549,10 +560,12 @@ fn swap_handler(
                 .ok();
             }
         }
+        // HardOom handling will evict any and all pages that it can -- it does no filtering.
         Some(KernelOp::HardOom) => {
-            // parse the arguments
+            // parse the arguments (none, currently)
+
             // be sure to allocate some extra space for the handler itself to run the next time!
-            let mut pages_to_free = a2 + HARD_OOM_RESERVED_PAGES;
+            let mut pages_to_free = HARD_OOM_PAGE_TARGET + HARD_OOM_RESERVED_PAGES;
 
             // set the flag that hard oom ran during an Oom Doom handler pass
             MAYBE_HARD_OOM_DURING_OOM_DOOM.store(true, Ordering::SeqCst);
@@ -713,24 +726,8 @@ fn main() {
 
     /// Poll interval for OOMer
     const OOM_POLL_INTERVAL_MS: u64 = 1000;
-    /// Threshold for OomDoom callback
-    const OOM_THRESH_PAGES: usize = 16;
-    /// Target of free pages we want to get to after OomDoom call
-    const FREE_PAGE_TARGET: usize = 32;
     // track the current amount of pages to be freed
     let mut pages_to_free = FREE_PAGE_TARGET;
-    // set OOM threshold - first argument is the threshold, in pages, below which we ping the swapper to start
-    // clearing memory; second argument is how many pages to request clearing on OOM doom.
-    xous::rsyscall(xous::SysCall::SwapOp(
-        SwapAbi::SetOomThresh as usize,
-        OOM_THRESH_PAGES,
-        FREE_PAGE_TARGET - OOM_THRESH_PAGES,
-        0,
-        0,
-        0,
-        0,
-    ))
-    .ok();
     // track if the oom_doom process is running - so we don't get multiple spawns if the oom runner is taking
     // a long time
     let oom_doom_running = Arc::new(AtomicBool::new(false));
@@ -777,7 +774,7 @@ fn main() {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();
         let op: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
-        log::info!("Swapper got {:x?}", op);
+        log::debug!("Swapper got {:x?}", op);
         match op {
             Some(Opcode::FetchAllocsDone) => {
                 let ss = sss.inner.as_mut().unwrap();
@@ -795,6 +792,11 @@ fn main() {
                     for (i, entry) in preview_vec.iter().enumerate() {
                         println!("  {:x}: {:x} [{}]", i, entry.raw_vpn(), entry.timestamp());
                     } */
+
+                    // A holding variable for items that we're de-prioritizing from removal. We only try these
+                    // if we've exhausted all the other options.
+                    let mut deprioritized = VecDeque::new();
+
                     // avoid log calls inside this loop, as we want to process all of these pages without
                     // context switches
                     loop {
@@ -816,6 +818,16 @@ fn main() {
                                 // this should be 0, as it's pre-filtered by the kernel.
                                 wired += 1;
                             } else {
+                                if KEEP_VADDR_PREFIXES
+                                    .iter()
+                                    .find(|&&x| x == candidate.vaddr_prefix())
+                                    .is_some()
+                                {
+                                    log::trace!("De-prioritizing {:x?}", candidate);
+                                    deprioritized.push_back(candidate);
+                                    continue;
+                                }
+
                                 // If hard OOM happened somewhere in this loop, this should return a harmless
                                 // error if the candidate was already evicted; or it'll evict the candidate,
                                 // and either way we'll exit the loop when we wrap around to the top, as our
@@ -833,6 +845,21 @@ fn main() {
                                     Err(_e) => errs += 1,
                                 }
                             }
+                        } else if let Some(candidate) = deprioritized.pop_front() {
+                            log::trace!("Falling back to: {:x?}", candidate);
+                            match xous::rsyscall(xous::SysCall::SwapOp(
+                                SwapAbi::Evict as usize,
+                                candidate.raw_pid() as usize,
+                                candidate.vaddr(),
+                                0,
+                                0,
+                                0,
+                                0,
+                            )) {
+                                Ok(_) => pages_to_free -= 1,
+                                Err(_e) => errs += 1,
+                            }
+                            pages_to_free -= 1;
                         } else {
                             log::warn!(
                                 "Ran out of swappable candidates before we could free the requested number of pages!"
@@ -891,7 +918,7 @@ fn main() {
             Some(Opcode::Test0) => {
                 log::info!("Free mem before clearing: {}kiB", get_free_pages() * PAGE_SIZE / 1024);
                 // Try to free some number of pages
-                try_invoke_oom_doom(&oom_doom_running, conn, 8);
+                try_invoke_oom_doom(&oom_doom_running, conn, 64);
             }
             _ => {
                 log::info!("Unknown opcode {:?}", op);
