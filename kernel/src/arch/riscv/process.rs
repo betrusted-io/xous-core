@@ -543,6 +543,11 @@ impl Process {
         }
         None
     }
+
+    /// This is used by debugging routines to sanity check state, which are typically #[cfg]'d out
+    /// but with complicated overlapping rules that constantly change. Hence, the #[allow(dead_code)].
+    #[allow(dead_code)]
+    pub fn pid(&self) -> PID { self.pid }
 }
 
 impl Thread {
