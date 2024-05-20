@@ -54,6 +54,12 @@ pub fn disable_all_irqs() {
     sim_write(0x0);
 }
 
+/// Used by the swapper to put the correct value into SIM_BACKING, because
+/// on recovery from OOM we may skip the read from swap pre-amble that would
+/// normally set this up.
+#[cfg(feature = "swap")]
+pub fn set_sim_backing(sim: usize) { SIM_BACKING.store(sim, Ordering::SeqCst); }
+
 /// Enable external interrupts
 #[export_name = "_enable_all_irqs"]
 pub extern "C" fn enable_all_irqs() {
@@ -268,9 +274,15 @@ pub extern "C" fn trap_handler(
             println!("KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ", pid, ex, _pc, addr);
             crate::arch::mem::ensure_page_exists_inner(addr)
                 .map(|_new_page| {
-                    #[cfg(all(feature = "debug-print", feature = "print-panics"))]
-                    println!("SPF Handing page {:08x} to process", _new_page);
                     ArchProcess::with_current_mut(|process| {
+                        #[cfg(all(feature = "debug-print", feature = "print-panics"))]
+                        println!(
+                            "SPF Handing page {:08x} to pid {} tid {} sepc {:x}",
+                            _new_page,
+                            process.pid().get(),
+                            process.current_tid(),
+                            process.current_thread().sepc,
+                        );
                         crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
                     });
                 })
@@ -346,13 +358,18 @@ pub extern "C" fn trap_handler(
                     let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
                     let current = ss.get_process(current_pid()).unwrap();
                     let state = current.state();
-                    println!(
-                        "Swapper irq-like handler returning to PID{}(hw{})-{:?} with result {:?}",
-                        current.pid.get(),
-                        hardware_pid,
-                        state,
-                        response
-                    );
+                    ArchProcess::with_current(|p| {
+                        println!(
+                            "Swapper userspace handler returning to PID{}(hw{})-{:?} with result {:?}; tid {}, sepc {:x}\n{:x?}",
+                            current.pid.get(),
+                            hardware_pid,
+                            state,
+                            response,
+                            p.current_tid(),
+                            p.current_thread().sepc,
+                            p.current_thread().registers,
+                        );
+                    });
                 });
             }
 
@@ -366,7 +383,11 @@ pub extern "C" fn trap_handler(
                 ArchProcess::with_current_mut(|p| {
                     let thread = p.current_thread();
                     #[cfg(feature = "debug-swap-verbose")]
-                    println!("Swapper syscall returning to address {:08x}", thread.sepc);
+                    println!(
+                        "Swapper syscall returning to address {:08x} in pid {}",
+                        thread.sepc,
+                        p.pid().get()
+                    );
                     // re-enable IRQs as late as possible
                     enable_all_irqs();
                     unsafe { _xous_syscall_return_result(&response, thread) };
