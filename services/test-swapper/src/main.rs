@@ -35,7 +35,7 @@ fn main() -> ! {
         info!("Loop #{}, waiting {} ms", unsafe { LOOP_COUNT.load(Ordering::SeqCst) }, DELAY_MS);
         sleep(Duration::from_millis(DELAY_MS));
 
-        const TEST_SIZE: usize = 950 * 1024;
+        const TEST_SIZE: usize = 800 * 1024; // 950 really stresses things, as nothing fits
         if i == 8 || i == 17 {
             log::info!("allocating big_vec");
             let mut big_vec = Vec::with_capacity(TEST_SIZE);
