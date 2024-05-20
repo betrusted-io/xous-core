@@ -1034,7 +1034,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 }
                 SwapAbi::GetFreePages => Swap::with(|swap| swap.get_free_mem()),
                 SwapAbi::FetchAllocs => Swap::with_mut(|swap| swap.fetch_allocs()),
-                SwapAbi::SetOomThresh => Swap::with_mut(|swap| swap.set_oom_thresh(a1, a2)),
+                // SwapAbi::SetOomThresh => Swap::with_mut(|swap| swap.set_oom_thresh(a1, a2)),
                 SwapAbi::StealPage => {
                     let target_pid = a1 as u8;
                     let vaddr = a2;

@@ -15,13 +15,6 @@ use crate::arch::mem::PAGE_SIZE;
 use crate::mem::MemoryManager;
 use crate::services::SystemServices;
 
-/// Initial number of pages to free up in case of an OOM is tripped inside the kernel. This is different
-/// from the number used by the userspace OOM trigger -- this one is hard-coded into the kernel.
-const KERNEL_HARD_OOM_PAGES_TO_FREE: usize = 22;
-
-/// Initial threshold for triggering the hard OOM handler
-const KERNEL_HARD_OOM_THRESH_PAGES: usize = 10;
-
 /// userspace swapper -> kernel ABI (see kernel/src/syscall.rs)
 /// This ABI is copy-paste synchronized with what's in the userspace handler. It's left out of
 /// xous-rs so that we can change it without having to push crates to crates.io.
@@ -34,7 +27,7 @@ pub enum SwapAbi {
     Evict = 1,
     GetFreePages = 2,
     FetchAllocs = 3,
-    SetOomThresh = 4,
+    // SetOomThresh = 4,
     StealPage = 5,
     ReleaseMemory = 6,
 }
@@ -46,7 +39,7 @@ impl SwapAbi {
             1 => Evict,
             2 => GetFreePages,
             3 => FetchAllocs,
-            4 => SetOomThresh,
+            // 4 => SetOomThresh,
             5 => StealPage,
             6 => ReleaseMemory,
             _ => Invalid,
@@ -190,8 +183,6 @@ static mut SWAP: Swap = Swap {
     used_pages: 0,
     mem_alloc_tracker_paddr: 0,
     mem_alloc_tracker_pages: 0,
-    hard_oom_thresh_pages: KERNEL_HARD_OOM_THRESH_PAGES,
-    oom_pages_to_free: KERNEL_HARD_OOM_PAGES_TO_FREE,
     oom_irq_backing: None,
     unmap_rpt_after_hard_oom: false,
 };
@@ -220,10 +211,6 @@ pub struct Swap {
     mem_alloc_tracker_paddr: usize,
     /// number of pages to map when handling the tracker
     mem_alloc_tracker_pages: usize,
-    /// Imminent OOM threshold, in pages
-    hard_oom_thresh_pages: usize,
-    /// Number of pages to free on an OOM doom handler invocation
-    oom_pages_to_free: usize,
     /// state of IRQ backing before hard OOM
     oom_irq_backing: Option<usize>,
     /// Keep track of if we should unmap the RPT after a hard OOM. In the case that we hard-OOM while the
@@ -293,12 +280,6 @@ impl Swap {
         } else {
             self.used_pages = self.used_pages.saturating_sub(1);
         }
-    }
-
-    pub fn set_oom_thresh(&mut self, thresh_pages: usize, pages_to_free: usize) -> SysCallResult {
-        self.hard_oom_thresh_pages = thresh_pages;
-        self.oom_pages_to_free = pages_to_free;
-        Ok(xous_kernel::Result::Scalar5(0, 0, 0, 0, 0))
     }
 
     pub fn register_handler(
@@ -644,7 +625,6 @@ impl Swap {
             BlockingSwapOp::HardOom(_tid, _pid, _vaddr) => {
                 self.swapper_args[0] = self.swapper_state;
                 self.swapper_args[1] = 3; // HardOom
-                self.swapper_args[2] = KERNEL_HARD_OOM_PAGES_TO_FREE;
             }
         }
         if let Some(op) = self.prev_op.take() {
