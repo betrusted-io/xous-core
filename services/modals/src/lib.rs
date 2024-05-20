@@ -240,9 +240,30 @@ impl Modals {
         Ok(())
     }
 
-    /// this blocks until the notification has been acknowledged. It will attempt to render up to 256 bits
-    /// of `data` in bip39 format. Data must conform to the codeable lengths by BIP39, or else the routine
+    /// Modal dialog used to show up to 256 bits of `data` in bip39 format.
+    ///
+    /// - This dialog blocks until the notification has been acknowledged via [ Press any key ].
+    /// - Data must conform to the codeable lengths by BIP39, or else the routine
     /// will return immediately with an `InvalidString` error without showing any dialog box.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_show_bip39.png?raw=true)
+    ///
+    /// </details>
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// let refnum = 0b00000110001101100111100111001010000110110010100010110101110011111101101010011100000110000110101100110110011111100010011100011110u128;
+    /// let refvec = refnum.to_be_bytes().to_vec();
+    /// modals.show_bip39(Some("Some bip39 words"), &refvec).expect("couldn't show bip39 words");
+    /// ```
     pub fn show_bip39(&self, caption: Option<&str>, data: &Vec<u8>) -> Result<(), xous::Error> {
         match data.len() {
             16 | 20 | 24 | 28 | 32 => (),
@@ -265,6 +286,41 @@ impl Modals {
         Ok(())
     }
 
+    /// Input dialog used to accept bip39 formatted data.
+    ///
+    /// - This dialog blocks until either [ F4 ] has been pressed to abort entry, or a phrase has been input
+    ///   and accepted via [ enter ].
+    /// - Possible words will be auto-suggested during typing and [ enter ] must be pressed after each word.
+    /// - Valid input will be shown in the bottom section of the dialog after an accepted phrase has been
+    ///   entered.
+    ///
+    /// <details>
+    ///     <summary>Example Images (from example code below)</summary>
+    ///
+    /// ![Example Image - Initial](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_input_bip39_1.png?raw=true)
+    /// ![Example Image - Input](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_input_bip39_2.png?raw=true)
+    /// ![Example Image - Confirmation](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_input_bip39_3.png?raw=true)
+    ///
+    /// </details>
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// log::info!(
+    ///     "type these words: alert record income curve mercy tree heavy loan hen recycle mean devote"
+    /// );
+    /// match modals.input_bip39(Some("Input BIP39 words")) {
+    ///     Ok(data) => {
+    ///         log::info!("got bip39 input: {:x?}", data);
+    ///         log::info!("reference: 0x063679ca1b28b5cfda9c186b367e271e");
+    ///     }
+    ///     Err(e) => log::error!("couldn't get input: {:?}", e),
+    /// }
+    /// ```
     pub fn input_bip39(&self, prompt: Option<&str>) -> Result<Vec<u8>, xous::Error> {
         self.lock();
         let spec = ManagedBip39 {
