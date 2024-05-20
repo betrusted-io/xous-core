@@ -1057,6 +1057,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     let original_pid = a2 as u8;
                     MemoryManager::with_mut(|mm| {
                         let paddr = crate::arch::mem::virt_to_phys(vaddr_to_release).unwrap() as usize;
+                        #[cfg(feature = "debug-swap")]
                         println!("ReleaseMemory - paddr {:x}", paddr);
                         // this call unmaps the virtual page from the page table
                         crate::arch::mem::unmap_page_inner(mm, vaddr_to_release)

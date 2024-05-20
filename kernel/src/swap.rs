@@ -114,6 +114,7 @@ impl SwapAlloc {
             if let Some(pid) = pid {
                 s.track_alloc(true);
                 if let Some(va) = vaddr {
+                    #[cfg(feature = "debug-swap")]
                     println!(
                         "-- update {}/{:x} <- {}/{:x} @ {:x} (in pid{})",
                         pid.get(),
@@ -132,6 +133,7 @@ impl SwapAlloc {
                     self.vpn = SWAP_FLG_WIRED | pid.get() as u32;
                 }
             } else {
+                #[cfg(feature = "debug-swap")]
                 println!("-- release of pid{}/{:x}", self.vpn as u8, self.vpn & !0xfff);
                 s.track_alloc(false);
                 // allow the wired flag to clear if the page is actively de-allocated
@@ -391,6 +393,7 @@ impl Swap {
     pub fn hard_oom(&mut self, on_vaddr: usize) -> ! {
         // disable all IRQs; no context swapping is allowed
         self.oom_irq_backing = Some(sim_read());
+        #[cfg(feature = "debug-swap")]
         println!("Hard OOM stored SIM: {:x?}", self.oom_irq_backing);
         sim_write(0x0);
 
@@ -404,13 +407,12 @@ impl Swap {
 
         crate::arch::process::Process::with_current(|p| {
             println!(
-                "Entering hard OOM from pid{}, tid{:x}, sepc {:x}, va {:x} flags {:?}\n{:x?}",
+                "Entering hard OOM from pid{}, tid{:x}, sepc {:x}, va {:x} flags {:?}",
                 p.pid().get(),
                 p.current_tid(),
                 p.current_thread().sepc,
                 on_vaddr,
                 MMUFlags::from_bits(flags).unwrap(),
-                p.current_thread().registers
             );
         });
 
@@ -721,7 +723,6 @@ impl Swap {
                     let entry = crate::arch::mem::pagetable_entry(vaddr_in_pid)
                         .or(Err(xous_kernel::Error::BadAddress))?;
                     let current_entry = entry.read_volatile();
-                    println!("   Entry bef update: {:x}", current_entry);
                     // clear the swapped flag
                     let flags = current_entry & 0x3ff & !MMUFlags::P.bits();
                     let ppn1 = (paddr >> 22) & ((1 << 12) - 1);
@@ -737,11 +738,13 @@ impl Swap {
                     // from swap routine. If the backing is set, we took this path; we must copy
                     // the backing to the system backing to respect the assumptions of this epilogue.
                     if let Some(sim) = self.oom_irq_backing.take() {
+                        #[cfg(feature = "debug-swap")]
                         println!("OOM->RFS restoring IRQ: {:x}", sim);
                         crate::arch::irq::set_sim_backing(sim);
                     }
 
                     if !crate::arch::irq::is_handling_irq() {
+                        #[cfg(feature = "debug-swap")]
                         println!(
                             "RFS - handing page va {:x} -> pa {:x} to pid{}/hwpid{} tid{} entry {:x}",
                             vaddr_in_pid,
@@ -755,6 +758,7 @@ impl Swap {
                         // from swap routine. If the backing is set, we took this path; we must restore
                         // interrupts now, or else we lose pre-emption forever.
                         if let Some(sim) = self.oom_irq_backing.take() {
+                            #[cfg(feature = "debug-swap")]
                             println!("OOM->RFS restoring IRQ: {:x}", sim);
                             sim_write(sim);
                         }
@@ -785,6 +789,7 @@ impl Swap {
                 // encrypted data, as the encryption happens in-place.
                 MemoryManager::with_mut(|mm| {
                     let paddr = crate::arch::mem::virt_to_phys(swapper_virt_page).unwrap() as usize;
+                    #[cfg(feature = "debug-swap")]
                     println!("WTS releasing paddr {:x}", paddr);
                     // this call unmaps the virtual page from the page table
                     crate::arch::mem::unmap_page_inner(mm, swapper_virt_page).expect("couldn't unmap page");
@@ -930,6 +935,7 @@ impl Swap {
                 // restore IRQ state (don't borrow the system handler's state tracker, so we don't smash
                 // it by accident)
                 let sim = self.oom_irq_backing.take().expect("Someone stole our IRQ backing!");
+                #[cfg(feature = "debug-swap")]
                 println!("OOM restoring IRQ: {:x}", sim);
                 sim_write(sim);
 
