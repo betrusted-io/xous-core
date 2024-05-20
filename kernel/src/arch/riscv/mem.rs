@@ -934,8 +934,7 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
     });
     #[cfg(feature = "swap")]
     let new_page = MemoryManager::with_mut(|mm| {
-        mm.alloc_page_oomable(crate::arch::process::current_pid(), Some(address))
-            .expect("Couldn't allocate new page")
+        mm.alloc_page_oomable(crate::arch::process::current_pid(), virt).expect("Couldn't allocate new page")
     });
 
     let ppn1 = (new_page >> 22) & ((1 << 12) - 1);
@@ -1129,7 +1128,8 @@ pub fn evict_page_inner(target_pid: PID, vaddr: usize) -> Result<usize, xous_ker
 
         #[cfg(feature = "debug-swap")]
         println!(
-            "-- evict: {:08x} -> {:08x} (flags: {:?}), count {}",
+            "-- evict[{}]: {:08x} -> {:08x} (flags: {:?}), count {}",
+            target_pid.get(),
             vaddr,
             target_paddr,
             MMUFlags::from_bits(target_pte & 0x3ff).unwrap(),
@@ -1162,8 +1162,8 @@ pub fn evict_page_inner(target_pid: PID, vaddr: usize) -> Result<usize, xous_ker
             return Err(xous_kernel::Error::ShareViolation);
         }
 
-        // clear the valid bit, mark as swapped, preserve all other flags
-        let new_pte = (target_pte & !MMUFlags::VALID.bits()) | MMUFlags::P.bits();
+        // clear the valid bit, mark as swapped, preserve all other flags, remove physical address
+        let new_pte = (target_pte & !MMUFlags::VALID.bits() & 0x3FFusize) | MMUFlags::P.bits();
         unsafe { entry.write_volatile(new_pte) };
 
         // switch into the swapper memory space
