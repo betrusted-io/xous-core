@@ -386,6 +386,13 @@ impl MemoryManager {
         }
     }
 
+    #[cfg(baremetal)]
+    #[cfg(feature = "swap")]
+    pub fn memory_size(&self) -> usize { self.ram_size }
+
+    #[cfg(feature = "debug-swap")]
+    pub fn rpt_base(&self) -> usize { unsafe { MEMORY_ALLOCATIONS.as_ptr() as usize } }
+
     #[cfg(feature = "debug-swap")]
     /// This function is "improper" in that it returns a bogus value if the memory allocations are
     /// out of range, but its purpose is only for debugging. This is not suitable for use in any
@@ -402,11 +409,7 @@ impl MemoryManager {
     #[cfg(feature = "swap")]
     /// Similar to alloc_page(), but this implementation can only be called in one location because
     /// we need to know where to resume from after the OOM is recovered.
-    pub fn alloc_page_oomable(
-        &mut self,
-        pid: PID,
-        vaddr: Option<usize>,
-    ) -> Result<usize, xous_kernel::Error> {
+    pub fn alloc_page_oomable(&mut self, pid: PID, vaddr: usize) -> Result<usize, xous_kernel::Error> {
         // Go through all RAM pages looking for a free page.
         // println!("Allocating page for PID {}", pid);
         unsafe {
@@ -418,22 +421,18 @@ impl MemoryManager {
                 .chain(MEMORY_ALLOCATIONS[..starting_point].iter_mut().zip(0..))
             {
                 if allocation.is_none() {
-                    allocation.update(Some(pid), vaddr);
+                    allocation.update(Some(pid), Some(vaddr));
                     self.last_ram_page = index + 1;
                     let page = index * PAGE_SIZE + self.ram_start;
                     return Ok(page);
                 }
             }
         }
-
-        // TODO:
-        //   - remember the calling processes' pid, tid
-        //   - disable irqs - or at least make the calling process non-schedulable? unclear. maybe that comes
-        //     for free because we're already here.
-        //   - call the OOM-er
-        //   - resume the process, but also including all of the code that would happen after
-        //     alloc_page_oomable. Since we could only get here from one place, we just need to copy all that
-        //     code here.
+        crate::swap::Swap::with_mut(|s| {
+            s.hard_oom(vaddr);
+        });
+        // the call above actually diverges -- the final path will actually depend on how much memory
+        // could be freed by the swapper.
         Err(xous_kernel::Error::OutOfMemory)
     }
 
