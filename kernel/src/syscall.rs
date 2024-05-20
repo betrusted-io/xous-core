@@ -1035,6 +1035,40 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 SwapAbi::GetFreePages => Swap::with(|swap| swap.get_free_mem()),
                 SwapAbi::FetchAllocs => Swap::with_mut(|swap| swap.fetch_allocs()),
                 SwapAbi::SetOomThresh => Swap::with_mut(|swap| swap.set_oom_thresh(a1, a2)),
+                SwapAbi::StealPage => {
+                    let target_pid = a1 as u8;
+                    let vaddr = a2;
+                    match crate::arch::mem::evict_page_inner(
+                        PID::new(target_pid as u8).expect("Invalid PID"),
+                        vaddr,
+                    ) {
+                        Ok(ptr) => Ok(xous_kernel::Result::Scalar5(ptr, 0, 0, 0, 0)),
+                        Err(e) => {
+                            println!(
+                                "steal_page rejecting request for pid{}/{:x}: {:?}",
+                                target_pid, vaddr, e
+                            );
+                            Err(xous_kernel::Error::BadAddress)
+                        }
+                    }
+                }
+                SwapAbi::ReleaseMemory => {
+                    let vaddr_to_release = a1;
+                    let original_pid = a2 as u8;
+                    MemoryManager::with_mut(|mm| {
+                        let paddr = crate::arch::mem::virt_to_phys(vaddr_to_release).unwrap() as usize;
+                        println!("ReleaseMemory - paddr {:x}", paddr);
+                        // this call unmaps the virtual page from the page table
+                        crate::arch::mem::unmap_page_inner(mm, vaddr_to_release)
+                            .expect("couldn't unmap page");
+                        // This call releases the physical page from the RPT - the pid has to match that of
+                        // the original owner. This is the "pointy end" of the stick;
+                        // after this call, the memory is now back into the free pool.
+                        mm.release_page_swap(paddr as *mut usize, PID::new(original_pid).unwrap())
+                            .expect("couldn't free page that was swapped out");
+                        Ok(xous_kernel::Result::Ok)
+                    })
+                }
                 SwapAbi::Invalid => {
                     println!(
                         "Invalid SwapOp: {:x} {:x} {:x} {:x} {:x} {:x} {:x}",
