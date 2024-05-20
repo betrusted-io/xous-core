@@ -9,6 +9,7 @@ use xous_kernel::SWAPPER_PID;
 use xous_kernel::{SysCallResult, PID, SID, TID};
 
 use crate::arch::current_pid;
+use crate::arch::mem::flush_mmu;
 use crate::arch::mem::MMUFlags;
 use crate::arch::mem::PAGE_SIZE;
 use crate::mem::MemoryManager;
@@ -16,10 +17,10 @@ use crate::services::SystemServices;
 
 /// Initial number of pages to free up in case of an OOM is tripped inside the kernel. This is different
 /// from the number used by the userspace OOM trigger -- this one is hard-coded into the kernel.
-const KERNEL_OOM_DOOM_PAGES_TO_FREE: usize = 22;
+const KERNEL_HARD_OOM_PAGES_TO_FREE: usize = 22;
 
-/// Initial threshold for triggering the OOM doom handler
-const KERNEL_OOM_DOOM_THRESH_PAGES: usize = 10;
+/// Initial threshold for triggering the hard OOM handler
+const KERNEL_HARD_OOM_THRESH_PAGES: usize = 10;
 
 /// userspace swapper -> kernel ABI (see kernel/src/syscall.rs)
 /// This ABI is copy-paste synchronized with what's in the userspace handler. It's left out of
@@ -34,6 +35,8 @@ pub enum SwapAbi {
     GetFreePages = 2,
     FetchAllocs = 3,
     SetOomThresh = 4,
+    StealPage = 5,
+    ReleaseMemory = 6,
 }
 /// SYNC WITH `xous-swapper/src/main.rs`
 impl SwapAbi {
@@ -44,6 +47,8 @@ impl SwapAbi {
             2 => GetFreePages,
             3 => FetchAllocs,
             4 => SetOomThresh,
+            5 => StealPage,
+            6 => ReleaseMemory,
             _ => Invalid,
         }
     }
@@ -61,11 +66,16 @@ pub enum BlockingSwapOp {
     /// physical address of block. Returns to PID of the target block.
     ReadFromSwap(PID, TID, usize, usize, usize),
     /// Argument is the original thread ID of swapper. Returns to the swapper, as it can only
-    /// originate from the Swapper.
+    /// originate from the Swapper. This is used by the swapper when OomDoom is imminent; basically,
+    /// the userspace version of HardOom. This call allows progress in other processes while the
+    /// swapper does its thing.
     FetchAllocs(TID),
-    /// OOM is nigh warning to swapper. Argument is TID, PID of the thing we were running that triggered
-    /// OomDoom - returns to the PID/TID of the OOM Doomer.
-    OomDoom(TID, PID),
+    /// Immediate OOM. Drop everything and try to recover; from here until exit, everything runs in
+    /// an un-interruptable context, no progress allowed. This currently can only originate from one
+    /// location, if we need multi-location origin then we have to also track the re-entry point in the
+    /// kernel memory cycle. Arguments are the TID/PID of the context running that triggered the HardOom,
+    /// as well as the virtual address that triggered the hard OOM.
+    HardOom(TID, PID, usize),
 }
 
 /// This structure is a copy of what's defined in the loader's swap module. The reason
@@ -104,22 +114,25 @@ impl SwapAlloc {
             if let Some(pid) = pid {
                 s.track_alloc(true);
                 if let Some(va) = vaddr {
-                    /*
                     println!(
-                        "-- update {}/{:x} <- {}/{:x} @ {:x}",
+                        "-- update {}/{:x} <- {}/{:x} @ {:x} (in pid{})",
                         pid.get(),
                         va,
                         va as u8,
                         va & !0xfff,
-                        self as *const Self as usize
-                    ); */
+                        ((self as *const Self as usize
+                            - crate::mem::MemoryManager::with(|mm| mm.rpt_base()))
+                            / core::mem::size_of::<SwapAlloc>())
+                            * PAGE_SIZE,
+                        crate::arch::process::Process::with_current(|p| p.pid().get()),
+                    );
                     // preserve the wired flag if it was set previously by the loader
                     self.vpn = (va as u32) & !0xFFF | pid.get() as u32 | self.vpn & SWAP_FLG_WIRED;
                 } else {
                     self.vpn = SWAP_FLG_WIRED | pid.get() as u32;
                 }
             } else {
-                // println!("-- release of pid{}/{:x}", self.vpn as u8, self.vpn & !0xfff);
+                println!("-- release of pid{}/{:x}", self.vpn as u8, self.vpn & !0xfff);
                 s.track_alloc(false);
                 // allow the wired flag to clear if the page is actively de-allocated
                 self.vpn = 0;
@@ -172,11 +185,13 @@ static mut SWAP: Swap = Swap {
     swapper_state: 0,
     swapper_args: [0usize; 8],
     epoch: 0,
-    free_pages: 0,
+    used_pages: 0,
     mem_alloc_tracker_paddr: 0,
     mem_alloc_tracker_pages: 0,
-    oom_doom_thresh_pages: KERNEL_OOM_DOOM_THRESH_PAGES,
-    oom_pages_to_free: KERNEL_OOM_DOOM_PAGES_TO_FREE,
+    hard_oom_thresh_pages: KERNEL_HARD_OOM_THRESH_PAGES,
+    oom_pages_to_free: KERNEL_HARD_OOM_PAGES_TO_FREE,
+    oom_irq_backing: None,
+    unmap_rpt_after_hard_oom: false,
 };
 
 pub struct Swap {
@@ -197,16 +212,23 @@ pub struct Swap {
     swapper_args: [usize; 8],
     /// swap epoch tracker
     epoch: u32,
-    /// approximate free memory, in pages
-    free_pages: usize,
+    /// approximate used memory, in pages
+    used_pages: usize,
     /// physical base of memory allocation tracker
     mem_alloc_tracker_paddr: usize,
     /// number of pages to map when handling the tracker
     mem_alloc_tracker_pages: usize,
     /// Imminent OOM threshold, in pages
-    oom_doom_thresh_pages: usize,
+    hard_oom_thresh_pages: usize,
     /// Number of pages to free on an OOM doom handler invocation
     oom_pages_to_free: usize,
+    /// state of IRQ backing before hard OOM
+    oom_irq_backing: Option<usize>,
+    /// Keep track of if we should unmap the RPT after a hard OOM. In the case that we hard-OOM while the
+    /// soft-OOM handler is running, the RPT will already be mapped into the swapper's space. This is not
+    /// uncommon, because the soft-OOM handler is interruptable and can only keep up with gradual memory
+    /// demand.
+    unmap_rpt_after_hard_oom: bool,
 }
 impl Swap {
     pub fn with_mut<F, R>(f: F) -> R
@@ -265,14 +287,14 @@ impl Swap {
 
     pub fn track_alloc(&mut self, is_alloc: bool) {
         if is_alloc {
-            self.free_pages = self.free_pages.saturating_add(1);
+            self.used_pages = self.used_pages.saturating_add(1);
         } else {
-            self.free_pages = self.free_pages.saturating_sub(1);
+            self.used_pages = self.used_pages.saturating_sub(1);
         }
     }
 
     pub fn set_oom_thresh(&mut self, thresh_pages: usize, pages_to_free: usize) -> SysCallResult {
-        self.oom_doom_thresh_pages = thresh_pages;
+        self.hard_oom_thresh_pages = thresh_pages;
         self.oom_pages_to_free = pages_to_free;
         Ok(xous_kernel::Result::Scalar5(0, 0, 0, 0, 0))
     }
@@ -286,7 +308,7 @@ impl Swap {
         handler: usize,
         state: usize,
     ) -> Result<xous_kernel::Result, xous_kernel::Error> {
-        // initialize free_pages with a comprehensive count of RAM usage
+        // initialize used_pages with a comprehensive count of RAM usage
         let mut total_bytes = 0;
         crate::services::SystemServices::with(|system_services| {
             crate::mem::MemoryManager::with(|mm| {
@@ -298,7 +320,7 @@ impl Swap {
                 }
             });
         });
-        self.free_pages = total_bytes / PAGE_SIZE;
+        self.used_pages = total_bytes / PAGE_SIZE;
 
         // now register the swapper
         if self.sid == SID::from_u32(0, 0, 0, 0) {
@@ -326,8 +348,7 @@ impl Swap {
 
     /// This is a non-divergent syscall (handled entirely within the kernel)
     pub fn get_free_mem(&self) -> SysCallResult {
-        // TODO: remove this block once we have confidence that self.free_pages aligns with total_bytes
-        // reported
+        #[cfg(feature = "debug-swap")]
         {
             println!("RAM usage:");
             let mut total_bytes = 0;
@@ -348,10 +369,16 @@ impl Swap {
                 });
             });
             println!("Via count: {} k total", total_bytes / 1024);
-            println!("Via tracked alloc: {} k total", self.free_pages * PAGE_SIZE / 1024);
+            println!("Via tracked alloc: {} k total", self.used_pages * PAGE_SIZE / 1024);
         }
-
-        Ok(xous_kernel::Result::Scalar5(self.free_pages, 0, 0, 0, 0))
+        let ram_size = crate::mem::MemoryManager::with(|mm| mm.memory_size());
+        Ok(xous_kernel::Result::Scalar5(
+            ram_size / PAGE_SIZE - self.used_pages,
+            ram_size / PAGE_SIZE,
+            0,
+            0,
+            0,
+        ))
     }
 
     /// This call diverges into the swapper to inform it of imminent OOM DOOM. Otherwise it returns normally.
@@ -361,25 +388,95 @@ impl Swap {
     /// we'd have to resume execution. Normally, the swapper should poll memory levels and prevent this
     /// from ever being called, but we need this fallback in the case that we have a single process
     /// that just suddenly decides to allocate all of free memory in a single go.
-    ///
-    /// TODO: figure out where to insert this.
-    pub fn oom_doom(&mut self) -> ! {
-        crate::arch::irq::disable_all_irqs();
+    pub fn hard_oom(&mut self, on_vaddr: usize) -> ! {
+        // disable all IRQs; no context swapping is allowed
+        self.oom_irq_backing = Some(sim_read());
+        println!("Hard OOM stored SIM: {:x?}", self.oom_irq_backing);
+        sim_write(0x0);
+
         let original_pid = crate::arch::process::current_pid();
         let original_tid = crate::arch::process::current_tid();
 
+        let entry = crate::arch::mem::pagetable_entry(on_vaddr & !0xFFF)
+            .or(Err(xous_kernel::Error::BadAddress))
+            .expect("PTE should exist!");
+        let flags = unsafe { entry.read_volatile() } & 0x3ff;
+
+        crate::arch::process::Process::with_current(|p| {
+            println!(
+                "Entering hard OOM from pid{}, tid{:x}, sepc {:x}, va {:x} flags {:?}\n{:x?}",
+                p.pid().get(),
+                p.current_tid(),
+                p.current_thread().sepc,
+                on_vaddr,
+                MMUFlags::from_bits(flags).unwrap(),
+                p.current_thread().registers
+            );
+        });
+
+        // move into the swapper's memory space & map the RPT into the swapper's space so it can
+        // make decisions about what to move out.
         SystemServices::with(|system_services| {
             let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
             // swap to the swapper space
             let swapper_map = system_services.get_process(swapper_pid).unwrap().mapping;
-            swapper_map.activate().expect("couldn't activate swapper memory space");
+            swapper_map.activate().unwrap();
+
+            // map the RPT into userspace
+            // note that this technically makes the RPT shared with kernel and userspace, but,
+            // the userspace version is read-only, and the next section runs in an interrupt context,
+            // so I think it's safe for it to be shared for that duration.
+            let mut mapped_pages = false;
+            let mut already_mapped = false;
+            MemoryManager::with_mut(|mm| {
+                for page in 0..self.mem_alloc_tracker_pages {
+                    let virt = SWAP_RPT_VADDR + page * PAGE_SIZE;
+                    let entry = unsafe {
+                        // assume that the soft-OOM handler has run at least once already, so that
+                        // the L1 PTEs exist. If we hard-OOM before the soft-OOM handler ever runs,
+                        // the below would panic. We can solve this by having the user space swapper
+                        // force at least one fetch of the RPT on boot (this is probably a good idea
+                        // anyways as it ensures that any heap space it needs to handle this is
+                        // allocated).
+                        crate::arch::mem::pagetable_entry(virt)
+                            .expect("Couldn't access PTE for SWAP_RPT_VADDR; ensure soft-OOM handler runs once before hard-OOM")
+                            .read_volatile()
+                    };
+                    // only map pages if they aren't already mapped
+                    if entry & MMUFlags::VALID.bits() == 0 {
+                        mapped_pages = true;
+                        crate::arch::mem::map_page_inner(
+                            mm,
+                            swapper_pid,
+                            self.mem_alloc_tracker_paddr + page * PAGE_SIZE,
+                            virt,
+                            xous_kernel::MemoryFlags::R,
+                            true,
+                        )
+                        .ok();
+                        unsafe { crate::arch::mem::flush_mmu() };
+                    } else {
+                        already_mapped = true;
+                    }
+                }
+                if mapped_pages && already_mapped {
+                    // I *think* that whether we map or don't map is always going to be all-or-nothing.
+                    // However, in the case that only some pages have to be mapped, it probably means that
+                    // somehow, we hard-OOM'd right in the middle of the page map/unmap routine within
+                    // the soft-OOM handler. Shouldn't be possible -- `fetch_allocs` immediately disables
+                    // interrupts -- but let's sanity check this assumption anyways.
+                    todo!("Need to handle partial RPT maps -- tracking vector required in swapper");
+                } else if mapped_pages {
+                    self.unmap_rpt_after_hard_oom = true;
+                }
+            });
         });
 
         #[cfg(feature = "debug-swap")]
-        println!("oom_doom - userspace activate");
+        println!("hard_oom - userspace activate");
         // this is safe because we're now in the swapper memory context, thanks to the previous call
         unsafe {
-            self.blocking_activate_swapper(BlockingSwapOp::OomDoom(original_tid, original_pid));
+            self.blocking_activate_swapper(BlockingSwapOp::HardOom(original_tid, original_pid, on_vaddr));
         }
     }
 
@@ -499,8 +596,8 @@ impl Swap {
 
         #[cfg(feature = "debug-swap")]
         println!(
-            "retrieve_page - userspace activate from pid{:?}/tid{:?} for vaddr {:x?}",
-            target_pid, target_tid, target_vaddr_in_pid
+            "retrieve_page - userspace activate from pid{:?}/tid{:?} for vaddr {:x?} -> paddr {:x?}",
+            target_pid, target_tid, target_vaddr_in_pid, paddr
         );
         // this is safe because map_page_to_swapper() leaves us in the swapper memory context
         unsafe {
@@ -542,10 +639,10 @@ impl Swap {
                 self.swapper_args[1] = 2; // ExecFetchAllocs
                 self.swapper_args[2] = self.mem_alloc_tracker_pages;
             }
-            BlockingSwapOp::OomDoom(_tid, _pid) => {
+            BlockingSwapOp::HardOom(_tid, _pid, _vaddr) => {
                 self.swapper_args[0] = self.swapper_state;
-                self.swapper_args[1] = 3; // OomDoom
-                self.swapper_args[2] = KERNEL_OOM_DOOM_PAGES_TO_FREE;
+                self.swapper_args[1] = 3; // HardOom
+                self.swapper_args[2] = KERNEL_HARD_OOM_PAGES_TO_FREE;
             }
         }
         if let Some(op) = self.prev_op.take() {
@@ -624,6 +721,7 @@ impl Swap {
                     let entry = crate::arch::mem::pagetable_entry(vaddr_in_pid)
                         .or(Err(xous_kernel::Error::BadAddress))?;
                     let current_entry = entry.read_volatile();
+                    println!("   Entry bef update: {:x}", current_entry);
                     // clear the swapped flag
                     let flags = current_entry & 0x3ff & !MMUFlags::P.bits();
                     let ppn1 = (paddr >> 22) & ((1 << 12) - 1);
@@ -632,11 +730,34 @@ impl Swap {
                     // on the fact that the USER bit, etc. was correctly setup and stored when the
                     // page was originally allocated.
                     *entry = (ppn1 << 20) | (ppn0 << 10) | (flags | crate::arch::mem::FLG_VALID);
-                    crate::arch::mem::flush_mmu();
+                    flush_mmu();
                     flush_dcache();
 
+                    // There is an edge case where we are exiting the OOM handler through the read
+                    // from swap routine. If the backing is set, we took this path; we must copy
+                    // the backing to the system backing to respect the assumptions of this epilogue.
+                    if let Some(sim) = self.oom_irq_backing.take() {
+                        println!("OOM->RFS restoring IRQ: {:x}", sim);
+                        crate::arch::irq::set_sim_backing(sim);
+                    }
+
                     if !crate::arch::irq::is_handling_irq() {
-                        println!("RFS - exit pid{} tid{}", pid.get(), tid);
+                        println!(
+                            "RFS - handing page va {:x} -> pa {:x} to pid{}/hwpid{} tid{} entry {:x}",
+                            vaddr_in_pid,
+                            paddr,
+                            pid.get(),
+                            crate::arch::process::Process::with_current(|p| p.pid().get()),
+                            tid,
+                            *entry
+                        );
+                        // There is an edge case where we are exiting the OOM handler through the read
+                        // from swap routine. If the backing is set, we took this path; we must restore
+                        // interrupts now, or else we lose pre-emption forever.
+                        if let Some(sim) = self.oom_irq_backing.take() {
+                            println!("OOM->RFS restoring IRQ: {:x}", sim);
+                            sim_write(sim);
+                        }
                         Ok(xous_kernel::Result::ResumeProcess)
                     } else {
                         // Don't use the resume provided by the wrapper -- instead resume directly here,
@@ -649,7 +770,7 @@ impl Swap {
                                 tid,
                                 process.current_thread()
                             );
-                            crate::arch::mem::flush_mmu();
+                            flush_mmu();
                             flush_dcache();
                             crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
                         })
@@ -705,11 +826,113 @@ impl Swap {
             // *but* the swapper is running as a userspace process which means it could be interrupted.
             // We might be able to play shenanigans with disabling IRQs *very carefully* though, so as
             // to kill pre-emption and make the swapper the only thing that can possibly run.
-            Some(BlockingSwapOp::OomDoom(tid, pid)) => {
-                // Switch to the previous process' address space.
-                SystemServices::with_mut(|ss| {
-                    ss.finish_callback_and_resume(pid, tid).expect("unable to resume previous PID")
+            Some(BlockingSwapOp::HardOom(tid, pid, on_vaddr)) => {
+                // We enter this from the swapper's memory space
+                assert!(
+                    crate::arch::process::current_pid().get() == SWAPPER_PID,
+                    "Hard OOM did not return from swapper's space"
+                );
+                // unmap RPT from swapper's userspace, if it was previously unmapped
+                if self.unmap_rpt_after_hard_oom {
+                    MemoryManager::with_mut(|mm| {
+                        for page in 0..self.mem_alloc_tracker_pages {
+                            crate::arch::mem::unmap_page_inner(mm, SWAP_RPT_VADDR + page * PAGE_SIZE).ok();
+                        }
+                    });
+                }
+
+                // return to the original pid memory space, now that we have memory
+                SystemServices::with_mut(|system_services| {
+                    // Cleanup the swapper
+                    system_services.finish_swap();
+
+                    if !crate::arch::irq::is_handling_irq() {
+                        system_services.swap_resume_to_userspace(pid, tid).expect("couldn't swap_resume");
+                    }
+
+                    // Switch to target process
+                    let process = system_services.get_process_mut(pid).unwrap();
+                    process.mapping.activate().unwrap();
+                    process.activate().unwrap();
+                    // Activate the current context
+                    crate::arch::process::Process::current().set_tid(tid).unwrap();
+                    process.current_thread = tid;
                 });
+
+                // code stub replicated from the memory manager cycle that we're resuming into now that
+                // we're no longer OOM'd. Use the "infalliable" version of the alloc, because...well, it
+                // *should* work. If we couldn't free any memory, then -- truly, OOM!
+                let new_page = MemoryManager::with_mut(|mm| {
+                    mm.alloc_page(crate::arch::process::current_pid(), Some(on_vaddr))
+                        .expect("Couldn't allocate new page")
+                });
+
+                // Recover the PT flags that are no longer available because we left the original context
+                let entry = crate::arch::mem::pagetable_entry(on_vaddr & !0xFFF)
+                    .or(Err(xous_kernel::Error::BadAddress))
+                    .expect("PTE should exist!");
+                let current_entry = unsafe { entry.read_volatile() };
+                let flags = current_entry & 0x3ff;
+                println!(
+                    "After OOM recovery, alloc of pid{} va {:x} -> pa {:x}, PTE flags: {:?}",
+                    pid.get(),
+                    on_vaddr,
+                    new_page,
+                    MMUFlags::from_bits(flags).unwrap()
+                );
+
+                // Finish up the page table manipulations that were aborted by the original swap call
+                let ppn1 = (new_page >> 22) & ((1 << 12) - 1);
+                let ppn0 = (new_page >> 12) & ((1 << 10) - 1);
+                unsafe {
+                    if flags & MMUFlags::P.bits() != 0 {
+                        // page is swapped; fill page, map and return
+                        Swap::with_mut(|s| {
+                            s.retrieve_page(
+                                crate::arch::process::current_pid(),
+                                crate::arch::process::current_tid(),
+                                on_vaddr,
+                                new_page,
+                            )
+                        })
+                        // the execution flow diverges (again) from here: it returns via the interrupt
+                        // context handler. -> !
+                    } else {
+                        // page is reserved: simply zero it out
+                        // Map the page to our process
+                        *entry = (ppn1 << 20)
+                            | (ppn0 << 10)
+                            | (flags
+                                | crate::arch::mem::FLG_VALID
+                                | crate::arch::mem::FLG_D
+                                | crate::arch::mem::FLG_A);
+                        flush_mmu();
+                        // safety: page is aligned and all values can be represented by the u32 type;
+                        // `on_vaddr` has been mapped to a physical page inside the current memory space.
+                        let page = core::slice::from_raw_parts_mut(
+                            on_vaddr as *mut u32,
+                            PAGE_SIZE / core::mem::size_of::<u32>(),
+                        );
+                        page.fill(0);
+                    }
+
+                    // Move the page into userspace
+                    *entry = (ppn1 << 20)
+                        | (ppn0 << 10)
+                        | (flags
+                            | crate::arch::mem::FLG_VALID
+                            | crate::arch::mem::FLG_U
+                            | crate::arch::mem::FLG_D
+                            | crate::arch::mem::FLG_A);
+                    flush_mmu();
+                };
+
+                // restore IRQ state (don't borrow the system handler's state tracker, so we don't smash
+                // it by accident)
+                let sim = self.oom_irq_backing.take().expect("Someone stole our IRQ backing!");
+                println!("OOM restoring IRQ: {:x}", sim);
+                sim_write(sim);
+
                 // the current memory space is the target PID, so we will resume into the target PID
                 Ok(xous_kernel::Result::ResumeProcess)
             }
