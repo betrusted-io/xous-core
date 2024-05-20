@@ -1,4 +1,4 @@
-use std::io::{Error, ErrorKind, Read, Write};
+use std::io::{Read, Write};
 use std::path::Path;
 
 use ed25519_dalek::{DigestSigner, SigningKey};
@@ -37,9 +37,7 @@ pub fn sign_image(
     let minver_bytes = if let Some(mv) = minver { mv.into() } else { [0u8; 16] };
     let semver: [u8; 16] = match semver {
         Some(semver) => semver,
-        None => SemVer::from_git()
-            .map_err(|_| Error::new(ErrorKind::Other, "error parsing current Git rev"))?
-            .into(),
+        None => SemVer::from_git()?.into(),
     };
 
     // extra data appended here needs to be reflected in two places in Xous:
@@ -117,9 +115,7 @@ pub fn sign_image_prehash(
     let minver_bytes = if let Some(mv) = minver { mv.into() } else { [0u8; 16] };
     let semver: [u8; 16] = match semver {
         Some(semver) => semver,
-        None => SemVer::from_git()
-            .map_err(|_| Error::new(ErrorKind::Other, "error parsing current Git rev"))?
-            .into(),
+        None => SemVer::from_git()?.into(),
     };
 
     // extra data appended here needs to be reflected in two places in Xous:
