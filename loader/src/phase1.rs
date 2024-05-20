@@ -85,9 +85,10 @@ pub fn phase_1(cfg: &mut BootConfig) {
     // smashed if the stack overflows! It should be all 0's if the stack did not overrun.
     #[cfg(feature = "swap")]
     if SDBG && VDBG {
-        for (i, r) in cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 1024..].chunks(32).enumerate()
+        for (_i, _r) in
+            cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 1024..].chunks(32).enumerate()
         {
-            println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + i * 32, r);
+            println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + _i * 32, _r);
         }
     }
 

@@ -217,10 +217,10 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         if SDBG && VDBG {
             // activate to debug stack smashes. RPT should be 0's here (or at least valid PIDs) if stack did
             // not overflow.
-            for (i, r) in
+            for (_i, _r) in
                 cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 1024..].chunks(32).enumerate()
             {
-                println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + i * 32, r);
+                println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + _i * 32, _r);
             }
         }
         // Add a static check for stack overflow, using a heuristic that the last 64 bytes of the RPT

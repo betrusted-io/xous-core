@@ -162,9 +162,9 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
         #[cfg(feature = "swap")]
         if SDBG && VDBG {
             // dumps the page with kernel struct data, so we can correlate offsets to data.
-            for i in (0..4096).step_by(32) {
-                println!("{:08x}: {:02x?}", krn_struct_start + i, unsafe {
-                    core::slice::from_raw_parts((krn_struct_start + i) as *const u8, 32)
+            for _i in (0..4096).step_by(32) {
+                println!("{:08x}: {:02x?}", krn_struct_start + _i, unsafe {
+                    core::slice::from_raw_parts((krn_struct_start + _i) as *const u8, 32)
                 });
             }
         }
@@ -341,9 +341,9 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
     #[cfg(feature = "swap")]
     if SDBG && VVDBG {
         println!("Occupied RPT entries:");
-        for (i, entry) in cfg.runtime_page_tracker.iter().enumerate() {
+        for (_i, entry) in cfg.runtime_page_tracker.iter().enumerate() {
             if entry.raw_vpn() != 0 {
-                println!("  {:x}: {:x} [{}]", i, entry.raw_vpn(), entry.timestamp());
+                println!("  {:x}: {:x} [{}]", _i, entry.raw_vpn(), entry.timestamp());
             }
         }
     }

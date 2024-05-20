@@ -424,13 +424,13 @@ impl MiniElf {
         let tt = { allocator.processes[pid as usize - 1].ttbr0 };
 
         let mut section_offset = 0;
-        for (index, section) in self.sections.iter().enumerate() {
+        for (_index, section) in self.sections.iter().enumerate() {
             match ini_type {
                 IniType::IniE | IniType::IniF => {
                     if let Some(dest_offset) = pt_walk(tt, section.virt as usize) {
                         println!(
                             "  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), 0x{:x}(PA dst) len {}/0x{:x}",
-                            index,
+                            _index,
                             section_offset + image_phys_base,
                             section.virt as usize,
                             dest_offset,
@@ -458,7 +458,7 @@ impl MiniElf {
                     } else {
                         println!(
                             "  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), ERR UNMAPPED!!",
-                            index,
+                            _index,
                             section_offset + image_phys_base,
                             section.virt as usize + section_offset
                         );
@@ -473,7 +473,7 @@ impl MiniElf {
                     ) {
                         println!(
                             "  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), 0x{:x}(PA dst) len {}/0x{:x}",
-                            index,
+                            _index,
                             section_offset + image_phys_base,
                             section.virt as usize,
                             dest_offset,
@@ -530,7 +530,7 @@ impl MiniElf {
                     } else {
                         println!(
                             "  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), ERR UNMAPPED!!",
-                            index,
+                            _index,
                             section_offset + image_phys_base,
                             section.virt as usize + section_offset
                         );
@@ -543,21 +543,23 @@ impl MiniElf {
 }
 
 #[cfg(any(feature = "debug-print", feature = "swap"))]
-fn dump_addr(addr: usize, label: &str) {
-    print!("{}", label);
+fn dump_addr(addr: usize, _label: &str) {
+    // A lot of variables are _'d because when debug-print is turned off, the variable resolves
+    // as unused (because the print macros are dummies).
+    print!("{}", _label);
     let slice = unsafe { core::slice::from_raw_parts(addr as *const u8, 20) };
-    for &b in slice {
-        print!("{:02x}", b);
+    for &_b in slice {
+        print!("{:02x}", _b);
     }
     print!("\n\r");
 }
 #[cfg(feature = "swap")]
-fn dump_slice(slice: &[u8], label: &str) {
-    print!("{}", label);
+fn dump_slice(slice: &[u8], _label: &str) {
+    print!("{}", _label);
     // handle case that our decrypt region isn't 20 bytes long...
     let len = slice.len().min(20);
-    for &b in &slice[..len] {
-        print!("{:02x}", b);
+    for &_b in &slice[..len] {
+        print!("{:02x}", _b);
     }
     print!("\n\r");
 }
@@ -580,7 +582,7 @@ pub fn pt_walk(root: usize, va: usize) -> Option<usize> {
     }
 }
 
-#[cfg(all(feature = "debug-print", feature = "swap", not(feature = "atsama5d27")))]
+#[cfg(all(any(feature = "debug-print", feature = "swap"), not(feature = "atsama5d27")))]
 pub fn pt_walk_swap(root: usize, va: usize, swap_root: usize) -> Option<usize> {
     let l1_pt = unsafe { &mut (*((root << 12) as *mut PageTable)) };
     let l1_entry_va = (l1_pt.entries[(va & 0xFFC0_0000) >> 22] >> 10) << 12;
