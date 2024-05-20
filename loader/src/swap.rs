@@ -8,18 +8,30 @@ use crate::SWAPPER_PID;
 
 /// Virtual address fields:
 ///  31            22 21               12 11               0
-/// |    L1 index    |      L2 index     |    LSB of addr   |
+/// |    L1 index    |      L0 index     |    LSB of addr   |
 ///
-/// L1 PTE thus consists of 1024 entries, each resolving to a 22-bit number.
-///    - The bottom 10 bits are flags
-///    - The top 2 bits are 0
-///    - The middle 20 bits are the MSB of the address to the PA of the L2 PTE
+/// For regular memory, the L1 page is found by taking a 22-bit PPN from the
+/// SATP and shifting it left 10 bits and indexing it with 10 bits at [31:22].
 ///
-/// L2 PTE thus consists of 1024 entries, each resolving to a 22-bit number. It is
-/// indexed by the "L2 index" bits.
-///    - The bottom 10 bits are flags
+/// For swap, the L1 page is found by indexing into a table of roots by PID,
+/// and then indexing into the resulting root table with 10 bits of VA at [31:22].
+///
+/// The returned value in the 1024-entry L1 page table is a PA entry where the bottom
+/// 10 bits are flags, and top 22 bits are an address. The flags should have V=1,
+/// and RWX =0, to indicate an L1 page table entry (we don't use mixed L1->PA indexing).
+/// Bits [31:10] are a 22-bit number:
 ///    - The top 2 bits are 0
-///    - The middle 20 bits are the MSB of the address to the PA of the target page
+///    - The middle 20 bits are the MSB of the address to the PA of the L0 PTE
+///
+/// The value retrieved from L1 is thus shifted left by 2 bits, and used as a pointer
+/// to retrieve the L0 page table.
+///
+/// L0 page table consists of 1024 entries. This is indexed using 10 bits of the VA
+/// at [21:12]. The resulting value consists of a 22-bit physical address, and 10 bits
+/// of flags.
+///    - The bottom 10 bits are flags
+///    - The top 2 bits of the physical address are 0
+///    - The middle 20 bits the PA are the MSB of the address to the PA of the target page
 
 #[repr(C)]
 pub struct SwapDescriptor {
