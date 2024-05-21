@@ -524,20 +524,20 @@ pub fn early_init() {
             let mut chk_buf = [0u8; 32];
             crate::println!("first read...");
             crate::println!("flash read");
-            flash_spim.mem_read(0x0, &mut chk_buf);
+            flash_spim.mem_read(0x0, &mut chk_buf, false);
             crate::println!("flash: {:x?}", chk_buf);
-            ram_spim.mem_read(0x0, &mut chk_buf);
+            ram_spim.mem_read(0x0, &mut chk_buf, false);
             crate::println!("RAM: {:x?}", chk_buf);
             for (i, d) in chk_buf.iter_mut().enumerate() {
                 *d = i as u8;
             }
             crate::println!("ram write...");
-            ram_spim.mem_ram_write(0x0, &chk_buf);
+            ram_spim.mem_ram_write(0x0, &chk_buf, false);
             chk_buf.fill(0);
             crate::println!("empty buf: {:x?}", chk_buf);
 
             crate::println!("ram read...");
-            ram_spim.mem_read(0x0, &mut chk_buf);
+            ram_spim.mem_read(0x0, &mut chk_buf, false);
             crate::println!("RAM checked: {:x?}", chk_buf);
 
             /*
