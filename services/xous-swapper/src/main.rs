@@ -460,7 +460,7 @@ fn swap_handler(
     let ss = sss.inner.as_mut().expect("Shared state should be initialized");
 
     let op: Option<KernelOp> = FromPrimitive::from_usize(opcode);
-    #[cfg(feature = "debug-print")]
+    #[cfg(feature = "debug-print-verbose")]
     writeln!(DebugUart {}, "got Opcode: {:?}", op).ok();
     match op {
         Some(KernelOp::WriteToSwap) => {
@@ -483,15 +483,6 @@ fn swap_handler(
             let pid = a2 as u8;
             let vaddr_in_pid = a3;
             let vaddr_in_swap = a4;
-            #[cfg(feature = "debug-print")]
-            writeln!(
-                DebugUart {},
-                "RFS PID{}, vaddr_pid {:x}, vaddr_swap {:x}",
-                pid,
-                vaddr_in_pid,
-                vaddr_in_swap
-            )
-            .ok();
             // walk the PT to find the swap data, and remove it from the swap PT
             let paddr_in_swap = match ss.pt_walk(pid as u8, vaddr_in_pid, true) {
                 Some(paddr) => paddr,
@@ -501,8 +492,19 @@ fn swap_handler(
                     panic!("Couldn't resolve swapped data. Was the page actually swapped?")
                 }
             };
-            #[cfg(feature = "debug-verbose")]
-            writeln!(DebugUart {}, "   resolved paddr_in_swap {:x}", paddr_in_swap).ok();
+            // for some reason, `paddr_in_swap` must be printed for the routine to not crash. Or the delay
+            // after `pt_walk` is necessary. Either way, it's spooky. I wonder if there isn't some minimum
+            // time between reads from the SPIM that we're violating??
+            #[cfg(feature = "debug-print")]
+            writeln!(
+                DebugUart {},
+                "RFS PID{}, vaddr_pid {:x}, vaddr_swap {:x}, paddr {:x}",
+                pid,
+                vaddr_in_pid,
+                vaddr_in_swap,
+                paddr_in_swap
+            )
+            .ok();
             // clear the used bit in swap
             ss.sct.counts[paddr_in_swap / PAGE_SIZE] &= !loader::FLG_SWAP_USED;
 
