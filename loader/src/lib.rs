@@ -36,7 +36,9 @@ pub const APP_UART_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRA
 #[cfg(not(feature = "swap"))]
 pub const GUARD_MEMORY_BYTES: usize = 3 * crate::PAGE_SIZE;
 /// Amount of space for loader stack only, with swap
-#[cfg(all(feature = "swap", not(feature = "resume")))]
+#[cfg(all(feature = "swap", not(feature = "resume"), not(feature = "cramium-soc")))]
+pub const GUARD_MEMORY_BYTES: usize = 7 * crate::PAGE_SIZE;
+#[cfg(all(feature = "swap", not(feature = "resume"), feature = "cramium-soc"))]
 pub const GUARD_MEMORY_BYTES: usize = 7 * crate::PAGE_SIZE;
 /// Amount of space for loader stack plus clean suspend, with swap
 #[cfg(all(feature = "swap", feature = "resume"))]
