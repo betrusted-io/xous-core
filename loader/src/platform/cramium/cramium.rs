@@ -796,33 +796,33 @@ unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         crate::println!("PLL delay 3");
 
         crate::println!("fsvalid: {}", daric_cgu.add(sysctrl::SFR_CGUFSVLD.offset()).read_volatile());
-        let cgufsfreq0 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ0.offset()).read_volatile();
-        let cgufsfreq1 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ1.offset()).read_volatile();
-        let cgufsfreq2 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ2.offset()).read_volatile();
-        let cgufsfreq3 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ3.offset()).read_volatile();
+        let _cgufsfreq0 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ0.offset()).read_volatile();
+        let _cgufsfreq1 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ1.offset()).read_volatile();
+        let _cgufsfreq2 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ2.offset()).read_volatile();
+        let _cgufsfreq3 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ3.offset()).read_volatile();
         crate::println!(
             "Internal osc: {} -> {} MHz ({} MHz)",
-            cgufsfreq0,
-            fsfreq_to_hz(cgufsfreq0),
-            fsfreq_to_hz_32(cgufsfreq0)
+            _cgufsfreq0,
+            fsfreq_to_hz(_cgufsfreq0),
+            fsfreq_to_hz_32(_cgufsfreq0)
         );
         crate::println!(
             "XTAL: {} -> {} MHz ({} MHz)",
-            cgufsfreq1,
-            fsfreq_to_hz(cgufsfreq1),
-            fsfreq_to_hz_32(cgufsfreq1)
+            _cgufsfreq1,
+            fsfreq_to_hz(_cgufsfreq1),
+            fsfreq_to_hz_32(_cgufsfreq1)
         );
         crate::println!(
             "pll output 0: {} -> {} MHz ({} MHz)",
-            cgufsfreq2,
-            fsfreq_to_hz(cgufsfreq2),
-            fsfreq_to_hz_32(cgufsfreq2)
+            _cgufsfreq2,
+            fsfreq_to_hz(_cgufsfreq2),
+            fsfreq_to_hz_32(_cgufsfreq2)
         );
         crate::println!(
             "pll output 1: {} -> {} MHz ({} MHz)",
-            cgufsfreq3,
-            fsfreq_to_hz(cgufsfreq3),
-            fsfreq_to_hz_32(cgufsfreq3)
+            _cgufsfreq3,
+            fsfreq_to_hz(_cgufsfreq3),
+            fsfreq_to_hz_32(_cgufsfreq3)
         );
 
         // Hits a 16:8:4:2:1 ratio on fclk:aclk:hclk:iclk:pclk
@@ -840,7 +840,10 @@ unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     vco_actual / perclk_div
 }
 
+#[allow(dead_code)]
 fn fsfreq_to_hz(fs_freq: u32) -> u32 { (fs_freq * (48_000_000 / 32)) / 1_000_000 }
+
+#[allow(dead_code)]
 fn fsfreq_to_hz_32(fs_freq: u32) -> u32 { (fs_freq * (32_000_000 / 32)) / 1_000_000 }
 
 #[allow(dead_code)]
