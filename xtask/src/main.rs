@@ -472,7 +472,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("cramium-fpga") | Some("cramium-soc") => {
             let cramium_flash_pkgs =
                 ["xous-ticktimer", "xous-log", "xous-names", "cram-hal-service"].to_vec();
-            let cramium_swap_pkgs = ["test-swapper", "graphics-server", "cram-console"].to_vec();
+            let cramium_swap_pkgs = ["graphics-server", "cram-console"].to_vec();
             if !builder.is_swap_set() {
                 builder.set_swap(0, 4 * 1024 * 1024);
             }
@@ -481,12 +481,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // builder.add_loader_feature("spi-alt-channel"); // this flag, when asserted, uses the J_QSPI
             // header. By default, we use JPC7_13 (J_QSPI does not work, for some reason; bit 3 is stuck
             // high...)
-            builder.add_loader_feature("debug-print");
             builder.add_loader_feature("swap");
-            // builder.add_kernel_feature("debug-print");
-            builder.add_kernel_feature("debug-swap");
             builder.add_kernel_feature("swap");
             builder.add_feature("swap");
+
+            // builder.add_loader_feature("debug-print");
+            // builder.add_kernel_feature("debug-swap");
+            // builder.add_kernel_feature("debug-print");
+            // builder.add_kernel_feature("debug-swap-verbose");
+
             builder.add_feature("quantum-timer");
             builder.add_kernel_feature("v2p");
             match task.as_deref() {
