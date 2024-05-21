@@ -12,7 +12,7 @@ pub struct IoxHal {
 impl IoxHal {
     pub fn new() -> Self {
         crate::REFCOUNT.fetch_add(1, Ordering::Relaxed);
-        let xns = xous_api_names::XousNames::new().unwrap();
+        let xns = xous_names::XousNames::new().unwrap();
         let conn =
             xns.request_connection(SERVER_NAME_CRAM_HAL).expect("Couldn't connect to Cramium HAL server");
         IoxHal { conn }
