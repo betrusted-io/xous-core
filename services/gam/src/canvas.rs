@@ -2,6 +2,8 @@ use core::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 
+#[cfg(feature = "cramium-soc")]
+use cram_hal_service::trng;
 use graphics_server::*;
 use log::{error, info};
 

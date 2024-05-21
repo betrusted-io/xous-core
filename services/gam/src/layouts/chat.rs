@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+#[cfg(feature = "cramium-soc")]
+use cram_hal_service::trng;
 use graphics_server::*;
 
 use crate::contexts::MISC_CONTEXT_DEFAULT_TRUST;
