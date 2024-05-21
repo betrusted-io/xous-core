@@ -36,7 +36,6 @@ hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 swap-userspace-testing = []
 
-# for now, debug-print only works on Precursor targets
 debug-print = []
 debug-verbose = []
-default = []
+default = ["debug-print", "debug-verbose"]
