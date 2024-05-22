@@ -267,7 +267,9 @@ impl SwapHal {
             // allocate the buf
             let mut buf = RawPage { data: [0u8; 4096] };
             // fetch the header
-            flash_spim.mem_read(SWAP_IMG_START as u32, &mut buf.data, false);
+            if !flash_spim.mem_read(SWAP_IMG_START as u32, &mut buf.data, false) {
+                println!("Timeout reading FLASH_SPIM");
+            };
 
             // compute offsets for swap
             let ram_size_actual = crate::swap::derive_usable_swap(swap.ram_size as usize);
