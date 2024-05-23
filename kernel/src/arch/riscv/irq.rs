@@ -200,7 +200,8 @@ pub extern "C" fn trap_handler(
     {
         let pid = current_pid();
         let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
-        println!("IRQ -- KERNEL({}): RISC-V fault: {}", pid, ex);
+        let tid = ArchProcess::with_current(|p| p.current_tid());
+        println!("IRQ ({}.{}): {}", pid, tid, ex);
     }
     match ex {
         // Syscall
