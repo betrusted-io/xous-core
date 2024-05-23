@@ -1,14 +1,16 @@
 use std::cell::RefCell;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use rand_chacha::ChaCha8Rng;
 use rand_core::{CryptoRng, RngCore, SeedableRng};
 
 const RESEED_INTERVAL: u32 = 32;
 
+static RESEED: AtomicU32 = AtomicU32::new(0);
+
 #[derive(Debug)]
 pub struct Trng {
     csprng: RefCell<rand_chacha::ChaCha8Rng>,
-    reseed_ctr: RefCell<u32>,
 }
 impl Trng {
     pub fn new(_xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
@@ -17,14 +19,16 @@ impl Trng {
                 (xous::create_server_id().unwrap().to_u32().0 as u64)
                     | ((xous::create_server_id().unwrap().to_u32().0 as u64) << 32),
             )),
-            reseed_ctr: RefCell::new(0),
         })
     }
 
     fn reseed(&self) {
-        *self.reseed_ctr.borrow_mut() = *self.reseed_ctr.borrow() + 1;
-        if *self.reseed_ctr.borrow() > RESEED_INTERVAL {
-            *self.reseed_ctr.borrow_mut() = 0;
+        let reseed_ctr = match RESEED.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |x| Some(x + 1)) {
+            Ok(x) => x,
+            Err(x) => x,
+        };
+        if reseed_ctr > RESEED_INTERVAL {
+            RESEED.store(0, Ordering::SeqCst);
             // incorporate randomness from the TRNG
             let half = self.csprng.borrow_mut().next_u32();
             self.csprng.replace(rand_chacha::ChaCha8Rng::seed_from_u64(
