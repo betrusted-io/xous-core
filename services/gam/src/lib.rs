@@ -46,6 +46,7 @@ pub const WIFI_MENU_NAME: &'static str = "WLAN menu";
 pub const PREFERENCES_MENU_NAME: &'static str = "Preferences menu";
 
 /// UX context registry. Names here are authorized by the GAM to have Canvases.
+#[cfg(not(feature = "cramium-soc"))]
 pub const EXPECTED_BOOT_CONTEXTS: &[&'static str] = &[
     APP_NAME_SHELLCHAT,
     MAIN_MENU_NAME,
@@ -58,6 +59,18 @@ pub const EXPECTED_BOOT_CONTEXTS: &[&'static str] = &[
     APP_MENU_NAME,
     WIFI_MENU_NAME,
     PREFERENCES_MENU_NAME,
+];
+#[cfg(feature = "cramium-soc")]
+pub const EXPECTED_BOOT_CONTEXTS: &[&'static str] = &[
+    MAIN_MENU_NAME,
+    APP_NAME_SHELLCHAT,
+    STATUS_BAR_NAME,
+    EMOJI_MENU_NAME,
+    SHARED_MODAL_NAME,
+    APP_MENU_NAME,
+    PDDB_MODAL_NAME,
+    PDDB_MENU_NAME,
+    ROOTKEY_MODAL_NAME,
 ];
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
