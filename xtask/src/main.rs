@@ -470,9 +470,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // ------ Cramium hardware image configs ------
         Some("cramium-fpga") | Some("cramium-soc") => {
-            let cramium_flash_pkgs =
-                ["xous-ticktimer", "xous-log", "xous-names", "cram-hal-service"].to_vec();
-            let cramium_swap_pkgs = ["graphics-server", "cram-console"].to_vec();
+            let cramium_flash_pkgs = ["xous-ticktimer", "xous-log", "cram-hal-service"].to_vec();
+            let cramium_swap_pkgs = [
+                "xous-names",
+                "graphics-server",
+                "cram-console",
+                "gam",
+                "modals",
+                "ime-plugin-shell",
+                "ime-frontend",
+            ]
+            .to_vec();
             if !builder.is_swap_set() {
                 builder.set_swap(0, 4 * 1024 * 1024);
             }
@@ -485,7 +493,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_kernel_feature("swap");
             builder.add_feature("swap");
 
-            // builder.add_loader_feature("debug-print");
+            builder.add_loader_feature("debug-print");
             // builder.add_kernel_feature("debug-swap");
             // builder.add_kernel_feature("debug-print");
             // builder.add_kernel_feature("debug-swap-verbose");
