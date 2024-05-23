@@ -5,7 +5,7 @@ use xous_ipc::Buffer;
 use crate::api;
 use crate::api::keyboard::*;
 
-fn start_keyboard_service() {
+pub fn start_keyboard_service() {
     std::thread::spawn(move || {
         keyboard_service();
     });

@@ -181,6 +181,9 @@ fn main() {
         log::info!("Quantum timer setup!");
     }
 
+    // start keyboard emulator service
+    hw::keyboard::start_keyboard_service();
+
     let mut msg_opt = None;
     log::debug!("Starting main loop");
     loop {
