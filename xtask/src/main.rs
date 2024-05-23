@@ -273,9 +273,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_loader_feature("renode-bypass");
         }
         Some("renode-swap") => {
-            let swap_pkgs = ["xous-ticktimer", "xous-log", "xous-susres", "xous-names"];
+            let swap_pkgs = ["xous-ticktimer", "xous-log", "xous-susres"];
             if !builder.is_swap_set() {
-                builder.set_swap(0x4080_0000, 8 * 1024 * 1024);
+                builder.set_swap(0x4020_0000, 14 * 1024 * 1024);
             }
             builder.target_renode();
             // builder.target_cramium_soc();
@@ -294,9 +294,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for service in swap_pkgs {
                 builder.add_service(service, LoaderRegion::Flash);
             }
-            builder.add_service("test-swapper", LoaderRegion::Swap); // when we implement loaded-but-swapped, use that instead
-            builder.add_service("graphics-server", LoaderRegion::Swap);
-            builder.add_service("trng", LoaderRegion::Swap);
+            let swap_pkgs = [
+                "xous-names",
+                "graphics-server",
+                "gam",
+                "modals",
+                "ime-plugin-shell",
+                "ime-frontend",
+                "test-swapper",
+                "trng",
+                "cram-console",
+            ]
+            .to_vec();
+            for service in swap_pkgs {
+                builder.add_service(service, LoaderRegion::Swap);
+            }
+
             builder.add_apps(get_cratespecs());
         }
 
@@ -510,7 +523,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // It is important that this is the first service added, because the swapper *must* be in PID 2
             builder.add_service("xous-swapper", LoaderRegion::Flash);
 
-            builder.add_services(&get_cratespecs());
             for service in cramium_flash_pkgs {
                 builder.add_service(service, LoaderRegion::Flash);
             }
