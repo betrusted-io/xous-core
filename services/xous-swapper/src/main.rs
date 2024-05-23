@@ -236,9 +236,10 @@ static MAYBE_HARD_OOM_DURING_OOM_DOOM: AtomicBool = AtomicBool::new(false);
 ///
 /// Known things the swapper has to allocate memory for in hard-OOM:
 ///   - L1 page table entries for tracking swap
-///   - A second page will be requested in case of panic in hard OOM for TLS, but these shouldn't happen so we
-///     don't reserve it.
-const HARD_OOM_RESERVED_PAGES: usize = 1;
+///   - An extra page for stack (needed for cramium targets, but not on precursor due to HAL differences)
+///   - An additional page will be requested in case of panic in hard OOM for TLS, but these shouldn't happen
+///     so we don't reserve it.
+const HARD_OOM_RESERVED_PAGES: usize = 2;
 
 /// This structure contains shared state accessible between the userspace code and the blocking swap call
 /// handler.
