@@ -358,11 +358,16 @@ impl SwapHal {
         // cheaper than the Refcell bookkeeping.
         let mut aad = [0u8; 64];
         aad[..self.aad_len].copy_from_slice(self.aad());
-        self.flash_spim.mem_read(
+        if !self.flash_spim.mem_read(
             (self.image_mac_start + (offset / 4096) * size_of::<Tag>()) as u32,
             &mut tag,
             false,
-        );
+        ) {
+            println!(
+                " ** Memory read timed out reading {:x}",
+                (self.image_mac_start + (offset / 4096) * size_of::<Tag>()) as u32
+            );
+        };
         match self.src_cipher.decrypt_in_place_detached(
             Nonce::from_slice(&nonce),
             &aad[..self.aad_len],
