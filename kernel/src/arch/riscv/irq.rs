@@ -201,7 +201,14 @@ pub extern "C" fn trap_handler(
         let pid = current_pid();
         let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
         let tid = ArchProcess::with_current(|p| p.current_tid());
-        println!("IRQ ({}.{}): {}", pid, tid, ex);
+        println!(
+            "IRQ ({}.{}): {} sepc {:x}", //  reg {:08x?}
+            pid,
+            tid,
+            ex,
+            sepc::read(),
+            // ArchProcess::with_current(|p| p.current_thread().registers)
+        );
     }
     match ex {
         // Syscall
@@ -385,9 +392,10 @@ pub extern "C" fn trap_handler(
                     let thread = p.current_thread();
                     #[cfg(feature = "debug-swap-verbose")]
                     println!(
-                        "Swapper syscall returning to address {:08x} in pid {}",
+                        "Swapper syscall returning to address {:08x} in pid {}.{}",
                         thread.sepc,
-                        p.pid().get()
+                        p.pid().get(),
+                        p.current_tid(),
                     );
                     // re-enable IRQs as late as possible
                     enable_all_irqs();
