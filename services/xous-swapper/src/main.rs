@@ -125,7 +125,6 @@ mod platform;
 use core::fmt::Write;
 use std::collections::{BinaryHeap, VecDeque};
 use std::fmt::Debug;
-use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
@@ -136,10 +135,6 @@ use num_traits::*;
 use platform::{SwapHal, PAGE_SIZE};
 use xous::{MemoryFlags, MemoryRange, Message, Result, CID, PID, SID};
 
-/// Threshold for OomDoom callback
-const OOM_THRESH_PAGES: usize = 16;
-/// Target of free pages we want to get to after OomDoom call
-const FREE_PAGE_TARGET: usize = 32;
 /// Target of pages to free in case of a Hard OOM
 const HARD_OOM_PAGE_TARGET: usize = 48;
 /// Virtual address prefixes to de-prioritize in the OomDoom sweep
@@ -156,9 +151,9 @@ const KEEP_VADDR_PREFIXES: [u8; 2] = [0u8, 4u8];
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SwapAbi {
     Invalid = 0,
-    Evict = 1,
+    ClearMemoryNow = 1,
     GetFreePages = 2,
-    FetchAllocs = 3,
+    // FetchAllocs = 3,
     // HardOom = 4, // meant to be initiated within the kernel to itself
     StealPage = 5,
     ReleaseMemory = 6,
@@ -168,9 +163,9 @@ impl SwapAbi {
     pub fn from(val: usize) -> SwapAbi {
         use SwapAbi::*;
         match val {
-            1 => Evict,
+            1 => ClearMemoryNow,
             2 => GetFreePages,
-            3 => FetchAllocs,
+            // 3 => FetchAllocs,
             // 4 => HardOom,
             5 => StealPage,
             6 => ReleaseMemory,
@@ -190,8 +185,6 @@ pub enum KernelOp {
     WriteToSwap = 0,
     /// Find the requested page, decrypt it, and return it
     ReadFromSwap = 1,
-    /// Kernel message advising us that a page of RAM was allocated
-    ExecFetchAllocs = 2,
     /// Hard OOM invocation - stop everything and free memory!
     HardOom = 3,
 }
@@ -200,10 +193,6 @@ pub enum KernelOp {
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 #[repr(usize)]
 pub enum Opcode {
-    /// Trigger back to userspace to indicate that alloc fetching is done.
-    FetchAllocsDone,
-    /// Trigger the OOM routine
-    HandleOomDoom,
     /// Test messages
     #[cfg(feature = "swap-userspace-testing")]
     Test0,
@@ -225,9 +214,6 @@ pub struct RuntimePageTracker {
 pub struct SwapCountTracker {
     pub counts: &'static mut [u32],
 }
-
-/// Track if the hard OOM handler ram during the Oom Doom userspace routine
-static MAYBE_HARD_OOM_DURING_OOM_DOOM: AtomicBool = AtomicBool::new(false);
 
 /// Number of pages to reserve for hard OOM handling. In case of a hard OOM, there are 0 pages
 /// available, which makes it impossible for the hard OOM handler to do things like allocate an L1
@@ -262,15 +248,13 @@ pub struct SwapperSharedState {
     /// starting from the free swap search origin. The unit of this variable is in pages, so it
     /// can be used to directly index the `sct` `SwapCountTracker`.
     pub free_swap_search_origin: usize,
-    /// alloc heap for the OomDoom handler
-    pub alloc_heap: Option<BinaryHeap<SwapAlloc>>,
-    /// alloc heap for the Hard OOM handler. Must be separate because it's possible for both
-    /// to run at the same time.
     pub hard_oom_alloc_heap: Option<BinaryHeap<SwapAlloc>>,
     /// Reserve some memory to be freed by the hard OOM manager. These pages are needed to do things
     /// like create L1 page table entries for the swapper to track evicted pages.
     pub hard_oom_reserved_page: Option<MemoryRange>,
     pub report_full_rpt: bool,
+    /// number of pages to free in the OOM routine
+    pub pages_to_free: usize,
 }
 impl SwapperSharedState {
     pub fn pt_walk(&self, pid: u8, va: usize, mark_free: bool) -> Option<usize> {
@@ -303,7 +287,7 @@ impl SwapperSharedState {
 }
 struct SharedStateStorage {
     pub inner: Option<SwapperSharedState>,
-    pub conn: CID,
+    pub _conn: CID,
 }
 impl SharedStateStorage {
     pub fn init(&mut self, sid: SID) {
@@ -452,10 +436,10 @@ fn swap_handler(
             sram_start: swap_spec.sram_start as usize,
             sram_size: swap_spec.sram_size as usize,
             free_swap_search_origin: 0,
-            alloc_heap: None,
             hard_oom_alloc_heap: None,
             report_full_rpt: true,
             hard_oom_reserved_page: Some(reserved),
+            pages_to_free: HARD_OOM_PAGE_TARGET + HARD_OOM_RESERVED_PAGES,
         });
     }
     let ss = sss.inner.as_mut().expect("Shared state should be initialized");
@@ -532,46 +516,12 @@ fn swap_handler(
             }
             // at this point, the `buf` has our desired data, we're done, modulo updating the count.
         }
-        Some(KernelOp::ExecFetchAllocs) => {
-            if let Some(alloc_heap) = &mut ss.alloc_heap {
-                alloc_heap.clear();
-                assert!(alloc_heap.len() == 0);
-                let rpt = unsafe {
-                    core::slice::from_raw_parts(SWAP_RPT_VADDR as *const SwapAlloc, ss.sram_size / PAGE_SIZE)
-                };
-                for (_i, &entry) in rpt.iter().enumerate() {
-                    #[cfg(feature = "debug-verbose")]
-                    if entry.raw_vpn() != 0 {
-                        writeln!(DebugUart {}, "{:x}: {:x} [{}]", _i, entry.raw_vpn(), entry.timestamp())
-                            .ok();
-                    }
-                    // filter out invalid, wired, or kernel/swapper candidates.
-                    // report everything if requested (this is used to wire our heap memory prior to an OOM)
-                    if (!entry.is_wired() && entry.is_valid() && entry.raw_pid() != 1 && entry.raw_pid() != 2)
-                        || ss.report_full_rpt
-                    {
-                        //  writeln!(DebugUart {}, "Pushing {:x?}", entry).ok();
-                        alloc_heap.push(entry);
-                    }
-                }
-                #[cfg(feature = "debug-verbose")]
-                writeln!(DebugUart {}, "Created heap with {} entries", alloc_heap.len()).ok();
-                xous::try_send_message(
-                    sss.conn,
-                    Message::new_scalar(Opcode::FetchAllocsDone.to_usize().unwrap(), 0, 0, 0, 0),
-                )
-                .ok();
-            }
-        }
         // HardOom handling will evict any and all pages that it can -- it does no filtering.
         Some(KernelOp::HardOom) => {
             // parse the arguments (none, currently)
 
             // be sure to allocate some extra space for the handler itself to run the next time!
-            let mut pages_to_free = HARD_OOM_PAGE_TARGET + HARD_OOM_RESERVED_PAGES;
-
-            // set the flag that hard oom ran during an Oom Doom handler pass
-            MAYBE_HARD_OOM_DURING_OOM_DOOM.store(true, Ordering::SeqCst);
+            let mut pages_to_free = ss.pages_to_free;
 
             // free memory for the hard-OOM handler to run
             if let Some(reserved_mem) = ss.hard_oom_reserved_page.take() {
@@ -590,8 +540,11 @@ fn swap_handler(
                 core::slice::from_raw_parts(SWAP_RPT_VADDR as *const SwapAlloc, ss.sram_size / PAGE_SIZE)
             };
             for (_i, &entry) in rpt.iter().enumerate() {
-                // filter out invalid, wired, or kernel/swapper candidates.
-                if !entry.is_wired() && entry.is_valid() && entry.raw_pid() != 1 && entry.raw_pid() != 2 {
+                // filter out invalid, wired, or kernel/swapper candidates
+                if (!entry.is_wired() && entry.is_valid() && entry.raw_pid() != 1 && entry.raw_pid() != 2)
+                // report_full_rpt is used to force the heap to reserve all the data we might need in a future oom
+                    || ss.report_full_rpt
+                {
                     //  writeln!(DebugUart {}, "Pushing {:x?}", entry).ok();
                     alloc_heap.push(entry);
                 }
@@ -604,6 +557,11 @@ fn swap_handler(
             let target_pages = pages_to_free;
             let mut errs = 0;
             let mut wired = 0;
+
+            // A holding variable for items that we're de-prioritizing from removal. We only try these
+            // if we've exhausted all the other options.
+            let mut deprioritized = VecDeque::new();
+
             loop {
                 if pages_to_free == 0 {
                     break;
@@ -616,6 +574,12 @@ fn swap_handler(
                     {
                         wired += 1;
                     } else {
+                        if KEEP_VADDR_PREFIXES.iter().find(|&&x| x == candidate.vaddr_prefix()).is_some() {
+                            log::trace!("De-prioritizing {:x?}", candidate);
+                            deprioritized.push_back(candidate);
+                            continue;
+                        }
+
                         // step 1: steal the page from the other process. Its data gets mapped into the
                         // swapper as `local_ptr`. This will also unmap the page from memory.
                         let local_ptr = match xous::rsyscall(xous::SysCall::SwapOp(
@@ -652,6 +616,48 @@ fn swap_handler(
                         )).expect("Unexpected error: couldn't release a page that was mapped into the swapper's space");
                         pages_to_free -= 1;
                     }
+                } else if let Some(candidate) = deprioritized.pop_front() {
+                    // copy of code above. TODO: figure out some way to reduce this duplication,
+                    // without impacting error tracking, etc.
+
+                    // step 1: steal the page from the other process. Its data gets mapped into the
+                    // swapper as `local_ptr`. This will also unmap the page from memory.
+                    let local_ptr = match xous::rsyscall(xous::SysCall::SwapOp(
+                        SwapAbi::StealPage as usize,
+                        candidate.raw_pid() as usize,
+                        candidate.vaddr(),
+                        0,
+                        0,
+                        0,
+                        0,
+                    )) {
+                        Ok(Result::Scalar5(page_ptr, _, _, _, _)) => page_ptr,
+                        Ok(_) => panic!("Malformed return value"),
+                        Err(_e) => {
+                            errs += 1;
+                            continue; // try another page
+                        }
+                    };
+
+                    // step 2: write the page to swap.
+                    write_to_swap_inner(ss, candidate.raw_pid(), candidate.vaddr(), local_ptr);
+
+                    // step 3: release the page (currently mapped into the swapper's memory space). Need
+                    // to demonstrate to the memory system that we know what we are
+                    // doing by also presenting the original PID that owned the page.
+                    xous::rsyscall(xous::SysCall::SwapOp(
+                        SwapAbi::ReleaseMemory as usize,
+                        local_ptr,
+                        candidate.raw_pid() as usize,
+                        0,
+                        0,
+                        0,
+                        0,
+                    ))
+                    .expect(
+                        "Unexpected error: couldn't release a page that was mapped into the swapper's space",
+                    );
+                    pages_to_free -= 1;
                 } else {
                     writeln!(
                         DebugUart {},
@@ -683,6 +689,9 @@ fn swap_handler(
             let reserved_slice: &mut [u32] = unsafe { reserved.as_slice_mut() }; // this is safe because `u32` is fully representable
             reserved_slice.fill(0);
             ss.hard_oom_reserved_page = Some(reserved);
+            if ss.report_full_rpt {
+                ss.report_full_rpt = false;
+            }
         }
         _ => {
             writeln!(DebugUart {}, "Unimplemented or unknown opcode: {}", opcode).ok();
@@ -690,24 +699,10 @@ fn swap_handler(
     }
 }
 
-/// Invokes OOM Doom, but only if it hasn't already been invoked.
-fn try_invoke_oom_doom(oom_doom_running: &Arc<AtomicBool>, conn: CID, pages_to_free: usize) -> bool {
-    if !oom_doom_running.swap(true, Ordering::SeqCst) {
-        xous::try_send_message(
-            conn,
-            Message::new_scalar(Opcode::HandleOomDoom.to_usize().unwrap(), pages_to_free, 0, 0, 0),
-        )
-        .ok();
-        true
-    } else {
-        false
-    }
-}
-
 fn main() {
     let sid = xous::create_server().unwrap();
     let conn = xous::connect(sid).unwrap();
-    let mut sss = Box::new(SharedStateStorage { conn, inner: None });
+    let mut sss = Box::new(SharedStateStorage { _conn: conn, inner: None });
     sss.init(sid);
 
     // init the log, but this is mostly unused.
@@ -724,16 +719,7 @@ fn main() {
 
     let total_ram = sss.inner.as_ref().unwrap().sram_size;
     // Binary heap for storing the view of the memory allocations.
-    sss.inner.as_mut().unwrap().alloc_heap = Some(BinaryHeap::with_capacity(total_ram / PAGE_SIZE));
     sss.inner.as_mut().unwrap().hard_oom_alloc_heap = Some(BinaryHeap::with_capacity(total_ram / PAGE_SIZE));
-
-    /// Poll interval for OOMer
-    const OOM_POLL_INTERVAL_MS: u64 = 1000;
-    // track the current amount of pages to be freed
-    let mut pages_to_free = FREE_PAGE_TARGET;
-    // track if the oom_doom process is running - so we don't get multiple spawns if the oom runner is taking
-    // a long time
-    let oom_doom_running = Arc::new(AtomicBool::new(false));
 
     // Do a single invocation at boot with 0 pages to free, to ensure that the page maps are set up,
     // and sufficient heap has been allocated for the swapper to run in case of a hard OOM. Failure to
@@ -741,23 +727,12 @@ fn main() {
     // hard-OOM happens before the OOM-doom routine can run. All of swapper's memory is `wired`, so,
     // once we've done a dry-run, this memory stays ours forever.
     sss.inner.as_mut().unwrap().report_full_rpt = true;
-    try_invoke_oom_doom(&oom_doom_running, conn, 0);
-
-    // This thread is the active OOM monitor
-    thread::spawn({
-        let conn = conn.clone();
-        let oom_doom_running = oom_doom_running.clone();
-        move || {
-            loop {
-                let free_mem_pages = get_free_pages();
-                if free_mem_pages < OOM_THRESH_PAGES {
-                    let pages_to_free = FREE_PAGE_TARGET - free_mem_pages;
-                    try_invoke_oom_doom(&oom_doom_running, conn, pages_to_free);
-                }
-                sleep(Duration::from_millis(OOM_POLL_INTERVAL_MS));
-            }
-        }
-    });
+    sss.inner.as_mut().unwrap().pages_to_free = 2;
+    xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::ClearMemoryNow as usize, 0, 0, 0, 0, 0, 0))
+        .expect("ClearMemoryNow syscall failed");
+    // restore the normal parameters
+    sss.inner.as_mut().unwrap().report_full_rpt = false;
+    sss.inner.as_mut().unwrap().pages_to_free = HARD_OOM_PAGE_TARGET + HARD_OOM_RESERVED_PAGES;
 
     // This thread is for testing
     #[cfg(feature = "swap-userspace-testing")]
@@ -779,149 +754,9 @@ fn main() {
         let op: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
         log::debug!("Swapper got {:x?}", op);
         match op {
-            Some(Opcode::FetchAllocsDone) => {
-                let ss = sss.inner.as_mut().unwrap();
-                if let Some(mut alloc_heap) = ss.alloc_heap.take() {
-                    log::info!("Attempting to free {} pages, {} candidates", pages_to_free, alloc_heap.len());
-                    let target_pages = pages_to_free;
-                    let mut errs = 0;
-                    let mut wired = 0;
-                    /* // for debugging ordering of suggested pages
-                    use std::collections::VecDeque;
-                    let mut preview_vec = VecDeque::new();
-                    for _ in 0..16 {
-                        preview_vec.push_back(alloc_heap.pop().unwrap());
-                    }
-                    for (i, entry) in preview_vec.iter().enumerate() {
-                        println!("  {:x}: {:x} [{}]", i, entry.raw_vpn(), entry.timestamp());
-                    } */
-
-                    // A holding variable for items that we're de-prioritizing from removal. We only try these
-                    // if we've exhausted all the other options.
-                    let mut deprioritized = VecDeque::new();
-
-                    // avoid log calls inside this loop, as we want to process all of these pages without
-                    // context switches
-                    loop {
-                        // Abort the loop if a hard OOM happened, because our RPT view is now stale
-                        if pages_to_free == 0 || MAYBE_HARD_OOM_DURING_OOM_DOOM.load(Ordering::SeqCst) {
-                            break;
-                        }
-                        /*
-                        if let Some(candidate) =
-                            Some(preview_vec.pop_front().unwrap_or(alloc_heap.pop().unwrap()))
-                        {
-                        */
-                        if let Some(candidate) = alloc_heap.pop() {
-                            if candidate.is_wired()
-                                || !candidate.is_valid()
-                                || candidate.raw_pid() == 1
-                                || candidate.raw_pid() == 2
-                            {
-                                // this should be 0, as it's pre-filtered by the kernel.
-                                wired += 1;
-                            } else {
-                                if KEEP_VADDR_PREFIXES
-                                    .iter()
-                                    .find(|&&x| x == candidate.vaddr_prefix())
-                                    .is_some()
-                                {
-                                    log::trace!("De-prioritizing {:x?}", candidate);
-                                    deprioritized.push_back(candidate);
-                                    continue;
-                                }
-
-                                // If hard OOM happened somewhere in this loop, this should return a harmless
-                                // error if the candidate was already evicted; or it'll evict the candidate,
-                                // and either way we'll exit the loop when we wrap around to the top, as our
-                                // RPT views are now inconsistent.
-                                match xous::rsyscall(xous::SysCall::SwapOp(
-                                    SwapAbi::Evict as usize,
-                                    candidate.raw_pid() as usize,
-                                    candidate.vaddr(),
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                )) {
-                                    Ok(_) => pages_to_free -= 1,
-                                    Err(_e) => errs += 1,
-                                }
-                            }
-                        } else if let Some(candidate) = deprioritized.pop_front() {
-                            log::trace!("Falling back to: {:x?}", candidate);
-                            match xous::rsyscall(xous::SysCall::SwapOp(
-                                SwapAbi::Evict as usize,
-                                candidate.raw_pid() as usize,
-                                candidate.vaddr(),
-                                0,
-                                0,
-                                0,
-                                0,
-                            )) {
-                                Ok(_) => pages_to_free -= 1,
-                                Err(_e) => errs += 1,
-                            }
-                            pages_to_free -= 1;
-                        } else {
-                            log::warn!(
-                                "Ran out of swappable candidates before we could free the requested number of pages!"
-                            );
-                            break;
-                        }
-                    }
-                    log::info!(
-                        "Exiting swap free loop: freed {} pages; {} requests rejected, {} wired",
-                        target_pages - pages_to_free,
-                        errs,
-                        wired
-                    );
-                    assert!(
-                        wired == 0 || ss.report_full_rpt,
-                        "Wired pages were handed to us, but they should have been filtered by the userspace handler!"
-                    );
-                    if ss.report_full_rpt {
-                        ss.report_full_rpt = false; // reset this flag after the invocation has returned
-                        // copy the alloc heap contents to the oom doom alloc heap so as to force its storage
-                        // to alloc
-                        for alloc in alloc_heap.iter() {
-                            ss.hard_oom_alloc_heap.as_mut().unwrap().push(*alloc);
-                        }
-                    }
-                }
-                // restore the allocation for the binary heap
-                ss.alloc_heap = Some(BinaryHeap::with_capacity(total_ram / PAGE_SIZE));
-
-                // reset the hard OOM during OOM Doom lock
-                if MAYBE_HARD_OOM_DURING_OOM_DOOM.swap(false, Ordering::SeqCst) {
-                    log::warn!(
-                        "Hard OOM detected during OOM Doom running; run was aborted because RPT view is now inconsistent"
-                    );
-                }
-
-                // clear the running flag on exit
-                oom_doom_running.store(false, Ordering::SeqCst);
-                log::info!("Free mem after clearing: {}kiB", get_free_pages() * PAGE_SIZE / 1024);
-            }
-            Some(Opcode::HandleOomDoom) => {
-                if let Some(scalar) = msg.body.scalar_message() {
-                    // This should be a redundant store -- the caller should have set this to prevent multiple
-                    // HandleOomDoom messages from being shoved into the server, blocking
-                    // our ability to make progress. But we re-assert it just in case.
-                    oom_doom_running.store(true, Ordering::SeqCst);
-                    pages_to_free = scalar.arg1;
-                    // trigger alloc fetch so we know what to free up
-                    xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::FetchAllocs as usize, 0, 0, 0, 0, 0, 0))
-                        .ok();
-                } else {
-                    panic!("Wrong message type for HandleOomDoom");
-                }
-            }
             #[cfg(feature = "swap-userspace-testing")]
             Some(Opcode::Test0) => {
                 log::info!("Free mem before clearing: {}kiB", get_free_pages() * PAGE_SIZE / 1024);
-                // Try to free some number of pages
-                try_invoke_oom_doom(&oom_doom_running, conn, 64);
             }
             _ => {
                 log::info!("Unknown opcode {:?}", op);

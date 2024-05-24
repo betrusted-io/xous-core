@@ -38,4 +38,4 @@ swap-userspace-testing = []
 
 debug-print = []
 debug-verbose = []
-default = ["debug-print"]
+default = ["debug-print", "swap-userspace-testing"]
