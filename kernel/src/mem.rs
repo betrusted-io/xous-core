@@ -410,27 +410,29 @@ impl MemoryManager {
     /// Similar to alloc_page(), but this implementation can only be called in one location because
     /// we need to know where to resume from after the OOM is recovered.
     pub fn alloc_page_oomable(&mut self, pid: PID, vaddr: usize) -> Result<usize, xous_kernel::Error> {
-        // Go through all RAM pages looking for a free page.
-        // println!("Allocating page for PID {}", pid);
-        unsafe {
-            let end_point = self.ram_size / PAGE_SIZE;
-            let starting_point = self.last_ram_page.max(end_point);
-            for (allocation, index) in MEMORY_ALLOCATIONS[starting_point..end_point]
-                .iter_mut()
-                .zip(starting_point..)
-                .chain(MEMORY_ALLOCATIONS[..starting_point].iter_mut().zip(0..))
-            {
-                if allocation.is_none() {
-                    allocation.update(Some(pid), Some(vaddr));
-                    self.last_ram_page = index + 1;
-                    let page = index * PAGE_SIZE + self.ram_start;
-                    return Ok(page);
+        loop {
+            // Go through all RAM pages looking for a free page.
+            // println!("Allocating page for PID {}", pid);
+            unsafe {
+                let end_point = self.ram_size / PAGE_SIZE;
+                let starting_point = self.last_ram_page.max(end_point);
+                for (allocation, index) in MEMORY_ALLOCATIONS[starting_point..end_point]
+                    .iter_mut()
+                    .zip(starting_point..)
+                    .chain(MEMORY_ALLOCATIONS[..starting_point].iter_mut().zip(0..))
+                {
+                    if allocation.is_none() {
+                        allocation.update(Some(pid), Some(vaddr));
+                        self.last_ram_page = index + 1;
+                        let page = index * PAGE_SIZE + self.ram_start;
+                        return Ok(page);
+                    }
                 }
             }
+            if !crate::swap::Swap::with_mut(|s| s.hard_oom_inline()) {
+                break;
+            }
         }
-        crate::swap::Swap::with_mut(|s| {
-            s.hard_oom(vaddr);
-        });
         // the call above actually diverges -- the final path will actually depend on how much memory
         // could be freed by the swapper.
         Err(xous_kernel::Error::OutOfMemory)
@@ -553,9 +555,7 @@ impl MemoryManager {
         #[cfg(not(feature = "swap"))]
         let phys = self.alloc_page(pid)?;
         #[cfg(feature = "swap")]
-        // this should not be OOMable because the callers for map_zeroed page are exclusively from kernel
-        // services (process creation, queue creation)
-        let phys = self.alloc_page(pid, Some(virt))?;
+        let phys = self.alloc_page_oomable(pid, virt)?;
 
         // Actually perform the map.  At this stage, every physical page should be owned by us.
         if let Err(e) = crate::arch::mem::map_page_inner(
