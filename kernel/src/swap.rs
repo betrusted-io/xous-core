@@ -16,6 +16,8 @@ use crate::arch::mem::PAGE_SIZE;
 use crate::mem::MemoryManager;
 use crate::services::SystemServices;
 
+const BACKUP_STACK_SIZE_WORDS: usize = 1024 / core::mem::size_of::<usize>();
+
 /// userspace swapper -> kernel ABI (see kernel/src/syscall.rs)
 /// This ABI is copy-paste synchronized with what's in the userspace handler. It's left out of
 /// xous-rs so that we can change it without having to push crates to crates.io.
@@ -187,7 +189,8 @@ static mut SWAP: Swap = Swap {
     oom_irq_backing: None,
     unmap_rpt_after_hard_oom: false,
     oom_thread_backing: None,
-    oom_stack_backing: [0usize; 512],
+    // hand-tuned based on feedback from actual runtime data
+    oom_stack_backing: [0usize; BACKUP_STACK_SIZE_WORDS],
 };
 
 pub struct Swap {
@@ -223,7 +226,8 @@ pub struct Swap {
     unmap_rpt_after_hard_oom: bool,
     /// backing for the thread state that is smashed by the OOM handler
     oom_thread_backing: Option<crate::arch::process::Thread>,
-    oom_stack_backing: [usize; 512],
+    /// backing for the stack that is smashed by the OOM handler
+    oom_stack_backing: [usize; BACKUP_STACK_SIZE_WORDS],
 }
 impl Swap {
     pub fn with_mut<F, R>(f: F) -> R
@@ -337,7 +341,7 @@ impl Swap {
 
     /// This is a non-divergent syscall (handled entirely within the kernel)
     pub fn get_free_mem(&self) -> SysCallResult {
-        #[cfg(feature = "debug-swap")]
+        // #[cfg(feature = "debug-swap")]
         {
             println!("RAM usage:");
             let mut total_bytes = 0;
@@ -455,13 +459,12 @@ impl Swap {
         println!("Entering inline hard OOM handler");
         crate::arch::process::Process::with_current(|p| {
             println!(
-                "BEF HARD OOM HANDLER {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?} reg {:08x?}",
+                "BEF HARD OOM HANDLER {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?}",
                 p.pid().get(),
                 p.current_tid(),
                 riscv::register::sepc::read(),
                 riscv::register::sstatus::read().spp(),
                 riscv::register::satp::read(),
-                p.current_thread().registers,
             )
         });
         // assemble this upstream of the stack save, because this affects stack
@@ -532,13 +535,12 @@ impl Swap {
 
         crate::arch::process::Process::with_current(|p| {
             println!(
-                "AFT HARD OOM HANDLER {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?} reg {:08x?}",
+                "AFT HARD OOM HANDLER {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?}",
                 p.pid().get(),
                 p.current_tid(),
                 riscv::register::sepc::read(),
                 riscv::register::sstatus::read().spp(),
                 riscv::register::satp::read(),
-                p.current_thread().registers,
             )
         });
 
