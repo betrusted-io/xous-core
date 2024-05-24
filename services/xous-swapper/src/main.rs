@@ -159,7 +159,7 @@ pub enum SwapAbi {
     Evict = 1,
     GetFreePages = 2,
     FetchAllocs = 3,
-    // SetOomThresh = 4,
+    // HardOom = 4, // meant to be initiated within the kernel to itself
     StealPage = 5,
     ReleaseMemory = 6,
 }
@@ -171,7 +171,7 @@ impl SwapAbi {
             1 => Evict,
             2 => GetFreePages,
             3 => FetchAllocs,
-            // 4 => SetOomThresh,
+            // 4 => HardOom,
             5 => StealPage,
             6 => ReleaseMemory,
             _ => Invalid,
