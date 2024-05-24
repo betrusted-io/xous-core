@@ -283,7 +283,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
             builder.add_feature("swap");
-            builder.add_kernel_feature("debug-swap");
+            // builder.add_kernel_feature("debug-swap");
             // builder.add_kernel_feature("debug-swap-verbose");
             // builder.add_kernel_feature("debug-print");
             builder.add_loader_feature("resume");
@@ -301,7 +301,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "modals",
                 "ime-plugin-shell",
                 "ime-frontend",
-                "test-swapper",
+                // "test-swapper",
                 "trng",
                 "cram-console",
             ]
