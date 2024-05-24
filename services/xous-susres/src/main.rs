@@ -154,7 +154,7 @@ mod implementation {
             .expect("couldn't map clean suspend page");
             #[cfg(feature = "swap")]
             let marker = xous::syscall::map_memory(
-                xous::MemoryAddress::new(0x4080_0000 - loader::GUARD_MEMORY_BYTES), // TODO: fix hard-coding of top of RAM
+                xous::MemoryAddress::new(0x4020_0000 - loader::GUARD_MEMORY_BYTES), // TODO: fix hard-coding of top of RAM
                 None,
                 4096,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
