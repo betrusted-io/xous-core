@@ -11,6 +11,7 @@ use xous_kernel::{SysCallResult, PID, SID, TID};
 use crate::arch::current_pid;
 use crate::arch::mem::flush_mmu;
 use crate::arch::mem::MMUFlags;
+use crate::arch::mem::EXCEPTION_STACK_TOP;
 use crate::arch::mem::PAGE_SIZE;
 use crate::mem::MemoryManager;
 use crate::services::SystemServices;
@@ -27,7 +28,7 @@ pub enum SwapAbi {
     Evict = 1,
     GetFreePages = 2,
     FetchAllocs = 3,
-    // SetOomThresh = 4,
+    HardOom = 4,
     StealPage = 5,
     ReleaseMemory = 6,
 }
@@ -39,7 +40,7 @@ impl SwapAbi {
             1 => Evict,
             2 => GetFreePages,
             3 => FetchAllocs,
-            // 4 => SetOomThresh,
+            4 => HardOom,
             5 => StealPage,
             6 => ReleaseMemory,
             _ => Invalid,
@@ -69,6 +70,7 @@ pub enum BlockingSwapOp {
     /// kernel memory cycle. Arguments are the TID/PID of the context running that triggered the HardOom,
     /// as well as the virtual address that triggered the hard OOM.
     HardOom(TID, PID, usize),
+    HardOomSyscall(TID, PID),
 }
 
 /// This structure is a copy of what's defined in the loader's swap module. The reason
@@ -185,6 +187,8 @@ static mut SWAP: Swap = Swap {
     mem_alloc_tracker_pages: 0,
     oom_irq_backing: None,
     unmap_rpt_after_hard_oom: false,
+    oom_thread_backing: None,
+    oom_stack_backing: [0usize; 512],
 };
 
 pub struct Swap {
@@ -218,6 +222,9 @@ pub struct Swap {
     /// uncommon, because the soft-OOM handler is interruptable and can only keep up with gradual memory
     /// demand.
     unmap_rpt_after_hard_oom: bool,
+    /// backing for the thread state that is smashed by the OOM handler
+    oom_thread_backing: Option<crate::arch::process::Thread>,
+    oom_stack_backing: [usize; 512],
 }
 impl Swap {
     pub fn with_mut<F, R>(f: F) -> R
@@ -463,6 +470,188 @@ impl Swap {
         }
     }
 
+    pub fn hard_oom_syscall(&mut self) -> SysCallResult {
+        // disable all IRQs; no context swapping is allowed
+        self.oom_irq_backing = Some(sim_read());
+        #[cfg(feature = "debug-swap")]
+        println!("Hard OOM syscall stored SIM: {:x?}", self.oom_irq_backing);
+        sim_write(0x0);
+
+        let original_pid = crate::arch::process::current_pid();
+        let original_tid = crate::arch::process::current_tid();
+
+        // move into the swapper's memory space & map the RPT into the swapper's space so it can
+        // make decisions about what to move out.
+        SystemServices::with(|system_services| {
+            let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
+            // swap to the swapper space
+            let swapper_map = system_services.get_process(swapper_pid).unwrap().mapping;
+            swapper_map.activate().unwrap();
+
+            // map the RPT into userspace
+            // note that this technically makes the RPT shared with kernel and userspace, but,
+            // the userspace version is read-only, and the next section runs in an interrupt context,
+            // so I think it's safe for it to be shared for that duration.
+            let mut mapped_pages = false;
+            let mut already_mapped = false;
+            MemoryManager::with_mut(|mm| {
+                for page in 0..self.mem_alloc_tracker_pages {
+                    let virt = SWAP_RPT_VADDR + page * PAGE_SIZE;
+                    let entry = unsafe {
+                        // assume that the soft-OOM handler has run at least once already, so that
+                        // the L1 PTEs exist. If we hard-OOM before the soft-OOM handler ever runs,
+                        // the below would panic. We can solve this by having the user space swapper
+                        // force at least one fetch of the RPT on boot (this is probably a good idea
+                        // anyways as it ensures that any heap space it needs to handle this is
+                        // allocated).
+                        crate::arch::mem::pagetable_entry(virt)
+                            .expect("Couldn't access PTE for SWAP_RPT_VADDR; ensure soft-OOM handler runs once before hard-OOM")
+                            .read_volatile()
+                    };
+                    // only map pages if they aren't already mapped
+                    if entry & MMUFlags::VALID.bits() == 0 {
+                        mapped_pages = true;
+                        crate::arch::mem::map_page_inner(
+                            mm,
+                            swapper_pid,
+                            self.mem_alloc_tracker_paddr + page * PAGE_SIZE,
+                            virt,
+                            xous_kernel::MemoryFlags::R,
+                            true,
+                        )
+                        .ok();
+                        unsafe { crate::arch::mem::flush_mmu() };
+                    } else {
+                        already_mapped = true;
+                    }
+                }
+                if mapped_pages && already_mapped {
+                    // I *think* that whether we map or don't map is always going to be all-or-nothing.
+                    // However, in the case that only some pages have to be mapped, it probably means that
+                    // somehow, we hard-OOM'd right in the middle of the page map/unmap routine within
+                    // the soft-OOM handler. Shouldn't be possible -- `fetch_allocs` immediately disables
+                    // interrupts -- but let's sanity check this assumption anyways.
+                    todo!("Need to handle partial RPT maps -- tracking vector required in swapper");
+                } else if mapped_pages {
+                    self.unmap_rpt_after_hard_oom = true;
+                }
+            });
+        });
+
+        #[cfg(feature = "debug-swap")]
+        println!("hard_oom - userspace activate");
+        // this is safe because we're now in the swapper memory context, thanks to the previous call
+        unsafe {
+            self.blocking_activate_swapper(BlockingSwapOp::HardOomSyscall(original_tid, original_pid));
+        }
+    }
+
+    pub fn hard_oom_inline(&mut self) -> bool {
+        // we are in the pid/tid of the invoking process
+        // stash the thread state of the current pid/tid because the syscall return trampoline will smash it
+        self.oom_thread_backing =
+            Some(crate::arch::process::Process::with_current(|p| p.current_thread().clone()));
+
+        println!("Entering inline hard OOM handler");
+        crate::arch::process::Process::with_current(|p| {
+            println!(
+                "BEF HARD OOM HANDLER {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?} reg {:08x?}",
+                p.pid().get(),
+                p.current_tid(),
+                riscv::register::sepc::read(),
+                riscv::register::sstatus::read().spp(),
+                riscv::register::satp::read(),
+                p.current_thread().registers,
+            )
+        });
+        // assemble this upstream of the stack save, because this affects stack
+        let call_precompute = xous_kernel::SysCall::SwapOp(SwapAbi::HardOom as usize, 0, 0, 0, 0, 0, 0);
+
+        // at this point we are in user pid/tid, but supervisor mode. The current thread backing is
+        // about to be smashed by the syscall invocation. we want to return to this backing.
+        let mut current_sp: usize = 0;
+
+        unsafe {
+            core::arch::asm!(
+                "mv {current_sp}, sp",
+                current_sp = out(reg) current_sp,
+            )
+        }
+        println!(" --> SP extent d'{} bytes", EXCEPTION_STACK_TOP - current_sp);
+        let backup_stack_ptr: usize = self.oom_stack_backing.as_ptr() as usize;
+        let working_stack_end: usize = EXCEPTION_STACK_TOP;
+        let working_stack_ptr: usize =
+            EXCEPTION_STACK_TOP - self.oom_stack_backing.len() * core::mem::size_of::<usize>();
+        unsafe {
+            core::arch::asm!(
+                "mv   a7, {working_stack_end}",
+                "mv   a6, {working_stack_ptr}",
+                "mv   a5, {backup_stack_ptr}",
+            "100:",
+                "lw   a4, 0(a6)",
+                "sw   a4, 0(a5)",
+                "addi  a6, a6, 4",
+                "addi  a5, a5, 4",
+                "bltu  a6, a7, 100b",
+                "mv    {current_sp}, sp",
+
+                working_stack_end = in(reg) working_stack_end,
+                working_stack_ptr = in(reg) working_stack_ptr,
+                backup_stack_ptr = in(reg) backup_stack_ptr,
+                current_sp = out(reg) current_sp,
+            )
+        }
+        assert!(
+            EXCEPTION_STACK_TOP - current_sp <= self.oom_stack_backing.len() * core::mem::size_of::<usize>(),
+            "Backing stack not large enough to handle current kernel stack utilization."
+        );
+        // invoke this as a nested syscall so it returns here
+        xous_kernel::rsyscall(call_precompute).ok();
+
+        let restore_stack_ptr: usize = self.oom_stack_backing.as_ptr() as usize;
+        let working_restore_end: usize = EXCEPTION_STACK_TOP;
+        let working_restore_ptr: usize =
+            EXCEPTION_STACK_TOP - self.oom_stack_backing.len() * core::mem::size_of::<usize>();
+        unsafe {
+            core::arch::asm!(
+                "mv   a7, {working_restore_end}",
+                "mv   a6, {working_restore_ptr}",
+                "mv   a5, {restore_stack_ptr}",
+            "100:",
+                "lw   a4, 0(a5)",
+                "sw   a4, 0(a6)",
+                "addi  a6, a6, 4",
+                "addi  a5, a5, 4",
+                "bltu  a6, a7, 100b",
+
+                working_restore_end = in(reg) working_restore_end,
+                working_restore_ptr = in(reg) working_restore_ptr,
+                restore_stack_ptr = in(reg) restore_stack_ptr,
+            )
+        }
+
+        crate::arch::process::Process::with_current(|p| {
+            println!(
+                "AFT HARD OOM HANDLER {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?} reg {:08x?}",
+                p.pid().get(),
+                p.current_tid(),
+                riscv::register::sepc::read(),
+                riscv::register::sstatus::read().spp(),
+                riscv::register::satp::read(),
+                p.current_thread().registers,
+            )
+        });
+
+        // then restore the thread state on return from the syscall
+        crate::arch::process::Process::with_current_mut(|p| {
+            println!("Returned from hard OOM handler, current pid {}/tid {}", p.pid().get(), p.current_tid());
+            *p.current_thread_mut() =
+                self.oom_thread_backing.take().expect("No thread backing was set prior to OOM handler")
+        });
+
+        true
+    }
+
     /// This call diverges into the userspace swapper.
     /// Divergent calls must turn of IRQs before memory spaces are changed.
     pub fn fetch_allocs(&mut self) -> ! {
@@ -626,6 +815,10 @@ impl Swap {
                 self.swapper_args[0] = self.swapper_state;
                 self.swapper_args[1] = 3; // HardOom
             }
+            BlockingSwapOp::HardOomSyscall(_tid, _pid) => {
+                self.swapper_args[0] = self.swapper_state;
+                self.swapper_args[1] = 3; // HardOom
+            }
         }
         if let Some(op) = self.prev_op.take() {
             if let Some(dop) = self.nested_op {
@@ -672,6 +865,7 @@ impl Swap {
     ///
     /// Safety: this call must only be invoked in the swapper's memory context
     pub unsafe fn exit_blocking_call(&mut self) -> Result<xous_kernel::Result, xous_kernel::Error> {
+        println!("prev_op: {:x?}", self.prev_op);
         let result = match self.prev_op.take() {
             // Called from any process. Resume as if recovering from a page fault; absorb the rest of the
             // page fault handler code into this routine at the point where it would have
@@ -806,11 +1000,6 @@ impl Swap {
                 // return as a SysCall
                 Ok(xous_kernel::Result::Scalar5(0, 0, 0, 0, 0))
             }
-            // The caller point is still TBD. This is complicated because ideally we want the OOM'ing
-            // process to stop trying to do allocate memory until the swapper has had some time to run,
-            // *but* the swapper is running as a userspace process which means it could be interrupted.
-            // We might be able to play shenanigans with disabling IRQs *very carefully* though, so as
-            // to kill pre-emption and make the swapper the only thing that can possibly run.
             Some(BlockingSwapOp::HardOom(tid, pid, on_vaddr)) => {
                 // We enter this from the swapper's memory space
                 assert!(
@@ -921,6 +1110,51 @@ impl Swap {
 
                 // the current memory space is the target PID, so we will resume into the target PID
                 Ok(xous_kernel::Result::ResumeProcess)
+            }
+            Some(BlockingSwapOp::HardOomSyscall(tid, pid)) => {
+                // We enter this from the swapper's memory space
+                assert!(
+                    crate::arch::process::current_pid().get() == SWAPPER_PID,
+                    "Hard OOM syscall did not return from swapper's space"
+                );
+                // unmap RPT from swapper's userspace, if it was previously unmapped
+                if self.unmap_rpt_after_hard_oom {
+                    MemoryManager::with_mut(|mm| {
+                        for page in 0..self.mem_alloc_tracker_pages {
+                            crate::arch::mem::unmap_page_inner(mm, SWAP_RPT_VADDR + page * PAGE_SIZE).ok();
+                        }
+                    });
+                }
+
+                // return to the original pid memory space, now that we have memory
+                SystemServices::with_mut(|system_services| {
+                    // Cleanup the swapper
+                    system_services.finish_swap();
+
+                    if !crate::arch::irq::is_handling_irq() {
+                        system_services.swap_resume_to_userspace(pid, tid).expect("couldn't swap_resume");
+                    }
+
+                    // Switch to target process
+                    let process = system_services.get_process_mut(pid).unwrap();
+                    process.mapping.activate().unwrap();
+                    process.activate().unwrap();
+                    // Activate the current context
+                    crate::arch::process::Process::current().set_tid(tid).unwrap();
+                    process.current_thread = tid;
+                });
+
+                // return to kernel space -- this call can only be originated from kernel space
+                unsafe { riscv::register::sstatus::set_spp(riscv::register::sstatus::SPP::Supervisor) };
+
+                // restore IRQ state (don't borrow the system handler's state tracker, so we don't smash
+                // it by accident)
+                let sim = self.oom_irq_backing.take().expect("Someone stole our IRQ backing!");
+                #[cfg(feature = "debug-swap")]
+                println!("OOM syscall restoring IRQ: {:x}", sim);
+                sim_write(sim);
+
+                Ok(xous_kernel::Result::Scalar5(0, 0, 0, 0, 0))
             }
             None => panic!("No previous swap op was set"),
         };
