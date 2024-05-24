@@ -29,5 +29,5 @@ locales = { path = "../../locales" }
 "hwsim" = []
 "pio-test" = ["xous-pio"]
 "pl230-test" = ["xous-pl230"]
-"message-passing-test" = []
+"hwtest" = []
 default = []
