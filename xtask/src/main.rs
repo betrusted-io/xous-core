@@ -275,7 +275,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("renode-swap") => {
             let swap_pkgs = ["xous-ticktimer", "xous-log", "xous-susres"];
             if !builder.is_swap_set() {
-                builder.set_swap(0x4020_0000, 14 * 1024 * 1024);
+                builder.set_swap(0x4020_0000, 4 * 1024 * 1024);
             }
             builder.target_renode();
             // builder.target_cramium_soc();
