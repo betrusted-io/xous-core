@@ -35,6 +35,7 @@ precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 swap-userspace-testing = []
+oom-doom = []
 
 debug-print = []
 debug-verbose = []

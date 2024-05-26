@@ -67,11 +67,13 @@ use xous::{MemoryFlags, MemoryRange, Message, Result, CID, PID, SID};
 /// are imprecise, in that there is a chance that one target is active during another
 /// invocation of a routine. This is because the hard OOM handler is entirely asynchronous
 /// and could be invoked at any time, including while we are trying to handle a soft OOM.
-const HARD_OOM_PAGE_TARGET: usize = 48;
+const HARD_OOM_PAGE_TARGET: usize = 32;
 /// Target of pages to free in case of OOM Doom
-const OOM_DOOM_PAGE_TARGET: usize = 64;
+#[cfg(feature = "oom-doom")]
+const OOM_DOOM_PAGE_TARGET: usize = 48;
 /// Polling interval for OOM Doom. Slightly off from an even second so we don't have constant
 /// competition with other processes that probably use even-second multiples for polling.
+#[cfg(feature = "oom-doom")]
 const OOM_DOOM_POLL_INTERVAL_MS: u64 = 1057;
 
 /// Virtual address prefixes to de-prioritize in the OomDoom sweep
@@ -334,14 +336,7 @@ fn write_to_swap_inner(
 
     // step 2: write the page to swap
     #[cfg(feature = "debug-print")]
-    writeln!(
-        DebugUart {},
-        "WTS PID{}, vaddr_pid {:x}, vaddr_swap {:x}",
-        candidate.raw_pid(),
-        candidate.vaddr(),
-        vaddr_in_swap
-    )
-    .ok();
+    writeln!(DebugUart {}, "WTS PID{} VA {:x}", candidate.raw_pid(), vaddr_in_swap).ok();
     // this is safe because the page is aligned and initialized as it comes from the kernel
     // remember that this page is overwritten with encrypted data
     let buf: &mut [u8] = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
@@ -503,15 +498,7 @@ fn swap_handler(
             // after `pt_walk` is necessary. Either way, it's spooky. I wonder if there isn't some minimum
             // time between reads from the SPIM that we're violating??
             #[cfg(feature = "debug-print")]
-            writeln!(
-                DebugUart {},
-                "RFS PID{}, vaddr_pid {:x}, vaddr_swap {:x}, paddr {:x}",
-                pid,
-                vaddr_in_pid,
-                vaddr_in_swap,
-                paddr_in_swap
-            )
-            .ok();
+            writeln!(DebugUart {}, "RFS PID{} VA {:x} PA {:x}", pid, vaddr_in_pid, paddr_in_swap).ok();
             // clear the used bit in swap
             ss.sct.counts[paddr_in_swap / PAGE_SIZE] &= !loader::FLG_SWAP_USED;
 
@@ -547,8 +534,13 @@ fn swap_handler(
 
             // free memory for the hard-OOM handler to run
             if let Some(reserved_mem) = ss.hard_oom_reserved_page.take() {
-                writeln!(DebugUart {}, "Entering HARD OOM - freeing scratch memory: {:x?}", reserved_mem)
-                    .ok();
+                writeln!(
+                    DebugUart {},
+                    "Entering HARD OOM attempt to free {} pages - scratch memory: {:x?}",
+                    pages_to_free,
+                    reserved_mem,
+                )
+                .ok();
                 xous::unmap_memory(reserved_mem).expect("couldn't free memory for hard OOM handler");
             } else {
                 panic!("No space was reserved for the hard OOM manager to run!");
@@ -693,6 +685,7 @@ fn main() {
     });
 
     // This thread pings the free memory level and will try to clear memory to avoid OOM
+    #[cfg(feature = "oom-doom")]
     thread::spawn({
         move || {
             loop {
