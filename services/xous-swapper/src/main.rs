@@ -336,7 +336,7 @@ fn write_to_swap_inner(
 
     // step 2: write the page to swap
     #[cfg(feature = "debug-print")]
-    writeln!(DebugUart {}, "WTS PID{} VA {:x}", candidate.raw_pid(), vaddr_in_swap).ok();
+    writeln!(DebugUart {}, "WTS PID{} VA {:x}", candidate.raw_pid(), candidate.vaddr()).ok();
     // this is safe because the page is aligned and initialized as it comes from the kernel
     // remember that this page is overwritten with encrypted data
     let buf: &mut [u8] = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
