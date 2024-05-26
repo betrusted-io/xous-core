@@ -452,7 +452,7 @@ impl Swap {
         self.oom_thread_backing =
             Some(crate::arch::process::Process::with_current(|p| p.current_thread().clone()));
 
-        println!("Entering inline hard OOM handler");
+        #[cfg(feature = "debug-swap")]
         crate::arch::process::Process::with_current(|p| {
             println!(
                 "BEF HARD OOM HANDLER {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?}",
@@ -486,7 +486,7 @@ impl Swap {
                 current_sp = out(reg) current_sp,
             )
         }
-        println!(" --> SP extent d'{} bytes", EXCEPTION_STACK_TOP - current_sp);
+        println!(" --> HARD OOM SP extent d'{} bytes", EXCEPTION_STACK_TOP - current_sp);
         // make a backup copy of the stack
         let backup_stack_ptr: usize = self.oom_stack_backing.as_ptr() as usize;
         let working_stack_end: usize = EXCEPTION_STACK_TOP;
@@ -545,6 +545,7 @@ impl Swap {
             )
         }
 
+        #[cfg(feature = "debug-swap")]
         crate::arch::process::Process::with_current(|p| {
             println!(
                 "AFT HARD OOM HANDLER {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?}",
@@ -558,7 +559,6 @@ impl Swap {
 
         // then restore the smashed thread backing state on return from the syscall
         crate::arch::process::Process::with_current_mut(|p| {
-            println!("Returned from hard OOM handler, current pid {}/tid {}", p.pid().get(), p.current_tid());
             *p.current_thread_mut() =
                 self.oom_thread_backing.take().expect("No thread backing was set prior to OOM handler")
         });

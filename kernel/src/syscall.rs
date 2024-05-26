@@ -1042,10 +1042,11 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                         vaddr,
                     ) {
                         Ok(ptr) => Ok(xous_kernel::Result::Scalar5(ptr, 0, 0, 0, 0)),
-                        Err(e) => {
+                        Err(_e) => {
+                            #[cfg(feature = "debug-swap")]
                             println!(
                                 "steal_page rejecting request for pid{}/{:x}: {:?}",
-                                target_pid, vaddr, e
+                                target_pid, vaddr, _e
                             );
                             Err(xous_kernel::Error::BadAddress)
                         }
