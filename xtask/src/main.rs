@@ -304,6 +304,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // "test-swapper",
                 "trng",
                 "cram-console",
+                "keyboard",
+                "llio",
             ]
             .to_vec();
             for service in swap_pkgs {
