@@ -368,7 +368,7 @@ impl MemoryMapping {
             #[cfg(not(feature = "swap"))]
             let l0pt_phys = mm.alloc_page(pid)?;
             #[cfg(feature = "swap")]
-            let l0pt_phys = mm.alloc_page(pid, None)?;
+            let l0pt_phys = mm.alloc_page_oomable(pid, None)?;
 
             // Mark this entry as a leaf node (WRX as 0), and indicate
             // it is a valid page by setting "V".
@@ -630,7 +630,7 @@ pub fn map_page_inner(
         #[cfg(not(feature = "swap"))]
         let l0_pt_phys = mm.alloc_page(pid)?;
         #[cfg(feature = "swap")]
-        let l0_pt_phys = mm.alloc_page(pid, None)?;
+        let l0_pt_phys = mm.alloc_page_oomable(pid, None)?;
 
         // Mark this entry as a leaf node (WRX as 0), and indicate
         // it is a valid page by setting "V".
@@ -934,7 +934,8 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
     });
     #[cfg(feature = "swap")]
     let new_page = MemoryManager::with_mut(|mm| {
-        mm.alloc_page_oomable(crate::arch::process::current_pid(), virt).expect("Couldn't allocate new page")
+        mm.alloc_page_oomable(crate::arch::process::current_pid(), Some(virt))
+            .expect("Couldn't allocate new page")
     });
 
     let ppn1 = (new_page >> 22) & ((1 << 12) - 1);
