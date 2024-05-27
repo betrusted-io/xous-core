@@ -9,7 +9,6 @@ use xous_kernel::SWAPPER_PID;
 use xous_kernel::{SysCallResult, PID, SID, TID};
 
 use crate::arch::current_pid;
-use crate::arch::mem::flush_mmu;
 use crate::arch::mem::MMUFlags;
 use crate::arch::mem::EXCEPTION_STACK_TOP;
 use crate::arch::mem::PAGE_SIZE;
@@ -20,6 +19,9 @@ use crate::services::SystemServices;
 /// The good news is it's static with every version, and constant after the first
 /// invocation. So, if it works once, it should keep on working for that particular
 /// combination of target/link options/compiler version.
+#[cfg(any(feature = "debug-swap", feature = "debug-swap-verbose"))] // more stack needed for debug
+const BACKUP_STACK_SIZE_WORDS: usize = 2048 / core::mem::size_of::<usize>();
+#[cfg(not(any(feature = "debug-swap", feature = "debug-swap-verbose")))]
 const BACKUP_STACK_SIZE_WORDS: usize = 1024 / core::mem::size_of::<usize>();
 
 /// userspace swapper -> kernel ABI (see kernel/src/syscall.rs)
@@ -33,7 +35,7 @@ pub enum SwapAbi {
     Invalid = 0,
     ClearMemoryNow = 1,
     GetFreePages = 2,
-    // FetchAllocs = 3,
+    RetrievePage = 3,
     HardOom = 4,
     StealPage = 5,
     ReleaseMemory = 6,
@@ -45,7 +47,7 @@ impl SwapAbi {
         match val {
             1 => ClearMemoryNow,
             2 => GetFreePages,
-            // 3 => FetchAllocs,
+            3 => RetrievePage,
             4 => HardOom,
             5 => StealPage,
             6 => ReleaseMemory,
@@ -106,7 +108,7 @@ impl SwapAlloc {
             if let Some(pid) = pid {
                 s.track_alloc(true);
                 if let Some(va) = vaddr {
-                    #[cfg(feature = "debug-swap")]
+                    #[cfg(feature = "debug-swap-verbose")]
                     println!(
                         "-- update {}/{:x} <- {}/{:x} @ {:x} (in pid{})",
                         pid.get(),
@@ -125,7 +127,7 @@ impl SwapAlloc {
                     self.vpn = SWAP_FLG_WIRED | pid.get() as u32;
                 }
             } else {
-                #[cfg(feature = "debug-swap")]
+                #[cfg(feature = "debug-swap-verbose")]
                 println!("-- release of pid{}/{:x}", self.vpn as u8, self.vpn & !0xfff);
                 s.track_alloc(false);
                 // allow the wired flag to clear if the page is actively de-allocated
@@ -183,6 +185,7 @@ static mut SWAP: Swap = Swap {
     mem_alloc_tracker_paddr: 0,
     mem_alloc_tracker_pages: 0,
     oom_irq_backing: None,
+    clearmem_irq_backing: None,
     unmap_rpt_after_hard_oom: false,
     oom_thread_backing: None,
     // hand-tuned based on feedback from actual runtime data
@@ -215,6 +218,7 @@ pub struct Swap {
     mem_alloc_tracker_pages: usize,
     /// state of IRQ backing before hard OOM
     oom_irq_backing: Option<usize>,
+    clearmem_irq_backing: Option<usize>,
     /// Keep track of if we should unmap the RPT after a hard OOM. In the case that we hard-OOM while the
     /// soft-OOM handler is running, the RPT will already be mapped into the swapper's space. This is not
     /// uncommon, because the soft-OOM handler is interruptable and can only keep up with gradual memory
@@ -371,12 +375,6 @@ impl Swap {
     }
 
     pub fn hard_oom_syscall(&mut self) -> SysCallResult {
-        // disable all IRQs; no context swapping is allowed
-        self.oom_irq_backing = Some(sim_read());
-        #[cfg(feature = "debug-swap")]
-        println!("Hard OOM syscall stored SIM: {:x?}", self.oom_irq_backing);
-        sim_write(0x0);
-
         let original_pid = crate::arch::process::current_pid();
         let original_tid = crate::arch::process::current_tid();
 
@@ -446,7 +444,41 @@ impl Swap {
         }
     }
 
-    pub fn hard_oom_inline(&mut self) -> bool {
+    pub fn swap_stop_irq(&mut self) {
+        // disable all IRQs; no context swapping is allowed
+        self.oom_irq_backing = Some(sim_read());
+        #[cfg(feature = "debug-swap")]
+        println!("Swap stored SIM: {:x?}", self.oom_irq_backing);
+        sim_write(0x0);
+    }
+
+    pub fn swap_restore_irq(&mut self) {
+        // restore IRQ state (don't borrow the system handler's state tracker, so we don't smash
+        // it by accident)
+        let sim = self.oom_irq_backing.take().expect("Someone stole our IRQ backing!");
+        #[cfg(feature = "debug-swap")]
+        println!("Swap restoring IRQ: {:x}", sim);
+        sim_write(sim);
+    }
+
+    pub fn clearmem_stop_irq(&mut self) {
+        self.clearmem_irq_backing = Some(sim_read());
+        #[cfg(feature = "debug-swap")]
+        println!("Clearmem stored SIM: {:x?}", self.clearmem_irq_backing);
+        sim_write(0x0);
+    }
+
+    pub fn clearmem_restore_irq(&mut self) {
+        if let Some(sim) = self.clearmem_irq_backing.take() {
+            #[cfg(feature = "debug-swap")]
+            println!("Clearmem restoring IRQ: {:x}", sim);
+            sim_write(sim);
+        }
+    }
+
+    pub fn swap_reentrant_syscall(&mut self, call: xous_kernel::SysCall) {
+        self.swap_stop_irq();
+
         // we are in the pid/tid of the invoking process
         // stash the thread state of the current pid/tid because the syscall return trampoline will smash it
         self.oom_thread_backing =
@@ -455,7 +487,8 @@ impl Swap {
         #[cfg(feature = "debug-swap")]
         crate::arch::process::Process::with_current(|p| {
             println!(
-                "BEF HARD OOM HANDLER {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?}",
+                "BEF HANDLER {:x?} {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?}",
+                call,
                 p.pid().get(),
                 p.current_tid(),
                 riscv::register::sepc::read(),
@@ -463,8 +496,6 @@ impl Swap {
                 riscv::register::satp::read(),
             )
         });
-        // assemble this upstream of the stack save, because this affects stack
-        let call_precompute = xous_kernel::SysCall::SwapOp(SwapAbi::HardOom as usize, 0, 0, 0, 0, 0, 0);
 
         // at this point we are in user pid/tid, but supervisor mode. The current exception handler stack is
         // about to be smashed by the syscall invocation. Save the stack with a specially crafted routine
@@ -486,7 +517,7 @@ impl Swap {
                 current_sp = out(reg) current_sp,
             )
         }
-        println!(" --> HARD OOM SP extent d'{} bytes", EXCEPTION_STACK_TOP - current_sp);
+        println!(" --> HANDLER SP extent d'{} bytes", EXCEPTION_STACK_TOP - current_sp);
         // make a backup copy of the stack
         let backup_stack_ptr: usize = self.oom_stack_backing.as_ptr() as usize;
         let working_stack_end: usize = EXCEPTION_STACK_TOP;
@@ -502,7 +533,7 @@ impl Swap {
                 "sw   a4, 0(a5)",
                 "addi  a6, a6, 4",
                 "addi  a5, a5, 4",
-                "bltu  a6, a7, 100b",
+                "blt   a6, a7, 100b",
                 "mv    {current_sp}, sp",
 
                 working_stack_end = in(reg) working_stack_end,
@@ -519,7 +550,7 @@ impl Swap {
         );
         // invoke this as a nested syscall so it returns here. No stack mods are allowed between the
         // backup and this call
-        xous_kernel::rsyscall(call_precompute).ok();
+        xous_kernel::rsyscall(call).ok();
 
         // restore the stack immediately after the syscall return (no debug info etc. allowed as it may
         // rely on stack).
@@ -537,7 +568,7 @@ impl Swap {
                 "sw   a4, 0(a6)",
                 "addi  a6, a6, 4",
                 "addi  a5, a5, 4",
-                "bltu  a6, a7, 100b",
+                "blt   a6, a7, 100b",
 
                 working_restore_end = in(reg) working_restore_end,
                 working_restore_ptr = in(reg) working_restore_ptr,
@@ -548,7 +579,7 @@ impl Swap {
         #[cfg(feature = "debug-swap")]
         crate::arch::process::Process::with_current(|p| {
             println!(
-                "AFT HARD OOM HANDLER {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?}",
+                "AFT HANDLER {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?}",
                 p.pid().get(),
                 p.current_tid(),
                 riscv::register::sepc::read(),
@@ -563,7 +594,7 @@ impl Swap {
                 self.oom_thread_backing.take().expect("No thread backing was set prior to OOM handler")
         });
 
-        true
+        self.swap_restore_irq();
     }
 
     /// The address space on entry to `retrieve_page` is `target_pid`; it must ensure
@@ -578,28 +609,9 @@ impl Swap {
     ///
     /// This call diverges into the userspace swapper.
     /// Divergent calls must turn of IRQs before memory spaces are changed.
-    pub fn retrieve_page(
-        &mut self,
-        target_pid: PID,
-        target_tid: TID,
-        target_vaddr_in_pid: usize,
-        paddr: usize,
-    ) -> ! {
-        if crate::arch::irq::is_handling_irq() {
-            #[cfg(feature = "debug-swap")]
-            crate::arch::process::Process::with_current(|process| {
-                println!("IRQ ENTRY: pid{}, {:x?}", current_pid().get(), process.current_thread());
-            });
-            #[cfg(feature = "debug-swap")]
-            println!(
-                "sstatus {:x?} spp: {:?}",
-                riscv::register::sstatus::read(),
-                riscv::register::sstatus::read().spp()
-            );
-            // crate::arch::mem::MemoryMapping::current().print_map();
-        } else {
-            crate::arch::irq::disable_all_irqs();
-        }
+    pub fn retrieve_page_syscall(&mut self, target_vaddr_in_pid: usize, paddr: usize) -> ! {
+        let target_pid = crate::arch::process::current_pid();
+        let target_tid = crate::arch::process::current_tid();
 
         let block_vaddr_in_swap =
             crate::arch::mem::map_page_to_swapper(paddr).expect("couldn't map target page to swapper");
@@ -644,11 +656,14 @@ impl Swap {
         }
         if let Some(op) = self.prev_op.take() {
             if let Some(dop) = self.nested_op {
-                println!("ERR: nesting depth of 2 exceeded! {:?}", dop);
+                println!("ERR: nesting depth of 2 exceeded! {:x?}", dop);
                 panic!("Nesting depth of 2 exceeded!");
             }
-            // println!("Nesting {:?}", op);
+            println!("Nesting {:x?}", op);
             self.nested_op = Some(op);
+            panic!(
+                "Nesting should not happen - this code is vestigial but remains to see if this edge case remains"
+            );
         }
         // println!("Setting prev_op to {:?}", op);
         self.prev_op = Some(op);
@@ -687,94 +702,18 @@ impl Swap {
     ///
     /// Safety: this call must only be invoked in the swapper's memory context
     pub unsafe fn exit_blocking_call(&mut self) -> Result<xous_kernel::Result, xous_kernel::Error> {
-        let result = match self.prev_op.take() {
+        let (pid, tid) = match self.prev_op.take() {
             // Called from any process. Resume as if recovering from a page fault; absorb the rest of the
-            // page fault handler code into this routine at the point where it would have
-            // divereged.
-            Some(BlockingSwapOp::ReadFromSwap(pid, tid, vaddr_in_pid, vaddr_in_swap, paddr)) => {
+            // page fault handler code into this routine at the point where it would have diverged.
+            Some(BlockingSwapOp::ReadFromSwap(pid, tid, _vaddr_in_pid, vaddr_in_swap, _paddr)) => {
                 MemoryManager::with_mut(|mm| {
                     // we are in the swapper's memory space a this point
                     // unmap the page from the swapper
-                    crate::arch::mem::unmap_page_inner(mm, vaddr_in_swap)?;
-
-                    SystemServices::with_mut(|system_services| {
-                        // Cleanup the swapper
-                        system_services.finish_swap();
-
-                        if !crate::arch::irq::is_handling_irq() {
-                            system_services.swap_resume_to_userspace(pid, tid).expect("couldn't swap_resume");
-                        }
-
-                        // Switch to target process
-                        let process = system_services.get_process_mut(pid).unwrap();
-                        process.mapping.activate().unwrap();
-                        process.activate().unwrap();
-                        // Activate the current context
-                        crate::arch::process::Process::current().set_tid(tid).unwrap();
-                        process.current_thread = tid;
-                    });
-
-                    // Finish up the page table manipulations that were aborted by the original swap call
-                    let entry = crate::arch::mem::pagetable_entry(vaddr_in_pid)
-                        .or(Err(xous_kernel::Error::BadAddress))?;
-                    let current_entry = entry.read_volatile();
-                    // clear the swapped flag
-                    let flags = current_entry & 0x3ff & !MMUFlags::P.bits();
-                    let ppn1 = (paddr >> 22) & ((1 << 12) - 1);
-                    let ppn0 = (paddr >> 12) & ((1 << 10) - 1);
-                    // Map the retrieved page to the target memory space, and set valid. We rely
-                    // on the fact that the USER bit, etc. was correctly setup and stored when the
-                    // page was originally allocated.
-                    *entry = (ppn1 << 20) | (ppn0 << 10) | (flags | crate::arch::mem::FLG_VALID);
-                    flush_mmu();
-                    flush_dcache();
-
-                    // There is an edge case where we are exiting the OOM handler through the read
-                    // from swap routine. If the backing is set, we took this path; we must copy
-                    // the backing to the system backing to respect the assumptions of this epilogue.
-                    if let Some(sim) = self.oom_irq_backing.take() {
-                        #[cfg(feature = "debug-swap")]
-                        println!("OOM->RFS restoring IRQ: {:x}", sim);
-                        crate::arch::irq::set_sim_backing(sim);
-                    }
-
-                    if !crate::arch::irq::is_handling_irq() {
-                        #[cfg(feature = "debug-swap")]
-                        println!(
-                            "RFS - handing page va {:x} -> pa {:x} to pid{}/hwpid{} tid{} entry {:x}",
-                            vaddr_in_pid,
-                            paddr,
-                            pid.get(),
-                            crate::arch::process::Process::with_current(|p| p.pid().get()),
-                            tid,
-                            *entry
-                        );
-                        // There is an edge case where we are exiting the OOM handler through the read
-                        // from swap routine. If the backing is set, we took this path; we must restore
-                        // interrupts now, or else we lose pre-emption forever.
-                        if let Some(sim) = self.oom_irq_backing.take() {
-                            #[cfg(feature = "debug-swap")]
-                            println!("OOM->RFS restoring IRQ: {:x}", sim);
-                            sim_write(sim);
-                        }
-                        Ok(xous_kernel::Result::ResumeProcess)
-                    } else {
-                        // Don't use the resume provided by the wrapper -- instead resume directly here,
-                        // as we don't want to re-enable IRQs
-                        crate::arch::process::Process::with_current(|process| {
-                            #[cfg(feature = "debug-swap")]
-                            println!(
-                                "Swapper returning from page fault in IRQ: pid{}/tid{}-{:x?}",
-                                pid.get(),
-                                tid,
-                                process.current_thread()
-                            );
-                            flush_mmu();
-                            flush_dcache();
-                            crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
-                        })
-                    }
-                })
+                    crate::arch::mem::unmap_page_inner(mm, vaddr_in_swap)
+                        .expect("couldn't unmap page lent to swapper");
+                    // the page map into the target space happens after the syscall returns
+                });
+                (pid, tid)
             }
             Some(BlockingSwapOp::HardOomSyscall(tid, pid)) => {
                 // We enter this from the swapper's memory space
@@ -790,68 +729,41 @@ impl Swap {
                         }
                     });
                 }
-
-                // return to the original pid memory space, now that we have memory
-                SystemServices::with_mut(|system_services| {
-                    // Cleanup the swapper
-                    system_services.finish_swap();
-
-                    if !crate::arch::irq::is_handling_irq() {
-                        system_services.swap_resume_to_userspace(pid, tid).expect("couldn't swap_resume");
-                    }
-
-                    // Switch to target process
-                    let process = system_services.get_process_mut(pid).unwrap();
-                    process.mapping.activate().unwrap();
-                    process.activate().unwrap();
-                    // Activate the current context
-                    crate::arch::process::Process::current().set_tid(tid).unwrap();
-                    process.current_thread = tid;
-                });
-
-                // return to kernel space -- this call can only be originated from kernel space
-                unsafe { riscv::register::sstatus::set_spp(riscv::register::sstatus::SPP::Supervisor) };
-
-                // restore IRQ state (don't borrow the system handler's state tracker, so we don't smash
-                // it by accident)
-                let sim = self.oom_irq_backing.take().expect("Someone stole our IRQ backing!");
-                #[cfg(feature = "debug-swap")]
-                println!("OOM syscall restoring IRQ: {:x}", sim);
-                sim_write(sim);
-
-                Ok(xous_kernel::Result::Scalar5(0, 0, 0, 0, 0))
+                (pid, tid)
             }
             None => panic!("No previous swap op was set"),
         };
+
+        // return to the original pid memory space, now that we have memory
+        SystemServices::with_mut(|system_services| {
+            // Cleanup the swapper
+            system_services.finish_swap();
+
+            if !crate::arch::irq::is_handling_irq() {
+                system_services.swap_resume_to_userspace(pid, tid).expect("couldn't swap_resume");
+            }
+
+            // Switch to target process
+            let process = system_services.get_process_mut(pid).unwrap();
+            process.mapping.activate().unwrap();
+            process.activate().unwrap();
+            // Activate the current context
+            crate::arch::process::Process::current().set_tid(tid).unwrap();
+            process.current_thread = tid;
+        });
+
+        // return to kernel space -- these calls can only be originated from kernel space
+        unsafe { riscv::register::sstatus::set_spp(riscv::register::sstatus::SPP::Supervisor) };
+
         if let Some(op) = self.nested_op.take() {
-            // println!("Popping nested_op into prev_op with {:?}", op);
+            println!("Popping nested_op into prev_op with {:?}", op);
             self.prev_op = Some(op);
         }
-        result
+        Ok(xous_kernel::Result::Scalar5(0, 0, 0, 0, 0))
     }
 }
 
 // Various in-line assembly thunks go below this line.
-
-#[inline]
-fn flush_dcache() {
-    unsafe {
-        #[rustfmt::skip]
-        core::arch::asm!(
-            ".word 0x500F",
-            "nop",
-            "nop",
-            "nop",
-            "nop",
-            "fence",
-            "nop",
-            "nop",
-            "nop",
-            "nop",
-        );
-    }
-}
-
 fn sim_read() -> usize {
     let existing: usize;
     unsafe { core::arch::asm!("csrrs {0}, 0x9C0, zero", out(reg) existing) };
