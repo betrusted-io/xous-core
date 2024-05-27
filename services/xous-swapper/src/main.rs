@@ -92,7 +92,7 @@ pub enum SwapAbi {
     Invalid = 0,
     ClearMemoryNow = 1,
     GetFreePages = 2,
-    // FetchAllocs = 3,
+    // RetrievePage = 3, // meant to be initiated within the kernel to itself
     // HardOom = 4, // meant to be initiated within the kernel to itself
     StealPage = 5,
     ReleaseMemory = 6,
@@ -104,7 +104,7 @@ impl SwapAbi {
         match val {
             1 => ClearMemoryNow,
             2 => GetFreePages,
-            // 3 => FetchAllocs,
+            // 3 => RetrievePage,
             // 4 => HardOom,
             5 => StealPage,
             6 => ReleaseMemory,
@@ -494,9 +494,6 @@ fn swap_handler(
                     panic!("Couldn't resolve swapped data. Was the page actually swapped?")
                 }
             };
-            // for some reason, `paddr_in_swap` must be printed for the routine to not crash. Or the delay
-            // after `pt_walk` is necessary. Either way, it's spooky. I wonder if there isn't some minimum
-            // time between reads from the SPIM that we're violating??
             #[cfg(feature = "debug-print")]
             writeln!(DebugUart {}, "RFS PID{} VA {:x} PA {:x}", pid, vaddr_in_pid, paddr_in_swap).ok();
             // clear the used bit in swap
