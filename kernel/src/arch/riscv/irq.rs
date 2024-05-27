@@ -54,12 +54,6 @@ pub fn disable_all_irqs() {
     sim_write(0x0);
 }
 
-/// Used by the swapper to put the correct value into SIM_BACKING, because
-/// on recovery from OOM we may skip the read from swap pre-amble that would
-/// normally set this up.
-#[cfg(feature = "swap")]
-pub fn set_sim_backing(sim: usize) { SIM_BACKING.store(sim, Ordering::SeqCst); }
-
 /// Enable external interrupts
 #[export_name = "_enable_all_irqs"]
 pub extern "C" fn enable_all_irqs() {
@@ -381,27 +375,21 @@ pub extern "C" fn trap_handler(
                 });
             }
 
-            if response == xous_kernel::Result::ResumeProcess {
-                ArchProcess::with_current_mut(|process| {
-                    // re-enable IRQs as late as possible
-                    enable_all_irqs();
-                    crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
-                });
-            } else {
-                ArchProcess::with_current_mut(|p| {
-                    let thread = p.current_thread();
-                    #[cfg(feature = "debug-swap-verbose")]
-                    println!(
-                        "Swapper syscall returning to address {:08x} in pid {}.{}",
-                        thread.sepc,
-                        p.pid().get(),
-                        p.current_tid(),
-                    );
-                    // re-enable IRQs as late as possible
-                    enable_all_irqs();
-                    unsafe { _xous_syscall_return_result(&response, thread) };
-                });
-            }
+            ArchProcess::with_current_mut(|p| {
+                let thread = p.current_thread();
+                #[cfg(feature = "debug-swap-verbose")]
+                println!(
+                    "Swapper syscall returning to address {:08x} in pid {}.{}",
+                    thread.sepc,
+                    p.pid().get(),
+                    p.current_tid(),
+                );
+                // this is necessary because ClearMemoryNow diverges on this path instead of
+                // cleaning exiting out of its entry point. Means every thunk out has to check
+                // this special case, even though it's rare...
+                Swap::with_mut(|s| s.clearmem_restore_irq());
+                unsafe { _xous_syscall_return_result(&response, thread) };
+            });
         }
 
         // Handle faulted instruction pages, because we can now actually have instruction pages that are
