@@ -1021,7 +1021,10 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     if pid.get() != xous_kernel::SWAPPER_PID {
                         return Err(xous_kernel::Error::AccessDenied);
                     } else {
-                        Swap::with_mut(|swap| swap.hard_oom_syscall())
+                        Swap::with_mut(|swap| {
+                            swap.clearmem_stop_irq();
+                            swap.hard_oom_syscall()
+                        })
                     }
                 }
                 SwapAbi::GetFreePages => {
@@ -1030,7 +1033,6 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     }
                     Swap::with(|swap| swap.get_free_mem())
                 }
-                // SwapAbi::SetOomThresh => Swap::with_mut(|swap| swap.set_oom_thresh(a1, a2)),
                 SwapAbi::StealPage => {
                     if pid.get() != xous_kernel::SWAPPER_PID {
                         return Err(xous_kernel::Error::AccessDenied);
@@ -1079,6 +1081,16 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     if riscv::register::sstatus::read().spp() == riscv::register::sstatus::SPP::Supervisor {
                         // any process can invoke the hard OOM syscall, but only from within the kernel
                         Swap::with_mut(|swap| swap.hard_oom_syscall())
+                    } else {
+                        Err(xous_kernel::Error::AccessDenied)
+                    }
+                }
+                SwapAbi::RetrievePage => {
+                    if riscv::register::sstatus::read().spp() == riscv::register::sstatus::SPP::Supervisor {
+                        // any process can invoke RetrievePage, but only from within the kernel
+                        let target_vaddr_in_pid = a1;
+                        let paddr = a2;
+                        Swap::with_mut(|swap| swap.retrieve_page_syscall(target_vaddr_in_pid, paddr))
                     } else {
                         Err(xous_kernel::Error::AccessDenied)
                     }
