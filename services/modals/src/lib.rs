@@ -386,6 +386,33 @@ impl Modals {
         Ok(())
     }
 
+
+    /// Human interaction-enabled slider.
+    ///
+    /// - Interactable until home/enter is pressed.
+    /// - Use the arrow keys to shift the slider by a step in either direction.
+    /// - Note that it is possible to exceed start or end if you choose the 'step' value poorly.
+    /// - Title text wraps, burden is on the consumer not to exceed the available screen space.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image - Initial](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_slider.png?raw=true)
+    ///
+    /// </details>
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// let result = modals
+    ///     .slider("Human interaction-enabled slider!", 0, 100, 50, 1)
+    ///     .expect("slider test failed");
+    /// log::info!("result: {}", &result);
+    /// ```
     pub fn slider(
         &self,
         title: &str,
