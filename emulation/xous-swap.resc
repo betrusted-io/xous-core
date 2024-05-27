@@ -1,14 +1,20 @@
 i @emulation/betrusted-swap.resc
 # i @emulation/linux-server.resc
 
+emulation SetGlobalSerialExecution true
+emulation SetSeed 0x0
 
 # Connect EC to the switch
 # mach set "EC"
 # connector Connect sysbus.wifi.wf200 switch
 # mach clear
 
-emulation CreateServerSocketTerminal 4444 "term"
+# emulation CreateServerSocketTerminal 4444 "term"
 mach set 0
-connector Connect uart term
+# connector Connect uart term
+
+uart CreateFileBackend @renode-kernel.txt true
+console CreateFileBackend @renode-console.txt true
+app_uart CreateFileBackend @renode-app.txt true
 
 start
