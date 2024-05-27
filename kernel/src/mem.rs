@@ -404,13 +404,18 @@ impl MemoryManager {
                     }
                 }
             }
-            if !crate::swap::Swap::with_mut(|s| s.hard_oom_inline()) {
-                break;
-            }
+            crate::swap::Swap::with_mut(|s| {
+                s.swap_reentrant_syscall(xous_kernel::SysCall::SwapOp(
+                    crate::swap::SwapAbi::HardOom as usize,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ))
+            });
         }
-        // the call above actually diverges -- the final path will actually depend on how much memory
-        // could be freed by the swapper.
-        Err(xous_kernel::Error::OutOfMemory)
     }
 
     /// Find a virtual address in the current process that is big enough
