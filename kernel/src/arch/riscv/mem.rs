@@ -10,8 +10,6 @@ use xous_kernel::{MemoryFlags, PID};
 
 use crate::arch::process::InitialProcess;
 use crate::mem::MemoryManager;
-#[cfg(feature = "swap")]
-use crate::swap::Swap;
 
 // pub const DEFAULT_STACK_TOP: usize = 0x8000_0000;
 pub const DEFAULT_HEAP_BASE: usize = 0x2000_0000;
@@ -944,16 +942,21 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
         #[cfg(feature = "swap")]
         if flags & MMUFlags::P.bits() != 0 {
             // page is swapped; fill page, map and return
-            Swap::with_mut(|s| {
-                s.retrieve_page(
-                    crate::arch::process::current_pid(),
-                    crate::arch::process::current_tid(),
+            crate::swap::Swap::with_mut(|s| {
+                s.swap_reentrant_syscall(xous_kernel::SysCall::SwapOp(
+                    crate::swap::SwapAbi::RetrievePage as usize,
                     virt,
                     new_page,
-                )
-            })
-
-            // the execution flow diverges from here: it returns via the interrupt context handler. -> !
+                    0,
+                    0,
+                    0,
+                    0,
+                ))
+            });
+            *entry =
+                (ppn1 << 20) | (ppn0 << 10) | ((flags & !MMUFlags::P.bits()) | crate::arch::mem::FLG_VALID);
+            flush_mmu();
+            return Ok(new_page);
         } else {
             // page is reserved: simply zero it out
             // Map the page to our process
