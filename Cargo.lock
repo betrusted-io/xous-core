@@ -837,8 +837,13 @@ dependencies = [
 name = "cram-console"
 version = "0.1.0"
 dependencies = [
+ "gam",
  "graphics-server",
+ "locales",
  "log",
+ "modals",
+ "num-derive 0.3.3",
+ "num-traits",
  "utralib 0.1.24",
  "xous 0.9.60 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
@@ -858,6 +863,8 @@ dependencies = [
  "num-traits",
  "pio",
  "pio-proc",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
  "rkyv",
  "utralib 0.1.24",
  "xous 0.9.60 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1993,6 +2000,7 @@ version = "0.1.0"
 dependencies = [
  "com",
  "content-plugin-api",
+ "cram-hal-service",
  "digest 0.9.0",
  "enum_dispatch",
  "graphics-server",

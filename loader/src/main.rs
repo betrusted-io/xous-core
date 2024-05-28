@@ -43,7 +43,7 @@ const STACK_PAGE_COUNT: usize = 8;
 
 const VDBG: bool = false; // verbose debug
 const VVDBG: bool = false; // very verbose debug
-const SDBG: bool = true; // swap debug
+const SDBG: bool = false; // swap debug
 
 #[cfg(test)]
 mod test;
@@ -215,15 +215,17 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size + cfg.swap_offset;
         #[cfg(feature = "swap")]
         if SDBG && VDBG {
+            const CHUNK_SIZE: usize = 2;
             // activate to debug stack smashes. RPT should be 0's here (or at least valid PIDs) if stack did
             // not overflow.
-            for (_i, _r) in
-                cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 1024..].chunks(32).enumerate()
+            for (_i, _r) in cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 512..]
+                .chunks(CHUNK_SIZE)
+                .enumerate()
             {
-                println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + _i * 32, _r);
+                println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 512 + _i * CHUNK_SIZE, _r);
             }
         }
-        // Add a static check for stack overflow, using a heuristic that the last 64 bytes of the RPT
+        // Add a static check for stack overflow, using a heuristic that the last 64 entries of the RPT
         // ought to be a valid PID. A stack smash is likely to write something that does not obey
         // this heuristic within that range (any stack-stored pointer, for example, will break this).
         for &check in cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 64..].iter() {
@@ -518,15 +520,13 @@ fn clear_ram(cfg: &mut BootConfig) {
     }
 }
 
-pub unsafe fn bzero<T>(mut sbss: *mut T, ebss: *mut T)
-where
-    T: Copy,
-{
+pub unsafe fn bzero<T>(mut sbss: *mut T, ebss: *mut T) {
     if VDBG {
         println!("ZERO: {:08x} - {:08x}", sbss as usize, ebss as usize);
     }
     while sbss < ebss {
         // NOTE(volatile) to prevent this from being transformed into `memclr`
+        // which can create an accidental dependency on libc.
         ptr::write_volatile(sbss, mem::zeroed());
         sbss = sbss.offset(1);
     }

@@ -10,8 +10,6 @@ use xous_kernel::{MemoryFlags, PID};
 
 use crate::arch::process::InitialProcess;
 use crate::mem::MemoryManager;
-#[cfg(feature = "swap")]
-use crate::swap::Swap;
 
 // pub const DEFAULT_STACK_TOP: usize = 0x8000_0000;
 pub const DEFAULT_HEAP_BASE: usize = 0x2000_0000;
@@ -368,7 +366,7 @@ impl MemoryMapping {
             #[cfg(not(feature = "swap"))]
             let l0pt_phys = mm.alloc_page(pid)?;
             #[cfg(feature = "swap")]
-            let l0pt_phys = mm.alloc_page(pid, None)?;
+            let l0pt_phys = mm.alloc_page_oomable(pid, None)?;
 
             // Mark this entry as a leaf node (WRX as 0), and indicate
             // it is a valid page by setting "V".
@@ -630,7 +628,7 @@ pub fn map_page_inner(
         #[cfg(not(feature = "swap"))]
         let l0_pt_phys = mm.alloc_page(pid)?;
         #[cfg(feature = "swap")]
-        let l0_pt_phys = mm.alloc_page(pid, None)?;
+        let l0_pt_phys = mm.alloc_page_oomable(pid, None)?;
 
         // Mark this entry as a leaf node (WRX as 0), and indicate
         // it is a valid page by setting "V".
@@ -794,7 +792,7 @@ pub fn lend_page_inner(
     let result = map_page_inner(mm, dest_pid, phys, dest_addr as usize, new_flags, dest_pid.get() != 1);
     unsafe { flush_mmu() };
 
-    // Switch back to our proces space
+    // Switch back to our process space
     src_space.activate().unwrap();
 
     // Return the new address.
@@ -934,7 +932,8 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
     });
     #[cfg(feature = "swap")]
     let new_page = MemoryManager::with_mut(|mm| {
-        mm.alloc_page_oomable(crate::arch::process::current_pid(), virt).expect("Couldn't allocate new page")
+        mm.alloc_page_oomable(crate::arch::process::current_pid(), Some(virt))
+            .expect("Couldn't allocate new page")
     });
 
     let ppn1 = (new_page >> 22) & ((1 << 12) - 1);
@@ -943,16 +942,21 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
         #[cfg(feature = "swap")]
         if flags & MMUFlags::P.bits() != 0 {
             // page is swapped; fill page, map and return
-            Swap::with_mut(|s| {
-                s.retrieve_page(
-                    crate::arch::process::current_pid(),
-                    crate::arch::process::current_tid(),
+            crate::swap::Swap::with_mut(|s| {
+                s.swap_reentrant_syscall(xous_kernel::SysCall::SwapOp(
+                    crate::swap::SwapAbi::RetrievePage as usize,
                     virt,
                     new_page,
-                )
-            })
-
-            // the execution flow diverges from here: it returns via the interrupt context handler. -> !
+                    0,
+                    0,
+                    0,
+                    0,
+                ))
+            });
+            *entry =
+                (ppn1 << 20) | (ppn0 << 10) | ((flags & !MMUFlags::P.bits()) | crate::arch::mem::FLG_VALID);
+            flush_mmu();
+            return Ok(new_page);
         } else {
             // page is reserved: simply zero it out
             // Map the page to our process
@@ -1126,7 +1130,7 @@ pub fn evict_page_inner(target_pid: PID, vaddr: usize) -> Result<usize, xous_ker
         let target_pte = unsafe { entry.read_volatile() };
         let target_paddr = (target_pte >> 10) << 12;
 
-        #[cfg(feature = "debug-swap")]
+        #[cfg(feature = "debug-swap-verbose")]
         println!(
             "-- evict[{}]: {:08x} -> {:08x} (flags: {:?}), count {}",
             target_pid.get(),

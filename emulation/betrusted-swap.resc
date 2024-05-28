@@ -90,7 +90,7 @@ sysbus.spinor.flash BackingFile $ORIGIN/../tools/pddb-images/renode.bin
 sysbus LoadBinary @../utralib/renode/soc_csr.bin 0x20000000
 
 # Connect the SoC to the SPI bus
-connector Connect sysbus.com com
+# connector Connect sysbus.com com
 
 # The macro `reset` gets called implicitly when running `machine Reset`
 macro reset

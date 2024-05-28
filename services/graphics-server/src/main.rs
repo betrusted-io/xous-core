@@ -182,7 +182,13 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
     #[cfg(not(target_os = "xous"))]
     let sid = xns.register_name(api::SERVER_NAME_GFX, Some(1)).expect("can't register server");
     #[cfg(feature = "cramium-soc")]
-    let sid = xns.register_name(api::SERVER_NAME_GFX, Some(1)).expect("can't register server");
+    let sid = {
+        log::warn!(
+            "Remember to notch the expected connections for graphics_server down to 1 after initial testing!"
+        );
+        // 2 for now -- one for GAM, one for testing
+        xns.register_name(api::SERVER_NAME_GFX, Some(2)).expect("can't register server")
+    };
 
     let screen_clip = Rectangle::new(Point::new(0, 0), display.screen_size());
 

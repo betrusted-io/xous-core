@@ -347,35 +347,6 @@ impl MemoryManager {
 
     #[cfg(baremetal)]
     #[cfg(feature = "swap")]
-    /// This is an infalliable alloc_page, but, the number of cases where this may be called is small:
-    ///   - mapping an L1 page table page
-    ///   - creating a process
-    /// As long the swapper manages to keep a handful of pages free, we should be able to absorb this
-    /// so long as we don't do something like spawn a bazillion processes in a single quantum.
-    pub fn alloc_page(&mut self, pid: PID, vaddr: Option<usize>) -> Result<usize, xous_kernel::Error> {
-        // Go through all RAM pages looking for a free page.
-        // println!("Allocating page for PID {}", pid);
-        unsafe {
-            let end_point = self.ram_size / PAGE_SIZE;
-            let starting_point = self.last_ram_page.max(end_point);
-            for (allocation, index) in MEMORY_ALLOCATIONS[starting_point..end_point]
-                .iter_mut()
-                .zip(starting_point..)
-                .chain(MEMORY_ALLOCATIONS[..starting_point].iter_mut().zip(0..))
-            {
-                if allocation.is_none() {
-                    allocation.update(Some(pid), vaddr);
-                    self.last_ram_page = index + 1;
-                    let page = index * PAGE_SIZE + self.ram_start;
-                    return Ok(page);
-                }
-            }
-        }
-        Err(xous_kernel::Error::OutOfMemory)
-    }
-
-    #[cfg(baremetal)]
-    #[cfg(feature = "swap")]
     // Take a physical address and indicate that it's been queried so it doesn't get suggested as LRU any time
     // soon. Addresses outside of RAM are just ignored.
     pub fn touch(&self, paddr: usize) {
@@ -391,9 +362,11 @@ impl MemoryManager {
     pub fn memory_size(&self) -> usize { self.ram_size }
 
     #[cfg(feature = "debug-swap")]
+    #[allow(dead_code)]
     pub fn rpt_base(&self) -> usize { unsafe { MEMORY_ALLOCATIONS.as_ptr() as usize } }
 
     #[cfg(feature = "debug-swap")]
+    #[allow(dead_code)]
     /// This function is "improper" in that it returns a bogus value if the memory allocations are
     /// out of range, but its purpose is only for debugging. This is not suitable for use in any
     /// other context.
@@ -409,31 +382,42 @@ impl MemoryManager {
     #[cfg(feature = "swap")]
     /// Similar to alloc_page(), but this implementation can only be called in one location because
     /// we need to know where to resume from after the OOM is recovered.
-    pub fn alloc_page_oomable(&mut self, pid: PID, vaddr: usize) -> Result<usize, xous_kernel::Error> {
-        // Go through all RAM pages looking for a free page.
-        // println!("Allocating page for PID {}", pid);
-        unsafe {
-            let end_point = self.ram_size / PAGE_SIZE;
-            let starting_point = self.last_ram_page.max(end_point);
-            for (allocation, index) in MEMORY_ALLOCATIONS[starting_point..end_point]
-                .iter_mut()
-                .zip(starting_point..)
-                .chain(MEMORY_ALLOCATIONS[..starting_point].iter_mut().zip(0..))
-            {
-                if allocation.is_none() {
-                    allocation.update(Some(pid), Some(vaddr));
-                    self.last_ram_page = index + 1;
-                    let page = index * PAGE_SIZE + self.ram_start;
-                    return Ok(page);
+    pub fn alloc_page_oomable(
+        &mut self,
+        pid: PID,
+        vaddr: Option<usize>,
+    ) -> Result<usize, xous_kernel::Error> {
+        loop {
+            // Go through all RAM pages looking for a free page.
+            // println!("Allocating page for PID {}", pid);
+            unsafe {
+                let end_point = self.ram_size / PAGE_SIZE;
+                let starting_point = self.last_ram_page.max(end_point);
+                for (allocation, index) in MEMORY_ALLOCATIONS[starting_point..end_point]
+                    .iter_mut()
+                    .zip(starting_point..)
+                    .chain(MEMORY_ALLOCATIONS[..starting_point].iter_mut().zip(0..))
+                {
+                    if allocation.is_none() {
+                        allocation.update(Some(pid), vaddr);
+                        self.last_ram_page = index + 1;
+                        let page = index * PAGE_SIZE + self.ram_start;
+                        return Ok(page);
+                    }
                 }
             }
+            crate::swap::Swap::with_mut(|s| {
+                s.swap_reentrant_syscall(xous_kernel::SysCall::SwapOp(
+                    crate::swap::SwapAbi::HardOom as usize,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ))
+            });
         }
-        crate::swap::Swap::with_mut(|s| {
-            s.hard_oom(vaddr);
-        });
-        // the call above actually diverges -- the final path will actually depend on how much memory
-        // could be freed by the swapper.
-        Err(xous_kernel::Error::OutOfMemory)
     }
 
     /// Find a virtual address in the current process that is big enough
@@ -553,9 +537,7 @@ impl MemoryManager {
         #[cfg(not(feature = "swap"))]
         let phys = self.alloc_page(pid)?;
         #[cfg(feature = "swap")]
-        // this should not be OOMable because the callers for map_zeroed page are exclusively from kernel
-        // services (process creation, queue creation)
-        let phys = self.alloc_page(pid, Some(virt))?;
+        let phys = self.alloc_page_oomable(pid, Some(virt))?;
 
         // Actually perform the map.  At this stage, every physical page should be owned by us.
         if let Err(e) = crate::arch::mem::map_page_inner(

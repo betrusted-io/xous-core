@@ -1233,11 +1233,13 @@ impl Spim {
     }
 
     /// Note that `use_yield` is disallowed in interrupt contexts (e.g. swapper)
-    pub fn mem_read(&mut self, addr: u32, buf: &mut [u8], _use_yield: bool) {
+    pub fn mem_read(&mut self, addr: u32, buf: &mut [u8], _use_yield: bool) -> bool {
         // divide into buffer-sized chunks + repeat cycle on each buffer increment
         // this is because the size of the buffer is meant to represent the limit of the
         // target device's memory page (i.e., the point at which you'd wrap when reading)
         let mut offset = 0;
+        let mut timeout = 0;
+        let mut success = true;
         for chunk in buf.chunks_mut(self.rx_buf_len_bytes) {
             let chunk_addr = addr as usize + offset;
             let addr_plus_dummy = (24 / 8) + self.dummy_cycles / 2;
@@ -1284,6 +1286,16 @@ impl Spim {
                 self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u8>()[..chunk.len()], CFG_EN | CFG_SIZE_8)
             };
             while self.udma_busy(Bank::Rx) {
+                // TODO: figure out why this timeout detection code is necessary.
+                // It seems that some traffic during the UDMA access can cause the UDMA
+                // engine to hang. For example, if we put a dcache_flush() routine in this
+                // loop, it will fail immediately. This might be something to look into
+                // in simulation.
+                timeout += 1;
+                if (self.mode == SpimMode::Quad) && (timeout > chunk.len() * 10_000) {
+                    success = false;
+                    break;
+                }
                 #[cfg(feature = "std")]
                 if _use_yield {
                     xous::yield_slice();
@@ -1293,6 +1305,7 @@ impl Spim {
             chunk.copy_from_slice(&self.rx_buf()[..chunk.len()]);
             offset += chunk.len();
         }
+        success
     }
 
     /// This should only be called on SPI RAM -- not valid for FLASH devices, they need a programming routine!

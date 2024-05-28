@@ -1,5 +1,7 @@
 pub mod api;
 pub mod iox_lib;
+pub mod keyboard;
+pub mod trng;
 
 pub use api::*;
 use cramium_hal::udma::{EventChannel, PeriphEventType, PeriphId};
@@ -20,7 +22,7 @@ pub struct UdmaGlobal {
 impl UdmaGlobal {
     pub fn new() -> Self {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
-        let xns = xous_api_names::XousNames::new().unwrap();
+        let xns = xous_names::XousNames::new().unwrap();
         let conn =
             xns.request_connection(SERVER_NAME_CRAM_HAL).expect("Couldn't connect to Cramium HAL server");
         UdmaGlobal { conn }

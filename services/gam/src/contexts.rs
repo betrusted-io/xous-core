@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+#[cfg(feature = "cramium-soc")]
+use cram_hal_service::{keyboard, trng};
 use enum_dispatch::enum_dispatch;
 use gam::MAIN_MENU_NAME;
 use graphics_server::*;

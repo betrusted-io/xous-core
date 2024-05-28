@@ -110,12 +110,29 @@ impl SwapHal {
         nonce[9..12].copy_from_slice(&(vpage_masked as u32).to_be_bytes()[..3]);
         let aad: &[u8] = &[];
         let mut tag = [0u8; size_of::<Tag>()];
-        self.ram_spim.mem_read(
+        if !self.ram_spim.mem_read(
             (self.swap_mac_start + (src_offset / PAGE_SIZE) * size_of::<Tag>()) as u32,
             &mut tag,
             false,
-        );
-        self.ram_spim.mem_read(src_offset as u32, buf, false);
+        ) {
+            writeln!(
+                DebugUart {},
+                "Read timeout of MAC at offset {:x}; data result: {:x?}",
+                (self.swap_mac_start + (src_offset / PAGE_SIZE) * size_of::<Tag>()) as u32,
+                &tag
+            )
+            .ok();
+        }
+        if !self.ram_spim.mem_read(src_offset as u32, buf, false) {
+            writeln!(
+                DebugUart {},
+                "Read timeout of data at offset {:x}; data result: {:x?} .. {:x?}",
+                (self.swap_mac_start + (src_offset / PAGE_SIZE) * size_of::<Tag>()) as u32,
+                &buf[..16],
+                &buf[buf.len() - 16..]
+            )
+            .ok();
+        };
         self.cipher.decrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf, (&tag).into())
     }
 }

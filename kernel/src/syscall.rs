@@ -1014,28 +1014,29 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         }
         #[cfg(feature = "swap")]
         SysCall::SwapOp(op, a1, a2, a3, a4, a5, a6) => {
-            if pid.get() != xous_kernel::SWAPPER_PID {
-                klog!("Illegal caller"); // only PID 2 can call this
-                return Err(xous_kernel::Error::AccessDenied);
-            }
-            #[cfg(feature = "debug-swap")]
+            #[cfg(feature = "debug-swap-verbose")]
             println!("Swap ABI via syscall: {:?}", SwapAbi::from(op));
             match SwapAbi::from(op) {
-                SwapAbi::Evict => {
-                    let pid = a1;
-                    if pid != 0 && pid != 1 && pid != 2 {
-                        Swap::with_mut(|swap| swap.evict_page(pid, a2))
+                SwapAbi::ClearMemoryNow => {
+                    if pid.get() != xous_kernel::SWAPPER_PID {
+                        return Err(xous_kernel::Error::AccessDenied);
                     } else {
-                        // don't allow kernel or swapper to be swapped out
-                        #[cfg(feature = "debug-swap")]
-                        println!("evict_page rejecting request for pid{}/{:x}: InvalidPID", pid, a2);
-                        Err(xous_kernel::Error::InvalidPID)
+                        Swap::with_mut(|swap| {
+                            swap.clearmem_stop_irq();
+                            swap.hard_oom_syscall()
+                        })
                     }
                 }
-                SwapAbi::GetFreePages => Swap::with(|swap| swap.get_free_mem()),
-                SwapAbi::FetchAllocs => Swap::with_mut(|swap| swap.fetch_allocs()),
-                // SwapAbi::SetOomThresh => Swap::with_mut(|swap| swap.set_oom_thresh(a1, a2)),
+                SwapAbi::GetFreePages => {
+                    if pid.get() != xous_kernel::SWAPPER_PID {
+                        return Err(xous_kernel::Error::AccessDenied);
+                    }
+                    Swap::with(|swap| swap.get_free_mem())
+                }
                 SwapAbi::StealPage => {
+                    if pid.get() != xous_kernel::SWAPPER_PID {
+                        return Err(xous_kernel::Error::AccessDenied);
+                    }
                     let target_pid = a1 as u8;
                     let vaddr = a2;
                     match crate::arch::mem::evict_page_inner(
@@ -1043,21 +1044,25 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                         vaddr,
                     ) {
                         Ok(ptr) => Ok(xous_kernel::Result::Scalar5(ptr, 0, 0, 0, 0)),
-                        Err(e) => {
+                        Err(_e) => {
+                            #[cfg(feature = "debug-swap")]
                             println!(
                                 "steal_page rejecting request for pid{}/{:x}: {:?}",
-                                target_pid, vaddr, e
+                                target_pid, vaddr, _e
                             );
                             Err(xous_kernel::Error::BadAddress)
                         }
                     }
                 }
                 SwapAbi::ReleaseMemory => {
+                    if pid.get() != xous_kernel::SWAPPER_PID {
+                        return Err(xous_kernel::Error::AccessDenied);
+                    }
                     let vaddr_to_release = a1;
                     let original_pid = a2 as u8;
                     MemoryManager::with_mut(|mm| {
                         let paddr = crate::arch::mem::virt_to_phys(vaddr_to_release).unwrap() as usize;
-                        #[cfg(feature = "debug-swap")]
+                        #[cfg(feature = "debug-swap-verbose")]
                         println!("ReleaseMemory - paddr {:x}", paddr);
                         // this call unmaps the virtual page from the page table
                         crate::arch::mem::unmap_page_inner(mm, vaddr_to_release)
@@ -1069,6 +1074,26 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                             .expect("couldn't free page that was swapped out");
                         Ok(xous_kernel::Result::Ok)
                     })
+                }
+                SwapAbi::HardOom => {
+                    // Hard OOM can be invoked from any PID, but, only by a kernel routine. Check that
+                    // we're in supervisor mode!
+                    if riscv::register::sstatus::read().spp() == riscv::register::sstatus::SPP::Supervisor {
+                        // any process can invoke the hard OOM syscall, but only from within the kernel
+                        Swap::with_mut(|swap| swap.hard_oom_syscall())
+                    } else {
+                        Err(xous_kernel::Error::AccessDenied)
+                    }
+                }
+                SwapAbi::RetrievePage => {
+                    if riscv::register::sstatus::read().spp() == riscv::register::sstatus::SPP::Supervisor {
+                        // any process can invoke RetrievePage, but only from within the kernel
+                        let target_vaddr_in_pid = a1;
+                        let paddr = a2;
+                        Swap::with_mut(|swap| swap.retrieve_page_syscall(target_vaddr_in_pid, paddr))
+                    } else {
+                        Err(xous_kernel::Error::AccessDenied)
+                    }
                 }
                 SwapAbi::Invalid => {
                     println!(

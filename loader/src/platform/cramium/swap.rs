@@ -6,7 +6,7 @@ use cramium_hal::iox::*;
 use cramium_hal::sce;
 use cramium_hal::udma::*;
 use loader::swap::SPIM_RAM_IFRAM_ADDR;
-use loader::{APP_UART_IFRAM_ADDR, UART_IFRAM_ADDR};
+use loader::APP_UART_IFRAM_ADDR;
 use rand_chacha::rand_core::RngCore;
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -267,7 +267,9 @@ impl SwapHal {
             // allocate the buf
             let mut buf = RawPage { data: [0u8; 4096] };
             // fetch the header
-            flash_spim.mem_read(SWAP_IMG_START as u32, &mut buf.data, false);
+            if !flash_spim.mem_read(SWAP_IMG_START as u32, &mut buf.data, false) {
+                println!("Timeout reading FLASH_SPIM");
+            };
 
             // compute offsets for swap
             let ram_size_actual = crate::swap::derive_usable_swap(swap.ram_size as usize);
@@ -356,11 +358,16 @@ impl SwapHal {
         // cheaper than the Refcell bookkeeping.
         let mut aad = [0u8; 64];
         aad[..self.aad_len].copy_from_slice(self.aad());
-        self.flash_spim.mem_read(
+        if !self.flash_spim.mem_read(
             (self.image_mac_start + (offset / 4096) * size_of::<Tag>()) as u32,
             &mut tag,
             false,
-        );
+        ) {
+            println!(
+                " ** Memory read timed out reading {:x}",
+                (self.image_mac_start + (offset / 4096) * size_of::<Tag>()) as u32
+            );
+        };
         match self.src_cipher.decrypt_in_place_detached(
             Nonce::from_slice(&nonce),
             &aad[..self.aad_len],
@@ -490,8 +497,8 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
     // the address of the UART buffer is "hard-allocated" at an offset one page from the top of
     // IFRAM0. This is a convention that must be respected by the UDMA UART library implementation
     // for things to work.
-    let uart_buf_addr = UART_IFRAM_ADDR;
-    let udma_uart = unsafe {
+    let uart_buf_addr = APP_UART_IFRAM_ADDR;
+    let mut udma_uart = unsafe {
         // safety: this is safe to call, because we set up clock and events prior to calling new.
         cramium_hal::udma::Uart::get_handle(
             utralib::utra::udma_uart_0::HW_UDMA_UART_0_BASE,
@@ -501,6 +508,8 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
     };
     crate::println!("Baud freq is {} Hz, baudrate is {}", freq, baudrate);
     udma_uart.set_baud(baudrate, freq);
+
+    udma_uart.write(b"APP UART INIT OK\n\r");
 
     // map the debug UART HW page
     cfg.map_page_32(

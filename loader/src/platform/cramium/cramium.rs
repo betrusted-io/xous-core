@@ -524,20 +524,20 @@ pub fn early_init() {
             let mut chk_buf = [0u8; 32];
             crate::println!("first read...");
             crate::println!("flash read");
-            flash_spim.mem_read(0x0, &mut chk_buf);
+            flash_spim.mem_read(0x0, &mut chk_buf, false);
             crate::println!("flash: {:x?}", chk_buf);
-            ram_spim.mem_read(0x0, &mut chk_buf);
+            ram_spim.mem_read(0x0, &mut chk_buf, false);
             crate::println!("RAM: {:x?}", chk_buf);
             for (i, d) in chk_buf.iter_mut().enumerate() {
                 *d = i as u8;
             }
             crate::println!("ram write...");
-            ram_spim.mem_ram_write(0x0, &chk_buf);
+            ram_spim.mem_ram_write(0x0, &chk_buf, false);
             chk_buf.fill(0);
             crate::println!("empty buf: {:x?}", chk_buf);
 
             crate::println!("ram read...");
-            ram_spim.mem_read(0x0, &mut chk_buf);
+            ram_spim.mem_read(0x0, &mut chk_buf, false);
             crate::println!("RAM checked: {:x?}", chk_buf);
 
             /*
@@ -796,33 +796,33 @@ unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         crate::println!("PLL delay 3");
 
         crate::println!("fsvalid: {}", daric_cgu.add(sysctrl::SFR_CGUFSVLD.offset()).read_volatile());
-        let cgufsfreq0 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ0.offset()).read_volatile();
-        let cgufsfreq1 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ1.offset()).read_volatile();
-        let cgufsfreq2 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ2.offset()).read_volatile();
-        let cgufsfreq3 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ3.offset()).read_volatile();
+        let _cgufsfreq0 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ0.offset()).read_volatile();
+        let _cgufsfreq1 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ1.offset()).read_volatile();
+        let _cgufsfreq2 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ2.offset()).read_volatile();
+        let _cgufsfreq3 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ3.offset()).read_volatile();
         crate::println!(
             "Internal osc: {} -> {} MHz ({} MHz)",
-            cgufsfreq0,
-            fsfreq_to_hz(cgufsfreq0),
-            fsfreq_to_hz_32(cgufsfreq0)
+            _cgufsfreq0,
+            fsfreq_to_hz(_cgufsfreq0),
+            fsfreq_to_hz_32(_cgufsfreq0)
         );
         crate::println!(
             "XTAL: {} -> {} MHz ({} MHz)",
-            cgufsfreq1,
-            fsfreq_to_hz(cgufsfreq1),
-            fsfreq_to_hz_32(cgufsfreq1)
+            _cgufsfreq1,
+            fsfreq_to_hz(_cgufsfreq1),
+            fsfreq_to_hz_32(_cgufsfreq1)
         );
         crate::println!(
             "pll output 0: {} -> {} MHz ({} MHz)",
-            cgufsfreq2,
-            fsfreq_to_hz(cgufsfreq2),
-            fsfreq_to_hz_32(cgufsfreq2)
+            _cgufsfreq2,
+            fsfreq_to_hz(_cgufsfreq2),
+            fsfreq_to_hz_32(_cgufsfreq2)
         );
         crate::println!(
             "pll output 1: {} -> {} MHz ({} MHz)",
-            cgufsfreq3,
-            fsfreq_to_hz(cgufsfreq3),
-            fsfreq_to_hz_32(cgufsfreq3)
+            _cgufsfreq3,
+            fsfreq_to_hz(_cgufsfreq3),
+            fsfreq_to_hz_32(_cgufsfreq3)
         );
 
         // Hits a 16:8:4:2:1 ratio on fclk:aclk:hclk:iclk:pclk
@@ -840,7 +840,10 @@ unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     vco_actual / perclk_div
 }
 
+#[allow(dead_code)]
 fn fsfreq_to_hz(fs_freq: u32) -> u32 { (fs_freq * (48_000_000 / 32)) / 1_000_000 }
+
+#[allow(dead_code)]
 fn fsfreq_to_hz_32(fs_freq: u32) -> u32 { (fs_freq * (32_000_000 / 32)) / 1_000_000 }
 
 #[allow(dead_code)]
