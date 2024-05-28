@@ -590,11 +590,11 @@ macro_rules! msg_blocking_scalar_unpack {
 }
 
 #[cfg(feature = "swap")]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AllocAdvice {
     /// the PID of the allocation, virtual address in PID space, physical address
     Allocate(PID, usize, usize),
-    /// the PID of the page freed, virtuall address in PID space, physical address
+    /// the PID of the page freed, virtual address in PID space, physical address
     Free(PID, usize, usize),
     /// not yet initialized record
     Uninit,

@@ -11,7 +11,7 @@ defmt = { version = "0.3", optional = true }
 utralib = { version = "0.1.24", default-features = false, features = ["cramium-soc"] }
 
 [target.'cfg(target_os = "xous")'.dependencies]
-xous = "0.9.60"
+xous = "0.9.61"
 
 [features]
 cramium-soc = ["utralib/cramium-soc"]

@@ -8,12 +8,12 @@ version = "0.1.0"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 log = "0.4.14"
-log-server = { package = "xous-api-log", version = "0.1.56" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.56" }
-xous = "0.9.60"
-xous-ipc = "0.9.60"
-xous-names = { package = "xous-api-names", version = "0.9.58" }
-susres = { package = "xous-api-susres", version = "0.9.56" }
+log-server = { package = "xous-api-log", version = "0.1.57" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.57" }
+xous = "0.9.61"
+xous-ipc = "0.9.61"
+xous-names = { package = "xous-api-names", version = "0.9.59" }
+susres = { package = "xous-api-susres", version = "0.9.57" }
 
 # RTC dependencies
 bitflags = "1.2.1"
