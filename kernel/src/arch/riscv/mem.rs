@@ -792,7 +792,7 @@ pub fn lend_page_inner(
     let result = map_page_inner(mm, dest_pid, phys, dest_addr as usize, new_flags, dest_pid.get() != 1);
     unsafe { flush_mmu() };
 
-    // Switch back to our proces space
+    // Switch back to our process space
     src_space.activate().unwrap();
 
     // Return the new address.
@@ -1130,7 +1130,7 @@ pub fn evict_page_inner(target_pid: PID, vaddr: usize) -> Result<usize, xous_ker
         let target_pte = unsafe { entry.read_volatile() };
         let target_paddr = (target_pte >> 10) << 12;
 
-        #[cfg(feature = "debug-swap")]
+        #[cfg(feature = "debug-swap-verbose")]
         println!(
             "-- evict[{}]: {:08x} -> {:08x} (flags: {:?}), count {}",
             target_pid.get(),
