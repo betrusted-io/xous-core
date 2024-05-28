@@ -1014,7 +1014,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         }
         #[cfg(feature = "swap")]
         SysCall::SwapOp(op, a1, a2, a3, a4, a5, a6) => {
-            #[cfg(feature = "debug-swap")]
+            #[cfg(feature = "debug-swap-verbose")]
             println!("Swap ABI via syscall: {:?}", SwapAbi::from(op));
             match SwapAbi::from(op) {
                 SwapAbi::ClearMemoryNow => {
@@ -1062,7 +1062,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     let original_pid = a2 as u8;
                     MemoryManager::with_mut(|mm| {
                         let paddr = crate::arch::mem::virt_to_phys(vaddr_to_release).unwrap() as usize;
-                        #[cfg(feature = "debug-swap")]
+                        #[cfg(feature = "debug-swap-verbose")]
                         println!("ReleaseMemory - paddr {:x}", paddr);
                         // this call unmaps the virtual page from the page table
                         crate::arch::mem::unmap_page_inner(mm, vaddr_to_release)
