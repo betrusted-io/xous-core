@@ -362,6 +362,7 @@ impl MemoryManager {
     pub fn memory_size(&self) -> usize { self.ram_size }
 
     #[cfg(feature = "debug-swap")]
+    #[allow(dead_code)]
     pub fn rpt_base(&self) -> usize { unsafe { MEMORY_ALLOCATIONS.as_ptr() as usize } }
 
     #[cfg(feature = "debug-swap")]
