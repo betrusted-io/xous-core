@@ -51,7 +51,7 @@
 mod debug;
 mod platform;
 use core::fmt::Write;
-use std::collections::{BinaryHeap, VecDeque};
+use std::collections::BinaryHeap;
 use std::fmt::Debug;
 use std::thread;
 use std::thread::sleep;
@@ -67,7 +67,7 @@ use xous::{MemoryFlags, MemoryRange, Message, Result, CID, PID, SID};
 /// are imprecise, in that there is a chance that one target is active during another
 /// invocation of a routine. This is because the hard OOM handler is entirely asynchronous
 /// and could be invoked at any time, including while we are trying to handle a soft OOM.
-const HARD_OOM_PAGE_TARGET: usize = 32;
+const HARD_OOM_PAGE_TARGET: usize = 24;
 /// Target of pages to free in case of OOM Doom
 #[cfg(feature = "oom-doom")]
 const OOM_DOOM_PAGE_TARGET: usize = 48;
@@ -75,11 +75,6 @@ const OOM_DOOM_PAGE_TARGET: usize = 48;
 /// competition with other processes that probably use even-second multiples for polling.
 #[cfg(feature = "oom-doom")]
 const OOM_DOOM_POLL_INTERVAL_MS: u64 = 1057;
-
-/// Virtual address prefixes to de-prioritize in the OomDoom sweep
-///   0 - text region
-///   4 - message region
-const KEEP_VADDR_PREFIXES: [u8; 2] = [0u8, 4u8];
 
 /// userspace swapper -> kernel ABI
 /// This ABI is copy-paste synchronized with what's in the kernel. It's left out of
@@ -606,10 +601,6 @@ fn swap_handler(
             let mut errs: usize = 0;
             let mut wired: usize = 0;
 
-            // A holding variable for items that we're de-prioritizing from removal. We only try these
-            // if we've exhausted all the other options.
-            let mut deprioritized = VecDeque::new();
-
             while pages_to_free > 0 {
                 if let Some(candidate) = alloc_heap.pop() {
                     if candidate.is_wired()
@@ -619,16 +610,9 @@ fn swap_handler(
                     {
                         wired += 1;
                     } else {
-                        if KEEP_VADDR_PREFIXES.iter().find(|&&x| x == candidate.vaddr_prefix()).is_some() {
-                            log::trace!("De-prioritizing {:x?}", candidate);
-                            deprioritized.push_back(candidate);
-                            continue;
-                        }
                         // error is ignored because the correct behavior on error is to try another page
                         write_to_swap_inner(ss, candidate, &mut errs, &mut pages_to_free).ok();
                     }
-                } else if let Some(candidate) = deprioritized.pop_front() {
-                    write_to_swap_inner(ss, candidate, &mut errs, &mut pages_to_free).ok();
                 } else {
                     writeln!(
                         DebugUart {},
