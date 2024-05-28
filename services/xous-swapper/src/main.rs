@@ -687,7 +687,8 @@ fn main() {
     while sss.inner.is_none() {
         xous::yield_slice();
     }
-
+    // measure memory at boot
+    get_free_pages();
     let total_ram = sss.inner.as_ref().unwrap().sram_size;
     // Binary heap for storing the view of the memory allocations.
     sss.inner.as_mut().unwrap().hard_oom_alloc_heap = Some(BinaryHeap::with_capacity(total_ram / PAGE_SIZE));
@@ -711,7 +712,7 @@ fn main() {
         let conn = conn.clone();
         move || {
             loop {
-                sleep(Duration::from_millis(2500));
+                sleep(Duration::from_millis(10_200));
                 xous::send_message(conn, Message::new_scalar(Opcode::Test0.to_usize().unwrap(), 0, 0, 0, 0))
                     .ok();
             }
