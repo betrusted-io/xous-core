@@ -74,9 +74,6 @@ pub(crate) enum KeyboardOpcode {
     /// request for ScanCodes
     RegisterListener = 2,
 
-    /// request for raw keyups/downs
-    RegisterRawListener = 3,
-
     /// request for updates for *when* keyboard is pressed
     RegisterKeyObserver = 12,
 
@@ -114,13 +111,4 @@ pub struct RowCol {
 impl RowCol {
     #[allow(dead_code)]
     pub fn new(r: u8, c: u8) -> RowCol { RowCol { r, c } }
-}
-
-#[derive(Debug)]
-pub struct KeyRawStates {
-    pub keydowns: Vec<RowCol>,
-    pub keyups: Vec<RowCol>,
-}
-impl KeyRawStates {
-    pub fn new() -> Self { KeyRawStates { keydowns: Vec::with_capacity(16), keyups: Vec::with_capacity(16) } }
 }

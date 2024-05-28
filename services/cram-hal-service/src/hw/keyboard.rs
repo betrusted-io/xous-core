@@ -17,8 +17,6 @@ fn keyboard_service() {
 
     let mut listener_conn: Option<CID> = None;
     let mut listener_op: Option<usize> = None;
-    let mut raw_listener_conn: Option<CID> = None;
-    let mut raw_listener_op: Option<u32> = None;
     let mut observer_conn: Option<CID> = None;
     let mut observer_op: Option<usize> = None;
 
@@ -46,21 +44,6 @@ fn keyboard_service() {
                         log::error!("couldn't connect to listener: {:?}", e);
                         listener_conn = None;
                         listener_op = None;
-                    }
-                }
-            }
-            Some(KeyboardOpcode::RegisterRawListener) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let kr = buffer.as_flat::<KeyboardRegistration, _>().unwrap();
-                match xns.request_connection_blocking(kr.server_name.as_str()) {
-                    Ok(cid) => {
-                        raw_listener_conn = Some(cid);
-                        raw_listener_op = Some(kr.listener_op_id as u32);
-                    }
-                    Err(e) => {
-                        log::error!("couldn't connect to listener: {:?}", e);
-                        raw_listener_conn = None;
-                        raw_listener_op = None;
                     }
                 }
             }
@@ -142,6 +125,30 @@ fn keyboard_service() {
                         }
                     }
                 };
+
+                if let Some(conn) = listener_conn {
+                    if key != '\u{0000}' {
+                        if key >= '\u{f700}' && key <= '\u{f8ff}' {
+                            log::info!("ignoring key '{}'({:x})", key, key as u32); // ignore Apple PUA characters
+                        } else {
+                            log::info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
+                            xous::try_send_message(
+                                conn,
+                                xous::Message::new_scalar(
+                                    listener_op.unwrap(),
+                                    key as u32 as usize,
+                                    '\u{0000}' as u32 as usize,
+                                    '\u{0000}' as u32 as usize,
+                                    '\u{0000}' as u32 as usize,
+                                ),
+                            )
+                            .unwrap_or_else(|_| {
+                                log::info!("Input overflow, dropping keys!");
+                                xous::Result::Ok
+                            });
+                        }
+                    }
+                }
 
                 if observer_conn.is_some() && observer_op.is_some() {
                     log::trace!("sending observer key");
