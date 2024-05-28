@@ -13,8 +13,8 @@ emulation SetSeed 0x0
 mach set 0
 # connector Connect uart term
 
-uart CreateFileBackend @renode-kernel.txt true
-console CreateFileBackend @renode-console.txt true
-app_uart CreateFileBackend @renode-app.txt true
+uart CreateFileBackend @reports/renode-kernel.txt true
+console CreateFileBackend @reports/renode-console.txt true
+app_uart CreateFileBackend @reports/renode-app.txt true
 
 start
