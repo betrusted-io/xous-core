@@ -160,9 +160,8 @@ pub struct SwapCountTracker {
 /// Known things the swapper has to allocate memory for in hard-OOM:
 ///   - L1 page table entries for tracking swap
 ///   - An extra page for stack (needed for cramium targets, but not on precursor due to HAL differences)
-///   - An additional page will be requested in case of panic in hard OOM for TLS, but these shouldn't happen
-///     so we don't reserve it.
-const HARD_OOM_RESERVED_PAGES: usize = 2;
+///   - An additional page seems to be necessary for handling OOM-during-move-or-lend edge cases.
+const HARD_OOM_RESERVED_PAGES: usize = 3;
 
 /// This structure contains shared state accessible between the userspace code and the blocking swap call
 /// handler.
