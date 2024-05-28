@@ -251,8 +251,7 @@ fn map_swap(ss: &mut SwapperSharedState, swap_phys: usize, virt: usize, owner: u
     assert!(virt & 0xFFF == 0, "VA is not page aligned");
     #[cfg(feature = "debug-verbose")]
     writeln!(DebugUart {}, "    swap pa {:x} -> va {:x}", swap_phys, virt).ok();
-    let ppn1 = (swap_phys >> 22) & ((1 << 12) - 1);
-    let ppn0 = (swap_phys >> 12) & ((1 << 10) - 1);
+    let ppn = (swap_phys & 0xFFFF_F000) >> 2;
 
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);
     let vpn0 = (virt >> 12) & ((1 << 10) - 1);
@@ -280,24 +279,39 @@ fn map_swap(ss: &mut SwapperSharedState, swap_phys: usize, virt: usize, owner: u
     let l0_pt_idx = unsafe { &mut (*(((l1_pt[vpn1] << 2) & !((1 << 12) - 1)) as *mut PtPage)) };
     let l0_pt = &mut l0_pt_idx.entries;
 
-    // Ensure the entry hasn't already been mapped to a different address.
-    if ((l0_pt[vpn0] as usize) & loader::FLG_VALID) != 0
-        && (l0_pt[vpn0] as usize & 0xffff_fc00) != ((ppn1 << 20) | (ppn0 << 10))
+    // Check if the entry was already mapped.
+    if ((l0_pt[vpn0] as usize) & loader::FLG_VALID) != 0 && ((l0_pt[vpn0] as usize & 0xffff_fc00) << 2) != ppn
     {
-        // Panics don't print from the swapper in this context - must use the DebugUart to have the message
-        // appear. Note that panics just appear as a store fault as the kernel unwind tries to lend messages
-        // to the logger.
+        // Print a warning, because this can be indicative of either an error in the algorithm, OR
+        // it can be indicative of a scenario where a page was swapped, then released without updating the
+        // swapper. Swap then release can happen in the case that a page was lent to a target process;
+        // then it was swapped out; then, it was released without having to be swapped back in. The release
+        // does not check the PTE swap bit, it simply releases the memory. This can lead to a "memory leak"
+        // in swap, so we print a warning here. However, I think the leak only happens insofar as the
+        // mappings are never re-used, but for lent pages the addresses tend to be re-used rapidly.
         writeln!(
             DebugUart {},
-            "Swap page {:08x} was already allocated to {:08x}, so cannot map to {:08x}!",
+            "{}.{:08x} already mapped to PA {:08x} (raw entry {:08x}). Remapping to PA {:08x}! (possibly leak of swap due silent unmap of lent pages)",
+            owner,
+            virt,
+            (l0_pt[vpn0] & 0xFFFF_FC00) << 2,
+            l0_pt[vpn0],
             swap_phys,
-            (l0_pt[vpn0] >> 10) << 12,
-            virt
         )
         .ok();
-        panic!("Swap page already allocated");
     }
-    l0_pt[vpn0] = ((ppn1 << 20) | (ppn0 << 10) | loader::FLG_VALID) as u32;
+    l0_pt[vpn0] = (ppn | loader::FLG_VALID) as u32;
+    #[cfg(feature = "debug-verbose")]
+    writeln!(
+        DebugUart {},
+        "map_swap {}.{:x}->{:x}: l0_pt[vpn0] {:x}, l0_pt {:x}",
+        owner,
+        virt,
+        swap_phys,
+        l0_pt[vpn0],
+        l0_pt.as_ptr() as usize
+    )
+    .ok();
 }
 
 /// Convenience wrapper for GetFreePages syscall
@@ -346,6 +360,14 @@ fn write_to_swap_inner(
     for slot in 0..ss.sct.counts.len() {
         let candidate = (ss.free_swap_search_origin + slot) % ss.sct.counts.len();
         if (ss.sct.counts[candidate] & loader::FLG_SWAP_USED) == 0 {
+            #[cfg(feature = "debug-verbose")]
+            writeln!(
+                DebugUart {},
+                "WTS found free page {:x} with contents {:x}",
+                candidate,
+                ss.sct.counts[candidate]
+            )
+            .ok();
             next_free_page = Some(candidate);
             break;
         }
@@ -357,6 +379,14 @@ fn write_to_swap_inner(
         let mut count = ss.sct.counts[free_page_number] & !loader::FLG_SWAP_USED;
         count = (count + 1) & !loader::FLG_SWAP_USED;
         ss.sct.counts[free_page_number] = count | loader::FLG_SWAP_USED;
+        #[cfg(feature = "debug-verbose")]
+        writeln!(
+            DebugUart {},
+            "WTS ss.sct.counts[{:x}] {:x}",
+            free_page_number,
+            ss.sct.counts[free_page_number]
+        )
+        .ok();
 
         // add a PT mapping for the swap entry
         map_swap(ss, free_page_number * PAGE_SIZE, candidate.vaddr(), candidate.raw_pid());
@@ -494,10 +524,18 @@ fn swap_handler(
                     panic!("Couldn't resolve swapped data. Was the page actually swapped?")
                 }
             };
-            #[cfg(feature = "debug-print")]
-            writeln!(DebugUart {}, "RFS PID{} VA {:x} PA {:x}", pid, vaddr_in_pid, paddr_in_swap).ok();
             // clear the used bit in swap
             ss.sct.counts[paddr_in_swap / PAGE_SIZE] &= !loader::FLG_SWAP_USED;
+            #[cfg(feature = "debug-print")]
+            writeln!(
+                DebugUart {},
+                "RFS PID{} VA {:x} PA {:x} counts {:x}",
+                pid,
+                vaddr_in_pid,
+                paddr_in_swap,
+                ss.sct.counts[paddr_in_swap / PAGE_SIZE]
+            )
+            .ok();
 
             // safety: this is only safe because the pointer we're passed from the kernel is guaranteed to be
             // a valid u8-page in memory
