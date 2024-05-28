@@ -33,10 +33,11 @@ fn main() {
         loop {
             log::info!("Still alive! #{}", count);
             count += 1;
-            std::thread::sleep(std::time::Duration::from_millis(2000));
+            std::thread::sleep(std::time::Duration::from_millis(5000));
         }
     });
 
+    #[cfg(feature = "early-ball")]
     thread::spawn(move || {
         let xns = xous_api_names::XousNames::new().unwrap();
         let mut ball = Ball::new(&xns);
