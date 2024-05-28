@@ -366,6 +366,7 @@ impl MemoryManager {
     pub fn rpt_base(&self) -> usize { unsafe { MEMORY_ALLOCATIONS.as_ptr() as usize } }
 
     #[cfg(feature = "debug-swap")]
+    #[allow(dead_code)]
     /// This function is "improper" in that it returns a bogus value if the memory allocations are
     /// out of range, but its purpose is only for debugging. This is not suitable for use in any
     /// other context.
