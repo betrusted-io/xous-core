@@ -190,6 +190,7 @@ static mut SWAP: Swap = Swap {
     oom_thread_backing: None,
     // hand-tuned based on feedback from actual runtime data
     oom_stack_backing: [0usize; BACKUP_STACK_SIZE_WORDS],
+    oom_stashed_pid: None,
 };
 
 pub struct Swap {
@@ -218,6 +219,7 @@ pub struct Swap {
     mem_alloc_tracker_pages: usize,
     /// state of IRQ backing before hard OOM
     oom_irq_backing: Option<usize>,
+    /// state of IRQ backing before a ClearMem syscall
     clearmem_irq_backing: Option<usize>,
     /// Keep track of if we should unmap the RPT after a hard OOM. In the case that we hard-OOM while the
     /// soft-OOM handler is running, the RPT will already be mapped into the swapper's space. This is not
@@ -228,6 +230,8 @@ pub struct Swap {
     oom_thread_backing: Option<crate::arch::process::Thread>,
     /// backing for the stack that is smashed by the OOM handler
     oom_stack_backing: [usize; BACKUP_STACK_SIZE_WORDS],
+    /// address space to restore after an OOM, if necessary
+    oom_stashed_pid: Option<PID>,
 }
 impl Swap {
     pub fn with_mut<F, R>(f: F) -> R
@@ -447,25 +451,25 @@ impl Swap {
     pub fn swap_stop_irq(&mut self) {
         // disable all IRQs; no context swapping is allowed
         self.oom_irq_backing = Some(sim_read());
-        #[cfg(feature = "debug-swap")]
-        println!("Swap stored SIM: {:x?}", self.oom_irq_backing);
         sim_write(0x0);
+        #[cfg(feature = "debug-swap-verbose")]
+        println!("Swap stored SIM: {:x?}", self.oom_irq_backing);
     }
 
     pub fn swap_restore_irq(&mut self) {
         // restore IRQ state (don't borrow the system handler's state tracker, so we don't smash
         // it by accident)
         let sim = self.oom_irq_backing.take().expect("Someone stole our IRQ backing!");
-        #[cfg(feature = "debug-swap")]
+        #[cfg(feature = "debug-swap-verbose")]
         println!("Swap restoring IRQ: {:x}", sim);
         sim_write(sim);
     }
 
     pub fn clearmem_stop_irq(&mut self) {
         self.clearmem_irq_backing = Some(sim_read());
+        sim_write(0x0);
         #[cfg(feature = "debug-swap")]
         println!("Clearmem stored SIM: {:x?}", self.clearmem_irq_backing);
-        sim_write(0x0);
     }
 
     pub fn clearmem_restore_irq(&mut self) {
@@ -479,12 +483,30 @@ impl Swap {
     pub fn swap_reentrant_syscall(&mut self, call: xous_kernel::SysCall) {
         self.swap_stop_irq();
 
-        // we are in the pid/tid of the invoking process
-        // stash the thread state of the current pid/tid because the syscall return trampoline will smash it
-        self.oom_thread_backing =
-            Some(crate::arch::process::Process::with_current(|p| p.current_thread().clone()));
+        // Check that our address spaces are consistent. There is an edge case where
+        // if we entered this via an OOM during a move or lend, our hardware address space
+        // is in the target process but the process is still in the source. Return the address
+        // space to the source for the duration of the OOM processing.
+        //
+        // Ideally, we could also check that our syscall is an OOM but it seems that touching
+        // this variable mucks with other optimizations, and makes the stack saving fail.
+        {
+            let pid = crate::arch::process::current_pid();
+            let hardware_pid = crate::arch::current_pid();
+            if pid != hardware_pid {
+                self.oom_stashed_pid = Some(hardware_pid);
+                println!(
+                    "OOM in move or lend. Reverting to previous address space {}->{}",
+                    hardware_pid.get(),
+                    pid.get()
+                );
+                SystemServices::with(|ss| {
+                    ss.get_process(pid).unwrap().mapping.activate().unwrap();
+                })
+            }
+        }
 
-        #[cfg(feature = "debug-swap")]
+        #[cfg(feature = "debug-swap-verbose")]
         crate::arch::process::Process::with_current(|p| {
             println!(
                 "BEF HANDLER {:x?} {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?}",
@@ -497,7 +519,11 @@ impl Swap {
             )
         });
 
-        // at this point we are in user pid/tid, but supervisor mode. The current exception handler stack is
+        // we are in the pid/tid of the invoking process
+        // stash the thread state of the current pid/tid because the syscall return trampoline will smash it
+        self.oom_thread_backing =
+            Some(crate::arch::process::Process::with_current(|p| p.current_thread().clone()));
+
         // about to be smashed by the syscall invocation. Save the stack with a specially crafted routine
         // that has the following properties:
         //   1. It does not modify the stack
@@ -511,13 +537,16 @@ impl Swap {
 
         // Print the stack pointer for checking purposes
         let mut current_sp: usize;
-        unsafe {
-            core::arch::asm!(
-                "mv {current_sp}, sp",
-                current_sp = out(reg) current_sp,
-            )
+        #[cfg(feature = "debug-swap-verbose")]
+        {
+            unsafe {
+                core::arch::asm!(
+                    "mv {current_sp}, sp",
+                    current_sp = out(reg) current_sp,
+                )
+            }
+            println!(" --> HANDLER SP extent d'{} bytes", EXCEPTION_STACK_TOP - current_sp);
         }
-        println!(" --> HANDLER SP extent d'{} bytes", EXCEPTION_STACK_TOP - current_sp);
         // make a backup copy of the stack
         let backup_stack_ptr: usize = self.oom_stack_backing.as_ptr() as usize;
         let working_stack_end: usize = EXCEPTION_STACK_TOP;
@@ -576,7 +605,7 @@ impl Swap {
             )
         }
 
-        #[cfg(feature = "debug-swap")]
+        #[cfg(feature = "debug-swap-verbose")]
         crate::arch::process::Process::with_current(|p| {
             println!(
                 "AFT HANDLER {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?}",
@@ -593,6 +622,14 @@ impl Swap {
             *p.current_thread_mut() =
                 self.oom_thread_backing.take().expect("No thread backing was set prior to OOM handler")
         });
+
+        // recover from OOM in move or lend
+        if let Some(pid) = self.oom_stashed_pid.take() {
+            println!("Restoring address space to {}", pid.get());
+            SystemServices::with(|ss| {
+                ss.get_process(pid).unwrap().mapping.activate().unwrap();
+            })
+        }
 
         self.swap_restore_irq();
     }
@@ -617,7 +654,7 @@ impl Swap {
             crate::arch::mem::map_page_to_swapper(paddr).expect("couldn't map target page to swapper");
         // we are now in the swapper's memory space
 
-        #[cfg(feature = "debug-swap")]
+        #[cfg(feature = "debug-swap-verbose")]
         println!(
             "retrieve_page - userspace activate from pid{:?}/tid{:?} for vaddr {:x?} -> paddr {:x?}",
             target_pid, target_tid, target_vaddr_in_pid, paddr
