@@ -39,4 +39,4 @@ oom-doom = []
 
 debug-print = []
 debug-verbose = []
-default = ["debug-print", "swap-userspace-testing"]
+default = ["swap-userspace-testing"]
