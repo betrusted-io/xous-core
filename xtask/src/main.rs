@@ -299,6 +299,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "trng",
                 "graphics-server",
                 "llio",
+                "early_settings", // required by keyboard
+                "spinor",
                 "keyboard",
                 "gam",
                 "modals",
