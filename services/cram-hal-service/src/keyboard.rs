@@ -81,6 +81,14 @@ impl Keyboard {
         }
     }
 
+    pub fn inject_key(&self, c: char) {
+        send_message(
+            self.conn,
+            Message::new_scalar(KeyboardOpcode::InjectKey.to_usize().unwrap(), c as u32 as usize, 0, 0, 0),
+        )
+        .unwrap();
+    }
+
     /// Reveal the connection ID for use with unsafe FFI calls
     pub fn conn(&self) -> xous::CID { self.conn }
 }
