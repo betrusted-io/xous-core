@@ -27,7 +27,7 @@ fn keyboard_service() {
 
     loop {
         let msg = xous::receive_message(kbd_sid).unwrap(); // this blocks until we get a message
-        log::trace!("Message: {:?}", msg);
+        log::debug!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(KeyboardOpcode::BlockingKeyListener) => {
                 blocking_listener.push(msg.sender);
