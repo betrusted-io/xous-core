@@ -20,7 +20,7 @@ use crate::services::SystemServices;
 /// invocation. So, if it works once, it should keep on working for that particular
 /// combination of target/link options/compiler version.
 #[cfg(any(feature = "debug-swap", feature = "debug-swap-verbose"))] // more stack needed for debug
-const BACKUP_STACK_SIZE_WORDS: usize = 2048 / core::mem::size_of::<usize>();
+const BACKUP_STACK_SIZE_WORDS: usize = 1536 / core::mem::size_of::<usize>();
 #[cfg(not(any(feature = "debug-swap", feature = "debug-swap-verbose")))]
 const BACKUP_STACK_SIZE_WORDS: usize = 1024 / core::mem::size_of::<usize>();
 
@@ -506,7 +506,7 @@ impl Swap {
             }
         }
 
-        #[cfg(feature = "debug-swap-verbose")]
+        #[cfg(feature = "debug-swap")]
         crate::arch::process::Process::with_current(|p| {
             println!(
                 "BEF HANDLER {:x?} {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?}",
