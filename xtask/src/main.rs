@@ -487,17 +487,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // ------ Cramium hardware image configs ------
         Some("cramium-fpga") | Some("cramium-soc") => {
-            let cramium_flash_pkgs = ["xous-ticktimer", "xous-log", "cram-hal-service"].to_vec();
-            let cramium_swap_pkgs = [
-                "xous-names",
-                "graphics-server",
-                "cram-console",
-                "gam",
-                "modals",
-                "ime-plugin-shell",
-                "ime-frontend",
-            ]
-            .to_vec();
+            // placement in flash is a tension between dev convenience and RAM usage. Things in flash
+            // are resident, non-swapable, but end up making the slow kernel burn process take longer.
+            let cramium_flash_pkgs =
+                ["xous-ticktimer", "xous-log", "cram-hal-service", "xous-names"].to_vec();
+            let cramium_swap_pkgs =
+                ["graphics-server", "gam", "modals", "ime-plugin-shell", "ime-frontend", "cram-console"]
+                    .to_vec();
             if !builder.is_swap_set() {
                 builder.set_swap(0, 4 * 1024 * 1024);
             }
@@ -511,12 +507,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_feature("swap");
 
             builder.add_loader_feature("debug-print");
-            // builder.add_kernel_feature("debug-swap");
+            builder.add_kernel_feature("debug-swap");
             // builder.add_kernel_feature("debug-print");
             // builder.add_kernel_feature("debug-swap-verbose");
 
             builder.add_feature("quantum-timer");
-            builder.add_kernel_feature("v2p");
+            // builder.add_kernel_feature("v2p");
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),
                 Some("cramium-soc") => builder.target_cramium_soc(),
