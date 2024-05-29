@@ -2922,6 +2922,7 @@ name = "modals"
 version = "0.1.0"
 dependencies = [
  "bit_field",
+ "cram-hal-service",
  "gam",
  "locales",
  "log",
