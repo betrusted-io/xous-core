@@ -3,7 +3,7 @@ pub mod iox_lib;
 pub mod keyboard;
 pub mod trng;
 
-pub use api::*;
+use api::Opcode;
 use cramium_hal::udma::{EventChannel, PeriphEventType, PeriphId};
 pub use iox_lib::*;
 use num_traits::*;

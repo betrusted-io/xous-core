@@ -2,7 +2,7 @@ use num_traits::*;
 use xous::{send_message, Message};
 use xous_ipc::{Buffer, String};
 
-use crate::api::*;
+use crate::api::keyboard::*;
 
 #[derive(Debug)]
 pub struct Keyboard {
