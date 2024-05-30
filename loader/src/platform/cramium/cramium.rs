@@ -601,6 +601,37 @@ pub fn early_init() {
             rx_buf[2] = '\r' as u32 as u8;
             udma_uart.write(&rx_buf);
         }
+
+        // now wait for some interrupt-driven receive
+        #[cfg(feature = "irq-test")]
+        {
+            irq_setup();
+            let mut _c: u8 = 0;
+            // this sets us up for async reads
+            let should_be_zero = udma_uart.read_async(&mut _c);
+            crate::println!("should_be_zero: {}", should_be_zero);
+            crate::println!("Waiting for async hits...");
+            NUM_RX.store(0, core::sync::atomic::Ordering::SeqCst);
+            let mut last_rx = 0;
+            let mut last_pending = 0;
+            let irqarray5 = CSR::new(utra::irqarray5::HW_IRQARRAY5_BASE as *mut u32);
+            crate::println!("irqarray5 enable: {:x}", irqarray5.r(utra::irqarray5::EV_ENABLE));
+            loop {
+                let cur_rx = NUM_RX.load(core::sync::atomic::Ordering::SeqCst);
+                if cur_rx != last_rx {
+                    crate::println!("Got async event {}", cur_rx);
+                    last_rx = cur_rx;
+                }
+                if cur_rx > 4 {
+                    break;
+                }
+                let pending = irqarray5.r(utra::irqarray5::EV_PENDING);
+                if pending != last_pending {
+                    crate::println!("pending: {:x}", pending);
+                    last_pending = pending;
+                }
+            }
+        }
     }
 
     udma_uart.write("Press any key to continue...".as_bytes());
@@ -881,4 +912,216 @@ impl TestPattern {
         self.x ^= self.x >> 14;
         return self.x;
     }
+}
+
+#[cfg(feature = "irq-test")]
+static NUM_RX: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+#[cfg(feature = "irq-test")]
+pub fn irq_setup() {
+    unsafe {
+        #[rustfmt::skip]
+        core::arch::asm!(
+            // Set trap handler
+            "la   t0, _start_trap", // this first one forces the nop sled symbol to be generated
+            "la   t0, _start_trap_aligned", // this is the actual target
+            "csrw mtvec, t0",
+        );
+    }
+
+    // enable IRQ handling
+    riscv::register::vexriscv::mim::write(0x0); // first make sure everything is disabled, so we aren't OR'ing in garbage
+    // this will set the IRQ bit for the uart bank as part of the new() function
+    let mut uart_irq = cramium_hal::udma::UartIrq::new();
+    uart_irq.rx_irq_ena(udma::UartChannel::Uart1, true);
+    // the actual handler is hard-coded below :'( but this is just a quick and dirty test so meh?
+
+    let mut irqarray5 = CSR::new(utra::irqarray5::HW_IRQARRAY5_BASE as *mut u32);
+    irqarray5.wo(utra::irqarray5::EV_PENDING, irqarray5.r(utra::irqarray5::EV_PENDING));
+
+    // must enable external interrupts on the CPU for any of the above to matter
+    unsafe { riscv::register::mie::set_mext() };
+
+    crate::println!(
+        "mie: {:x}, mim: {:x}",
+        riscv::register::mie::read().bits(),
+        riscv::register::vexriscv::mim::read()
+    );
+}
+
+#[export_name = "_start_trap"]
+#[inline(never)]
+#[cfg(feature = "irq-test")]
+pub unsafe extern "C" fn _start_trap() -> ! {
+    loop {
+        // install a NOP sled before _start_trap() until https://github.com/rust-lang/rust/issues/82232 is stable
+        #[rustfmt::skip]
+        core::arch::asm!(
+            "nop",
+            "nop",
+        );
+        #[export_name = "_start_trap_aligned"]
+        pub unsafe extern "C" fn _start_trap_aligned() {
+            #[rustfmt::skip]
+            core::arch::asm!(
+                "csrw        mscratch, sp",
+                "li          sp, 0x61008000", // a random location that we corrupt for testing routine
+                "sw       x1, 0*4(sp)",
+                // Skip SP for now
+                "sw       x3, 2*4(sp)",
+                "sw       x4, 3*4(sp)",
+                "sw       x5, 4*4(sp)",
+                "sw       x6, 5*4(sp)",
+                "sw       x7, 6*4(sp)",
+                "sw       x8, 7*4(sp)",
+                "sw       x9, 8*4(sp)",
+                "sw       x10, 9*4(sp)",
+                "sw       x11, 10*4(sp)",
+                "sw       x12, 11*4(sp)",
+                "sw       x13, 12*4(sp)",
+                "sw       x14, 13*4(sp)",
+                "sw       x15, 14*4(sp)",
+                "sw       x16, 15*4(sp)",
+                "sw       x17, 16*4(sp)",
+                "sw       x18, 17*4(sp)",
+                "sw       x19, 18*4(sp)",
+                "sw       x20, 19*4(sp)",
+                "sw       x21, 20*4(sp)",
+                "sw       x22, 21*4(sp)",
+                "sw       x23, 22*4(sp)",
+                "sw       x24, 23*4(sp)",
+                "sw       x25, 24*4(sp)",
+                "sw       x26, 25*4(sp)",
+                "sw       x27, 26*4(sp)",
+                "sw       x28, 27*4(sp)",
+                "sw       x29, 28*4(sp)",
+                "sw       x30, 29*4(sp)",
+                "sw       x31, 30*4(sp)",
+                // Save MEPC
+                "csrr        t0, mepc",
+                "sw       t0, 31*4(sp)",
+                // Finally, save SP
+                "csrr        t0, mscratch",
+                "sw          t0, 1*4(sp)",
+                // Restore a default stack pointer
+                "li          sp, 0x6100A000", // more random locations to corrupt
+                // Note that registers $a0-$a7 still contain the arguments
+                "j           _start_trap_rust",
+            );
+        }
+        _start_trap_aligned();
+        #[rustfmt::skip]
+        core::arch::asm!(
+            "nop",
+            "nop",
+        );
+    }
+}
+
+#[export_name = "_resume_context"]
+#[inline(never)]
+#[cfg(feature = "irq-test")]
+pub unsafe extern "C" fn _resume_context(registers: u32) -> ! {
+    #[rustfmt::skip]
+    core::arch::asm!(
+        "move        sp, {registers}",
+
+        "lw        x1, 0*4(sp)",
+        // Skip SP for now
+        "lw        x3, 2*4(sp)",
+        "lw        x4, 3*4(sp)",
+        "lw        x5, 4*4(sp)",
+        "lw        x6, 5*4(sp)",
+        "lw        x7, 6*4(sp)",
+        "lw        x8, 7*4(sp)",
+        "lw        x9, 8*4(sp)",
+        "lw        x10, 9*4(sp)",
+        "lw        x11, 10*4(sp)",
+        "lw        x12, 11*4(sp)",
+        "lw        x13, 12*4(sp)",
+        "lw        x14, 13*4(sp)",
+        "lw        x15, 14*4(sp)",
+        "lw        x16, 15*4(sp)",
+        "lw        x17, 16*4(sp)",
+        "lw        x18, 17*4(sp)",
+        "lw        x19, 18*4(sp)",
+        "lw        x20, 19*4(sp)",
+        "lw        x21, 20*4(sp)",
+        "lw        x22, 21*4(sp)",
+        "lw        x23, 22*4(sp)",
+        "lw        x24, 23*4(sp)",
+        "lw        x25, 24*4(sp)",
+        "lw        x26, 25*4(sp)",
+        "lw        x27, 26*4(sp)",
+        "lw        x28, 27*4(sp)",
+        "lw        x29, 28*4(sp)",
+        "lw        x30, 29*4(sp)",
+        "lw        x31, 30*4(sp)",
+
+        // Restore SP
+        "lw        x2, 1*4(sp)",
+        "mret",
+        registers = in(reg) registers,
+    );
+    loop {}
+}
+
+/// Just handles specific traps for testing CPU interactions. Doesn't do anything useful with the traps.
+#[export_name = "_start_trap_rust"]
+#[cfg(feature = "irq-test")]
+pub extern "C" fn trap_handler(
+    _a0: usize,
+    _a1: usize,
+    _a2: usize,
+    _a3: usize,
+    _a4: usize,
+    _a5: usize,
+    _a6: usize,
+    _a7: usize,
+) -> ! {
+    use riscv::register::{mcause, mie, vexriscv::mip};
+    let mut udma_uart = unsafe {
+        // safety: this is safe to call, because we set up clock and events prior to calling new.
+        udma::Uart::get_handle(
+            utra::udma_uart_1::HW_UDMA_UART_1_BASE,
+            loader::UART_IFRAM_ADDR,
+            loader::UART_IFRAM_ADDR,
+        )
+    };
+
+    let mc: mcause::Mcause = mcause::read();
+    if mc.bits() == 0x8000_0009 {
+        // external interrupt. find out which ones triggered it, and clear the source.
+        let irqs_pending = mip::read();
+        if (irqs_pending & (1 << utra::irqarray5::IRQARRAY5_IRQ)) != 0 {
+            let mut irqarray5 = CSR::new(utra::irqarray5::HW_IRQARRAY5_BASE as *mut u32);
+
+            let pending = irqarray5.r(utra::irqarray5::EV_PENDING);
+            let mut c: u8 = 0;
+            let should_be_one = udma_uart.read_async(&mut c);
+            let mut buf = [0u8; 16];
+            udma_uart.write("async_rx ".as_bytes());
+            buf[0] = should_be_one as u8 + '0' as u32 as u8;
+            buf[1] = ':' as u32 as u8;
+            buf[2] = c;
+            udma_uart.write(&buf[..3]);
+            NUM_RX.fetch_add(1, core::sync::atomic::Ordering::SeqCst);
+            // clear all pending
+            irqarray5.wo(utra::irqarray5::EV_PENDING, pending);
+        }
+    } else {
+        udma_uart.write("Unrecognized interrupt case".as_bytes());
+    }
+
+    // re-enable interrupts
+    unsafe {
+        #[rustfmt::skip]
+        core::arch::asm!(
+            "csrr        t0, mstatus",
+            "ori         t0, t0, 3",
+            "csrw        mstatus, t0",
+        );
+    }
+    unsafe { mie::set_mext() };
+    unsafe { _resume_context(0x61008000u32) }; // this is the scratch page used in the assembly routine above
 }
