@@ -127,10 +127,8 @@ fn main() {
         }
     });
 
-    log::info!("starting modal");
     let modals = modals::Modals::new(&xns).unwrap();
     modals.show_notification("This is a test", Some("This is a test")).ok();
-    log::info!("exiting modal");
 
     xous::send_message(
         cb_cid,
@@ -143,10 +141,6 @@ fn main() {
     log::info!("starting ball");
     loop {
         ball.update();
-        /* // for testing full-frame graphics drawing
-            ball.draw_boot();
-            tt.sleep_ms(100).ok();
-        */
     }
 }
 
