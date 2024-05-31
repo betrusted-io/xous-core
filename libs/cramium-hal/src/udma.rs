@@ -203,7 +203,7 @@ impl Into<u32> for PeriphEventType {
 }
 
 #[repr(u32)]
-#[derive(Copy, Clone, num_derive::FromPrimitive)]
+#[derive(Debug, Copy, Clone, num_derive::FromPrimitive)]
 pub enum EventChannel {
     Channel0 = 0,
     Channel1 = 8,
@@ -799,7 +799,7 @@ pub enum SpimClkPha {
     CaptureOnTrailing = 1,
 }
 #[repr(u32)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum SpimCs {
     Cs0 = 0,
     Cs1 = 1,
@@ -807,13 +807,13 @@ pub enum SpimCs {
     Cs3 = 3,
 }
 #[repr(u32)]
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum SpimMode {
     Standard = 0,
     Quad = 1,
 }
 #[repr(u32)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum SpimByteAlign {
     Enable = 0,
     Disable = 1,
@@ -935,6 +935,7 @@ pub enum SpimChannel {
     Channel2,
     Channel3,
 }
+#[derive(Debug)]
 pub struct Spim {
     csr: CSR<u32>,
     cs: SpimCs,
@@ -1111,6 +1112,67 @@ impl Spim {
         spim.send_cmd_list(&[SpimCmd::Config(pol, pha, clk_div as u8)]);
 
         spim
+    }
+
+    /// For creating a clone to the current SPIM handle passed through a thread.
+    ///
+    /// Safety: can only be used on devices that are static for the life of the OS. Also, does nothing
+    /// to prevent races/contention for the underlying device. The main reason this is introduced is
+    /// to facilitate a panic handler for the graphics frame buffer, where we're about to kill the OS
+    /// anyways: we don't care about soundness guarantees after this point.
+    pub unsafe fn from_raw_parts(
+        csr: usize,
+        cs: SpimCs,
+        sot_wait: u8,
+        eot_wait: u8,
+        event_channel: Option<EventChannel>,
+        mode: SpimMode,
+        _align: SpimByteAlign,
+        ifram: IframRange,
+        tx_buf_len_bytes: usize,
+        rx_buf_len_bytes: usize,
+        dummy_cycles: u8,
+    ) -> Self {
+        Spim {
+            csr: CSR::new(csr as *mut u32),
+            cs,
+            sot_wait,
+            eot_wait,
+            event_channel,
+            _align,
+            mode,
+            ifram,
+            tx_buf_len_bytes,
+            rx_buf_len_bytes,
+            dummy_cycles,
+        }
+    }
+
+    /// Blows a SPIM structure into parts that can be sent across a thread boundary.
+    ///
+    /// Safety: this is only safe because the *mut u32 for the CSR doesn't change, because it's tied to
+    /// a piece of hardware, not some arbitrary block of memory.
+    pub unsafe fn into_raw_parts(
+        &self,
+    ) -> (usize, SpimCs, u8, u8, Option<EventChannel>, SpimMode, SpimByteAlign, IframRange, usize, usize, u8)
+    {
+        (
+            self.csr.base() as usize,
+            self.cs,
+            self.sot_wait,
+            self.eot_wait,
+            self.event_channel,
+            self.mode,
+            self._align,
+            IframRange {
+                phys_range: self.ifram.phys_range,
+                virt_range: self.ifram.virt_range,
+                conn: self.ifram.conn,
+            },
+            self.tx_buf_len_bytes,
+            self.rx_buf_len_bytes,
+            self.dummy_cycles,
+        )
     }
 
     /// The command buf is *always* a `u32`; so tie the type down here.
