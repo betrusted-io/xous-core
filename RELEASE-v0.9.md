@@ -475,6 +475,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - keymap is checked on every call to send a key to the USB keyboard. This allows us to toggle the keymap temporarily to allow typing into hosts with a different keymap (instead of requiring a reboot)
 - Encrypted swap: encrypted swap will allow Xous to run on microcontrollers that have small internal memory footprints, and rely on external SPI RAM for backing storage. This should create a step function in physical security when running on a microcontroller with sufficient internal protected RAM to hold the working set and core OS, as it will complicated attacks that attempt to read out off-chip RAM.
 
+# New in 0.9.17
+
 ## Roadmap
 - Lots of testing and bug fixes
 - Fixing performance issues in `pddb`
