@@ -22,7 +22,7 @@ use crate::services::SystemServices;
 #[cfg(any(feature = "debug-swap", feature = "debug-swap-verbose"))] // more stack needed for debug
 const BACKUP_STACK_SIZE_WORDS: usize = 1536 / core::mem::size_of::<usize>();
 #[cfg(not(any(feature = "debug-swap", feature = "debug-swap-verbose")))]
-const BACKUP_STACK_SIZE_WORDS: usize = 1024 / core::mem::size_of::<usize>();
+const BACKUP_STACK_SIZE_WORDS: usize = 1536 / core::mem::size_of::<usize>();
 
 /// userspace swapper -> kernel ABI (see kernel/src/syscall.rs)
 /// This ABI is copy-paste synchronized with what's in the userspace handler. It's left out of
