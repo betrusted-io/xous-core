@@ -18,9 +18,6 @@ pub(crate) enum StatusOpcode {
     Quit,
 }
 
-// TODO:
-//   - clean up the mess here
-
 fn main() {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -28,6 +25,7 @@ fn main() {
     #[cfg(feature = "hwtest")]
     hwtest::hwtest();
 
+    #[cfg(feature = "early-ball")]
     thread::spawn(move || {
         let mut count = 0;
         loop {
@@ -107,7 +105,6 @@ fn main() {
         ),
     )
     .unwrap();
-    log::trace!("status redraw## initial");
     gam.redraw().unwrap(); // initial boot redraw
 
     // ------------------ start a 'gutter' thread to handle incoming events while we go through the
@@ -130,10 +127,8 @@ fn main() {
         }
     });
 
-    log::info!("starting modal");
     let modals = modals::Modals::new(&xns).unwrap();
     modals.show_notification("This is a test", Some("This is a test")).ok();
-    log::info!("exiting modal");
 
     xous::send_message(
         cb_cid,
@@ -146,10 +141,6 @@ fn main() {
     log::info!("starting ball");
     loop {
         ball.update();
-        /* // for testing full-frame graphics drawing
-            ball.draw_boot();
-            tt.sleep_ms(100).ok();
-        */
     }
 }
 

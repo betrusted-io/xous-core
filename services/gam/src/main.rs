@@ -56,7 +56,6 @@ fn wrapped_main() -> ! {
     // unlimited connections allowed; this is a gateway server
     let gam_sid = xns.register_name(api::SERVER_NAME_GAM, None).expect("can't register server");
     CB_TO_MAIN_CONN.store(xous::connect(gam_sid).unwrap(), Ordering::Relaxed);
-    log::trace!("starting up...");
 
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
@@ -135,8 +134,9 @@ fn wrapped_main() -> ! {
     }
     loop {
         let mut msg = xous::receive_message(gam_sid).unwrap();
-        log::trace!("Message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let op = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", op);
+        match op {
             Some(Opcode::ClearCanvas) => {
                 msg_scalar_unpack!(msg, g0, g1, g2, g3, {
                     let gid = Gid::new([g0 as _, g1 as _, g2 as _, g3 as _]);

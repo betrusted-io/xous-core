@@ -26,7 +26,7 @@ use xous_ipc::Buffer;
 mod fontmap;
 use api::BulkRead;
 
-#[cfg(any(feature = "precursor", feature = "renode"))]
+#[cfg(any(feature = "precursor", feature = "renode", feature = "cramium-soc"))]
 // only install for hardware targets; hosted mode uses host's panic handler
 mod panic;
 
@@ -171,6 +171,13 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
             display.hw_regs()
         };
         panic::panic_handler_thread(is_panic.clone(), hwfb, control);
+    }
+    #[cfg(feature = "cramium-soc")]
+    {
+        // This is safe because the SPIM is finished with initialization, and the handler is
+        // Mutex-protected.
+        let hw_if = unsafe { display.hw_regs() };
+        panic::panic_handler_thread(is_panic.clone(), hw_if);
     }
 
     let xns = xous_names::XousNames::new().unwrap();

@@ -9,6 +9,32 @@ pub fn start_keyboard_service() {
     std::thread::spawn(move || {
         keyboard_service();
     });
+    std::thread::spawn(move || {
+        keyboard_bouncer();
+    });
+}
+
+fn keyboard_bouncer() {
+    // private server that has no dependencies but a "well-known-name" for the log server
+    // to forward keystrokes into.
+    let sid = xous::create_server_with_address(b"keyboard_bouncer")
+        .expect("couldn't create keyboard log bounce server");
+    let xns = xous_names::XousNames::new().unwrap();
+    let kbd = cram_hal_service::keyboard::Keyboard::new(&xns).unwrap();
+    let mut msg_opt = None;
+    loop {
+        xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
+        let msg = msg_opt.as_mut().unwrap();
+        // only one type of message is expected
+        match msg.body.scalar_message() {
+            Some(m) => {
+                if let Some(c) = char::from_u32(m.arg1 as u32) {
+                    kbd.inject_key(c);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 fn keyboard_service() {
@@ -27,8 +53,9 @@ fn keyboard_service() {
 
     loop {
         let msg = xous::receive_message(kbd_sid).unwrap(); // this blocks until we get a message
-        log::trace!("Message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let op = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", op);
+        match op {
             Some(KeyboardOpcode::BlockingKeyListener) => {
                 blocking_listener.push(msg.sender);
             }

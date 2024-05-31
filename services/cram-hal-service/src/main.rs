@@ -87,7 +87,7 @@ fn try_alloc(ifram_allocs: &mut Vec<Option<Sender>>, size: usize, sender: Sender
 }
 fn main() {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
 
     let xns = xous_names::XousNames::new().unwrap();
     let sid = xns.register_name(cram_hal_service::SERVER_NAME_CRAM_HAL, None).expect("can't register server");

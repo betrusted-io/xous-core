@@ -20,9 +20,9 @@ use crate::services::SystemServices;
 /// invocation. So, if it works once, it should keep on working for that particular
 /// combination of target/link options/compiler version.
 #[cfg(any(feature = "debug-swap", feature = "debug-swap-verbose"))] // more stack needed for debug
-const BACKUP_STACK_SIZE_WORDS: usize = 2048 / core::mem::size_of::<usize>();
+const BACKUP_STACK_SIZE_WORDS: usize = 1536 / core::mem::size_of::<usize>();
 #[cfg(not(any(feature = "debug-swap", feature = "debug-swap-verbose")))]
-const BACKUP_STACK_SIZE_WORDS: usize = 1024 / core::mem::size_of::<usize>();
+const BACKUP_STACK_SIZE_WORDS: usize = 1536 / core::mem::size_of::<usize>();
 
 /// userspace swapper -> kernel ABI (see kernel/src/syscall.rs)
 /// This ABI is copy-paste synchronized with what's in the userspace handler. It's left out of
@@ -506,7 +506,7 @@ impl Swap {
             }
         }
 
-        #[cfg(feature = "debug-swap-verbose")]
+        #[cfg(feature = "debug-swap")]
         crate::arch::process::Process::with_current(|p| {
             println!(
                 "BEF HANDLER {:x?} {}.{} sepc: {:x} sstatus: {:x?} satp: {:x?}",
@@ -553,6 +553,7 @@ impl Swap {
         let working_stack_ptr: usize =
             EXCEPTION_STACK_TOP - self.oom_stack_backing.len() * core::mem::size_of::<usize>();
         unsafe {
+            #[rustfmt::skip]
             core::arch::asm!(
                 "mv   a7, {working_stack_end}",
                 "mv   a6, {working_stack_ptr}",
@@ -569,7 +570,7 @@ impl Swap {
                 working_stack_ptr = in(reg) working_stack_ptr,
                 backup_stack_ptr = in(reg) backup_stack_ptr,
                 current_sp = out(reg) current_sp,
-            )
+            );
         }
         // this assert will hopefully save us during CI testing if parameters changed and we have to fix them
         // the assert itself would modify stack, but, we're on the path to a panic so that's OK
@@ -588,6 +589,7 @@ impl Swap {
         let working_restore_ptr: usize =
             EXCEPTION_STACK_TOP - self.oom_stack_backing.len() * core::mem::size_of::<usize>();
         unsafe {
+            #[rustfmt::skip]
             core::arch::asm!(
                 "mv   a7, {working_restore_end}",
                 "mv   a6, {working_restore_ptr}",
@@ -602,7 +604,7 @@ impl Swap {
                 working_restore_end = in(reg) working_restore_end,
                 working_restore_ptr = in(reg) working_restore_ptr,
                 restore_stack_ptr = in(reg) restore_stack_ptr,
-            )
+            );
         }
 
         #[cfg(feature = "debug-swap-verbose")]

@@ -2,7 +2,7 @@ use num_traits::*;
 use xous::{send_message, Message};
 use xous_ipc::{Buffer, String};
 
-use crate::api::*;
+use crate::api::keyboard::*;
 
 #[derive(Debug)]
 pub struct Keyboard {
@@ -79,6 +79,14 @@ impl Keyboard {
             }
             Ok(_) | Err(_) => panic!("internal error: Incorrect return type"),
         }
+    }
+
+    pub fn inject_key(&self, c: char) {
+        send_message(
+            self.conn,
+            Message::new_scalar(KeyboardOpcode::InjectKey.to_usize().unwrap(), c as u32 as usize, 0, 0, 0),
+        )
+        .unwrap();
     }
 
     /// Reveal the connection ID for use with unsafe FFI calls

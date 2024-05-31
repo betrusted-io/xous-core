@@ -68,7 +68,6 @@ use core::mem::size_of;
 use cram_hal_service::IoxHal;
 use cramium_hal::udma::PeriphId;
 use cramium_hal::{iox, udma};
-use xous::MemoryRange;
 
 use crate::api::Point;
 use crate::api::{LINES, WIDTH};
@@ -92,7 +91,7 @@ pub fn claim_main_thread(f: impl FnOnce(MainThreadToken) -> Never + Send + 'stat
 }
 
 pub struct XousDisplay {
-    fb: MemoryRange,
+    fb: [u32; FB_SIZE],
     next_free_line: usize,
     spim: udma::Spim,
     devboot: bool,
@@ -100,20 +99,6 @@ pub struct XousDisplay {
 
 impl XousDisplay {
     pub fn new(_main_thread_token: MainThreadToken) -> XousDisplay {
-        let mut fb = xous::syscall::map_memory(
-            None,
-            None,
-            ((FB_WIDTH_WORDS * FB_LINES * 4) + 4096) & !4095,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map backing frame buffer");
-        // this is safe because all values of u32 are representable on the system
-        unsafe {
-            for w in fb.as_slice_mut() {
-                *w = 0xFFFF_FFFFu32;
-            }
-        }
-
         let udma_global = cram_hal_service::UdmaGlobal::new();
 
         // setup the I/O pins
@@ -234,7 +219,8 @@ impl XousDisplay {
             .expect("Couldn't allocate SPI channel for LCD")
         };
 
-        let mut display = XousDisplay { fb, spim, next_free_line: 0, devboot: false };
+        let mut display =
+            XousDisplay { fb: [0xFFFF_FFFFu32; FB_SIZE], spim, next_free_line: 0, devboot: false };
 
         // initialize the DMA buffer with valid mode/address lines & blank data
         for line in 0..FB_LINES {
@@ -250,20 +236,30 @@ impl XousDisplay {
     /// copy of hardware registers.
     ///
     /// # Safety
+    /// This creates a raw copy of the SPI hardware handle, which diverges from the copy used
+    /// by the framebuffer. This is only safe when there are no more operations to be done to
+    /// adjust the hardware mode of the SPIM.
     ///
-    /// The addresses of these structures are passed as `u32` and unsafely cast back
-    /// into pointers on the user's side. We do this because the panic handler is special:
-    /// it grabs ahold of the low-level hardware, yanking control from the higher level
-    /// control functions, without having to map its own separate pages.
-    ///
-    /// Of course, "anyone" with a copy of this data can clobber existing graphics operations. Thus,
+    /// Furthermore, "anyone" with a copy of this data can clobber existing graphics operations. Thus,
     /// any access to these registers have to be protected with a mutex of some form. In the case of
     /// the panic handler, the `is_panic` `AtomicBool` will suppress graphics loop operation
     /// in the case of a panic.
-    pub unsafe fn hw_regs(&self) -> (u32, u32) {
-        todo!(
-            "Need to implement visual panic handler -- requires also a deep refactor of the panic handler itself!"
-        );
+    pub unsafe fn hw_regs(
+        &self,
+    ) -> (
+        usize,
+        udma::SpimCs,
+        u8,
+        u8,
+        Option<udma::EventChannel>,
+        udma::SpimMode,
+        udma::SpimByteAlign,
+        cramium_hal::ifram::IframRange,
+        usize,
+        usize,
+        u8,
+    ) {
+        self.spim.into_raw_parts()
     }
 
     pub fn stash(&mut self) {
@@ -295,11 +291,9 @@ impl XousDisplay {
         }
         // check if a line is dirty; if so, copy it to the DMA buffer, then mark it as clean.
         for line_no in 0..FB_LINES {
-            // this code is safe because u32 is representable on the system
-            let fb = unsafe { self.fb.as_slice::<u32>() };
             // check an immutably borrowed copy of the soft framebuffer to see if the line is dirty,
             // and store the result.
-            let is_dirty = if fb[line_no * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] & 0xFFFF_0000 != 0x0 {
+            let is_dirty = if self.fb[line_no * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] & 0xFFFF_0000 != 0x0 {
                 true
             } else {
                 false
@@ -311,8 +305,7 @@ impl XousDisplay {
                 self.copy_line_to_dma(line_no);
                 // this borrows self.fb to clear the dirty flag on the soft framebuffer
                 // this code is safe because u32 is representable on the system
-                let fb = unsafe { self.fb.as_slice_mut::<u32>() };
-                fb[line_no * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] &= 0x0000_FFFF;
+                self.fb[line_no * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] &= 0x0000_FFFF;
                 dirty_count += 1;
             }
         }
@@ -326,9 +319,8 @@ impl XousDisplay {
 
     pub fn blit_screen(&mut self, bmp: &[u32]) {
         // this code is safe because u32 is representable on the system
-        let fb = unsafe { self.fb.as_slice_mut::<u32>() };
         // copy to the soft frame buffer
-        fb[..bmp.len()].copy_from_slice(bmp);
+        self.fb[..bmp.len()].copy_from_slice(bmp);
         // now copy for DMA
         for line_no in 0..FB_LINES {
             self.copy_line_to_dma(line_no);
@@ -340,7 +332,7 @@ impl XousDisplay {
 
     pub fn as_slice(&self) -> &[u32] {
         // Safety: all values of `[u32]` are valid
-        unsafe { &self.fb.as_slice::<u32>()[..FB_SIZE] }
+        &self.fb[..FB_SIZE]
     }
 
     /// Beneath this line are pure-HAL layer, and should not be user-visible
@@ -349,7 +341,6 @@ impl XousDisplay {
     fn copy_line_to_dma(&mut self, src_line: usize) {
         let hwfb = self.spim.tx_buf_mut();
         // safety: this is safe because `u32` has no invalid values
-        let fb = unsafe { self.fb.as_slice::<u32>() };
         // set the mode and address
         // the very first line is unused, except for the mode & address info
         // this is done just to keep the math easy for computing strides & alignments
@@ -358,7 +349,7 @@ impl XousDisplay {
                 | (((src_line as u32) << 6) | 0b001) << 16;
         // now copy the data
         hwfb[(self.next_free_line + 1) * FB_WIDTH_WORDS..(self.next_free_line + 2) * FB_WIDTH_WORDS]
-            .copy_from_slice(&fb[src_line * FB_WIDTH_WORDS..(src_line + 1) * FB_WIDTH_WORDS]);
+            .copy_from_slice(&self.fb[src_line * FB_WIDTH_WORDS..(src_line + 1) * FB_WIDTH_WORDS]);
         if self.devboot && src_line == 7 {
             for w in hwfb
                 [(self.next_free_line + 1) * FB_WIDTH_WORDS..(self.next_free_line + 2) * FB_WIDTH_WORDS]

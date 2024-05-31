@@ -8,6 +8,7 @@ pub enum IframBank {
 }
 
 /// `IframRange` is a range of memory that is suitable for use as a DMA target.
+#[derive(Debug)]
 pub struct IframRange {
     pub phys_range: MemoryRange,
     pub virt_range: MemoryRange,

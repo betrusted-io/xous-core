@@ -476,6 +476,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Encrypted swap: encrypted swap will allow Xous to run on microcontrollers that have small internal memory footprints, and rely on external SPI RAM for backing storage. This should create a step function in physical security when running on a microcontroller with sufficient internal protected RAM to hold the working set and core OS, as it will complicated attacks that attempt to read out off-chip RAM.
 
 # New in 0.9.17
+- Fix panic reporting in userspace panics. There was an API incompatibility between `std` and the panic handler where we instantiated the panic handler as a "well known service" but actually it needed to be registered with xous-names.
 
 ## Roadmap
 - Lots of testing and bug fixes
