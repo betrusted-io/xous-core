@@ -755,12 +755,17 @@ unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
 
     // now, program the VCO to get to as close to vco_actual
     const FREF_HZ: u32 = 48_000_000;
-    let ni = vco_actual / FREF_HZ;
+    // adjust m so that PFD runs between 4-16MHz (target 8MHz)
+    const PREDIV_M: u32 = 6;
+    let fref_hz = FREF_HZ / PREDIV_M;
+    assert!(fref_hz == 8_000_000);
+
+    let ni = vco_actual / fref_hz;
     if ni >= 4096 || ni < 8 {
         crate::println!("Warning: ni out of range: {}", ni);
     }
-    let pllmn = (1 << 12) | ni & 0xFFF; // m is set to 1, lower 12 bits is nf
-    let frac_n = ((vco_actual as f32 / FREF_HZ as f32) - ni as f32).max(0 as f32);
+    let pllmn = (PREDIV_M << 12) | ni & 0xFFF; // m is set to PREDIV_M, lower 12 bits is nf
+    let frac_n = ((vco_actual as f32 / fref_hz as f32) - ni as f32).max(0 as f32);
     let pllf: u32 = (frac_n * ((1 << 24) as f32)) as u32;
     if pllf >= 1 << 24 {
         crate::println!("Warning nf out of range: 0x{:x}", pllf);
