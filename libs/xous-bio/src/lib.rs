@@ -32,7 +32,6 @@ use utralib::generated::*;
 #[cfg(feature = "tests")]
 pub mod bio_tests;
 
-
 #[derive(Debug)]
 pub enum BioError {
     /// specified state machine is not valid
@@ -77,14 +76,11 @@ impl BioSharedState {
         let imem_slice = unsafe {
             core::slice::from_raw_parts_mut(
                 utralib::generated::HW_BIO_RAM_MEM as *mut u32,
-                utralib::generated::HW_BIO_RAM_MEM_LEN
+                utralib::generated::HW_BIO_RAM_MEM_LEN,
             )
         };
 
-        BioSharedState {
-            bio: CSR::new(utra::bio::HW_BIO_BASE as *mut u32),
-            imem_slice,
-        }
+        BioSharedState { bio: CSR::new(utra::bio::HW_BIO_BASE as *mut u32), imem_slice }
     }
 
     #[cfg(not(feature = "baremetal"))]
@@ -98,9 +94,7 @@ impl BioSharedState {
         )
         .unwrap();
 
-        BioSharedState {
-            bio: CSR::new(csr.as_mut_ptr() as *mut u32),
-        }
+        BioSharedState { bio: CSR::new(csr.as_mut_ptr() as *mut u32) }
     }
 
     pub fn load_code(&mut self, prog: &[u8], offset_bytes: usize) {

@@ -1,3 +1,5 @@
+mod debug;
+pub mod i2c;
 pub mod spi;
 pub mod units;
 
@@ -88,6 +90,7 @@ pub fn report_api(d: u32) {
 pub fn bio_tests() {
     report_api(crate::get_id());
 
+    i2c::i2c_test();
     units::fifo_level_tests();
     spi::spi_test();
     units::hello_world();
