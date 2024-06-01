@@ -8,12 +8,16 @@
 //! or an external event comes in on a host-specified GPIO pin.
 //! - x20 -/w  halt to quantum
 //!
-//! GPIO - note clear-on-0 semantics for bit-clear ops
+//! GPIO - note clear-on-0 semantics for bit-clear for data pins!
+//!   This is done so we can do a shift-and-move without an invert to
+//!   bitbang a data pin. Direction retains a more "conventional" meaning
+//!   where a write of `1` to either clear or set will cause the action,
+//!   as pin direction toggling is less likely to be in a tight inner loop.
 //! - x21 r/w  write: (x26 & x21) -> gpio pins; read: gpio pins -> x21
 //! - x22 -/w  (x26 & x22) -> `1` will set corresponding pin on gpio
 //! - x23 -/w  (x26 & x23) -> `0` will clear corresponding pin on gpio
 //! - x24 -/w  (x26 & x24) -> `1` will make corresponding gpio pin an output
-//! - x25 -/w  (x26 & x25) -> `0` will make corresponding gpio pin an input
+//! - x25 -/w  (x26 & x25) -> `1` will make corresponding gpio pin an input
 //! - x26 r/w  mask GPIO action outputs
 //!
 //! Events - operate on a shared event register. Bits [7:0] are hard-wired to FIFO
