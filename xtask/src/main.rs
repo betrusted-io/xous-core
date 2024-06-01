@@ -500,6 +500,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // builder.add_loader_feature("spim-test");
             // builder.add_loader_feature("spi-alt-channel"); // this flag, when asserted, uses the J_QSPI
             // builder.add_loader_feature("irq-test");
+            builder.add_loader_feature("usb-test");
             // header. By default, we use JPC7_13 (J_QSPI does not work, for some reason; bit 3 is stuck
             // high...)
             builder.add_loader_feature("swap");
