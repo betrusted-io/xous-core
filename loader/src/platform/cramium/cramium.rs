@@ -634,6 +634,11 @@ pub fn early_init() {
         }
     }
 
+    #[cfg(feature = "usb-test")]
+    {
+        crate::platform::usb_test::usb_test();
+    }
+
     udma_uart.write("Press any key to continue...".as_bytes());
     getc();
     crate::println!("\n\rBooting!\n\r");
