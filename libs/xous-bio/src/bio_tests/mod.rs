@@ -118,7 +118,7 @@ pub fn bio_tests() {
 // Application tests:
 //   -[x] SPI loopback test - implement using extclk as spi clk for input
 //   -[ ] I2C loopback test
-//   -[ ] IR controller test
+//   -[-] (cancelled) IR controller test
 //   -[ ] Arithmetic test, utilizing load/store on core 0
 //   -[ ] Arithmetic test, without store, cores 1-3
 //   -[ ] DMA transfer test -- might have to wait until full-chip integration to get MDMA core?

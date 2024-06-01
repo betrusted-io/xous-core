@@ -2,7 +2,7 @@ use utralib::utra::bio::{
     SFR_ETYPE_FIFO_EVENT_EQ_MASK, SFR_ETYPE_FIFO_EVENT_GT_MASK, SFR_ETYPE_FIFO_EVENT_LT_MASK,
 };
 
-use super::{report_api, TEST_INVERT_MASK};
+use super::TEST_INVERT_MASK;
 use crate::*;
 
 // this test requires manual inspection of the outputs
