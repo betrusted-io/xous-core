@@ -1,4 +1,6 @@
-use utralib::utra::bio::{SFR_ETYPE_FIFO_EVENT_EQ_MASK, SFR_ETYPE_FIFO_EVENT_GT_MASK, SFR_ETYPE_FIFO_EVENT_LT_MASK};
+use utralib::utra::bio::{
+    SFR_ETYPE_FIFO_EVENT_EQ_MASK, SFR_ETYPE_FIFO_EVENT_GT_MASK, SFR_ETYPE_FIFO_EVENT_LT_MASK,
+};
 
 use super::{report_api, TEST_INVERT_MASK};
 use crate::*;
@@ -7,7 +9,7 @@ use crate::*;
 // the GPIO pins should toggle with 0x11, 0x12, 0x13...
 // at the specified quantum rate of the machine.
 pub fn hello_world() {
-    report_api(0x1310_0000);
+    print!("hello world test\r");
     let mut bio_ss = BioSharedState::new();
     let simple_test_code = hello_world_code();
     // copy code to reset vector for 0th machine
@@ -18,7 +20,7 @@ pub fn hello_world() {
     bio_ss.bio.wo(utra::bio::SFR_QDIV0, 0x20_0000);
     // start the machine
     bio_ss.bio.wo(utra::bio::SFR_CTRL, 0x111);
-    report_api(0x1310_600D);
+    print!("===hello world PASS===\r");
 }
 #[rustfmt::skip]
 bio_code!(hello_world_code, HELLO_START, HELLO_END,
@@ -36,7 +38,7 @@ bio_code!(hello_world_code, HELLO_START, HELLO_END,
 // 0x41312111, 0x42322212, 0x43332313, etc.
 // and they should be in sync-lock, no ragged transitions
 pub fn hello_multiverse() {
-    report_api(0x1310_1000);
+    print!("multiverse\r");
     let mut bio_ss = BioSharedState::new();
     // stop all the machines, so that code can be loaded
     bio_ss.bio.wo(utra::bio::SFR_CTRL, 0x0);
@@ -58,7 +60,7 @@ pub fn hello_multiverse() {
     );
     // start all the machines, all at once
     bio_ss.bio.wo(utra::bio::SFR_CTRL, 0xfff);
-    report_api(0x1311_600D);
+    print!("===multiverse PASS===\r");
 }
 #[rustfmt::skip]
 bio_code!(multiverse_code, MULTIVERSE_START, MULTIVERSE_END,
@@ -138,8 +140,7 @@ bio_code!(multiverse_code, MULTIVERSE_START, MULTIVERSE_END,
 // be sync'd locked, but we leave it off for this test so we have
 // a demo of how things look when it's off.
 pub fn fifo_basic() {
-    report_api(0x1310_2000);
-    report_api(0xf1f0_0000);
+    print!("FIFO basic\r");
     // clear any prior test config state
     let mut test_cfg = CSR::new(utra::main::HW_MAIN_BASE as *mut u32);
     test_cfg.wo(utra::main::WDATA, 0);
@@ -160,8 +161,7 @@ pub fn fifo_basic() {
     bio_ss.bio.wo(utra::bio::SFR_CONFIG, 0);
     // start all the machines, all at once
     bio_ss.bio.wo(utra::bio::SFR_CTRL, 0xfff);
-
-    report_api(0x1312_600D);
+    print!("===FIFO basic PASS===\r");
 }
 #[rustfmt::skip]
 bio_code!(fifo_basic_code, FIFO_BASIC_START, FIFO_BASIC_END,
@@ -227,8 +227,7 @@ bio_code!(fifo_basic_code, FIFO_BASIC_START, FIFO_BASIC_END,
 // GPIO outputs are run without snapping in this case, because there is just one
 // machine updating outputs and no need to do that.
 pub fn host_fifo_tests() {
-    report_api(0x1310_3000);
-    report_api(0xf1f0_0001);
+    print!("Host FIFO tests\r");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::main::HW_MAIN_BASE as *mut u32);
     test_cfg.wo(utra::main::WDATA, 0);
@@ -279,7 +278,7 @@ pub fn host_fifo_tests() {
         } else {
             assert!(rbk == !(0xF1F0_0000 + 15));
         }
-        report_api(rbk);
+        print!("backpressure {:x}\r", rbk);
     }
 
     fn get_gpio_via_core(bio_ss: &mut BioSharedState) -> u32 {
@@ -292,7 +291,6 @@ pub fn host_fifo_tests() {
     }
 
     // load next test
-    report_api(0xf1f0_0002);
     // clear inversions, etc on readbacks via I/O
     test_cfg.wo(utra::main::WDATA, 0);
     // stop machine & load code
@@ -316,7 +314,7 @@ pub fn host_fifo_tests() {
 
     // confirm the core booted
     let f1_val = get_gpio_via_core(&mut bio_ss);
-    report_api(f1_val);
+    print!("core booted {:x}\r", f1_val);
     assert!(f1_val == 0xfeedface);
     // ensure fifo levels are where we think they are
     assert!(bio_ss.bio.rf(utra::bio::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0) == 0);
@@ -333,25 +331,25 @@ pub fn host_fifo_tests() {
         // wait for fifo to drain
     }
     let pause_val = get_gpio_via_core(&mut bio_ss);
-    report_api(pause_val);
+    print!("pause_val {:x}\r", pause_val);
     assert!(pause_val == final_val);
     // drop one more value in and confirm it appears
     let stop_val = 0xACE0_BACE;
     bio_ss.bio.wo(utra::bio::SFR_TXF0, stop_val);
     let stop_confirm_val = get_gpio_via_core(&mut bio_ss);
-    report_api(stop_confirm_val);
+    print!("stop_confirm_val {:x}\r", stop_confirm_val);
     assert!(stop_val == stop_confirm_val);
 
     // fifo2 should have the entire log of all values in it. make sure that's the case
     for i in 0..7 {
         let f2_val = bio_ss.bio.r(utra::bio::SFR_RXF2);
-        report_api(f2_val);
+        print!("f2_val {:x}\r", f2_val);
         assert!(f2_val == 0xf1f0_1000 + i);
     }
     let stop_check = bio_ss.bio.r(utra::bio::SFR_RXF2);
-    report_api(stop_check);
+    print!("stop_check {:x}\r", stop_check);
     assert!(stop_check == stop_val);
-    report_api(0x1313_600D);
+    print!("===Host FIFO PASS===\r");
 }
 #[rustfmt::skip]
 bio_code!(fifo_host_bitbang, FIFO_HOST_BITBANG_START, FIFO_HOST_BITBANG_END,
@@ -440,11 +438,10 @@ struct FifoLevelTestConfig {
     event_masks: [u32; 2],
 }
 
-// TODO: i think this can be done without any code running on the machines; the host can
+// This can be done without any code running on the machines; the host can
 // set and observe all fifo levels and triggers directly.
 pub fn fifo_level_tests() {
-    report_api(0x1310_4000);
-    report_api(0xf1f0_0003);
+    print!("FIFO level comprehensive\r");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::main::HW_MAIN_BASE as *mut u32);
     test_cfg.wo(utra::main::WDATA, 0);
@@ -506,14 +503,17 @@ pub fn fifo_level_tests() {
     let mut rx_checks = [0u32; FIFO_MAX as usize];
     let mut tx_state = 0x1;
     let irq_masks: [Register; 4] = [
-        utra::bio::SFR_IRQMASK_0, utra::bio::SFR_IRQMASK_1, utra::bio::SFR_IRQMASK_2, utra::bio::SFR_IRQMASK_3
+        utra::bio::SFR_IRQMASK_0,
+        utra::bio::SFR_IRQMASK_1,
+        utra::bio::SFR_IRQMASK_2,
+        utra::bio::SFR_IRQMASK_3,
     ];
     let irqarray18 = CSR::new(utra::irqarray18::HW_IRQARRAY18_BASE as *mut u32);
 
     for (bank, config) in fifo_test_configs.iter().enumerate() {
         let irq_mask_reg = irq_masks[bank];
         let irq_mask = (1 << bank) as u32;
-        report_api(0xf1f0_f1f0 + irq_mask);
+        print!("irq_mask {:x}\r", irq_mask);
         // we want to check that less than, equals, and greater than triggers work individually
         // then we want to check that lt+eq and gt+eq work together
         // lt+gt trigger doesn't make sense, we just don't check that
@@ -522,7 +522,7 @@ pub fn fifo_level_tests() {
             // reset all the fifos
             bio_ss.bio.wo(utra::bio::SFR_FIFO_CLR, 0xF);
             for test_level in 0..FIFO_MAX {
-                report_api(0xf1f0_4000 + test_level + ((bank as u32) << 8));
+                print!("test_level {:x} bank {:x}\r", test_level, bank);
                 // test eq at level
                 bio_ss.bio.wfo(level, test_level);
                 bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_EQ_MASK, mask);
@@ -697,5 +697,5 @@ pub fn fifo_level_tests() {
             bio_ss.bio.wo(irq_mask_reg, 0);
         }
     }
-    report_api(0x1314_600D);
+    print!("===FIFO level comprehensive PASS===\r")
 }
