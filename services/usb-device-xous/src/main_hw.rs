@@ -85,8 +85,6 @@ pub(crate) fn main_hw() -> ! {
     let tt = ticktimer_server::Ticktimer::new().unwrap();
     #[cfg(not(feature = "minimal"))]
     let native_kbd = keyboard::Keyboard::new(&xns).unwrap();
-    #[cfg(not(feature = "minimal"))]
-    let native_map = native_kbd.get_keymap().unwrap();
 
     #[cfg(not(feature = "minimal"))]
     let serial_number = format!("{:x}", llio.soc_dna().unwrap());
@@ -1165,6 +1163,7 @@ pub(crate) fn main_hw() -> ! {
                 match view {
                     Views::FidoWithKbd => {
                         if usb_dev.state() == UsbDeviceState::Configured {
+                            let native_map = native_kbd.get_keymap().unwrap();
                             let mut codes = Vec::<Keyboard>::new();
                             if code0 != 0 {
                                 codes.push(match native_map {
@@ -1262,6 +1261,9 @@ pub(crate) fn main_hw() -> ! {
                 match view {
                     #[cfg(not(feature = "minimal"))]
                     Views::FidoWithKbd => {
+                        // check keymap on every call because we may need to toggle this for e.g. plugging
+                        // into a new host with a different map
+                        let native_map = native_kbd.get_keymap().unwrap();
                         for ch in usb_send.s.as_str().unwrap().chars() {
                             // ASSUME: user's keyboard type matches the preference on their Precursor device.
                             let codes = match native_map {

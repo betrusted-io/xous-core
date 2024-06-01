@@ -1,4 +1,4 @@
-use std::io::{Error, ErrorKind, Read, Write};
+use std::io::{Read, Write};
 use std::path::Path;
 
 use ed25519_dalek::{DigestSigner, SigningKey};
@@ -9,6 +9,7 @@ use sha2::{Digest, Sha512};
 
 const LOADER_VERSION: u32 = 1;
 const LOADER_PREHASH_VERSION: u32 = 2;
+const RV_SKIP_I: u32 = 0x0000106f; // jal x0, 4096
 
 use xous_semver::SemVer;
 
@@ -26,6 +27,7 @@ pub fn sign_image(
     defile: bool,
     minver: &Option<SemVer>,
     semver: Option<[u8; 16]>,
+    with_jump: bool,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut source = source.to_owned();
     let mut dest_file = vec![];
@@ -35,9 +37,7 @@ pub fn sign_image(
     let minver_bytes = if let Some(mv) = minver { mv.into() } else { [0u8; 16] };
     let semver: [u8; 16] = match semver {
         Some(semver) => semver,
-        None => SemVer::from_git()
-            .map_err(|_| Error::new(ErrorKind::Other, "error parsing current Git rev"))?
-            .into(),
+        None => SemVer::from_git()?.into(),
     };
 
     // extra data appended here needs to be reflected in two places in Xous:
@@ -66,6 +66,13 @@ pub fn sign_image(
         Ed25519KeyPair::from_pkcs8_maybe_unchecked(&private_key.contents).map_err(|e| format!("{}", e))?;
     let signature = signing_key.sign(&source);
 
+    let extra_pad = if with_jump {
+        dest_file.write_all(&RV_SKIP_I.to_le_bytes())?;
+        4
+    } else {
+        0
+    };
+
     dest_file.write_all(&LOADER_VERSION.to_le_bytes())?;
     dest_file.write_all(&(source.len() as u32).to_le_bytes())?;
 
@@ -75,7 +82,7 @@ pub fn sign_image(
 
     // Pad the first sector to 4096 bytes.
     let mut v = vec![];
-    v.resize(4096 - 4 - 4 - signature_u8.len(), 0);
+    v.resize(4096 - 4 - 4 - signature_u8.len() - extra_pad, 0);
     dest_file.write_all(&v)?;
 
     // Fill the remainder of the source data
@@ -98,6 +105,7 @@ pub fn sign_image_prehash(
     defile: bool,
     minver: &Option<SemVer>,
     semver: Option<[u8; 16]>,
+    with_jump: bool,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut source = source.to_owned();
     let mut dest_file = vec![];
@@ -107,9 +115,7 @@ pub fn sign_image_prehash(
     let minver_bytes = if let Some(mv) = minver { mv.into() } else { [0u8; 16] };
     let semver: [u8; 16] = match semver {
         Some(semver) => semver,
-        None => SemVer::from_git()
-            .map_err(|_| Error::new(ErrorKind::Other, "error parsing current Git rev"))?
-            .into(),
+        None => SemVer::from_git()?.into(),
     };
 
     // extra data appended here needs to be reflected in two places in Xous:
@@ -145,6 +151,13 @@ pub fn sign_image_prehash(
     let signing_key = SigningKey::from_bytes(&secbytes);
     let signature = signing_key.sign_digest(h);
 
+    let extra_pad = if with_jump {
+        dest_file.write_all(&RV_SKIP_I.to_le_bytes())?;
+        4
+    } else {
+        0
+    };
+
     dest_file.write_all(&LOADER_PREHASH_VERSION.to_le_bytes())?;
     dest_file.write_all(&(source.len() as u32).to_le_bytes())?;
 
@@ -154,7 +167,7 @@ pub fn sign_image_prehash(
 
     // Pad the first sector to 4096 bytes.
     let mut v = vec![];
-    v.resize(4096 - 4 - 4 - signature_u8.len(), 0);
+    v.resize(4096 - 4 - 4 - signature_u8.len() - extra_pad, 0);
     dest_file.write_all(&v)?;
 
     // Fill the remainder of the source data
@@ -178,6 +191,7 @@ pub fn sign_file<S, T>(
     defile: bool,
     minver: &Option<SemVer>,
     use_prehash: bool,
+    with_jump: bool,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     S: AsRef<Path>,
@@ -189,9 +203,9 @@ where
     source_file.read_to_end(&mut source)?;
 
     let result = if use_prehash {
-        sign_image_prehash(&source, private_key, defile, minver, None)?
+        sign_image_prehash(&source, private_key, defile, minver, None, with_jump)?
     } else {
-        sign_image(&source, private_key, defile, minver, None)?
+        sign_image(&source, private_key, defile, minver, None, with_jump)?
     };
     dest_file.write_all(&result)?;
     Ok(())

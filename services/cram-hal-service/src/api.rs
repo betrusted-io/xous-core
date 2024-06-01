@@ -1,4 +1,6 @@
+pub mod keyboard;
 use cramium_hal::iox;
+pub use keyboard::*;
 
 /// The Opcode numbers here should not be changed. You can add new ones,
 /// but do not re-use old numbers or repurpose them. This is because the

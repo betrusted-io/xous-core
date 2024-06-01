@@ -97,7 +97,7 @@ impl XousDisplay {
     /// The addresses of these structures are passed as `u32` and unsafely cast back
     /// into pointers on the user's side. We do this because the panic handler is special:
     /// it grabs ahold of the low-level hardware, yanking control from the higher level
-    /// control functons, without having to map its own separate pages.
+    /// control functions, without having to map its own separate pages.
     ///
     /// Of course, "anyone" with a copy of this data can clobber existing graphics operations. Thus,
     /// any access to these registers have to be protected with a mutex of some form. In the case of

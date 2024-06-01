@@ -31,7 +31,7 @@ const PRECURSOR_SOC_VERSION: &str = "pvt";
   Backups older than this cannot be parsed because the migration code for that backup
   was deprecated. The main purpose of this field is to assist the restore script
   in selecting a kernel: it will automatically downgrade a kernel as far as it must
-  to read a very old backup. This tag is *not* useful for enforcing a minimum
+  read a very old backup. This tag is *not* useful for enforcing a minimum
   version of the kernel to read a very *new* backup.
 
   Instead, when picking a kernel to restore from, the latest kernel should always be picked,
@@ -98,8 +98,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // security
             "root-keys",
             "trng",
-            "sha2@0.10.8",
-            "engine-25519",
+            "sha2",
+            // "engine-25519",
             "jtag",
             // GUI front end
             "status",
@@ -118,12 +118,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ---- extract position independent args ----
     let loader_key = get_flag("--lkey")?;
-    if loader_key.len() != 0 {
+    if !loader_key.is_empty() {
         builder.loader_key_file(loader_key[0].to_string());
     }
     let kernel_key = get_flag("--kkey")?;
-    if kernel_key.len() != 0 {
+    if !kernel_key.is_empty() {
         builder.kernel_key_file(kernel_key[0].to_string());
+    }
+    let swap_key = get_flag("--swap")?;
+    if swap_key.len() != 0 {
+        let swap_parts: Vec<&str> = swap_key[0].split(':').collect();
+        if swap_parts.len() != 2 {
+            return Err(
+                "Error: --swap argument should be of the form [offset]:[size] as hex numbers without 0x"
+                    .into(),
+            );
+        }
+
+        let offset = match u32::from_str_radix(swap_parts[0], 16) {
+            Ok(o) => o,
+            Err(e) => {
+                return Err(format!(
+                    "Error: offset should be hex number without 0x prefix {}: {:?}",
+                    swap_parts[0], e
+                )
+                .into());
+            }
+        };
+
+        let size = match u32::from_str_radix(swap_parts[1], 16) {
+            Ok(o) => o,
+            Err(e) => {
+                return Err(format!(
+                    "Error: offset should be hex number without 0x prefix {}: {:?}",
+                    swap_parts[1], e
+                )
+                .into());
+            }
+        };
+
+        builder.set_swap(offset, size);
     }
 
     let extra_apps = get_flag("--app")?;
@@ -159,6 +193,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if env::args().filter(|x| x == "--offline").count() != 0 {
         builder.add_global_flag("--offline");
     }
+    if env::args().filter(|x| x == "--change-target").count() != 0 {
+        builder.set_change_target_flag();
+    }
+
+    // manage an ugly patch we have to do to selectively configure AES for only cramium-soc targets
+    match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
+        Ok(false) => {
+            builder::search_and_replace_in_file(
+                "services/aes/Cargo.toml",
+                "default = [\"cramium-soc\"]",
+                "default = []",
+            )
+            .expect("couldn't patch AES");
+
+            match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
+                Ok(false) => {
+                    return Err(
+                        "Couldn't revert services/aes/Cargo.toml -- is the file writeable or corrupted?"
+                            .into(),
+                    );
+                }
+                _ => (),
+            }
+        }
+        _ => {}
+    }
+    let mut broken_aes_cleanup = false;
 
     // ---- now process the verb plus position dependent arguments ----
     let mut args = env::args();
@@ -175,66 +236,94 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         // ----- renode configs --------
         Some("renode-image") => {
-            builder
-                .target_renode()
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                .add_apps(&get_cratespecs());
+            builder.target_renode().add_services(&user_pkgs).add_apps(&get_cratespecs());
+            builder.add_loader_feature("resume");
+            // builder.add_loader_feature("debug-print");
         }
         Some("renode-image-debug") => {
             builder
                 .target_renode()
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_loader_feature("resume")
+                .add_services(&user_pkgs)
                 .stream(BuildStream::Debug)
                 .add_apps(&get_cratespecs());
         }
         Some("renode-test") => {
-            builder
-                .target_renode()
-                .add_services(&base_pkgs.into_iter().map(String::from).collect())
-                .add_services(&get_cratespecs());
+            builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
         }
         Some("libstd-test") => {
-            builder
-                .target_renode()
-                .add_services(&base_pkgs.into_iter().map(String::from).collect())
-                .add_services(&get_cratespecs());
+            builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
             builder.add_loader_feature("renode-bypass");
         }
         Some("libstd-net") => {
-            builder
-                .target_renode()
-                .add_services(&base_pkgs.into_iter().map(String::from).collect())
-                .add_services(&get_cratespecs());
+            builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
             builder.add_loader_feature("renode-bypass").add_loader_feature("renode-minimal");
             builder
-                .add_service("net", false)
-                .add_service("com", false)
-                .add_service("llio", false)
-                .add_service("dns", false);
+                .add_service("net", LoaderRegion::Ram)
+                .add_service("com", LoaderRegion::Ram)
+                .add_service("llio", LoaderRegion::Ram)
+                .add_service("dns", LoaderRegion::Ram);
         }
         Some("renode-aes-test") => {
-            builder
-                .target_renode()
-                .add_services(&aes_test_pkgs.into_iter().map(String::from).collect())
-                .add_services(&get_cratespecs());
+            builder.target_renode().add_services(&aes_test_pkgs).add_services(&get_cratespecs());
         }
         Some("ffi-test") => {
-            builder
-                .target_renode()
-                .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
-                .add_services(&get_cratespecs());
-            builder.add_service("ffi-test", false);
+            builder.target_renode().add_services(&gfx_base_pkgs).add_services(&get_cratespecs());
+            builder.add_service("ffi-test", LoaderRegion::Ram);
             builder.add_loader_feature("renode-bypass");
+        }
+        Some("renode-swap") => {
+            let swap_pkgs = ["xous-ticktimer", "xous-log", "xous-susres"];
+            if !builder.is_swap_set() {
+                builder.set_swap(0x4020_0000, 4 * 1024 * 1024);
+            }
+            builder.target_renode();
+            // builder.target_cramium_soc();
+            builder.add_loader_feature("debug-print");
+            builder.add_loader_feature("swap");
+            builder.add_kernel_feature("swap");
+            builder.add_feature("swap");
+            builder.add_kernel_feature("debug-swap");
+            // builder.add_kernel_feature("debug-swap-verbose");
+            // builder.add_kernel_feature("debug-print");
+            builder.add_loader_feature("resume");
+            // It is important that this is the first service added, because the swapper *must* be in PID 2
+            builder.add_service("xous-swapper", LoaderRegion::Flash);
+            builder.add_kernel_feature("swap");
+
+            for service in swap_pkgs {
+                builder.add_service(service, LoaderRegion::Flash);
+            }
+            let swap_pkgs = [
+                "xous-names",
+                "trng",
+                "graphics-server",
+                "llio",
+                "early_settings", // required by keyboard
+                "spinor",
+                "keyboard",
+                "gam",
+                "modals",
+                "ime-plugin-shell",
+                "ime-frontend",
+                // "test-swapper",
+                "cram-console",
+            ]
+            .to_vec();
+            for service in swap_pkgs {
+                builder.add_service(service, LoaderRegion::Swap);
+            }
+
+            builder.add_apps(get_cratespecs());
         }
 
         // ------- hosted mode configs -------
         Some("run") => {
             builder
                 .target_hosted()
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("pddbtest")
                 .add_feature("ditherpunk")
-                .add_feature("tracking-alloc")
                 .add_feature("tls")
                 // .add_feature("test-rekey")
                 .add_apps(&get_cratespecs());
@@ -242,14 +331,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("pddb-ci") => {
             builder
                 .target_hosted()
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("pddb/ci")
                 .add_feature("pddb/deterministic");
         }
         Some("pddb-btest") => {
             builder
                 .target_hosted()
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("pddbtest")
                 .add_feature("autobasis") // this will make secret basis tracking synthetic and automated for stress testing
                 .add_feature("autobasis-ci")
@@ -258,7 +347,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("hosted-debug") => {
             builder
                 .target_hosted()
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("pddbtest")
                 .add_feature("ditherpunk")
                 .add_feature("tracking-alloc")
@@ -269,40 +358,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("gfx-dev") => {
             builder
                 .target_hosted()
-                .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
+                .add_services(&gfx_base_pkgs)
                 .add_services(&get_cratespecs())
                 .add_feature("graphics-server/gfx-testing");
         }
         Some("hosted-ci") => {
-            builder
-                .target_hosted()
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                .hosted_build_only()
-                .add_apps(&get_cratespecs());
+            builder.target_hosted().add_services(&user_pkgs).hosted_build_only().add_apps(&get_cratespecs());
         }
 
         // ------ Precursor hardware image configs ------
         Some("app-image") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("mass-storage") // add this in by default to help with testing
                 .add_apps(&get_cratespecs());
         }
         Some("app-image-xip") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                //.add_services(&user_pkgs.into_iter().map(String::from).collect())
+                //.add_services(&user_pkgs)
                 .add_feature("mass-storage"); // add this in by default to help with testing
             for service in user_pkgs {
                 if (service != "shellchat") && (service != "ime-plugin-shell" && (service != "net")) {
-                    builder.add_service(service, false);
+                    builder.add_service(service, LoaderRegion::Ram);
                 } else {
-                    builder.add_service(service, true);
+                    builder.add_service(service, LoaderRegion::Flash);
                 }
             }
             for app in get_cratespecs() {
-                builder.add_app(&app, true);
+                builder.add_app(&app, LoaderRegion::Flash);
             }
         }
         Some("perf-image") => {
@@ -322,7 +407,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // by the usb_update script.
             builder
                 .target_precursor("c809403-perflib")
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_apps(&get_cratespecs())
                 .add_feature("perfcounter")
                 .add_kernel_feature("v2p");
@@ -350,9 +435,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             pkgs.push("ime-plugin-tts");
             pkgs.retain(|&pkg| pkg != "ime-plugin-shell");
 
-            builder.add_services(&pkgs.into_iter().map(String::from).collect())
+            builder.add_services(&pkgs)
                 .add_apps(&get_cratespecs())
-                .add_service("espeak-embedded#https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/espeak-embedded", false)
+                .add_service("espeak-embedded#https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/espeak-embedded",
+                    LoaderRegion::Ram)
                 .override_locale("en-tts")
                 .add_feature("tts")
                 .add_feature("braille");
@@ -360,62 +446,89 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("tiny") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                .add_services(&base_pkgs.into_iter().map(String::from).collect())
+                .add_services(&base_pkgs)
                 .add_services(&get_cratespecs());
         }
         Some("usbdev") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                .add_services(&base_pkgs.into_iter().map(String::from).collect())
+                .add_services(&base_pkgs)
                 .add_services(&get_cratespecs());
             //builder.add_service("usb-test");
-            builder.add_service("usb-device-xous", false);
+            builder.add_service("usb-device-xous", LoaderRegion::Ram);
         }
         Some("pddb-dev") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                .add_services(&pddb_dev_pkgs.into_iter().map(String::from).collect())
+                .add_services(&pddb_dev_pkgs)
                 .add_services(&get_cratespecs());
         }
         Some("trng-test") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("urandomtest");
         }
         Some("ro-test") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("ringosctest");
         }
         Some("av-test") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("avalanchetest");
         }
         Some("compile-apps") => {
-            builder
-                .target_precursor_no_image(PRECURSOR_SOC_VERSION)
-                .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect());
+            builder.target_precursor_no_image(PRECURSOR_SOC_VERSION).add_services(&gfx_base_pkgs);
         }
 
         // ------ Cramium hardware image configs ------
         Some("cramium-fpga") | Some("cramium-soc") => {
-            let cramium_pkgs =
-                ["xous-log", "xous-names", "xous-ticktimer", "cram-hal-service", "graphics-server"].to_vec();
+            // placement in flash is a tension between dev convenience and RAM usage. Things in flash
+            // are resident, non-swapable, but end up making the slow kernel burn process take longer.
+            let cramium_flash_pkgs =
+                ["xous-ticktimer", "xous-log", "cram-hal-service", "xous-names", "graphics-server"].to_vec();
+            let cramium_swap_pkgs =
+                ["gam", "modals", "ime-plugin-shell", "ime-frontend", "cram-console"].to_vec();
+            if !builder.is_swap_set() {
+                builder.set_swap(0, 4 * 1024 * 1024);
+            }
+            // builder.add_loader_feature("board-bringup");
+            // builder.add_loader_feature("spim-test");
+            // builder.add_loader_feature("spi-alt-channel"); // this flag, when asserted, uses the J_QSPI
+            // builder.add_loader_feature("irq-test");
+            // header. By default, we use JPC7_13 (J_QSPI does not work, for some reason; bit 3 is stuck
+            // high...)
+            builder.add_loader_feature("swap");
+            builder.add_kernel_feature("swap");
+            builder.add_feature("swap");
+
             builder.add_loader_feature("debug-print");
-            builder.add_loader_feature("board-bringup");
-            builder.add_kernel_feature("v2p");
+            // builder.add_kernel_feature("debug-swap");
+            // builder.add_kernel_feature("debug-print");
+            // builder.add_kernel_feature("debug-swap-verbose");
+
+            builder.add_feature("quantum-timer");
+            // builder.add_kernel_feature("v2p");
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),
                 Some("cramium-soc") => builder.target_cramium_soc(),
                 _ => panic!("should be unreachable"),
             };
+            broken_aes_cleanup = true;
+
+            // It is important that this is the first service added, because the swapper *must* be in PID 2
+            builder.add_service("xous-swapper", LoaderRegion::Flash);
+
+            for service in cramium_flash_pkgs {
+                builder.add_service(service, LoaderRegion::Flash);
+            }
             builder.add_services(&get_cratespecs());
-            for service in cramium_pkgs {
-                builder.add_service(service, true);
+            for service in cramium_swap_pkgs {
+                builder.add_service(service, LoaderRegion::Swap);
             }
         }
 
@@ -423,11 +536,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("arm-tiny") => {
             builder
                 .target_arm()
-                .add_services(&vec![
-                    "xous-log".to_string(),
-                    "xous-ticktimer".to_string(),
-                    "xous-names".to_string(),
-                    "ticktimer-test-client".to_string(),
+                .add_services([
+                    "xous-log",
+                    "xous-ticktimer",
+                    "xous-names",
+                    "ticktimer-test-client",
                 ])
                 .add_kernel_feature("v2p") // required to use LCD DMA with lcd-console
                 .add_feature("atsama5d27")
@@ -444,6 +557,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     builder.build()?;
 
+    // AES is broken in the current rev of the Cramium SoC. This unpatches the crate so other builds can
+    // work properly.
+    if broken_aes_cleanup {
+        builder::search_and_replace_in_file(
+            "services/aes/Cargo.toml",
+            "default = [\"cramium-soc\"]",
+            "default = []",
+        )
+        .expect("couldn't patch AES");
+    }
+    match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
+        Ok(false) => {
+            println!(
+                "Build configuration is out of sync: cramium-soc patch on AES crate was not cleared out"
+            );
+            return Err("services/aes/Cargo.toml is in a bad state! Revert any patches to the file.".into());
+        }
+        _ => {}
+    }
     // the intent of this call is to check that crates we are sourcing from crates.io
     // match the crates in our local source. The usual cause of an inconsistency is
     // a maintainer forgot to publish a change to crates.io.
@@ -483,6 +615,7 @@ fn print_help() {
 "cargo xtask [verb] [cratespecs ..]
     [--feature [feature name]]
     [--lkey [loader key]] [--kkey [kernel key]]
+    [--swap [offset:size]]
     [--app [cratespec]]
     [--service [cratespec]]
     [--no-timestamp]
@@ -490,6 +623,7 @@ fn print_help() {
     [--gdb-stub]
     [--debug-loader]
     [--offline]
+    [--change-target]
 
 [cratespecs] is a list of 0 or more items of the following syntax:
    [name]                crate 'name' to be built from local source
@@ -513,6 +647,9 @@ be merged in with explicit app/service treatment with the following flags:
 [--gdb-stub]             Build the kernel with GDB support
 [--debug-loader]         Enable debug printing in the loader
 [--offline]              Avoid network traffic
+[--swap offset:size]     Specify a region for swap memory. The behavior of this depends on the target.
+[--change-target]        Used to clean the cached target/*/*/build/SVD_PATH when changing build targets.
+                         This will also force a full rebuild every time the flag is specified.
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.

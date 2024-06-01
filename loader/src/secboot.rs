@@ -14,7 +14,7 @@ const VERSION_STR: &'static str = "Xous OS Loader v0.9.6\n\r";
 // v0.9.6 -- convert signature check to pre-hash signature (see #472 https://github.com/betrusted-io/xous-core/issues/472)
 
 pub const STACK_LEN: u32 = 8192 - (7 * 4); // 7 words for backup kernel args
-pub const STACK_TOP: u32 = 0x4100_0000 - STACK_LEN;
+pub const STACK_TOP: u32 = (crate::platform::RAM_BASE + crate::platform::RAM_SIZE) as u32 - STACK_LEN;
 
 use utralib::generated::*;
 

@@ -17,8 +17,6 @@ default-members = [
   "services/shellchat",
   "services/llio",
   "services/codec",
-  #  "services/engine-sha512",
-  "services/engine-25519",
   "services/aes",
   "services/spinor",
   "services/root-keys",
@@ -60,8 +58,6 @@ members = [
   "services/content-plugin-api",
   "services/llio",
   "services/codec",
-  #  "services/engine-sha512",
-  "services/engine-25519",
   "services/aes",
   "services/spinor",
   "services/root-keys",
@@ -106,6 +102,8 @@ members = [
   "libs/xous-pl230",
   "libs/cramium-hal",
   "services/cram-hal-service",
+  "services/xous-swapper",
+  "services/test-swapper",
 ]
 resolver = "2"
 
@@ -139,20 +137,15 @@ opt-level = "s" # z,s: Optimize for size instead of performance; 1 for easier de
 [patch.crates-io]
 sha2 = { git = "https://github.com/betrusted-io/hashes.git", branch = "sha2-v0.10.8-xous" }
 # sha2 = { path = "../hashes/sha2" }
-# This is needed by `p256`, currently the last holdout (a `vault` depenedncy)
-sha2_legacy = { git = "https://github.com/RustCrypto/hashes.git", tag = "sha2-v0.9.9", package = "sha2" }
 
 [patch.crates-io.aes]
 path = "services/aes"
 
-#[patch.crates-io.curve25519-dalek]
-#git = "https://github.com/betrusted-io/curve25519-dalek.git"
-#branch = "main"
-#path = "../curve25519-dalek/curve25519-dalek" # when doing local dev work
+[patch.crates-io.curve25519-dalek]
+git = "https://github.com/betrusted-io/curve25519-dalek.git"
+branch = "main"
+# path = "../curve25519-dalek/curve25519-dalek" # when doing local dev work
 # feature overrides are specified at the crate level
-
-[patch."https://github.com/betrusted-io/xous-engine-25519.git"]
-engine-25519 = { path = "services/engine-25519" }
 
 [patch.crates-io.usb-device]
 git = "https://github.com/betrusted-io/usb-device.git"

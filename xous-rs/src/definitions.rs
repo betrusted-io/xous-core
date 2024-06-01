@@ -55,6 +55,10 @@ pub const BASE_QUANTA_MS: u32 = 10;
 pub const BOOKEND_START: &str = "_|TT|_";
 pub const BOOKEND_END: &str = "_|TE|_";
 
+/// Hard-wired PID of the swapper
+#[cfg(feature = "swap")]
+pub const SWAPPER_PID: u8 = 2;
+
 #[cfg(not(any(target_os = "xous", target_os = "none")))]
 use core::sync::atomic::AtomicU64;
 
@@ -303,18 +307,18 @@ impl core::fmt::Display for MemoryType {
 #[repr(C)]
 #[derive(Debug, PartialEq)]
 pub enum Result {
-    // 0
+    /// 0
     Ok,
-    // 1
+    /// 1
     Error(Error),
 
-    // 2
+    /// 2
     MemoryAddress(MemoryAddress),
 
-    // 3
+    /// 3
     MemoryRange(MemoryRange),
 
-    // 4
+    /// 4
     ReadyThreads(
         usize, /* count */
         usize,
@@ -325,25 +329,25 @@ pub enum Result {
         /* pid2 */ usize, /* context2 */
     ),
 
-    // 5
+    /// 5
     ResumeProcess,
 
-    // 6
+    /// 6
     ServerID(SID),
 
-    // 7
+    /// 7
     ConnectionID(CID),
 
-    // 8
+    /// 8
     NewServerID(SID, CID),
 
-    // 9
+    /// 9
     MessageEnvelope(MessageEnvelope),
 
-    // 10
+    /// 10
     ThreadID(TID),
 
-    // 11
+    /// 11
     ProcessID(PID),
 
     /// 12: The requested system call is unimplemented
@@ -377,9 +381,10 @@ pub enum Result {
     /// 20: A scalar with five values
     Scalar5(usize, usize, usize, usize, usize),
 
-    // 21: A message is returned as part of `send_message()` when the result is blocking
+    /// 21: A message is returned as part of `send_message()` when the result is blocking
     Message(Message),
 
+    /// Reserved: do not rely on the argument numbering for this variant.
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -582,4 +587,46 @@ macro_rules! msg_blocking_scalar_unpack {
             log::error!("message expansion failed in msg_scalar_unpack macro")
         }
     }};
+}
+
+#[cfg(feature = "swap")]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum AllocAdvice {
+    /// the PID of the allocation, virtual address in PID space, physical address
+    Allocate(PID, usize, usize),
+    /// the PID of the page freed, virtual address in PID space, physical address
+    Free(PID, usize, usize),
+    /// not yet initialized record
+    Uninit,
+}
+#[cfg(feature = "swap")]
+impl AllocAdvice {
+    pub fn serialize(&self) -> (usize, usize) {
+        match self {
+            AllocAdvice::Allocate(pid, vaddr, paddr) => {
+                (
+                    (pid.get() as usize) << 24 | (vaddr >> 12),
+                    (1 << 24) | (paddr >> 12), // 1 indicates an alloc
+                )
+            }
+            AllocAdvice::Free(pid, vaddr, paddr) => {
+                (
+                    (pid.get() as usize) << 24 | (vaddr >> 12),
+                    (0 << 24) | (paddr >> 12), // 0 indicates a free
+                )
+            }
+            AllocAdvice::Uninit => (0, 0),
+        }
+    }
+
+    pub fn deserialize(a0: usize, a1: usize) -> Self {
+        if a0 == 0 && a1 == 0 {
+            AllocAdvice::Uninit
+        } else if (a1 & (1 << 24)) == 0 {
+            // don't have to mask a0 or a1 high bits because << 12 shifts the high flag byte out
+            AllocAdvice::Free(NonZeroU8::new((a0 >> 24) as u8).unwrap(), a0 << 12, a1 << 12)
+        } else {
+            AllocAdvice::Allocate(NonZeroU8::new((a0 >> 24) as u8).unwrap(), a0 << 12, a1 << 12)
+        }
+    }
 }

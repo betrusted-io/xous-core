@@ -26,7 +26,7 @@ use xous_ipc::Buffer;
 mod fontmap;
 use api::BulkRead;
 
-#[cfg(any(feature = "precursor", feature = "renode"))]
+#[cfg(any(feature = "precursor", feature = "renode", feature = "cramium-soc"))]
 // only install for hardware targets; hosted mode uses host's panic handler
 mod panic;
 
@@ -172,6 +172,13 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
         };
         panic::panic_handler_thread(is_panic.clone(), hwfb, control);
     }
+    #[cfg(feature = "cramium-soc")]
+    {
+        // This is safe because the SPIM is finished with initialization, and the handler is
+        // Mutex-protected.
+        let hw_if = unsafe { display.hw_regs() };
+        panic::panic_handler_thread(is_panic.clone(), hw_if);
+    }
 
     let xns = xous_names::XousNames::new().unwrap();
     // these connections should be established:
@@ -182,7 +189,13 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
     #[cfg(not(target_os = "xous"))]
     let sid = xns.register_name(api::SERVER_NAME_GFX, Some(1)).expect("can't register server");
     #[cfg(feature = "cramium-soc")]
-    let sid = xns.register_name(api::SERVER_NAME_GFX, Some(1)).expect("can't register server");
+    let sid = {
+        log::warn!(
+            "Remember to notch the expected connections for graphics_server down to 1 after initial testing!"
+        );
+        // 2 for now -- one for GAM, one for testing
+        xns.register_name(api::SERVER_NAME_GFX, Some(2)).expect("can't register server")
+    };
 
     let screen_clip = Rectangle::new(Point::new(0, 0), display.screen_size());
 

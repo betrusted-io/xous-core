@@ -144,10 +144,17 @@ mod implementation {
             .expect("couldn't map SusRes CSR range");
 
             // note that mapping a page zeroes it out. Plus, this should have been zero'd by the bootloader.
+            #[cfg(not(feature = "swap"))]
             let marker = xous::syscall::map_memory(
-                xous::MemoryAddress::new(0x4100_0000 - 0x3000), /* this is a special, hard-coded location;
-                                                                 * 0x2000 is the size of the bootloader's
-                                                                 * stack area */
+                xous::MemoryAddress::new(0x4100_0000 - loader::GUARD_MEMORY_BYTES), // TODO: fix hard-coding of top of RAM
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map clean suspend page");
+            #[cfg(feature = "swap")]
+            let marker = xous::syscall::map_memory(
+                xous::MemoryAddress::new(0x4020_0000 - loader::GUARD_MEMORY_BYTES), // TODO: fix hard-coding of top of RAM
                 None,
                 4096,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,

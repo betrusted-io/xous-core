@@ -32,6 +32,15 @@ const MINIELF_FLG_X: u8 = 4;
 #[cfg(baremetal)]
 const MINIELF_FLG_EHF: u8 = 8;
 
+#[derive(Debug)]
+#[allow(dead_code)] // suppresses unused warnings in hosted mode
+pub enum CallbackType {
+    /// args: irq_no, arg
+    Interrupt(usize, *mut usize),
+    Swap([usize; 8]),
+    SwapInIrq([usize; 8]),
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ExceptionHandler {
     /// Address (in program space) where the exception handler is
@@ -258,6 +267,10 @@ impl Process {
         self.state = ProcessState::Free;
         Ok(())
     }
+
+    /// Reveal state for debugging outside the crate.
+    #[cfg(all(feature = "debug-swap-verbose", baremetal))]
+    pub fn state(&self) -> ProcessState { self.state }
 }
 
 #[cfg(not(baremetal))]
@@ -314,7 +327,7 @@ impl SystemServices {
     {
         #[cfg(baremetal)]
         unsafe {
-            f(&SYSTEM_SERVICES)
+            f(&*core::ptr::addr_of!(SYSTEM_SERVICES))
         }
         #[cfg(not(baremetal))]
         SYSTEM_SERVICES.with(|ss| f(&ss.borrow()))
@@ -326,7 +339,7 @@ impl SystemServices {
     {
         #[cfg(baremetal)]
         unsafe {
-            f(&mut SYSTEM_SERVICES)
+            f(&mut *core::ptr::addr_of_mut!(SYSTEM_SERVICES))
         }
 
         #[cfg(not(baremetal))]
@@ -342,7 +355,10 @@ impl SystemServices {
         let init_offsets = {
             let mut init_count = 1;
             for arg in args.iter() {
-                if arg.name == u32::from_le_bytes(*b"IniE") || arg.name == u32::from_le_bytes(*b"IniF") {
+                if arg.name == u32::from_le_bytes(*b"IniE")
+                    || arg.name == u32::from_le_bytes(*b"IniF")
+                    || arg.name == u32::from_le_bytes(*b"IniS")
+                {
                     init_count += 1;
                 }
             }
@@ -355,7 +371,10 @@ impl SystemServices {
         let mut arg_iter = args.iter().peekable();
         loop {
             if let Some(arg) = arg_iter.peek() {
-                if arg.name == u32::from_le_bytes(*b"IniE") || arg.name == u32::from_le_bytes(*b"IniF") {
+                if arg.name == u32::from_le_bytes(*b"IniE")
+                    || arg.name == u32::from_le_bytes(*b"IniF")
+                    || arg.name == u32::from_le_bytes(*b"IniS")
+                {
                     break;
                 }
             } else {
@@ -388,7 +407,7 @@ impl SystemServices {
             } else {
                 // This code makes the following assumption:
                 //   - Arguments are in the same order as processes
-                //   - All processes take the form of IniE/IniF such that the flags are in the last word
+                //   - All processes take the form of IniE/IniF/IniS such that the flags are in the last word
                 //   - Process #1 is the kernel
                 // Any changes to this will break this code!
                 let mut eh_frame = 0;
@@ -503,6 +522,44 @@ impl SystemServices {
 
     pub fn current_pid(&self) -> PID { arch::process::current_pid() }
 
+    /// Must be called from the swapper's context. Resets the runnable states of the swapper.
+    #[cfg(feature = "swap")]
+    pub fn finish_swap(&mut self) {
+        let current_pid = self.current_pid();
+        let current = self.get_process_mut(current_pid).expect("couldn't get current PID");
+        current.state = match current.state {
+            ProcessState::Running(0) => ProcessState::Sleeping,
+            ProcessState::Running(x) => ProcessState::Ready(x),
+            #[cfg(feature = "gdb-stub")]
+            ProcessState::DebugIrq(x) => ProcessState::Debug(x),
+            y => panic!("current process was {:?}, not 'Running(_)'", y),
+        };
+    }
+
+    #[cfg(feature = "swap")]
+    pub fn swap_resume_to_userspace(&mut self, pid: PID, tid: TID) -> Result<(), xous_kernel::Error> {
+        let process = self.get_process_mut(pid)?;
+        #[cfg(feature = "gdb-stub")]
+        let ppid = process.ppid;
+        // Ensure the new context is available to be run
+        let available_threads = match process.state {
+            ProcessState::Ready(x) if x & 1 << tid != 0 => x & !(1 << tid),
+            // If we're currently debugging the process, return to its parent.
+            // This can happen when the process handles a debug interrupt.
+            #[cfg(feature = "gdb-stub")]
+            ProcessState::Debug(_) => {
+                crate::syscall::reset_switchto_caller();
+                return self.switch_to_thread(ppid, None);
+            }
+            other => panic!(
+                "process {} was in an invalid state {:?} -- thread {} not available to run",
+                pid, other, tid
+            ),
+        };
+        process.state = ProcessState::Running(available_threads);
+        Ok(())
+    }
+
     /// Create a stack frame in the specified process and jump to it.
     /// 1. Pause the current process and switch to the new one
     /// 2. Save the process state, if it hasn't already been saved
@@ -577,28 +634,33 @@ impl SystemServices {
         &mut self,
         pid: PID,
         pc: *const usize,
-        irq_no: usize,
-        arg: *mut usize,
+        cb_type: CallbackType,
     ) -> Result<(), xous_kernel::Error> {
         // Get the current process (which was just interrupted) and mark it as
         // "ready to run".  If this function is called when the current process
         // isn't running, that means the system has gotten into an invalid
         // state.
-        {
-            let current_pid = self.current_pid();
-            let current = self.get_process_mut(current_pid).expect("couldn't get current PID");
-            // The current thread should never be 0, but for some reason it ends up
-            // as 0 after resuming from suspend. It's unclear how this happens.
-            if current.current_thread == 0 {
-                current.current_thread = arch::process::current_tid();
+
+        match cb_type {
+            CallbackType::SwapInIrq(_) => {
+                // don't manipulate current PID state at all if handling an IRQ fault
             }
-            // let old_state = current.state;
-            current.state = match current.state {
-                ProcessState::Running(x) => ProcessState::Ready(x | (1 << current.current_thread)),
-                y => panic!("current process was {:?}, not 'Running(_)'", y),
-            };
-            // log_process_update(file!(), line!(), current, old_state);
-            // println!("Making PID {} state {:?}", current_pid, current.state);
+            _ => {
+                let current_pid = self.current_pid();
+                let current = self.get_process_mut(current_pid).expect("couldn't get current PID");
+                // The current thread should never be 0, but for some reason it ends up
+                // as 0 after resuming from suspend. It's unclear how this happens.
+                if current.current_thread == 0 {
+                    current.current_thread = arch::process::current_tid();
+                }
+                // let old_state = current.state;
+                current.state = match current.state {
+                    ProcessState::Running(x) => ProcessState::Ready(x | (1 << current.current_thread)),
+                    y => panic!("current process was {:?}, not 'Running(_)'", y),
+                };
+                // log_process_update(file!(), line!(), current, old_state);
+                // println!("Making PID {} state {:?}", current_pid, current.state);
+            }
         }
 
         // Get the new process, and ensure that it is in a state where it's fit
@@ -619,8 +681,8 @@ impl SystemServices {
             #[cfg(feature = "gdb-stub")]
             if let ProcessState::Debug(_) = process.state {
                 println!(
-                    "Making a callback for IRQ {} to process {:?} which is currently in a debug state!",
-                    irq_no, pid
+                    "Making a callback of type {:?} to process {:?} which is currently in a debug state!",
+                    cb_type, pid
                 );
                 process.state = ProcessState::DebugIrq(available_threads);
             } else {
@@ -660,14 +722,28 @@ impl SystemServices {
             arch_process.set_tid(arch::process::IRQ_TID).unwrap();
 
             // Construct the new frame
-            arch::syscall::invoke(
-                arch_process.current_thread_mut(),
-                pid.get() == 1,
-                pc as usize,
-                sp,
-                arch::process::RETURN_FROM_ISR,
-                &[irq_no, arg as usize],
-            );
+            match cb_type {
+                CallbackType::Interrupt(irq_no, arg) => {
+                    arch::syscall::invoke(
+                        arch_process.current_thread_mut(),
+                        pid.get() == 1,
+                        pc as usize,
+                        sp,
+                        arch::process::RETURN_FROM_ISR,
+                        &[irq_no, arg as usize],
+                    );
+                }
+                CallbackType::Swap(args) | CallbackType::SwapInIrq(args) => {
+                    arch::syscall::invoke(
+                        arch_process.current_thread_mut(),
+                        pid.get() == 1,
+                        pc as usize,
+                        sp,
+                        arch::process::RETURN_FROM_SWAPPER,
+                        &args,
+                    );
+                }
+            }
         });
         Ok(())
     }

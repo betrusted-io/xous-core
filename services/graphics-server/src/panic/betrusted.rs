@@ -4,8 +4,6 @@ use std::thread;
 
 use utralib::generated::*;
 
-const PANIC_STD_SERVER: &[u8; 16] = b"panic-to-screen!";
-
 /// We can have no allocations inside this, and ideally, it's as minimal as possible.
 ///
 /// The graphics handler code and font renderer code are duplicated into this module to
@@ -48,8 +46,8 @@ const RIGHT_EDGE: usize = FB_WIDTH_PIXELS - LEFT_EDGE; // 312
 pub(crate) fn panic_handler_thread(is_panic: Arc<AtomicBool>, hwfb: u32, control: u32) {
     thread::spawn({
         move || {
-            let panic_server =
-                xous::create_server_with_address(PANIC_STD_SERVER).expect("Couldn't create panic server");
+            let xns = xous_names::XousNames::new().unwrap();
+            let panic_server = xns.register_name(crate::panic::PANIC_STD_SERVER, None).unwrap();
 
             let mut display = unsafe { PanicDisplay::new(hwfb, control) };
             loop {

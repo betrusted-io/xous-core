@@ -1,17 +1,1 @@
-[alias]
-xtask = "run --package xtask --"
-
-# [net]
-# offline = true              # do not access the network
-
-[build]
-rustflags = ["--cfg", "crossbeam_no_atomic_64"]
-
-# [target.riscv32imac-unknown-xous-elf]
-# linker = "/usr/bin/mold"
-# rustflags = [
-#     "-C", "linker-flavor=ld",
-#     "-C", "relocation-model=pic",
-#     "-C", "link-arg=-shared",
-#     "--cfg", "crossbeam_no_atomic_64"
-#     ]
+config.toml

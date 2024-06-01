@@ -19,11 +19,13 @@ log = "0.4.14"
 pem = "0.8.3"
 svd2utra = "0.1.22"
 xmas-elf = "0.9.0"
-xous-semver = "0.1.2"
+xous-semver = "0.1.3"
 ed25519-dalek = { version = "2.1.0", features = ["digest"] }
 sha2 = { version = "0.10.8" }
 pkcs8 = { version = "0.8.0", features = ["pem"] }
 base64 = "0.20.0"
+rand = "0.8.5"
+aes-gcm-siv = "0.11.1"
 
 [[bin]]
 name = "copy-object"
@@ -42,3 +44,10 @@ name = "read-tags"
 
 [[bin]]
 name = "sign-image"
+
+[features]
+precursor = []
+renode = []
+cramium-soc = []
+atsama5d2 = []
+default = []

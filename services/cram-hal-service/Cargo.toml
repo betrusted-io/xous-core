@@ -9,20 +9,24 @@ edition = "2021"
 utralib = { version = "0.1.24", optional = true, default-features = false, features = [
     "cramium-soc",
 ] }
-xous-api-names = "0.9.56"
-xous-api-ticktimer = "0.9.54"
-xous = "0.9.58"
-xous-ipc = "0.9.58"
-log-server = { package = "xous-api-log", version = "0.1.54" }
+xous-names = { package = "xous-api-names", version = "0.9.59" }
+ticktimer = { package = "xous-api-ticktimer", version = "0.9.57" }
+xous = "0.9.61"
+xous-ipc = "0.9.61"
+log-server = { package = "xous-api-log", version = "0.1.57" }
 log = "0.4.14"
 cramium-hal = { path = "../../libs/cramium-hal", features = [
     "derive-rkyv",
     "std",
 ] }
 xous-pl230 = { path = "../../libs/xous-pl230", features = ["cramium-soc"] }
-xous-pio = { path = "../../libs/xous-pio", features = ["cramium-soc"] }
+xous-pio = { path = "../../libs/xous-pio", default-features = false, features = [
+    "cramium-soc",
+] }
 pio-proc = "0.2.2"
 pio = "0.2.1"
+rand_core = "0.6.4"
+rand_chacha = "0.3.1"
 
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
@@ -31,6 +35,8 @@ rkyv = { version = "0.4.3", default-features = false, features = [
 ] }
 
 [features]
+app-uart = []
+swap = []
 # add this feature to enable pre-emption
 quantum-timer = ["utralib"]
-default = []
+default = ["quantum-timer", "app-uart"]

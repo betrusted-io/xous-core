@@ -1,4 +1,5 @@
 use core::fmt::{Error, Write};
+use std::pin::Pin;
 
 use cramium_hal::udma;
 use utralib::generated::*;
@@ -7,6 +8,12 @@ pub struct Output {}
 
 #[cfg(feature = "cramium-soc")]
 pub static mut UART_DMA_TX_BUF_VIRT: *mut u8 = 0x0000_0000 as *mut u8;
+
+#[cfg(feature = "cramium-soc")]
+pub static mut UART_IRQ: Option<Pin<Box<cramium_hal::udma::UartIrq>>> = None;
+
+#[cfg(feature = "cramium-soc")]
+pub static mut KBD_CONN: u32 = 0;
 
 #[cfg(feature = "cramium-soc")]
 pub const UART_DMA_TX_BUF_PHYS: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096;
@@ -24,7 +31,7 @@ pub fn init() -> Output {
     // to is the DUART.
     #[cfg(feature = "cramium-soc")]
     let uart = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utra::udma_uart_0::HW_UDMA_UART_0_BASE),
+        xous::MemoryAddress::new(utra::udma_uart_1::HW_UDMA_UART_1_BASE),
         None,
         4096,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -47,11 +54,53 @@ pub fn init() -> Output {
         )
         .expect("couldn't map UDMA buffer");
         unsafe { UART_DMA_TX_BUF_VIRT = tx_buf_region.as_mut_ptr() as *mut u8 };
+
+        let mut uart_irq = Box::pin(cramium_hal::udma::UartIrq::new());
+        // safety: This is safe because uart_irq is committed into a `static mut` variable that
+        // ensures that its lifetime is `static`
+        unsafe {
+            Pin::as_mut(&mut uart_irq).register_handler(udma::UartChannel::Uart1, uart_handler);
+        }
+        uart_irq.rx_irq_ena(udma::UartChannel::Uart1, true);
+        unsafe { UART_IRQ = Some(uart_irq) };
+        let mut udma_uart = unsafe {
+            udma::Uart::get_handle(
+                crate::platform::debug::DEFAULT_UART_ADDR as usize,
+                UART_DMA_TX_BUF_PHYS,
+                UART_DMA_TX_BUF_VIRT as usize,
+            )
+        };
+        udma_uart.setup_async_read();
     }
     println!("Mapped UART @ {:08x}", uart.as_ptr() as usize);
     println!("Process: map success!");
 
     Output {}
+}
+
+#[cfg(feature = "cramium-soc")]
+fn uart_handler(_irq_no: usize, _arg: *mut usize) {
+    let mut uart = unsafe {
+        udma::Uart::get_handle(
+            crate::platform::debug::DEFAULT_UART_ADDR as usize,
+            UART_DMA_TX_BUF_PHYS,
+            UART_DMA_TX_BUF_VIRT as usize,
+        )
+    };
+    let mut c: u8 = 0;
+    if uart.read_async(&mut c) != 0 {
+        if unsafe { KBD_CONN } == 0 {
+            match xous::try_connect(xous::SID::from_bytes(b"keyboard_bouncer").unwrap()) {
+                Ok(cid) => unsafe { KBD_CONN = cid },
+                // ignore the character and wait until there's a server for us to send it to
+                _ => return,
+            }
+        }
+        if unsafe { KBD_CONN != 0 } {
+            xous::try_send_message(unsafe { KBD_CONN }, xous::Message::new_scalar(0, c as usize, 0, 0, 0))
+                .ok();
+        }
+    }
 }
 
 impl Output {

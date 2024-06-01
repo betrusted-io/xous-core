@@ -26,6 +26,10 @@ mod platform;
 mod server;
 mod services;
 mod syscall;
+mod utils;
+
+#[cfg(feature = "swap")]
+mod swap;
 
 use services::SystemServices;
 use xous_kernel::*;
@@ -38,12 +42,17 @@ use xous_kernel::*;
 /// # Safety
 ///
 /// This is safe to call only to initialize the kernel.
-pub unsafe extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offset: *mut u32) {
+pub unsafe extern "C" fn init(
+    arg_offset: *const u32,
+    init_offset: *const u32,
+    rpt_offset: usize,
+    xpt_offset: usize,
+) {
     args::KernelArguments::init(arg_offset);
     let args = args::KernelArguments::get();
     // Everything needs memory, so the first thing we should do is initialize the memory manager.
     crate::mem::MemoryManager::with_mut(|mm| {
-        mm.init_from_memory(rpt_offset, &args).expect("couldn't initialize memory manager")
+        mm.init_from_memory(rpt_offset, xpt_offset, &args).expect("couldn't initialize memory manager")
     });
     SystemServices::with_mut(|system_services| system_services.init_from_memory(init_offset, &args));
 
@@ -97,12 +106,14 @@ pub extern "C" fn kmain() {
     }
 
     loop {
+        #[cfg(feature = "debug-print")]
+        let last_pid = pid;
         pid = next_pid_to_run(pid);
 
         match pid {
             Some(pid) => {
-                // #[cfg(feature = "debug-print")]
-                // println!("switching to pid {}", pid);
+                #[cfg(feature = "debug-print")]
+                println!("  PID{:?}->{:?}", last_pid, pid); // keep this succinct as it happens often
                 xous_kernel::rsyscall(xous_kernel::SysCall::SwitchTo(pid, 0))
                     .expect("couldn't switch to pid");
             }

@@ -79,7 +79,7 @@ impl From<u32> for IoxValue {
 }
 
 pub struct Iox {
-    csr: CSR<u32>,
+    pub csr: CSR<u32>,
 }
 
 impl Iox {
@@ -126,7 +126,7 @@ impl Iox {
             let oe_ptr = self.csr.base();
             IoxValue::from(
                 oe_ptr.add(iox::SFR_GPIOIN_SRGI0.offset() + port as usize).read_volatile()
-                    & !(1u32 << (pin as u32)),
+                    & (1u32 << (pin as u32)),
             )
         }
     }

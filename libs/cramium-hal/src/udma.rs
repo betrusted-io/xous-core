@@ -203,7 +203,7 @@ impl Into<u32> for PeriphEventType {
 }
 
 #[repr(u32)]
-#[derive(Copy, Clone, num_derive::FromPrimitive)]
+#[derive(Debug, Copy, Clone, num_derive::FromPrimitive)]
 pub enum EventChannel {
     Channel0 = 0,
     Channel1 = 8,
@@ -312,7 +312,7 @@ impl Into<usize> for Bank {
 
 /// Crate-local struct that defines the offset of registers in UDMA banks, as words.
 #[repr(usize)]
-enum DmaReg {
+pub enum DmaReg {
     Saddr = 0,
     Size = 1,
     Cfg = 2,
@@ -340,6 +340,13 @@ pub trait Udma {
     unsafe fn udma_enqueue<T>(&self, bank: Bank, buf: &[T], config: u32) {
         let bank_addr = self.csr().base().add(bank as usize);
         let buf_addr = buf.as_ptr() as u32;
+        /*
+        crate::println!(
+            "udma_enqueue: @{:x}[{}]/{:x}",
+            buf_addr,
+            (buf.len() * size_of::<T>()) as u32,
+            config | CFG_EN
+        ); */
         bank_addr.add(DmaReg::Saddr.into()).write_volatile(buf_addr);
         bank_addr.add(DmaReg::Size.into()).write_volatile((buf.len() * size_of::<T>()) as u32);
         bank_addr.add(DmaReg::Cfg.into()).write_volatile(config | CFG_EN)
@@ -364,15 +371,18 @@ enum UartReg {
     Status = 0,
     Setup = 1,
 }
-
-pub enum UartChannel {
-    Uart0,
-    Uart1,
-    Uart2,
-    Uart3,
+impl Into<usize> for UartReg {
+    fn into(self) -> usize { self as usize }
 }
 
-impl Into<usize> for UartReg {
+#[repr(usize)]
+pub enum UartChannel {
+    Uart0 = 0,
+    Uart1 = 1,
+    Uart2 = 2,
+    Uart3 = 3,
+}
+impl Into<usize> for UartChannel {
     fn into(self) -> usize { self as usize }
 }
 
@@ -395,6 +405,7 @@ impl Udma for Uart {
 const UART_TX_BUF_SIZE: usize = 2048;
 const UART_RX_BUF_START: usize = UART_TX_BUF_SIZE;
 const UART_RX_BUF_SIZE: usize = 2048;
+const RX_BUF_DEPTH: usize = 1;
 impl Uart {
     /// Configures for N81
     ///
@@ -579,6 +590,189 @@ impl Uart {
             }
         }
     }
+
+    /// Call this to read one character on receiving an interrupt.
+    ///
+    /// Note that if the interrupt is not handled fast enough, characters are simply dropped.
+    ///
+    /// Returns actual number of bytes read (0 or 1).
+    pub fn read_async(&mut self, c: &mut u8) -> usize {
+        let bank_addr = unsafe { self.csr().base().add(Bank::Rx as usize) };
+        // retrieve total bytes available
+        let pending = unsafe { bank_addr.add(DmaReg::Size.into()).read_volatile() } as usize;
+
+        // recover the pending byte. Hard-coded for case of RX_BUF_DEPTH == 1
+        assert!(RX_BUF_DEPTH == 1, "Need to refactor buf recovery code if RX_BUF_DEPTH > 1");
+        #[cfg(feature = "std")]
+        {
+            *c = self.ifram.as_slice::<u8>()[UART_RX_BUF_START];
+        }
+        #[cfg(not(feature = "std"))]
+        unsafe {
+            *c = self.ifram.as_phys_slice::<u8>()[UART_RX_BUF_START];
+        }
+
+        // queue the next round
+        #[cfg(feature = "std")]
+        unsafe {
+            self.udma_enqueue(
+                Bank::Rx,
+                &self.ifram.as_phys_slice::<u8>()[UART_RX_BUF_START..UART_RX_BUF_START + RX_BUF_DEPTH],
+                CFG_EN | CFG_CONT,
+            );
+        }
+        #[cfg(not(feature = "std"))]
+        unsafe {
+            self.udma_enqueue(
+                Bank::Rx,
+                &self.ifram.as_phys_slice::<u8>()[UART_RX_BUF_START..UART_RX_BUF_START + RX_BUF_DEPTH],
+                CFG_EN | CFG_CONT,
+            );
+        }
+
+        pending
+    }
+
+    /// Call this to prime the system for async reads. This must be called at least once if any characters
+    /// are ever to be received.
+    pub fn setup_async_read(&mut self) {
+        #[cfg(feature = "std")]
+        unsafe {
+            self.udma_enqueue(
+                Bank::Rx,
+                &self.ifram.as_phys_slice::<u8>()[UART_RX_BUF_START..UART_RX_BUF_START + RX_BUF_DEPTH],
+                CFG_EN | CFG_CONT,
+            );
+        }
+        #[cfg(not(feature = "std"))]
+        unsafe {
+            self.udma_enqueue(
+                Bank::Rx,
+                &self.ifram.as_phys_slice::<u8>()[UART_RX_BUF_START..UART_RX_BUF_START + RX_BUF_DEPTH],
+                CFG_EN | CFG_CONT,
+            );
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct UartIrq {
+    pub csr: CSR<u32>,
+    #[cfg(feature = "std")]
+    pub handlers: [Option<HandlerFn>; 4],
+    #[cfg(feature = "std")]
+    /// We can't claim the interrupt when the object is created, because the version we allocate
+    /// inside `new()` is a temporary instance that exists on the stack. It's recommend that the
+    /// caller put `UartIrq` inside a `Box` so that the location of the structure does not move
+    /// around. Later on, when `register_handler()` is invoked, the address of `self` is used to
+    /// pass into the handler. It is important that the caller ensures that `self` does not move around.
+    interrupt_claimed: bool,
+}
+impl UartIrq {
+    #[cfg(feature = "std")]
+    pub fn new() -> Self {
+        let uart = xous::syscall::map_memory(
+            xous::MemoryAddress::new(HW_IRQARRAY5_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map uart IRQ control");
+        Self {
+            csr: CSR::new(uart.as_ptr() as *mut u32),
+            handlers: [None, None, None, None],
+            interrupt_claimed: false,
+        }
+    }
+
+    #[cfg(not(feature = "std"))]
+    pub fn new() -> Self {
+        use riscv::register::vexriscv::mim;
+        mim::write(mim::read() | (1 << utra::irqarray5::IRQARRAY5_IRQ));
+        Self { csr: CSR::new(HW_IRQARRAY5_BASE as *mut u32) }
+    }
+
+    pub fn rx_irq_ena(&mut self, channel: UartChannel, enable: bool) {
+        let val = if enable { 1 } else { 0 };
+        match channel {
+            UartChannel::Uart0 => self.csr.rmwf(utra::irqarray5::EV_ENABLE_UART0_RX, val),
+            UartChannel::Uart1 => self.csr.rmwf(utra::irqarray5::EV_ENABLE_UART1_RX, val),
+            UartChannel::Uart2 => self.csr.rmwf(utra::irqarray5::EV_ENABLE_UART2_RX, val),
+            UartChannel::Uart3 => self.csr.rmwf(utra::irqarray5::EV_ENABLE_UART3_RX, val),
+        }
+    }
+
+    #[cfg(feature = "std")]
+    /// This needs to be invoked from a Pin'd Box wrapper of the UartIrq structure. Here is how the
+    /// pattern looks:
+    ///
+    /// ```rust
+    /// let mut uart_irq = Box::pin(cramium_hal::udma::UartIrq::new());
+    /// Pin::as_mut(&mut uart_irq).register_handler(udma::UartChannel::Uart1, uart_handler);
+    /// ```
+    ///
+    /// What this does is bind a `UartIrq` instance to an address in the heap (via Box), and
+    /// marks that address as non-moveable (via Pin), ensuring that the `register_handler` call's
+    /// view of `self` stays around forever.
+    ///
+    /// Note: this does not also enable the interrupt channel, it just registers the handler
+    ///
+    /// Safety: the function is only safe to use if `self` has a `static` lifetime, that is, the
+    /// `UartIrq` object will live the entire duration of the OS. If the object is destroyed,
+    /// the IRQ handler will point to an invalid location and the system will crash. In general,
+    /// we don't intend this kind of behavior, so we don't implement a `Drop` because simply
+    /// de-allocating the interrupt handler on an accidental Drop is probably not intentional
+    /// and can lead to even more confusing/harder-to-debug faults, i.e., the system won't crash,
+    /// but it will simply stop responding to interrupts. As a philosophical point, if an unregister behavior
+    /// is desired, it should be explicit.
+    pub unsafe fn register_handler(
+        mut self: std::pin::Pin<&mut Self>,
+        channel: UartChannel,
+        handler: HandlerFn,
+    ) {
+        if !self.interrupt_claimed {
+            xous::claim_interrupt(
+                utra::irqarray5::IRQARRAY5_IRQ,
+                main_uart_handler,
+                self.as_ref().get_ref() as *const UartIrq as *mut usize,
+            )
+            .expect("couldn't claim UART IRQ channel");
+            self.interrupt_claimed = true;
+        }
+
+        self.handlers[channel as usize] = Some(handler);
+    }
+}
+
+pub type HandlerFn = fn(usize, *mut usize);
+
+#[cfg(feature = "std")]
+fn main_uart_handler(irq_no: usize, arg: *mut usize) {
+    // check ev_pending and dispatch handlers based on that
+    let uartirq = unsafe { &mut *(arg as *mut UartIrq) };
+    let pending = uartirq.csr.r(utra::irqarray5::EV_PENDING);
+    if pending & uartirq.csr.ms(utra::irqarray5::EV_PENDING_UART0_RX, 1) != 0 {
+        if let Some(h) = uartirq.handlers[0] {
+            h(irq_no, arg);
+        }
+    }
+    if pending & uartirq.csr.ms(utra::irqarray5::EV_PENDING_UART1_RX, 1) != 0 {
+        if let Some(h) = uartirq.handlers[1] {
+            h(irq_no, arg);
+        }
+    }
+    if pending & uartirq.csr.ms(utra::irqarray5::EV_PENDING_UART2_RX, 1) != 0 {
+        if let Some(h) = uartirq.handlers[2] {
+            h(irq_no, arg);
+        }
+    }
+    if pending & uartirq.csr.ms(utra::irqarray5::EV_PENDING_UART3_RX, 1) != 0 {
+        if let Some(h) = uartirq.handlers[3] {
+            h(irq_no, arg);
+        }
+    }
+    // note that this will also clear other spurious interrupts without issuing a warning.
+    uartirq.csr.wo(utra::irqarray5::EV_PENDING, pending);
 }
 
 // ----------------------------------- SPIM ------------------------------------
@@ -605,7 +799,7 @@ pub enum SpimClkPha {
     CaptureOnTrailing = 1,
 }
 #[repr(u32)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum SpimCs {
     Cs0 = 0,
     Cs1 = 1,
@@ -613,13 +807,13 @@ pub enum SpimCs {
     Cs3 = 3,
 }
 #[repr(u32)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum SpimMode {
     Standard = 0,
     Quad = 1,
 }
 #[repr(u32)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum SpimByteAlign {
     Enable = 0,
     Disable = 1,
@@ -670,9 +864,9 @@ pub enum SpimCmd {
     /// type of wait, channel, cycle count
     Wait(SpimWaitType),
     /// mode, words per xfer, bits per word, endianness, number of words to send
-    TxData(SpimMode, SpimWordsPerXfer, u8, SpimEndian, u16),
+    TxData(SpimMode, SpimWordsPerXfer, u8, SpimEndian, u32),
     /// mode, words per xfer, bits per word, endianness, number of words to receive
-    RxData(SpimMode, SpimWordsPerXfer, u8, SpimEndian, u16),
+    RxData(SpimMode, SpimWordsPerXfer, u8, SpimEndian, u32),
     /// repeat count
     RepeatNextCmd(u16),
     EndXfer(SpimEventGen),
@@ -688,7 +882,7 @@ impl Into<u32> for SpimCmd {
             SpimCmd::Config(pol, pha, div) => 0 << 28 | (pol as u32) << 9 | (pha as u32) << 8 | div as u32,
             SpimCmd::StartXfer(cs) => 1 << 28 | cs as u32,
             SpimCmd::SendCmd(mode, size, cmd) => {
-                2 << 28 | (mode as u32) << 27 | (size as u32 & 0x1F) << 16 | cmd as u32
+                2 << 28 | (mode as u32) << 27 | ((size - 1) as u32 & 0x1F) << 16 | cmd as u32
             }
             SpimCmd::SendAddr(mode, size) => 3 << 28 | (mode as u32) << 27 | (size as u32 & 0x1F) << 16,
             SpimCmd::Dummy(cycles) => 4 << 28 | (cycles as u32 & 0x1F) << 16,
@@ -733,12 +927,15 @@ impl Into<u32> for SpimCmd {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy)]
 pub enum SpimChannel {
     Channel0,
     Channel1,
     Channel2,
     Channel3,
 }
+#[derive(Debug)]
 pub struct Spim {
     csr: CSR<u32>,
     cs: SpimCs,
@@ -746,12 +943,13 @@ pub struct Spim {
     eot_wait: u8,
     event_channel: Option<EventChannel>,
     mode: SpimMode,
-    align: SpimByteAlign,
-    ifram: IframRange,
+    _align: SpimByteAlign,
+    pub ifram: IframRange,
     // starts at the base of ifram range
-    tx_buf_len_bytes: usize,
+    pub tx_buf_len_bytes: usize,
     // immediately after the tx buf len
-    rx_buf_len_bytes: usize,
+    pub rx_buf_len_bytes: usize,
+    dummy_cycles: u8,
 }
 
 // length of the command buffer
@@ -788,7 +986,11 @@ impl Spim {
         event_channel: Option<EventChannel>,
         max_tx_len_bytes: usize,
         max_rx_len_bytes: usize,
+        dummy_cycles: Option<u8>,
     ) -> Option<Self> {
+        // this is a hardware limit - the DMA pointer is only this long!
+        assert!(max_tx_len_bytes < 65536);
+        assert!(max_rx_len_bytes < 65536);
         // now setup the channel
         let base_addr = match channel {
             SpimChannel::Channel0 => utra::udma_spim_0::HW_UDMA_SPIM_0_BASE,
@@ -805,7 +1007,7 @@ impl Spim {
         .expect("couldn't map serial port");
         let csr = CSR::new(csr_range.as_mut_ptr() as *mut u32);
 
-        let clk_div = sys_clk_freq / spi_clk_freq;
+        let clk_div = sys_clk_freq / (2 * spi_clk_freq);
         // make this a hard panic -- you'll find out at runtime that you f'd up
         // but at least you find out.
         assert!(clk_div < 256, "SPI clock divider is out of range");
@@ -822,11 +1024,12 @@ impl Spim {
                 sot_wait,
                 eot_wait,
                 event_channel,
-                align: SpimByteAlign::Disable,
+                _align: SpimByteAlign::Disable,
                 mode: SpimMode::Standard,
                 ifram,
                 tx_buf_len_bytes: max_tx_len_bytes,
                 rx_buf_len_bytes: max_rx_len_bytes,
+                dummy_cycles: dummy_cycles.unwrap_or(0),
             };
             // setup the interface using a UDMA command
             spim.send_cmd_list(&[SpimCmd::Config(pol, pha, clk_div as u8)]);
@@ -835,6 +1038,141 @@ impl Spim {
         } else {
             None
         }
+    }
+
+    /// This function is `unsafe` because it can only be called after the
+    /// global shared UDMA state has been set up to un-gate clocks and set up
+    /// events.
+    ///
+    /// It is also `unsafe` on Drop because you have to remember to unmap
+    /// the clock manually as well once the object is dropped...
+    ///
+    /// Return: the function can return None if it can't allocate enough memory
+    /// for the requested tx/rx length.
+    pub unsafe fn new_with_ifram(
+        channel: SpimChannel,
+        spi_clk_freq: u32,
+        sys_clk_freq: u32,
+        pol: SpimClkPol,
+        pha: SpimClkPha,
+        chip_select: SpimCs,
+        // cycles to wait between CS assert and data start
+        sot_wait: u8,
+        // cycles to wait after data stop and CS de-assert
+        eot_wait: u8,
+        event_channel: Option<EventChannel>,
+        max_tx_len_bytes: usize,
+        max_rx_len_bytes: usize,
+        dummy_cycles: Option<u8>,
+        mode: Option<SpimMode>,
+        ifram: IframRange,
+    ) -> Self {
+        // this is a hardware limit - the DMA pointer is only this long!
+        assert!(max_tx_len_bytes < 65536);
+        assert!(max_rx_len_bytes < 65536);
+        // now setup the channel
+        let base_addr = match channel {
+            SpimChannel::Channel0 => utra::udma_spim_0::HW_UDMA_SPIM_0_BASE,
+            SpimChannel::Channel1 => utra::udma_spim_1::HW_UDMA_SPIM_1_BASE,
+            SpimChannel::Channel2 => utra::udma_spim_2::HW_UDMA_SPIM_2_BASE,
+            SpimChannel::Channel3 => utra::udma_spim_3::HW_UDMA_SPIM_3_BASE,
+        };
+        #[cfg(target_os = "xous")]
+        let csr_range = xous::syscall::map_memory(
+            xous::MemoryAddress::new(base_addr),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map serial port");
+        #[cfg(target_os = "xous")]
+        let csr = CSR::new(csr_range.as_mut_ptr() as *mut u32);
+        #[cfg(not(target_os = "xous"))]
+        let csr = CSR::new(base_addr as *mut u32);
+
+        let clk_div = sys_clk_freq / (2 * spi_clk_freq);
+        // make this a hard panic -- you'll find out at runtime that you f'd up
+        // but at least you find out.
+        assert!(clk_div < 256, "SPI clock divider is out of range");
+
+        let mut spim = Spim {
+            csr,
+            cs: chip_select,
+            sot_wait,
+            eot_wait,
+            event_channel,
+            _align: SpimByteAlign::Disable,
+            mode: mode.unwrap_or(SpimMode::Standard),
+            ifram,
+            tx_buf_len_bytes: max_tx_len_bytes,
+            rx_buf_len_bytes: max_rx_len_bytes,
+            dummy_cycles: dummy_cycles.unwrap_or(0),
+        };
+        // setup the interface using a UDMA command
+        spim.send_cmd_list(&[SpimCmd::Config(pol, pha, clk_div as u8)]);
+
+        spim
+    }
+
+    /// For creating a clone to the current SPIM handle passed through a thread.
+    ///
+    /// Safety: can only be used on devices that are static for the life of the OS. Also, does nothing
+    /// to prevent races/contention for the underlying device. The main reason this is introduced is
+    /// to facilitate a panic handler for the graphics frame buffer, where we're about to kill the OS
+    /// anyways: we don't care about soundness guarantees after this point.
+    pub unsafe fn from_raw_parts(
+        csr: usize,
+        cs: SpimCs,
+        sot_wait: u8,
+        eot_wait: u8,
+        event_channel: Option<EventChannel>,
+        mode: SpimMode,
+        _align: SpimByteAlign,
+        ifram: IframRange,
+        tx_buf_len_bytes: usize,
+        rx_buf_len_bytes: usize,
+        dummy_cycles: u8,
+    ) -> Self {
+        Spim {
+            csr: CSR::new(csr as *mut u32),
+            cs,
+            sot_wait,
+            eot_wait,
+            event_channel,
+            _align,
+            mode,
+            ifram,
+            tx_buf_len_bytes,
+            rx_buf_len_bytes,
+            dummy_cycles,
+        }
+    }
+
+    /// Blows a SPIM structure into parts that can be sent across a thread boundary.
+    ///
+    /// Safety: this is only safe because the *mut u32 for the CSR doesn't change, because it's tied to
+    /// a piece of hardware, not some arbitrary block of memory.
+    pub unsafe fn into_raw_parts(
+        &self,
+    ) -> (usize, SpimCs, u8, u8, Option<EventChannel>, SpimMode, SpimByteAlign, IframRange, usize, usize, u8)
+    {
+        (
+            self.csr.base() as usize,
+            self.cs,
+            self.sot_wait,
+            self.eot_wait,
+            self.event_channel,
+            self.mode,
+            self._align,
+            IframRange {
+                phys_range: self.ifram.phys_range,
+                virt_range: self.ifram.virt_range,
+                conn: self.ifram.conn,
+            },
+            self.tx_buf_len_bytes,
+            self.rx_buf_len_bytes,
+            self.dummy_cycles,
+        )
     }
 
     /// The command buf is *always* a `u32`; so tie the type down here.
@@ -950,19 +1288,15 @@ impl Spim {
             }
         }
         while words_sent < total_words {
-            // determine the valid length of data we could send -- has to fit into a u16::MAX
-            let tx_len = if (total_words - words_sent) >= u16::MAX as usize {
-                u16::MAX as usize
-            } else {
-                total_words - words_sent
-            };
+            // determine the valid length of data we could send
+            let tx_len = (total_words - words_sent).min(self.tx_buf_len_bytes);
             // setup the command list for data to send
             let cmd_list = [SpimCmd::TxData(
                 self.mode,
                 SpimWordsPerXfer::Words1,
                 bits_per_xfer as u8,
                 SpimEndian::LsbFirst,
-                tx_len as u16,
+                tx_len as u32,
             )];
             self.send_cmd_list(&cmd_list);
             let cfg_size = match size_of::<T>() {
@@ -1017,5 +1351,258 @@ impl Spim {
 
     pub fn rx_data<T: UdmaWidths + Copy>(&mut self, _rx_data: &mut [T], _cs: Option<SpimCs>) {
         todo!("Not yet done...let's see if tx_data works first before templating");
+    }
+
+    /// Activate is the logical sense, not the physical sense. To be clear: `true` causes CS to go low.
+    fn mem_cs(&mut self, activate: bool) {
+        if activate {
+            if self.sot_wait == 0 {
+                self.send_cmd_list(&[SpimCmd::StartXfer(self.cs)])
+            } else {
+                self.send_cmd_list(&[
+                    SpimCmd::StartXfer(self.cs),
+                    SpimCmd::Wait(SpimWaitType::Cycles(self.sot_wait)),
+                ])
+            }
+        } else {
+            let evt =
+                if self.event_channel.is_some() { SpimEventGen::Enabled } else { SpimEventGen::Disabled };
+            if self.eot_wait == 0 {
+                self.send_cmd_list(&[SpimCmd::EndXfer(evt)])
+            } else {
+                self.send_cmd_list(&[
+                    SpimCmd::Wait(SpimWaitType::Cycles(self.eot_wait)),
+                    SpimCmd::EndXfer(evt),
+                ])
+            }
+        }
+    }
+
+    fn mem_send_cmd(&mut self, cmd: u8) {
+        let cmd_list = [SpimCmd::SendCmd(self.mode, 8, cmd as u16)];
+        self.send_cmd_list(&cmd_list);
+        while self.udma_busy(Bank::Custom) {
+            #[cfg(feature = "std")]
+            xous::yield_slice();
+        }
+    }
+
+    pub fn mem_read_id_flash(&mut self) -> u32 {
+        self.mem_cs(true);
+
+        // send the RDID command
+        match self.mode {
+            SpimMode::Standard => self.mem_send_cmd(0x9F),
+            SpimMode::Quad => self.mem_send_cmd(0xAF),
+        }
+
+        // read back the ID result
+        let cmd_list = [SpimCmd::RxData(self.mode, SpimWordsPerXfer::Words1, 8, SpimEndian::MsbFirst, 3)];
+        self.send_cmd_list(&cmd_list);
+        // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
+        unsafe { self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u8>()[..3], CFG_EN | CFG_SIZE_8) };
+        while self.udma_busy(Bank::Rx) {
+            #[cfg(feature = "std")]
+            xous::yield_slice();
+        }
+
+        let ret = u32::from_le_bytes([self.rx_buf()[0], self.rx_buf()[1], self.rx_buf()[2], 0x0]);
+
+        self.mem_cs(false);
+        ret
+    }
+
+    /// Side-effects: unsets QPI mode if it was previously set
+    pub fn mem_read_id_ram(&mut self) -> u32 {
+        self.mem_cs(true);
+
+        // send the RDID command
+        self.mem_send_cmd(0x9F);
+
+        // read back the ID result
+        // The ID requires 24 bits "dummy" address field, then followed by 2 bytes ID + KGD, and then
+        // 48 bits of unique ID -- we only retrieve the top 16 of that here.
+        let cmd_list = [SpimCmd::RxData(self.mode, SpimWordsPerXfer::Words1, 8, SpimEndian::MsbFirst, 7)];
+        self.send_cmd_list(&cmd_list);
+        // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
+        unsafe { self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u8>()[..7], CFG_EN | CFG_SIZE_8) };
+        while self.udma_busy(Bank::Rx) {
+            #[cfg(feature = "std")]
+            xous::yield_slice();
+        }
+
+        let ret =
+            u32::from_le_bytes([self.rx_buf()[3], self.rx_buf()[4], self.rx_buf()[5], self.rx_buf()[6]]);
+
+        self.mem_cs(false);
+        ret
+    }
+
+    pub fn mem_qpi_mode(&mut self, activate: bool) {
+        self.mem_cs(true);
+        if activate {
+            self.mem_send_cmd(0x35);
+        } else {
+            self.mode = SpimMode::Quad; // pre-assumes quad mode
+            self.mem_send_cmd(0xF5);
+        }
+        self.mem_cs(false);
+        // change the mode only after the command has been sent
+        if activate {
+            self.mode = SpimMode::Quad;
+        } else {
+            self.mode = SpimMode::Standard;
+        }
+    }
+
+    /// Side-effects: unsets QPI mode if it was previously set
+    /// TODO: this does not seem to work. Setting it causes some strange behaviors
+    /// on reads (but QE mode is enabled, so something must have worked). This
+    /// needs to be looked into more. Oddly enough, it looks "fine" on the logic
+    /// analyzer when I checked it early on, but obviously something is not right.
+    pub fn mem_write_status_register(&mut self, status: u8, config: u8) {
+        if self.mode != SpimMode::Standard {
+            self.mem_qpi_mode(false);
+        }
+        self.mem_cs(true);
+        self.mem_send_cmd(0x1);
+        // setup the command list for data to send
+        let cmd_list =
+            [SpimCmd::TxData(self.mode, SpimWordsPerXfer::Words1, 8 as u8, SpimEndian::MsbFirst, 2 as u32)];
+        self.send_cmd_list(&cmd_list);
+        self.tx_buf_mut()[..2].copy_from_slice(&[status, config]);
+        // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
+        unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..2], CFG_EN | CFG_SIZE_8) }
+
+        while self.udma_busy(Bank::Tx) {
+            #[cfg(feature = "std")]
+            xous::yield_slice();
+        }
+        self.mem_cs(false);
+    }
+
+    /// Note that `use_yield` is disallowed in interrupt contexts (e.g. swapper)
+    pub fn mem_read(&mut self, addr: u32, buf: &mut [u8], _use_yield: bool) -> bool {
+        // divide into buffer-sized chunks + repeat cycle on each buffer increment
+        // this is because the size of the buffer is meant to represent the limit of the
+        // target device's memory page (i.e., the point at which you'd wrap when reading)
+        let mut offset = 0;
+        let mut timeout = 0;
+        let mut success = true;
+        for chunk in buf.chunks_mut(self.rx_buf_len_bytes) {
+            let chunk_addr = addr as usize + offset;
+            let addr_plus_dummy = (24 / 8) + self.dummy_cycles / 2;
+            let cmd_list = [
+                SpimCmd::SendCmd(self.mode, 8, 0xEB),
+                SpimCmd::TxData(
+                    self.mode,
+                    SpimWordsPerXfer::Words1,
+                    8 as u8,
+                    SpimEndian::MsbFirst,
+                    addr_plus_dummy as u32,
+                ),
+            ];
+            let a = chunk_addr.to_be_bytes();
+            self.tx_buf_mut()[..3].copy_from_slice(&[a[1], a[2], a[3]]);
+            // the remaining bytes are junk
+            self.tx_buf_mut()[3..6].copy_from_slice(&[0xFFu8, 0xFFu8, 0xFFu8]);
+            self.mem_cs(true);
+            self.send_cmd_list(&cmd_list);
+            // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
+            unsafe {
+                self.udma_enqueue(
+                    Bank::Tx,
+                    &self.tx_buf_phys::<u8>()[..addr_plus_dummy as usize],
+                    CFG_EN | CFG_SIZE_8,
+                )
+            }
+            let rd_cmd = [SpimCmd::RxData(
+                self.mode,
+                SpimWordsPerXfer::Words1,
+                8,
+                SpimEndian::MsbFirst,
+                chunk.len() as u32,
+            )];
+            while self.udma_busy(Bank::Tx) {
+                #[cfg(feature = "std")]
+                if _use_yield {
+                    xous::yield_slice();
+                }
+            }
+            self.send_cmd_list(&rd_cmd);
+            // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
+            unsafe {
+                self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u8>()[..chunk.len()], CFG_EN | CFG_SIZE_8)
+            };
+            while self.udma_busy(Bank::Rx) {
+                // TODO: figure out why this timeout detection code is necessary.
+                // It seems that some traffic during the UDMA access can cause the UDMA
+                // engine to hang. For example, if we put a dcache_flush() routine in this
+                // loop, it will fail immediately. This might be something to look into
+                // in simulation.
+                timeout += 1;
+                if (self.mode == SpimMode::Quad) && (timeout > chunk.len() * 10_000) {
+                    success = false;
+                    break;
+                }
+                #[cfg(feature = "std")]
+                if _use_yield {
+                    xous::yield_slice();
+                }
+            }
+            self.mem_cs(false);
+            chunk.copy_from_slice(&self.rx_buf()[..chunk.len()]);
+            offset += chunk.len();
+        }
+        success
+    }
+
+    /// This should only be called on SPI RAM -- not valid for FLASH devices, they need a programming routine!
+    /// Note that `use_yield` is disallowed in interrupt contexts
+    pub fn mem_ram_write(&mut self, addr: u32, buf: &[u8], _use_yield: bool) {
+        // divide into buffer-sized chunks + repeat cycle on each buffer increment
+        // this is because the size of the buffer is meant to represent the limit of the
+        // target device's memory page (i.e., the point at which you'd wrap when reading)
+        let mut offset = 0;
+        for chunk in buf.chunks(self.tx_buf_len_bytes) {
+            let chunk_addr = addr as usize + offset;
+            let cmd_list = [
+                SpimCmd::SendCmd(self.mode, 8, 0x38),
+                SpimCmd::TxData(self.mode, SpimWordsPerXfer::Words1, 8 as u8, SpimEndian::MsbFirst, 3),
+            ];
+            let a = chunk_addr.to_be_bytes();
+            self.tx_buf_mut()[..3].copy_from_slice(&[a[1], a[2], a[3]]);
+            self.mem_cs(true);
+            self.send_cmd_list(&cmd_list);
+            // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
+            unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..3], CFG_EN | CFG_SIZE_8) }
+            let wr_cmd = [SpimCmd::TxData(
+                self.mode,
+                SpimWordsPerXfer::Words1,
+                8,
+                SpimEndian::MsbFirst,
+                chunk.len() as u32,
+            )];
+            while self.udma_busy(Bank::Tx) {
+                #[cfg(feature = "std")]
+                if _use_yield {
+                    xous::yield_slice();
+                }
+            }
+            self.send_cmd_list(&wr_cmd);
+            self.tx_buf_mut()[..chunk.len()].copy_from_slice(chunk);
+            // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
+            unsafe {
+                self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..chunk.len()], CFG_EN | CFG_SIZE_8)
+            };
+            while self.udma_busy(Bank::Tx) {
+                #[cfg(feature = "std")]
+                if _use_yield {
+                    xous::yield_slice();
+                }
+            }
+            self.mem_cs(false);
+            offset += chunk.len();
+        }
     }
 }

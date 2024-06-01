@@ -10,7 +10,7 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
     #[cfg(any(feature = "precursor", feature = "renode"))]
     let _kernel_args = _kernel_args;
     #[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
-    let _kernel_args = _start as *const usize as usize + platform::KERNEL_OFFSET;
+    let _kernel_args = platform::FLASH_BASE + platform::KERNEL_OFFSET;
     unsafe {
         #[rustfmt::skip]
         asm! (
@@ -53,7 +53,8 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
 #[link_section = ".text.init"]
 #[export_name = "abort"]
 /// This is only used in debug mode
-pub extern "C" fn abort() {
+pub extern "C" fn abort() -> ! {
+    #[cfg(not(feature = "cramium-soc"))]
     unsafe {
         #[rustfmt::skip]
         asm!(
@@ -61,6 +62,39 @@ pub extern "C" fn abort() {
             "j 300b",
             options(noreturn)
         );
+    }
+    #[cfg(feature = "cramium-soc")]
+    unsafe {
+        use utralib::generated::*;
+        let uart = utra::duart::HW_DUART_BASE as *mut u32;
+
+        while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+        uart.add(utra::duart::SFR_TXD.offset()).write_volatile(0xa as u32);
+        while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+        uart.add(utra::duart::SFR_TXD.offset()).write_volatile(0xd as u32);
+        while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+        uart.add(utra::duart::SFR_TXD.offset()).write_volatile('0' as char as u32);
+        while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+        uart.add(utra::duart::SFR_TXD.offset()).write_volatile('x' as char as u32);
+        let sc = riscv::register::scause::read();
+        for &byte in sc.bits().to_be_bytes().iter() {
+            let d = byte >> 4;
+            let nyb = d & 0xF;
+            let c = if nyb < 10 { nyb + 0x30 } else { nyb + 0x61 - 10 };
+            while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+            uart.add(utra::duart::SFR_TXD.offset()).write_volatile(c as u32);
+            let d = byte & 0xF;
+            let nyb = d & 0xF;
+            let c = if nyb < 10 { nyb + 0x30 } else { nyb + 0x61 - 10 };
+            while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+            uart.add(utra::duart::SFR_TXD.offset()).write_volatile(c as u32);
+        }
+        while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+        uart.add(utra::duart::SFR_TXD.offset()).write_volatile(0xa as u32);
+        while uart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
+        uart.add(utra::duart::SFR_TXD.offset()).write_volatile(0xd as u32);
+
+        loop {}
     }
 }
 
@@ -70,14 +104,12 @@ pub extern "C" fn start_kernel(
     args: usize,
     ss: usize,
     rpt: usize,
+    xpt: usize,
     satp: usize,
     entrypoint: usize,
     stack: usize,
-    debug_: bool,
-    resume_: bool,
+    debug_resume: usize,
 ) -> ! {
-    let debug: usize = if debug_ { 1 } else { 0 };
-    let resume: usize = if resume_ { 1 } else { 0 };
     unsafe {
         #[rustfmt::skip]
         asm! (
@@ -85,7 +117,7 @@ pub extern "C" fn start_kernel(
             "mv          a0, {args}",
             "mv          a1, {ss}",
             "mv          a2, {rpt}",
-            "mv          a7, {resume}",
+            "mv          a3, {xpt}",
             // Delegate as much as we can supervisor mode
             "li          t0, 0xffffffff",
             "csrw        mideleg, t0",
@@ -94,13 +126,14 @@ pub extern "C" fn start_kernel(
             // Return to Supervisor mode (1 << 11) when we call `reti`.
             // Disable interrupts (0 << 5)
             "li		     t0, (1 << 11) | (0 << 5)",
-            // If arg6 is "true", also set mstatus.SUM to allow the kernel
+            // If debug_resume is "true", also set mstatus.SUM to allow the kernel
             // to access userspace memory.
-            "mv          a6, {debug}",
-            "andi        a6, a6, 1",
-            "slli        a6, a6, 18",
-            "or          t0, t0, a6",
+            "mv          t3, {debug_resume}",
+            "andi        t3, t3, 1",
+            "slli        t3, t3, 18",
+            "or          t0, t0, t3",
             "csrw	     mstatus, t0",
+            "mv          a7, {debug_resume}",
 
             // Enable the MMU (once we issue `mret`) and flush the cache
             "csrw        satp, {satp}",
@@ -117,11 +150,11 @@ pub extern "C" fn start_kernel(
             args = in(reg) args,
             ss = in(reg) ss,
             rpt = in(reg) rpt,
+            xpt = in(reg) xpt,
             satp = in(reg) satp,
             entrypoint = in(reg) entrypoint,
             stack = in(reg) stack,
-            debug = in(reg) debug,
-            resume = in(reg) resume,
+            debug_resume = in(reg) debug_resume,
             options(noreturn)
         );
     }

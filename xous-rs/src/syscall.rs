@@ -484,11 +484,11 @@ pub enum SysCall {
     ReplyAndReceiveNext(
         MessageSender, /* ID if the sender that sent this message */
         usize,         /* Return code to the caller */
-        usize,         /* arg1 (BlockingScalar) or the memory address (MemoryMesage) */
-        usize,         /* arg2 (BlockingScalar) or the memory length (MemoryMesage) */
-        usize,         /* arg3 (BlockingScalar) or the memory offset (MemoryMesage) */
-        usize,         /* arg4 (BlockingScalar) or the memory valid (MemoryMesage) */
-        usize,         /* how many args are valid (BlockingScalar) or usize::MAX (MemoryMessge) */
+        usize,         /* arg1 (BlockingScalar) or the memory address (MemoryMessage) */
+        usize,         /* arg2 (BlockingScalar) or the memory length (MemoryMessage) */
+        usize,         /* arg3 (BlockingScalar) or the memory offset (MemoryMessage) */
+        usize,         /* arg4 (BlockingScalar) or the memory valid (MemoryMessage) */
+        usize,         /* how many args are valid (BlockingScalar) or usize::MAX (MemoryMessage) */
     ),
 
     /// Returns the physical address corresponding to a virtual address for a given process, if such a
@@ -506,6 +506,42 @@ pub enum SysCall {
     #[cfg(feature = "v2p")]
     VirtToPhysPid(PID /* Process ID */, usize /* virtual address */),
 
+    /// Registers a swapper.
+    ///
+    /// ## Arguments
+    ///   * **sid0**, **sid1**, **sid2**, **sid3**: 128-bit SID as four u32
+    ///   * **handler**: address of the blocking swap handler
+    ///   * **state**: address of the process-local state of the swap handler
+    ///
+    /// ## Returns
+    /// Returns a Scalar5 with raw pointers as follows:
+    ///   - `arg1`: A pointer to the SPT
+    ///   - `arg2`: A pointer to the SMT
+    ///   - `arg3`: A pointer to the RPT
+    #[cfg(feature = "swap")]
+    RegisterSwapper(u32, u32, u32, u32, usize, usize),
+
+    /// Swapper operation.
+    ///
+    /// This syscall can only be called by PID 2, the swapper. The form of the
+    /// call is deliberately left flexible, so that the swapper ABI can evolve
+    /// without impacting version compatibility with application ABIs.
+    ///
+    /// ## Arguments
+    ///     * Up to 7 `usize` values, whose ABI is determined by the swapper's implementation.
+    ///
+    /// ## Returns
+    /// Returns a Scalar5, whose ABI is determined by the swapper's implementation.
+    ///
+    /// ## Errors
+    ///     * **BadAddress**: The mapping does not exist
+    ///     * **AccessDenied**: Called by a PID that does not belong to the swapper
+    ///     * **MappingInUse**: A requested operation could not be performed because the mapping is wired
+    ///     * **UnhandledSyscall**: The ABI encoding doesn't map to the current implementation
+    ///     * Other errors may be added as the swapper ABI evolves
+    #[cfg(feature = "swap")]
+    SwapOp(usize, usize, usize, usize, usize, usize, usize),
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -513,6 +549,7 @@ pub enum SysCall {
 
 // #[derive(FromPrimitive)]
 pub enum SysCallNumber {
+    Invalid = 0,
     MapMemory = 2,
     Yield = 3,
     ReturnToParent = 4,
@@ -556,7 +593,10 @@ pub enum SysCallNumber {
     ReplyAndReceiveNext = 41,
     #[cfg(feature = "v2p")]
     VirtToPhysPid = 42,
-    Invalid,
+    #[cfg(feature = "swap")]
+    RegisterSwapper = 43,
+    #[cfg(feature = "swap")]
+    SwapOp = 44,
 }
 
 impl SysCallNumber {
@@ -606,6 +646,10 @@ impl SysCallNumber {
             41 => ReplyAndReceiveNext,
             #[cfg(feature = "v2p")]
             42 => VirtToPhysPid,
+            #[cfg(feature = "swap")]
+            43 => RegisterSwapper,
+            #[cfg(feature = "swap")]
+            44 => SwapOp,
             _ => Invalid,
         }
     }
@@ -840,6 +884,21 @@ impl SysCall {
             SysCall::VirtToPhysPid(pid, vaddr) => {
                 [SysCallNumber::VirtToPhysPid as usize, pid.get() as usize, *vaddr, 0, 0, 0, 0, 0]
             }
+            #[cfg(feature = "swap")]
+            SysCall::RegisterSwapper(s0, s1, s2, s3, handler, state) => [
+                SysCallNumber::RegisterSwapper as usize,
+                *s0 as usize,
+                *s1 as usize,
+                *s2 as usize,
+                *s3 as usize,
+                *handler,
+                *state,
+                0,
+            ],
+            #[cfg(feature = "swap")]
+            SysCall::SwapOp(a1, a2, a3, a4, a5, a6, a7) => {
+                [SysCallNumber::SwapOp as usize, *a1, *a2, *a3, *a4, *a5, *a6, *a7]
+            }
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => {
                 [SysCallNumber::Invalid as usize, *a1, *a2, *a3, *a4, *a5, *a6, *a7]
             }
@@ -986,6 +1045,12 @@ impl SysCall {
             SysCallNumber::ReturnScalar5 => {
                 SysCall::ReturnScalar5(MessageSender::from_usize(a1), a2, a3, a4, a5, a6)
             }
+            #[cfg(feature = "swap")]
+            SysCallNumber::RegisterSwapper => {
+                SysCall::RegisterSwapper(a1 as u32, a2 as u32, a3 as u32, a4 as u32, a5 as usize, a6 as usize)
+            }
+            #[cfg(feature = "swap")]
+            SysCallNumber::SwapOp => SysCall::SwapOp(a1, a2, a3, a4, a5, a6, a7),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
@@ -1081,6 +1146,10 @@ impl SysCall {
     pub fn can_call_from_interrupt(&self) -> bool {
         if let SysCall::TrySendMessage(_cid, msg) = self {
             return !msg.is_blocking();
+        }
+        #[cfg(feature = "swap")]
+        if let SysCall::SwapOp(_, _, _, _, _, _, _) = self {
+            return true;
         }
         matches!(
             self,
@@ -1308,7 +1377,7 @@ pub fn create_server_with_sid(sid: SID) -> core::result::Result<SID, Error> {
 /// Create a new server with a random name.  This enables other processes to
 /// connect to this server to send messages.  A random server ID is generated
 /// by the kernel and returned to the caller. This address can then be registered
-/// to a namserver.
+/// to a nameserver.
 ///
 /// # Errors
 ///
@@ -1329,7 +1398,7 @@ pub fn create_server() -> core::result::Result<SID, Error> {
 /// Fetch a random server ID from the kernel. This is used
 /// exclusively by the name server and the suspend/resume server.  A random server ID is generated
 /// by the kernel and returned to the caller. This address can then be registered
-/// to a namserver by the caller in their memory space.
+/// to a nameserver by the caller in their memory space.
 ///
 /// The implementation is just a call to the kernel-exclusive TRNG to fetch random numbers.
 ///
@@ -1401,7 +1470,7 @@ pub fn try_receive_message(server: SID) -> core::result::Result<Option<MessageEn
     }
 }
 
-/// Send a message to a server.  Depending on the mesage type (move or borrow), it
+/// Send a message to a server.  Depending on the message type (move or borrow), it
 /// will either block (borrow) or return immediately (move).
 /// If the message type is `borrow`, then the memory addresses pointed to will be
 /// unavailable to this process until this function returns.
@@ -1444,7 +1513,7 @@ pub fn connect_for_process(pid: PID, sid: SID) -> core::result::Result<Result, E
     }
 }
 
-/// Send a message to a server.  Depending on the mesage type (move or borrow), it
+/// Send a message to a server.  Depending on the message type (move or borrow), it
 /// will either block (borrow) or return immediately (move).
 /// If the message type is `borrow`, then the memory addresses pointed to will be
 /// unavailable to this process until this function returns.
@@ -1738,7 +1807,7 @@ pub fn reply_and_receive_next_legacy(
         }
 
         let args = if let Some(mem) = envelope.body.memory_message() {
-            // Allow hosted mode to detect this is a memory message by giving a sentinal value here
+            // Allow hosted mode to detect this is a memory message by giving a sentinel value here
             rt = usize::MAX;
             mem.to_usize()
         } else if let Some(scalar) = envelope.body.scalar_message() {

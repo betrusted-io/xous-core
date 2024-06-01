@@ -16360,7 +16360,7 @@ soc/candidate/mbox_v0.1.sv]]></description>
             <memoryRegion>
                 <name>XIP</name>
                 <baseAddress>0x70000000</baseAddress>
-                <size>0x08000000</size>
+                <size>0x04000000</size>
             </memoryRegion>
             <memoryRegion>
                 <name>PL230</name>

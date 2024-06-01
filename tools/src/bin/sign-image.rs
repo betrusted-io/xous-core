@@ -74,6 +74,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Arg::with_name("defile")
                 .help("patch the resulting image, to create a test file to catch signature failure"),
         )
+        .arg(
+            Arg::with_name("with-jump")
+                .long("with-jump")
+                .takes_value(false)
+                .help("Insert a jump instruction in the signature block"),
+        )
         .get_matches();
 
     let minver =
@@ -96,7 +102,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err("invalid loader private key type")?;
         }
         println!("Signing loader");
-        sign_file(&loader_image, &loader_output, &loader_pkey, matches.is_present("defile"), &minver, false)?;
+        sign_file(
+            &loader_image,
+            &loader_output,
+            &loader_pkey,
+            matches.is_present("defile"),
+            &minver,
+            false,
+            matches.is_present("with-jump"),
+        )?;
     }
 
     if let Some(kernel_output) = matches.value_of("kernel-output") {
@@ -109,7 +123,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err("invalid kernel private key type")?;
         }
         println!("Signing kernel");
-        sign_file(&kernel_image, &kernel_output, &kernel_pkey, matches.is_present("defile"), &minver, true)?;
+        sign_file(
+            &kernel_image,
+            &kernel_output,
+            &kernel_pkey,
+            matches.is_present("defile"),
+            &minver,
+            true,
+            matches.is_present("with-jump"),
+        )?;
     }
     Ok(())
 }

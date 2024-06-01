@@ -57,7 +57,7 @@ dependencies = [
  "aes",
  "hex-literal",
  "log",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
 ]
 
@@ -114,11 +114,11 @@ dependencies = [
  "rkyv",
  "ureq",
  "url",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -288,11 +288,11 @@ dependencies = [
  "num-derive 0.3.3",
  "num-traits",
  "trng",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -573,11 +573,11 @@ dependencies = [
  "pddb",
  "rkyv",
  "trng",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -608,11 +608,11 @@ dependencies = [
  "trng",
  "ureq",
  "url",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -710,12 +710,12 @@ dependencies = [
  "rkyv",
  "trng",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -741,12 +741,12 @@ dependencies = [
  "trng",
  "typenum",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
 ]
 
@@ -804,7 +804,7 @@ dependencies = [
  "graphics-server",
  "log",
  "rkyv",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
 ]
 
@@ -837,10 +837,15 @@ dependencies = [
 name = "cram-console"
 version = "0.1.0"
 dependencies = [
+ "gam",
  "graphics-server",
+ "locales",
  "log",
+ "modals",
+ "num-derive 0.3.3",
+ "num-traits",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -858,13 +863,15 @@ dependencies = [
  "num-traits",
  "pio",
  "pio-proc",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
  "rkyv",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-pio",
  "xous-pl230",
 ]
@@ -877,7 +884,7 @@ dependencies = [
  "num-derive 0.3.3",
  "num-traits",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -891,7 +898,7 @@ dependencies = [
  "num-derive 0.3.3",
  "num-traits",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -907,8 +914,9 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
+ "xous-riscv",
 ]
 
 [[package]]
@@ -1035,23 +1043,12 @@ checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
 
 [[package]]
 name = "crypto-bigint"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03c6a1d5fa1de37e071642dfa44ec552ca5b299adb128fab16138e24b548fd21"
-dependencies = [
- "generic-array",
- "rand_core 0.6.4",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "crypto-bigint"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef2b4b23cddf68b89b8f8069890e8c270d54e2d5fe1b143820234805e4cb17ef"
 dependencies = [
  "generic-array",
+ "rand_core 0.6.4",
  "subtle",
  "zeroize",
 ]
@@ -1063,17 +1060,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1bfb12502f3fc46cca1bb51ac28df9d618d813cdc3d2f25b9fe775a34af26bb3"
 dependencies = [
  "generic-array",
+ "rand_core 0.6.4",
  "typenum",
-]
-
-[[package]]
-name = "crypto-mac"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25fab6889090c8133f3deb8f73ba3c65a7f456f66436fc012a1b1e272b1e103e"
-dependencies = [
- "generic-array",
- "subtle",
 ]
 
 [[package]]
@@ -1116,7 +1104,7 @@ dependencies = [
  "rfc6979 0.2.0",
  "serde",
  "serde_json",
- "sha2 0.10.8",
+ "sha2",
  "subtle",
  "trng",
  "untrusted 0.7.1",
@@ -1143,33 +1131,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "cty"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b365fabc795046672053e29c954733ec3b05e4be654ab130fe8f1f94d7051f35"
-
-[[package]]
 name = "curve25519-dalek"
-version = "4.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e89b8c6a2e4b1f45971ad09761aafb85514a84744b67a95e32c3cc1352d1f65c"
+version = "4.1.2"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#5a337c5cf7d9eb133cbe2e30d8c78ab6e918b2a6"
 dependencies = [
  "cfg-if",
  "cpufeatures",
  "curve25519-dalek-derive",
  "digest 0.10.7",
- "fiat-crypto 0.2.6",
- "platforms",
+ "engine25519-as",
+ "fiat-crypto 0.2.7",
+ "log",
  "rustc_version 0.4.0",
  "subtle",
+ "utralib 0.1.24",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "zeroize",
 ]
 
 [[package]]
 name = "curve25519-dalek-derive"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f46882e17999c6cc590af592290432be3bce0428cb0d5f8b6715e4dc7b383eb3"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#5a337c5cf7d9eb133cbe2e30d8c78ab6e918b2a6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1318,6 +1301,16 @@ dependencies = [
 
 [[package]]
 name = "der"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1a467a65c5e759bce6e65eaf91cc29f466cdc57cb65777bd646872a8a1fd4de"
+dependencies = [
+ "const-oid 0.9.6",
+ "zeroize",
+]
+
+[[package]]
+name = "der"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fffa369a668c8af7dbf8b5e56c9f744fbd399949ed171606040001947de40b1c"
@@ -1447,12 +1440,12 @@ dependencies = [
  "trng",
  "userprefs",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1472,24 +1465,24 @@ dependencies = [
  "rkyv",
  "spinor",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "ecdsa"
-version = "0.13.4"
+version = "0.14.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0d69ae62e0ce582d56380743515fefaf1a8c70cec685d9677636d7e30ae9dc9"
+checksum = "413301934810f597c1d19ca71c8710e99a3f1ba28a0d2ebc01551a2daeea3c5c"
 dependencies = [
- "der 0.5.1",
+ "der 0.6.1",
  "elliptic-curve",
- "rfc6979 0.1.0",
- "signature 1.4.0",
+ "rfc6979 0.3.1",
+ "signature 1.6.4",
 ]
 
 [[package]]
@@ -1499,7 +1492,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
 dependencies = [
  "serde",
- "signature 1.4.0",
+ "signature 1.6.4",
 ]
 
 [[package]]
@@ -1520,15 +1513,15 @@ checksum = "e18997d4604542d0736fae2c5ad6de987f0a50530cbcc14a7ce5a685328a252d"
 
 [[package]]
 name = "ed25519-dalek"
-version = "2.1.1"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a3daa8e81a3963a60642bcc1f90a670680bd4a77535faa384e9d1c79d620871"
+checksum = "1f628eaec48bfd21b865dc2950cfa014450c01d2fa2b69a86c2fd5844ec523c0"
 dependencies = [
  "curve25519-dalek",
  "ed25519 2.2.3",
  "rand_core 0.6.4",
  "serde",
- "sha2 0.10.8",
+ "sha2",
  "signature 2.2.0",
  "subtle",
  "zeroize",
@@ -1562,16 +1555,18 @@ checksum = "a26ae43d7bcc3b814de94796a5e736d4029efb0ee900c12e2d54c993ad1a1e07"
 
 [[package]]
 name = "elliptic-curve"
-version = "0.11.12"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25b477563c2bfed38a3b7a60964c49e058b2510ad3f12ba3483fd8f62c2306d6"
+checksum = "e7bb888ab5300a19b8e5bceef25ac745ad065f3c9f7efc6de1b91958110891d3"
 dependencies = [
  "base16ct",
- "crypto-bigint 0.3.2",
- "der 0.5.1",
+ "crypto-bigint",
+ "der 0.6.1",
+ "digest 0.10.7",
  "ff",
  "generic-array",
  "group",
+ "hkdf",
  "rand_core 0.6.4",
  "sec1",
  "subtle",
@@ -1632,26 +1627,12 @@ dependencies = [
 [[package]]
 name = "engine-25519"
 version = "0.1.0"
-dependencies = [
- "engine25519-as",
- "llio",
- "log",
- "num-derive 0.3.3",
- "num-traits",
- "rkyv",
- "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-api-log",
- "xous-api-names",
- "xous-api-susres",
- "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
-]
+source = "git+https://github.com/betrusted-io/xous-engine-25519.git?rev=63d3d1f30736022e791deaacf4dd62c00b42fe2e#63d3d1f30736022e791deaacf4dd62c00b42fe2e"
 
 [[package]]
 name = "engine25519-as"
 version = "0.1.0"
-source = "git+https://github.com/betrusted-io/engine25519-as.git?rev=d249c967556b02ab5439eacb5078fa00c60b93d6#d249c967556b02ab5439eacb5078fa00c60b93d6"
+source = "git+https://github.com/betrusted-io/engine25519-as.git?rev=775e8406eb4aad08f05ae10619fcb4ca891ba0a6#775e8406eb4aad08f05ae10619fcb4ca891ba0a6"
 
 [[package]]
 name = "enum-iterator"
@@ -1775,9 +1756,9 @@ dependencies = [
 
 [[package]]
 name = "ff"
-version = "0.11.1"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "131655483be284720a17d74ff97592b8e76576dc25563148601df2d7c9080924"
+checksum = "d013fc25338cc558c5c2cfbad646908fb23591e2404481826742b651c9af7160"
 dependencies = [
  "rand_core 0.6.4",
  "subtle",
@@ -1800,7 +1781,7 @@ dependencies = [
  "num-derive 0.3.3",
  "num-traits",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -1815,9 +1796,9 @@ checksum = "e825f6987101665dea6ec934c09ec6d721de7bc1bf92248e1d5810c8cd636b77"
 
 [[package]]
 name = "fiat-crypto"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1676f435fc1dadde4d03e43f5d62b259e1ce5f40bd4ffb21db2b42ebe59c1382"
+checksum = "c007b1ae3abe1cb6f85a16305acd418b7ca6343b953633fee2b76d8f108b830f"
 
 [[package]]
 name = "filetime"
@@ -2020,6 +2001,7 @@ version = "0.1.0"
 dependencies = [
  "com",
  "content-plugin-api",
+ "cram-hal-service",
  "digest 0.9.0",
  "enum_dispatch",
  "graphics-server",
@@ -2034,16 +2016,16 @@ dependencies = [
  "num-traits",
  "qrcode",
  "rkyv",
- "sha2 0.10.8",
+ "sha2",
  "trng",
  "tts-frontend",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2110,9 +2092,9 @@ dependencies = [
  "wasi 0.11.0+wasi-snapshot-preview1",
  "wasm-bindgen",
  "wasm-bindgen-test",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2147,19 +2129,19 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "group"
-version = "0.11.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc5ac374b108929de78460075f3dc439fa66df9d8fc77e8f12caa5165fcf0c89"
+checksum = "5dfbfb3a6cfbd390d5c9564ab283a0349b9b9fcd46a706c1eb10e0db70bfbac7"
 dependencies = [
  "ff",
  "rand_core 0.6.4",
@@ -2242,10 +2224,10 @@ dependencies = [
  "num-derive 0.3.3",
  "num-traits",
  "tts-frontend",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2305,10 +2287,10 @@ dependencies = [
  "num-traits",
  "tts-frontend",
  "usb-device-xous",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2317,17 +2299,7 @@ version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7"
 dependencies = [
- "hmac 0.12.1",
-]
-
-[[package]]
-name = "hmac"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a2a2320eb7ec0ebe8da8f744d7812d9fc4cb4d09344ac01898dbcb6a20ae69b"
-dependencies = [
- "crypto-mac",
- "digest 0.9.0",
+ "hmac",
 ]
 
 [[package]]
@@ -2457,11 +2429,11 @@ dependencies = [
  "rkyv",
  "tts-frontend",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2473,9 +2445,9 @@ dependencies = [
  "num-derive 0.3.3",
  "num-traits",
  "rkyv",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2488,11 +2460,11 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2507,11 +2479,11 @@ dependencies = [
  "rkyv",
  "tts-frontend",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2621,12 +2593,12 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2644,7 +2616,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-ticktimer",
 ]
@@ -2661,12 +2633,12 @@ dependencies = [
  "rkyv",
  "spinor",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2764,7 +2736,7 @@ dependencies = [
  "num-derive 0.3.3",
  "num-traits",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -2788,12 +2760,12 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
 ]
 
@@ -2801,17 +2773,23 @@ dependencies = [
 name = "loader"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm-siv",
  "armv7",
  "atsama5d27",
  "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs?branch=main)",
  "cramium-hal",
+ "crc",
  "curve25519-dalek-loader",
  "ed25519-dalek-loader",
  "lazy_static",
+ "pio",
+ "pio-proc",
+ "rand_chacha 0.3.1",
  "sha2-loader",
  "utralib 0.1.24",
  "xous-pio",
  "xous-pl230",
+ "xous-riscv",
 ]
 
 [[package]]
@@ -2846,7 +2824,7 @@ checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 name = "log-test-client"
 version = "0.1.0"
 dependencies = [
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2890,9 +2868,9 @@ checksum = "c3c8dda44ff03a2f238717214da50f65d5a53b45cd213a7370424ffdb6fae815"
 
 [[package]]
 name = "minifb"
-version = "0.23.0"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9e21c5f89bb820c7878c300c5b944e65de0f1b2a75e0be92ce670b95943740e"
+checksum = "36eac3001258de903d8e8f79b91b6c03cb19214f823c01db1505ef250cb980f9"
 dependencies = [
  "cc",
  "dlib",
@@ -2945,6 +2923,7 @@ name = "modals"
 version = "0.1.0"
 dependencies = [
  "bit_field",
+ "cram-hal-service",
  "gam",
  "locales",
  "log",
@@ -2954,11 +2933,11 @@ dependencies = [
  "trng",
  "tts-frontend",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2989,11 +2968,11 @@ dependencies = [
  "trng",
  "ureq",
  "url",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3019,11 +2998,11 @@ dependencies = [
  "serde",
  "trng",
  "ureq",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3059,12 +3038,12 @@ dependencies = [
  "smoltcp",
  "trng",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
 ]
 
@@ -3322,14 +3301,13 @@ checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
 
 [[package]]
 name = "p256"
-version = "0.10.1"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19736d80675fbe9fe33426268150b951a3fb8f5cfca2a23a17c85ef3adb24e3b"
+checksum = "51f44edd08f51e2ade572f141051021c5af22677e42b7dd28a88155151c33594"
 dependencies = [
  "ecdsa",
  "elliptic-curve",
- "sec1",
- "sha2 0.9.9",
+ "sha2",
 ]
 
 [[package]]
@@ -3467,9 +3445,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83a0692ec44e4cf1ef28ca317f14f8f07da2d95ec3fa01f86e4467b725e60917"
 dependencies = [
  "digest 0.10.7",
- "hmac 0.12.1",
+ "hmac",
  "password-hash",
- "sha2 0.10.8",
+ "sha2",
 ]
 
 [[package]]
@@ -3498,18 +3476,18 @@ dependencies = [
  "rand_core 0.6.4",
  "rkyv",
  "root-keys",
- "sha2 0.10.8",
+ "sha2",
  "spinor",
  "subtle",
  "trng",
  "tts-frontend",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "zeroize",
  "zeroize_derive",
 ]
@@ -3546,7 +3524,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3642,6 +3620,16 @@ dependencies = [
 
 [[package]]
 name = "pkcs8"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9eca2c590a5f85da82668fa685c09ce2888b9430e83299debf1f34b65fd4a4ba"
+dependencies = [
+ "der 0.6.1",
+ "spki 0.6.0",
+]
+
+[[package]]
+name = "pkcs8"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f950b2377845cebe5cf8b5165cb3cc1a5e0fa5cfa3e1f7f55707d8fd82e0a7b7"
@@ -3655,12 +3643,6 @@ name = "pkg-config"
 version = "0.3.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2900ede94e305130c13ddd391e0ab7cbaeb783945ae07a279c268cb05109c6cb"
-
-[[package]]
-name = "platforms"
-version = "3.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "626dec3cac7cc0e1577a2ec3fc496277ec2baa084bebad95bb6fdbfae235f84c"
 
 [[package]]
 name = "plotters"
@@ -4022,12 +4004,9 @@ dependencies = [
 
 [[package]]
 name = "raw-window-handle"
-version = "0.4.3"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b800beb9b6e7d2df1fe337c9e3d04e3af22a124460fb4c30fcc22c9117cefb41"
-dependencies = [
- "cty",
-]
+checksum = "8cc3bcbdb1ddfc11e700e62968e6b4cc9c75bb466464ad28fb61c5b2c964418b"
 
 [[package]]
 name = "rayon"
@@ -4122,22 +4101,11 @@ dependencies = [
  "num-derive 0.3.3",
  "num-traits",
  "trng",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "rfc6979"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96ef608575f6392792f9ecf7890c00086591d29a83910939d430753f7c050525"
-dependencies = [
- "crypto-bigint 0.3.2",
- "hmac 0.11.0",
- "zeroize",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4146,8 +4114,19 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c0788437d5ee113c49af91d3594ebc4fcdcc962f8b6df5aa1c3eeafd8ad95de"
 dependencies = [
- "crypto-bigint 0.4.9",
- "hmac 0.12.1",
+ "crypto-bigint",
+ "hmac",
+ "zeroize",
+]
+
+[[package]]
+name = "rfc6979"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7743f17af12fa0b03b803ba12cd6a8d9483a587e89c69445e3909655c0b9fabb"
+dependencies = [
+ "crypto-bigint",
+ "hmac",
  "zeroize",
 ]
 
@@ -4165,9 +4144,9 @@ dependencies = [
  "spin",
  "untrusted 0.9.0",
  "windows-sys 0.52.0",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4207,7 +4186,6 @@ dependencies = [
  "curve25519-dalek",
  "digest 0.10.7",
  "ed25519-dalek",
- "engine-25519",
  "gam",
  "graphics-server",
  "hex 0.4.3",
@@ -4221,19 +4199,19 @@ dependencies = [
  "num-traits",
  "rand_core 0.6.4",
  "rkyv",
- "sha2 0.10.8",
+ "sha2",
  "spinor",
  "subtle",
  "trng",
  "tts-frontend",
  "usb-device-xous",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
  "zeroize",
 ]
@@ -4395,13 +4373,14 @@ checksum = "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
 
 [[package]]
 name = "sec1"
-version = "0.2.1"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08da66b8b0965a5555b6bd6639e68ccba85e1e2506f5fbb089e93f8a04e1a2d1"
+checksum = "3be24c1842290c45df0a7bf069e0c268a747ad05a192f2fd7dcfdbc1cba40928"
 dependencies = [
- "der 0.5.1",
+ "base16ct",
+ "der 0.6.1",
  "generic-array",
- "pkcs8 0.8.0",
+ "pkcs8 0.9.0",
  "subtle",
  "zeroize",
 ]
@@ -4524,20 +4503,8 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.9.9"
-source = "git+https://github.com/RustCrypto/hashes.git?tag=sha2-v0.9.9#e942f6f13a820a58716587f508fa50b6582cf34f"
-dependencies = [
- "block-buffer 0.9.0",
- "cfg-if",
- "cpufeatures",
- "digest 0.9.0",
- "opaque-debug",
-]
-
-[[package]]
-name = "sha2"
 version = "0.10.8"
-source = "git+https://github.com/betrusted-io/hashes.git?branch=sha2-v0.10.8-xous#9e4f31ab3fa63598d63167b36204bc67c0bb1ed1"
+source = "git+https://github.com/betrusted-io/hashes.git?branch=sha2-v0.10.8-xous#f8684594b9766acafa893feeb46bfce0d4b762a4"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -4549,11 +4516,11 @@ dependencies = [
  "rand 0.8.5",
  "rkyv",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4592,7 +4559,6 @@ dependencies = [
  "digest 0.10.7",
  "dns",
  "ed25519-dalek",
- "engine-25519",
  "gam",
  "graphics-server",
  "hex 0.4.3",
@@ -4619,7 +4585,7 @@ dependencies = [
  "rkyv",
  "root-keys",
  "rustls",
- "sha2 0.10.8",
+ "sha2",
  "spinor",
  "threadpool",
  "tls",
@@ -4634,21 +4600,21 @@ dependencies = [
  "utralib 0.1.24",
  "webpki-roots",
  "x25519-dalek",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "signature"
-version = "1.4.0"
+version = "1.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02658e48d89f2bec991f9a78e69cfa4c316f8d6a6c4ec12fae1aeb263d486788"
+checksum = "74233d3b3b2f6d4b006dc19dee745e73e2a6bfb6f93607cd3b02bd5b00797d7c"
 dependencies = [
- "digest 0.9.0",
+ "digest 0.10.7",
  "rand_core 0.6.4",
 ]
 
@@ -4719,7 +4685,7 @@ name = "spawn"
 version = "0.1.0"
 dependencies = [
  "log",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
 ]
 
@@ -4746,12 +4712,12 @@ dependencies = [
  "rkyv",
  "trng",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4762,6 +4728,16 @@ checksum = "44d01ac02a6ccf3e07db148d2be087da624fea0221a16152ed01f0496a6b0a27"
 dependencies = [
  "base64ct",
  "der 0.5.1",
+]
+
+[[package]]
+name = "spki"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67cf02bbac7a337dc36e4f5a693db6c21e7863f45070f7064577eb4367a3212b"
+dependencies = [
+ "base64ct",
+ "der 0.6.1",
 ]
 
 [[package]]
@@ -4812,17 +4788,17 @@ dependencies = [
  "pddb",
  "rkyv",
  "root-keys",
- "sha2 0.10.8",
+ "sha2",
  "trng",
  "usb-device-xous",
  "userprefs",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
 ]
 
@@ -4958,7 +4934,23 @@ dependencies = [
 name = "test-spawn"
 version = "0.1.0"
 dependencies = [
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "test-swapper"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "num-derive 0.3.3",
+ "num-traits",
+ "rkyv",
+ "utralib 0.1.24",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-susres",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5020,7 +5012,7 @@ name = "ticktimer-test-client"
 version = "0.1.0"
 dependencies = [
  "log",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -5107,15 +5099,15 @@ dependencies = [
  "rustls",
  "rustls-webpki",
  "sct",
- "sha2 0.10.8",
+ "sha2",
  "ureq",
  "webpki-roots",
  "x509-parser",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5137,6 +5129,7 @@ dependencies = [
 name = "tools"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm-siv",
  "base64 0.20.0",
  "bitflags 1.3.2",
  "clap 2.34.0",
@@ -5147,8 +5140,9 @@ dependencies = [
  "log",
  "pem",
  "pkcs8 0.8.0",
+ "rand 0.8.5",
  "ring",
- "sha2 0.10.8",
+ "sha2",
  "svd2utra 0.1.22",
  "xmas-elf",
  "xous-semver",
@@ -5231,10 +5225,10 @@ dependencies = [
  "num-derive 0.3.3",
  "num-traits",
  "usb-device-xous",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5249,12 +5243,12 @@ dependencies = [
  "rand_core 0.6.4",
  "rkyv",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5267,11 +5261,11 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-tts-backend",
 ]
 
@@ -5431,12 +5425,12 @@ dependencies = [
  "usbd_scsi 0.1.1",
  "utralib 0.1.24",
  "vcell",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
  "xous-usb-hid",
 ]
@@ -5456,7 +5450,7 @@ dependencies = [
  "usb-device",
  "utralib 0.1.24",
  "vcell",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -5486,7 +5480,7 @@ dependencies = [
  "typenum",
  "usb-device",
  "usbd_mass_storage 0.1.0",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-ticktimer",
 ]
 
@@ -5560,7 +5554,7 @@ dependencies = [
  "usb-device",
  "usbd_bulk_only_transport 0.1.0",
  "usbd_mass_storage 0.1.0",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-ticktimer",
 ]
 
@@ -5621,7 +5615,7 @@ dependencies = [
  "gam",
  "graphics-server",
  "hex 0.4.3",
- "hmac 0.12.1",
+ "hmac",
  "ime-plugin-api",
  "locales",
  "log",
@@ -5638,7 +5632,7 @@ dependencies = [
  "random-pick",
  "rkyv",
  "sha1",
- "sha2 0.10.8",
+ "sha2",
  "sntpc",
  "subtle",
  "trng",
@@ -5646,12 +5640,12 @@ dependencies = [
  "usb-device-xous",
  "userprefs",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-usb-hid",
 ]
 
@@ -6190,7 +6184,7 @@ checksum = "0fcb9cbac069e033553e8bb871be2fbdffcab578eb25bd0f7c508cedc6dcd75a"
 
 [[package]]
 name = "xous"
-version = "0.9.58"
+version = "0.9.61"
 dependencies = [
  "compiler_builtins",
  "lazy_static",
@@ -6199,94 +6193,94 @@ dependencies = [
 
 [[package]]
 name = "xous"
-version = "0.9.58"
+version = "0.9.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb93122c9dab77f8bde501ff0677d3df7777982f9faa23603423aeb5eae4e55d"
+checksum = "e540c5677fdb7e291b45db72ad1af7b6148ea2b3c194f92cf2d7078df602e34c"
 dependencies = [
  "lazy_static",
 ]
 
 [[package]]
 name = "xous-api-log"
-version = "0.1.54"
+version = "0.1.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "941f7fd7c114e1e0c401bbbe8222e8adbb4bc8ebeb782f7812d8f1678a578934"
+checksum = "95681e5c74f7fa206d29535c48610c5aeffb2020dbacdf423312ee1ef31c999b"
 dependencies = [
  "log",
  "num-derive 0.3.3",
  "num-traits",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "xous-api-names"
-version = "0.9.56"
+version = "0.9.59"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "471502d9379d198738ec55dec7cd688ce21e1cfe7d93af6dad25e38c1c404d1c"
+checksum = "4b4e47cbc61139959a45e64942718164e4333688f975a2b45cf85ee41dc2e6ef"
 dependencies = [
  "log",
  "num-derive 0.3.3",
  "num-traits",
  "rkyv",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "xous-api-susres"
-version = "0.9.54"
+version = "0.9.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7554497b3b3c07bd70948f1b997dd5692643996972e13388798306ac26588b2c"
+checksum = "2c36a023b7d38668ce412f1b457dea1e8e595cf9e5c7b34d842b530a0c1b1220"
 dependencies = [
  "log",
  "num-derive 0.3.3",
  "num-traits",
  "rkyv",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "xous-api-ticktimer"
-version = "0.9.54"
+version = "0.9.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9e8bb005478553d38da42fcfe001d833d7ac4bb1065f6d88164547ac0e2294c"
+checksum = "2533ea7bd8b684fb2c1a4eff8a86362abe4efa09d9c4086b3710296964759872"
 dependencies = [
  "log",
  "num-derive 0.3.3",
  "num-traits",
  "rkyv",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
 ]
 
 [[package]]
 name = "xous-ipc"
-version = "0.9.58"
+version = "0.9.61"
 dependencies = [
  "bitflags 1.3.2",
  "rkyv",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "xous-ipc"
-version = "0.9.58"
+version = "0.9.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f5081581314f115e2005403ee2cc0957d86cbfc49edf6e8b05d2fcf6c226c5d"
+checksum = "4f9797a3830bf22d1f8f66805c786e2b68ebe2416129486749c3593cfd95a4f6"
 dependencies = [
  "bitflags 1.3.2",
  "rkyv",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -6302,11 +6296,12 @@ dependencies = [
  "gdbstub_arch",
  "hex 0.4.3",
  "lazy_static",
+ "loader",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "stats_alloc",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-riscv",
 ]
 
@@ -6320,9 +6315,9 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -6334,10 +6329,10 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -6349,7 +6344,7 @@ dependencies = [
  "pio",
  "pio-proc",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -6362,7 +6357,7 @@ dependencies = [
  "pio",
  "pio-proc",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-pio",
 ]
 
@@ -6378,24 +6373,42 @@ dependencies = [
 
 [[package]]
 name = "xous-semver"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ed3278bb4e7be4895c1c597434e5269f7357ffb800ebc644f0398bb008a15ad"
+checksum = "4b79d97eaeab0fdf766f7f2c8d3b88bdae67ad36fac9694e2857defca345178c"
 
 [[package]]
 name = "xous-susres"
 version = "0.1.36"
 dependencies = [
+ "loader",
  "log",
  "num-derive 0.3.3",
  "num-traits",
  "rkyv",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "xous-swapper"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm-siv",
+ "cramium-hal",
+ "loader",
+ "log",
+ "num-derive 0.3.3",
+ "num-traits",
+ "utralib 0.1.24",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -6407,12 +6420,12 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
 ]
 
@@ -6426,9 +6439,9 @@ dependencies = [
  "num-derive 0.3.3",
  "num-traits",
  "rkyv",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -6501,7 +6514,7 @@ dependencies = [
  "crc32fast",
  "crossbeam-utils",
  "flate2",
- "hmac 0.12.1",
+ "hmac",
  "pbkdf2",
  "sha1",
  "time",

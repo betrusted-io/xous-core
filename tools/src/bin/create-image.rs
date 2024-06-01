@@ -8,11 +8,14 @@ use std::fs::File;
 
 use clap::{App, Arg};
 use tools::elf::{read_minielf, read_program};
+use tools::swap_writer::SwapWriter;
 use tools::tags::bflg::Bflg;
 use tools::tags::inie::IniE;
 use tools::tags::inif::IniF;
+use tools::tags::inis::IniS;
 use tools::tags::memory::{MemoryRegion, MemoryRegions};
 use tools::tags::pnam::ProcessNames;
+use tools::tags::swap::Swap;
 use tools::tags::xkrn::XousKernel;
 use tools::utils::{parse_csr_csv, parse_u32};
 use tools::xous_arguments::XousArguments;
@@ -78,7 +81,7 @@ fn csr_to_config(hv: tools::utils::CsrConfig, ram_config: &mut RamConfig) {
     ram_config.regions.add(candidate_region);
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let matches = App::new("Xous Image Creator")
         .version(crate_version!())
@@ -110,6 +113,14 @@ fn main() {
                 .multiple(true)
                 .number_of_values(1)
                 .help("Initial program to load from FLASH"),
+        )
+        .arg(
+            Arg::with_name("inis")
+                .long("inis")
+                .takes_value(true)
+                .multiple(true)
+                .number_of_values(1)
+                .help("Program to be loaded into swap space"),
         )
         .arg(
             Arg::with_name("csv")
@@ -150,6 +161,27 @@ fn main() {
                 .required_unless_one(&["ram", "svd", "csv"]),
         )
         .arg(
+            Arg::with_name("swap")
+                .long("swap")
+                .takes_value(true)
+                .value_name("OFFSET:SIZE")
+                .help("Swap offset and size, in the form of [offset]:[size]; note: offset and size have platform-dependent interpretations")
+        )
+        .arg(
+            Arg::with_name("swap-name")
+                .long("swap-name")
+                .takes_value(true)
+                .value_name("OUTPUT")
+                .help("Output file to store swap image data")
+        )
+        .arg(
+            Arg::with_name("swap-debug-name")
+                .long("swap-debug-name")
+                .takes_value(true)
+                .value_name("OUTPUT")
+                .help("Output file to store swap debug data")
+        )
+        .arg(
             Arg::with_name("debug")
                 .short("d")
                 .long("debug")
@@ -172,28 +204,27 @@ fn main() {
         memory_required: 0,
     };
 
+    let mut swap: Option<Swap> = None;
+
     let mut process_names = ProcessNames::new();
 
     if let Some(val) = matches.value_of("ram") {
         let ram_parts: Vec<&str> = val.split(':').collect();
         if ram_parts.len() != 2 {
-            eprintln!("Error: --ram argument should be of the form [offset]:[size]");
-            return;
+            return Err("Error: --ram argument should be of the form [offset]:[size]".into());
         }
 
         ram_config.offset = match parse_u32(ram_parts[0]) {
             Ok(o) => o,
             Err(e) => {
-                eprintln!("Error: Unable to parse {}: {:?}", ram_parts[0], e);
-                return;
+                return Err(format!("Error: Unable to parse {}: {:?}", ram_parts[0], e).into());
             }
         };
 
         ram_config.size = match parse_u32(ram_parts[1]) {
             Ok(o) => o,
             Err(e) => {
-                eprintln!("Error: Unable to parse {}: {:?}", ram_parts[1], e);
-                return;
+                return Err(format!("Error: Unable to parse {}: {:?}", ram_parts[1], e).into());
             }
         };
 
@@ -285,10 +316,69 @@ fn main() {
         csr_to_config(tools::utils::CsrConfig { regions: map }, &mut ram_config);
     }
 
+    // Swap has an architecture-dependent meaning.
+    //
+    // On Precursor, it's only used exclusively for testing, so we apply it as a
+    // "patch" on top of the RAM area -- it's a specifier for what part
+    // of RAM should be carved out to use as swap.
+    //
+    // On Cramium, the swap region may point to a section of memory-mapped RAM, *or*
+    // it can point to register-mapped SPI RAM. The distinction is based solely upon
+    // the starting address. If the starting address is `0`, we assume this is talking
+    // about register-mapped SPI RAM. If it is non-zero, then we assume this is referring
+    // to a window that is memory-mapped.
+    if let Some(val) = matches.value_of("swap") {
+        let swap_parts: Vec<&str> = val.split(':').collect();
+        if swap_parts.len() != 2 {
+            return Err("Error: --swap argument should be of the form [offset]:[size]".into());
+        }
+
+        let offset = match parse_u32(swap_parts[0]) {
+            Ok(o) => o,
+            Err(e) => {
+                return Err(format!("Error: Unable to parse {}: {:?}", swap_parts[0], e).into());
+            }
+        };
+
+        let size = match parse_u32(swap_parts[1]) {
+            Ok(o) => o,
+            Err(e) => {
+                return Err(format!("Error: Unable to parse {}: {:?}", swap_parts[1], e).into());
+            }
+        };
+
+        swap = Some(Swap::new(offset, size));
+    }
+
     let mut args = XousArguments::new(ram_config.offset, ram_config.size, ram_config.name);
+    let mut swap_args: Option<XousArguments> = None;
 
     if !ram_config.regions.is_empty() {
-        args.add(ram_config.regions);
+        if let Some(s) = swap {
+            // now process the swap region.
+            #[cfg(any(feature = "precursor", feature = "renode"))]
+            {
+                // this is slightly janky, but we only use this configuration for testing swap
+                // so we can impose an artificial rule like "swap must be higher than RAM", instead
+                // of trying to handle the generic cases like "swap could be anywhere, maybe even
+                // a window inside RAM, or lower, or multiple fragments, or...".
+                assert!(s.offset > ram_config.offset, "swap is assumed to be at a higher address than RAM");
+                // split the RAM space, if necessary, to accommodate swap
+                if s.offset < ram_config.offset + ram_config.size {
+                    ram_config.size = s.offset - ram_config.offset;
+                }
+                args.ram_start = ram_config.offset;
+                args.ram_length = ram_config.size;
+            }
+            // Note that other configurations don't split RAM, since the swap is provisioned directly
+            // in hardware, and thus, no post-processing is required.
+            swap_args = Some(XousArguments::new(s.offset, s.size, s.name));
+
+            args.add(s);
+            args.add(ram_config.regions);
+        } else {
+            args.add(ram_config.regions);
+        }
     }
 
     if matches.is_present("debug") {
@@ -334,6 +424,27 @@ fn main() {
         }
     }
 
+    if let Some(init_paths) = matches.values_of("inis") {
+        if let Some(sargs) = &mut swap_args {
+            for init_path in init_paths {
+                let program_name = std::path::Path::new(init_path);
+                process_names.set(
+                    pid,
+                    program_name
+                        .file_stem()
+                        .expect("program had no name")
+                        .to_str()
+                        .expect("program name is not valid utf-8"),
+                );
+                pid += 1;
+                let init = read_minielf(init_path).expect("couldn't parse init file");
+                sargs.add(IniS::new(init.entry_point, init.sections, init.program));
+            }
+        } else {
+            println!("Warning: inis regions specified, but no swap region specified. Ignoring inis regions!");
+        }
+    }
+
     let xkrn = XousKernel::new(
         kernel.text_offset,
         kernel.text_size,
@@ -358,6 +469,43 @@ fn main() {
 
     println!("Arguments: {}", args);
 
+    if let Some(mut sargs) = swap_args {
+        let mut swap_buffer = SwapWriter::new();
+        // Transfer our unencrypted data inside sargs to swap_buffer
+        sargs.write(&mut swap_buffer).expect("Couldn't write out swap args");
+        let buf_len = swap_buffer.buffer.get_ref().len();
+
+        // Create the swap target image and encrypt swap_buffer to it
+        let swap_filename = matches.value_of("swap-name").expect("swap filename not present");
+        let sf = File::create(swap_filename)
+            .unwrap_or_else(|_| panic!("Couldn't create output file {}", swap_filename));
+        swap_buffer.encrypt_to(sf).expect("Couldn't flush swap buffer to disk");
+
+        println!("Swap arguments: {}", sargs);
+        println!("Swap data created in file {}", swap_filename);
+
+        match matches.value_of("swap-debug-name") {
+            Some(sf_dbg) => {
+                use std::io::Write;
+                let mut sf =
+                    File::create(sf_dbg).unwrap_or_else(|_| panic!("Couldn't create debug file {}", sf_dbg));
+                // serialize the unencrypted header into the debug image
+                let header = tools::swap_writer::SwapHeader::new(buf_len);
+                sf.write(&header.serialize()?)?;
+                // directly write our unencrypted data from sargs into file sf. It's an exact copy of
+                // what ended up in swap_buffer.
+                sargs.write(&sf).expect("Couldn't write debug swap image");
+                println!("Swap debug created in file {}", sf_dbg);
+            }
+            None => {
+                // Argument wasn't specified, do nothing.
+            }
+        }
+    }
     println!("Runtime will require {} bytes to track memory allocations", ram_config.memory_required);
+    if let Some(s) = swap {
+        println!("Runtime will also require {} bytes to track swap", s.size / 4096);
+    }
     println!("Image created in file {}", output_filename);
+    Ok(())
 }

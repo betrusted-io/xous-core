@@ -1,4 +1,4 @@
-use core::{mem, slice};
+use core::{mem::size_of, slice};
 
 #[cfg(feature = "atsama5d27")]
 pub use crate::platform::atsama5d27::load::InitialProcess;
@@ -33,12 +33,14 @@ pub struct InitialProcess {
 pub fn phase_1(cfg: &mut BootConfig) {
     // Allocate space for the stack pointer.
     // The bootloader should have placed the stack pointer at the end of RAM
-    // prior to jumping to our program, so allocate one page of data for
-    // stack.
+    // prior to jumping to our program. Reserve space for the stack, so that it does not smash
+    // run time allocations.
+    //
     // All other allocations will be placed below the stack pointer.
     //
     // As of Xous 0.8, the top page is bootloader stack, and the page below that is the 'clean suspend' page.
     cfg.init_size += GUARD_MEMORY_BYTES;
+    println!("Loader runtime stack should not exceed: {:x}", cfg.get_top() as usize);
 
     // The first region is defined as being "main RAM", which will be used
     // to keep track of allocations.
@@ -58,7 +60,88 @@ pub fn phase_1(cfg: &mut BootConfig) {
     }
 
     // All further allocations must be page-aligned.
+    #[cfg(feature = "swap")]
+    if SDBG {
+        println!(" -> cfg end pre-alignment: {:x}(-{:x})", cfg.get_top() as usize, cfg.init_size);
+    }
     cfg.init_size = (cfg.init_size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+    #[cfg(feature = "swap")]
+    if SDBG {
+        println!(" -> cfg end post-alignment: {:x}(-{:x})", cfg.get_top() as usize, cfg.init_size);
+    }
+
+    #[cfg(feature = "swap")]
+    allocate_swap(cfg);
+
+    // debug addresses of all key cfg fields
+    #[cfg(feature = "debug-print")]
+    {
+        println!("*** CFG debug ***");
+        println!("  base_addr: {:x}", cfg.base_addr as usize);
+        println!(
+            "  regions: {:x} -> {:x}",
+            cfg.regions.as_ptr() as usize,
+            cfg.regions.as_ptr() as usize + cfg.regions.len() * size_of::<MemoryRegionExtra>()
+        );
+        println!(
+            "  sram_start: {:x}, sram_end: {:x}",
+            cfg.sram_start as usize,
+            cfg.sram_start as usize + cfg.sram_size
+        );
+        println!(
+            "  RPT: {:x} -> {:x}",
+            cfg.runtime_page_tracker.as_ptr() as usize,
+            cfg.runtime_page_tracker.as_ptr() as usize
+                + cfg.runtime_page_tracker.len() * size_of::<XousAlloc>()
+        );
+        println!(
+            "  XPT: {:x} -> {:x}",
+            cfg.extra_page_tracker.as_ptr() as usize,
+            cfg.extra_page_tracker.as_ptr() as usize + cfg.extra_page_tracker.len() * size_of::<XousPid>()
+        );
+        println!(
+            "  processes: {:x} -> {:x}",
+            cfg.processes.as_ptr() as usize,
+            cfg.processes.as_ptr() as usize + cfg.processes.len() * size_of::<InitialProcess>()
+        );
+        #[cfg(feature = "swap")]
+        {
+            if let Some(hal) = cfg.swap_hal.as_ref() {
+                println!(
+                    "    (Stack) HAL: {:x} -> {:x}",
+                    hal as *const SwapHal as usize,
+                    hal as *const SwapHal as usize + size_of::<SwapHal>()
+                );
+            } else {
+                println!("  NO SWAP HAL!!!");
+            }
+            if let Some(hal) = cfg.swap_hal.as_ref() {
+                println!(
+                    "    (Stack) HAL decrypt buf: {:x} -> {:x}",
+                    hal.buf_as_ref().as_ptr() as usize,
+                    hal.buf_as_ref().as_ptr() as usize + hal.buf_as_ref().len() * size_of::<u8>()
+                );
+            } else {
+                println!("  NO SWAP HAL!!!");
+            }
+            println!(
+                "  swap_root: {:x} -> {:x}",
+                cfg.swap_root.as_ptr() as usize,
+                cfg.swap_root.as_ptr() as usize + cfg.swap_root.len() * size_of::<usize>()
+            );
+        }
+    }
+
+    println!("Runtime Page Tracker: {} bytes", cfg.runtime_page_tracker.len());
+    #[cfg(feature = "swap")]
+    if SDBG {
+        println!("Occupied RPT entries (at this point, the list should be nil):");
+        for (_i, entry) in cfg.runtime_page_tracker.iter().enumerate() {
+            if entry.raw_vpn() != 0 {
+                println!("  {:x}: {:x} [{}]", _i, entry.raw_vpn(), entry.timestamp());
+            }
+        }
+    }
 
     // Additionally, from this point on all allocations come from
     // their respective processes rather than kernel memory.
@@ -67,6 +150,16 @@ pub fn phase_1(cfg: &mut BootConfig) {
     if !cfg.no_copy {
         println!("Copying processes");
         copy_processes(cfg);
+    }
+    // activate this to debug stack-smashing during copy_process(). The RPT is the first structure that gets
+    // smashed if the stack overflows! It should be all 0's if the stack did not overrun.
+    #[cfg(feature = "swap")]
+    if SDBG && VDBG {
+        for (_i, _r) in
+            cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 1024..].chunks(32).enumerate()
+        {
+            println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + _i * 32, _r);
+        }
     }
 
     // Mark all pages as in-use by the kernel.
@@ -79,8 +172,8 @@ pub fn phase_1(cfg: &mut BootConfig) {
     // needs to be claimed by the susres server before the kernel allocates it.
     // Lower numbered indices corresponding to higher address pages.
     println!("Marking pages as in-use");
-    for i in 4..(cfg.init_size / PAGE_SIZE) {
-        cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - i] = 1;
+    for i in ((GUARD_MEMORY_BYTES / PAGE_SIZE) + 1)..(cfg.init_size / PAGE_SIZE) {
+        cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - i] = XousAlloc::from(1);
     }
 }
 
@@ -89,7 +182,63 @@ pub fn phase_1(cfg: &mut BootConfig) {
 pub fn allocate_regions(cfg: &mut BootConfig) {
     // Number of individual pages in the system
     let mut rpt_pages = cfg.sram_size / PAGE_SIZE;
+    // Round the tracker to a multiple of the pointer size, so as to keep memory
+    // operations fast.
+    rpt_pages = (rpt_pages + size_of::<usize>() - 1) & !(size_of::<usize>() - 1);
 
+    // allocate the RPT
+    #[cfg(not(feature = "swap"))]
+    {
+        cfg.init_size += rpt_pages * mem::size_of::<XousAlloc>();
+    }
+    #[cfg(feature = "swap")]
+    {
+        println!("RPT raw pages: {:x}", rpt_pages);
+
+        // Round the allocation to a multiple of the page size, so that it can be mapped into userspace
+        let proposed_alloc = rpt_pages * mem::size_of::<XousAlloc>();
+        let page_aligned_alloc = (proposed_alloc + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        assert!(cfg.init_size & 0xFFF == 0, "init_size should be page aligned going into the RPT alloc");
+        cfg.init_size += page_aligned_alloc;
+        assert!(cfg.init_size & 0xFFF == 0, "init_size should be page aligned leaving the RPT alloc");
+        println!(
+            "RPT ALLOC init_size before: {:x}, ext pages: {:x}, minimal alloc: {:x}, page-aligned alloc: {:x}, sizeof entry: {:x}",
+            cfg.init_size,
+            cfg.extra_pages,
+            proposed_alloc,
+            page_aligned_alloc,
+            size_of::<XousAlloc>(),
+        );
+    }
+
+    // Clear all memory pages such that they're not owned by anyone
+    let runtime_page_tracker = cfg.get_top();
+    println!("rpt value: {:x}", runtime_page_tracker as usize);
+    #[cfg(feature = "swap")]
+    {
+        assert!(runtime_page_tracker as usize & 0xFFF == 0); // this needs to be page-aligned for swap to work
+    }
+    assert!((runtime_page_tracker as usize) < (cfg.sram_start as usize) + cfg.sram_size);
+    unsafe {
+        bzero(
+            runtime_page_tracker as *mut XousAlloc,
+            (runtime_page_tracker as *mut XousAlloc).add(rpt_pages),
+        );
+    }
+
+    cfg.runtime_page_tracker =
+        unsafe { slice::from_raw_parts_mut(runtime_page_tracker as *mut XousAlloc, rpt_pages) };
+    #[cfg(feature = "swap")]
+    if SDBG {
+        println!(
+            " -> RPT range: {:x} - {:x}",
+            runtime_page_tracker as usize,
+            runtime_page_tracker as usize + rpt_pages * size_of::<XousAlloc>()
+        );
+    }
+
+    // allocate the XPT
+    let mut xpt_pages = 0;
     for region in cfg.regions.iter() {
         println!(
             "Discovered memory region {:08x} ({:08x} - {:08x}) -- {} bytes",
@@ -99,39 +248,216 @@ pub fn allocate_regions(cfg: &mut BootConfig) {
             region.length
         );
         let region_length_rounded = (region.length as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-        rpt_pages += region_length_rounded / PAGE_SIZE;
+        xpt_pages += region_length_rounded / PAGE_SIZE;
     }
-
-    // Round the tracker to a multiple of the page size, so as to keep memory
+    // Round the tracker to a multiple of the pointer size, so as to keep memory
     // operations fast.
-    rpt_pages = (rpt_pages + mem::size_of::<usize>() - 1) & !(mem::size_of::<usize>() - 1);
+    xpt_pages = (xpt_pages + size_of::<usize>() - 1) & !(size_of::<usize>() - 1);
+    println!(
+        "XPT ALLOC init_size bef: {:x}, ext pages: {:x}, rpt alloc: {:x}",
+        cfg.init_size,
+        cfg.extra_pages,
+        xpt_pages * size_of::<XousPid>()
+    );
 
-    cfg.init_size += rpt_pages * mem::size_of::<XousPid>();
+    cfg.init_size += xpt_pages * size_of::<XousPid>();
 
     // Clear all memory pages such that they're not owned by anyone
-    let runtime_page_tracker = cfg.get_top();
-    assert!((runtime_page_tracker as usize) < (cfg.sram_start as usize) + cfg.sram_size);
+    let extra_page_tracker = cfg.get_top();
+    println!("xpt value: {:x}", extra_page_tracker as usize);
+    assert!((extra_page_tracker as usize) < (cfg.sram_start as usize) + cfg.sram_size);
     unsafe {
-        bzero(runtime_page_tracker, runtime_page_tracker.add(rpt_pages / mem::size_of::<usize>()));
+        bzero(extra_page_tracker as *mut XousPid, (extra_page_tracker as *mut XousPid).add(xpt_pages));
     }
 
-    cfg.runtime_page_tracker =
-        unsafe { slice::from_raw_parts_mut(runtime_page_tracker as *mut XousPid, rpt_pages) };
+    cfg.extra_page_tracker =
+        unsafe { slice::from_raw_parts_mut(extra_page_tracker as *mut XousPid, xpt_pages) };
+    #[cfg(feature = "swap")]
+    if SDBG {
+        println!(
+            " -> XPT range: {:x} - {:x}",
+            extra_page_tracker as usize,
+            extra_page_tracker as usize + xpt_pages * size_of::<XousPid>()
+        );
+    }
 }
 
 pub fn allocate_processes(cfg: &mut BootConfig) {
     let process_count = cfg.init_process_count + 1;
+    println!("Allocating tables for {} processes", process_count);
     let table_size = process_count * mem::size_of::<InitialProcess>();
     // Allocate the process table
     cfg.init_size += table_size;
     let processes = cfg.get_top();
     unsafe {
-        bzero(processes, processes.add((table_size / mem::size_of::<usize>()) as usize));
+        bzero(
+            processes as *mut InitialProcess,
+            (processes as *mut InitialProcess).add(process_count as usize),
+        );
     }
     cfg.processes =
         unsafe { slice::from_raw_parts_mut(processes as *mut InitialProcess, process_count as usize) };
+
+    #[cfg(feature = "swap")]
+    {
+        if SDBG {
+            println!(
+                " -> Processes range: {:x} - {:x}",
+                processes as usize,
+                processes as usize + cfg.processes.len() * mem::size_of::<InitialProcess>()
+            );
+        }
+        let swap_root_pt_size = process_count * mem::size_of::<usize>();
+        cfg.init_size += swap_root_pt_size;
+        let swap_root_pt = cfg.get_top();
+        unsafe {
+            bzero(swap_root_pt, swap_root_pt.add(process_count));
+        }
+        cfg.swap_root = unsafe { slice::from_raw_parts_mut(swap_root_pt, process_count as usize) };
+        if SDBG {
+            println!(
+                " -> Swap root pt range: {:x} - {:x}",
+                swap_root_pt as usize,
+                swap_root_pt as usize + cfg.swap_root.len() * mem::size_of::<usize>()
+            );
+        }
+    }
 }
 
+#[cfg(feature = "swap")]
+pub fn allocate_swap(cfg: &mut BootConfig) {
+    let process_count = cfg.init_process_count + 1;
+    let swap_pt_size = process_count * size_of::<PageTable>();
+    cfg.init_size += swap_pt_size;
+    cfg.swap_offset += swap_pt_size;
+    let swap_pt_base = cfg.get_top();
+    unsafe {
+        bzero(swap_pt_base as *mut PageTable, (swap_pt_base as *mut PageTable).add(cfg.swap_root.len()))
+    }
+    // The page table proper is "unbound": we don't put it in a slice, we simply put references
+    // to each page in cfg.swap_root[]. I wonder if this is UB?
+    for (index, root) in cfg.swap_root.iter_mut().enumerate() {
+        *root = swap_pt_base as usize + index * mem::size_of::<PageTable>();
+    }
+
+    if SDBG {
+        println!(
+            " -> Swap pt data range: {:x} - {:x}",
+            swap_pt_base as usize,
+            swap_pt_base as usize + cfg.swap_root.len() * mem::size_of::<PageTable>()
+        );
+    }
+}
+
+#[cfg(feature = "swap")]
+pub fn copy_args(cfg: &mut BootConfig) {
+    // With swap enabled, copy_args also merges the IniS arguments from the swap region into the kernel
+    // arguments, and patches the length field accordingly.
+    //
+    // So much terrible, no-good awful code. This is basically not Rust code, because the whole thing
+    // is operating on pointers conjured out of thin air and confused senses of what is a byte-size
+    // versus a word-size. Deserves a re-write, but it would also require reworking a bunch of other
+    // bootloader code because the core issue is the way the kernel arguments are defined for parsing and
+    // iteration.
+    //
+    // Suspect many bugs in this code.
+
+    // Read in the swap arguments: should be located at beginning of the first page of swap.
+    // Safety: only safe because we know that the decrypt was setup by read_swap_config(), and no pages
+    // were decrypted between then and now!
+    let page0 = unsafe { cfg.swap_hal.as_mut().unwrap().get_decrypt() };
+    let swap_args = KernelArguments::new(page0.as_ptr() as *const usize);
+    let mut j = swap_args.iter();
+    // skip the first argument
+    let swap_xarg = j.next().expect("couldn't read initial swap tag");
+
+    // Merge the args list to target RAM
+    // Reserve space for the primary arg list + swap args - swap's XArg structure (7 words long)
+    let final_len = cfg.args.size() / size_of::<u32>() + swap_xarg.data[0] as usize - 7;
+    cfg.init_size += final_len * 4;
+    let runtime_arg_buffer = cfg.get_top();
+    // places the boot image kernel arguments
+    unsafe {
+        #[allow(clippy::cast_ptr_alignment)]
+        memcpy(runtime_arg_buffer, cfg.args.base as *const usize, cfg.args.size() as usize)
+    };
+    // safety: this should be aligned, allowing this conversion. Note that we do violate a safety condition
+    // in that we haven't fully initialized the region (the swap arg extension area is uninit), but I think
+    // it's OK because we will write only to that region (but I suppose in practice, Rust could assume the
+    // untouched data is 0 or something and try an optimization based on that).
+    let merged_arg_slice =
+        unsafe { core::slice::from_raw_parts_mut(runtime_arg_buffer as *mut usize, final_len) };
+    let mut arg_index = cfg.args.size() / size_of::<u32>();
+
+    // append the swap arguments, and patch the size field accordingly
+    for a in j {
+        // turn the argument into a raw slice
+        // this is safe because:
+        //  - arguments are always guaranteed to be aligned to a word boundary by the image creator
+        //  - arguments are fully initialized with no UB fields under this transformation
+        // +2 is for the tag field
+        if a.name == u32::from_le_bytes(*b"IniS") {
+            let arg_slice = unsafe {
+                core::slice::from_raw_parts(
+                    a.data.as_ptr().sub(2) as *const usize, // backup by 2 to accommodate the tag field
+                    a.size as usize / size_of::<usize>() + 2,
+                )
+            };
+            if SDBG {
+                println!(
+                    "Extending args with: 0x{:x}, size: {}. index: {}, len: {}, data: {:x?}",
+                    a.name,
+                    a.size,
+                    arg_index,
+                    arg_slice.len(),
+                    arg_slice
+                );
+            }
+            merged_arg_slice[arg_index..arg_index + arg_slice.len()].copy_from_slice(arg_slice);
+            arg_index += arg_slice.len();
+        } else {
+            println!("Unhandled arg type: {:x}", a.name);
+        }
+    }
+
+    // redirect the arg buffer to point at the newly copied arguments
+    cfg.args = KernelArguments::new(runtime_arg_buffer);
+
+    // extract the new XArg field, pointing into RAM
+    let args = cfg.args;
+    let mut i = args.iter();
+    let xarg = i.next().expect("couldn't read initial tag");
+    // patch the total length of the arguments - just jam the value into the data field of the XArg by
+    // dead-reckoning to the offset
+    assert!(merged_arg_slice[2] == xarg.data[0] as usize); // sanity checks the dead-reckoning
+    merged_arg_slice[2] = arg_index;
+    use crc::{crc16, Hasher16};
+    // compute the new CRC
+    let mut digest = crc16::Digest::new(crc16::X25);
+    // safe because we know the entire region can map into a u8 slice with no UB
+    let xarg_data = unsafe {
+        core::slice::from_raw_parts(xarg.data.as_ptr() as *const u8, xarg.data.len() * size_of::<u32>())
+    };
+    digest.write(&xarg_data);
+    // patch the CRC
+    let merged_arg_slice_u8 = unsafe {
+        core::slice::from_raw_parts_mut(runtime_arg_buffer as *mut u8, final_len * size_of::<u32>())
+    };
+    merged_arg_slice_u8[4..6].copy_from_slice(&digest.sum16().to_le_bytes());
+
+    if SDBG {
+        println!(
+            " -> Patched kernel args range: {:x} - {:x}",
+            runtime_arg_buffer as usize,
+            runtime_arg_buffer as usize + final_len * size_of::<usize>()
+        );
+    }
+}
+
+#[cfg(feature = "swap")]
+fn remaining_in_page(addr: usize) -> usize { PAGE_SIZE - (addr & (PAGE_SIZE - 1)) }
+
+#[cfg(not(feature = "swap"))]
 pub fn copy_args(cfg: &mut BootConfig) {
     // Copy the args list to target RAM
     cfg.init_size += cfg.args.size();
@@ -147,6 +473,7 @@ pub fn copy_args(cfg: &mut BootConfig) {
 enum TagType {
     IniE,
     IniF,
+    IniS,
     XKrn,
     Other,
 }
@@ -156,6 +483,8 @@ impl From<u32> for TagType {
             TagType::IniE
         } else if code == u32::from_le_bytes(*b"IniF") {
             TagType::IniF
+        } else if code == u32::from_le_bytes(*b"IniS") {
+            TagType::IniS
         } else if code == u32::from_le_bytes(*b"XKrn") {
             TagType::XKrn
         } else {
@@ -169,6 +498,7 @@ impl TagType {
         match self {
             TagType::IniE => "IniE",
             TagType::IniF => "IniF",
+            TagType::IniS => "IniS",
             TagType::XKrn => "XKrn",
             TagType::Other => "Other",
         }
@@ -188,8 +518,7 @@ fn copy_processes(cfg: &mut BootConfig) {
 
                 let inie = MiniElf::new(&tag);
                 let mut src_paddr =
-                    unsafe { cfg.base_addr.add(inie.load_offset as usize / mem::size_of::<usize>()) }
-                        as *const u8;
+                    unsafe { cfg.base_addr.add(inie.load_offset as usize / size_of::<usize>()) } as *const u8;
 
                 println!("\n\n{} {} has {} sections", tag_type.to_str(), _pid, inie.sections.len());
                 println!(
@@ -314,6 +643,175 @@ fn copy_processes(cfg: &mut BootConfig) {
                 }
                 println!("Done with sections");
             }
+            TagType::IniS => {
+                // if swap is not enabled, don't pull this code in, to keep the bootloader light-weight
+                #[cfg(feature = "swap")]
+                {
+                    // IniS does not necessarily exist in linear memory space, so it requires special
+                    // handling. Instead of copying the IniS data into RAM, it's copied
+                    // into encrypted swap (e.g. the RAM area (again, not necessarily in
+                    // linear space) reserved for swap processes).
+
+                    /*
+                    Example of an IniS section:
+                    1    IniS: entrypoint @ 00021e68, loaded from 00001114.  Sections:
+                    Physical offset in swap source image                     Destination range in virtual memory
+                             src_swap_img_addr                                          dst_page_vaddr
+                                  |                                                              |
+                                  v                                                              v
+                    Loaded from 00001114 - Section .gcc_except_table   4056 bytes loading into 00010114..000110ec flags: NONE
+                    Loaded from 000020ec - Section .rodata        19080 bytes loading into 000110f0..00015b78 flags: NONE
+                    Loaded from 00006b74 - Section .eh_frame_hdr   2172 bytes loading into 00015b78..000163f4 flags: EH_HEADER
+                    Loaded from 000073f0 - Section .eh_frame       7740 bytes loading into 000163f4..00018230 flags: EH_FRAME
+                    Loaded from 0000922c - Section .text          67428 bytes loading into 00019230..00029994 flags: EXECUTE
+                    Loaded from 00019990 - Section .data              4 bytes loading into 0002a994..0002a998 flags: WRITE
+                    Loaded from 00019994 - Section .sdata            32 bytes loading into 0002a998..0002a9b8 flags: WRITE
+                    Loaded from 000199b4 - Section .sbss             64 bytes loading into 0002a9b8..0002a9f8 flags: WRITE | NOCOPY
+                    Loaded from 000199f4 - Section .bss             532 bytes loading into 0002a9f8..0002ac0c flags: WRITE | NOCOPY
+
+                    Note that we have full control over what swap block we put things into, but the swap block's
+                    address offsets should have a 1:1 correlation to the *virtual* destination addresess. We track
+                    the current swap page with `working_page_swap_offset`.
+                    */
+
+                    _pid += 1;
+                    let mut working_page_swap_offset: Option<usize> = None;
+                    let mut working_buf = [0u8; 4096];
+                    let mut working_buf_dirty = false;
+
+                    let inis = MiniElf::new(&tag);
+                    let mut src_swap_img_addr = inis.load_offset as usize;
+
+                    println!("\n\n{} {} has {} sections", tag_type.to_str(), _pid, inis.sections.len());
+                    println!("Swap free page at swap addr: {:x}", cfg.swap_free_page,);
+
+                    let mut last_copy_vaddr = 0;
+
+                    for section in inis.sections.iter() {
+                        let mut dst_page_vaddr = section.virt as usize;
+                        let mut bytes_to_copy = section.len();
+
+                        if let Some(swap_offset) = working_page_swap_offset {
+                            if (last_copy_vaddr & !(PAGE_SIZE - 1)) != (dst_page_vaddr & !(PAGE_SIZE - 1)) {
+                                if SDBG {
+                                    println!(
+                                        "New section not aligned: last_copy_vaddr {:x}, dst_page_vaddr {:x}",
+                                        last_copy_vaddr, dst_page_vaddr
+                                    );
+                                }
+                                // handle case that the new section destination address is outside of the
+                                // current page
+                                cfg.swap_hal.as_mut().expect("swap HAL uninit").encrypt_swap_to(
+                                    &mut working_buf,
+                                    swap_offset * 0x1000,
+                                    last_copy_vaddr & !(PAGE_SIZE - 1),
+                                    _pid,
+                                );
+                                working_buf.fill(0);
+                                working_page_swap_offset = Some(cfg.swap_free_page);
+                                working_buf_dirty = false;
+                                cfg.swap_free_page += 1;
+                            }
+                        } else {
+                            // very first time through the loop. working_buf is guaranteed to be zero.
+                            working_page_swap_offset = Some(cfg.swap_free_page);
+                            cfg.swap_free_page += 1;
+                        }
+
+                        // Decrypt the source image data and re-encrypt it to swap for the section at hand.
+                        //   - dst_page_vaddr is the virtual address of the section. We only care about this
+                        //     for tracking offsets in pages, at this stage.
+                        //   - working_page_swap_offset is the current destination swap RAM page
+                        //   - src_swap_img_addr is the offset of the section in source swap FLASH.
+                        //   - no_copy sections need to set the corresponding bytes in swap RAM to zero.
+                        //
+                        //
+                        while bytes_to_copy > 0 {
+                            // here are the cases we have to handle:
+                            //   - the available decrypted data is larger than the target region to encrypt
+                            //   - the available decrypted data is smaller than the target region to encrypt
+                            //   - the available decrypted data is equal to the target region to encrypt
+                            let src_swap_img_page = src_swap_img_addr & !(PAGE_SIZE - 1);
+                            let src_swap_img_offset = src_swap_img_addr & (PAGE_SIZE - 1);
+                            // it's almost free to check, so we check at every loop start
+                            if cfg.swap_hal.as_ref().expect("swap HAL uninit").decrypt_page_addr()
+                                != src_swap_img_page
+                            {
+                                cfg.swap_hal
+                                    .as_mut()
+                                    .expect("swap HAL uninit")
+                                    .decrypt_src_page_at(src_swap_img_page);
+                            }
+                            let decrypt_avail = remaining_in_page(src_swap_img_addr);
+                            let dst_page_avail = remaining_in_page(dst_page_vaddr);
+                            let dst_page_offset = dst_page_vaddr & (PAGE_SIZE - 1);
+                            let copyable = if decrypt_avail >= dst_page_avail {
+                                dst_page_avail.min(bytes_to_copy)
+                            } else {
+                                decrypt_avail.min(bytes_to_copy)
+                            };
+                            if !section.no_copy() {
+                                working_buf[dst_page_offset..dst_page_offset + copyable].copy_from_slice(
+                                    &cfg.swap_hal.as_ref().expect("swap HAL uninit").buf_as_ref()
+                                        [src_swap_img_offset..src_swap_img_offset + copyable],
+                                );
+                                working_buf_dirty = true;
+                            } else {
+                                // do nothing, because working_buff is filled with 0 on alloc
+                                // but, mark the buffer as dirty, because, it still needs to be committed
+                                working_buf_dirty = true;
+                            }
+                            bytes_to_copy -= copyable;
+                            dst_page_vaddr += copyable;
+                            src_swap_img_addr += copyable;
+                            // if we filled up the destination, grab another page.
+                            if (dst_page_vaddr & (PAGE_SIZE - 1)) == 0 {
+                                // the current vaddr is pointing to a new, empty vaddr; we want to write
+                                // out the previous, full page. Compute that here.
+                                let full_page_vaddr = dst_page_vaddr - PAGE_SIZE;
+                                // we copied exactly dst_page_avail, causing us to wrap around to 0
+                                // write the existing page to swap, and allocate a new swap page
+                                cfg.swap_hal.as_mut().expect("swap HAL uninit").encrypt_swap_to(
+                                    &mut working_buf,
+                                    working_page_swap_offset.unwrap() * 0x1000,
+                                    full_page_vaddr & !(PAGE_SIZE - 1),
+                                    _pid,
+                                );
+                                working_buf.fill(0);
+                                working_page_swap_offset = Some(cfg.swap_free_page);
+                                working_buf_dirty = false;
+                                cfg.swap_free_page += 1;
+                            }
+                        }
+                        // set the vpage based on our current vpage. This allows us to allocate
+                        // a new vpage on the next iteration in case there is surprise padding in
+                        // the section load address.
+                        last_copy_vaddr = dst_page_vaddr;
+
+                        if SDBG && VVDBG {
+                            println!("Looping to the next section (swap)");
+                            println!(
+                                "  swap_free_page: {:x}, dst_page_vaddr: {:x}, src_swap_img_addr: {:x}",
+                                cfg.swap_free_page, dst_page_vaddr, src_swap_img_addr,
+                            );
+                            println!("  last_copy_vaddr: {:x}", last_copy_vaddr);
+                        }
+                    }
+                    // flush the encryption buffer
+                    if working_buf_dirty {
+                        cfg.swap_hal.as_mut().expect("swap HAL uninit").encrypt_swap_to(
+                            &mut working_buf,
+                            working_page_swap_offset.unwrap() * 0x1000,
+                            last_copy_vaddr & !(PAGE_SIZE - 1),
+                            _pid,
+                        );
+                    } else {
+                        // we didn't use the current page, de-allocate it
+                        cfg.swap_free_page -= 1;
+                    }
+                    println!("Done with sections");
+                }
+            }
             TagType::XKrn => {
                 let prog = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
 
@@ -325,7 +823,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                 println!("\n\nKernel top: {:x}, extra_pages: {:x}", top as u32, cfg.extra_pages);
                 unsafe {
                     // Copy the program to the target address, rounding it off to the load size.
-                    let src_addr = cfg.base_addr.add(prog.load_offset as usize / mem::size_of::<usize>());
+                    let src_addr = cfg.base_addr.add(prog.load_offset as usize / size_of::<usize>());
                     println!(
                         "    Copying TEXT from {:08x}-{:08x} to {:08x}-{:08x} ({} bytes long)",
                         src_addr as usize,
@@ -336,16 +834,16 @@ fn copy_processes(cfg: &mut BootConfig) {
                     );
                     println!(
                         "    Zeroing out TEXT from {:08x}-{:08x}",
-                        top.add(prog.text_size as usize / mem::size_of::<usize>()) as usize,
-                        top.add(load_size_rounded as usize / mem::size_of::<usize>()) as usize,
+                        top.add(prog.text_size as usize / size_of::<usize>()) as usize,
+                        top.add(load_size_rounded as usize / size_of::<usize>()) as usize,
                     );
 
                     memcpy(top, src_addr, prog.text_size as usize + 1);
 
                     // Zero out the remaining data.
                     bzero(
-                        top.add(prog.text_size as usize / mem::size_of::<usize>()),
-                        top.add(load_size_rounded as usize / mem::size_of::<usize>()),
+                        top.add(prog.text_size as usize / size_of::<usize>()),
+                        top.add(load_size_rounded as usize / size_of::<usize>()),
                     )
                 };
 
@@ -359,7 +857,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                     // Copy the program to the target address, rounding it off to the load size.
                     let src_addr = cfg
                         .base_addr
-                        .add((prog.load_offset + prog.text_size + 4) as usize / mem::size_of::<usize>() - 1);
+                        .add((prog.load_offset + prog.text_size + 4) as usize / size_of::<usize>() - 1);
                     println!(
                         "    Copying DATA from {:08x}-{:08x} to {:08x}-{:08x} ({} bytes long)",
                         src_addr as usize,
@@ -373,12 +871,12 @@ fn copy_processes(cfg: &mut BootConfig) {
                     // Zero out the remaining data.
                     println!(
                         "    Zeroing out DATA from {:08x} - {:08x}",
-                        top.add(prog.data_size as usize / mem::size_of::<usize>()) as usize,
-                        top.add(load_size_rounded as usize / mem::size_of::<usize>()) as usize
+                        top.add(prog.data_size as usize / size_of::<usize>()) as usize,
+                        top.add(load_size_rounded as usize / size_of::<usize>()) as usize
                     );
                     bzero(
-                        top.add(prog.data_size as usize / mem::size_of::<usize>()),
-                        top.add(load_size_rounded as usize / mem::size_of::<usize>()),
+                        top.add(prog.data_size as usize / size_of::<usize>()),
+                        top.add(load_size_rounded as usize / size_of::<usize>()),
                     )
                 }
             }
@@ -394,7 +892,7 @@ where
     if VDBG {
         println!(
             "COPY (align {}): {:08x} - {:08x} {} {:08x} - {:08x}",
-            mem::size_of::<T>(),
+            size_of::<T>(),
             src as usize,
             src as usize + count,
             count,
@@ -402,5 +900,5 @@ where
             dest as usize + count
         );
     }
-    core::ptr::copy_nonoverlapping(src, dest, count / mem::size_of::<T>());
+    core::ptr::copy_nonoverlapping(src, dest, count / size_of::<T>());
 }

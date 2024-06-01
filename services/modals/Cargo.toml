@@ -7,19 +7,20 @@ description = "Ux modals server"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.58"
-log-server = { package = "xous-api-log", version = "0.1.54" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.54" }
-xous-names = { package = "xous-api-names", version = "0.9.56" }
+xous = "0.9.61"
+log-server = { package = "xous-api-log", version = "0.1.57" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.57" }
+xous-names = { package = "xous-api-names", version = "0.9.59" }
 log = "0.4.14"
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-xous-ipc = "0.9.58"
+xous-ipc = "0.9.61"
 rkyv = { version = "0.4.3", features = [
     "const_generics",
 ], default-features = false }
 gam = { path = "../gam" }
-trng = { path = "../trng" }
+trng = { path = "../trng", optional = true }
+cram-hal-service = { path = "../cram-hal-service", optional = true } # provides trng for cramium-soc
 tts-frontend = { path = "../tts" }
 locales = { path = "../../locales" }
 bit_field = "0.9.0"
@@ -27,9 +28,10 @@ bit_field = "0.9.0"
 utralib = { version = "0.1.24", optional = true, default-features = false }
 
 [features]
-precursor = ["utralib/precursor"]
-hosted = ["utralib/hosted"]
-renode = ["utralib/renode"]
+precursor = ["utralib/precursor", "trng"]
+hosted = ["utralib/hosted", "trng"]
+renode = ["utralib/renode", "trng"]
+cramium-soc = ["utralib/cramium-soc", "cram-hal-service"]
 tts = []
 ditherpunk = []
 hazardous-debug = []

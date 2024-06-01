@@ -249,7 +249,7 @@ def main():
         print("Can't simultaneously change to local and remote paths. Pick only one operation.")
         exit(1)
 
-    crate_roots = ['.', '../hashes/sha2']
+    crate_roots = ['.', '../hashes/sha2', '../curve25519-dalek/curve25519-dalek']
 
     if args.bump or args.local_paths or args.remote_paths:
         cargo_toml_paths = []

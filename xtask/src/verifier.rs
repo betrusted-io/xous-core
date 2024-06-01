@@ -12,12 +12,12 @@ pub fn check_project_consistency() -> Result<(), DynError> {
     // TODO: retire utralib/svd2utra from publication as well
     let check_pkgs = [
         // this set updates with kernel API changes
-        "xous^0.9.58",
-        "xous-ipc^0.9.58",
-        "xous-api-log^0.1.54",
-        "xous-api-names^0.9.56",
-        "xous-api-susres^0.9.54",
-        "xous-api-ticktimer^0.9.54",
+        "xous^0.9.61",
+        "xous-ipc^0.9.61",
+        "xous-api-log^0.1.57",
+        "xous-api-names^0.9.59",
+        "xous-api-susres^0.9.57",
+        "xous-api-ticktimer^0.9.57",
     ];
     // utra/svd2utra changes are downgraded to warnings because these now prefer to pull
     // from the local patch version, so any inconsistency simply indicates we forgot to
@@ -53,7 +53,7 @@ pub fn verify(spec: CrateSpec, hard_failure: bool) -> Result<(), DynError> {
                 cache_leaf.push_str(&regdir);
             }
         }
-        if cache_leaf.len() == 0 {
+        if cache_leaf.is_empty() {
             return Err("Can't find expected registry source location".into());
         }
         // this now has the path to the cache directory
@@ -79,20 +79,18 @@ pub fn verify(spec: CrateSpec, hard_failure: bool) -> Result<(), DynError> {
             && name != "svd2utra"
         {
             Path::new(&subdir)
+        } else if name == "xous" {
+            Path::new("./xous-rs")
+        } else if name == "xous-ipc" {
+            Path::new("./xous-ipc")
+        } else if name == "xous-kernel" {
+            Path::new("./kernel")
+        } else if name == "utralib" {
+            Path::new("./utralib")
+        } else if name == "svd2utra" {
+            Path::new("./svd2utra")
         } else {
-            if name == "xous" {
-                Path::new("./xous-rs")
-            } else if name == "xous-ipc" {
-                Path::new("./xous-ipc")
-            } else if name == "xous-kernel" {
-                Path::new("./kernel")
-            } else if name == "utralib" {
-                Path::new("./utralib")
-            } else if name == "svd2utra" {
-                Path::new("./svd2utra")
-            } else {
-                panic!("Consistency error: special case handling did not find either xous or xous-ipc");
-            }
+            panic!("Consistency error: special case handling did not find either xous or xous-ipc");
         };
 
         // now recurse through the source path and check that it matches the cache, except for Cargo.toml

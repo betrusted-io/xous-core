@@ -1,3 +1,5 @@
+#[cfg(feature = "swap")]
+use crate::swap::*;
 use crate::*;
 
 /// Phase 2 bootloader
@@ -76,24 +78,35 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
     let mut kernel_exception_sp = 0;
     #[cfg(feature = "atsama5d27")]
     let mut kernel_irq_sp = 0;
+
     for tag in args.iter() {
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
             println!("\n\nCopying IniE program into memory");
-            let allocated = inie.load(cfg, process_offset, pid, &env, false);
+            let allocated = inie.load(cfg, process_offset, pid, &env, IniType::IniE);
             println!("IniE Allocated {:x}", allocated);
             process_offset -= allocated;
             pid += 1;
         } else if tag.name == u32::from_le_bytes(*b"IniF") {
             let inif = MiniElf::new(&tag);
             println!("\n\nMapping IniF program into memory");
-            let allocated = inif.load(cfg, process_offset, pid, &env, true);
+            let allocated = inif.load(cfg, process_offset, pid, &env, IniType::IniF);
             println!("IniF Allocated {:x}", allocated);
             process_offset -= allocated;
             pid += 1;
+        } else if tag.name == u32::from_le_bytes(*b"IniS") {
+            #[cfg(feature = "swap")]
+            {
+                let inis = MiniElf::new(&tag);
+                println!("\n\nMapping IniS program into memory");
+                let allocated = inis.load(cfg, process_offset, pid, &env, IniType::IniS);
+                println!("IniS Allocated {:x}", allocated);
+                process_offset -= allocated;
+                pid += 1;
+            }
         } else if tag.name == u32::from_le_bytes(*b"XKrn") {
-            println!("\n\nCopying kernel into memory");
             let xkrn = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
+            println!("\n\nCopying kernel into memory");
             let load_size_rounded = ((xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1))
                 + (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1));
             #[cfg(not(feature = "atsama5d27"))]
@@ -117,7 +130,8 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
 
     println!("Done loading.");
 
-    let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size;
+    assert!(cfg.init_size & 0xFFF == 0); // check that we didn't mess this assumption up somewhere in the process
+    let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size + cfg.swap_offset;
     #[cfg(feature = "atsama5d27")]
     let krn_l1_pt_addr = cfg.processes[0].ttbr0;
     #[cfg(not(feature = "atsama5d27"))]
@@ -132,7 +146,11 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
 
         // Map boot-generated kernel structures into the kernel
         let satp = unsafe { &mut *(krn_l1_pt_addr as *mut PageTable) };
-        for addr in (0..cfg.init_size - GUARD_MEMORY_BYTES).step_by(PAGE_SIZE as usize) {
+        let kernel_arg_extents = cfg.init_size - (GUARD_MEMORY_BYTES + cfg.swap_offset);
+        println!("Kernel argument extents: {:x}", kernel_arg_extents);
+        // this is just a manual sanity check, the actual limit varies depending on system config parameters
+        assert!(kernel_arg_extents <= 0xD000, "Kernel init structures exceeded allocated region");
+        for addr in (0..kernel_arg_extents).step_by(PAGE_SIZE as usize) {
             cfg.map_page(
                 satp,
                 addr + krn_struct_start,
@@ -140,6 +158,15 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
                 FLG_R | FLG_W | FLG_VALID,
                 1 as XousPid,
             );
+        }
+        #[cfg(feature = "swap")]
+        if SDBG && VDBG {
+            // dumps the page with kernel struct data, so we can correlate offsets to data.
+            for _i in (0..4096).step_by(32) {
+                println!("{:08x}: {:02x?}", krn_struct_start + _i, unsafe {
+                    core::slice::from_raw_parts((krn_struct_start + _i) as *const u8, 32)
+                });
+            }
         }
 
         // Copy the kernel's "MMU Page 1023" into every process.
@@ -170,8 +197,113 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             krn_struct_start,
         );
     }
+    #[cfg(feature = "swap")]
+    {
+        // map the swap page table into PID space 2
+        let tt_address = cfg.processes[SWAPPER_PID as usize - 1].satp << 12;
+        let root = unsafe { &mut *(tt_address as *mut PageTable) };
+        let mut swap_pt_vaddr_offset = 0;
+        // map page table roots
+        for p in 0..cfg.processes.len() {
+            // loop is "decomposed" because iterating over processes causes a borrow conflic
+            let swap_root = cfg.swap_root[p];
+            println!(
+                "Mapping root swap PT to PID 2 @paddr {:x} -> vaddr {:x}",
+                swap_root,
+                SWAP_PT_VADDR + swap_pt_vaddr_offset
+            );
+            cfg.map_page(
+                root,
+                swap_root,
+                SWAP_PT_VADDR + swap_pt_vaddr_offset,
+                FLG_R | FLG_W | FLG_U | FLG_VALID,
+                SWAPPER_PID,
+            );
+            swap_pt_vaddr_offset += PAGE_SIZE;
+        }
+        // now chase down any entries in the roots, and map valid pages
+        for p in 0..cfg.processes.len() {
+            let root_pt = unsafe { &mut *(cfg.swap_root[p] as *mut PageTable) };
+            for entry in root_pt.entries.iter_mut() {
+                if *entry & FLG_VALID != 0 {
+                    let paddr = (*entry & !0x3FF) << 2;
+                    let vaddr = SWAP_PT_VADDR + swap_pt_vaddr_offset;
+                    cfg.map_page(root, paddr, vaddr, FLG_R | FLG_W | FLG_U | FLG_VALID, SWAPPER_PID);
+                    // patch the entry to point at the virtual address
+                    *entry &= 0x3FF;
+                    *entry |= (vaddr & !0xFFF) >> 2;
+                    println!("Remapping L2 PT @paddr {:x} -> vaddr {:x}", paddr, vaddr);
+                    swap_pt_vaddr_offset += PAGE_SIZE;
+                }
+            }
+        }
+        // map the arguments into PID 2
+        let swap_spec_ptr = cfg.alloc();
+        cfg.map_page(
+            root,
+            swap_spec_ptr as usize,
+            SWAP_CFG_VADDR,
+            FLG_R | FLG_W | FLG_U | FLG_VALID,
+            SWAPPER_PID,
+        );
+        // this is safe because:
+        //   - swap_spec_ptr is aligned (it's page-aligned even)
+        //   - alloc() zeroes the contents
+        //   - SwapSpec is a Repr(C), and every element of the struct is valid with a 0's initialization.
+        let swap_spec = unsafe { (swap_spec_ptr as *mut SwapSpec).as_mut().unwrap() };
+        if let Some(desc) = cfg.swap {
+            swap_spec.key.copy_from_slice(&cfg.swap_hal.as_ref().unwrap().get_swap_key());
+            swap_spec.pid_count = cfg.init_process_count as u32 + 1;
+            // duplicated code from loader/src/phase1.rs/allocate_regions()
+            let rpt_pages = cfg.sram_size / PAGE_SIZE;
+            let proposed_alloc = rpt_pages * mem::size_of::<XousAlloc>();
+            let page_aligned_alloc = (proposed_alloc + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+            swap_spec.rpt_len_pages = (page_aligned_alloc / PAGE_SIZE) as u32;
+            swap_spec.rpt_base_phys = cfg.runtime_page_tracker.as_ptr() as usize as u32;
+            swap_spec.swap_base = desc.ram_offset;
+            swap_spec.swap_len = desc.ram_size;
+            (swap_spec.mac_base, swap_spec.mac_len) = cfg.swap_hal.as_ref().unwrap().mac_base_bounds();
+            swap_spec.sram_start = cfg.sram_start as u32;
+            swap_spec.sram_size = cfg.sram_size as u32;
+        }
 
-    if VVDBG {
+        // allocate swap count tracker
+        {
+            let swap_size_usable = crate::swap::derive_usable_swap(swap_spec.swap_len as usize);
+            let mut swap_count_start = 0;
+            for offset in
+                (0..(swap_size_usable / PAGE_SIZE) * core::mem::size_of::<u32>()).step_by(4096).rev()
+            {
+                let count_page = cfg.alloc() as usize; // this also zeroes the page
+                // we want the start page to keep refreshing, because allocations grow *down*, so the
+                // last iteration actually contains the base pointer of the count tracker (due to the .rev()
+                // on the iterator)
+                swap_count_start = count_page;
+                cfg.map_page(
+                    root,
+                    count_page,
+                    SWAP_COUNT_VADDR + offset,
+                    FLG_R | FLG_W | FLG_U | FLG_VALID,
+                    SWAPPER_PID,
+                );
+            }
+            // initialize which pages are used inside the count tracker by marking the MSB
+            // this is safe because the count range is contiguous (just freshly allocated), initialized
+            // to 0's, and all values are representable inside u32
+            let counts: &mut [u32] = unsafe {
+                core::slice::from_raw_parts_mut(swap_count_start as *mut u32, swap_size_usable / PAGE_SIZE)
+            };
+            println!("Claiming 0x{:x} swap pages as used", cfg.last_swap_page);
+            for i in 0..cfg.last_swap_page {
+                counts[i] = loader::FLG_SWAP_USED;
+            }
+        }
+
+        // map any hardware-specific pages into the userspace swapper
+        crate::platform::userspace_maps(cfg);
+    }
+
+    if VVDBG || SDBG {
         println!("PID1 pagetables:");
         #[cfg(feature = "atsama5d27")]
         debug::print_pagetable(cfg.processes[0].ttbr0);
@@ -189,11 +321,32 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             println!();
         }
     }
+
+    // Mark pages used by suspend/resume, otherwise they will be handed out to userspace.
+    // However, when not doing suspend/resume, it's safe to hand this out because it's always zeroized
+    // before use and never re-used on a resume cycle.
+    #[cfg(feature = "resume")]
+    {
+        // Mark all of stack as owned by the kernel, because this region contains the backup arguments.
+        // tampering in userspace of the loader stack prior to a resume can be a potent attack vector.
+        let rtp_len = cfg.runtime_page_tracker.len();
+        for page in cfg.runtime_page_tracker[1 + rtp_len - GUARD_MEMORY_BYTES / PAGE_SIZE..].iter_mut() {
+            *page = XousAlloc::from(1);
+        }
+        // allow susres to claim the suspend/resume marker, assumed to be at the limit of the guard memory
+        cfg.runtime_page_tracker[rtp_len - GUARD_MEMORY_BYTES / PAGE_SIZE] = XousAlloc::from(0);
+    }
+
     println!("Runtime Page Tracker: {} bytes", cfg.runtime_page_tracker.len());
-    // mark pages used by suspend/resume according to their needs
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = 1; // claim the loader stack -- do not allow tampering, as it contains backup kernel args
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = 1; // 8k in total (to allow for digital signatures to be computed)
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 3] = 0; // allow clean suspend page to be mapped in Xous
+    #[cfg(feature = "swap")]
+    if SDBG && VVDBG {
+        println!("Occupied RPT entries:");
+        for (_i, entry) in cfg.runtime_page_tracker.iter().enumerate() {
+            if entry.raw_vpn() != 0 {
+                println!("  {:x}: {:x} [{}]", _i, entry.raw_vpn(), entry.timestamp());
+            }
+        }
+    }
 }
 
 /// This describes the kernel as well as initially-loaded processes
@@ -264,6 +417,9 @@ impl ProgramDescription {
 
         // Turn the satp address into a pointer
         let satp = unsafe { &mut *(satp_address as *mut PageTable) };
+        if SDBG {
+            println!("Kernel root PT address: {:x}", satp_address);
+        }
         allocator.map_page(
             satp,
             satp_address,
@@ -271,10 +427,14 @@ impl ProgramDescription {
             FLG_R | FLG_W | FLG_VALID,
             pid as XousPid,
         );
+        #[cfg(feature = "swap")]
+        allocator.mark_as_wired(satp_address); // don't allow the root PT to be swapped in any process
 
         // Allocate context for this process
         let thread_address = allocator.alloc() as usize;
         allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W | FLG_VALID, pid as XousPid);
+        #[cfg(feature = "swap")]
+        allocator.mark_as_wired(thread_address); // don't allow the process descriptor to be swapped in any process
 
         // Allocate stack pages.
         for i in 0..if is_kernel { KERNEL_STACK_PAGE_COUNT } else { STACK_PAGE_COUNT } {

@@ -22,24 +22,28 @@ mod murmur3;
 mod phase1;
 mod phase2;
 mod platform;
+#[cfg(feature = "swap")]
+pub mod swap;
 
 use core::{mem, ptr, slice};
 
 use asm::*;
 use bootconfig::BootConfig;
 use consts::*;
+pub use loader::*;
 use minielf::*;
 use phase1::{phase_1, InitialProcess};
 use phase2::{phase_2, ProgramDescription};
+#[cfg(feature = "swap")]
+use platform::SwapHal;
 
-pub type XousPid = u8;
-pub const PAGE_SIZE: usize = 4096;
 const WORD_SIZE: usize = mem::size_of::<usize>();
 pub const SIGBLOCK_SIZE: usize = 0x1000;
 const STACK_PAGE_COUNT: usize = 8;
 
 const VDBG: bool = false; // verbose debug
 const VVDBG: bool = false; // very verbose debug
+const SDBG: bool = false; // swap debug
 
 #[cfg(test)]
 mod test;
@@ -57,6 +61,16 @@ pub struct MemoryRegionExtra {
 #[repr(C)]
 pub struct PageTable {
     entries: [usize; PAGE_SIZE / WORD_SIZE],
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum IniType {
+    // RAM
+    IniE,
+    // XIP
+    IniF,
+    // Swap
+    IniS,
 }
 
 /// Entrypoint
@@ -110,7 +124,15 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
     platform::platform_tests();
 
     let mut cfg = BootConfig { base_addr: args.base as *const usize, args, ..Default::default() };
+    #[cfg(feature = "swap")]
+    println!("Size of BootConfig: {:x}", core::mem::size_of::<BootConfig>());
     read_initial_config(&mut cfg);
+
+    #[cfg(feature = "swap")]
+    {
+        cfg.swap_hal = SwapHal::new(&cfg);
+        read_swap_config(&mut cfg);
+    }
 
     // check to see if we are recovering from a clean suspend or not
     #[cfg(feature = "resume")]
@@ -125,8 +147,8 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg, &fs_prehash);
-        #[cfg(feature = "debug-print")]
-        if VDBG {
+        #[cfg(any(feature = "debug-print", feature = "swap"))]
+        if VDBG || SDBG {
             check_load(&mut cfg);
         }
         println!("done initializing for cold boot.");
@@ -139,8 +161,8 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg, &fs_prehash);
-        #[cfg(feature = "debug-print")]
-        if VDBG {
+        #[cfg(any(feature = "debug-print", feature = "swap"))]
+        if VDBG || SDBG {
             check_load(&mut cfg);
         }
         println!("done initializing for cold boot.");
@@ -185,21 +207,54 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         resume_csr.wfo(utra::susres::INTERRUPT_INTERRUPT, 1);
     }
 
+    // condense debug and resume arguments into a single register, so we have space for XPT
+    let debug_resume = if cfg.debug { 0x1 } else { 0x0 } | if clean { 0x2 } else { 0x0 };
     if !clean {
         // The MMU should be set up now, and memory pages assigned to their
         // respective processes.
-        let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size;
+        let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size + cfg.swap_offset;
+        #[cfg(feature = "swap")]
+        if SDBG && VDBG {
+            const CHUNK_SIZE: usize = 2;
+            // activate to debug stack smashes. RPT should be 0's here (or at least valid PIDs) if stack did
+            // not overflow.
+            for (_i, _r) in cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 512..]
+                .chunks(CHUNK_SIZE)
+                .enumerate()
+            {
+                println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 512 + _i * CHUNK_SIZE, _r);
+            }
+        }
+        // Add a static check for stack overflow, using a heuristic that the last 64 entries of the RPT
+        // ought to be a valid PID. A stack smash is likely to write something that does not obey
+        // this heuristic within that range (any stack-stored pointer, for example, will break this).
+        for &check in cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 64..].iter() {
+            assert!(
+                // use .to_le() to access the structure because SwapAlloc can either be a u8 or a composite
+                // type, and .to_le() can do the right thing for both cases.
+                check.to_le() <= cfg.processes.len() as u8,
+                "RPT looks corrupted, suspect stack overflow in loader. Increase GUARD_MEMORY_BYTES!"
+            );
+        }
+        // compute the virtual addresses of all of these "manually"
         let arg_offset = cfg.args.base as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let ip_offset = cfg.processes.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let rpt_offset =
             cfg.runtime_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
+        let xpt_offset = cfg.extra_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         #[cfg(not(feature = "atsama5d27"))]
         let _tt_addr = { cfg.processes[0].satp };
         #[cfg(feature = "atsama5d27")]
         let _tt_addr = { cfg.processes[0].ttbr0 };
         println!(
-            "Jumping to kernel @ {:08x} with map @ {:08x} and stack @ {:08x} (kargs: {:08x}, ip: {:08x}, rpt: {:08x})",
-            cfg.processes[0].entrypoint, _tt_addr, cfg.processes[0].sp, arg_offset, ip_offset, rpt_offset,
+            "Jumping to kernel @ {:08x} with map @ {:08x} and stack @ {:08x} (kargs: {:08x}, ip: {:08x}, rpt: {:08x}, xpt: {:08x})",
+            cfg.processes[0].entrypoint,
+            _tt_addr,
+            cfg.processes[0].sp,
+            arg_offset,
+            ip_offset,
+            rpt_offset,
+            xpt_offset,
         );
 
         // save a copy of the computed kernel registers at the bottom of the page reserved
@@ -212,7 +267,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         // critical parameters like these kernel arguments.
         #[cfg(not(feature = "atsama5d27"))]
         unsafe {
-            let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut [u32; 7];
+            let backup_args: *mut [u32; 8] = BACKUP_ARGS_ADDR as *mut [u32; 8];
             (*backup_args)[0] = arg_offset as u32;
             (*backup_args)[1] = ip_offset as u32;
             (*backup_args)[2] = rpt_offset as u32;
@@ -220,12 +275,13 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
             (*backup_args)[4] = cfg.processes[0].entrypoint as u32;
             (*backup_args)[5] = cfg.processes[0].sp as u32;
             (*backup_args)[6] = if cfg.debug { 1 } else { 0 };
+            (*backup_args)[7] = xpt_offset as u32;
             #[cfg(feature = "debug-print")]
             {
                 if VDBG {
                     println!("Backup kernel args:");
-                    for i in 0..7 {
-                        println!("0x{:08x}", (*backup_args)[i]);
+                    for &arg in (*backup_args).iter() {
+                        println!("0x{:08x}", arg);
                     }
                 }
             }
@@ -245,11 +301,11 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
                 arg_offset,
                 ip_offset,
                 rpt_offset,
+                xpt_offset,
                 cfg.processes[0].satp,
                 cfg.processes[0].entrypoint,
                 cfg.processes[0].sp,
-                cfg.debug,
-                clean,
+                debug_resume,
             );
         }
 
@@ -262,19 +318,19 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
                 arg_offset,
                 ip_offset,
                 rpt_offset,
-                cfg.debug,
-                clean,
+                xpt_offset,
+                debug_resume,
             )
         }
     } else {
         #[cfg(feature = "resume")]
         unsafe {
-            let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut [u32; 7];
+            let backup_args: *mut [u32; 8] = BACKUP_ARGS_ADDR as *mut [u32; 8];
             #[cfg(feature = "debug-print")]
             {
                 println!("Using backed up kernel args:");
-                for i in 0..7 {
-                    println!("0x{:08x}", (*backup_args)[i]);
+                for &arg in (*backup_args).iter() {
+                    println!("0x{:08x}", arg);
                 }
             }
             let satp = ((*backup_args)[3] as usize) & 0x803F_FFFF | (((susres_pid as usize) & 0x1FF) << 22);
@@ -296,11 +352,11 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
                 (*backup_args)[0] as usize,
                 (*backup_args)[1] as usize,
                 (*backup_args)[2] as usize,
+                (*backup_args)[7] as usize,
                 satp as usize,
                 (*backup_args)[4] as usize,
                 (*backup_args)[5] as usize,
-                if (*backup_args)[6] == 0 { false } else { true },
-                clean,
+                debug_resume,
             );
         }
         #[cfg(not(feature = "resume"))]
@@ -317,6 +373,10 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
     }
     cfg.sram_start = xarg.data[2] as *mut usize;
     cfg.sram_size = xarg.data[3] as usize;
+    #[cfg(feature = "swap")]
+    if SDBG {
+        println!("XAarg // sram_start: {:x}, sram_size: {:x}", cfg.sram_start as usize, cfg.sram_size);
+    }
 
     let mut kernel_seen = false;
     let mut init_seen = false;
@@ -349,10 +409,37 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
             init_seen = true;
             cfg.init_process_count += 1;
         }
+        #[cfg(feature = "swap")]
+        if tag.name == u32::from_le_bytes(*b"Swap") {
+            // safety: the image creator guarantees this data is aligned and initialized properly
+            cfg.swap = Some(unsafe { &*(tag.data.as_ptr() as *const crate::swap::SwapDescriptor) });
+        }
     }
 
     assert!(kernel_seen, "no kernel definition");
     assert!(init_seen, "no initial programs found");
+}
+
+#[cfg(feature = "swap")]
+pub fn read_swap_config(cfg: &mut BootConfig) {
+    // Read in the swap arguments: should be located at beginning of the encrypted image in swap.
+    let page0 = cfg.swap_hal.as_mut().unwrap().decrypt_src_page_at(0x0);
+    let swap_args = KernelArguments::new(page0.as_ptr() as *const usize);
+    for tag in swap_args.iter() {
+        if tag.name == u32::from_le_bytes(*b"IniS") {
+            assert!(tag.size >= 4, "invalid Init size");
+            cfg.init_process_count += 1;
+        } else if tag.name == u32::from_le_bytes(*b"XArg") {
+            // these are actually specified inside the `Swap` arg, this is just
+            // a mirror because this argument is added by default by the image creator
+            if SDBG {
+                println!("Swap start: {:x}", tag.data[2]);
+                println!("Swap size:  {:x}", tag.data[3]);
+            }
+        } else {
+            println!("Unhandled argument in swap: {:x}", tag.name);
+        }
+    }
 }
 
 /// Checks a reserved area of RAM for a pattern with a pre-defined mathematical
@@ -365,7 +452,7 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
     const NUM_SECTORS: usize = 8;
     const WORDS_PER_PAGE: usize = PAGE_SIZE / 4;
 
-    let suspend_marker = cfg.sram_start as usize + cfg.sram_size - PAGE_SIZE * 3;
+    let suspend_marker = cfg.sram_start as usize + cfg.sram_size - GUARD_MEMORY_BYTES;
     let marker: *mut [u32; WORDS_PER_PAGE] = suspend_marker as *mut [u32; WORDS_PER_PAGE];
 
     let boot_seed = CSR::new(utra::seed::HW_SEED_BASE as *mut u32);
@@ -421,23 +508,25 @@ fn clear_ram(cfg: &mut BootConfig) {
     // stay there forever, if not explicitly cleared. This clear adds a couple seconds
     // to a cold boot, but it's probably worth it. Note that it doesn't happen on a suspend/resume.
     let ram: *mut u32 = cfg.sram_start as *mut u32;
+    let clear_limit = ((4096 + core::mem::size_of::<BootConfig>()) + 4095) & !4095;
+    if VDBG {
+        println!("Stack clearing limit: {:x}", clear_limit);
+    }
     unsafe {
-        for addr in 0..(cfg.sram_size - 8192) / 4 {
+        for addr in 0..(cfg.sram_size - clear_limit) / 4 {
             // 8k is reserved for our own stack
             ram.add(addr).write_volatile(0);
         }
     }
 }
 
-pub unsafe fn bzero<T>(mut sbss: *mut T, ebss: *mut T)
-where
-    T: Copy,
-{
+pub unsafe fn bzero<T>(mut sbss: *mut T, ebss: *mut T) {
     if VDBG {
         println!("ZERO: {:08x} - {:08x}", sbss as usize, ebss as usize);
     }
     while sbss < ebss {
         // NOTE(volatile) to prevent this from being transformed into `memclr`
+        // which can create an accidental dependency on libc.
         ptr::write_volatile(sbss, mem::zeroed());
         sbss = sbss.offset(1);
     }
@@ -446,7 +535,7 @@ where
 /// This function allows us to check the final loader results
 /// It will print to the console the first 32 bytes of each loaded
 /// region top/bottom, based upon extractions from the page table.
-#[cfg(feature = "debug-print")]
+#[cfg(any(feature = "debug-print", feature = "swap"))]
 fn check_load(cfg: &mut BootConfig) {
     let args = cfg.args;
 
@@ -460,12 +549,17 @@ fn check_load(cfg: &mut BootConfig) {
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
             println!("\n\nChecking IniE region");
-            inie.check(cfg, inie.load_offset as usize, pid, false);
+            inie.check(cfg, inie.load_offset as usize, pid, IniType::IniE);
             pid += 1;
         } else if tag.name == u32::from_le_bytes(*b"IniF") {
             let inif = MiniElf::new(&tag);
             println!("\n\nChecking IniF region");
-            inif.check(cfg, inif.load_offset as usize, pid, true);
+            inif.check(cfg, inif.load_offset as usize, pid, IniType::IniF);
+            pid += 1;
+        } else if tag.name == u32::from_le_bytes(*b"IniS") {
+            let inis = MiniElf::new(&tag);
+            println!("\n\nChecking IniS region");
+            inis.check(cfg, inis.load_offset as usize, pid, IniType::IniS);
             pid += 1;
         }
     }

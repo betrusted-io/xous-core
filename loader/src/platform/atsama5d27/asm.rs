@@ -12,7 +12,7 @@ extern "C" {
         args: usize,       // r3
         ip: usize,
         rpt: usize,
-        debug: bool,
-        resume: bool,
+        xpt: usize,
+        debug_resume: usize,
     ) -> !;
 }

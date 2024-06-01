@@ -29,6 +29,14 @@ xous-pio = { path = "../libs/xous-pio", optional = true, features = [
     "cramium-soc",
     "baremetal",
 ] }
+aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
+    "aes",
+], optional = true }
+crc = { version = "1.8.1", default-features = false }
+rand_chacha = { version = "0.3.1", optional = true, default_features = false }
+pio-proc = { version = "0.2.2", optional = true }
+pio = { version = "0.2.1", optional = true }
+riscv = { version = "0.5.6", package = "xous-riscv" }
 
 [dependencies.com_rs]
 git = "https://github.com/betrusted-io/com_rs"
@@ -50,7 +58,6 @@ renode = [
     "utralib/renode",
     "ed25519-dalek-loader/renode",
     "curve25519-dalek-loader/renode",
-    "resume",
     "secboot",
     "sha2-loader",
 ]
@@ -61,6 +68,9 @@ cramium-soc = [
     "cramium-hal",
     "xous-pio",
     "xous-pl230",
+    "rand_chacha",
+    "sram-margin",
+    "boot-delay",
 ]
 cramium-fpga = [
     "utralib/cramium-fpga",
@@ -76,6 +86,13 @@ renode-bypass = []
 secboot = []
 simulation-only = []
 board-bringup = []
+sram-margin = []
+boot-delay = []
 #default = ["debug-print"]
-resume = []                                # suspend/resume pathway code
-default = ["debug-print", "board-bringup"]
+swap = ["aes-gcm-siv"]
+quantum-timer-test = ["pio", "pio-proc"]
+spim-test = []
+spi-alt-channel = []
+irq-test = []
+resume = []                              # suspend/resume pathway code
+default = ["board-bringup", "irq-test"]
