@@ -34,9 +34,9 @@ pub fn i2c_test() {
     // T/RX2 is the bank of interest for triggering interrupts
     bio_ss.bio.wfo(utra::bio::SFR_ELEVEL_FIFO_EVENT_LEVEL4, 1); // corresponds to T/RXF2
     bio_ss.bio.wfo(utra::bio::SFR_ETYPE_FIFO_EVENT_EQ_MASK, 0b00_01_00_00); // level4 mask EQ
-    bio_ss.bio.wfo(utra::bio::SFR_ETYPE_FIFO_EVENT_GT_MASK, 0b00_01_00_00); // level4 mask GT
+    bio_ss.bio.rmwf(utra::bio::SFR_ETYPE_FIFO_EVENT_GT_MASK, 0b00_01_00_00); // level4 mask GT
     // IRQ 0 should issue the pulse
-    bio_ss.bio.wo(utra::bio::SFR_IRQMASK_0, 1 << 2);
+    bio_ss.bio.wo(utra::bio::SFR_IRQMASK_0, 1 << 28);
 
     // this is where the IRQ is wired to right now
     let irqarray18 = CSR::new(utra::irqarray18::HW_IRQARRAY18_BASE as *mut u32);
@@ -53,11 +53,14 @@ pub fn i2c_test() {
     for addr in 10..14 {
         print!("reading from {}\r", addr);
 
-        let i2c_cmd = PIN_SDA << 27 | PIN_SCL << 22 | ((rxbuf.len() & 0xFF) as u32) << 8 | addr << 1 | 0x1;
+        // 1 is read, 0 is write
+        let wr_byte = (addr << 1 | 0x1) as u8;
+        let i2c_cmd =
+            PIN_SDA << 27 | PIN_SCL << 22 | 1 << 8 | ((rxbuf.len() & 0x7F) as u32) << 15 | wr_byte as u32;
         bio_ss.bio.wo(utra::bio::SFR_TXF0, i2c_cmd);
 
         let mut timeout = 0;
-        while irqarray18.r(utra::irqarray18::EV_STATUS) & (1 << 2) == 0 {
+        while irqarray18.r(utra::irqarray18::EV_STATUS) & 1 == 0 {
             // wait
             timeout += 1;
             if (timeout % 1_000) == 0 {
@@ -70,7 +73,7 @@ pub fn i2c_test() {
         }
         // read the result code
         let result_code = bio_ss.bio.r(utra::bio::SFR_RXF2);
-        print!("rbk {:x?}, result_code {:x}", rxbuf, result_code);
+        print!("rbk {:x?}, result_code {:x}\r", rxbuf, result_code);
 
         if addr == failing_address {
             if result_code != 0x2_0000 {
@@ -78,8 +81,9 @@ pub fn i2c_test() {
                 passing = false;
             }
         } else {
-            if result_code != 0x2 {
-                // expect 2 ACKs
+            if result_code != 0x1_0001 {
+                assert!(rxbuf[0] == wr_byte);
+                // expect 1 ACK, 1 NACK (last read is always a NACK)
                 passing = false;
             }
         }
@@ -94,12 +98,16 @@ pub fn i2c_test() {
     }
 }
 
+// TODO:
+//   -- missing repeated start
+//   -- mock up some more complex I2C transactions
+
 // An I2C test that gives us coverage of GPIO direction control
 // I2C is initiated by writing a 32-bit word to x16 that has the following format:
 //    bit[0..1]   - r/w. R=1, W=0
 //    bit[1..8]   - device address
-//    bit[8..17]  - bytes to read or write (0-256 is valid values; not bounds checked)
-//    bit[17..22] - reserved
+//    bit[8..15]  - bytes to write (0-127); amount includes device addressing write
+//    bit[15..22] - bytes to read (0-127)
 //    bit[22..27] - I/O pin for SCL
 //    bit[27..32] - I/O pin for SDA
 //
@@ -107,8 +115,8 @@ pub fn i2c_test() {
 //
 // Host determines if I2C is done by IRQ & value appearing on x18 which contains ack/nack status
 // Format is:
-//    bit[0..9]   - # of words successfully written or read (up to 257: 1 address + 0-256 words)
-//    bit[16..25] - # of words NACK'd
+//    bit[0..9]   - # of words successfully written or (read - 1)
+//    bit[16..25] - # of words NACK'd - if a read, the last word is always NACK so this should be 1
 //
 // Quantum is assumed to be 4x of final I2C clock rate
 #[rustfmt::skip]
@@ -128,42 +136,45 @@ bio_code!(
     "mv x1, x16",        // x1 <- initiation command
     "andi x2, x1, 1",    // x2 <- r/w bit. write if 0.
     "andi x3, x1, 0xff", // x3 <- word to send: initially, device address with r/w bit in place
-    "mv x9, x1",         // x9 <- total bytes to transfer
+    "mv x9, x1",         // x9 <- writes to transfer
     "srli x9, x9, 8",
-    "andi x9, x9, 0x1ff",// no bounds check; max value should be 0x100 though
-    "li x10, 1",         // x10 <- bytes to send (at least 1 for address cycle)
-    "bne x2, x0, 27f",   // if read, don't add the byte count
-    "add x10, x9, x10",  //   write: add bytes to send to total send count
-  "27:", // reads leave x10 == 1
-    "addi x9, x9, 1",    //   add 1 to x9, to account for address word
+    "andi x9, x9, 0x7f",
+    "mv x10, x1",        // x10 <- reads to transfer
+    "srli x10, x10, 15",
+    "andi x10, x10, 0x7f",
     "mv x15, x1",        // x15 <- SCL pin temp
     "srli x15, x15, 22",
     "andi x15, x15, 0x1f",
-    "mv x16, x1",        // x16 <- SDA pin temp
-    "srli x16, x16, 27",
-    "andi x16, x16, 0x1f",
+    "mv x14, x1",        // x14 <- SDA pin temp
+    "srli x14, x14, 27",
+    "andi x14, x14, 0x1f",
     "li x5, 1",          // setup GPIO masks
     "sll x5, x5, x15",   // x5 <- SCL bitmask
     "li x4, 1",
-    "sll x4, x4, x16",   // x4 <- SDA bitmask
-    "or x23, x4, x5",    // pre-set SCL/SDA to 0 for "output low"
-    "or x25, x4, x5",    // set SCL, SDA to 1 (inputs)
+    "sll x4, x4, x14",   // x4 <- SDA bitmask
+    // setup gpios
+    "mv x20, x0",        // sync to clock stream
+    "or x26, x4, x5",    // set GPIO mask
+    "or x23, x4, x5",    // clear SCL/SDA pins to 0 for "output low"
+    "or x25, x4, x5",    // SCL/SDA to inputs
     // setup done
+    "mv x20, x0",        // sync to clock stream
     "li x7, 0",          // x7 <- ACK counter
     "li x8, 0",          // x8 <- NACK counter
     // START bit
     "mv x20, x0", // SCL HS
     "mv x24, x4",        // SDA <- 0 while SCL is high (start)
+
     // main loop
-    // DATA bits
   "26:",
-    "li x6, 8",          // x6 <- loop counter
+    "li x6, 8",          // x6 <- set loop counter = 8
     "mv x11, x0",        // x11 is read shift register; initialize with 0
+
   "23:",
     "mv x20, x0", // SCL L0
     "mv x24, x5",        // SCL <- 0
-    "beq x10, x0, 30f",  // go to 30f if read cycle
-    // write code
+    "beq x9, x0, 30f",  // go to 30f if read cycle
+    // write path
     "mv x20, x0", // SCL L1
     "andi x14, x3, 0x80",// x14 (temp) <- extract MSB for sending
     "slli x3, x3, 1",    // shift data for next iteration
@@ -176,9 +187,27 @@ bio_code!(
     "mv x20, x0", // SCL H0
     "mv x25, x5",        // SCL <- 1
     "mv x20, x0", // SCL H1
-    "j 40f",             // jump past read code
+    "addi x6, x6, -1",   // decrement bit counter
+    "bne x6, x0, 23b",   // loop back if we haven't shifted all the bits
+
+    // incoming ACK
+    "mv x25, x4",        // SDA is input
+    "mv x20, x0", // SCL L0
+    "mv x24, x5",        // SCL <- 0
+    "mv x20, x0", // SCL L1
+    "mv x20, x0", // SCL H0
+    "mv x25, x5",        // SCL <- 1
+    "mv x13, x21",       // read GPIO pins
+    "and x13, x4, x13",  // mask just SDA
+    "beq x13, x0, 24f",  // if ack, go to 24f
+    "addi x8, x8, 1",    //   NACK += 1
+    "j 25f",
+  "24:",
+    "addi x7, x7, 1",    //   ACK += 1
+    "j 25f",
+
+    // read path
   "30:",
-    // read code
     "mv x25, x4",        // SDA is input
     "mv x20, x0", // SCL L1
     "mv x20, x0", // SCL H0
@@ -190,35 +219,39 @@ bio_code!(
     "beq x14, x0, 40f",  // don't OR in a 1 if SDA is 0
     "ori x11, x11, 1",   //   x11 <- x11 | 1
   "40:",
-    "addi x6, x6, -1",
+    "addi x6, x6, -1",   // decrement bit counter
     "bne x6, x0, 23b",   // loop back if we haven't shifted all the bits
-    // ACK/NACK
-    "mv x25, x4",        // SDA is input
+    "mv x17, x11",       // x17 <- read data
+
+    // outgoing ACK or NACK
+    "beq x10, x0, 28f",  // if last iteration, do NACK
+    "mv x24, x4",        //    otherwise ACK by SDA as output
+    "addi x7, x7, 1",    //   ACK += 1
+    "j 29f",
+  "28:",
+    "mv x25, x4",        // SDA is input (SDA goes high; NACK)
+    "addi x8, x8, 1",    //   NACK += 1
+  "29:",
     "mv x20, x0", // SCL L0
     "mv x24, x5",        // SCL <- 0
     "mv x20, x0", // SCL L1
-    "mv x25, x5",        // SCL <- 1
     "mv x20, x0", // SCL H0
-    "mv x13, x21",       // read GPIO pins
-    "and x13, x4, x13",  // mask just SDA
-    "beq x13, x0, 24f",  // if ack, go to 24f
-    "addi x8, x8, 1",    //   NACK += 1
+    "mv x25, x5",        // SCL <- 1
     "j 25f",
-  "24:",
-    "addi x7, x7, 1",    //   ACK += 1
+
+    // loop prologue
   "25:",
     "mv x20, x0", // SCL H1
-    "addi x9, x9, -1",   // decrement total bytes to transfer
-    "beq x10, x0, 29f",  // if x10 is already 0, don't decrement: commit read data instead
-    "addi x10, x10, -1", //    decrement x10 (bytes to send)
-    "beq x10, x0, 28f",  // if x10 is now 0, don't fetch new data to send
+    "beq x9, x0, 60f",   // don't decrement past 0; go to read processing instead
+    "addi x9, x9, -1",   // if not, decrement total writes to transfer
+    "beq x9, x0, 60f",   // check if writes are exhausted, if so, go to read processing
     "mv x3, x17",        // x3 <- x17 fetch outgoing from FIFO. Transfer will halt here until byte is available.
-  "28:",
-    "bne x9, x0, 26b",   // loop back to "DATA bits" if more bytes
-    "j 50f",             //   fall through to STOP otherwise
-  "29:",
-    "mv x17, x11",       // x17 <- x11 store read data into x17 FIFO. Will halt if FIFO is full.
-    "bne x9, x0, 26b",   // loop back to "DATA bits" if more bytes
+    "j 26b",             // loop back to "DATA bits"
+  "60:",
+    "beq x10, x0, 50f",  // if x10 is already 0, go to STOP
+    "addi x10, x10, -1", //    decrement x10 (bytes to read)
+    "j 26b",             // loop back to "DATA bits"
+
     // STOP
   "50:",
     "mv x20, x0", // SCL L0
@@ -229,6 +262,7 @@ bio_code!(
     "mv x25, x5",        // SCL is input (SCL -> 1)
     "mv x20, x0", // SCL H2
     "mv x25, x4",        // SDA is input (SDA -> 1)
+
     // REPORT
     "slli x8, x8, 16",   // shift NACK count into place
     "add x18, x7, x8",   // x18 <- send ACK + NACK
