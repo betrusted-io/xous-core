@@ -70,14 +70,16 @@ pub fn spi_test() {
             j += 1;
         }
     }
+    print!("iter ");
     while j < TEST_LEN {
         while bio_ss.bio.rf(SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) == 0 {} // wait until there's something there
         retvals[j] = bio_ss.bio.r(utra::bio::SFR_RXF1);
         j += 1;
-        print!("iter {}", j);
+        print!("{} ", j);
     }
+    print!("\r");
     for (index, &val) in retvals.iter().enumerate() {
-        print!("SPI rbk {:x}", val);
+        print!("SPI rbk {:x}\r", val);
         // the XOR to 0xAAAA is just a mask we threw in to test immediate loads
         assert!(val == ((0xAA00 | index as u32) ^ 0xAAAA));
     }
