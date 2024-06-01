@@ -134,10 +134,12 @@ macro_rules! bio_code {
                 static $name_start: *const u8;
                 static $name_end: *const u8;
             }
+            /*
             unsafe {
                 report_api($name_start as u32);
                 report_api($name_end as u32);
             }
+            */
             // skip the first 4 bytes, as they contain the loading offset
             unsafe { core::slice::from_raw_parts($name_start.add(4), ($name_end as usize) - ($name_start as usize) - 4)}
         }
