@@ -4,8 +4,7 @@ use super::report_api;
 use crate::*;
 
 pub fn spi_test() {
-    report_api(0x1310_5000);
-    report_api(0x51C0_0000);
+    print!("SPI test\r");
 
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::main::HW_MAIN_BASE as *mut u32);
@@ -15,7 +14,7 @@ pub fn spi_test() {
     // stop all the machines, so that code can be loaded
     bio_ss.bio.wo(utra::bio::SFR_CTRL, 0x0);
     let code = spi_driver();
-    report_api(code.len() as u32);
+    print!("code length {}\r", code.len());
     bio_ss.load_code(code, 0);
 
     // configure fifo trigger levels
@@ -36,7 +35,7 @@ pub fn spi_test() {
     bio_ss.bio.wo(
         utra::bio::SFR_CONFIG,
         bio_ss.bio.ms(utra::bio::SFR_CONFIG_SNAP_OUTPUT_TO_QUANTUM, 1)
-        | bio_ss.bio.ms(utra::bio::SFR_CONFIG_SNAP_OUTPUT_TO_WHICH, 2)
+            | bio_ss.bio.ms(utra::bio::SFR_CONFIG_SNAP_OUTPUT_TO_WHICH, 2),
     );
 
     // bypass sync on all but clock
@@ -45,7 +44,7 @@ pub fn spi_test() {
     bio_ss.bio.wo(
         utra::bio::SFR_EXTCLOCK,
         bio_ss.bio.ms(utra::bio::SFR_EXTCLOCK_USE_EXTCLK, 0b1000)
-        | bio_ss.bio.ms(utra::bio::SFR_EXTCLOCK_EXTCLK_GPIO_3, 9)
+            | bio_ss.bio.ms(utra::bio::SFR_EXTCLOCK_EXTCLK_GPIO_3, 9),
     );
 
     // start cores 2 & 3
@@ -75,10 +74,10 @@ pub fn spi_test() {
         while bio_ss.bio.rf(SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) == 0 {} // wait until there's something there
         retvals[j] = bio_ss.bio.r(utra::bio::SFR_RXF1);
         j += 1;
-        report_api(j as u32);
+        print!("iter {}", j);
     }
     for (index, &val) in retvals.iter().enumerate() {
-        report_api(val);
+        print!("SPI rbk {:x}", val);
         // the XOR to 0xAAAA is just a mask we threw in to test immediate loads
         assert!(val == ((0xAA00 | index as u32) ^ 0xAAAA));
     }
@@ -90,10 +89,10 @@ pub fn spi_test() {
 //   - loading word out of RAM (the random mask at the top)
 //   - machine ID based dispatch
 //   - how fast the SPI could run, hence the unrolled loop
-//   - Receive clock triggering a code event (quanta register x20
-//     is remapped to a GPIO input instead of the clock divider)
-//   - Branch on quanta read (saves one clock cycle for a tight loop;
-//     not strictly necessary but we use the idiom here to cap Tx loop)
+//   - Receive clock triggering a code event (quanta register x20 is remapped to a GPIO input instead of the
+//     clock divider)
+//   - Branch on quanta read (saves one clock cycle for a tight loop; not strictly necessary but we use the
+//     idiom here to cap Tx loop)
 // This runs at about a 25MHz SPI clock rate, assuming an 800MHz
 // core clock for the complex. The Rx loop is potentially much faster
 // than the Tx loop.
