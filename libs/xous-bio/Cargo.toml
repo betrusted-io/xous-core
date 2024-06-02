@@ -8,7 +8,9 @@ edition = "2021"
 [dependencies]
 log = "0.4.14"
 defmt = { version = "0.3", optional = true }
-utralib = { version = "0.1.24", default-features = false, features = ["cramium-soc"] }
+utralib = { version = "0.1.24", default-features = false, features = [
+    "cramium-soc",
+] }
 
 [target.'cfg(target_os = "xous")'.dependencies]
 xous = "0.9.61"
