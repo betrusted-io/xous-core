@@ -90,6 +90,7 @@ pub fn report_api(d: u32) {
 pub fn bio_tests() {
     report_api(crate::get_id());
 
+    units::aclk_tests();
     i2c::i2c_test();
     i2c::complex_i2c_test();
     units::fifo_level_tests();
@@ -115,7 +116,7 @@ pub fn bio_tests() {
 //   -[x] Stall on event - FIFO level test
 //   -[x] Host IRQ generation test - some combination with event tests above to confirm IRQ generation
 //   -[x] Core ID read test
-//   -[ ] Core aclk counter test
+//   -[x] Core aclk counter test
 // Application tests:
 //   -[x] SPI loopback test - implement using extclk as spi clk for input
 //   -[x] I2C loopback test

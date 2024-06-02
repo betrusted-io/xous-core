@@ -699,3 +699,77 @@ pub fn fifo_level_tests() {
     }
     print!("===FIFO level comprehensive PASS===\r")
 }
+
+pub fn aclk_tests() {
+    print!("ACLK test\r");
+    // clear any prior test config state
+    let mut test_cfg = CSR::new(utra::main::HW_MAIN_BASE as *mut u32);
+    test_cfg.wo(utra::main::WDATA, 0);
+
+    let mut bio_ss = BioSharedState::new();
+    // stop all the machines, so that code can be loaded
+    bio_ss.bio.wo(utra::bio::SFR_CTRL, 0x0);
+    let code = aclk_code();
+    bio_ss.load_code(code, 0);
+
+    // configure & run the 0th machine
+    bio_ss.bio.wo(utra::bio::SFR_QDIV1, 0xA_0000);
+    // don't snap GPIO outputs
+    bio_ss.bio.wo(utra::bio::SFR_CONFIG, 0);
+
+    // start machine 1
+    bio_ss.bio.wo(utra::bio::SFR_CTRL, 0x222);
+    while bio_ss.bio.rf(utra::bio::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) < 7 {
+        print!("waiting {}\r", bio_ss.bio.rf(utra::bio::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1));
+        // wait
+    }
+    let mut results = [0u32; 7];
+    for d in results.iter_mut() {
+        *d = bio_ss.bio.r(utra::bio::SFR_RXF1) & 0x3FFF_FFFF;
+    }
+    for (i, r) in results.iter().enumerate() {
+        print!("{}: {} cycles\r", i, r);
+    }
+    assert!(results[1] - results[0] == 3);
+    assert!(results[2] - results[1] == 3);
+    assert!(results[3] - results[2] == 6);
+    assert!(results[4] - results[3] == 3);
+
+    assert!(results[6] - results[5] == 10); // related to the clock divider
+    print!("===ACLK test PASS===\r");
+}
+
+#[rustfmt::skip]
+bio_code!(aclk_code, ACLK_START, ACLK_END,
+    "j 90f",
+    "nop",
+    "j 91f",
+    "nop",
+    "j 92f",
+    "nop",
+    "j 93f",
+    "nop",
+    // mach 0 code
+    "90:",
+    "j 90b",
+    // mach 1 code
+    "91:",
+    "mv x17, x31",
+    "mv x17, x31",
+    "mv x17, x31",
+    "nop",
+    "mv x17, x31",
+    "mv x17, x31",
+    "mv x20, x0",
+    "mv x17, x31",
+    "mv x20, x0",
+    "mv x17, x31",
+    "40:",
+    "j 40b",
+    // mach 2 code
+    "92:",
+    "j 92b",
+    // mach 3 code
+    "93:",
+    "j 93b"
+);
