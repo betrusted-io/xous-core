@@ -93,12 +93,12 @@ pub fn bio_tests() {
     units::aclk_tests();
     i2c::i2c_test();
     i2c::complex_i2c_test();
-    units::fifo_level_tests();
     spi::spi_test();
     units::hello_world();
     units::hello_multiverse();
     units::fifo_basic();
     units::host_fifo_tests();
+    units::fifo_level_tests();
 }
 
 // Test plan:
