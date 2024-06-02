@@ -6264,6 +6264,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "xous-bio"
+version = "0.1.0"
+dependencies = [
+ "defmt",
+ "log",
+ "utralib 0.1.24",
+ "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "xous-ipc"
 version = "0.9.61"
 dependencies = [

@@ -99,6 +99,7 @@ members = [
   "libs/userprefs",
   "libs/tls",
   "libs/xous-pio",
+  "libs/xous-bio",
   "libs/xous-pl230",
   "libs/cramium-hal",
   "services/cram-hal-service",
