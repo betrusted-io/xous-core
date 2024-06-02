@@ -36,6 +36,8 @@ use utralib::generated::*;
 #[cfg(feature = "tests")]
 pub mod bio_tests;
 
+pub mod i2c;
+
 #[derive(Debug)]
 pub enum BioError {
     /// specified state machine is not valid
@@ -89,7 +91,6 @@ impl BioSharedState {
 
     #[cfg(not(feature = "baremetal"))]
     pub fn new() -> Self {
-        // TODO
         let csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::bio::HW_BIO_BASE),
             None,
@@ -98,7 +99,18 @@ impl BioSharedState {
         )
         .unwrap();
 
-        BioSharedState { bio: CSR::new(csr.as_mut_ptr() as *mut u32) }
+        let imem: xous::MemoryRange = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::bio::HW_BIO_RAM_MEM),
+            None,
+            utra::bio::HW_BIO_RAM_MEM_LEN,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .unwrap();
+
+        BioSharedState {
+            bio: CSR::new(csr.as_mut_ptr() as *mut u32),
+            imem_slice: unsafe { imem.as_slice_mut() },
+        }
     }
 
     pub fn load_code(&mut self, prog: &[u8], offset_bytes: usize) {
