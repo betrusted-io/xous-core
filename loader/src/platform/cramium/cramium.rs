@@ -636,7 +636,8 @@ pub fn early_init() {
 
     #[cfg(feature = "usb-test")]
     {
-        crate::platform::usb_test::usb_test();
+        let mut usb = crate::platform::usb_test::CorigineUsb::new();
+        usb.init();
     }
 
     udma_uart.write("Press any key to continue...".as_bytes());
