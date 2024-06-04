@@ -34,6 +34,8 @@ pub fn early_init() {
     // Not all design changes have a rhyme or reason at this stage -- sometimes "it just works,
     // don't futz with it" is actually the answer that goes to production.
     use utralib::utra::sysctrl;
+
+    use crate::platform::usb_test;
     unsafe {
         // this is MANDATORY for any chip stapbility in real silicon, as the initial
         // clocks are too unstable to do anything otherwise. However, for the simulation
@@ -636,8 +638,43 @@ pub fn early_init() {
 
     #[cfg(feature = "usb-test")]
     {
+        udma_uart.write("USB basic test...\n\r".as_bytes());
         let mut usb = crate::platform::usb_test::CorigineUsb::new();
-        usb.init();
+        usb.reset();
+        let mut idle_timer = 0;
+        let mut vbus_on = false;
+        let mut vbus_on_count = 0;
+        let mut in_u0 = true;
+        loop {
+            if usb.udc_handle_interrupt() == usb_test::CorigineEvent::None {
+                idle_timer += 1;
+            } else {
+                crate::println!("Event at {}", idle_timer);
+                idle_timer = 0;
+            }
+            if !vbus_on && vbus_on_count == 4 {
+                crate::println!("vbus on");
+                usb.reset();
+                usb.init();
+                usb.start();
+                vbus_on = true;
+                in_u0 = false;
+            } else if !usb.pp() && vbus_on {
+                crate::println!("vbus off");
+                usb.stop();
+                usb.reset();
+                vbus_on_count = 0;
+                vbus_on = false;
+                in_u0 = false;
+            } else if in_u0 && vbus_on {
+                crate::println!("some handler here");
+                // TODO
+            } else if usb.ccs() && vbus_on {
+                usb.print_status();
+                crate::println!("enter U0");
+                in_u0 = true;
+            }
+        }
     }
 
     udma_uart.write("Press any key to continue...".as_bytes());
