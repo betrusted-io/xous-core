@@ -370,6 +370,36 @@ impl Modals {
         Ok(())
     }
 
+
+    /// Generates progress bar (updated by update_progress, and closed by finish_progress).
+    ///
+    /// - This item cannot be dismissed/modified by the user.
+    /// - If 'current' is less than 'start' or more than 'end', progress will show 0 or 100 percent, respectively.
+    /// - Title text wraps, burden is on the consumer not to exceed the available screen space.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image - Initial](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_start_progress.png?raw=true)
+    ///
+    /// </details>
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// modals
+    /// .start_progress(
+    ///     "Progress Quest",
+    ///     0,
+    ///     1000,
+    ///     0,
+    /// )
+    /// .expect("couldn't raise progress bar");
+    /// ```
     pub fn start_progress(&self, title: &str, start: u32, end: u32, current: u32) -> Result<(), xous::Error> {
         self.lock();
         let spec = ManagedProgress {
