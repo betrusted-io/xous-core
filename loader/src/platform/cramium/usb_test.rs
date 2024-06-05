@@ -49,7 +49,7 @@ pub enum Error {
     InvalidState,
 }
 
-#[derive(Eq, PartialEq, Copy, Clone)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum CorigineEvent {
     None = 0,
     Error,
@@ -153,61 +153,6 @@ pub struct Uicr {
     erstbahi: u32,
     erdplo: u32,
     erdphi: u32,
-}
-
-/// symbolic mapping of UDC registers into fields
-#[repr(C)]
-pub struct Uccr {
-    capability: u32, /* 0x00 */
-    resv0: [u32; 3],
-
-    config0: u32, /* 0x10 */
-    config1: u32,
-    resv1: [u32; 2],
-
-    control: u32, /* 0x20 USBCMD */
-    status: u32,
-    /* device context base address (DCBA) Pointer Low */
-    dcbaplo: u32,
-    /* device context base address (DCBA) Pointer High */
-    dcbaphi: u32,
-    /* PORT Status and Control */
-    portsc: u32,
-    /* USB3 Port PM Status and Control */
-    u3portpmsc: u32,
-    /* USB2 Port PM Status and Control */
-    u2portpmsc: u32,
-    /* USB3 Port Link Info */
-    u3portli: u32,
-
-    /* Door Bell Register */
-    doorbell: u32, /* 0x40 */
-    /* Microframe Index */
-    mfindex: u32,
-    ptm_ctr: u32,
-    ptm_sts: u32,
-    ep0_ctrl: u32,
-    resv3: [u32; 3],
-
-    ep_enable: u32, /* 0x60 */
-    ep_running: u32,
-    resv4: [u32; 2],
-
-    /* Command Parameter 0 */
-    cmd_param0: u32, /* 0x70 */
-    /* Command Parameter 1 */
-    cmd_param1: u32,
-    /* Command Control */
-    cmd_control: u32,
-    resv5: [u32; 1],
-
-    odb_capability: u32, /* 0x80 */
-    resv6k: [u32; 3],
-
-    /* Command Control 90-a0 */
-    odb_config: [u32; 8],
-
-    debug0: u32, /* 0xB0 */
 }
 
 const USB_SEND: u8 = 0;
@@ -539,7 +484,7 @@ pub struct CorigineUsb {
     #[cfg(feature = "std")]
     ifram_range: xous::MemoryRange,
     ifram_base_ptr: usize,
-    csr: CSR<u32>,
+    pub csr: CSR<u32>,
     // Because the init routine requires magic pokes
     magic_page: &'static mut [u32],
     // Seems necessary for some debug tricks
@@ -669,19 +614,10 @@ impl CorigineUsb {
         [unsafe { ((self.csr.base() as usize + CORIGINE_UICR_OFFSET) as *mut Uicr).as_mut().unwrap() }]
     }
 
-    fn uccr(&self) -> &'static mut Uccr {
-        // Safety: only safe because this is an aligned, allocated region
-        // of hardware registers; all values are representable as u32; and the structure
-        // fits the data.
-        unsafe { ((self.csr.base() as usize) as *mut Uccr).as_mut().unwrap() }
-    }
-
     pub fn reset(&mut self) {
-        let uccr = self.uccr();
-
-        println!("devcap: {:x}", uccr.capability);
-        println!("max speed: {:x}", self.csr.rf(corigine_usb::DEVCONFIG_MAX_SPEED));
-        println!("usb3 disable: {:x}", self.csr.rf(corigine_usb::DEVCONFIG_USB3_DISABLE_COUNT));
+        println!("devcap: {:x}", self.csr.r(DEVCAP));
+        println!("max speed: {:x}", self.csr.rf(DEVCONFIG_MAX_SPEED));
+        println!("usb3 disable: {:x}", self.csr.rf(DEVCONFIG_USB3_DISABLE_COUNT));
 
         // NOTE: the indices are byte-addressed, and so need to be divided by size_of::<u32>()
         const MAGIC_TABLE: [(usize, u32); 17] = [
@@ -716,16 +652,18 @@ impl CorigineUsb {
             // wait for reset to finish
         }
         // dummy readback, from the sample code. not sure if important
+        println!("Dummy");
         for i in 0..72 {
-            println!("Dummy {}: {:x}", i, self.dev_slice[i]);
+            if i % 16 == 0 {
+                print!("\r\n {}: ", i);
+            }
+            print!("{:x} ", self.dev_slice[i]);
         }
         compiler_fence(Ordering::SeqCst);
-
-        println!("USB reset done");
+        println!("\rUSB reset done");
     }
 
     pub fn init(&mut self) {
-        let uccr = self.uccr();
         let uicr = self.uicr();
 
         // stop controller and disable interrupt
@@ -741,9 +679,9 @@ impl CorigineUsb {
         }
 
         compiler_fence(Ordering::SeqCst);
-        uccr.config0 = 0x80 | CRG_UDC_CFG0_MAXSPEED_FS;
+        self.csr.wo(DEVCONFIG, 0x80 | CRG_UDC_CFG0_MAXSPEED_FS);
         compiler_fence(Ordering::SeqCst);
-        println!("config0: {:x}", uccr.config0);
+        println!("config0: {:x}", self.csr.r(DEVCONFIG));
 
         self.csr.wo(
             EVENTCONFIG,
@@ -815,30 +753,32 @@ impl CorigineUsb {
         }
 
         // init_device_context
+        println!("Begin init_device_context");
         // init device context and ep context, refer to 7.6.2
         self.ep_cx.len = (CRG_EP_NUM * size_of::<EpCxS>()) as u32;
         self.ep_cx.vaddr = (self.ifram_base_ptr + CRG_UDC_EPCX_OFFSET) as *mut u8; // EpCxS ??
         self.p_epcx = self.ep_cx.vaddr as *mut EpCxS;
 
-        uccr.dcbaplo = self.ep_cx.vaddr as u32;
-        uccr.dcbaphi = 0;
+        self.csr.wo(DCBAPLO, self.ep_cx.vaddr as u32);
+        self.csr.wo(DCBAPHI, 0);
         compiler_fence(Ordering::SeqCst);
-        println!(" dcbaplo: {:x}", uccr.dcbaplo);
-        println!(" dcbaphi: {:x}", uccr.dcbaphi);
+        println!(" dcbaplo: {:x}", self.csr.r(DCBAPLO));
+        println!(" dcbaphi: {:x}", self.csr.r(DCBAPHI));
 
         // initial ep0 transfer ring
         self.init_ep0();
 
         // disable u1 u2
-        uccr.u3portpmsc = 0;
+        self.csr.wo(U3PORTPMSC, 0);
 
         // disable 2.0 LPM
-        uccr.u2portpmsc = 0;
+        self.csr.wo(U2PORTPMSC, 0);
 
         println!("USB init done");
     }
 
     pub fn init_ep0(&mut self) {
+        println!("Begin init_ep0");
         let udc_ep = &mut self.udc_ep[0];
 
         udc_ep.ep_num = 0;
@@ -880,20 +820,20 @@ impl CorigineUsb {
             .expect("couldn't issue ep0 init command");
 
         self.ep0_buf = (self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET) as *mut u8;
+        println!("End init_ep0");
     }
 
     pub fn issue_command(&mut self, cmd: CmdType, p0: u32, p1: u32) -> Result<(), Error> {
-        let uccr = self.uccr();
-        let check_complete = uccr.control & self.csr.ms(USBCMD_RUN_STOP, 1) != 0;
+        let check_complete = self.csr.r(USBCMD) & self.csr.ms(USBCMD_RUN_STOP, 1) != 0;
         if check_complete {
-            if uccr.cmd_control & self.csr.ms(CMDCTRL_ACTIVE, 1) != 0 {
+            if self.csr.r(CMDCTRL) & self.csr.ms(CMDCTRL_ACTIVE, 1) != 0 {
                 println!("issue_command(): prev command is not complete!");
                 return Err(Error::CoreBusy);
             }
         }
-        uccr.cmd_param0 = p0;
-        uccr.cmd_param1 = p1;
-        uccr.cmd_control = self.csr.ms(CMDCTRL_ACTIVE, 1) | self.csr.ms(CMDCTRL_TYPE, cmd as u32);
+        self.csr.wo(CMDPARA0, p0);
+        self.csr.wo(CMDPARA1, p1);
+        self.csr.wo(CMDCTRL, self.csr.ms(CMDCTRL_ACTIVE, 1) | self.csr.ms(CMDCTRL_TYPE, cmd as u32));
         compiler_fence(Ordering::SeqCst);
         if check_complete {
             loop {
@@ -920,6 +860,7 @@ impl CorigineUsb {
             ret = CorigineEvent::Error;
         }
         if (status & self.csr.ms(USBSTS_EINT, 1)) != 0 {
+            // println!("USB Event");
             // this overwrites any previous error reporting. Seems bad, but
             // it's exactly what the reference code does.
             ret = CorigineEvent::Interrupt;
@@ -933,7 +874,7 @@ impl CorigineUsb {
 
     pub fn process_event_ring(&mut self, index: usize) {
         let uicr = self.uicr();
-        println!("ringindex: {}", index);
+        // println!("ringindex: {}", index);
         let tmp = uicr[index].iman;
         if (tmp & (self.csr.ms(IMAN_IE, 1) | self.csr.ms(IMAN_IP, 1)))
             != (self.csr.ms(IMAN_IE, 1) | self.csr.ms(IMAN_IP, 1))
@@ -979,15 +920,16 @@ impl CorigineUsb {
     pub fn handle_event(&mut self, event_trb: &mut EventTrbS) -> bool {
         let pei = event_trb.get_endpoint_id();
         let udc_ep = &mut self.udc_ep[pei as usize];
-        println!("event_trb: {:x?}", event_trb);
+        // println!("handle_event() event_trb: {:x?}", event_trb);
         match event_trb.get_trb_type() {
             TrbType::EventPortStatusChange => {
                 let portsc_val = self.csr.r(PORTSC);
                 self.csr.wo(PORTSC, portsc_val);
+                self.print_status(portsc_val);
                 let cs = (portsc_val & self.csr.ms(PORTSC_CCS, 1)) != 0;
                 let pp = (portsc_val & self.csr.ms(PORTSC_PP, 1)) != 0;
 
-                println!("  Current port link state is {:x}", portsc_val);
+                println!("  {:x} {:x} PORT_STATUS_CHANGE", portsc_val, event_trb.dw3);
 
                 if portsc_val & self.csr.ms(PORTSC_CSC, 1) != 0 {
                     if cs {
@@ -1019,6 +961,7 @@ impl CorigineUsb {
                         println!("  In port reset process");
                     } else {
                         println!("  Port reset done");
+                        self.update_current_speed();
                     }
                 }
 
@@ -1147,14 +1090,14 @@ impl CorigineUsb {
 
     pub fn ccs(&self) -> bool { self.csr.rf(PORTSC_CCS) != 0 }
 
-    pub fn print_status(&self) {
-        let status = self.csr.r(PORTSC);
+    pub fn print_status(&self, status: u32) {
         let bitflags = [
             (0u32, "CCS"),
             (3u32, "PP"),
             (4u32, "PR"),
             (16u32, "LWS"),
             (17u32, "CSC"),
+            (18u32, "PEC"),
             (20u32, "PPC"),
             (21u32, "PRC"),
             (22u32, "PLC"),
@@ -1216,7 +1159,7 @@ impl CorigineUsb {
                 | self.csr.ms(USBCMD_RUN_STOP, 1),
         );
 
-        self.print_status();
+        self.print_status(self.csr.r(PORTSC));
 
         self.set_addr(0, 0);
     }
@@ -1296,9 +1239,9 @@ pub mod corigine_usb {
     pub const PORTSC_WDE: Field = Field::new(1, 26, PORTSC);
     pub const PORTSC_WPR: Field = Field::new(1, 31, PORTSC);
 
-    // pub const U3PORTPMSC: Register = Register::new(CORIGINE_DEV_OFFSET / 4 + 0x34 / 4, 0xFFFF_FFFF);
+    pub const U3PORTPMSC: Register = Register::new(CORIGINE_DEV_OFFSET / 4 + 0x34 / 4, 0xFFFF_FFFF);
 
-    // pub const U2PORTPMSC: Register = Register::new(CORIGINE_DEV_OFFSET / 4 + 0x38 / 4, 0xFFFF_FFFF);
+    pub const U2PORTPMSC: Register = Register::new(CORIGINE_DEV_OFFSET / 4 + 0x38 / 4, 0xFFFF_FFFF);
 
     // pub const U3PORTLI: Register = Register::new(CORIGINE_DEV_OFFSET / 4 + 0x3C / 4, 0xFFFF_FFFF);
 
