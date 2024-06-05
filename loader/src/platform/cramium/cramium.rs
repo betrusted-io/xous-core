@@ -644,34 +644,40 @@ pub fn early_init() {
         let mut idle_timer = 0;
         let mut vbus_on = false;
         let mut vbus_on_count = 0;
-        let mut in_u0 = true;
+        let mut in_u0 = false;
         loop {
-            if usb.udc_handle_interrupt() == usb_test::CorigineEvent::None {
+            let event = usb.udc_handle_interrupt();
+            if event == usb_test::CorigineEvent::None {
                 idle_timer += 1;
             } else {
-                crate::println!("Event at {}", idle_timer);
+                // crate::println!("*Event {:?} at {}", event, idle_timer);
                 idle_timer = 0;
             }
+
             if !vbus_on && vbus_on_count == 4 {
-                crate::println!("vbus on");
+                crate::println!("*Vbus on");
                 usb.reset();
                 usb.init();
                 usb.start();
                 vbus_on = true;
                 in_u0 = false;
+            } else if usb.pp() && !vbus_on {
+                vbus_on_count += 1;
+                crate::println!("*Vbus_on_count: {}", vbus_on_count);
+                // mdelay(100);
             } else if !usb.pp() && vbus_on {
-                crate::println!("vbus off");
+                crate::println!("*Vbus off");
                 usb.stop();
                 usb.reset();
                 vbus_on_count = 0;
                 vbus_on = false;
                 in_u0 = false;
             } else if in_u0 && vbus_on {
-                crate::println!("some handler here");
+                // usb.udc_handle_interrupt();
                 // TODO
             } else if usb.ccs() && vbus_on {
-                usb.print_status();
-                crate::println!("enter U0");
+                usb.print_status(usb.csr.r(crate::platform::usb_test::corigine_usb::PORTSC));
+                crate::println!("*Enter U0");
                 in_u0 = true;
             }
         }
