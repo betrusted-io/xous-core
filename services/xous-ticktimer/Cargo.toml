@@ -37,7 +37,7 @@ precursor = ["utralib/precursor", "susres/precursor", "watchdog"]
 hosted = ["utralib/hosted", "susres/hosted", "watchdog"]
 renode = ["utralib/renode", "susres/renode", "watchdog"]
 
-cramium-soc = ["utralib/cramium-soc"]
+cramium-soc = ["utralib/cramium-soc", "utralib/std"]
 cramium-fpga = ["utralib/cramium-fpga"]
 
 debug-print = []
