@@ -1,9 +1,16 @@
 use core::convert::TryFrom;
 use core::mem::size_of;
-use core::sync::atomic::{compiler_fence, Ordering};
+use core::sync::atomic::{compiler_fence, AtomicPtr, Ordering};
 
-use utralib::*;
+#[cfg(feature = "std")]
+use usb_device::bus::PollResult;
+#[cfg(feature = "std")]
+use usb_device::{class_prelude::*, Result, UsbDirection};
+#[cfg(feature = "std")]
+use utralib::generated::*;
 
+#[cfg(not(feature = "std"))]
+use super::compat::AtomicCsr;
 use crate::usb::utra::*;
 use crate::{print, println};
 
@@ -29,8 +36,9 @@ const CRG_UDC_EP_TRSIZE: usize = CRG_TD_RING_SIZE * CRG_EP_NUM * 16;
 /// allocate 0x400 bytes for EP0 Buffer, Normally EP0 TRB transfer length will not greater than 1K
 const CRG_UDC_EP0_REQBUFSIZE: usize = 0x400;
 
-const CRG_IFRAM_PAGES: usize = 16;
-const CRG_UDC_MEMBASE: usize = utralib::HW_IFRAM1_MEM + utralib::HW_IFRAM1_MEM_LEN - CRG_IFRAM_PAGES * 0x1000;
+pub const CRG_IFRAM_PAGES: usize = 16;
+pub const CRG_UDC_MEMBASE: usize =
+    utralib::HW_IFRAM1_MEM + utralib::HW_IFRAM1_MEM_LEN - CRG_IFRAM_PAGES * 0x1000;
 
 const CRG_UDC_ERST_OFFSET: usize = 0; // use relative offsets
 const CRG_UDC_EVENTRING_OFFSET: usize = CRG_UDC_ERST_OFFSET + CRG_UDC_ERSTSIZE;
@@ -186,7 +194,7 @@ pub enum TrbType {
 impl TryFrom<u32> for TrbType {
     type Error = Error;
 
-    fn try_from(value: u32) -> Result<Self, Error> {
+    fn try_from(value: u32) -> core::result::Result<Self, Error> {
         match value {
             1 => Ok(TrbType::XferNormal),
             2 => Ok(TrbType::Rsvd2),
@@ -226,7 +234,7 @@ impl TryFrom<u32> for CompletionCode {
     type Error = Error;
 
     /// Note that this expects a raw dw2 value - the bit shift is built into this.
-    fn try_from(dw2: u32) -> Result<Self, Error> {
+    fn try_from(dw2: u32) -> core::result::Result<Self, Error> {
         match (dw2 >> 24) & 0xFF {
             1 => Ok(CompletionCode::Success),
             4 => Ok(CompletionCode::UsbTransactionError),
@@ -369,12 +377,12 @@ pub struct ErstS {
 
 /// buffer info data structure
 pub struct BufferInfo {
-    vaddr: *mut u8,
+    vaddr: AtomicPtr<u8>,
     dma: u64,
     len: u32,
 }
 impl Default for BufferInfo {
-    fn default() -> Self { Self { vaddr: core::ptr::null_mut(), dma: 0, len: 0 } }
+    fn default() -> Self { Self { vaddr: AtomicPtr::new(core::ptr::null_mut()), dma: 0, len: 0 } }
 }
 
 pub struct UdcEp {
@@ -385,10 +393,10 @@ pub struct UdcEp {
     ep_type: u8,
     max_packet_size: u16,
     tran_ring_info: BufferInfo,
-    first_trb: *mut TransferTrbS,
-    last_trb: *mut TransferTrbS,
-    enq_pt: *mut TransferTrbS,
-    deq_pt: *mut TransferTrbS,
+    first_trb: AtomicPtr<TransferTrbS>,
+    last_trb: AtomicPtr<TransferTrbS>,
+    enq_pt: AtomicPtr<TransferTrbS>,
+    deq_pt: AtomicPtr<TransferTrbS>,
     pcs: u8,
     tran_ring_full: bool,
     ep_state: EpState,
@@ -402,10 +410,10 @@ impl Default for UdcEp {
             ep_type: 0,
             max_packet_size: 0,
             tran_ring_info: BufferInfo::default(),
-            first_trb: core::ptr::null_mut(),
-            last_trb: core::ptr::null_mut(),
-            enq_pt: core::ptr::null_mut(),
-            deq_pt: core::ptr::null_mut(),
+            first_trb: AtomicPtr::new(core::ptr::null_mut()),
+            last_trb: AtomicPtr::new(core::ptr::null_mut()),
+            enq_pt: AtomicPtr::new(core::ptr::null_mut()),
+            deq_pt: AtomicPtr::new(core::ptr::null_mut()),
             pcs: 0,
             tran_ring_full: false,
             ep_state: EpState::Disabled,
@@ -417,21 +425,21 @@ impl Default for UdcEp {
 // Corigine USB device controller event data structure
 pub struct UdcEvent {
     erst: BufferInfo,
-    p_erst: *mut ErstS,
+    p_erst: AtomicPtr<ErstS>,
     event_ring: BufferInfo,
-    evt_dq_pt: *mut EventTrbS,
+    evt_dq_pt: AtomicPtr<EventTrbS>,
     ccs: u8,
-    evt_seg0_last_trb: *mut EventTrbS,
+    evt_seg0_last_trb: AtomicPtr<EventTrbS>,
 }
 impl Default for UdcEvent {
     fn default() -> Self {
         Self {
             erst: BufferInfo::default(),
-            p_erst: core::ptr::null_mut(),
+            p_erst: AtomicPtr::new(core::ptr::null_mut()),
             event_ring: BufferInfo::default(),
-            evt_dq_pt: core::ptr::null_mut(),
+            evt_dq_pt: AtomicPtr::new(core::ptr::null_mut()),
             ccs: 0,
-            evt_seg0_last_trb: core::ptr::null_mut(),
+            evt_seg0_last_trb: AtomicPtr::new(core::ptr::null_mut()),
         }
     }
 }
@@ -479,20 +487,16 @@ enum UsbDeviceState {
 }
 
 pub struct CorigineUsb {
-    #[cfg(feature = "std")]
-    range: xous::MemoryRange,
-    #[cfg(feature = "std")]
-    ifram_range: xous::MemoryRange,
     ifram_base_ptr: usize,
-    pub csr: CSR<u32>,
+    pub csr: AtomicCsr<u32>,
     // Because the init routine requires magic pokes
     magic_page: &'static mut [u32],
-    // Seems necessary for some debug tricks
-    dev_slice: &'static mut [u32],
+    #[cfg(feature = "std")]
+    conn: xous::CID,
 
     udc_ep: [UdcEp; CRG_EP_NUM + 2],
     ep_cx: BufferInfo,
-    p_epcx: *mut EpCxS,
+    p_epcx: AtomicPtr<EpCxS>,
 
     udc_event: [UdcEvent; CRG_EVENT_RING_NUM],
 
@@ -513,7 +517,7 @@ pub struct CorigineUsb {
     connected: u32,
 
     // actual hardware pointer value to pass to UDC; not directly accessed by Rust
-    ep0_buf: *mut u8,
+    ep0_buf: AtomicPtr<u8>,
 
     u2_rwe: u32,
     feature_u1_enabled: u32,
@@ -524,57 +528,25 @@ pub struct CorigineUsb {
     max_speed: u32,
 }
 impl CorigineUsb {
-    pub fn new() -> Self {
-        #[cfg(feature = "std")]
-        let mut usb_mapping = xous::syscall::map_memory(
-            xous::MemoryAddress::new(CORIGINE_USB_BASE),
-            None,
-            CORIGINE_USB_LEN,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't reserve register pages");
-        #[cfg(feature = "std")]
-        let ifram_range = xous::syscall::map_memory(
-            xous::MemoryAddress::new(CRG_UDC_MEMBASE),
-            xous::MemoryAddress::new(CRG_UDC_MEMBASE), // make P & V addresses line up
-            CRG_IFRAM_PAGES * 0x1000,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't allocate IFRAM pages");
-        #[cfg(feature = "std")]
-        let magic_page = unsafe { core::slice::from_raw_parts_mut(usb_mapping.as_ptr() as *mut u32, 1024) };
-        #[cfg(not(feature = "std"))]
-        let magic_page = unsafe { core::slice::from_raw_parts_mut(CORIGINE_USB_BASE as *mut u32, 1024) };
-
-        // note that the extent of this slice goes beyond the strict end of the register set because
-        // I think there are extra hidden registers we may need to access later on.
-        #[cfg(feature = "std")]
-        let dev_slice: &mut [u32] = unsafe {
-            core::slice::from_raw_parts_mut(usb_mapping.as_ptr() as *mut u32, 0x200 / size_of::<u32>())
-        };
-        #[cfg(not(feature = "std"))]
-        let dev_slice = unsafe {
-            core::slice::from_raw_parts_mut(
-                (CORIGINE_USB_BASE + CORIGINE_DEV_OFFSET) as *mut u32,
-                0x200 / size_of::<u32>(),
-            )
-        };
+    /// Safety: this function is generally pretty unsafe because the underlying hardware needs raw pointers,
+    /// and will mutate values underneath the OS with no regard for safety.
+    ///
+    /// However, from the standpoint of Rust, the particular guarantee we need is that the `ifram_base_ptr`
+    /// maps to the exact same value in virtual memory as in physical memory. This allows us to operate on
+    /// the pointer directly in virtual memory, and pass it into the hardware (which thinks in physical
+    /// memory), without having to do tedious translations back and forth. On a platform where these two
+    /// could not be guaranteed to the same range, the driver would need to be written with a
+    /// de-virtualization/re-virtualization layer every time we extract data records from the device's mapped
+    /// RAM.
+    pub unsafe fn new(_conn: u32, ifram_base_ptr: usize, csr: AtomicCsr<u32>) -> Self {
+        let magic_page = unsafe { core::slice::from_raw_parts_mut(csr.base() as *mut u32, 1024) };
 
         Self {
+            ifram_base_ptr,
+            csr,
             #[cfg(feature = "std")]
-            range: usb_mapping,
-            #[cfg(feature = "std")]
-            ifram_range,
-            #[cfg(feature = "std")]
-            ifram_base_ptr: ifram_range.as_ptr() as usize,
-            #[cfg(not(feature = "std"))]
-            ifram_base_ptr: CRG_UDC_MEMBASE,
-            #[cfg(feature = "std")]
-            csr: CSR::new(usb_mapping.as_mut_ptr() as *mut u32),
-            #[cfg(not(feature = "std"))]
-            csr: CSR::new(CORIGINE_USB_BASE as *mut u32),
+            conn: _conn,
             magic_page,
-            dev_slice,
             // is there a way to make this less shitty?
             udc_ep: [
                 UdcEp::default(),
@@ -585,7 +557,7 @@ impl CorigineUsb {
                 UdcEp::default(),
             ],
             ep_cx: BufferInfo::default(),
-            p_epcx: core::ptr::null_mut(),
+            p_epcx: AtomicPtr::new(core::ptr::null_mut()),
             udc_event: [UdcEvent::default(); CRG_EVENT_RING_NUM],
             sel_value: SelValue::default(),
             setup_status: 0,
@@ -598,7 +570,7 @@ impl CorigineUsb {
             set_tm: 0,
             cur_interface_num: 0,
             connected: 0,
-            ep0_buf: core::ptr::null_mut(),
+            ep0_buf: AtomicPtr::new(core::ptr::null_mut()),
             u2_rwe: 0,
             feature_u1_enabled: 0,
             feature_u2_enabled: 0,
@@ -654,20 +626,36 @@ impl CorigineUsb {
         while self.csr.rf(USBCMD_SOFT_RESET) != 0 {
             // wait for reset to finish
         }
-        // dummy readback, from the sample code. not sure if important
-        println!("Dummy");
-        for i in 0..72 {
-            if i % 16 == 0 {
-                print!("\r\n {}: ", i);
-            }
-            print!("{:x} ", self.dev_slice[i]);
-        }
-        compiler_fence(Ordering::SeqCst);
         println!("\rUSB reset done");
     }
 
     pub fn init(&mut self) {
         let uicr = self.uicr();
+
+        // NOTE: the indices are byte-addressed, and so need to be divided by size_of::<u32>()
+        const MAGIC_TABLE: [(usize, u32); 17] = [
+            (0x084, 0x01401388),
+            (0x0f4, 0x0000f023),
+            (0x088, 0x3b066409),
+            (0x08c, 0x0d020407),
+            (0x090, 0x04055050),
+            (0x094, 0x03030a07),
+            (0x098, 0x05131304),
+            (0x09c, 0x3b4b0d15),
+            (0x0a0, 0x14168c6e),
+            (0x0a4, 0x18060408),
+            (0x0a8, 0x4b120c0f),
+            (0x0ac, 0x03190d05),
+            (0x0b0, 0x08080d09),
+            (0x0b4, 0x20060b03),
+            (0x0b8, 0x040a8c0e),
+            (0x0bc, 0x44087d5a),
+            (0x110, 0x00000000),
+        ];
+
+        for (offset, magic) in MAGIC_TABLE {
+            self.magic_page[offset / size_of::<u32>()] = magic;
+        }
 
         // stop controller and disable interrupt
         self.csr.rmwf(USBCMD_INT_ENABLE, 0);
@@ -713,8 +701,8 @@ impl CorigineUsb {
                 *e = ErstS::default();
             }
             udc_event.erst.len = (erst.len() * size_of::<ErstS>()) as u32;
-            udc_event.erst.vaddr = erst.as_mut_ptr() as *mut u8; // ErstS ??
-            udc_event.p_erst = udc_event.erst.vaddr as *mut ErstS;
+            udc_event.erst.vaddr = AtomicPtr::new(erst.as_mut_ptr() as *mut u8); // ErstS ??
+            udc_event.p_erst = AtomicPtr::new(udc_event.erst.vaddr.load(Ordering::SeqCst) as *mut ErstS);
 
             // allocate event ring
             let event_ring = unsafe {
@@ -730,24 +718,29 @@ impl CorigineUsb {
 
             udc_event.event_ring.len = event_ring.len() as u32;
             // TODO: V->P
-            udc_event.event_ring.vaddr = event_ring.as_mut_ptr(); // EventTrbS ??
-            udc_event.evt_dq_pt = udc_event.event_ring.vaddr as *mut EventTrbS;
-            udc_event.evt_seg0_last_trb =
-                unsafe { (udc_event.event_ring.vaddr as *mut EventTrbS).add(CRG_EVENT_RING_SIZE - 1) };
+            udc_event.event_ring.vaddr = AtomicPtr::new(event_ring.as_mut_ptr()); // EventTrbS ??
+            udc_event.evt_dq_pt =
+                AtomicPtr::new(udc_event.event_ring.vaddr.load(Ordering::SeqCst) as *mut EventTrbS);
+            udc_event.evt_seg0_last_trb = AtomicPtr::new(unsafe {
+                (udc_event.event_ring.vaddr.load(Ordering::SeqCst) as *mut EventTrbS)
+                    .add(CRG_EVENT_RING_SIZE - 1)
+            });
 
             udc_event.ccs = 1;
 
             // copy control structure pointers to hardware-managed memory
-            let p_erst = unsafe { udc_event.p_erst.as_mut() }.expect("invalid pointer");
-            p_erst.seg_addr_lo = udc_event.event_ring.vaddr as u32;
+            let p_erst =
+                unsafe { udc_event.p_erst.load(Ordering::SeqCst).as_mut().expect("invalid pointer") };
+            p_erst.seg_addr_lo = udc_event.event_ring.vaddr.load(Ordering::SeqCst) as u32;
             p_erst.seg_addr_hi = 0;
             p_erst.seg_size = CRG_EVENT_RING_SIZE as u32;
             p_erst.rsvd = 0;
 
             uicr[index].erstsz = CRG_ERST_SIZE as u32;
-            uicr[index].erstbalo = udc_event.erst.vaddr as u32;
+            uicr[index].erstbalo = udc_event.erst.vaddr.load(Ordering::SeqCst) as u32;
             uicr[index].erstbahi = 0;
-            uicr[index].erdplo = udc_event.event_ring.vaddr as u32 | self.csr.ms(ERDPLO_EHB, 1);
+            uicr[index].erdplo =
+                udc_event.event_ring.vaddr.load(Ordering::SeqCst) as u32 | self.csr.ms(ERDPLO_EHB, 1);
             uicr[index].erdphi = 0;
 
             uicr[index].iman = self.csr.ms(IMAN_IE, 1) | self.csr.ms(IMAN_IP, 1);
@@ -759,10 +752,10 @@ impl CorigineUsb {
         println!("Begin init_device_context");
         // init device context and ep context, refer to 7.6.2
         self.ep_cx.len = (CRG_EP_NUM * size_of::<EpCxS>()) as u32;
-        self.ep_cx.vaddr = (self.ifram_base_ptr + CRG_UDC_EPCX_OFFSET) as *mut u8; // EpCxS ??
-        self.p_epcx = self.ep_cx.vaddr as *mut EpCxS;
+        self.ep_cx.vaddr = AtomicPtr::new((self.ifram_base_ptr + CRG_UDC_EPCX_OFFSET) as *mut u8); // EpCxS ??
+        self.p_epcx = AtomicPtr::new(self.ep_cx.vaddr.load(Ordering::SeqCst) as *mut EpCxS);
 
-        self.csr.wo(DCBAPLO, self.ep_cx.vaddr as u32);
+        self.csr.wo(DCBAPLO, self.ep_cx.vaddr.load(Ordering::SeqCst) as u32);
         self.csr.wo(DCBAPHI, 0);
         compiler_fence(Ordering::SeqCst);
         println!(" dcbaplo: {:x}", self.csr.r(DCBAPLO));
@@ -799,34 +792,37 @@ impl CorigineUsb {
             e.zeroize();
         }
         // TODO: V->P
-        udc_ep.tran_ring_info.vaddr = ep0_tr_ring.as_mut_ptr() as *mut u8; // &[TransferTrbS] ??
+        udc_ep.tran_ring_info.vaddr = AtomicPtr::new(ep0_tr_ring.as_mut_ptr() as *mut u8); // &[TransferTrbS] ??
         udc_ep.tran_ring_info.len = (ep0_tr_ring.len() * size_of::<TransferTrbS>()) as u32;
-        udc_ep.first_trb = (&mut ep0_tr_ring[0]) as *mut TransferTrbS;
+        udc_ep.first_trb = AtomicPtr::new((&mut ep0_tr_ring[0]) as *mut TransferTrbS);
         // TODO: P->V
-        udc_ep.last_trb = (&ep0_tr_ring[ep0_tr_ring.len() - 1]) as *const TransferTrbS as *mut TransferTrbS;
+        udc_ep.last_trb =
+            AtomicPtr::new((&ep0_tr_ring[ep0_tr_ring.len() - 1]) as *const TransferTrbS as *mut TransferTrbS);
 
-        udc_ep.enq_pt = udc_ep.first_trb;
-        udc_ep.deq_pt = udc_ep.first_trb;
+        udc_ep.enq_pt = AtomicPtr::new(udc_ep.first_trb.load(Ordering::SeqCst));
+        udc_ep.deq_pt = AtomicPtr::new(udc_ep.first_trb.load(Ordering::SeqCst));
         udc_ep.pcs = 1;
         udc_ep.tran_ring_full = false;
 
-        unsafe { udc_ep.last_trb.as_mut().expect("couldn't deref pointer") }
-            .set_trb_link(true, udc_ep.tran_ring_info.vaddr as *mut TransferTrbS);
+        unsafe { udc_ep.last_trb.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") }
+            .set_trb_link(true, udc_ep.tran_ring_info.vaddr.load(Ordering::SeqCst) as *mut TransferTrbS);
 
-        let cmd_param0: u32 = self.csr.ms(CMDPARA0_CMD0_INIT_EP0_DQPTRLO, udc_ep.tran_ring_info.vaddr as u32)
+        let cmd_param0: u32 = self
+            .csr
+            .ms(CMDPARA0_CMD0_INIT_EP0_DQPTRLO, udc_ep.tran_ring_info.vaddr.load(Ordering::SeqCst) as u32)
             | self.csr.ms(CMDPARA0_CMD0_INIT_EP0_DCS, udc_ep.pcs as u32);
         let cmd_param1: u32 = 0;
-        println!("ep0 ring dma addr = {:x}", udc_ep.tran_ring_info.vaddr as usize);
+        println!("ep0 ring dma addr = {:x}", udc_ep.tran_ring_info.vaddr.load(Ordering::SeqCst) as usize);
         println!("INIT EP0 CMD par0 = {:x} par1 = {:x}", cmd_param0, cmd_param1);
 
         self.issue_command(CmdType::InitEp0, cmd_param0, cmd_param1)
             .expect("couldn't issue ep0 init command");
 
-        self.ep0_buf = (self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET) as *mut u8;
+        self.ep0_buf = AtomicPtr::new((self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET) as *mut u8);
         println!("End init_ep0");
     }
 
-    pub fn issue_command(&mut self, cmd: CmdType, p0: u32, p1: u32) -> Result<(), Error> {
+    pub fn issue_command(&mut self, cmd: CmdType, p0: u32, p1: u32) -> core::result::Result<(), Error> {
         let check_complete = self.csr.r(USBCMD) & self.csr.ms(USBCMD_RUN_STOP, 1) != 0;
         if check_complete {
             if self.csr.r(CMDCTRL) & self.csr.ms(CMDCTRL_ACTIVE, 1) != 0 {
@@ -890,10 +886,10 @@ impl CorigineUsb {
         loop {
             let event = {
                 let udc_event = &mut self.udc_event[index];
-                if udc_event.evt_dq_pt.is_null() {
+                if udc_event.evt_dq_pt.load(Ordering::SeqCst).is_null() {
                     break;
                 }
-                let event_ptr = udc_event.evt_dq_pt as usize;
+                let event_ptr = udc_event.evt_dq_pt.load(Ordering::SeqCst) as usize;
                 unsafe { (event_ptr as *mut EventTrbS).as_mut().expect("couldn't deref pointer") }
             };
 
@@ -904,19 +900,23 @@ impl CorigineUsb {
             self.handle_event(event);
 
             let udc_event = &mut self.udc_event[index];
-            if udc_event.evt_dq_pt == udc_event.evt_seg0_last_trb {
-                println!(" evt_last_trb {:x}", udc_event.evt_seg0_last_trb as usize);
+            if udc_event.evt_dq_pt.load(Ordering::SeqCst)
+                == udc_event.evt_seg0_last_trb.load(Ordering::SeqCst)
+            {
+                println!(" evt_last_trb {:x}", udc_event.evt_seg0_last_trb.load(Ordering::SeqCst) as usize);
                 udc_event.ccs = if udc_event.ccs != 0 { 0 } else { 1 };
                 // does this...go to null to end the transfer??
-                udc_event.evt_dq_pt = udc_event.event_ring.vaddr as *mut EventTrbS;
+                udc_event.evt_dq_pt =
+                    AtomicPtr::new(udc_event.event_ring.vaddr.load(Ordering::SeqCst) as *mut EventTrbS);
             } else {
-                udc_event.evt_dq_pt = unsafe { udc_event.evt_dq_pt.add(1) };
+                udc_event.evt_dq_pt =
+                    AtomicPtr::new(unsafe { udc_event.evt_dq_pt.load(Ordering::SeqCst).add(1) });
             }
         }
         let udc_event = &mut self.udc_event[index];
         // update dequeue pointer
         uicr[index].erdphi = 0;
-        uicr[index].erdplo = udc_event.evt_dq_pt as u32 | CRG_UDC_ERDPLO_EHB;
+        uicr[index].erdplo = udc_event.evt_dq_pt.load(Ordering::SeqCst) as u32 | CRG_UDC_ERDPLO_EHB;
         compiler_fence(Ordering::SeqCst);
     }
 
@@ -987,9 +987,9 @@ impl CorigineUsb {
                     (event_trb.dw0 as *mut TransferTrbS).add(1).as_mut().expect("Couldn't deref ptr")
                 };
                 if deq_pt.get_trb_type() == TrbType::Link {
-                    udc_ep.deq_pt = udc_ep.first_trb;
+                    udc_ep.deq_pt = AtomicPtr::new(udc_ep.first_trb.load(Ordering::SeqCst));
                 } else {
-                    udc_ep.deq_pt = deq_pt as *mut TransferTrbS;
+                    udc_ep.deq_pt = AtomicPtr::new(deq_pt as *mut TransferTrbS);
                 }
                 println!("EventTransfer: comp_code {:?}, PEI {}", comp_code, pei);
 
@@ -1072,16 +1072,18 @@ impl CorigineUsb {
 
         let udc_ep = &mut self.udc_ep[0];
         // TODO: P->A
-        let enq_pt = unsafe { udc_ep.enq_pt.as_mut().expect("couldn't deref pointer") };
+        let enq_pt =
+            unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
         enq_pt.set_trb_status(udc_ep.pcs, true, false, self.setup_tag, target, false);
 
         // TODO: fix raw pointer manips with something more sane?
-        udc_ep.enq_pt = unsafe { udc_ep.enq_pt.add(1) };
+        udc_ep.enq_pt = AtomicPtr::new(unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).add(1) });
         // TODO: P->A
-        let enq_pt = unsafe { udc_ep.enq_pt.as_mut().expect("couldn't deref pointer") };
+        let enq_pt =
+            unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
         if enq_pt.get_trb_type() == TrbType::Link {
             enq_pt.set_cycle_bit(udc_ep.pcs);
-            udc_ep.enq_pt = udc_ep.first_trb;
+            udc_ep.enq_pt = AtomicPtr::new(udc_ep.first_trb.load(Ordering::SeqCst));
             udc_ep.pcs ^= 1;
         }
         self.knock_doorbell(0);
@@ -1166,4 +1168,176 @@ impl CorigineUsb {
 
         self.set_addr(0, 0);
     }
+
+    /*
+     Functions below implement the "device management" APIs.
+
+     These are mostly dummy thunks on the Cramium target because only a single core is possible
+     on this SoC.
+
+     This would be cleaner if we implemented it as a trait, I think - but we've got a lot to do
+     in term sof getting the cores up and running, so we'll leave this as technical debt for when
+     we uh...decide to implement a third target, or something like that.
+    */
+    /// Force and hold the reset pin according to the state selected
+    pub fn ll_reset(&mut self, state: bool) {
+        #[cfg(feature = "std")]
+        log::warn!("ll_reset is UNSURE");
+        // There is a PHY control, it looks like 0x1C bit 1 set to 1 will cause the device to hi-Z
+
+        // But we might not even have to do that, I think it could be the case that we may just
+        // need to do a soft-disconnect routine per 8.3.4 in manual.
+        if state {
+            self.reset();
+        } else {
+            self.init();
+        }
+    }
+
+    pub fn ll_connect_device_core(&self, _state: bool) {}
+
+    pub fn connect_device_core(&self, _state: bool) {}
+
+    pub fn is_device_connected(&self) -> bool { true }
+
+    pub fn disable_debug(&mut self, _disable: bool) {}
+
+    pub fn get_disable_debug(&self) -> bool { true }
+
+    pub fn xous_suspend(&self) {}
+
+    pub fn xous_resume1(&self) {}
+
+    pub fn xous_resume2(&self) {}
+}
+
+#[cfg(feature = "std")]
+impl UsbBus for CorigineUsb {
+    /// Indicates that `set_device_address` must be called before accepting the corresponding
+    /// control transfer, not after.
+    ///
+    /// The default value for this constant is `false`, which corresponds to the USB 2.0 spec, 9.4.6
+    const QUIRK_SET_ADDRESS_BEFORE_STATUS: bool = false;
+
+    /// Allocates an endpoint and specified endpoint parameters. This method is called by the device
+    /// and class implementations to allocate endpoints, and can only be called before
+    /// [`enable`](UsbBus::enable) is called.
+    ///
+    /// # Arguments
+    ///
+    /// * `ep_dir` - The endpoint direction.
+    /// * `ep_addr` - A static endpoint address to allocate. If Some, the implementation should attempt to
+    ///   return an endpoint with the specified address. If None, the implementation should return the next
+    ///   available one.
+    /// * `max_packet_size` - Maximum packet size in bytes.
+    /// * `interval` - Polling interval parameter for interrupt endpoints.
+    ///
+    /// # Errors
+    ///
+    /// * [`EndpointOverflow`](crate::UsbError::EndpointOverflow) - Available total number of endpoints,
+    ///   endpoints of the specified type, or endpoind packet memory has been exhausted. This is generally
+    ///   caused when a user tries to add too many classes to a composite device.
+    /// * [`InvalidEndpoint`](crate::UsbError::InvalidEndpoint) - A specific `ep_addr` was specified but the
+    ///   endpoint in question has already been allocated.
+    fn alloc_ep(
+        &mut self,
+        ep_dir: UsbDirection,
+        ep_addr: Option<EndpointAddress>,
+        ep_type: EndpointType,
+        max_packet_size: u16,
+        interval: u8,
+    ) -> Result<EndpointAddress> {
+        Ok(EndpointAddress::from_parts(1, UsbDirection::Out))
+    }
+
+    /// Enables and initializes the USB peripheral. Soon after enabling the device will be reset, so
+    /// there is no need to perform a USB reset in this method.
+    fn enable(&mut self) {}
+
+    /// Called when the host resets the device. This will be soon called after
+    /// [`poll`](crate::device::UsbDevice::poll) returns [`PollResult::Reset`]. This method should
+    /// reset the state of all endpoints and peripheral flags back to a state suitable for
+    /// enumeration, as well as ensure that all endpoints previously allocated with alloc_ep are
+    /// initialized as specified.
+    fn reset(&self) {}
+
+    /// Sets the device USB address to `addr`.
+    fn set_device_address(&self, addr: u8) {}
+
+    /// Writes a single packet of data to the specified endpoint and returns number of bytes
+    /// actually written.
+    ///
+    /// The only reason for a short write is if the caller passes a slice larger than the amount of
+    /// memory allocated earlier, and this is generally an error in the class implementation.
+    ///
+    /// # Errors
+    ///
+    /// * [`InvalidEndpoint`](crate::UsbError::InvalidEndpoint) - The `ep_addr` does not point to a valid
+    ///   endpoint that was previously allocated with [`UsbBus::alloc_ep`].
+    /// * [`WouldBlock`](crate::UsbError::WouldBlock) - A previously written packet is still pending to be
+    ///   sent.
+    /// * [`BufferOverflow`](crate::UsbError::BufferOverflow) - The packet is too long to fit in the
+    ///   transmission buffer. This is generally an error in the class implementation, because the class
+    ///   shouldn't provide more data than the `max_packet_size` it specified when allocating the endpoint.
+    ///
+    /// Implementations may also return other errors if applicable.
+    fn write(&self, ep_addr: EndpointAddress, buf: &[u8]) -> Result<usize> { Ok(0) }
+
+    /// Reads a single packet of data from the specified endpoint and returns the actual length of
+    /// the packet.
+    ///
+    /// This should also clear any NAK flags and prepare the endpoint to receive the next packet.
+    ///
+    /// # Errors
+    ///
+    /// * [`InvalidEndpoint`](crate::UsbError::InvalidEndpoint) - The `ep_addr` does not point to a valid
+    ///   endpoint that was previously allocated with [`UsbBus::alloc_ep`].
+    /// * [`WouldBlock`](crate::UsbError::WouldBlock) - There is no packet to be read. Note that this is
+    ///   different from a received zero-length packet, which is valid in USB. A zero-length packet will
+    ///   return `Ok(0)`.
+    /// * [`BufferOverflow`](crate::UsbError::BufferOverflow) - The received packet is too long to fit in
+    ///   `buf`. This is generally an error in the class implementation, because the class should use a buffer
+    ///   that is large enough for the `max_packet_size` it specified when allocating the endpoint.
+    ///
+    /// Implementations may also return other errors if applicable.
+    fn read(&self, ep_addr: EndpointAddress, buf: &mut [u8]) -> Result<usize> { Ok(0) }
+
+    /// Sets or clears the STALL condition for an endpoint. If the endpoint is an OUT endpoint, it
+    /// should be prepared to receive data again.
+    fn set_stalled(&self, ep_addr: EndpointAddress, stalled: bool) {}
+
+    /// Gets whether the STALL condition is set for an endpoint.
+    fn is_stalled(&self, ep_addr: EndpointAddress) -> bool { false }
+
+    /// Instruct EP0 to configure itself with an OUT descriptor, so that it may receive a STATUS
+    /// update during configuration. This is for devices that support an EP0 which can only either
+    /// be IN or OUT, but not both at the same time. Devices with both IN/OUT may leave this as
+    /// an empty stub.
+    fn set_ep0_out(&self) {}
+
+    /// Causes the USB peripheral to enter USB suspend mode, lowering power consumption and
+    /// preparing to detect a USB wakeup event. This will be called after
+    /// [`poll`](crate::device::UsbDevice::poll) returns [`PollResult::Suspend`]. The device will
+    /// continue be polled, and it shall return a value other than `Suspend` from `poll` when it no
+    /// longer detects the suspend condition.
+    fn suspend(&self) {}
+
+    /// Resumes from suspend mode. This may only be called after the peripheral has been previously
+    /// suspended.
+    fn resume(&self) {}
+
+    /// Gets information about events and incoming data. Usually called in a loop or from an
+    /// interrupt handler. See the [`PollResult`] struct for more information.
+    fn poll(&self) -> PollResult { PollResult::None }
+
+    /// Simulates a disconnect from the USB bus, causing the host to reset and re-enumerate the
+    /// device.
+    ///
+    /// The default implementation just returns `Unsupported`.
+    ///
+    /// # Errors
+    ///
+    /// * [`Unsupported`](crate::UsbError::Unsupported) - This UsbBus implementation doesn't support
+    ///   simulating a disconnect or it has not been enabled at creation time.
+    fn force_reset(&self) -> Result<()> { Err(UsbError::Unsupported) }
 }
