@@ -639,7 +639,16 @@ pub fn early_init() {
     #[cfg(feature = "usb-test")]
     {
         udma_uart.write("USB basic test...\n\r".as_bytes());
-        let mut usb = cramium_hal::usb::driver::CorigineUsb::new();
+        let csr =
+            cramium_hal::usb::compat::AtomicCsr::new(cramium_hal::usb::utra::CORIGINE_USB_BASE as *mut u32);
+        // safety: this is safe because we are in machine mode, and vaddr/paddr always pairs up
+        let mut usb = unsafe {
+            cramium_hal::usb::driver::CorigineUsb::new(
+                0, // is dummy in no-std
+                cramium_hal::usb::driver::CRG_UDC_MEMBASE,
+                csr,
+            )
+        };
         usb.reset();
         let mut idle_timer = 0;
         let mut vbus_on = false;
