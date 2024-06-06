@@ -368,6 +368,16 @@ impl SwapHal {
                 (self.image_mac_start + (offset / 4096) * size_of::<Tag>()) as u32
             );
         };
+        if crate::VVDBG {
+            println!(
+                "Decrypting nonce {:x?}, aad {:x?}, tag {:x?}, data{:x?}..{:x?}",
+                nonce,
+                &aad[..self.aad_len],
+                &tag,
+                &self.buf.data[..16],
+                &self.buf.data[self.buf.data.len() - 16..]
+            );
+        }
         match self.src_cipher.decrypt_in_place_detached(
             Nonce::from_slice(&nonce),
             &aad[..self.aad_len],

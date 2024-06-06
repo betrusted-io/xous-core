@@ -35,9 +35,8 @@ pub fn early_init() {
     // don't futz with it" is actually the answer that goes to production.
     use utralib::utra::sysctrl;
 
-    use crate::platform::cramium;
     unsafe {
-        // this is MANDATORY for any chip stapbility in real silicon, as the initial
+        // this is MANDATORY for any chip stability in real silicon, as the initial
         // clocks are too unstable to do anything otherwise. However, for the simulation
         // environment, this can (should?) be dropped
         let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
@@ -644,6 +643,7 @@ pub fn early_init() {
         // safety: this is safe because we are in machine mode, and vaddr/paddr always pairs up
         let mut usb = unsafe {
             cramium_hal::usb::driver::CorigineUsb::new(
+                0, // is dummy in no-std
                 0, // is dummy in no-std
                 cramium_hal::usb::driver::CRG_UDC_MEMBASE,
                 csr,
