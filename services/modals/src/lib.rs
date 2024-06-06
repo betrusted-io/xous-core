@@ -370,11 +370,11 @@ impl Modals {
         Ok(())
     }
 
-
     /// Generates progress bar (updated by update_progress, and closed by finish_progress).
     ///
     /// - This item cannot be dismissed/modified by the user.
-    /// - If 'current' is less than 'start' or more than 'end', progress will show 0 or 100 percent, respectively.
+    /// - If 'current' is less than 'start' or more than 'end', progress will show 0 or 100 percent,
+    ///   respectively.
     /// - Title text wraps, burden is on the consumer not to exceed the available screen space.
     ///
     /// <details>
@@ -391,14 +391,7 @@ impl Modals {
     /// let xns = XousNames::new().unwrap();
     /// let modals = Modals::new(&xns).unwrap();
     ///
-    /// modals
-    /// .start_progress(
-    ///     "Progress Quest",
-    ///     0,
-    ///     1000,
-    ///     0,
-    /// )
-    /// .expect("couldn't raise progress bar");
+    /// modals.start_progress("Progress Quest", 0, 1000, 0).expect("couldn't raise progress bar");
     /// ```
     pub fn start_progress(&self, title: &str, start: u32, end: u32, current: u32) -> Result<(), xous::Error> {
         self.lock();
@@ -415,7 +408,6 @@ impl Modals {
         buf.lend(self.conn, Opcode::StartProgress.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         Ok(())
     }
-
 
     /// Human interaction-enabled slider.
     ///
@@ -470,9 +462,24 @@ impl Modals {
         Ok(orig.0)
     }
 
-    /// note that this API is not atomically token-locked, so, someone could mess with the progress bar state
-    /// but, progress updates are meant to be fast and frequent, and generally if a progress bar shows
-    /// something whacky it's not going to affect a security outcome
+    /// Updates progress bar (created by start_progress, and closed by finish_progress).
+    ///
+    /// - This item cannot be dismissed/modified by the user.
+    /// - If you exceed 'end' of the progress bar with an update, it will show 100%.
+    /// - Note that this API is not atomically token-locked, so, someone could mess with the progress bar
+    ///   state. But, progress updates are meant to be fast and frequent, and generally if a progress bar
+    ///   shows something whacky it's not going to affect a security outcome.
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// modals.start_progress("Progress Quest", 0, 1000, 0).expect("couldn't raise progress bar");
+    /// modals.update_progress(10).expect("couldn't update progress bar");
+    /// ```
     pub fn update_progress(&self, current: u32) -> Result<(), xous::Error> {
         match xous::try_send_message(
             self.conn,
@@ -490,10 +497,24 @@ impl Modals {
         Ok(())
     }
 
-    /// Close the progress bar, regardless of the current state
-    /// This is a blocking call, because you want the GAM to revert focus back to your context before you
-    /// continue with any drawing operations. Otherwise, they could be missed as the modal is still covering
-    /// your window.
+    /// Closes progress bar (created by start_progress, and updated by update_progress).
+    ///
+    ///  - Closes the progress bar, regardless of the current state.
+    ///  - This is a blocking call, because you want the GAM to revert focus back to your context before you
+    ///    continue with any drawing operations. Otherwise, they could be missed as the modal is still
+    ///    covering your window.
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// modals.start_progress("Progress Quest", 0, 1000, 0).expect("couldn't raise progress bar");
+    /// modals.update_progress(10).expect("couldn't update progress bar");
+    /// modals.finish_progress().expect("couldn't dismiss progress bar");
+    /// ```
     pub fn finish_progress(&self) -> Result<(), xous::Error> {
         self.lock();
         send_message(
