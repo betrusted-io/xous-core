@@ -9,7 +9,10 @@ use cram_hal_service::api::KeyMap;
 #[cfg(feature = "cramium-soc")]
 use cram_hal_service::keyboard;
 #[cfg(feature = "cramium-soc")]
+use cram_hal_service::trng;
+#[cfg(feature = "cramium-soc")]
 use cramium_hal::usb::driver::CorigineUsb;
+use cramium_hal::usb::driver::CorigineWrapper;
 #[cfg(all(not(feature = "minimal"), any(feature = "renode", feature = "precursor")))]
 use keyboard::KeyMap;
 use num_traits::*;
@@ -85,7 +88,7 @@ enum SerialListenMode {
 
 pub(crate) fn main_hw() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -212,6 +215,8 @@ pub(crate) fn main_hw() -> ! {
     .expect("couldn't allocate IFRAM pages");
     #[cfg(feature = "cramium-soc")]
     let usb = AtomicCsr::new(usb_mapping.as_ptr() as *mut u32);
+    #[cfg(feature = "cramium-soc")]
+    let h_op: usize = Opcode::UsbIrqHandler.to_usize().unwrap();
 
     // Notes:
     //  - Most drivers would `Box()` the hardware management structure to make sure the compiler doesn't move
@@ -223,21 +228,34 @@ pub(crate) fn main_hw() -> ! {
     let usb_fidokbd_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     #[cfg(feature = "cramium-soc")]
     // safety: this is safe because we allocated ifram_range to have the same physical and virtual addresses
-    let usb_fidokbd_dev = unsafe { CorigineUsb::new(cid, ifram_range.as_ptr() as usize, usb.clone()) };
+    let usb_fidokbd_dev = CorigineWrapper::new(unsafe {
+        CorigineUsb::new(cid, h_op, ifram_range.as_ptr() as usize, usb.clone())
+    });
     #[cfg(any(feature = "renode", feature = "precursor"))]
     usb_fidokbd_dev.init();
     #[cfg(any(feature = "renode", feature = "precursor"))]
     let mut usbmgmt = usb_fidokbd_dev.get_iface();
     #[cfg(feature = "cramium-soc")]
     // safety: this is safe because we allocated ifram_range to have the same physical and virtual addresses
-    let mut usbmgmt = unsafe { CorigineUsb::new(cid, ifram_range.as_ptr() as usize, usb.clone()) };
+    let mut usbmgmt = unsafe {
+        CorigineUsb::new(
+            cid,
+            Opcode::UsbIrqHandler.to_usize().unwrap(),
+            ifram_range.as_ptr() as usize,
+            usb.clone(),
+        )
+    };
+    #[cfg(feature = "cramium-soc")]
+    usbmgmt.reset();
     // before doing any allocs, clone a copy of the hardware access structure so we can build a second
     // view into the hardware with only FIDO descriptors
     #[cfg(any(feature = "renode", feature = "precursor"))]
     let usb_fido_dev: SpinalUsbDevice = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     #[cfg(feature = "cramium-soc")]
     // safety: this is safe because we allocated ifram_range to have the same physical and virtual addresses
-    let usb_fido_dev = unsafe { CorigineUsb::new(cid, ifram_range.as_ptr() as usize, usb.clone()) };
+    let usb_fido_dev = CorigineWrapper::new(unsafe {
+        CorigineUsb::new(cid, h_op, ifram_range.as_ptr() as usize, usb.clone())
+    });
     #[cfg(any(feature = "renode", feature = "precursor"))]
     usb_fido_dev.init();
     // do the same thing for mass storage
@@ -245,7 +263,9 @@ pub(crate) fn main_hw() -> ! {
     let ums_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     #[cfg(all(feature = "mass-storage", any(feature = "cramium-soc")))]
     // safety: this is safe because we allocated ifram_range to have the same physical and virtual addresses
-    let ums_dev = unsafe { CorigineUsb::new(cid, ifram_range.as_ptr() as usize, usb.clone()) };
+    let ums_dev = CorigineWrapper::new(unsafe {
+        CorigineUsb::new(cid, h_op, ifram_range.as_ptr() as usize, usb.clone())
+    });
     #[cfg(feature = "mass-storage")]
     #[cfg(any(feature = "renode", feature = "precursor"))]
     ums_dev.init();
@@ -253,12 +273,11 @@ pub(crate) fn main_hw() -> ! {
     let serial_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     #[cfg(feature = "cramium-soc")]
     // safety: this is safe because we allocated ifram_range to have the same physical and virtual addresses
-    let serial_dev = unsafe { CorigineUsb::new(cid, ifram_range.as_ptr() as usize, usb.clone()) };
+    let serial_dev = CorigineWrapper::new(unsafe {
+        CorigineUsb::new(cid, h_op, ifram_range.as_ptr() as usize, usb.clone())
+    });
     #[cfg(any(feature = "renode", feature = "precursor"))]
     serial_dev.init();
-
-    #[cfg(feature = "cramium-soc")]
-    usbmgmt.init(); // for the cramium target, call init only once via management structure
 
     // track which view is visible on the device core
     #[cfg(not(feature = "minimal"))]
@@ -349,7 +368,9 @@ pub(crate) fn main_hw() -> ! {
     let usb_hidv2_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     #[cfg(feature = "cramium-soc")]
     // safety: this is safe because we allocated ifram_range to have the same physical and virtual addresses
-    let usb_hidv2_dev = unsafe { CorigineUsb::new(cid, ifram_range.as_ptr() as usize, usb.clone()) };
+    let usb_hidv2_dev = CorigineWrapper::new(unsafe {
+        CorigineUsb::new(cid, h_op, ifram_range.as_ptr() as usize, usb.clone())
+    });
 
     let hidv2_alloc = UsbBusAllocator::new(usb_hidv2_dev);
 
@@ -360,6 +381,17 @@ pub(crate) fn main_hw() -> ! {
         AppHIDConfig::default(),
         100, // 100 * 64 bytes = 6.4kb, quite the backlog
     );
+
+    #[cfg(feature = "cramium-soc")]
+    {
+        log::info!("Starting USB hardware in 5 seconds...");
+        tt.sleep_ms(5000).ok();
+        log::info!("NOW!");
+        // for the cramium target, call init only once via management structure
+        usbmgmt.init();
+        usbmgmt.start();
+        log::info!("HW started...");
+    }
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
@@ -484,6 +516,7 @@ pub(crate) fn main_hw() -> ! {
         }
     });
 
+    log::info!("starting main loop");
     loop {
         let mut msg = xous::receive_message(usbdev_sid).unwrap();
         let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());

@@ -21,7 +21,10 @@ mod spinal_udc;
 use packed_struct::PackedStructSlice;
 #[cfg(any(feature = "precursor", feature = "renode"))]
 use spinal_udc::*;
-#[cfg(all(any(feature = "precursor", feature = "renode", feature = "corigine"), feature = "mass-storage"))]
+#[cfg(all(
+    any(feature = "precursor", feature = "renode", feature = "cramium-soc"),
+    feature = "mass-storage"
+))]
 mod apps_block_device;
 
 #[cfg(any(feature = "precursor", feature = "renode", feature = "cramium-soc"))]
