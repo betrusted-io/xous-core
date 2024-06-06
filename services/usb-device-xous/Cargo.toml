@@ -20,7 +20,7 @@ rkyv = { version = "0.4.3", default-features = false, features = [
     "const_generics",
 ] }
 susres = { package = "xous-api-susres", version = "0.9.57" }
-modals = { path = "../modals" }
+modals = { path = "../modals", optional = true }
 keyboard = { path = "../keyboard", features = ["inject-api"], optional = true }
 bitfield = "0.13.2"
 vcell = "0.1.3"
@@ -60,9 +60,9 @@ rand = "0.8.5"
 rand_chacha = "0.3.1"
 
 [features]
-precursor = ["utralib/precursor", "utralib/std", "keyboard"]
-hosted = ["utralib/hosted", "utralib/std", "keyboard"]
-renode = ["utralib/renode", "utralib/std", "keyboard"]
+precursor = ["utralib/precursor", "utralib/std", "keyboard", "modals"]
+hosted = ["utralib/hosted", "utralib/std", "keyboard", "modals"]
+renode = ["utralib/renode", "utralib/std", "keyboard", "modals"]
 cramium-soc = [
     "utralib/cramium-soc",
     "utralib/std",
