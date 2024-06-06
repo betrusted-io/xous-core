@@ -1,6 +1,10 @@
 use core::convert::TryFrom;
 use core::mem::size_of;
+#[cfg(feature = "std")]
+use core::sync::atomic::AtomicBool;
 use core::sync::atomic::{compiler_fence, AtomicPtr, Ordering};
+#[cfg(feature = "std")]
+use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "std")]
 use usb_device::bus::PollResult;
@@ -22,6 +26,8 @@ const CRG_EP_NUM: usize = 4;
 const CRG_TD_RING_SIZE: usize = 1280;
 const CRG_UDC_MAX_BURST: usize = 15;
 const CRG_UDC_ISO_INTERVAL: usize = 3;
+
+const CRG_INT_TARGET: u32 = 0;
 
 /// allocate 0x100 bytes for event ring segment table, each table 0x40 bytes
 const CRG_UDC_ERSTSIZE: usize = 0x100;
@@ -48,6 +54,21 @@ const CRG_UDC_EP0_TR_OFFSET: usize = CRG_UDC_EPCX_OFFSET + CRG_UDC_EPCXSIZE;
 const CRG_UDC_EP_TR_OFFSET: usize = CRG_UDC_EP0_TR_OFFSET + CRG_UDC_EP0_TRSIZE;
 const CRG_UDC_EP0_BUF_OFFSET: usize = CRG_UDC_EP_TR_OFFSET + CRG_UDC_EP_TRSIZE;
 const CRG_UDC_APP_BUFOFFSET: usize = CRG_UDC_EP0_BUF_OFFSET + CRG_UDC_EP0_REQBUFSIZE;
+
+#[cfg(feature = "std")]
+static INTERRUPT_INIT_DONE: AtomicBool = AtomicBool::new(false);
+
+#[cfg(feature = "std")]
+fn handle_usb(_irq_no: usize, arg: *mut usize) {
+    let usb = unsafe { &mut *(arg as *mut CorigineUsb) };
+    let pending = usb.csr.r(utralib::utra::irqarray1::EV_PENDING);
+
+    // actual interrupt handling is done in userspace, this just triggers the routine
+
+    usb.csr.wo(utralib::utra::irqarray1::EV_PENDING, pending);
+
+    xous::try_send_message(usb.conn, xous::Message::new_scalar(usb.opcode, 0, 0, 0, 0)).ok();
+}
 
 // total size 0x15300
 #[derive(Debug)]
@@ -291,6 +312,8 @@ impl TransferTrbS {
         self.dw2 = 0;
         self.set_trb_type(TrbType::Link);
         self.dw3 = (self.dw3 & !0x2) | if toggle { 2 } else { 0 };
+        // also set interrupt enable
+        self.dw3 = self.dw3 | 0x20; // set INTR_ON_COMPLETION
         compiler_fence(Ordering::SeqCst);
     }
 
@@ -313,7 +336,8 @@ impl TransferTrbS {
         self.dw3 = (self.dw3 & !0x00080000) | if stall { 1 << 19 } else { 0 }; // STATUS_STAGE_TRB_STALL
         self.dw3 = (self.dw3 & !0x00100000) | if set_addr { 1 << 20 } else { 0 }; // STATUS_STAGE_TRB_SET_ADDR
         compiler_fence(Ordering::SeqCst);
-        println!("trb_status dw2 {:x} dw3 {:x}", self.dw2, self.dw3);
+        #[cfg(feature = "std")]
+        log::info!("trb_status dw2 {:x} dw3 {:x}", self.dw2, self.dw3);
     }
 }
 
@@ -493,6 +517,8 @@ pub struct CorigineUsb {
     magic_page: &'static mut [u32],
     #[cfg(feature = "std")]
     conn: xous::CID,
+    #[cfg(feature = "std")]
+    opcode: usize,
 
     udc_ep: [UdcEp; CRG_EP_NUM + 2],
     ep_cx: BufferInfo,
@@ -538,7 +564,7 @@ impl CorigineUsb {
     /// could not be guaranteed to the same range, the driver would need to be written with a
     /// de-virtualization/re-virtualization layer every time we extract data records from the device's mapped
     /// RAM.
-    pub unsafe fn new(_conn: u32, ifram_base_ptr: usize, csr: AtomicCsr<u32>) -> Self {
+    pub unsafe fn new(_conn: u32, _opcode: usize, ifram_base_ptr: usize, csr: AtomicCsr<u32>) -> Self {
         let magic_page = unsafe { core::slice::from_raw_parts_mut(csr.base() as *mut u32, 1024) };
 
         Self {
@@ -546,6 +572,8 @@ impl CorigineUsb {
             csr,
             #[cfg(feature = "std")]
             conn: _conn,
+            #[cfg(feature = "std")]
+            opcode: _opcode,
             magic_page,
             // is there a way to make this less shitty?
             udc_ep: [
@@ -672,7 +700,10 @@ impl CorigineUsb {
         compiler_fence(Ordering::SeqCst);
         self.csr.wo(DEVCONFIG, 0x80 | CRG_UDC_CFG0_MAXSPEED_FS);
         compiler_fence(Ordering::SeqCst);
+        #[cfg(not(feature = "std"))]
         println!("config0: {:x}", self.csr.r(DEVCONFIG));
+        #[cfg(feature = "std")]
+        log::info!("config0: {:x}", self.csr.r(DEVCONFIG));
 
         self.csr.wo(
             EVENTCONFIG,
@@ -717,7 +748,6 @@ impl CorigineUsb {
             event_ring.fill(0);
 
             udc_event.event_ring.len = event_ring.len() as u32;
-            // TODO: V->P
             udc_event.event_ring.vaddr = AtomicPtr::new(event_ring.as_mut_ptr()); // EventTrbS ??
             udc_event.evt_dq_pt =
                 AtomicPtr::new(udc_event.event_ring.vaddr.load(Ordering::SeqCst) as *mut EventTrbS);
@@ -749,6 +779,9 @@ impl CorigineUsb {
         }
 
         // init_device_context
+        #[cfg(feature = "std")]
+        log::info!("Begin init_device_context");
+        #[cfg(not(feature = "std"))]
         println!("Begin init_device_context");
         // init device context and ep context, refer to 7.6.2
         self.ep_cx.len = (CRG_EP_NUM * size_of::<EpCxS>()) as u32;
@@ -758,8 +791,36 @@ impl CorigineUsb {
         self.csr.wo(DCBAPLO, self.ep_cx.vaddr.load(Ordering::SeqCst) as u32);
         self.csr.wo(DCBAPHI, 0);
         compiler_fence(Ordering::SeqCst);
-        println!(" dcbaplo: {:x}", self.csr.r(DCBAPLO));
-        println!(" dcbaphi: {:x}", self.csr.r(DCBAPHI));
+        #[cfg(not(feature = "std"))]
+        {
+            println!(" dcbaplo: {:x}", self.csr.r(DCBAPLO));
+            println!(" dcbaphi: {:x}", self.csr.r(DCBAPHI));
+        }
+        #[cfg(feature = "std")]
+        {
+            log::info!(" dcbaplo: {:x}", self.csr.r(DCBAPLO));
+            log::info!(" dcbaphi: {:x}", self.csr.r(DCBAPHI));
+        }
+
+        #[cfg(feature = "std")]
+        if !INTERRUPT_INIT_DONE.fetch_or(true, Ordering::SeqCst) {
+            xous::claim_interrupt(
+                utralib::utra::irqarray1::IRQARRAY1_IRQ,
+                handle_usb,
+                self as *const CorigineUsb as *mut usize,
+            )
+            .expect("couldn't claim irq");
+            let p = self.csr.r(utralib::utra::irqarray1::EV_PENDING);
+            self.csr.wo(utralib::utra::irqarray1::EV_PENDING, p); // clear in case it's pending for some reason
+            self.csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
+
+            // enable interrupts in corigine core
+            self.csr.rmwf(USBCMD_INT_ENABLE, 1);
+            // enable interruptor 0 via IMAN (we only map one in the current UTRA - if we need more
+            // interruptors we have to update utra)
+            self.csr.rmwf(IMAN_IE, 1);
+            log::info!("interrupt claimed");
+        }
 
         // initial ep0 transfer ring
         self.init_ep0();
@@ -770,11 +831,13 @@ impl CorigineUsb {
         // disable 2.0 LPM
         self.csr.wo(U2PORTPMSC, 0);
 
-        println!("USB init done");
+        #[cfg(feature = "std")]
+        log::info!("USB init done");
     }
 
     pub fn init_ep0(&mut self) {
-        println!("Begin init_ep0");
+        #[cfg(feature = "std")]
+        log::info!("Begin init_ep0");
         let udc_ep = &mut self.udc_ep[0];
 
         udc_ep.ep_num = 0;
@@ -791,11 +854,9 @@ impl CorigineUsb {
         for e in ep0_tr_ring.iter_mut() {
             e.zeroize();
         }
-        // TODO: V->P
         udc_ep.tran_ring_info.vaddr = AtomicPtr::new(ep0_tr_ring.as_mut_ptr() as *mut u8); // &[TransferTrbS] ??
         udc_ep.tran_ring_info.len = (ep0_tr_ring.len() * size_of::<TransferTrbS>()) as u32;
         udc_ep.first_trb = AtomicPtr::new((&mut ep0_tr_ring[0]) as *mut TransferTrbS);
-        // TODO: P->V
         udc_ep.last_trb =
             AtomicPtr::new((&ep0_tr_ring[ep0_tr_ring.len() - 1]) as *const TransferTrbS as *mut TransferTrbS);
 
@@ -812,14 +873,21 @@ impl CorigineUsb {
             .ms(CMDPARA0_CMD0_INIT_EP0_DQPTRLO, udc_ep.tran_ring_info.vaddr.load(Ordering::SeqCst) as u32)
             | self.csr.ms(CMDPARA0_CMD0_INIT_EP0_DCS, udc_ep.pcs as u32);
         let cmd_param1: u32 = 0;
-        println!("ep0 ring dma addr = {:x}", udc_ep.tran_ring_info.vaddr.load(Ordering::SeqCst) as usize);
-        println!("INIT EP0 CMD par0 = {:x} par1 = {:x}", cmd_param0, cmd_param1);
+        #[cfg(feature = "std")]
+        {
+            log::info!(
+                "ep0 ring dma addr = {:x}",
+                udc_ep.tran_ring_info.vaddr.load(Ordering::SeqCst) as usize
+            );
+            log::info!("INIT EP0 CMD par0 = {:x} par1 = {:x}", cmd_param0, cmd_param1);
+        }
 
         self.issue_command(CmdType::InitEp0, cmd_param0, cmd_param1)
             .expect("couldn't issue ep0 init command");
 
         self.ep0_buf = AtomicPtr::new((self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET) as *mut u8);
-        println!("End init_ep0");
+        #[cfg(feature = "std")]
+        log::info!("End init_ep0");
     }
 
     pub fn issue_command(&mut self, cmd: CmdType, p0: u32, p1: u32) -> core::result::Result<(), Error> {
@@ -878,7 +946,8 @@ impl CorigineUsb {
         if (tmp & (self.csr.ms(IMAN_IE, 1) | self.csr.ms(IMAN_IP, 1)))
             != (self.csr.ms(IMAN_IE, 1) | self.csr.ms(IMAN_IP, 1))
         {
-            println!("uicr iman[{}] = {:x}", index, tmp);
+            #[cfg(feature = "std")]
+            log::info!("uicr iman[{}] = {:x}", index, tmp);
         }
         // clear IP
         uicr[index].iman |= self.csr.ms(IMAN_IP, 1);
@@ -903,7 +972,8 @@ impl CorigineUsb {
             if udc_event.evt_dq_pt.load(Ordering::SeqCst)
                 == udc_event.evt_seg0_last_trb.load(Ordering::SeqCst)
             {
-                println!(" evt_last_trb {:x}", udc_event.evt_seg0_last_trb.load(Ordering::SeqCst) as usize);
+                #[cfg(feature = "std")]
+                log::info!(" evt_last_trb {:x}", udc_event.evt_seg0_last_trb.load(Ordering::SeqCst) as usize);
                 udc_event.ccs = if udc_event.ccs != 0 { 0 } else { 1 };
                 // does this...go to null to end the transfer??
                 udc_event.evt_dq_pt =
@@ -931,22 +1001,34 @@ impl CorigineUsb {
                 self.print_status(portsc_val);
                 let cs = (portsc_val & self.csr.ms(PORTSC_CCS, 1)) != 0;
                 let pp = (portsc_val & self.csr.ms(PORTSC_PP, 1)) != 0;
-
-                println!("  {:x} {:x} PORT_STATUS_CHANGE", portsc_val, event_trb.dw3);
+                #[cfg(feature = "std")]
+                log::info!("  {:x} {:x} PORT_STATUS_CHANGE", portsc_val, event_trb.dw3);
 
                 if portsc_val & self.csr.ms(PORTSC_CSC, 1) != 0 {
                     if cs {
+                        #[cfg(not(feature = "std"))]
                         println!("  Port connection");
+                        #[cfg(feature = "std")]
+                        log::info!("  Port connection");
                     } else {
+                        #[cfg(not(feature = "std"))]
                         println!("  Port disconnection");
+                        #[cfg(feature = "std")]
+                        log::info!("  Port disconnection");
                     }
                 }
 
                 if portsc_val & self.csr.ms(PORTSC_PPC, 1) != 0 {
                     if pp {
+                        #[cfg(not(feature = "std"))]
                         println!("  Power present");
+                        #[cfg(feature = "std")]
+                        log::info!("  Power present");
                     } else {
+                        #[cfg(not(feature = "std"))]
                         println!("  Power not present");
+                        #[cfg(feature = "std")]
+                        log::info!("  Power not present");
                     }
                 }
 
@@ -954,26 +1036,41 @@ impl CorigineUsb {
                     && (portsc_val & self.csr.ms(PORTSC_PPC, 1) != 0)
                 {
                     if cs && pp {
+                        #[cfg(not(feature = "std"))]
                         println!("  Cable connect and power present");
+                        #[cfg(feature = "std")]
+                        log::info!("  Cable connect and power present");
                         self.update_current_speed();
                     }
                 }
 
                 if (portsc_val & self.csr.ms(PORTSC_PRC, 1)) != 0 {
                     if portsc_val & self.csr.ms(PORTSC_PR, 1) != 0 {
+                        #[cfg(not(feature = "std"))]
                         println!("  In port reset process");
+                        #[cfg(feature = "std")]
+                        log::info!("  In port reset process");
                     } else {
+                        #[cfg(not(feature = "std"))]
                         println!("  Port reset done");
+                        #[cfg(feature = "std")]
+                        log::info!("  Port reset done");
                         self.update_current_speed();
                     }
                 }
 
                 if (portsc_val & self.csr.ms(PORTSC_PLC, 1)) != 0 {
+                    #[cfg(not(feature = "std"))]
                     println!("  Port link state change: {:?}", PortLinkState::from_portsc(portsc_val));
+                    #[cfg(feature = "std")]
+                    log::info!("  Port link state change: {:?}", PortLinkState::from_portsc(portsc_val));
                 }
 
                 if !cs && !pp {
+                    #[cfg(not(feature = "std"))]
                     println!("  cable disconnect and power not present");
+                    #[cfg(feature = "std")]
+                    log::info!("  cable disconnect and power not present");
                 }
 
                 self.csr.rmwf(EVENTCONFIG_SETUP_ENABLE, 1);
@@ -982,7 +1079,6 @@ impl CorigineUsb {
                 let comp_code = CompletionCode::try_from(event_trb.dw2).expect("Invalid completion code");
 
                 // update the dequeue pointer
-                // Todo: physical to virtual address translation so we can check the TRB type.
                 let deq_pt = unsafe {
                     (event_trb.dw0 as *mut TransferTrbS).add(1).as_mut().expect("Couldn't deref ptr")
                 };
@@ -991,7 +1087,8 @@ impl CorigineUsb {
                 } else {
                     udc_ep.deq_pt = AtomicPtr::new(deq_pt as *mut TransferTrbS);
                 }
-                println!("EventTransfer: comp_code {:?}, PEI {}", comp_code, pei);
+                #[cfg(feature = "std")]
+                log::info!("EventTransfer: comp_code {:?}, PEI {}", comp_code, pei);
 
                 if pei == 0 {
                     self.ep0_xfer_complete(event_trb);
@@ -1006,10 +1103,12 @@ impl CorigineUsb {
                 }
             }
             TrbType::SetupPkt => {
-                println!("  handle_setup_pkt");
+                #[cfg(feature = "std")]
+                log::info!("  handle_setup_pkt");
                 self.setup.copy_from_slice(&event_trb.get_raw_setup());
                 self.setup_tag = event_trb.get_setup_tag();
-                println!(" setup_pkt = {:x?}, setup_tag = {:x}", self.setup, self.setup_tag);
+                #[cfg(feature = "std")]
+                log::info!(" setup_pkt = {:x?}, setup_tag = {:x}", self.setup, self.setup_tag);
 
                 println!("setup handler: placeholder TODO");
             }
@@ -1071,14 +1170,12 @@ impl CorigineUsb {
             .expect("couldn't issue command");
 
         let udc_ep = &mut self.udc_ep[0];
-        // TODO: P->A
         let enq_pt =
             unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
         enq_pt.set_trb_status(udc_ep.pcs, true, false, self.setup_tag, target, false);
 
         // TODO: fix raw pointer manips with something more sane?
         udc_ep.enq_pt = AtomicPtr::new(unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).add(1) });
-        // TODO: P->A
         let enq_pt =
             unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
         if enq_pt.get_trb_type() == TrbType::Link {
@@ -1130,16 +1227,36 @@ impl CorigineUsb {
             "Resume (USB2)",     // 15 -
         ];
         let speeds = ["Invalid", "FS", "Invalid", "HS", "SS", "SSP", "Unknown", "Unknown"];
-        println!("Status: {:x}", status);
-        print!("   ");
-        for &(field, name) in bitflags.iter() {
-            if (status & 1 << field) != 0 {
-                print!("{} ", name);
+        #[cfg(not(feature = "std"))]
+        {
+            println!("Status: {:x}", status);
+            print!("   ");
+            for &(field, name) in bitflags.iter() {
+                if (status & 1 << field) != 0 {
+                    print!("{} ", name);
+                }
             }
+            println!("");
+            println!("   Speed: {}", speeds[((status >> 10) & 0x7) as usize]);
+            println!("   PLS: {}", plses[((status >> 5) & 0xF) as usize]);
         }
-        println!("");
-        println!("   Speed: {}", speeds[((status >> 10) & 0x7) as usize]);
-        println!("   PLS: {}", plses[((status >> 5) & 0xF) as usize]);
+        #[cfg(feature = "std")]
+        {
+            let mut s = String::new();
+            s.push_str(&format!("\n\rStatus: {:x}\n\r", status));
+            s.push_str("   ");
+            for &(field, name) in bitflags.iter() {
+                if (status & 1 << field) != 0 {
+                    s.push_str(&format!("{} ", name));
+                }
+            }
+            s.push_str(&format!(
+                "\n\r   Speed: {}\n\r   PLS: {}\n\r",
+                speeds[((status >> 10) & 0x7) as usize],
+                plses[((status >> 5) & 0xF) as usize]
+            ));
+            log::info!("{}", s);
+        }
     }
 
     pub fn start(&mut self) {
@@ -1212,7 +1329,16 @@ impl CorigineUsb {
 }
 
 #[cfg(feature = "std")]
-impl UsbBus for CorigineUsb {
+pub struct CorigineWrapper {
+    pub hw: Arc<Mutex<CorigineUsb>>,
+}
+#[cfg(feature = "std")]
+impl CorigineWrapper {
+    pub fn new(obj: CorigineUsb) -> Self { Self { hw: Arc::new(Mutex::new(obj)) } }
+}
+
+#[cfg(feature = "std")]
+impl UsbBus for CorigineWrapper {
     /// Indicates that `set_device_address` must be called before accepting the corresponding
     /// control transfer, not after.
     ///
@@ -1262,7 +1388,7 @@ impl UsbBus for CorigineUsb {
     fn reset(&self) {}
 
     /// Sets the device USB address to `addr`.
-    fn set_device_address(&self, addr: u8) {}
+    fn set_device_address(&self, addr: u8) { self.hw.lock().unwrap().set_addr(addr, CRG_INT_TARGET); }
 
     /// Writes a single packet of data to the specified endpoint and returns number of bytes
     /// actually written.
@@ -1304,10 +1430,10 @@ impl UsbBus for CorigineUsb {
 
     /// Sets or clears the STALL condition for an endpoint. If the endpoint is an OUT endpoint, it
     /// should be prepared to receive data again.
-    fn set_stalled(&self, ep_addr: EndpointAddress, stalled: bool) {}
+    fn set_stalled(&self, _ep_addr: EndpointAddress, _stalled: bool) {}
 
     /// Gets whether the STALL condition is set for an endpoint.
-    fn is_stalled(&self, ep_addr: EndpointAddress) -> bool { false }
+    fn is_stalled(&self, _ep_addr: EndpointAddress) -> bool { false }
 
     /// Instruct EP0 to configure itself with an OUT descriptor, so that it may receive a STATUS
     /// update during configuration. This is for devices that support an EP0 which can only either
@@ -1328,7 +1454,14 @@ impl UsbBus for CorigineUsb {
 
     /// Gets information about events and incoming data. Usually called in a loop or from an
     /// interrupt handler. See the [`PollResult`] struct for more information.
-    fn poll(&self) -> PollResult { PollResult::None }
+    fn poll(&self) -> PollResult {
+        match self.hw.lock().unwrap().udc_handle_interrupt() {
+            CorigineEvent::Interrupt => PollResult::None, /* PollResult::Data { ep_out: (), */
+            // ep_in_complete: (), ep_setup: () },
+            CorigineEvent::None => PollResult::None,
+            CorigineEvent::Error => PollResult::Reset,
+        }
+    }
 
     /// Simulates a disconnect from the USB bus, causing the host to reset and re-enumerate the
     /// device.
