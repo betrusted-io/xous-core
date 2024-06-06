@@ -8,6 +8,7 @@ use std::sync::Arc;
 use cram_hal_service::api::KeyMap;
 #[cfg(feature = "cramium-soc")]
 use cram_hal_service::keyboard;
+#[cfg(feature = "cramium-soc")]
 use cramium_hal::usb::driver::CorigineUsb;
 #[cfg(all(not(feature = "minimal"), any(feature = "renode", feature = "precursor")))]
 use keyboard::KeyMap;
@@ -21,6 +22,7 @@ use usb_device_xous::UsbDeviceType;
 use usbd_serial::SerialPort;
 #[cfg(any(feature = "precursor", feature = "renode"))]
 use utralib::generated::*;
+#[cfg(feature = "cramium-soc")]
 use utralib::AtomicCsr;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
