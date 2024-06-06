@@ -53,15 +53,12 @@ mod platform;
 use core::fmt::Write;
 use std::collections::BinaryHeap;
 use std::fmt::Debug;
-use std::thread;
-use std::thread::sleep;
-use std::time::Duration;
 
 use debug::*;
 use loader::swap::{SwapAlloc, SwapSpec, SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
 use num_traits::*;
 use platform::{SwapHal, PAGE_SIZE};
-use xous::{MemoryFlags, MemoryRange, Message, Result, CID, PID, SID};
+use xous::{MemoryFlags, MemoryRange, Result, CID, PID, SID};
 
 /// Target of pages to free in case of a Hard OOM. Note that the PAGE_TARGET numbers
 /// are imprecise, in that there is a chance that one target is active during another
@@ -128,6 +125,7 @@ pub enum Opcode {
     /// Test messages
     #[cfg(feature = "swap-userspace-testing")]
     Test0,
+    None,
 }
 
 pub struct PtPage {
@@ -692,23 +690,26 @@ fn main() {
 
     // This thread is for testing
     #[cfg(feature = "swap-userspace-testing")]
-    thread::spawn({
+    std::thread::spawn({
         let conn = conn.clone();
         move || {
             loop {
-                sleep(Duration::from_millis(10_200));
-                xous::send_message(conn, Message::new_scalar(Opcode::Test0.to_usize().unwrap(), 0, 0, 0, 0))
-                    .ok();
+                std::thread::sleep(std::time::Duration::from_millis(10_200));
+                xous::send_message(
+                    conn,
+                    xous::Message::new_scalar(Opcode::Test0.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
             }
         }
     });
 
     // This thread pings the free memory level and will try to clear memory to avoid OOM
     #[cfg(feature = "oom-doom")]
-    thread::spawn({
+    std::thread::spawn({
         move || {
             loop {
-                sleep(Duration::from_millis(OOM_DOOM_POLL_INTERVAL_MS));
+                std::thread::sleep(std::time::Duration::from_millis(OOM_DOOM_POLL_INTERVAL_MS));
                 if get_free_pages() < OOM_DOOM_PAGE_TARGET {
                     sss.inner.as_mut().unwrap().pages_to_free = OOM_DOOM_PAGE_TARGET;
                     xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::ClearMemoryNow as usize, 0, 0, 0, 0, 0, 0))
