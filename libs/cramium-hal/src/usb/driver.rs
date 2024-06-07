@@ -524,8 +524,6 @@ pub struct CorigineUsb {
     ifram_base_ptr: usize,
     pub csr: AtomicCsr<u32>,
     irq_csr: AtomicCsr<u32>,
-    // Because the init routine requires magic pokes
-    magic_page: &'static mut [u32],
     #[cfg(feature = "std")]
     conn: xous::CID,
     #[cfg(feature = "std")]
@@ -541,8 +539,7 @@ pub struct CorigineUsb {
     sel_value: SelValue,
 
     setup_status: u8,
-
-    setup: [u8; 8],
+    setup: Option<[u8; 8]>,
     setup_tag: u8,
 
     speed: UsbDeviceSpeed,
@@ -560,7 +557,6 @@ pub struct CorigineUsb {
     feature_u1_enabled: u32,
     feature_u2_enabled: u32,
 
-    setup_tag_mismatch_found: u32,
     portsc_on_reconnecting: u32,
     max_speed: u32,
 }
@@ -582,8 +578,6 @@ impl CorigineUsb {
         csr: AtomicCsr<u32>,
         irq_csr: AtomicCsr<u32>,
     ) -> Self {
-        let magic_page = unsafe { core::slice::from_raw_parts_mut(csr.base() as *mut u32, 1024) };
-
         Self {
             ifram_base_ptr,
             csr,
@@ -592,7 +586,6 @@ impl CorigineUsb {
             conn: _conn,
             #[cfg(feature = "std")]
             opcode: _opcode,
-            magic_page,
             // is there a way to make this less shitty?
             udc_ep: [
                 UdcEp::default(),
@@ -607,8 +600,8 @@ impl CorigineUsb {
             udc_event: [UdcEvent::default(); CRG_EVENT_RING_NUM],
             sel_value: SelValue::default(),
             setup_status: 0,
-            setup: [0u8; 8],
             setup_tag: 0,
+            setup: None,
             speed: UsbDeviceSpeed::Unknown,
             device_state: UsbDeviceState::NotAttached,
             resume_state: 0,
@@ -620,19 +613,29 @@ impl CorigineUsb {
             u2_rwe: 0,
             feature_u1_enabled: 0,
             feature_u2_enabled: 0,
-            setup_tag_mismatch_found: 0,
             portsc_on_reconnecting: 0,
             max_speed: 0,
         }
     }
 
     pub fn reset(&mut self) {
-        println!("devcap: {:x}", self.csr.r(DEVCAP));
-        println!("max speed: {:x}", self.csr.rf(DEVCONFIG_MAX_SPEED));
-        println!("usb3 disable: {:x}", self.csr.rf(DEVCONFIG_USB3_DISABLE_COUNT));
+        #[cfg(not(feature = "std"))]
+        {
+            println!("devcap: {:x}", self.csr.r(DEVCAP));
+            println!("max speed: {:x}", self.csr.rf(DEVCONFIG_MAX_SPEED));
+            println!("usb3 disable: {:x}", self.csr.rf(DEVCONFIG_USB3_DISABLE_COUNT));
+        }
+        #[cfg(feature = "std")]
+        {
+            log::info!("devcap: {:x}", self.csr.r(DEVCAP));
+            log::info!("max speed: {:x}", self.csr.rf(DEVCONFIG_MAX_SPEED));
+            log::info!("usb3 disbale: {:x}", self.csr.rf(DEVCONFIG_USB3_DISABLE_COUNT));
+        }
 
         // NOTE: the indices are byte-addressed, and so need to be divided by size_of::<u32>()
-        const MAGIC_TABLE: [(usize, u32); 17] = [
+        #[cfg(feature = "magic_sim")]
+        const MAGIC_TABLE: [(usize, u32); 18] = [
+            (0x0fc, 0x00000001),
             (0x084, 0x01401388),
             (0x0f4, 0x0000f023),
             (0x088, 0x3b066409),
@@ -652,8 +655,28 @@ impl CorigineUsb {
             (0x110, 0x00000000),
         ];
 
+        const MAGIC_TABLE: [(usize, u32); 17] = [
+            (0x0fc, 0x00000001),
+            (0x084, 0x01401388),
+            (0x0f4, 0x0000f023),
+            (0x088, 0x06060a09),
+            (0x08c, 0x0d020509),
+            (0x090, 0x04050603),
+            (0x094, 0x0303000a),
+            (0x098, 0x05131304),
+            (0x09c, 0x06070d15),
+            (0x0a0, 0x14160e0b),
+            (0x0a4, 0x18060408),
+            (0x0a8, 0x4b120c0f),
+            (0x0ac, 0x03640d05),
+            (0x0b0, 0x08080d09),
+            (0x0b4, 0x20060914),
+            (0x0b8, 0x040a0e0f),
+            (0x0bc, 0x44080c09),
+        ];
+
         for (offset, magic) in MAGIC_TABLE {
-            self.magic_page[offset / size_of::<u32>()] = magic;
+            unsafe { self.csr.base().add(offset / size_of::<u32>()).write_volatile(magic) };
         }
 
         // udc reset
@@ -663,50 +686,27 @@ impl CorigineUsb {
         while self.csr.rf(USBCMD_SOFT_RESET) != 0 {
             // wait for reset to finish
         }
-        println!("\rUSB reset done");
+
+        // a dummy readback is in the reference code
+        let mut dummy = 0;
+        for i in 0..72 {
+            dummy += unsafe { self.csr.base().add(i).read_volatile() };
+        }
+        println!("USB reset done: {:x}", dummy);
     }
 
     pub fn init(&mut self) {
-        // NOTE: the indices are byte-addressed, and so need to be divided by size_of::<u32>()
-        const MAGIC_TABLE: [(usize, u32); 17] = [
-            (0x084, 0x01401388),
-            (0x0f4, 0x0000f023),
-            (0x088, 0x3b066409),
-            (0x08c, 0x0d020407),
-            (0x090, 0x04055050),
-            (0x094, 0x03030a07),
-            (0x098, 0x05131304),
-            (0x09c, 0x3b4b0d15),
-            (0x0a0, 0x14168c6e),
-            (0x0a4, 0x18060408),
-            (0x0a8, 0x4b120c0f),
-            (0x0ac, 0x03190d05),
-            (0x0b0, 0x08080d09),
-            (0x0b4, 0x20060b03),
-            (0x0b8, 0x040a8c0e),
-            (0x0bc, 0x44087d5a),
-            (0x110, 0x00000000),
-        ];
-
-        for (offset, magic) in MAGIC_TABLE {
-            self.magic_page[offset / size_of::<u32>()] = magic;
-        }
-
-        // stop controller and disable interrupt
         self.csr.rmwf(USBCMD_INT_ENABLE, 0);
         self.csr.rmwf(USBCMD_RUN_STOP, 0);
 
-        // udc reset
         self.csr.rmwf(USBCMD_SOFT_RESET, 1);
-        compiler_fence(Ordering::SeqCst);
 
         while self.csr.rf(USBCMD_SOFT_RESET) != 0 {
             // wait for reset to finish
         }
 
-        compiler_fence(Ordering::SeqCst);
         self.csr.wo(DEVCONFIG, 0x80 | CRG_UDC_CFG0_MAXSPEED_FS);
-        compiler_fence(Ordering::SeqCst);
+
         #[cfg(not(feature = "std"))]
         println!("config0: {:x}", self.csr.r(DEVCONFIG));
         #[cfg(feature = "std")]
@@ -721,7 +721,6 @@ impl CorigineUsb {
                 | self.csr.ms(EVENTCONFIG_PLC_ENABLE, 1)
                 | self.csr.ms(EVENTCONFIG_CEC_ENABLE, 1),
         );
-        compiler_fence(Ordering::SeqCst);
 
         // event_ring_init
         // init event ring 0
@@ -870,6 +869,11 @@ impl CorigineUsb {
             );
             log::info!("INIT EP0 CMD par0 = {:x} par1 = {:x}", cmd_param0, cmd_param1);
         }
+        #[cfg(not(feature = "std"))]
+        {
+            println!("ep0 ring dma addr = {:x}", udc_ep.tran_ring_info.vaddr.load(Ordering::SeqCst) as usize);
+            println!("INIT EP0 CMD par0 = {:x} par1 = {:x}", cmd_param0, cmd_param1);
+        }
 
         self.issue_command(CmdType::InitEp0, cmd_param0, cmd_param1)
             .expect("couldn't issue ep0 init command");
@@ -909,17 +913,22 @@ impl CorigineUsb {
     pub fn udc_handle_interrupt(&mut self) -> CrgEvent {
         let mut ret = CrgEvent::None;
         let status = self.csr.r(USBSTS);
+        self.print_status(status);
         if (status & self.csr.ms(USBSTS_SYSTEM_ERR, 1)) != 0 {
             println!("System error");
             self.csr.wfo(USBSTS_SYSTEM_ERR, 1);
             println!("USBCMD: {:x}", self.csr.r(USBCMD));
         }
         if (status & self.csr.ms(USBSTS_EINT, 1)) != 0 {
-            // println!("USB Event");
             // this overwrites any previous error reporting. Seems bad, but
             // it's exactly what the reference code does.
             self.csr.wfo(USBSTS_EINT, 1);
             ret = self.process_event_ring(0); // there is only one event ring
+        }
+        #[cfg(feature = "std")]
+        log::info!("uhi IMAN {:x}", self.csr.r(IMAN));
+        if self.csr.rf(IMAN_IP) != 0 {
+            self.csr.rmwf(IMAN_IP, 1);
         }
         self.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
         // re-enable interrupts
@@ -933,7 +942,7 @@ impl CorigineUsb {
             != (self.csr.ms(IMAN_IE, 1) | self.csr.ms(IMAN_IP, 1))
         {
             #[cfg(feature = "std")]
-            log::info!("IMAN {:x}", tmp);
+            log::info!("per IMAN {:x}", tmp);
         }
         // clear IP
         self.csr.rmwf(IMAN_IP, 1);
@@ -1102,12 +1111,12 @@ impl CorigineUsb {
             TrbType::SetupPkt => {
                 #[cfg(feature = "std")]
                 log::info!("  handle_setup_pkt");
-                self.setup.copy_from_slice(&event_trb.get_raw_setup());
+                let mut setup_storage = [0u8; 8];
+                setup_storage.copy_from_slice(&event_trb.get_raw_setup());
+                self.setup = Some(setup_storage);
                 self.setup_tag = event_trb.get_setup_tag();
-                #[cfg(feature = "std")]
-                log::info!(" setup_pkt = {:x?}, setup_tag = {:x}", self.setup, self.setup_tag);
 
-                println!("setup handler: placeholder TODO");
+                ret = CrgEvent::Setup;
             }
             _ => {
                 println!("Unexpected trb_type {:?}", event_trb.get_trb_type());
@@ -1151,8 +1160,7 @@ impl CorigineUsb {
         self.issue_command(CmdType::UpdateEp0, cmd_param, 0).expect("couldn't issue command");
     }
 
-    /// TODO: make this not a sham
-    pub fn pp(&self) -> bool { true }
+    pub fn pp(&self) -> bool { self.csr.rf(PORTSC_PP) != 0 }
 
     pub fn stop(&mut self) {
         self.csr.rmwf(USBCMD_INT_ENABLE, 0);
@@ -1226,6 +1234,7 @@ impl CorigineUsb {
         let speeds = ["Invalid", "FS", "Invalid", "HS", "SS", "SSP", "Unknown", "Unknown"];
         #[cfg(not(feature = "std"))]
         {
+            println!("Config0,1: {:x}, {:x}", self.csr.r(DEVCONFIG), self.csr.r(EVENTCONFIG));
             println!("Status: {:x}", status);
             print!("   ");
             for &(field, name) in bitflags.iter() {
@@ -1239,16 +1248,16 @@ impl CorigineUsb {
         }
         #[cfg(feature = "std")]
         {
+            log::info!("Config0,1: {:x}, {:x}", self.csr.r(DEVCONFIG), self.csr.r(EVENTCONFIG));
             let mut s = String::new();
-            s.push_str(&format!("\n\rStatus: {:x}\n\r", status));
-            s.push_str("   ");
+            s.push_str(&format!("Status: {:x} | ", status));
             for &(field, name) in bitflags.iter() {
                 if (status & 1 << field) != 0 {
                     s.push_str(&format!("{} ", name));
                 }
             }
             s.push_str(&format!(
-                "\n\r   Speed: {}\n\r   PLS: {}\n\r",
+                "| Speed: {} PLS: {}",
                 speeds[((status >> 10) & 0x7) as usize],
                 plses[((status >> 5) & 0xF) as usize]
             ));
@@ -1257,6 +1266,22 @@ impl CorigineUsb {
     }
 
     pub fn start(&mut self) {
+        #[cfg(not(feature = "std"))]
+        println!(
+            "****** cfg0/1 {:x}/{:x}, cmd {:x}",
+            self.csr.r(DEVCONFIG),
+            self.csr.r(EVENTCONFIG),
+            self.csr.r(USBCMD)
+        );
+        #[cfg(feature = "std")]
+        log::info!(
+            "****** cfg0/1 {:x}/{:x}, cmd {:x}",
+            self.csr.r(DEVCONFIG),
+            self.csr.r(EVENTCONFIG),
+            self.csr.r(USBCMD)
+        );
+        self.print_status(self.csr.r(PORTSC));
+
         self.csr.wo(
             EVENTCONFIG,
             self.csr.ms(EVENTCONFIG_CSC_ENABLE, 1)
@@ -1277,10 +1302,21 @@ impl CorigineUsb {
                 | self.csr.ms(USBCMD_INT_ENABLE, 1)
                 | self.csr.ms(USBCMD_RUN_STOP, 1),
         );
-
+        #[cfg(not(feature = "std"))]
+        println!(
+            "====== cfg0/1 {:x}/{:x}, cmd {:x}",
+            self.csr.r(DEVCONFIG),
+            self.csr.r(EVENTCONFIG),
+            self.csr.r(USBCMD)
+        );
+        #[cfg(feature = "std")]
+        log::info!(
+            "====== cfg0/1 {:x}/{:x}, cmd {:x}",
+            self.csr.r(DEVCONFIG),
+            self.csr.r(EVENTCONFIG),
+            self.csr.r(USBCMD)
+        );
         self.print_status(self.csr.r(PORTSC));
-
-        self.set_addr(0, 0);
 
         #[cfg(feature = "std")]
         if !INTERRUPT_INIT_DONE.fetch_or(true, Ordering::SeqCst) {
@@ -1290,42 +1326,20 @@ impl CorigineUsb {
                 self as *const CorigineUsb as *mut usize,
             )
             .expect("couldn't claim irq");
-            // self.irq_csr.wfo(utralib::utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE, 1);
-            // self.irq_csr.wfo(utralib::utra::irqarray1::EV_POLARITY_RISING, 0);
-            self.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xffff_ffff); // blanket clear
-            self.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
-
-            // enable interrupts in corigine core
-            self.csr.rmwf(USBCMD_INT_ENABLE, 1);
-            self.csr.rmwf(USBCMD_SYS_ERR_ENABLE, 1);
-            // setting this would force device termination if controller is stopped -- i think we don't want
-            // that, we actually want to disconnect.
-            // self.csr.rmwf(USBCMD_FORCE_TERMINATION, 1);
-
-            // enable interruptor 0 via IMAN (we only map one in the current
-            // UTRA - if we need more interruptors we have to update utra)
-            self.csr.rmwf(IMAN_IE, 1);
             log::info!("interrupt claimed");
         }
-        #[cfg(not(feature = "std"))]
-        {
-            self.irq_csr.wfo(utralib::utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE, 1);
-            self.irq_csr.wfo(utralib::utra::irqarray1::EV_POLARITY_RISING, 0);
-            let p = self.irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
-            self.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, p); // clear in case it's pending for some reason
-            self.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
+        // self.irq_csr.wfo(utralib::utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        // self.irq_csr.wfo(utralib::utra::irqarray1::EV_POLARITY_RISING, 0);
+        self.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xffff_ffff); // blanket clear
+        self.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
+        // enable interruptor 0 via IMAN (we only map one in the current
 
-            // enable interrupts in corigine core
-            self.csr.rmwf(USBCMD_INT_ENABLE, 1);
-            self.csr.rmwf(USBCMD_SYS_ERR_ENABLE, 1);
-            // setting this would force device termination if controller is stopped -- i think we don't want
-            // that, we actually want to disconnect.
-            // self.csr.rmwf(USBCMD_FORCE_TERMINATION, 1);
+        // UTRA - if we need more interruptors we have to update utra)
+        self.csr.rmwf(IMAN_IE, 1);
 
-            // enable interruptor 0 via IMAN (we only map one in the current
-            // UTRA - if we need more interruptors we have to update utra)
-            self.csr.rmwf(IMAN_IE, 1);
-        }
+        self.print_status(self.csr.r(PORTSC));
+
+        self.set_addr(0, 0);
     }
 
     /*
@@ -1373,10 +1387,25 @@ impl CorigineUsb {
 #[cfg(feature = "std")]
 pub struct CorigineWrapper {
     pub hw: Arc<Mutex<CorigineUsb>>,
+    pub free_ep: [bool; CRG_EP_NUM + 1],
 }
 #[cfg(feature = "std")]
 impl CorigineWrapper {
-    pub fn new(obj: CorigineUsb) -> Self { Self { hw: Arc::new(Mutex::new(obj)) } }
+    pub fn new(obj: CorigineUsb) -> Self {
+        let mut c = Self { hw: Arc::new(Mutex::new(obj)), free_ep: [true; CRG_EP_NUM + 1] };
+        // ep0 is allocated by default
+        c.free_ep[0] = false;
+        c
+    }
+
+    pub fn clone(&self) -> Self {
+        let mut c = Self { hw: self.hw.clone(), free_ep: [true; CRG_EP_NUM + 1] };
+        // ep0 is allocated by default
+        c.free_ep[0] = false;
+        c
+    }
+
+    pub fn core(&self) -> std::sync::MutexGuard<CorigineUsb> { self.hw.lock().unwrap() }
 }
 
 #[cfg(feature = "std")]
@@ -1412,25 +1441,63 @@ impl UsbBus for CorigineWrapper {
         ep_dir: UsbDirection,
         ep_addr: Option<EndpointAddress>,
         ep_type: EndpointType,
-        max_packet_size: u16,
-        interval: u8,
+        _max_packet_size: u16,
+        _interval: u8,
     ) -> Result<EndpointAddress> {
-        Ok(EndpointAddress::from_parts(1, UsbDirection::Out))
+        log::info!("alloc_ep {:?}; {:?}", ep_addr, self.free_ep);
+        if let Some(req_addr) = ep_addr {
+            let index = req_addr.index();
+            if self.free_ep[index] {
+                self.free_ep[index] = false;
+                Ok(EndpointAddress::from_parts(index, ep_dir))
+            } else {
+                if index == 0 && ep_type == EndpointType::Control {
+                    Ok(EndpointAddress::from_parts(index, ep_dir))
+                } else {
+                    Err(usb_device::UsbError::InvalidEndpoint)
+                }
+            }
+        } else {
+            let mut found_index: Option<usize> = None;
+            for (index, &is_free) in self.free_ep.iter().enumerate() {
+                if is_free {
+                    found_index = Some(index);
+                    break;
+                }
+            }
+            if let Some(index) = found_index {
+                self.free_ep[index] = false;
+                Ok(EndpointAddress::from_parts(index, ep_dir))
+            } else {
+                Err(usb_device::UsbError::EndpointOverflow)
+            }
+        }
     }
 
     /// Enables and initializes the USB peripheral. Soon after enabling the device will be reset, so
     /// there is no need to perform a USB reset in this method.
-    fn enable(&mut self) {}
+    fn enable(&mut self) {
+        log::info!(" ******** enable");
+    }
 
     /// Called when the host resets the device. This will be soon called after
     /// [`poll`](crate::device::UsbDevice::poll) returns [`PollResult::Reset`]. This method should
     /// reset the state of all endpoints and peripheral flags back to a state suitable for
     /// enumeration, as well as ensure that all endpoints previously allocated with alloc_ep are
     /// initialized as specified.
-    fn reset(&self) {}
+    fn reset(&self) {
+        log::info!(" ******** reset");
+        let mut hw = self.hw.lock().unwrap();
+        hw.reset();
+        hw.init();
+        hw.start();
+    }
 
     /// Sets the device USB address to `addr`.
-    fn set_device_address(&self, addr: u8) { self.hw.lock().unwrap().set_addr(addr, CRG_INT_TARGET); }
+    fn set_device_address(&self, addr: u8) {
+        log::info!(" ********** set address {}", addr);
+        self.hw.lock().unwrap().set_addr(addr, CRG_INT_TARGET);
+    }
 
     /// Writes a single packet of data to the specified endpoint and returns number of bytes
     /// actually written.
@@ -1449,7 +1516,10 @@ impl UsbBus for CorigineWrapper {
     ///   shouldn't provide more data than the `max_packet_size` it specified when allocating the endpoint.
     ///
     /// Implementations may also return other errors if applicable.
-    fn write(&self, ep_addr: EndpointAddress, buf: &[u8]) -> Result<usize> { Ok(0) }
+    fn write(&self, ep_addr: EndpointAddress, buf: &[u8]) -> Result<usize> {
+        log::info!(" ******** WRITE: {:?}({})", ep_addr, buf.len());
+        Ok(0)
+    }
 
     /// Reads a single packet of data from the specified endpoint and returns the actual length of
     /// the packet.
@@ -1468,7 +1538,19 @@ impl UsbBus for CorigineWrapper {
     ///   that is large enough for the `max_packet_size` it specified when allocating the endpoint.
     ///
     /// Implementations may also return other errors if applicable.
-    fn read(&self, ep_addr: EndpointAddress, buf: &mut [u8]) -> Result<usize> { Ok(0) }
+    fn read(&self, ep_addr: EndpointAddress, buf: &mut [u8]) -> Result<usize> {
+        log::info!(" ******** READ: {:?}({})", ep_addr, buf.len());
+        if ep_addr.index() == 0 {
+            if let Some(data) = self.core().setup.take() {
+                buf[..8].copy_from_slice(&data);
+                Ok(8)
+            } else {
+                Err(usb_device::UsbError::WouldBlock)
+            }
+        } else {
+            Ok(0)
+        }
+    }
 
     /// Sets or clears the STALL condition for an endpoint. If the endpoint is an OUT endpoint, it
     /// should be prepared to receive data again.
@@ -1497,18 +1579,27 @@ impl UsbBus for CorigineWrapper {
     /// Gets information about events and incoming data. Usually called in a loop or from an
     /// interrupt handler. See the [`PollResult`] struct for more information.
     fn poll(&self) -> PollResult {
-        log::info!("polling");
+        log::info!(" ******* polling");
         let result = self.hw.lock().unwrap().udc_handle_interrupt();
+        log::info!(" ---> result: {:x?}", result);
         match result {
             CrgEvent::None => PollResult::None,
             CrgEvent::Connect => {
+                log::info!("Got connect");
                 let mut hw = self.hw.lock().unwrap();
                 hw.reset();
                 hw.init();
                 hw.start();
                 PollResult::Reset
             }
-            _ => PollResult::None,
+            CrgEvent::Setup => {
+                log::info!("Got setup");
+                PollResult::Data { ep_out: 0, ep_in_complete: 0, ep_setup: 1 }
+            }
+            CrgEvent::Data(ep_out, ep_in_complete, ep_setup) => {
+                log::info!("Got data");
+                PollResult::Data { ep_out, ep_in_complete, ep_setup }
+            }
         }
     }
 
