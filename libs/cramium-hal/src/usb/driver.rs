@@ -3,6 +3,7 @@ use core::mem::size_of;
 #[cfg(feature = "std")]
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::{compiler_fence, AtomicPtr, Ordering};
+use core::task::Poll;
 #[cfg(feature = "std")]
 use std::sync::{Arc, Mutex};
 
@@ -61,11 +62,12 @@ static INTERRUPT_INIT_DONE: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "std")]
 fn handle_usb(_irq_no: usize, arg: *mut usize) {
     let usb = unsafe { &mut *(arg as *mut CorigineUsb) };
-    let pending = usb.csr.r(utralib::utra::irqarray1::EV_PENDING);
+    let pending = usb.irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
 
     // actual interrupt handling is done in userspace, this just triggers the routine
+    usb.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 0);
 
-    usb.csr.wo(utralib::utra::irqarray1::EV_PENDING, pending);
+    usb.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, pending);
 
     xous::try_send_message(usb.conn, xous::Message::new_scalar(usb.opcode, 0, 0, 0, 0)).ok();
 }
@@ -274,6 +276,14 @@ impl TryFrom<u32> for CompletionCode {
     }
 }
 
+/// We make our own custom event type because PollResult doesn't have debug, eq, etc...
+#[derive(Debug, PartialEq, Eq)]
+pub enum CrgEvent {
+    None,
+    Connect,
+    Setup,
+    Data(u16, u16, u16),
+}
 #[repr(C)]
 #[derive(Default)]
 
@@ -513,6 +523,7 @@ enum UsbDeviceState {
 pub struct CorigineUsb {
     ifram_base_ptr: usize,
     pub csr: AtomicCsr<u32>,
+    irq_csr: AtomicCsr<u32>,
     // Because the init routine requires magic pokes
     magic_page: &'static mut [u32],
     #[cfg(feature = "std")]
@@ -564,12 +575,19 @@ impl CorigineUsb {
     /// could not be guaranteed to the same range, the driver would need to be written with a
     /// de-virtualization/re-virtualization layer every time we extract data records from the device's mapped
     /// RAM.
-    pub unsafe fn new(_conn: u32, _opcode: usize, ifram_base_ptr: usize, csr: AtomicCsr<u32>) -> Self {
+    pub unsafe fn new(
+        _conn: u32,
+        _opcode: usize,
+        ifram_base_ptr: usize,
+        csr: AtomicCsr<u32>,
+        irq_csr: AtomicCsr<u32>,
+    ) -> Self {
         let magic_page = unsafe { core::slice::from_raw_parts_mut(csr.base() as *mut u32, 1024) };
 
         Self {
             ifram_base_ptr,
             csr,
+            irq_csr,
             #[cfg(feature = "std")]
             conn: _conn,
             #[cfg(feature = "std")]
@@ -606,15 +624,6 @@ impl CorigineUsb {
             portsc_on_reconnecting: 0,
             max_speed: 0,
         }
-    }
-
-    /// This is coded in a strange way because the reference drivers are designed to handle
-    /// potentially multiple Uicr; however, this specific instance of hardware has only one Uicr.
-    fn uicr(&self) -> [&'static mut Uicr; 1] {
-        // Safety: only safe because this is an aligned, allocated region
-        // of hardware registers; all values are representable as u32; and the structure
-        // fits the data.
-        [unsafe { ((self.csr.base() as usize + CORIGINE_UICR_OFFSET) as *mut Uicr).as_mut().unwrap() }]
     }
 
     pub fn reset(&mut self) {
@@ -658,8 +667,6 @@ impl CorigineUsb {
     }
 
     pub fn init(&mut self) {
-        let uicr = self.uicr();
-
         // NOTE: the indices are byte-addressed, and so need to be divided by size_of::<u32>()
         const MAGIC_TABLE: [(usize, u32); 17] = [
             (0x084, 0x01401388),
@@ -766,15 +773,17 @@ impl CorigineUsb {
             p_erst.seg_size = CRG_EVENT_RING_SIZE as u32;
             p_erst.rsvd = 0;
 
-            uicr[index].erstsz = CRG_ERST_SIZE as u32;
-            uicr[index].erstbalo = udc_event.erst.vaddr.load(Ordering::SeqCst) as u32;
-            uicr[index].erstbahi = 0;
-            uicr[index].erdplo =
-                udc_event.event_ring.vaddr.load(Ordering::SeqCst) as u32 | self.csr.ms(ERDPLO_EHB, 1);
-            uicr[index].erdphi = 0;
+            self.csr.wo(ERSTSZ, CRG_ERST_SIZE as u32);
+            self.csr.wo(ERSTBALO, udc_event.erst.vaddr.load(Ordering::SeqCst) as u32);
+            self.csr.wo(ERSTBAHI, 0);
+            self.csr.wo(
+                ERDPLO,
+                udc_event.event_ring.vaddr.load(Ordering::SeqCst) as u32 | self.csr.ms(ERDPLO_EHB, 1),
+            );
+            self.csr.wo(ERDPHI, 0);
 
-            uicr[index].iman = self.csr.ms(IMAN_IE, 1) | self.csr.ms(IMAN_IP, 1);
-            uicr[index].imod = 0;
+            self.csr.wo(IMAN, self.csr.ms(IMAN_IE, 1) | self.csr.ms(IMAN_IP, 1));
+            self.csr.wo(IMOD, 0);
             compiler_fence(Ordering::SeqCst);
         }
 
@@ -800,26 +809,6 @@ impl CorigineUsb {
         {
             log::info!(" dcbaplo: {:x}", self.csr.r(DCBAPLO));
             log::info!(" dcbaphi: {:x}", self.csr.r(DCBAPHI));
-        }
-
-        #[cfg(feature = "std")]
-        if !INTERRUPT_INIT_DONE.fetch_or(true, Ordering::SeqCst) {
-            xous::claim_interrupt(
-                utralib::utra::irqarray1::IRQARRAY1_IRQ,
-                handle_usb,
-                self as *const CorigineUsb as *mut usize,
-            )
-            .expect("couldn't claim irq");
-            let p = self.csr.r(utralib::utra::irqarray1::EV_PENDING);
-            self.csr.wo(utralib::utra::irqarray1::EV_PENDING, p); // clear in case it's pending for some reason
-            self.csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
-
-            // enable interrupts in corigine core
-            self.csr.rmwf(USBCMD_INT_ENABLE, 1);
-            // enable interruptor 0 via IMAN (we only map one in the current UTRA - if we need more
-            // interruptors we have to update utra)
-            self.csr.rmwf(IMAN_IE, 1);
-            log::info!("interrupt claimed");
         }
 
         // initial ep0 transfer ring
@@ -917,40 +906,38 @@ impl CorigineUsb {
         Ok(())
     }
 
-    pub fn udc_handle_interrupt(&mut self) -> CorigineEvent {
-        let mut ret = CorigineEvent::None;
+    pub fn udc_handle_interrupt(&mut self) -> CrgEvent {
+        let mut ret = CrgEvent::None;
         let status = self.csr.r(USBSTS);
         if (status & self.csr.ms(USBSTS_SYSTEM_ERR, 1)) != 0 {
             println!("System error");
             self.csr.wfo(USBSTS_SYSTEM_ERR, 1);
             println!("USBCMD: {:x}", self.csr.r(USBCMD));
-            ret = CorigineEvent::Error;
         }
         if (status & self.csr.ms(USBSTS_EINT, 1)) != 0 {
             // println!("USB Event");
             // this overwrites any previous error reporting. Seems bad, but
             // it's exactly what the reference code does.
-            ret = CorigineEvent::Interrupt;
             self.csr.wfo(USBSTS_EINT, 1);
-            for i in 0..CORIGINE_EVENT_RING_NUM {
-                self.process_event_ring(i);
-            }
+            ret = self.process_event_ring(0); // there is only one event ring
         }
+        self.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
+        // re-enable interrupts
+        self.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
         ret
     }
 
-    pub fn process_event_ring(&mut self, index: usize) {
-        let uicr = self.uicr();
-        // println!("ringindex: {}", index);
-        let tmp = uicr[index].iman;
+    pub fn process_event_ring(&mut self, index: usize) -> CrgEvent {
+        let tmp = self.csr.r(IMAN);
         if (tmp & (self.csr.ms(IMAN_IE, 1) | self.csr.ms(IMAN_IP, 1)))
             != (self.csr.ms(IMAN_IE, 1) | self.csr.ms(IMAN_IP, 1))
         {
             #[cfg(feature = "std")]
-            log::info!("uicr iman[{}] = {:x}", index, tmp);
+            log::info!("IMAN {:x}", tmp);
         }
         // clear IP
-        uicr[index].iman |= self.csr.ms(IMAN_IP, 1);
+        self.csr.rmwf(IMAN_IP, 1);
+        let mut result = CrgEvent::None;
 
         loop {
             let event = {
@@ -966,7 +953,12 @@ impl CorigineUsb {
                 break;
             }
 
-            self.handle_event(event);
+            let res = self.handle_event(event);
+            if result != res && result != CrgEvent::None {
+                #[cfg(feature = "std")]
+                log::info!("Overwriting event: {:?}", result);
+            }
+            result = res;
 
             let udc_event = &mut self.udc_event[index];
             if udc_event.evt_dq_pt.load(Ordering::SeqCst)
@@ -985,15 +977,17 @@ impl CorigineUsb {
         }
         let udc_event = &mut self.udc_event[index];
         // update dequeue pointer
-        uicr[index].erdphi = 0;
-        uicr[index].erdplo = udc_event.evt_dq_pt.load(Ordering::SeqCst) as u32 | CRG_UDC_ERDPLO_EHB;
+        self.csr.wo(ERDPHI, 0);
+        self.csr.wo(ERDPLO, udc_event.evt_dq_pt.load(Ordering::SeqCst) as u32 | CRG_UDC_ERDPLO_EHB);
         compiler_fence(Ordering::SeqCst);
+        result
     }
 
-    pub fn handle_event(&mut self, event_trb: &mut EventTrbS) -> bool {
+    pub fn handle_event(&mut self, event_trb: &mut EventTrbS) -> CrgEvent {
         let pei = event_trb.get_endpoint_id();
         let udc_ep = &mut self.udc_ep[pei as usize];
         // println!("handle_event() event_trb: {:x?}", event_trb);
+        let mut ret = CrgEvent::None;
         match event_trb.get_trb_type() {
             TrbType::EventPortStatusChange => {
                 let portsc_val = self.csr.r(PORTSC);
@@ -1024,6 +1018,7 @@ impl CorigineUsb {
                         println!("  Power present");
                         #[cfg(feature = "std")]
                         log::info!("  Power present");
+                        ret = CrgEvent::Connect;
                     } else {
                         #[cfg(not(feature = "std"))]
                         println!("  Power not present");
@@ -1041,6 +1036,7 @@ impl CorigineUsb {
                         #[cfg(feature = "std")]
                         log::info!("  Cable connect and power present");
                         self.update_current_speed();
+                        ret = CrgEvent::Connect;
                     }
                 }
 
@@ -1056,6 +1052,7 @@ impl CorigineUsb {
                         #[cfg(feature = "std")]
                         log::info!("  Port reset done");
                         self.update_current_speed();
+                        ret = CrgEvent::Connect;
                     }
                 }
 
@@ -1116,7 +1113,7 @@ impl CorigineUsb {
                 println!("Unexpected trb_type {:?}", event_trb.get_trb_type());
             }
         }
-        false
+        ret
     }
 
     pub fn ep0_xfer_complete(&mut self, event_trb: &mut EventTrbS) {
@@ -1284,6 +1281,51 @@ impl CorigineUsb {
         self.print_status(self.csr.r(PORTSC));
 
         self.set_addr(0, 0);
+
+        #[cfg(feature = "std")]
+        if !INTERRUPT_INIT_DONE.fetch_or(true, Ordering::SeqCst) {
+            xous::claim_interrupt(
+                utralib::utra::irqarray1::IRQARRAY1_IRQ,
+                handle_usb,
+                self as *const CorigineUsb as *mut usize,
+            )
+            .expect("couldn't claim irq");
+            // self.irq_csr.wfo(utralib::utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+            // self.irq_csr.wfo(utralib::utra::irqarray1::EV_POLARITY_RISING, 0);
+            self.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xffff_ffff); // blanket clear
+            self.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
+
+            // enable interrupts in corigine core
+            self.csr.rmwf(USBCMD_INT_ENABLE, 1);
+            self.csr.rmwf(USBCMD_SYS_ERR_ENABLE, 1);
+            // setting this would force device termination if controller is stopped -- i think we don't want
+            // that, we actually want to disconnect.
+            // self.csr.rmwf(USBCMD_FORCE_TERMINATION, 1);
+
+            // enable interruptor 0 via IMAN (we only map one in the current
+            // UTRA - if we need more interruptors we have to update utra)
+            self.csr.rmwf(IMAN_IE, 1);
+            log::info!("interrupt claimed");
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            self.irq_csr.wfo(utralib::utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+            self.irq_csr.wfo(utralib::utra::irqarray1::EV_POLARITY_RISING, 0);
+            let p = self.irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
+            self.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, p); // clear in case it's pending for some reason
+            self.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
+
+            // enable interrupts in corigine core
+            self.csr.rmwf(USBCMD_INT_ENABLE, 1);
+            self.csr.rmwf(USBCMD_SYS_ERR_ENABLE, 1);
+            // setting this would force device termination if controller is stopped -- i think we don't want
+            // that, we actually want to disconnect.
+            // self.csr.rmwf(USBCMD_FORCE_TERMINATION, 1);
+
+            // enable interruptor 0 via IMAN (we only map one in the current
+            // UTRA - if we need more interruptors we have to update utra)
+            self.csr.rmwf(IMAN_IE, 1);
+        }
     }
 
     /*
@@ -1455,11 +1497,18 @@ impl UsbBus for CorigineWrapper {
     /// Gets information about events and incoming data. Usually called in a loop or from an
     /// interrupt handler. See the [`PollResult`] struct for more information.
     fn poll(&self) -> PollResult {
-        match self.hw.lock().unwrap().udc_handle_interrupt() {
-            CorigineEvent::Interrupt => PollResult::None, /* PollResult::Data { ep_out: (), */
-            // ep_in_complete: (), ep_setup: () },
-            CorigineEvent::None => PollResult::None,
-            CorigineEvent::Error => PollResult::Reset,
+        log::info!("polling");
+        let result = self.hw.lock().unwrap().udc_handle_interrupt();
+        match result {
+            CrgEvent::None => PollResult::None,
+            CrgEvent::Connect => {
+                let mut hw = self.hw.lock().unwrap();
+                hw.reset();
+                hw.init();
+                hw.start();
+                PollResult::Reset
+            }
+            _ => PollResult::None,
         }
     }
 
