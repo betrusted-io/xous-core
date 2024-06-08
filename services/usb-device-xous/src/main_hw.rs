@@ -214,6 +214,16 @@ pub(crate) fn main_hw() -> ! {
     )
     .expect("couldn't allocate IFRAM pages");
     #[cfg(feature = "cramium-soc")]
+    assert!(
+        cramium_hal::usb::driver::CRG_UDC_TOTAL_MEM_LEN <= cramium_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000
+    );
+    #[cfg(feature = "cramium-soc")]
+    log::info!(
+        "total memory len: {:x}, allocated: {:x}",
+        cramium_hal::usb::driver::CRG_UDC_TOTAL_MEM_LEN,
+        cramium_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000
+    );
+    #[cfg(feature = "cramium-soc")]
     let irq_range = xous::syscall::map_memory(
         xous::MemoryAddress::new(utralib::utra::irqarray1::HW_IRQARRAY1_BASE),
         None,
@@ -241,6 +251,55 @@ pub(crate) fn main_hw() -> ! {
         CorigineUsb::new(cid, h_op, ifram_range.as_ptr() as usize, usb.clone(), irq_csr.clone())
     });
 
+    #[cfg(feature = "cramium-soc")]
+    {
+        log::info!("Starting USB hardware in 2 seconds...");
+        tt.sleep_ms(2000).ok();
+        log::info!("NOW!");
+        // for the cramium target, call init only once via management structure
+        usbwrapper.reset();
+        let mut poweron = 0;
+        loop {
+            usbwrapper.core().udc_handle_interrupt();
+            if usbwrapper.core().pp() {
+                poweron += 1;
+            }
+            tt.sleep_ms(100).ok();
+            if poweron >= 4 {
+                break;
+            }
+        }
+        usbwrapper.core().print_status(usb.r(cramium_hal::usb::utra::PORTSC));
+        usbwrapper.core().reset();
+        usbwrapper.core().print_status(usb.r(cramium_hal::usb::utra::PORTSC));
+        usbwrapper.core().init();
+        usbwrapper.core().print_status(usb.r(cramium_hal::usb::utra::PORTSC));
+        usbwrapper.core().start();
+        usbwrapper.core().print_status(usb.r(cramium_hal::usb::utra::PORTSC));
+        log::info!("HW started...");
+        #[cfg(feature = "pinger")]
+        std::thread::spawn({
+            let irq_csr = irq_csr.clone();
+            let usb = usb.clone();
+            move || {
+                let tt = ticktimer_server::Ticktimer::new().unwrap();
+                loop {
+                    log::info!(
+                        "   pd: {:x}/{:x} st: {:x}/{:x} cf: {:x}/{:x} cmd: {:x}",
+                        irq_csr.r(utralib::utra::irqarray1::EV_PENDING),
+                        irq_csr.r(utralib::utra::irqarray1::EV_STATUS),
+                        usb.r(cramium_hal::usb::utra::USBSTS),
+                        usb.r(cramium_hal::usb::utra::PORTSC),
+                        usb.r(cramium_hal::usb::utra::DEVCONFIG),
+                        usb.r(cramium_hal::usb::utra::EVENTCONFIG),
+                        usb.r(cramium_hal::usb::utra::USBCMD),
+                    );
+                    tt.sleep_ms(5000).ok();
+                }
+            }
+        });
+    }
+
     #[cfg(any(feature = "renode", feature = "precursor"))]
     let usb_fidokbd_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     #[cfg(feature = "cramium-soc")]
@@ -250,10 +309,6 @@ pub(crate) fn main_hw() -> ! {
     usb_fidokbd_dev.init();
     #[cfg(any(feature = "renode", feature = "precursor"))]
     let mut usbmgmt = usb_fidokbd_dev.get_iface();
-    #[cfg(feature = "cramium-soc")]
-    {
-        usbwrapper.core().reset();
-    }
     // before doing any allocs, clone a copy of the hardware access structure so we can build a second
     // view into the hardware with only FIDO descriptors
     #[cfg(any(feature = "renode", feature = "precursor"))]
@@ -279,10 +334,6 @@ pub(crate) fn main_hw() -> ! {
     let serial_dev = usbwrapper.clone();
     #[cfg(any(feature = "renode", feature = "precursor"))]
     serial_dev.init();
-
-    // track which view is visible on the device core
-    #[cfg(not(feature = "minimal"))]
-    let mut view = Views::FidoWithKbd;
 
     // register a suspend/resume listener
     #[cfg(any(feature = "renode", feature = "precursor", feature = "hosted"))]
@@ -380,55 +431,11 @@ pub(crate) fn main_hw() -> ! {
         AppHIDConfig::default(),
         100, // 100 * 64 bytes = 6.4kb, quite the backlog
     );
-
+    // track which view is visible on the device core
+    #[cfg(not(feature = "minimal"))]
+    let mut view = Views::FidoWithKbd;
     #[cfg(feature = "cramium-soc")]
-    {
-        log::info!("Starting USB hardware in 2 seconds...");
-        tt.sleep_ms(2000).ok();
-        log::info!("NOW!");
-        // for the cramium target, call init only once via management structure
-        usbwrapper.reset();
-        let mut poweron = 0;
-        loop {
-            usbwrapper.core().udc_handle_interrupt();
-            if usbwrapper.core().pp() {
-                poweron += 1;
-            }
-            tt.sleep_ms(100).ok();
-            if poweron >= 4 {
-                break;
-            }
-        }
-        usbwrapper.core().print_status(usb.r(cramium_hal::usb::utra::PORTSC));
-        usbwrapper.core().reset();
-        usbwrapper.core().print_status(usb.r(cramium_hal::usb::utra::PORTSC));
-        usbwrapper.core().init();
-        usbwrapper.core().print_status(usb.r(cramium_hal::usb::utra::PORTSC));
-        usbwrapper.core().start();
-        usbwrapper.core().print_status(usb.r(cramium_hal::usb::utra::PORTSC));
-        log::info!("HW started...");
-        #[cfg(feature = "pinger")]
-        std::thread::spawn({
-            let irq_csr = irq_csr.clone();
-            let usb = usb.clone();
-            move || {
-                let tt = ticktimer_server::Ticktimer::new().unwrap();
-                loop {
-                    log::info!(
-                        "   pd: {:x}/{:x} st: {:x}/{:x} cf: {:x}/{:x} cmd: {:x}",
-                        irq_csr.r(utralib::utra::irqarray1::EV_PENDING),
-                        irq_csr.r(utralib::utra::irqarray1::EV_STATUS),
-                        usb.r(cramium_hal::usb::utra::USBSTS),
-                        usb.r(cramium_hal::usb::utra::PORTSC),
-                        usb.r(cramium_hal::usb::utra::DEVCONFIG),
-                        usb.r(cramium_hal::usb::utra::EVENTCONFIG),
-                        usb.r(cramium_hal::usb::utra::USBCMD),
-                    );
-                    tt.sleep_ms(5000).ok();
-                }
-            }
-        });
-    }
+    usb_dev.force_reset().ok(); // hard-coded to math the view specifier above
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
@@ -770,14 +777,9 @@ pub(crate) fn main_hw() -> ! {
                 }
                 buffer.replace(u2f_ipc).unwrap();
             }
-            #[cfg(not(feature = "cramium-soc"))]
-            Some(Opcode::UsbIrqHandler) => {
-                usbwrapper.core().udc_handle_interrupt();
-            }
             Some(Opcode::UsbIrqHandler) => {
                 let maybe_u2f = match view {
                     Views::FidoWithKbd => {
-                        log::info!("FidoWithKbd poll");
                         if usb_dev.poll(&mut [&mut composite]) {
                             match composite.device::<NKROBootKeyboard<_>, _>().read_report() {
                                 Ok(l) => {
@@ -1014,7 +1016,31 @@ pub(crate) fn main_hw() -> ! {
 
                 let devtype: UsbDeviceType = core.try_into().unwrap();
                 #[cfg(feature = "cramium-soc")]
-                let mut usbmgmt = usbwrapper.core();
+                {
+                    match devtype {
+                        UsbDeviceType::FidoKbd => {
+                            usb_dev.force_reset().ok();
+                        }
+                        UsbDeviceType::Fido => {
+                            fido_dev.force_reset().ok();
+                        }
+                        #[cfg(feature = "mass-storage")]
+                        UsbDeviceType::MassStorage => {
+                            ums_device.force_reset().ok();
+                        }
+                        UsbDeviceType::HIDv2 => {
+                            hidv2.force_reset().ok();
+                        }
+                        UsbDeviceType::Serial => {
+                            serial_device.force_reset().ok();
+                        }
+                        UsbDeviceType::Debug => {
+                            log::warn!("No debug core in this target");
+                        }
+                    }
+                }
+
+                #[cfg(not(feature = "cramium-soc"))]
                 match devtype {
                     UsbDeviceType::Debug => {
                         log::info!("Connecting debug core; disconnecting USB device core");
@@ -1235,7 +1261,7 @@ pub(crate) fn main_hw() -> ! {
             }),
             Some(Opcode::WhichCore) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 #[cfg(feature = "cramium-soc")]
-                let mut usbmgmt = usbwrapper.core();
+                let usbmgmt = usbwrapper.core();
                 if usbmgmt.is_device_connected() {
                     match view {
                         Views::FidoWithKbd => {
@@ -1270,7 +1296,7 @@ pub(crate) fn main_hw() -> ! {
             }),
             Some(Opcode::IsRestricted) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 #[cfg(feature = "cramium-soc")]
-                let mut usbmgmt = usbwrapper.core();
+                let usbmgmt = usbwrapper.core();
                 if usbmgmt.get_disable_debug() {
                     xous::return_scalar(msg.sender, 1).unwrap();
                 } else {
