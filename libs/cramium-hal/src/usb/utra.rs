@@ -101,7 +101,6 @@ pub const EPRUNNING: Register = Register::new(CORIGINE_DEV_OFFSET / 4 + 0x64 / 4
 pub const EPRUNNING_RUNNING: Field = Field::new(30, 2, EPRUNNING);
 
 pub const CMDPARA0: Register = Register::new(CORIGINE_DEV_OFFSET / 4 + 0x70 / 4, 0xFFFF_FFFF);
-pub const CMDPARA0_CMD0_INIT_EP0_DQPTRLO: Field = Field::new(28, 4, CMDPARA0);
 pub const CMDPARA0_CMD0_INIT_EP0_DCS: Field = Field::new(1, 0, CMDPARA0);
 pub const CMDPARA0_CMD1_UPDATE_EP0_MPS: Field = Field::new(16, 16, CMDPARA0);
 pub const CMDPARA0_CMD2_SET_ADDR: Field = Field::new(8, 0, CMDPARA0);
