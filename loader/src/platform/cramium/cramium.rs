@@ -671,32 +671,27 @@ pub fn early_init() {
                 let irq1 = irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
                 crate::println!("  irq1: {:x}", irq1);
                 crate::println!("  status: {:x}", csr.r(cramium_hal::usb::utra::USBSTS));
-                usb.print_status(csr.r(cramium_hal::usb::utra::PORTSC));
                 irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, irq1);
             }
 
             if !vbus_on && vbus_on_count == 4 {
                 crate::println!("*Vbus on");
                 crate::println!("  bef reset");
-                usb.print_status(csr.r(cramium_hal::usb::utra::PORTSC));
                 usb.reset();
                 crate::println!("  aft reset");
-                usb.print_status(csr.r(cramium_hal::usb::utra::PORTSC));
                 usb.init();
                 crate::println!("  aft init");
-                usb.print_status(csr.r(cramium_hal::usb::utra::PORTSC));
                 usb.start();
                 crate::println!("  aft start");
-                usb.print_status(csr.r(cramium_hal::usb::utra::PORTSC));
                 vbus_on = true;
                 in_u0 = false;
 
                 let irq1 = irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
                 crate::println!("irq1: {:x}", irq1);
                 crate::println!("status: {:x}", csr.r(cramium_hal::usb::utra::USBSTS));
-                usb.print_status(csr.r(cramium_hal::usb::utra::PORTSC));
                 irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, irq1);
-                break;
+                // restore this to go on to boot
+                // break;
             } else if usb.pp() && !vbus_on {
                 vbus_on_count += 1;
                 crate::println!("*Vbus_on_count: {}", vbus_on_count);
@@ -712,13 +707,13 @@ pub fn early_init() {
                 // usb.udc_handle_interrupt();
                 // TODO
             } else if usb.ccs() && vbus_on {
-                usb.print_status(usb.csr.r(cramium_hal::usb::utra::PORTSC));
+                // usb.print_status(usb.csr.r(cramium_hal::usb::utra::PORTSC));
                 crate::println!("*Enter U0");
                 in_u0 = true;
                 let irq1 = irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
                 crate::println!("irq1: {:x}", irq1);
                 crate::println!("status: {:x}", csr.r(cramium_hal::usb::utra::USBSTS));
-                usb.print_status(csr.r(cramium_hal::usb::utra::PORTSC));
+                // usb.print_status(csr.r(cramium_hal::usb::utra::PORTSC));
                 irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, irq1);
             }
         }
