@@ -88,7 +88,7 @@ enum SerialListenMode {
 
 pub(crate) fn main_hw() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -269,13 +269,9 @@ pub(crate) fn main_hw() -> ! {
                 break;
             }
         }
-        usbwrapper.core().print_status(usb.r(cramium_hal::usb::utra::PORTSC));
         usbwrapper.core().reset();
-        usbwrapper.core().print_status(usb.r(cramium_hal::usb::utra::PORTSC));
         usbwrapper.core().init();
-        usbwrapper.core().print_status(usb.r(cramium_hal::usb::utra::PORTSC));
         usbwrapper.core().start();
-        usbwrapper.core().print_status(usb.r(cramium_hal::usb::utra::PORTSC));
         log::info!("HW started...");
         #[cfg(feature = "pinger")]
         std::thread::spawn({

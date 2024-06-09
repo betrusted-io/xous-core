@@ -908,7 +908,6 @@ impl CorigineUsb {
          */
 
         // NOTE: the indices are byte-addressed, and so need to be divided by size_of::<u32>()
-        #[cfg(feature = "magic_sim")]
         const MAGIC_TABLE: [(usize, u32); 18] = [
             (0x0fc, 0x00000001),
             (0x084, 0x01401388),
@@ -929,7 +928,7 @@ impl CorigineUsb {
             (0x0bc, 0x44087d5a),
             (0x110, 0x00000000),
         ];
-
+        #[cfg(feature = "magic_manual")]
         const MAGIC_TABLE: [(usize, u32); 17] = [
             (0x0fc, 0x00000001),
             (0x084, 0x01401388),
@@ -1198,7 +1197,7 @@ impl CorigineUsb {
     pub fn udc_handle_interrupt(&mut self) -> CrgEvent {
         let mut ret = CrgEvent::None;
         let status = self.csr.r(USBSTS);
-        self.print_status(status);
+        // self.print_status(status);
         if (status & self.csr.ms(USBSTS_SYSTEM_ERR, 1)) != 0 {
             println!("System error");
             self.csr.wfo(USBSTS_SYSTEM_ERR, 1);
@@ -1301,6 +1300,7 @@ impl CorigineUsb {
                         println!("  Port connection");
                         #[cfg(feature = "std")]
                         log::info!("  Port connection");
+                        // ret = CrgEvent::Connect;
                     } else {
                         #[cfg(not(feature = "std"))]
                         println!("  Port disconnection");
@@ -1315,7 +1315,7 @@ impl CorigineUsb {
                         println!("  Power present");
                         #[cfg(feature = "std")]
                         log::info!("  Power present");
-                        ret = CrgEvent::None;
+                        // ret = CrgEvent::None;
                     } else {
                         #[cfg(not(feature = "std"))]
                         println!("  Power not present");
@@ -1333,7 +1333,7 @@ impl CorigineUsb {
                         #[cfg(feature = "std")]
                         log::info!("  Cable connect and power present");
                         self.update_current_speed();
-                        ret = CrgEvent::None;
+                        // ret = CrgEvent::None;
                     }
                 }
 
@@ -1425,6 +1425,47 @@ impl CorigineUsb {
                 setup_storage.copy_from_slice(&event_trb.get_raw_setup());
                 self.setup = Some(setup_storage);
                 self.setup_tag = event_trb.get_setup_tag();
+
+                // demo of setup packets working in loader
+                #[cfg(not(feature = "std"))]
+                {
+                    let request_type = setup_storage[0];
+                    let request = setup_storage[1];
+                    let value = u16::from_le_bytes(setup_storage[2..4].try_into().unwrap());
+                    let index = u16::from_le_bytes(setup_storage[4..6].try_into().unwrap());
+                    let length = u16::from_le_bytes(setup_storage[6..].try_into().unwrap());
+
+                    const SET_ADDRESS: u8 = 5;
+                    const GET_DESCRIPTOR: u8 = 6;
+
+                    match request {
+                        SET_ADDRESS => {
+                            self.set_addr(value as u8, 0);
+                            println!("address set");
+                        }
+                        GET_DESCRIPTOR => {
+                            let base_ptr = crate::usb::driver::CRG_UDC_MEMBASE + CRG_UDC_EP0_BUF_OFFSET;
+                            let ep0_buf = base_ptr as *mut u8;
+                            // [12, 1, 10, 2, 0, 0, 0, 8]
+                            unsafe {
+                                ep0_buf.add(0).write_volatile(0x12);
+                                ep0_buf.add(1).write_volatile(0x1);
+                                ep0_buf.add(2).write_volatile(0x10);
+                                ep0_buf.add(3).write_volatile(0x2);
+                                ep0_buf.add(4).write_volatile(0x0);
+                                ep0_buf.add(5).write_volatile(0x0);
+                                ep0_buf.add(6).write_volatile(0x0);
+                                ep0_buf.add(7).write_volatile(0x8);
+                            }
+                            println!("EP0 send");
+                            self.ep0_send(base_ptr, 8, 0);
+                            println!("EP0 sent");
+                        }
+                        _ => {
+                            println!("A request was not handled {:x}", request);
+                        }
+                    }
+                }
 
                 ret = CrgEvent::Setup;
             }
@@ -2077,7 +2118,7 @@ impl UsbBus for CorigineWrapper {
     ///
     /// Implementations may also return other errors if applicable.
     fn read(&self, ep_addr: EndpointAddress, buf: &mut [u8]) -> Result<usize> {
-        log::debug!(" ******** READ: {:?}({})", ep_addr, buf.len());
+        log::info!(" ******** READ: {:?}({})", ep_addr, buf.len());
         if ep_addr.index() == 0 {
             if let Some(data) = self.core().setup.take() {
                 buf[..8].copy_from_slice(&data);
@@ -2141,7 +2182,7 @@ impl UsbBus for CorigineWrapper {
     fn poll(&self) -> PollResult {
         log::debug!(" ******* polling");
         let result = self.hw.lock().unwrap().udc_handle_interrupt();
-        log::debug!(" ----> result: {:x?}", result);
+        log::info!(" ----> result: {:x?}", result);
         match result {
             CrgEvent::None => PollResult::None,
             CrgEvent::Connect => {
