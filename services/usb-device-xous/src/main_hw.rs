@@ -262,7 +262,7 @@ pub(crate) fn main_hw() -> ! {
         loop {
             usbwrapper.core().udc_handle_interrupt();
             if usbwrapper.core().pp() {
-                poweron += 1;
+                poweron += 1; // .pp() is a sham. MPW has no way to tell if power is applied. This needs to be fixed for NTO.
             }
             tt.sleep_ms(100).ok();
             if poweron >= 4 {

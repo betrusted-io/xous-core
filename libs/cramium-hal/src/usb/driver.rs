@@ -365,9 +365,9 @@ impl TryFrom<u32> for CompletionCode {
 pub enum CrgEvent {
     None,
     Connect,
-    Setup,
     /// out, in_complete, setup
     Data(u16, u16, u16),
+    Error,
 }
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Default)]
@@ -1201,79 +1201,97 @@ impl CorigineUsb {
             println!("System error");
             self.csr.wfo(USBSTS_SYSTEM_ERR, 1);
             println!("USBCMD: {:x}", self.csr.r(USBCMD));
+            CrgEvent::Error
+        } else {
+            if (status & self.csr.ms(USBSTS_EINT, 1)) != 0 {
+                // this overwrites any previous error reporting. Seems bad, but
+                // it's exactly what the reference code does.
+                self.csr.wfo(USBSTS_EINT, 1);
+                ret = self.process_event_ring(); // there is only one event ring
+            }
+            if self.csr.rf(IMAN_IE) != 0 {
+                self.csr.rmwf(IMAN_IE, 1);
+            }
+            self.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
+            // re-enable interrupts
+            self.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
+            ret
         }
-        if (status & self.csr.ms(USBSTS_EINT, 1)) != 0 {
-            // this overwrites any previous error reporting. Seems bad, but
-            // it's exactly what the reference code does.
-            self.csr.wfo(USBSTS_EINT, 1);
-            ret = self.process_event_ring(); // there is only one event ring
-        }
-        if self.csr.rf(IMAN_IP) != 0 {
-            self.csr.rmwf(IMAN_IP, 1);
-        }
-        self.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
-        // re-enable interrupts
-        self.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
-        ret
     }
 
     pub fn process_event_ring(&mut self) -> CrgEvent {
         // clear IP
         self.csr.rmwf(IMAN_IP, 1);
-        let mut result = CrgEvent::None;
 
-        // loop {
-        let event = {
-            if self.udc_event.evt_dq_pt.load(Ordering::SeqCst).is_null() {
-                // break;
-                #[cfg(feature = "std")]
-                log::warn!("null pointer in process_event_ring");
-                return CrgEvent::None;
+        // aggregated event status
+        let mut ep_out: u16 = 0;
+        let mut ep_in_complete: u16 = 0;
+        let mut ep_setup: u16 = 0;
+        let mut connect = false;
+        loop {
+            let event = {
+                if self.udc_event.evt_dq_pt.load(Ordering::SeqCst).is_null() {
+                    // break;
+                    #[cfg(feature = "std")]
+                    log::warn!("null pointer in process_event_ring");
+                    return CrgEvent::None;
+                }
+                let event_ptr = self.udc_event.evt_dq_pt.load(Ordering::SeqCst) as usize;
+                unsafe { (event_ptr as *mut EventTrbS).as_mut().expect("couldn't deref pointer") }
+            };
+
+            if event.dw3.cycle_bit() != self.udc_event.ccs {
+                break;
             }
-            let event_ptr = self.udc_event.evt_dq_pt.load(Ordering::SeqCst) as usize;
-            unsafe { (event_ptr as *mut EventTrbS).as_mut().expect("couldn't deref pointer") }
-        };
 
-        if event.dw3.cycle_bit() != self.udc_event.ccs {
-            #[cfg(feature = "std")]
-            log::warn!("cycle bit != ccs");
-            return CrgEvent::None;
-            // break;
-        }
-
-        let res = self.handle_event(event);
-        if res != CrgEvent::None {
-            // don't overwrite events with None
-            if result != res && result != CrgEvent::None {
-                #[cfg(feature = "std")]
-                log::info!("Overwriting event: {:?} with {:?}", result, res);
+            match self.handle_event(event) {
+                CrgEvent::Connect => connect = true,
+                CrgEvent::Error => return CrgEvent::Error,
+                CrgEvent::None => (),
+                CrgEvent::Data(o, i, s) => {
+                    ep_out |= o;
+                    ep_in_complete |= i;
+                    ep_setup |= s;
+                }
             }
-            result = res;
-        }
 
-        if self.udc_event.evt_dq_pt.load(Ordering::SeqCst)
-            == self.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst)
-        {
-            #[cfg(feature = "std")]
-            log::info!(
-                " evt_last_trb {:x}",
-                self.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst) as usize
-            );
-            self.udc_event.ccs = !self.udc_event.ccs;
-            // does this...go to null to end the transfer??
-            self.udc_event.evt_dq_pt =
-                AtomicPtr::new(self.udc_event.event_ring.vaddr.load(Ordering::SeqCst) as *mut EventTrbS);
-        } else {
-            self.udc_event.evt_dq_pt =
-                AtomicPtr::new(unsafe { self.udc_event.evt_dq_pt.load(Ordering::SeqCst).add(1) });
+            if self.udc_event.evt_dq_pt.load(Ordering::SeqCst)
+                == self.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst)
+            {
+                #[cfg(feature = "std")]
+                log::info!(
+                    " evt_last_trb {:x}",
+                    self.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst) as usize
+                );
+                self.udc_event.ccs = !self.udc_event.ccs;
+                // does this...go to null to end the transfer??
+                self.udc_event.evt_dq_pt =
+                    AtomicPtr::new(self.udc_event.event_ring.vaddr.load(Ordering::SeqCst) as *mut EventTrbS);
+            } else {
+                self.udc_event.evt_dq_pt =
+                    AtomicPtr::new(unsafe { self.udc_event.evt_dq_pt.load(Ordering::SeqCst).add(1) });
+            }
         }
-        // }
 
         // update dequeue pointer
         self.csr.wo(ERDPHI, 0);
         self.csr.wo(ERDPLO, self.udc_event.evt_dq_pt.load(Ordering::SeqCst) as u32 | CRG_UDC_ERDPLO_EHB);
         compiler_fence(Ordering::SeqCst);
-        result
+
+        // aggregate events and form a report
+        if connect && ((ep_out | ep_in_complete | ep_setup) != 0) {
+            #[cfg(feature = "std")]
+            log::error!("*** Connect event concurrent with packets, API cannot handle ***");
+        }
+        if connect {
+            CrgEvent::Connect
+        } else {
+            if ep_out | ep_in_complete | ep_setup != 0 {
+                CrgEvent::Data(ep_out, ep_in_complete, ep_setup)
+            } else {
+                CrgEvent::None
+            }
+        }
     }
 
     pub fn handle_event(&mut self, event_trb: &mut EventTrbS) -> CrgEvent {
@@ -1287,19 +1305,23 @@ impl CorigineUsb {
             TrbType::EventPortStatusChange => {
                 let portsc_val = self.csr.r(PORTSC);
                 self.csr.wo(PORTSC, portsc_val);
+                // self.print_status(portsc_val);
 
                 let portsc = PortSc(portsc_val);
                 #[cfg(feature = "std")]
                 log::info!("{:?}", portsc);
 
                 if portsc.prc() {
+                    #[cfg(feature = "std")]
+                    log::info!("update_current_speed()");
+                    self.update_current_speed();
                     ret = CrgEvent::Connect;
                 }
-
                 /*
                 let cs = (portsc_val & self.csr.ms(PORTSC_CCS, 1)) != 0;
                 let pp = (portsc_val & self.csr.ms(PORTSC_PP, 1)) != 0;
-                // log::info!("  {:x} {:x?} PORT_STATUS_CHANGE", portsc_val, event_trb.dw3);
+                #[cfg(feature = "std")]
+                log::info!("  {:x} {:x?} PORT_STATUS_CHANGE", portsc_val, event_trb.dw3);
 
                 if portsc_val & self.csr.ms(PORTSC_CSC, 1) != 0 {
                     if cs {
@@ -1372,8 +1394,8 @@ impl CorigineUsb {
                     println!("  cable disconnect and power not present");
                     #[cfg(feature = "std")]
                     log::info!("  cable disconnect and power not present");
-                }*/
-
+                }
+                */
                 self.csr.rmwf(EVENTCONFIG_SETUP_ENABLE, 1);
             }
             TrbType::EventTransfer => {
@@ -1482,7 +1504,7 @@ impl CorigineUsb {
                                 ep0_buf.add(6).write_volatile(0x0);
                                 ep0_buf.add(7).write_volatile(0x8);
                             }
-                            // println!("EP0 send");
+                            println!("EP0 send");
                             self.ep0_send(base_ptr, 8, 0);
                             println!("EP0 sent");
                         }
@@ -1492,7 +1514,7 @@ impl CorigineUsb {
                     }
                 }
 
-                ret = CrgEvent::Setup;
+                ret = CrgEvent::Data(0, 0, 1);
             }
             TrbType::DataStage => {
                 panic!("data stage needs handling");
@@ -1644,7 +1666,7 @@ impl CorigineUsb {
             EVENTCONFIG,
             self.csr.ms(EVENTCONFIG_CSC_ENABLE, 1)
                 | self.csr.ms(EVENTCONFIG_PEC_ENABLE, 1)
-                // | self.csr.ms(EVENTCONFIG_PPC_ENABLE, 1)
+                | self.csr.ms(EVENTCONFIG_PPC_ENABLE, 1)
                 | self.csr.ms(EVENTCONFIG_PRC_ENABLE, 1)
                 | self.csr.ms(EVENTCONFIG_PLC_ENABLE, 1)
                 | self.csr.ms(EVENTCONFIG_CEC_ENABLE, 1)
@@ -2191,9 +2213,12 @@ impl UsbBus for CorigineWrapper {
                 hw.start(); */
                 PollResult::Reset
             }
-            CrgEvent::Setup => PollResult::Data { ep_out: 0, ep_in_complete: 0, ep_setup: 1 },
             CrgEvent::Data(ep_out, ep_in_complete, ep_setup) => {
                 PollResult::Data { ep_out, ep_in_complete, ep_setup }
+            }
+            CrgEvent::Error => {
+                log::error!("Error detected in poll, issuing reset");
+                PollResult::Reset
             }
         }
     }
@@ -2209,9 +2234,12 @@ impl UsbBus for CorigineWrapper {
     ///   simulating a disconnect or it has not been enabled at creation time.
     fn force_reset(&self) -> Result<()> {
         log::info!(" ******* force_reset");
+        /*
         self.core().reset();
         self.core().init();
         self.core().start();
+        self.core().update_current_speed();
+        */
         /*
         for (index, &maybe_ep) in self.free_ep.iter().enumerate() {
             if index == 0 {
