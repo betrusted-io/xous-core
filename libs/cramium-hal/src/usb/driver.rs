@@ -176,6 +176,27 @@ impl TryFrom<u8> for EpType {
         }
     }
 }
+
+bitfield! {
+    #[derive(Copy, Clone, PartialEq, Eq, Default)]
+    pub struct PortSc(u32);
+    impl Debug;
+    pub ccs, set_ccs: 0;
+    pub pp, set_pp: 3;
+    pub pr, set_pr: 4;
+    pub pls, set_pl: 8, 5;
+    pub speed, set_speed: 13, 10;
+    pub lws, set_lws: 16;
+    pub csc, set_csc: 17;
+    pub ppc, set_ppc: 20;
+    pub prc, set_prc: 21;
+    pub plc, set_plc: 22;
+    pub cec, set_cec: 23;
+    pub wce, set_wce: 25;
+    pub wde, set_wde: 26;
+    pub wdr, set_wdr: 31;
+}
+
 #[repr(u32)]
 pub enum PortSpeed {
     Invalid = 0,
@@ -794,20 +815,21 @@ pub struct CorigineUsb {
 
     udc_event: UdcEvent,
 
+    /// A place to put data received from the hardware immediately, before it
+    /// is processed by the driver interface.
+    readout: [Option<[u8; CRG_UDC_APP_BUF_LEN]>; CRG_EP_NUM],
+    setup: Option<[u8; 8]>,
+    setup_tag: u8,
+    /// When `true`, indicates that hardware has auto-responded to set_address, and the stack's set_address
+    /// response should be ignored.
+    suppress_ep0_send_set_addr: bool,
+
     // power management data
     sel_value: SelValue,
 
-    setup_status: u8,
-    setup: Option<[u8; 8]>,
-    setup_tag: u8,
-
     speed: UsbDeviceSpeed,
     device_state: UsbDeviceState,
-    resume_state: u8,
-    dev_addr: u16,
-    set_tm: u8,
     cur_interface_num: u8,
-    connected: u32,
 
     // actual hardware pointer value to pass to UDC; not directly accessed by Rust
     ep0_buf: AtomicPtr<u8>,
@@ -815,9 +837,6 @@ pub struct CorigineUsb {
     u2_rwe: u32,
     feature_u1_enabled: u32,
     feature_u2_enabled: u32,
-
-    portsc_on_reconnecting: u32,
-    max_speed: u32,
 }
 impl CorigineUsb {
     /// Safety: this function is generally pretty unsafe because the underlying hardware needs raw pointers,
@@ -862,22 +881,17 @@ impl CorigineUsb {
             p_epcx: AtomicPtr::new(core::ptr::null_mut()),
             udc_event: UdcEvent::default(),
             sel_value: SelValue::default(),
-            setup_status: 0,
-            setup_tag: 0,
+            readout: [None; CRG_EP_NUM],
             setup: None,
+            suppress_ep0_send_set_addr: false,
+            setup_tag: 0,
             speed: UsbDeviceSpeed::Unknown,
             device_state: UsbDeviceState::NotAttached,
-            resume_state: 0,
-            dev_addr: 0,
-            set_tm: 0,
             cur_interface_num: 0,
-            connected: 0,
             ep0_buf: AtomicPtr::new(core::ptr::null_mut()),
             u2_rwe: 0,
             feature_u1_enabled: 0,
             feature_u2_enabled: 0,
-            portsc_on_reconnecting: 0,
-            max_speed: 0,
         }
     }
 
@@ -981,11 +995,6 @@ impl CorigineUsb {
 
         self.csr.wo(DEVCONFIG, 0x80 | CRG_UDC_CFG0_MAXSPEED_FS);
 
-        #[cfg(not(feature = "std"))]
-        println!("config0: {:x}", self.csr.r(DEVCONFIG));
-        #[cfg(feature = "std")]
-        log::trace!("config0: {:x}", self.csr.r(DEVCONFIG));
-
         self.csr.wo(
             EVENTCONFIG,
             self.csr.ms(EVENTCONFIG_CSC_ENABLE, 1)
@@ -1069,16 +1078,6 @@ impl CorigineUsb {
         self.csr.wo(DCBAPLO, self.ep_cx.vaddr.load(Ordering::SeqCst) as u32);
         self.csr.wo(DCBAPHI, 0);
         compiler_fence(Ordering::SeqCst);
-        #[cfg(not(feature = "std"))]
-        {
-            println!(" dcbaplo: {:x}", self.csr.r(DCBAPLO));
-            println!(" dcbaphi: {:x}", self.csr.r(DCBAPHI));
-        }
-        #[cfg(feature = "std")]
-        {
-            log::trace!(" dcbaplo: {:x}", self.csr.r(DCBAPLO));
-            log::trace!(" dcbaphi: {:x}", self.csr.r(DCBAPHI));
-        }
 
         // initial ep0 transfer ring
         self.init_ep0();
@@ -1281,18 +1280,26 @@ impl CorigineUsb {
         #[cfg(feature = "std")]
         log::debug!("handle_event: {:x?}", event_trb);
         let pei = event_trb.get_endpoint_id();
+        let ep_num = pei >> 1;
         let udc_ep = &mut self.udc_ep[pei as usize];
-        // println!("handle_event() event_trb: {:x?}", event_trb);
         let mut ret = CrgEvent::None;
         match event_trb.get_trb_type() {
             TrbType::EventPortStatusChange => {
                 let portsc_val = self.csr.r(PORTSC);
                 self.csr.wo(PORTSC, portsc_val);
-                self.print_status(portsc_val);
+
+                let portsc = PortSc(portsc_val);
+                #[cfg(feature = "std")]
+                log::info!("{:?}", portsc);
+
+                if portsc.prc() {
+                    ret = CrgEvent::Connect;
+                }
+
+                /*
                 let cs = (portsc_val & self.csr.ms(PORTSC_CCS, 1)) != 0;
                 let pp = (portsc_val & self.csr.ms(PORTSC_PP, 1)) != 0;
-                #[cfg(feature = "std")]
-                log::info!("  {:x} {:x?} PORT_STATUS_CHANGE", portsc_val, event_trb.dw3);
+                // log::info!("  {:x} {:x?} PORT_STATUS_CHANGE", portsc_val, event_trb.dw3);
 
                 if portsc_val & self.csr.ms(PORTSC_CSC, 1) != 0 {
                     if cs {
@@ -1365,7 +1372,7 @@ impl CorigineUsb {
                     println!("  cable disconnect and power not present");
                     #[cfg(feature = "std")]
                     log::info!("  cable disconnect and power not present");
-                }
+                }*/
 
                 self.csr.rmwf(EVENTCONFIG_SETUP_ENABLE, 1);
             }
@@ -1407,6 +1414,24 @@ impl CorigineUsb {
                     if comp_code == CompletionCode::Success || comp_code == CompletionCode::ShortPacket {
                         // xfer_complete
                         if dir == HOST_SEND {
+                            let addr = self.get_app_buf_ptr(ep_num, HOST_SEND);
+                            let hw_buf = unsafe {
+                                core::slice::from_raw_parts_mut(addr as *mut u8, CRG_UDC_APP_BUF_LEN)
+                            };
+                            // copy the whole hardware buffer contents -- even if it's bogus
+                            let mut storage = [0u8; 512];
+                            storage.copy_from_slice(hw_buf);
+                            self.readout[ep_num as usize - 1] = Some(storage);
+                            // re-enqueue the listener
+                            self.intr_xfer(
+                                ep_num,
+                                dir,
+                                addr,
+                                CRG_UDC_APP_BUF_LEN,
+                                CRG_INT_TARGET,
+                                false,
+                                false,
+                            );
                             ret = CrgEvent::Data((pei / 2) as u16, 0, 0);
                         } else {
                             ret = CrgEvent::Data(0, (pei / 2) as u16, 0);
@@ -1427,7 +1452,7 @@ impl CorigineUsb {
                 self.setup_tag = event_trb.get_setup_tag();
 
                 // demo of setup packets working in loader
-                #[cfg(not(feature = "std"))]
+                // #[cfg(not(feature = "std"))]
                 {
                     let request_type = setup_storage[0];
                     let request = setup_storage[1];
@@ -1457,7 +1482,7 @@ impl CorigineUsb {
                                 ep0_buf.add(6).write_volatile(0x0);
                                 ep0_buf.add(7).write_volatile(0x8);
                             }
-                            println!("EP0 send");
+                            // println!("EP0 send");
                             self.ep0_send(base_ptr, 8, 0);
                             println!("EP0 sent");
                         }
@@ -1523,12 +1548,17 @@ impl CorigineUsb {
         let udc_ep = &mut self.udc_ep[0];
         let enq_pt =
             unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
-        enq_pt.control_status_trb(udc_ep.pcs, true, false, self.setup_tag, target, false);
+        enq_pt.control_status_trb(udc_ep.pcs, true, false, self.setup_tag, target, HOST_SEND);
 
         // TODO: fix raw pointer manips with something more sane?
         let (_enq_pt, _pcs) = udc_ep.increment_enq_pt();
+        if addr != 0 {
+            self.suppress_ep0_send_set_addr = true; // signal to the usb_device stack that the HW has already ack'd this with a 0-length write
+        }
         compiler_fence(Ordering::SeqCst);
         self.knock_doorbell(0);
+        #[cfg(feature = "std")]
+        log::info!(" ******* set address done {}", addr);
     }
 
     // knock door bell then controller will start transfer for the specific endpoint
@@ -1610,27 +1640,11 @@ impl CorigineUsb {
     }
 
     pub fn start(&mut self) {
-        #[cfg(not(feature = "std"))]
-        println!(
-            "****** cfg0/1 {:x}/{:x}, cmd {:x}",
-            self.csr.r(DEVCONFIG),
-            self.csr.r(EVENTCONFIG),
-            self.csr.r(USBCMD)
-        );
-        #[cfg(feature = "std")]
-        log::trace!(
-            "****** cfg0/1 {:x}/{:x}, cmd {:x}",
-            self.csr.r(DEVCONFIG),
-            self.csr.r(EVENTCONFIG),
-            self.csr.r(USBCMD)
-        );
-        self.print_status(self.csr.r(PORTSC));
-
         self.csr.wo(
             EVENTCONFIG,
             self.csr.ms(EVENTCONFIG_CSC_ENABLE, 1)
                 | self.csr.ms(EVENTCONFIG_PEC_ENABLE, 1)
-                | self.csr.ms(EVENTCONFIG_PPC_ENABLE, 1)
+                // | self.csr.ms(EVENTCONFIG_PPC_ENABLE, 1)
                 | self.csr.ms(EVENTCONFIG_PRC_ENABLE, 1)
                 | self.csr.ms(EVENTCONFIG_PLC_ENABLE, 1)
                 | self.csr.ms(EVENTCONFIG_CEC_ENABLE, 1)
@@ -1646,21 +1660,6 @@ impl CorigineUsb {
                 | self.csr.ms(USBCMD_INT_ENABLE, 1)
                 | self.csr.ms(USBCMD_RUN_STOP, 1),
         );
-        #[cfg(not(feature = "std"))]
-        println!(
-            "====== cfg0/1 {:x}/{:x}, cmd {:x}",
-            self.csr.r(DEVCONFIG),
-            self.csr.r(EVENTCONFIG),
-            self.csr.r(USBCMD)
-        );
-        #[cfg(feature = "std")]
-        log::trace!(
-            "====== cfg0/1 {:x}/{:x}, cmd {:x}",
-            self.csr.r(DEVCONFIG),
-            self.csr.r(EVENTCONFIG),
-            self.csr.r(USBCMD)
-        );
-        self.print_status(self.csr.r(PORTSC));
 
         #[cfg(feature = "std")]
         if !INTERRUPT_INIT_DONE.fetch_or(true, Ordering::SeqCst) {
@@ -1683,10 +1682,16 @@ impl CorigineUsb {
 
         self.print_status(self.csr.r(PORTSC));
 
-        self.set_addr(0, 0);
+        self.set_addr(0, CRG_INT_TARGET);
     }
 
     pub fn ep0_send(&mut self, addr: usize, len: usize, intr_target: u32) {
+        if self.suppress_ep0_send_set_addr {
+            #[cfg(feature = "std")]
+            log::info!("ep0 ack suppressed");
+            self.suppress_ep0_send_set_addr = false;
+            return;
+        }
         let udc_ep = &mut self.udc_ep[0];
         let mut enq_pt =
             unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
@@ -1697,7 +1702,7 @@ impl CorigineUsb {
             (enq_pt, pcs) = udc_ep.increment_enq_pt();
         }
 
-        enq_pt.control_status_trb(pcs, false, false, tag, intr_target, true);
+        enq_pt.control_status_trb(pcs, false, false, tag, intr_target, HOST_RECV);
 
         let (_enq_pt, _pcs) = udc_ep.increment_enq_pt();
         compiler_fence(Ordering::SeqCst);
@@ -1957,7 +1962,7 @@ impl UsbBus for CorigineWrapper {
     /// control transfer, not after.
     ///
     /// The default value for this constant is `false`, which corresponds to the USB 2.0 spec, 9.4.6
-    const QUIRK_SET_ADDRESS_BEFORE_STATUS: bool = true;
+    const QUIRK_SET_ADDRESS_BEFORE_STATUS: bool = false;
 
     /// Allocates an endpoint and specified endpoint parameters. This method is called by the device
     /// and class implementations to allocate endpoints, and can only be called before
@@ -2045,10 +2050,7 @@ impl UsbBus for CorigineWrapper {
     }
 
     /// Sets the device USB address to `addr`.
-    fn set_device_address(&self, addr: u8) {
-        self.hw.lock().unwrap().set_addr(addr, CRG_INT_TARGET);
-        log::info!(" ********** set address {}", addr);
-    }
+    fn set_device_address(&self, addr: u8) { self.hw.lock().unwrap().set_addr(addr, CRG_INT_TARGET); }
 
     /// Writes a single packet of data to the specified endpoint and returns number of bytes
     /// actually written.
@@ -2068,7 +2070,6 @@ impl UsbBus for CorigineWrapper {
     ///
     /// Implementations may also return other errors if applicable.
     fn write(&self, ep_addr: EndpointAddress, buf: &[u8]) -> Result<usize> {
-        log::info!(" ******** WRITE: {:?}({}): {:x?}", ep_addr.index(), buf.len(), &buf[..8.min(buf.len())]);
         if ep_addr.index() == 0 {
             let base_ptr = self.core().ifram_base_ptr;
             assert!(buf.len() < CRG_UDC_EP0_REQBUFSIZE, "maximum transfer size exceeded");
@@ -2080,9 +2081,16 @@ impl UsbBus for CorigineWrapper {
                 )
             };
             ep0_buf[..buf.len().min(CRG_UDC_EP_TRSIZE)].copy_from_slice(buf);
+            log::info!(" ******** WRITE_EP0({}): : {:x?}", buf.len(), &buf[..8.min(buf.len())]);
             self.core().ep0_send(base_ptr + CRG_UDC_EP0_BUF_OFFSET, buf.len(), CRG_INT_TARGET);
             Ok(buf.len())
         } else {
+            log::info!(
+                " ******** WRITE: {:?}({}): {:x?}",
+                ep_addr.index(),
+                buf.len(),
+                &buf[..8.min(buf.len())]
+            );
             let addr = self.core().get_app_buf_ptr(ep_addr.index() as u8, HOST_RECV);
             let hw_buf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, CRG_UDC_APP_BUF_LEN) };
             assert!(buf.len() < CRG_UDC_APP_BUF_LEN, "write buffer size exceeded");
@@ -2118,38 +2126,26 @@ impl UsbBus for CorigineWrapper {
     ///
     /// Implementations may also return other errors if applicable.
     fn read(&self, ep_addr: EndpointAddress, buf: &mut [u8]) -> Result<usize> {
-        log::info!(" ******** READ: {:?}({})", ep_addr, buf.len());
         if ep_addr.index() == 0 {
             if let Some(data) = self.core().setup.take() {
                 buf[..8].copy_from_slice(&data);
-                log::debug!("   {:x?}", &buf[..8]);
+                log::debug!(" ******** STATUS_READ: {:x?})", &buf[..8]);
                 Ok(8)
             } else {
-                Err(usb_device::UsbError::WouldBlock)
+                Err(UsbError::WouldBlock)
             }
         } else {
-            // data is already in the memory at this point
-            let addr = self.core().get_app_buf_ptr(ep_addr.index() as u8, HOST_SEND);
-            let hw_buf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, CRG_UDC_APP_BUF_LEN) };
-            assert!(buf.len() < CRG_UDC_APP_BUF_LEN, "read buffer size exceeded");
-            buf.copy_from_slice(&hw_buf[..buf.len()]);
-            log::info!("   {:x?}", &buf[..8.min(buf.len())]);
-
-            // re-enqueue the listener
-            let dir = match ep_addr.direction() {
-                UsbDirection::Out => HOST_SEND,
-                UsbDirection::In => HOST_RECV,
-            };
-            self.core().intr_xfer(
-                ep_addr.index() as u8,
-                dir,
-                addr,
-                CRG_UDC_APP_BUF_LEN,
-                CRG_INT_TARGET,
-                false,
-                false,
-            );
-            Ok(buf.len())
+            if buf.len() > CRG_UDC_APP_BUF_LEN {
+                Err(UsbError::BufferOverflow)
+            } else {
+                if let Some(data) = self.core().readout[ep_addr.index() - 1] {
+                    buf.copy_from_slice(&data[..buf.len()]);
+                    log::info!(" ******** READ: {:x?})", &buf[..8.min(buf.len())]);
+                    Ok(buf.len())
+                } else {
+                    Err(UsbError::WouldBlock)
+                }
+            }
         }
     }
 
@@ -2164,7 +2160,9 @@ impl UsbBus for CorigineWrapper {
     /// update during configuration. This is for devices that support an EP0 which can only either
     /// be IN or OUT, but not both at the same time. Devices with both IN/OUT may leave this as
     /// an empty stub.
-    fn set_ep0_out(&self) {}
+    fn set_ep0_out(&self) {
+        log::info!(" ******* set EP0 out");
+    }
 
     /// Causes the USB peripheral to enter USB suspend mode, lowering power consumption and
     /// preparing to detect a USB wakeup event. This will be called after
@@ -2211,6 +2209,10 @@ impl UsbBus for CorigineWrapper {
     ///   simulating a disconnect or it has not been enabled at creation time.
     fn force_reset(&self) -> Result<()> {
         log::info!(" ******* force_reset");
+        self.core().reset();
+        self.core().init();
+        self.core().start();
+        /*
         for (index, &maybe_ep) in self.free_ep.iter().enumerate() {
             if index == 0 {
                 // EP0 -> reset & start the machine. Happens before the code below.
@@ -2241,6 +2243,7 @@ impl UsbBus for CorigineWrapper {
         }
         log::info!("enabled EPs: {:x}", self.core().csr.r(EPENABLE));
         log::info!("running EPs: {:x}", self.core().csr.r(EPRUNNING));
+        */
         Ok(())
     }
 }
