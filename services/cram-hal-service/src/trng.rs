@@ -7,6 +7,7 @@ use rand_core::{CryptoRng, RngCore, SeedableRng};
 const RESEED_INTERVAL: u32 = 32;
 
 static RESEED: AtomicU32 = AtomicU32::new(0);
+pub const TRNG_TEST_BUF_LEN: usize = 2048;
 
 #[derive(Debug)]
 pub struct Trng {
@@ -73,6 +74,17 @@ impl Trng {
             left.copy_from_slice(&chunk[..n]);
         }
     }
+
+    /// Sets the test mode according to the argument. Blocks until mode is set.
+    pub fn set_test_mode(&self, test_mode: api::TrngTestMode) {
+        log::info!("TODO: trng test mode setting: {:?}", test_mode);
+    }
+
+    /// Gets test data from the TRNG.
+    pub fn get_test_data(&self) -> Result<[u8; TRNG_TEST_BUF_LEN], xous::Error> {
+        log::info!("TODO: get test data");
+        Ok([0u8; TRNG_TEST_BUF_LEN])
+    }
 }
 
 impl RngCore for Trng {
@@ -88,3 +100,13 @@ impl RngCore for Trng {
 }
 
 impl CryptoRng for Trng {}
+
+pub mod api {
+    #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq, Copy, Clone)]
+    pub enum TrngTestMode {
+        // No test mode configured. Whitened data is sampled.
+        None,
+        // Raw TRNG output.
+        Raw,
+    }
+}

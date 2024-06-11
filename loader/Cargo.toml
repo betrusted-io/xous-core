@@ -94,5 +94,6 @@ quantum-timer-test = ["pio", "pio-proc"]
 spim-test = []
 spi-alt-channel = []
 irq-test = []
+usb-test = []
 resume = []                              # suspend/resume pathway code
-default = ["board-bringup", "irq-test"]
+default = ["board-bringup", "usb-test"]

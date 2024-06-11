@@ -24,6 +24,7 @@ pub const MINIELF_FLG_EHF: u8 = 8;
 pub const MINIELF_FLG_EHH: u8 = 0x10;
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct MiniElfSection {
     // Virtual address of this section
     pub virt: u32,
@@ -490,8 +491,12 @@ impl MiniElf {
                         );
                         #[cfg(feature = "swap")]
                         if let Some(swap) = allocator.swap_hal.as_mut() {
-                            let dump_disk = swap.decrypt_src_page_at(dump_pa_src & !(PAGE_SIZE - 1));
-                            dump_slice(&dump_disk[dump_pa_src & (PAGE_SIZE - 1)..], "    Src [:20]  ");
+                            if !section.no_copy() {
+                                let dump_disk = swap.decrypt_src_page_at(dump_pa_src & !(PAGE_SIZE - 1));
+                                dump_slice(&dump_disk[dump_pa_src & (PAGE_SIZE - 1)..], "    Src [:20]  ");
+                            } else {
+                                println!("    -- nocopy --");
+                            };
                             let dump_swap = swap.decrypt_swap_from(
                                 dest_offset & !(PAGE_SIZE - 1),
                                 (section.virt as usize) & !(PAGE_SIZE - 1),
@@ -501,12 +506,17 @@ impl MiniElf {
                                 &dump_swap[(section.virt as usize) & (PAGE_SIZE - 1)..],
                                 "    Dst [:20]  ",
                             );
-                            let dump_disk = swap
-                                .decrypt_src_page_at((dump_pa_src + section.len() - 20) & !(PAGE_SIZE - 1));
-                            dump_slice(
-                                &dump_disk[(dump_pa_src + section.len() - 20) & (PAGE_SIZE - 1)..],
-                                "    Src [-20:] ",
-                            );
+                            if !section.no_copy() {
+                                let dump_disk = swap.decrypt_src_page_at(
+                                    (dump_pa_src + section.len() - 20) & !(PAGE_SIZE - 1),
+                                );
+                                dump_slice(
+                                    &dump_disk[(dump_pa_src + section.len() - 20) & (PAGE_SIZE - 1)..],
+                                    "    Src [-20:] ",
+                                );
+                            } else {
+                                println!("    -- nocopy --");
+                            }
                             // recompute the end section mapping, because PA/VA mappings don't have to be
                             // linear (in fact they go in the opposite direction)
                             if let Some(pa_dst_end) = dump_pa_end_dst {

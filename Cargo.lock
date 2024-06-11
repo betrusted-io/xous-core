@@ -844,6 +844,7 @@ dependencies = [
  "modals",
  "num-derive 0.3.3",
  "num-traits",
+ "usb-device-xous",
  "utralib 0.1.24",
  "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
@@ -908,11 +909,13 @@ dependencies = [
 name = "cramium-hal"
 version = "0.1.0"
 dependencies = [
+ "bitfield",
  "bitflags 1.3.2",
  "log",
  "num-derive 0.3.3",
  "num-traits",
  "rkyv",
+ "usb-device",
  "utralib 0.1.24",
  "xous 0.9.61 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
@@ -5393,7 +5396,6 @@ dependencies = [
 [[package]]
 name = "usb-device"
 version = "0.2.8"
-source = "git+https://github.com/betrusted-io/usb-device.git?branch=main#31de6a25950194783e49244743c9dd69fac0dfad"
 dependencies = [
  "log",
 ]
@@ -5403,6 +5405,8 @@ name = "usb-device-xous"
 version = "0.1.0"
 dependencies = [
  "bitfield",
+ "cram-hal-service",
+ "cramium-hal",
  "embedded-time",
  "frunk_core",
  "fugit",

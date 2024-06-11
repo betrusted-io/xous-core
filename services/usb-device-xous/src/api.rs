@@ -78,6 +78,7 @@ pub(crate) enum Opcode {
     /// Handle the USB interrupt
     UsbIrqHandler = 2048,
     /// Suspend/resume callback
+    #[cfg(any(feature = "renode", feature = "precursor", feature = "hosted"))]
     SuspendResume = 2049,
     /// Exits the server
     Quit = 4096,

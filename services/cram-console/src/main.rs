@@ -45,7 +45,17 @@ fn main() {
         }
     });
 
+    let tt = xous_api_ticktimer::Ticktimer::new().unwrap();
     let xns = xous_api_names::XousNames::new().unwrap();
+
+    let usb = usb_device_xous::UsbHid::new();
+
+    tt.sleep_ms(15_000).ok();
+    log::info!("sending hello world");
+    usb.send_str("hello world");
+    loop {
+        tt.sleep_ms(1000).ok();
+    }
 
     let status_gam_getter =
         xns.register_name(SERVER_NAME_STATUS_GID, Some(1)).expect("can't register server");

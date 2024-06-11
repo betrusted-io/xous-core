@@ -152,7 +152,7 @@ branch = "main"
 git = "https://github.com/betrusted-io/usb-device.git"
 branch = "main"
 # local dev shortcuts
-#path = "../usb-device"
+# path = "../usb-device"
 
 [patch.crates-io.getrandom]
 path = "imports/getrandom"
