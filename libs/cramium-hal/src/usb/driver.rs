@@ -423,7 +423,7 @@ impl TransferTrbS {
 
     /// Implicitly sets the link type to Link
     pub fn setup_link_trb(&mut self, toggle: bool, next_trb: *mut TransferTrbS) {
-        self.dplo = next_trb as usize as u32;
+        self.dplo = next_trb as usize as u32 & 0xFFFF_FFF0;
         self.dphi = 0;
         self.dw2 = ControlTrbDw2(0);
 
@@ -569,7 +569,7 @@ bitfield! {
     pub deq_ptr_lo, set_deq_ptr_lo: 31, 4;
 }
 #[repr(C)]
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct EpCxS {
     dw0: EpCxDw0,
     dw1: EpCxDw1,
@@ -578,11 +578,16 @@ pub struct EpCxS {
 }
 impl EpCxS {
     pub fn epcx_setup(&mut self, udc_ep: &UdcEp) {
-        let ep_type = if udc_ep.direction == HOST_RECV {
+        // corigine gadget dir should be opposite to host dir
+        let ep_type = if udc_ep.direction == HOST_SEND {
+            // transforms the base type into INBOUND
             EpType::try_from(udc_ep.ep_type as u8 + EpType::Invalid2 as u8).unwrap()
         } else {
+            // leave as base type which is OUTBOUND
             udc_ep.ep_type
         };
+        #[cfg(feature = "std")]
+        log::info!("final HW EpType: {:?}", ep_type);
         let max_size = udc_ep.max_packet_size & 0x7FF;
 
         self.dw0 = EpCxDw0(0);
@@ -599,10 +604,11 @@ impl EpCxS {
         self.dw1.set_max_burst_size(CRG_UDC_MAX_BURST);
 
         self.dw2 = EpCxDw2(0);
-        self.dw2.set_deq_ptr_lo(udc_ep.tran_ring_info.dma as u32);
+        self.dw2.set_deq_ptr_lo(udc_ep.tran_ring_info.dma as u32 >> 4); // this gets shifted << 4, which effectively masks lower 4 bits
         self.dw2.set_deq_cyc_state(udc_ep.pcs);
 
         self.dw3 = 0;
+        compiler_fence(Ordering::SeqCst);
     }
 }
 
@@ -811,8 +817,8 @@ pub struct CorigineUsb {
 
     udc_ep: [UdcEp; CRG_EP_NUM * 2 + 2], /* each EP gets an in/out statically allocated, + in/out for EP0.
                                           * Reference driver has a bug? */
-    ep_cx: BufferInfo,
     p_epcx: AtomicPtr<EpCxS>,
+    p_epcx_len: usize,
 
     udc_event: UdcEvent,
 
@@ -879,8 +885,8 @@ impl CorigineUsb {
                 UdcEp::default(),
                 UdcEp::default(),
             ],
-            ep_cx: BufferInfo::default(),
             p_epcx: AtomicPtr::new(core::ptr::null_mut()),
+            p_epcx_len: 0,
             udc_event: UdcEvent::default(),
             sel_value: SelValue::default(),
             readout: [None; CRG_EP_NUM],
@@ -1060,7 +1066,8 @@ impl CorigineUsb {
         self.csr.wo(ERSTBAHI, 0);
         self.csr.wo(
             ERDPLO,
-            self.udc_event.event_ring.vaddr.load(Ordering::SeqCst) as u32 | self.csr.ms(ERDPLO_EHB, 1),
+            (self.udc_event.event_ring.vaddr.load(Ordering::SeqCst) as u32 & 0xFFFF_FFF0)
+                | self.csr.ms(ERDPLO_EHB, 1),
         );
         self.csr.wo(ERDPHI, 0);
 
@@ -1068,17 +1075,17 @@ impl CorigineUsb {
         self.csr.wo(IMOD, 0);
         compiler_fence(Ordering::SeqCst);
 
-        // init_device_context
+        // Set up storage for Endpoint contexts
         #[cfg(feature = "std")]
         log::trace!("Begin init_device_context");
         #[cfg(not(feature = "std"))]
         println!("Begin init_device_context");
         // init device context and ep context, refer to 7.6.2
-        self.ep_cx.len = CRG_EP_NUM * size_of::<EpCxS>();
-        self.ep_cx.vaddr = AtomicPtr::new((self.ifram_base_ptr + CRG_UDC_EPCX_OFFSET) as *mut u8); // EpCxS ??
-        self.p_epcx = AtomicPtr::new(self.ep_cx.vaddr.load(Ordering::SeqCst) as *mut EpCxS);
+        self.p_epcx = AtomicPtr::new((self.ifram_base_ptr + CRG_UDC_EPCX_OFFSET) as *mut EpCxS);
+        self.p_epcx_len = CRG_EP_NUM * 2 * size_of::<EpCxS>();
 
-        self.csr.wo(DCBAPLO, self.ep_cx.vaddr.load(Ordering::SeqCst) as u32);
+        assert!(self.p_epcx.load(Ordering::SeqCst) as u32 & 0x3F == 0, "EpCxS storage misaligned");
+        self.csr.wo(DCBAPLO, self.p_epcx.load(Ordering::SeqCst) as u32 & 0xFFFF_FFC0);
         self.csr.wo(DCBAPHI, 0);
         compiler_fence(Ordering::SeqCst);
 
@@ -1322,7 +1329,10 @@ impl CorigineUsb {
 
         // update dequeue pointer
         self.csr.wo(ERDPHI, 0);
-        self.csr.wo(ERDPLO, self.udc_event.evt_dq_pt.load(Ordering::SeqCst) as u32 | CRG_UDC_ERDPLO_EHB);
+        self.csr.wo(
+            ERDPLO,
+            (self.udc_event.evt_dq_pt.load(Ordering::SeqCst) as u32 & 0xFFFF_FFF0) | CRG_UDC_ERDPLO_EHB,
+        );
         compiler_fence(Ordering::SeqCst);
 
         // aggregate events and form a report
@@ -1479,6 +1489,8 @@ impl CorigineUsb {
                     }
                 } else if pei >= 2 {
                     if comp_code == CompletionCode::Success || comp_code == CompletionCode::ShortPacket {
+                        #[cfg(feature = "std")]
+                        log::info!("EP{} xfer event, dir {}", ep_num, if dir { "IN" } else { "OUT" });
                         // xfer_complete
                         if dir == HOST_SEND {
                             let addr = self.get_app_buf_ptr(ep_num, HOST_SEND);
@@ -1504,9 +1516,11 @@ impl CorigineUsb {
                             ret = CrgEvent::Data(0, (pei / 2) as u16, 0);
                         }
                     } else if comp_code == CompletionCode::MissedServiceError {
-                        println!("MissedServiceError");
+                        #[cfg(feature = "std")]
+                        log::error!("MissedServiceError");
                     } else {
-                        println!("EventTransfer {:?} event not handled", comp_code);
+                        #[cfg(feature = "std")]
+                        log::warn!("EventTransfer {:?} event not handled", comp_code);
                     }
                 }
             }
@@ -1913,12 +1927,22 @@ impl CorigineUsb {
     }
 
     pub fn ep_enable(&mut self, ep_num: u8, dir: bool, max_packet_size: u16, ep_type: EpType) {
+        let mut baseline_enable = self.csr.r(EPENABLE);
+        if ep_num == 0 {
+            panic!("Can't use ep_enable on EP0, use init_ep0 instead!");
+        }
         let pei = (2 * ep_num + if dir { 1 } else { 0 }) as usize;
         let udc_ep = &mut self.udc_ep[pei];
-        let len = CRG_TD_RING_SIZE + size_of::<TransferTrbS>();
+        let len = CRG_TD_RING_SIZE * size_of::<TransferTrbS>();
         let vaddr = self.ifram_base_ptr + CRG_UDC_EP_TR_OFFSET + (pei - 2) * len;
         #[cfg(feature = "std")]
-        log::trace!("udc_ep->PEI = {}, xfer ring addr {:x}", pei, vaddr);
+        log::info!(
+            "udc_ep->PEI = {}, xfer ring addr {:x}, dir {}, mps: {}",
+            pei,
+            vaddr,
+            if dir { "IN" } else { "OUT" },
+            max_packet_size,
+        );
         assert!(
             vaddr != 0 && vaddr <= CRG_UDC_EP0_TR_OFFSET + self.ifram_base_ptr + CRG_UDC_EP_TRSIZE,
             "failed to allocate trb ring"
@@ -1928,6 +1952,7 @@ impl CorigineUsb {
         udc_ep.max_packet_size = max_packet_size;
         udc_ep.ep_type = ep_type;
 
+        // setup TransferTrb ring - TD_RING_SIZE entries of TransferTrbS
         udc_ep.tran_ring_info.vaddr = AtomicPtr::new(vaddr as *mut u8);
         udc_ep.tran_ring_info.dma = vaddr as u64;
         udc_ep.tran_ring_info.len = len;
@@ -1948,20 +1973,43 @@ impl CorigineUsb {
         udc_ep.pcs = true;
         udc_ep.tran_ring_full = false;
 
+        // setup endpoint context: EpCxS
         let epcx = unsafe {
             self.p_epcx.load(Ordering::SeqCst).add(pei - 2).as_mut().expect("couldn't deref pointer")
         };
-        if udc_ep.ep_num != 0 {
-            epcx.epcx_setup(&udc_ep);
-        }
-
+        epcx.epcx_setup(&udc_ep);
+        #[cfg(feature = "std")]
+        log::info!(
+            "dcbap {:x}/{:x}; ecpx * {:x}; epcx: {:x?}",
+            self.csr.r(DCBAPHI),
+            self.csr.r(DCBAPLO),
+            epcx as *const EpCxS as usize,
+            epcx,
+        );
         self.issue_command(CmdType::ConfigEp, 1 << pei as u32, 0).expect("couldn't issue command");
         self.udc_ep[pei].ep_state = EpState::Running;
         #[cfg(feature = "std")]
-        log::trace!("config ep and start, DCI = {}", pei);
+        log::info!("config ep and start, PEI = {}", pei);
+        #[cfg(feature = "std")]
+        log::info!("waiting for EP to go to enabled, baseline: {:x}, epcx: {:x?}", baseline_enable, epcx);
+        loop {
+            let new_enable = self.csr.r(EPENABLE);
+            if baseline_enable != new_enable {
+                #[cfg(feature = "std")]
+                log::info!("EPENABLE {:x}, EPRUN {:x}", self.csr.r(EPENABLE), self.csr.r(EPRUNNING));
+                baseline_enable = new_enable;
+            }
+            if self.csr.r(EPENABLE) & (1 << pei) != 0 {
+                break;
+            }
+        }
+        #[cfg(feature = "std")]
+        log::info!("ENABLED");
     }
 
     pub fn ep_disable(&mut self, ep_num: u8, dir: bool) {
+        #[cfg(feature = "std")]
+        log::info!("Disable ep {}, dir {}", ep_num, if dir { "IN " } else { "OUT" });
         let pei = 2 * ep_num as usize + if dir { 1 } else { 0 };
         let param0 = 1 << pei as u32;
         if param0 & self.csr.r(EPRUNNING) != 0 {
@@ -2008,7 +2056,7 @@ impl CorigineUsb {
         let deq_pt = self.udc_ep[pei].deq_pt.load(Ordering::SeqCst);
         ep_cx_s.dw2 = EpCxDw2(0);
         ep_cx_s.dw2.set_deq_cyc_state(self.udc_ep[pei].pcs);
-        ep_cx_s.dw2.set_deq_ptr_lo(deq_pt as u32);
+        ep_cx_s.dw2.set_deq_ptr_lo(deq_pt as u32 >> 4);
         ep_cx_s.dw3 = 0;
         compiler_fence(Ordering::SeqCst);
         self.issue_command(CmdType::SetTrDqPtr, 1 << pei as u32, 0).expect("couldn't isssue command");
@@ -2024,7 +2072,10 @@ impl CorigineUsb {
         if ep_num == 0 {
             pei = 0;
         }
-        self.stall_spec[pei] = Some(stalled);
+        if stalled != self.stall_spec[pei].unwrap_or(false) {
+            self.stall_spec[pei] = Some(stalled);
+            self.ep0_enqueue_zlp(stalled, CRG_INT_TARGET);
+        }
     }
 
     /*
@@ -2142,7 +2193,7 @@ impl UsbBus for CorigineWrapper {
         max_packet_size: u16,
         _interval: u8,
     ) -> Result<EndpointAddress> {
-        log::info!("alloc_ep {:?} size: {}", ep_addr, max_packet_size);
+        log::info!("alloc_ep {:?} size: {} dir: {:?}", ep_addr, max_packet_size, ep_dir);
         let dir = match ep_dir {
             UsbDirection::Out => HOST_SEND,
             UsbDirection::In => HOST_RECV,
@@ -2238,7 +2289,7 @@ impl UsbBus for CorigineWrapper {
             };
             if buf.len() > 0 {
                 ep0_buf[..buf.len().min(mps as usize)].copy_from_slice(buf);
-                log::info!(
+                log::debug!(
                     " ******** WRITE_EP0({}): {:x?} @ {}",
                     buf.len(),
                     &buf[..buf.len().min(mps as usize)],
@@ -2293,7 +2344,7 @@ impl UsbBus for CorigineWrapper {
         if ep_addr.index() == 0 {
             if let Some(data) = self.core().setup.take() {
                 buf[..8].copy_from_slice(&data);
-                log::info!(" ******** STATUS_READ: {:x?})", &buf[..8]);
+                log::debug!(" ******** STATUS_READ: {:x?})", &buf[..8]);
                 Ok(8)
             } else {
                 Err(UsbError::WouldBlock)
@@ -2332,9 +2383,9 @@ impl UsbBus for CorigineWrapper {
     /// be IN or OUT, but not both at the same time. Devices with both IN/OUT may leave this as
     /// an empty stub.
     fn set_ep0_out(&self) {
-        log::info!(" ******* set EP0 out");
+        log::debug!(" ******* set EP0 out");
         let stall = self.core().stall_spec[0].unwrap_or(false);
-        log::info!(" ******** END_W_EP0: stall {:?}", stall);
+        log::debug!(" ******** END_W_EP0: stall {:?}", stall);
         self.core().ep0_enqueue_zlp(stall, CRG_INT_TARGET);
         self.txn_offset.lock().unwrap()[0] = 0;
     }
