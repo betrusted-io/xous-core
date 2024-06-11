@@ -12,6 +12,7 @@ use cram_hal_service::keyboard;
 use cram_hal_service::trng;
 #[cfg(feature = "cramium-soc")]
 use cramium_hal::usb::driver::CorigineUsb;
+#[cfg(feature = "cramium-soc")]
 use cramium_hal::usb::driver::CorigineWrapper;
 #[cfg(all(not(feature = "minimal"), any(feature = "renode", feature = "precursor")))]
 use keyboard::KeyMap;
