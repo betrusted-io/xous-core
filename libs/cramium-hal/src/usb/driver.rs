@@ -17,8 +17,21 @@ use utralib::generated::*;
 
 #[cfg(not(feature = "std"))]
 use super::compat::AtomicCsr;
+#[cfg(not(feature = "std"))]
+use crate::print;
+use crate::println;
 use crate::usb::utra::*;
-use crate::{print, println};
+
+// Directional nomenclature.
+//
+// Manual says "outbound" means outbound packets from device going to host. This is an IN packet in USB.
+// "inbound" means inbound packets to device, coming from host. This is the OUT packet in USB.
+pub const USB_SEND: bool = false; // USB IN -> corigine USB_SEND (outbound) -> 0/even on PEI
+pub const USB_RECV: bool = true; // USB OUT -> corigine USB_RECV (inbound) -> 1/odd on PEI
+// these names are picked so that the boolean value maps to the same thing in the reference code
+// this effectively does the "reversal of direction" from USB spec to corigine speak
+pub const CRG_IN: bool = false;
+pub const CRG_OUT: bool = true;
 
 const CRG_EVENT_RING_NUM: usize = 1;
 const CRG_ERST_SIZE: usize = 1;
@@ -62,9 +75,6 @@ const CRG_UDC_APP_BUFOFFSET: usize = CRG_UDC_EP0_BUF_OFFSET + CRG_UDC_EP0_REQBUF
 pub const CRG_UDC_TOTAL_MEM_LEN: usize = CRG_UDC_APP_BUFOFFSET + CRG_UDC_APP_BUFSIZE;
 
 const MAX_TRB_XFER_LEN: usize = 64 * 1024;
-
-pub const HOST_SEND: bool = false; // OUT; USB_SEND -> 0/even on PEI
-pub const HOST_RECV: bool = true; // IN; USB_RECV -> 1/odd on PEI
 
 #[cfg(feature = "std")]
 static INTERRUPT_INIT_DONE: AtomicBool = AtomicBool::new(false);
@@ -579,7 +589,7 @@ pub struct EpCxS {
 impl EpCxS {
     pub fn epcx_setup(&mut self, udc_ep: &UdcEp) {
         // corigine gadget dir should be opposite to host dir
-        let ep_type = if udc_ep.direction == HOST_SEND {
+        let ep_type = if udc_ep.direction == USB_RECV {
             // transforms the base type into INBOUND
             EpType::try_from(udc_ep.ep_type as u8 + EpType::Invalid2 as u8).unwrap()
         } else {
@@ -705,7 +715,7 @@ impl Default for UdcEp {
     fn default() -> Self {
         Self {
             ep_num: 0,
-            direction: HOST_RECV,
+            direction: USB_RECV,
             ep_type: EpType::ControlOrInvalid,
             max_packet_size: 0,
             tran_ring_info: BufferInfo::default(),
@@ -1108,7 +1118,7 @@ impl CorigineUsb {
         let udc_ep = &mut self.udc_ep[0];
 
         udc_ep.ep_num = 0;
-        udc_ep.direction = HOST_RECV;
+        udc_ep.direction = USB_SEND;
         udc_ep.ep_type = EpType::ControlOrInvalid;
         udc_ep.max_packet_size = 64;
 
@@ -1477,7 +1487,7 @@ impl CorigineUsb {
                 if pei == 0 {
                     if comp_code == CompletionCode::Success {
                         // ep0_xfer_complete
-                        if dir == HOST_SEND {
+                        if dir == USB_SEND {
                             ret = CrgEvent::Data(0, 1, 0); // FIXME: this ordering contradicts the `dir` bit, but seems necessary to trigger the next packet send
                         } else {
                             ret = CrgEvent::Data(1, 0, 0); // FIXME: this ordering contradicts the `dir` bit, but seems necessary to trigger the next packet send
@@ -1490,10 +1500,10 @@ impl CorigineUsb {
                 } else if pei >= 2 {
                     if comp_code == CompletionCode::Success || comp_code == CompletionCode::ShortPacket {
                         #[cfg(feature = "std")]
-                        log::info!("EP{} xfer event, dir {}", ep_num, if dir { "IN" } else { "OUT" });
+                        log::info!("EP{} xfer event, dir {}", ep_num, if dir { "OUT" } else { "IN" });
                         // xfer_complete
-                        if dir == HOST_SEND {
-                            let addr = self.get_app_buf_ptr(ep_num, HOST_SEND);
+                        if dir == CRG_OUT {
+                            let addr = self.get_app_buf_ptr(ep_num, dir);
                             let hw_buf = unsafe {
                                 core::slice::from_raw_parts_mut(addr as *mut u8, CRG_UDC_APP_BUF_LEN)
                             };
@@ -1590,7 +1600,7 @@ impl CorigineUsb {
                                 compiler_fence(Ordering::SeqCst);
                                 self.csr.wfo(DOORBELL_TARGET, 0);
                             }
-                            enq_pt.control_status_trb(pcs, false, false, tag, CRG_INT_TARGET, HOST_RECV);
+                            enq_pt.control_status_trb(pcs, false, false, tag, CRG_INT_TARGET, USB_RECV);
                             let (_enq_pt, _pcs) = self.udc_ep[0].increment_enq_pt();
                             self.knock_doorbell(0);
                             println!("ep0 sent");
@@ -1657,7 +1667,7 @@ impl CorigineUsb {
         let udc_ep = &mut self.udc_ep[0];
         let enq_pt =
             unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
-        enq_pt.control_status_trb(udc_ep.pcs, true, false, self.setup_tag, target, HOST_SEND);
+        enq_pt.control_status_trb(udc_ep.pcs, true, false, self.setup_tag, target, USB_SEND);
 
         // TODO: fix raw pointer manips with something more sane?
         let (_enq_pt, _pcs) = udc_ep.increment_enq_pt();
@@ -1766,7 +1776,7 @@ impl CorigineUsb {
             (enq_pt, pcs) = udc_ep.increment_enq_pt();
         }
 
-        enq_pt.control_status_trb(pcs, false, false, tag, intr_target, HOST_RECV);
+        enq_pt.control_status_trb(pcs, false, false, tag, intr_target, USB_RECV);
 
         let (_enq_pt, _pcs) = udc_ep.increment_enq_pt();
         compiler_fence(Ordering::SeqCst);
@@ -1796,7 +1806,7 @@ impl CorigineUsb {
         let udc_ep = &mut self.udc_ep[0];
         let enq_pt =
             unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
-        enq_pt.control_status_trb(udc_ep.pcs, false, stall, self.setup_tag, intr_target, HOST_RECV);
+        enq_pt.control_status_trb(udc_ep.pcs, false, stall, self.setup_tag, intr_target, USB_RECV);
         let (_, _) = udc_ep.increment_enq_pt();
         self.knock_doorbell(0);
     }
@@ -1805,7 +1815,7 @@ impl CorigineUsb {
         let udc_ep = &mut self.udc_ep[0];
         let enq_pt =
             unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
-        enq_pt.control_status_trb(udc_ep.pcs, false, stall, self.setup_tag, intr_target, HOST_SEND);
+        enq_pt.control_status_trb(udc_ep.pcs, false, stall, self.setup_tag, intr_target, USB_SEND);
         let (_, _) = udc_ep.increment_enq_pt();
         self.knock_doorbell(0);
     }
@@ -1940,7 +1950,7 @@ impl CorigineUsb {
             "udc_ep->PEI = {}, xfer ring addr {:x}, dir {}, mps: {}",
             pei,
             vaddr,
-            if dir { "IN" } else { "OUT" },
+            if dir { "OUT" } else { "IN" },
             max_packet_size,
         );
         assert!(
@@ -1980,7 +1990,7 @@ impl CorigineUsb {
         epcx.epcx_setup(&udc_ep);
         #[cfg(feature = "std")]
         log::info!(
-            "dcbap {:x}/{:x}; ecpx * {:x}; epcx: {:x?}",
+            "dcbap {:x}/{:x}; ecpx *{:x}; epcx: {:x?}",
             self.csr.r(DCBAPHI),
             self.csr.r(DCBAPLO),
             epcx as *const EpCxS as usize,
@@ -1988,8 +1998,7 @@ impl CorigineUsb {
         );
         self.issue_command(CmdType::ConfigEp, 1 << pei as u32, 0).expect("couldn't issue command");
         self.udc_ep[pei].ep_state = EpState::Running;
-        #[cfg(feature = "std")]
-        log::info!("config ep and start, PEI = {}", pei);
+
         #[cfg(feature = "std")]
         log::info!("waiting for EP to go to enabled, baseline: {:x}, epcx: {:x?}", baseline_enable, epcx);
         loop {
@@ -2009,7 +2018,7 @@ impl CorigineUsb {
 
     pub fn ep_disable(&mut self, ep_num: u8, dir: bool) {
         #[cfg(feature = "std")]
-        log::info!("Disable ep {}, dir {}", ep_num, if dir { "IN " } else { "OUT" });
+        log::info!("Disable ep {}, dir {}", ep_num, if dir { "OUT" } else { "IN" });
         let pei = 2 * ep_num as usize + if dir { 1 } else { 0 };
         let param0 = 1 << pei as u32;
         if param0 & self.csr.r(EPRUNNING) != 0 {
@@ -2139,7 +2148,7 @@ impl CorigineWrapper {
             txn_offset: Arc::new(Mutex::new([0; CRG_EP_NUM + 1])),
         };
         // ep0 is allocated by default
-        c.free_ep[0] = Some((HOST_SEND, 8, EpType::ControlOrInvalid));
+        c.free_ep[0] = Some((USB_SEND, 8, EpType::ControlOrInvalid));
         c
     }
 
@@ -2150,7 +2159,7 @@ impl CorigineWrapper {
             txn_offset: Arc::new(Mutex::new([0; CRG_EP_NUM + 1])),
         };
         // ep0 is allocated by default
-        c.free_ep[0] = Some((HOST_SEND, 8, EpType::ControlOrInvalid));
+        c.free_ep[0] = Some((USB_SEND, 8, EpType::ControlOrInvalid));
         c
     }
 
@@ -2195,8 +2204,8 @@ impl UsbBus for CorigineWrapper {
     ) -> Result<EndpointAddress> {
         log::info!("alloc_ep {:?} size: {} dir: {:?}", ep_addr, max_packet_size, ep_dir);
         let dir = match ep_dir {
-            UsbDirection::Out => HOST_SEND,
-            UsbDirection::In => HOST_RECV,
+            UsbDirection::Out => CRG_OUT,
+            UsbDirection::In => CRG_IN,
         };
         let hw_ep_type = match ep_type {
             EndpointType::Control => EpType::ControlOrInvalid,
@@ -2255,6 +2264,35 @@ impl UsbBus for CorigineWrapper {
     fn set_device_address(&self, addr: u8) {
         log::debug!(" ******** set address");
         self.hw.lock().unwrap().set_addr(addr, CRG_INT_TARGET);
+
+        // this core has a quirk that you can't actually enable the endpoints until *after* the address
+        // has been set. :-/
+        for (index, &maybe_ep) in self.free_ep.iter().enumerate() {
+            if index == 0 {
+                continue;
+            }
+            if let Some((dir, max_packet_size, hw_ep_type)) = maybe_ep {
+                self.core().ep_enable(index as u8, dir, max_packet_size, hw_ep_type);
+                if dir == CRG_OUT {
+                    let addr = self.core().get_app_buf_ptr(index as u8, dir);
+                    // TODO: how do we deal with bulk endpoints??
+                    self.core().intr_xfer(
+                        index as u8,
+                        dir,
+                        addr,
+                        CRG_UDC_APP_BUF_LEN,
+                        CRG_INT_TARGET,
+                        false,
+                        false,
+                    );
+                }
+            } else {
+                self.core().ep_disable(index as u8, true);
+                self.core().ep_disable(index as u8, false);
+            }
+        }
+        log::info!("enabled EPs: {:x}", self.core().csr.r(EPENABLE));
+        log::info!("running EPs: {:x}", self.core().csr.r(EPRUNNING));
     }
 
     /// Writes a single packet of data to the specified endpoint and returns number of bytes
@@ -2306,13 +2344,13 @@ impl UsbBus for CorigineWrapper {
                 buf.len(),
                 &buf[..8.min(buf.len())]
             );
-            let addr = self.core().get_app_buf_ptr(ep_addr.index() as u8, HOST_RECV);
+            let addr = self.core().get_app_buf_ptr(ep_addr.index() as u8, USB_RECV);
             let hw_buf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, CRG_UDC_APP_BUF_LEN) };
             assert!(buf.len() < CRG_UDC_APP_BUF_LEN, "write buffer size exceeded");
             hw_buf[..buf.len()].copy_from_slice(&buf);
             self.core().intr_xfer(
                 ep_addr.index() as u8,
-                HOST_RECV,
+                USB_RECV,
                 addr,
                 buf.len(),
                 CRG_INT_TARGET,
@@ -2438,41 +2476,10 @@ impl UsbBus for CorigineWrapper {
     ///   simulating a disconnect or it has not been enabled at creation time.
     fn force_reset(&self) -> Result<()> {
         log::info!(" ******* force_reset");
-        /*
-        self.core().reset();
-        self.core().init();
-        self.core().start();
+
+        // This is the minimum we need to do to restart EP0, but, I think we also need to reset
+        // TRB pointers etc. See page 67 of the manual.
         self.core().update_current_speed();
-        */
-        for (index, &maybe_ep) in self.free_ep.iter().enumerate() {
-            log::info!("Resetting EP{}", index);
-            if index == 0 {
-                // EP0 -> reset & start the machine. Happens before the code below.
-                self.core().update_current_speed();
-            } else {
-                if let Some((dir, max_packet_size, hw_ep_type)) = maybe_ep {
-                    self.core().ep_enable(index as u8, dir, max_packet_size, hw_ep_type);
-                    if dir == HOST_SEND {
-                        let addr = self.core().get_app_buf_ptr(index as u8, dir);
-                        // TODO: how do we deal with bulk endpoints??
-                        self.core().intr_xfer(
-                            index as u8,
-                            dir,
-                            addr,
-                            CRG_UDC_APP_BUF_LEN,
-                            CRG_INT_TARGET,
-                            false,
-                            false,
-                        );
-                    }
-                } else {
-                    self.core().ep_disable(index as u8, true);
-                    self.core().ep_disable(index as u8, false);
-                }
-            }
-        }
-        log::info!("enabled EPs: {:x}", self.core().csr.r(EPENABLE));
-        log::info!("running EPs: {:x}", self.core().csr.r(EPRUNNING));
 
         Ok(())
     }
