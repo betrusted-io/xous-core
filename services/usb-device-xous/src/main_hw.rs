@@ -272,6 +272,7 @@ pub(crate) fn main_hw() -> ! {
         usbwrapper.core().reset();
         usbwrapper.core().init();
         usbwrapper.core().start();
+        usbwrapper.core().update_current_speed();
         log::info!("HW started...");
         #[cfg(feature = "pinger")]
         std::thread::spawn({
