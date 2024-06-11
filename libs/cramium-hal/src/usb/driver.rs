@@ -2350,7 +2350,7 @@ impl UsbBus for CorigineWrapper {
             hw_buf[..buf.len()].copy_from_slice(&buf);
             self.core().intr_xfer(
                 ep_addr.index() as u8,
-                USB_RECV,
+                CRG_IN,
                 addr,
                 buf.len(),
                 CRG_INT_TARGET,
