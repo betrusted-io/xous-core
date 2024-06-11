@@ -95,7 +95,8 @@ fn keyboard_service() {
                 todo!();
             }
             Some(KeyboardOpcode::GetKeyMap) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                todo!();
+                log::warn!("Defaulting to DVORAK map");
+                xous::return_scalar(msg.sender, KeyMap::Dvorak.into()).expect("can't retrieve keymap");
             }),
             Some(KeyboardOpcode::SetRepeat) => msg_scalar_unpack!(msg, _rate, _delay, _, _, {
                 todo!();

@@ -19,9 +19,10 @@ xous-pio = { path = "../../libs/xous-pio", optional = true }
 xous-pl230 = { path = "../../libs/xous-pl230", optional = true }
 # this is temporary, until we get GAM/modals pulled in
 graphics-server = { path = "../graphics-server" }
-modals = { path = "../modals" }
+modals = { path = "../modals", features = ["cramium-soc"] }
 gam = { path = "../gam" }
 locales = { path = "../../locales" }
+usb-device-xous = { path = "../usb-device-xous" }
 
 [features]
 "cramium-fpga" = ["utralib/cramium-fpga", "xous-pl230/cramium-fpga"]
