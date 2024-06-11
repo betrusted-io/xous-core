@@ -291,9 +291,9 @@ impl Modals {
 
     /// Input dialog used to accept bip39 formatted data.
     ///
-    /// - This dialog blocks until either [ F4 ] has been pressed to abort entry, or a phrase has been input
-    ///   and accepted via [ enter ].
-    /// - Possible words will be auto-suggested during typing and [ enter ] must be pressed after each word.
+    /// - This dialog blocks until either \[ F4 \] has been pressed to abort entry, or a phrase has been input
+    ///   and accepted via \[ enter \].
+    /// - Possible words will be auto-suggested during typing and \[ enter \] must be pressed after each word.
     /// - Valid input will be shown in the bottom section of the dialog after an accepted phrase has been
     ///   entered.
     ///
@@ -417,7 +417,7 @@ impl Modals {
     /// - Interactable until home/enter is pressed.
     /// - Use the arrow keys to shift the slider by a step in either direction.
     /// - Note that it is possible to exceed start or end if you choose the 'step' value poorly.
-    /// - Title text wraps, burden is on the consumer not to exceed the available screen space.
+    /// - Title text wraps, burden is on the consumer not to exceed available screen space.
     ///
     /// <details>
     ///     <summary>Example Image</summary>
@@ -535,6 +535,28 @@ impl Modals {
         Ok(())
     }
 
+    /// Creates a list to be used by get_radiobutton or get_checkbox.
+    /// - Does not display on its own, the above mentioned methods prompt display of the list.
+    /// - Burden is on the consumer to not exceed available screen space.
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// const LIST_TEST: [&'static str; 5] = [
+    ///     "happy",
+    ///     "😃",
+    ///     "安",
+    ///     "peace &\n tranquility",
+    ///     "Once apon a time, in a land far far away, there was a",
+    /// ];
+    ///
+    /// let items: Vec<&str> = LIST_TEST.iter().map(|s| s.to_owned()).collect();
+    /// modals.add_list(items).expect("couldn't build list");
+    /// ```
     pub fn add_list(&self, items: Vec<&str>) -> Result<(), xous::Error> {
         for (_, text) in items.iter().enumerate() {
             self.add_list_item(text).or(Err(xous::Error::InternalError))?;
@@ -542,6 +564,19 @@ impl Modals {
         Ok(())
     }
 
+    /// Add individual items to a list to be used by get_radiobutton or get_checkbox.
+    /// - Does not display on its own, the above mentioned methods prompt display of the list.
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// modals.add_list_item("yes").expect("failed radio yes");
+    /// modals.add_list_item("no").expect("failed radio no");
+    /// ```
     pub fn add_list_item(&self, item: &str) -> Result<(), xous::Error> {
         self.lock();
         let itemname = ManagedListItem { token: self.token, item: ItemName::new(item) };
@@ -576,6 +611,46 @@ impl Modals {
         }
     }
 
+    /// Creates modal dialog from list of items (list created by add_list or add_list_item) and returns Vector
+    /// of checked items.
+    /// - Dialog cannot be dismissed without pressing 'ok'.
+    /// - 'ok' text is not editable.
+    /// - Any or none of the checked items are acceptable to be returned.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image - Initial](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_get_checkbox.png?raw=true)
+    ///
+    /// </details>
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// const LIST_TEST: [&'static str; 5] = [
+    ///     "happy",
+    ///     "😃",
+    ///     "安",
+    ///     "peace &\n tranquility",
+    ///     "Once apon a time, in a land far far away, there was a",
+    /// ];
+    ///
+    /// let items: Vec<&str> = LIST_TEST.iter().map(|s| s.to_owned()).collect();
+    /// modals.add_list(items).expect("couldn't build list");
+    /// match modals.get_checkbox("You can have it all:") {
+    ///     Ok(things) => {
+    ///         log::info!("The user picked {} things:", things.len());
+    ///         for thing in things {
+    ///             log::info!("{}", thing);
+    ///         }
+    ///     }
+    ///     _ => log::error!("get_checkbox failed"),
+    /// }
+    /// ```
     pub fn get_checkbox(&self, prompt: &str) -> Result<Vec<String>, xous::Error> {
         self.lock();
         let spec =
