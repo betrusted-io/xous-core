@@ -6,7 +6,9 @@ pub use swap::*;
 #[cfg(not(feature = "swap"))]
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_EXT_MEM_LEN;
 #[cfg(feature = "swap")]
-pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_EXT_MEM_LEN / 2;
+// also update in services/xous-susres/src/main.rs @ 157 to adjust where the clean suspend page goes...
+// probably should fix that to be linked to this more seamlessly somehow.
+pub const RAM_SIZE: usize = 2 * 1024 * 1024;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_EXT_MEM;
 
 /// Note that this memory test is "destructive" -- supend/resume will fail if it is enabled

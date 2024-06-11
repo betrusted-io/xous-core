@@ -180,6 +180,9 @@ impl Modals {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn =
             xns.request_connection_blocking(api::SERVER_NAME_MODALS).expect("Can't connect to Modals server");
+        #[cfg(feature = "cramium-soc")]
+        let trng = cram_hal_service::trng::Trng::new(&xns).unwrap();
+        #[cfg(not(feature = "cramium-soc"))]
         let trng = trng::Trng::new(&xns).unwrap();
         let mut token = [0u32; 4];
         trng.fill_buf(&mut token).unwrap();

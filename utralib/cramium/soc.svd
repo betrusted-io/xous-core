@@ -687,7 +687,7 @@ register to disable individual events.]]></description>
             <memoryRegion>
                 <name>XIP</name>
                 <baseAddress>0x70000000</baseAddress>
-                <size>0x08000000</size>
+                <size>0x04000000</size>
             </memoryRegion>
             <memoryRegion>
                 <name>VEXRISCV_DEBUG</name>

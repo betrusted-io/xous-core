@@ -10,7 +10,7 @@ impl MemoryRange {
     /// # Safety
     ///
     /// This allows for creating a `MemoryRange` from any arbitrary pointer,
-    /// so it is imperitive that this only be used to point to valid, page-aligned
+    /// so it is imperative that this only be used to point to valid, page-aligned
     /// ranges.
     pub unsafe fn new(addr: usize, size: usize) -> core::result::Result<MemoryRange, Error> {
         Ok(MemoryRange {

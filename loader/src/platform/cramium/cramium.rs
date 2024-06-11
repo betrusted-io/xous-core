@@ -524,20 +524,20 @@ pub fn early_init() {
             let mut chk_buf = [0u8; 32];
             crate::println!("first read...");
             crate::println!("flash read");
-            flash_spim.mem_read(0x0, &mut chk_buf);
+            flash_spim.mem_read(0x0, &mut chk_buf, false);
             crate::println!("flash: {:x?}", chk_buf);
-            ram_spim.mem_read(0x0, &mut chk_buf);
+            ram_spim.mem_read(0x0, &mut chk_buf, false);
             crate::println!("RAM: {:x?}", chk_buf);
             for (i, d) in chk_buf.iter_mut().enumerate() {
                 *d = i as u8;
             }
             crate::println!("ram write...");
-            ram_spim.mem_ram_write(0x0, &chk_buf);
+            ram_spim.mem_ram_write(0x0, &chk_buf, false);
             chk_buf.fill(0);
             crate::println!("empty buf: {:x?}", chk_buf);
 
             crate::println!("ram read...");
-            ram_spim.mem_read(0x0, &mut chk_buf);
+            ram_spim.mem_read(0x0, &mut chk_buf, false);
             crate::println!("RAM checked: {:x?}", chk_buf);
 
             /*
@@ -600,6 +600,37 @@ pub fn early_init() {
             rx_buf[1] = '\n' as u32 as u8;
             rx_buf[2] = '\r' as u32 as u8;
             udma_uart.write(&rx_buf);
+        }
+
+        // now wait for some interrupt-driven receive
+        #[cfg(feature = "irq-test")]
+        {
+            irq_setup();
+            let mut _c: u8 = 0;
+            // this sets us up for async reads
+            let should_be_zero = udma_uart.read_async(&mut _c);
+            crate::println!("should_be_zero: {}", should_be_zero);
+            crate::println!("Waiting for async hits...");
+            NUM_RX.store(0, core::sync::atomic::Ordering::SeqCst);
+            let mut last_rx = 0;
+            let mut last_pending = 0;
+            let irqarray5 = CSR::new(utra::irqarray5::HW_IRQARRAY5_BASE as *mut u32);
+            crate::println!("irqarray5 enable: {:x}", irqarray5.r(utra::irqarray5::EV_ENABLE));
+            loop {
+                let cur_rx = NUM_RX.load(core::sync::atomic::Ordering::SeqCst);
+                if cur_rx != last_rx {
+                    crate::println!("Got async event {}", cur_rx);
+                    last_rx = cur_rx;
+                }
+                if cur_rx > 4 {
+                    break;
+                }
+                let pending = irqarray5.r(utra::irqarray5::EV_PENDING);
+                if pending != last_pending {
+                    crate::println!("pending: {:x}", pending);
+                    last_pending = pending;
+                }
+            }
         }
     }
 
@@ -724,12 +755,17 @@ unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
 
     // now, program the VCO to get to as close to vco_actual
     const FREF_HZ: u32 = 48_000_000;
-    let ni = vco_actual / FREF_HZ;
+    // adjust m so that PFD runs between 4-16MHz (target 8MHz)
+    const PREDIV_M: u32 = 6;
+    let fref_hz = FREF_HZ / PREDIV_M;
+    assert!(fref_hz == 8_000_000);
+
+    let ni = vco_actual / fref_hz;
     if ni >= 4096 || ni < 8 {
         crate::println!("Warning: ni out of range: {}", ni);
     }
-    let pllmn = (1 << 12) | ni & 0xFFF; // m is set to 1, lower 12 bits is nf
-    let frac_n = ((vco_actual as f32 / FREF_HZ as f32) - ni as f32).max(0 as f32);
+    let pllmn = (PREDIV_M << 12) | ni & 0xFFF; // m is set to PREDIV_M, lower 12 bits is nf
+    let frac_n = ((vco_actual as f32 / fref_hz as f32) - ni as f32).max(0 as f32);
     let pllf: u32 = (frac_n * ((1 << 24) as f32)) as u32;
     if pllf >= 1 << 24 {
         crate::println!("Warning nf out of range: 0x{:x}", pllf);
@@ -796,33 +832,33 @@ unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         crate::println!("PLL delay 3");
 
         crate::println!("fsvalid: {}", daric_cgu.add(sysctrl::SFR_CGUFSVLD.offset()).read_volatile());
-        let cgufsfreq0 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ0.offset()).read_volatile();
-        let cgufsfreq1 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ1.offset()).read_volatile();
-        let cgufsfreq2 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ2.offset()).read_volatile();
-        let cgufsfreq3 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ3.offset()).read_volatile();
+        let _cgufsfreq0 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ0.offset()).read_volatile();
+        let _cgufsfreq1 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ1.offset()).read_volatile();
+        let _cgufsfreq2 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ2.offset()).read_volatile();
+        let _cgufsfreq3 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ3.offset()).read_volatile();
         crate::println!(
             "Internal osc: {} -> {} MHz ({} MHz)",
-            cgufsfreq0,
-            fsfreq_to_hz(cgufsfreq0),
-            fsfreq_to_hz_32(cgufsfreq0)
+            _cgufsfreq0,
+            fsfreq_to_hz(_cgufsfreq0),
+            fsfreq_to_hz_32(_cgufsfreq0)
         );
         crate::println!(
             "XTAL: {} -> {} MHz ({} MHz)",
-            cgufsfreq1,
-            fsfreq_to_hz(cgufsfreq1),
-            fsfreq_to_hz_32(cgufsfreq1)
+            _cgufsfreq1,
+            fsfreq_to_hz(_cgufsfreq1),
+            fsfreq_to_hz_32(_cgufsfreq1)
         );
         crate::println!(
             "pll output 0: {} -> {} MHz ({} MHz)",
-            cgufsfreq2,
-            fsfreq_to_hz(cgufsfreq2),
-            fsfreq_to_hz_32(cgufsfreq2)
+            _cgufsfreq2,
+            fsfreq_to_hz(_cgufsfreq2),
+            fsfreq_to_hz_32(_cgufsfreq2)
         );
         crate::println!(
             "pll output 1: {} -> {} MHz ({} MHz)",
-            cgufsfreq3,
-            fsfreq_to_hz(cgufsfreq3),
-            fsfreq_to_hz_32(cgufsfreq3)
+            _cgufsfreq3,
+            fsfreq_to_hz(_cgufsfreq3),
+            fsfreq_to_hz_32(_cgufsfreq3)
         );
 
         // Hits a 16:8:4:2:1 ratio on fclk:aclk:hclk:iclk:pclk
@@ -840,7 +876,10 @@ unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     vco_actual / perclk_div
 }
 
+#[allow(dead_code)]
 fn fsfreq_to_hz(fs_freq: u32) -> u32 { (fs_freq * (48_000_000 / 32)) / 1_000_000 }
+
+#[allow(dead_code)]
 fn fsfreq_to_hz_32(fs_freq: u32) -> u32 { (fs_freq * (32_000_000 / 32)) / 1_000_000 }
 
 #[allow(dead_code)]
@@ -878,4 +917,216 @@ impl TestPattern {
         self.x ^= self.x >> 14;
         return self.x;
     }
+}
+
+#[cfg(feature = "irq-test")]
+static NUM_RX: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+#[cfg(feature = "irq-test")]
+pub fn irq_setup() {
+    unsafe {
+        #[rustfmt::skip]
+        core::arch::asm!(
+            // Set trap handler
+            "la   t0, _start_trap", // this first one forces the nop sled symbol to be generated
+            "la   t0, _start_trap_aligned", // this is the actual target
+            "csrw mtvec, t0",
+        );
+    }
+
+    // enable IRQ handling
+    riscv::register::vexriscv::mim::write(0x0); // first make sure everything is disabled, so we aren't OR'ing in garbage
+    // this will set the IRQ bit for the uart bank as part of the new() function
+    let mut uart_irq = cramium_hal::udma::UartIrq::new();
+    uart_irq.rx_irq_ena(udma::UartChannel::Uart1, true);
+    // the actual handler is hard-coded below :'( but this is just a quick and dirty test so meh?
+
+    let mut irqarray5 = CSR::new(utra::irqarray5::HW_IRQARRAY5_BASE as *mut u32);
+    irqarray5.wo(utra::irqarray5::EV_PENDING, irqarray5.r(utra::irqarray5::EV_PENDING));
+
+    // must enable external interrupts on the CPU for any of the above to matter
+    unsafe { riscv::register::mie::set_mext() };
+
+    crate::println!(
+        "mie: {:x}, mim: {:x}",
+        riscv::register::mie::read().bits(),
+        riscv::register::vexriscv::mim::read()
+    );
+}
+
+#[export_name = "_start_trap"]
+#[inline(never)]
+#[cfg(feature = "irq-test")]
+pub unsafe extern "C" fn _start_trap() -> ! {
+    loop {
+        // install a NOP sled before _start_trap() until https://github.com/rust-lang/rust/issues/82232 is stable
+        #[rustfmt::skip]
+        core::arch::asm!(
+            "nop",
+            "nop",
+        );
+        #[export_name = "_start_trap_aligned"]
+        pub unsafe extern "C" fn _start_trap_aligned() {
+            #[rustfmt::skip]
+            core::arch::asm!(
+                "csrw        mscratch, sp",
+                "li          sp, 0x61008000", // a random location that we corrupt for testing routine
+                "sw       x1, 0*4(sp)",
+                // Skip SP for now
+                "sw       x3, 2*4(sp)",
+                "sw       x4, 3*4(sp)",
+                "sw       x5, 4*4(sp)",
+                "sw       x6, 5*4(sp)",
+                "sw       x7, 6*4(sp)",
+                "sw       x8, 7*4(sp)",
+                "sw       x9, 8*4(sp)",
+                "sw       x10, 9*4(sp)",
+                "sw       x11, 10*4(sp)",
+                "sw       x12, 11*4(sp)",
+                "sw       x13, 12*4(sp)",
+                "sw       x14, 13*4(sp)",
+                "sw       x15, 14*4(sp)",
+                "sw       x16, 15*4(sp)",
+                "sw       x17, 16*4(sp)",
+                "sw       x18, 17*4(sp)",
+                "sw       x19, 18*4(sp)",
+                "sw       x20, 19*4(sp)",
+                "sw       x21, 20*4(sp)",
+                "sw       x22, 21*4(sp)",
+                "sw       x23, 22*4(sp)",
+                "sw       x24, 23*4(sp)",
+                "sw       x25, 24*4(sp)",
+                "sw       x26, 25*4(sp)",
+                "sw       x27, 26*4(sp)",
+                "sw       x28, 27*4(sp)",
+                "sw       x29, 28*4(sp)",
+                "sw       x30, 29*4(sp)",
+                "sw       x31, 30*4(sp)",
+                // Save MEPC
+                "csrr        t0, mepc",
+                "sw       t0, 31*4(sp)",
+                // Finally, save SP
+                "csrr        t0, mscratch",
+                "sw          t0, 1*4(sp)",
+                // Restore a default stack pointer
+                "li          sp, 0x6100A000", // more random locations to corrupt
+                // Note that registers $a0-$a7 still contain the arguments
+                "j           _start_trap_rust",
+            );
+        }
+        _start_trap_aligned();
+        #[rustfmt::skip]
+        core::arch::asm!(
+            "nop",
+            "nop",
+        );
+    }
+}
+
+#[export_name = "_resume_context"]
+#[inline(never)]
+#[cfg(feature = "irq-test")]
+pub unsafe extern "C" fn _resume_context(registers: u32) -> ! {
+    #[rustfmt::skip]
+    core::arch::asm!(
+        "move        sp, {registers}",
+
+        "lw        x1, 0*4(sp)",
+        // Skip SP for now
+        "lw        x3, 2*4(sp)",
+        "lw        x4, 3*4(sp)",
+        "lw        x5, 4*4(sp)",
+        "lw        x6, 5*4(sp)",
+        "lw        x7, 6*4(sp)",
+        "lw        x8, 7*4(sp)",
+        "lw        x9, 8*4(sp)",
+        "lw        x10, 9*4(sp)",
+        "lw        x11, 10*4(sp)",
+        "lw        x12, 11*4(sp)",
+        "lw        x13, 12*4(sp)",
+        "lw        x14, 13*4(sp)",
+        "lw        x15, 14*4(sp)",
+        "lw        x16, 15*4(sp)",
+        "lw        x17, 16*4(sp)",
+        "lw        x18, 17*4(sp)",
+        "lw        x19, 18*4(sp)",
+        "lw        x20, 19*4(sp)",
+        "lw        x21, 20*4(sp)",
+        "lw        x22, 21*4(sp)",
+        "lw        x23, 22*4(sp)",
+        "lw        x24, 23*4(sp)",
+        "lw        x25, 24*4(sp)",
+        "lw        x26, 25*4(sp)",
+        "lw        x27, 26*4(sp)",
+        "lw        x28, 27*4(sp)",
+        "lw        x29, 28*4(sp)",
+        "lw        x30, 29*4(sp)",
+        "lw        x31, 30*4(sp)",
+
+        // Restore SP
+        "lw        x2, 1*4(sp)",
+        "mret",
+        registers = in(reg) registers,
+    );
+    loop {}
+}
+
+/// Just handles specific traps for testing CPU interactions. Doesn't do anything useful with the traps.
+#[export_name = "_start_trap_rust"]
+#[cfg(feature = "irq-test")]
+pub extern "C" fn trap_handler(
+    _a0: usize,
+    _a1: usize,
+    _a2: usize,
+    _a3: usize,
+    _a4: usize,
+    _a5: usize,
+    _a6: usize,
+    _a7: usize,
+) -> ! {
+    use riscv::register::{mcause, mie, vexriscv::mip};
+    let mut udma_uart = unsafe {
+        // safety: this is safe to call, because we set up clock and events prior to calling new.
+        udma::Uart::get_handle(
+            utra::udma_uart_1::HW_UDMA_UART_1_BASE,
+            loader::UART_IFRAM_ADDR,
+            loader::UART_IFRAM_ADDR,
+        )
+    };
+
+    let mc: mcause::Mcause = mcause::read();
+    if mc.bits() == 0x8000_0009 {
+        // external interrupt. find out which ones triggered it, and clear the source.
+        let irqs_pending = mip::read();
+        if (irqs_pending & (1 << utra::irqarray5::IRQARRAY5_IRQ)) != 0 {
+            let mut irqarray5 = CSR::new(utra::irqarray5::HW_IRQARRAY5_BASE as *mut u32);
+
+            let pending = irqarray5.r(utra::irqarray5::EV_PENDING);
+            let mut c: u8 = 0;
+            let should_be_one = udma_uart.read_async(&mut c);
+            let mut buf = [0u8; 16];
+            udma_uart.write("async_rx ".as_bytes());
+            buf[0] = should_be_one as u8 + '0' as u32 as u8;
+            buf[1] = ':' as u32 as u8;
+            buf[2] = c;
+            udma_uart.write(&buf[..3]);
+            NUM_RX.fetch_add(1, core::sync::atomic::Ordering::SeqCst);
+            // clear all pending
+            irqarray5.wo(utra::irqarray5::EV_PENDING, pending);
+        }
+    } else {
+        udma_uart.write("Unrecognized interrupt case".as_bytes());
+    }
+
+    // re-enable interrupts
+    unsafe {
+        #[rustfmt::skip]
+        core::arch::asm!(
+            "csrr        t0, mstatus",
+            "ori         t0, t0, 3",
+            "csrw        mstatus, t0",
+        );
+    }
+    unsafe { mie::set_mext() };
+    unsafe { _resume_context(0x61008000u32) }; // this is the scratch page used in the assembly routine above
 }

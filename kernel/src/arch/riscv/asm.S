@@ -30,6 +30,7 @@ _start:
 
     /////// resume prep code
     // if resume flag is false (0), skip this section
+    andi        a7, a7, 0x2  // select just the resume flag
     beq         a7, zero, coldboot
 
     /*

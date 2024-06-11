@@ -138,6 +138,9 @@ fn wrapped_main() -> ! {
     let mut list_selected = 0u32;
 
     let mut token_lock: Option<[u32; 4]> = None;
+    #[cfg(feature = "cramium-soc")]
+    let trng = cram_hal_service::trng::Trng::new(&xns).unwrap();
+    #[cfg(not(feature = "cramium-soc"))]
     let trng = trng::Trng::new(&xns).unwrap();
     // this is a random number that serves as a "default" that cannot be guessed
     let default_nonce =

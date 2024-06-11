@@ -484,11 +484,11 @@ pub enum SysCall {
     ReplyAndReceiveNext(
         MessageSender, /* ID if the sender that sent this message */
         usize,         /* Return code to the caller */
-        usize,         /* arg1 (BlockingScalar) or the memory address (MemoryMesage) */
-        usize,         /* arg2 (BlockingScalar) or the memory length (MemoryMesage) */
-        usize,         /* arg3 (BlockingScalar) or the memory offset (MemoryMesage) */
-        usize,         /* arg4 (BlockingScalar) or the memory valid (MemoryMesage) */
-        usize,         /* how many args are valid (BlockingScalar) or usize::MAX (MemoryMessge) */
+        usize,         /* arg1 (BlockingScalar) or the memory address (MemoryMessage) */
+        usize,         /* arg2 (BlockingScalar) or the memory length (MemoryMessage) */
+        usize,         /* arg3 (BlockingScalar) or the memory offset (MemoryMessage) */
+        usize,         /* arg4 (BlockingScalar) or the memory valid (MemoryMessage) */
+        usize,         /* how many args are valid (BlockingScalar) or usize::MAX (MemoryMessage) */
     ),
 
     /// Returns the physical address corresponding to a virtual address for a given process, if such a
@@ -1147,6 +1147,10 @@ impl SysCall {
         if let SysCall::TrySendMessage(_cid, msg) = self {
             return !msg.is_blocking();
         }
+        #[cfg(feature = "swap")]
+        if let SysCall::SwapOp(_, _, _, _, _, _, _) = self {
+            return true;
+        }
         matches!(
             self,
             SysCall::TryConnect(_)
@@ -1373,7 +1377,7 @@ pub fn create_server_with_sid(sid: SID) -> core::result::Result<SID, Error> {
 /// Create a new server with a random name.  This enables other processes to
 /// connect to this server to send messages.  A random server ID is generated
 /// by the kernel and returned to the caller. This address can then be registered
-/// to a namserver.
+/// to a nameserver.
 ///
 /// # Errors
 ///
@@ -1394,7 +1398,7 @@ pub fn create_server() -> core::result::Result<SID, Error> {
 /// Fetch a random server ID from the kernel. This is used
 /// exclusively by the name server and the suspend/resume server.  A random server ID is generated
 /// by the kernel and returned to the caller. This address can then be registered
-/// to a namserver by the caller in their memory space.
+/// to a nameserver by the caller in their memory space.
 ///
 /// The implementation is just a call to the kernel-exclusive TRNG to fetch random numbers.
 ///
@@ -1466,7 +1470,7 @@ pub fn try_receive_message(server: SID) -> core::result::Result<Option<MessageEn
     }
 }
 
-/// Send a message to a server.  Depending on the mesage type (move or borrow), it
+/// Send a message to a server.  Depending on the message type (move or borrow), it
 /// will either block (borrow) or return immediately (move).
 /// If the message type is `borrow`, then the memory addresses pointed to will be
 /// unavailable to this process until this function returns.
@@ -1509,7 +1513,7 @@ pub fn connect_for_process(pid: PID, sid: SID) -> core::result::Result<Result, E
     }
 }
 
-/// Send a message to a server.  Depending on the mesage type (move or borrow), it
+/// Send a message to a server.  Depending on the message type (move or borrow), it
 /// will either block (borrow) or return immediately (move).
 /// If the message type is `borrow`, then the memory addresses pointed to will be
 /// unavailable to this process until this function returns.
@@ -1803,7 +1807,7 @@ pub fn reply_and_receive_next_legacy(
         }
 
         let args = if let Some(mem) = envelope.body.memory_message() {
-            // Allow hosted mode to detect this is a memory message by giving a sentinal value here
+            // Allow hosted mode to detect this is a memory message by giving a sentinel value here
             rt = usize::MAX;
             mem.to_usize()
         } else if let Some(scalar) = envelope.body.scalar_message() {

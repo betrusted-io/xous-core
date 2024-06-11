@@ -8,12 +8,16 @@
 //! or an external event comes in on a host-specified GPIO pin.
 //! - x20 -/w  halt to quantum
 //!
-//! GPIO - note clear-on-0 semantics for bit-clear ops
+//! GPIO - note clear-on-0 semantics for bit-clear for data pins!
+//!   This is done so we can do a shift-and-move without an invert to
+//!   bitbang a data pin. Direction retains a more "conventional" meaning
+//!   where a write of `1` to either clear or set will cause the action,
+//!   as pin direction toggling is less likely to be in a tight inner loop.
 //! - x21 r/w  write: (x26 & x21) -> gpio pins; read: gpio pins -> x21
 //! - x22 -/w  (x26 & x22) -> `1` will set corresponding pin on gpio
 //! - x23 -/w  (x26 & x23) -> `0` will clear corresponding pin on gpio
 //! - x24 -/w  (x26 & x24) -> `1` will make corresponding gpio pin an output
-//! - x25 -/w  (x26 & x25) -> `0` will make corresponding gpio pin an input
+//! - x25 -/w  (x26 & x25) -> `1` will make corresponding gpio pin an input
 //! - x26 r/w  mask GPIO action outputs
 //!
 //! Events - operate on a shared event register. Bits [7:0] are hard-wired to FIFO
@@ -32,6 +36,7 @@ use utralib::generated::*;
 #[cfg(feature = "tests")]
 pub mod bio_tests;
 
+pub mod i2c;
 
 #[derive(Debug)]
 pub enum BioError {
@@ -58,6 +63,14 @@ pub fn lfsr_next(state: u16) -> u16 {
 
     ((state << 1) + bit) & 0x1_FF
 }
+
+/// used to generate some test vectors
+pub fn lfsr_next_u32(state: u32) -> u32 {
+    let bit = ((state >> 31) ^ (state >> 21) ^ (state >> 1) ^ (state >> 0)) & 1;
+
+    (state << 1) + bit
+}
+
 pub struct BioSharedState {
     pub bio: CSR<u32>,
     pub imem_slice: &'static mut [u32],
@@ -69,19 +82,15 @@ impl BioSharedState {
         let imem_slice = unsafe {
             core::slice::from_raw_parts_mut(
                 utralib::generated::HW_BIO_RAM_MEM as *mut u32,
-                utralib::generated::HW_BIO_RAM_MEM_LEN
+                utralib::generated::HW_BIO_RAM_MEM_LEN,
             )
         };
 
-        BioSharedState {
-            bio: CSR::new(utra::bio::HW_BIO_BASE as *mut u32),
-            imem_slice,
-        }
+        BioSharedState { bio: CSR::new(utra::bio::HW_BIO_BASE as *mut u32), imem_slice }
     }
 
     #[cfg(not(feature = "baremetal"))]
     pub fn new() -> Self {
-        // TODO
         let csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::bio::HW_BIO_BASE),
             None,
@@ -90,8 +99,17 @@ impl BioSharedState {
         )
         .unwrap();
 
+        let imem: xous::MemoryRange = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::bio::HW_BIO_RAM_MEM),
+            None,
+            utra::bio::HW_BIO_RAM_MEM_LEN,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .unwrap();
+
         BioSharedState {
             bio: CSR::new(csr.as_mut_ptr() as *mut u32),
+            imem_slice: unsafe { imem.as_slice_mut() },
         }
     }
 
@@ -132,10 +150,12 @@ macro_rules! bio_code {
                 static $name_start: *const u8;
                 static $name_end: *const u8;
             }
+            /*
             unsafe {
                 report_api($name_start as u32);
                 report_api($name_end as u32);
             }
+            */
             // skip the first 4 bytes, as they contain the loading offset
             unsafe { core::slice::from_raw_parts($name_start.add(4), ($name_end as usize) - ($name_start as usize) - 4)}
         }

@@ -1,4 +1,5 @@
 mod api;
+mod hw;
 
 use api::*;
 use cramium_hal::{
@@ -86,9 +87,9 @@ fn try_alloc(ifram_allocs: &mut Vec<Option<Sender>>, size: usize, sender: Sender
 }
 fn main() {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
 
-    let xns = xous_api_names::XousNames::new().unwrap();
+    let xns = xous_names::XousNames::new().unwrap();
     let sid = xns.register_name(cram_hal_service::SERVER_NAME_CRAM_HAL, None).expect("can't register server");
 
     let mut ifram_allocs = [Vec::new(), Vec::new()];
@@ -160,7 +161,7 @@ fn main() {
     #[rustfmt::skip]
     let timer_code = pio_proc::pio_asm!(
         "restart:",
-        "set x, 31",  // 4 cycles overhead gets us to 10 iterations per pulse
+        "set x, 6",  // 4 cycles overhead gets us to 10 iterations per pulse
         "waitloop:",
         "jmp x-- waitloop",
         "irq set 0",
@@ -179,6 +180,9 @@ fn main() {
         ptimer.irq_csr.wfo(utra::irqarray18::EV_ENABLE_PIOIRQ0_DUPE, 1);
         log::info!("Quantum timer setup!");
     }
+
+    // start keyboard emulator service
+    hw::keyboard::start_keyboard_service();
 
     let mut msg_opt = None;
     log::debug!("Starting main loop");

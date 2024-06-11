@@ -1,3 +1,5 @@
+pub(crate) mod debug;
+pub mod i2c;
 pub mod spi;
 pub mod units;
 
@@ -88,6 +90,9 @@ pub fn report_api(d: u32) {
 pub fn bio_tests() {
     report_api(crate::get_id());
 
+    units::aclk_tests();
+    i2c::i2c_test();
+    i2c::complex_i2c_test();
     spi::spi_test();
     units::hello_world();
     units::hello_multiverse();
@@ -104,18 +109,15 @@ pub fn bio_tests() {
 //   -[x] GPIO input path test
 //   -[x] Extclk as x20 stall source
 //   -[x] Check Extclk:gpio pin mapping (make sure bit ordering is not swapped)
-//   -[ ] GPIO direction control test
-//   -[ ] FIFO level trigger test - eq, gt, lt on various channels, at various fullness levels
+//   -[x] GPIO direction control test
+//   -[x] FIFO level trigger test - eq, gt, lt on various channels, at various fullness levels
 //   -[x] Stall on event - register bit test, between cores
 //   -[x] Stall on event - register bit test, to host
 //   -[x] Stall on event - FIFO level test
-//   -[ ] Host IRQ generation test - some combination with event tests above to confirm IRQ generation
+//   -[x] Host IRQ generation test - some combination with event tests above to confirm IRQ generation
 //   -[x] Core ID read test
-//   -[ ] Core aclk counter test
+//   -[x] Core aclk counter test
 // Application tests:
 //   -[x] SPI loopback test - implement using extclk as spi clk for input
-//   -[ ] I2C loopback test
-//   -[ ] IR controller test
-//   -[ ] Arithmetic test, utilizing load/store on core 0
-//   -[ ] Arithmetic test, without store, cores 1-3
+//   -[x] I2C loopback test
 //   -[ ] DMA transfer test -- might have to wait until full-chip integration to get MDMA core?
