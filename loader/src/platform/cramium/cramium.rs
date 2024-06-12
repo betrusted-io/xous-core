@@ -25,6 +25,7 @@ pub const KERNEL_OFFSET: usize = 0x4_0000;
 
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() {
+    use utra::trng::SFR_BUF;
     // Set up the initial clocks. This is done as a "poke array" into a table of addresses.
     // Why? because this is actually how it's done for the chip verification code. We can
     // make this nicer and more abstract with register meanings down the road, if necessary,
@@ -635,6 +636,62 @@ pub fn early_init() {
         }
     }
 
+    #[cfg(feature = "trng-test")]
+    {
+        let mut csr = CSR::new(utralib::utra::trng::HW_TRNG_BASE as *mut u32);
+        let mut glbl_csr = CSR::new(utralib::utra::sce_glbsfr::HW_SCE_GLBSFR_BASE as *mut u32);
+
+        glbl_csr.wo(utra::sce_glbsfr::SFR_SUBEN, 0xff);
+        csr.wo(utra::trng::SFR_CRSRC, 0xffff);
+        csr.wo(utra::trng::SFR_CRANA, 0xffff);
+        csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, 0xffff_ffff);
+        csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN1, 0xffff_ffff);
+        csr.wo(utra::trng::SFR_PP, 0xf805); // postproc
+        csr.wo(utra::trng::SFR_OPT, 0); // opt
+
+        loop {
+            crate::println!("wait for ready...");
+            while csr.r(utra::trng::SFR_SR) & 0x100_0000 == 0 {}
+            for _ in 0..16 {
+                crate::println!("trng: {:x}", csr.r(SFR_BUF));
+            }
+        }
+
+        /*
+        csr.wo(utra::trng::SFR_AR_GEN, 0xA5);
+        csr.wo(utra::trng::SFR_CRSRC, 0xfff);
+        csr.wo(utra::trng::SFR_CRANA, 0xf0f);
+        csr.wo(utra::trng::SFR_PP, 0x1);
+        csr.wo(utra::trng::SFR_OPT, 0xff);
+        csr.wo(utra::trng::SFR_AR_GEN, 0x5A);
+        */
+
+        fn trng_start(csr: &mut CSR<u32>) { csr.wo(utra::trng::SFR_AR_GEN, 0x5A); }
+        fn trng_stop(csr: &mut CSR<u32>) { csr.wo(utra::trng::SFR_AR_GEN, 0xA5); }
+        fn trng_clock_enable(glbl_csr: &mut CSR<u32>) {
+            glbl_csr.wo(utra::sce_glbsfr::SFR_SUBEN, 0xff);
+            glbl_csr.wo(utra::sce_glbsfr::SFR_FFEN, 0x30);
+        };
+        fn trng_clock_disable(glbl_csr: &mut CSR<u32>) {
+            glbl_csr.wo(utra::sce_glbsfr::SFR_SUBEN, 0x00);
+            glbl_csr.wo(utra::sce_glbsfr::SFR_FFEN, 0x00);
+        };
+        fn trng_init(csr: &mut CSR<u32>) {
+            csr.wo(utra::trng::SFR_CRSRC, 0xFFFF);
+            csr.wo(utra::trng::SFR_CRANA, 0xFFFF);
+            csr.wo(utra::trng::SFR_OPT, 0x10020);
+            csr.wo(utra::trng::SFR_PP, 0x6801);
+        }
+        fn trng_continuous_prepare(csr: &mut CSR<u32>, glbl_csr: &mut CSR<u32>) {
+            trng_stop(csr);
+            glbl_csr.wo(utra::sce_glbsfr::SFR_FFCLR, 0xff05);
+            csr.wo(utra::trng::SFR_CRSRC, 0xFFFF);
+            csr.wo(utra::trng::SFR_CRANA, 0xFFFF);
+            csr.wo(utra::trng::SFR_OPT, 0x10040);
+            csr.wo(utra::trng::SFR_PP, 0xf821);
+            trng_start(csr);
+        }
+    }
     #[cfg(feature = "usb-test")]
     {
         udma_uart.write("USB basic test...\n\r".as_bytes());
