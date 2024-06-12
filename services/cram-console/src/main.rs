@@ -50,7 +50,7 @@ fn main() {
 
     let usb = usb_device_xous::UsbHid::new();
 
-    tt.sleep_ms(15_000).ok();
+    tt.sleep_ms(25_000).ok();
     log::info!("sending hello world");
     usb.send_str("hello world");
     loop {
