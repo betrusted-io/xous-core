@@ -2082,6 +2082,14 @@ impl CorigineUsb {
 
     pub fn handle_set_stalled(&mut self, ep_num: u8, dir: bool, stalled: bool) {
         let pei = 2 * ep_num as usize + if dir { 1 } else { 0 };
+        // Note: in this case, we don't differentiate EP0 PEI, because in and out
+        // stall is handled separately despite being one physical endpoint.
+
+        // TODO: resolve the problem with stalls
+        //   - figure out the actual protocol spec for this
+        //   - figure out how corigine actually handles stalls
+
+        // this works with linux, but not with windows.
         if stalled != self.stall_spec[pei].unwrap_or(false) {
             self.stall_spec[pei] = Some(stalled);
             self.ep0_enqueue_zlp(stalled, CRG_INT_TARGET);
