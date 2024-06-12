@@ -661,7 +661,7 @@ impl EventTrbS {
 
     pub fn get_trb_type(&self) -> TrbType {
         let trb_type = self.dw3.trb_type();
-        TrbType::try_from(trb_type).expect("Unknown TRB type")
+        TrbType::try_from(trb_type).unwrap_or(TrbType::Rsvd)
     }
 
     pub fn get_raw_setup(&self) -> [u8; 8] {
@@ -741,7 +741,7 @@ impl UdcEp {
                 // check if it's a link; if so, cycle the link, and go back to first_trb
                 ret.dw3.set_cycle_bit(self.pcs);
                 #[cfg(feature = "std")]
-                log::info!(">>toggling PCS<<");
+                log::debug!(">>toggling PCS<<");
                 self.pcs = !self.pcs;
                 self.enq_pt = AtomicPtr::new(self.first_trb.load(Ordering::SeqCst));
                 (self.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer"), self.pcs)
@@ -1353,7 +1353,7 @@ impl CorigineUsb {
         if connect {
             CrgEvent::Connect
         } else {
-            if ep_out | ep_in_complete | ep_setup != 0 {
+            if (ep_out | ep_in_complete | ep_setup) != 0 {
                 CrgEvent::Data(ep_out, ep_in_complete, ep_setup)
             } else {
                 CrgEvent::None
@@ -1504,7 +1504,7 @@ impl CorigineUsb {
                 } else if pei >= 2 {
                     if comp_code == CompletionCode::Success || comp_code == CompletionCode::ShortPacket {
                         #[cfg(feature = "std")]
-                        log::info!("EP{} xfer event, dir {}", ep_num, if dir { "OUT" } else { "IN" });
+                        log::debug!("EP{} xfer event, dir {}", ep_num, if dir { "OUT" } else { "IN" });
                         // xfer_complete
                         if dir == CRG_OUT {
                             let addr = self.get_app_buf_ptr(ep_num, dir);
@@ -1525,9 +1525,9 @@ impl CorigineUsb {
                                 false,
                                 false,
                             );
-                            ret = CrgEvent::Data((pei / 2) as u16, 0, 0);
+                            ret = CrgEvent::Data(ep_num as u16, 0, 0);
                         } else {
-                            ret = CrgEvent::Data(0, (pei / 2) as u16, 0);
+                            ret = CrgEvent::Data(0, ep_num as u16, 0);
                         }
                     } else if comp_code == CompletionCode::MissedServiceError {
                         #[cfg(feature = "std")]
@@ -1882,7 +1882,7 @@ impl CorigineUsb {
         let mut enq_pt =
             unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
         #[cfg(feature = "std")]
-        log::info!(
+        log::debug!(
             "intr_xfer() pei: {}, enq_pt: {:x}, buf_addr: {:x}, pcs: {}, len: {:x}",
             pei,
             enq_pt as *mut TransferTrbS as usize,
@@ -1899,11 +1899,11 @@ impl CorigineUsb {
                 tmp_len = len;
                 ioc = true;
                 chain_bit = false;
-            } else if (index != (num_trb - 1)) && (num_trb != 1) {
+            } else if (index != (num_trb - 1)) && (num_trb > 1) {
                 tmp_len = MAX_TRB_XFER_LEN;
                 ioc = false;
                 chain_bit = true;
-            } else if (index == (num_trb - 1)) && (num_trb != 1) {
+            } else if (index == (num_trb - 1)) && (num_trb > 1) {
                 tmp_len = if len % MAX_TRB_XFER_LEN != 0 { len % MAX_TRB_XFER_LEN } else { MAX_TRB_XFER_LEN };
                 ioc = true;
                 chain_bit = false;
@@ -2347,7 +2347,7 @@ impl UsbBus for CorigineWrapper {
             }
             Ok(buf.len())
         } else {
-            log::info!(
+            log::debug!(
                 " ******** WRITE: {:?}({}): {:x?}",
                 ep_addr.index(),
                 buf.len(),
@@ -2402,7 +2402,7 @@ impl UsbBus for CorigineWrapper {
             } else {
                 if let Some(data) = self.core().readout[ep_addr.index() - 1] {
                     buf.copy_from_slice(&data[..buf.len()]);
-                    log::info!(" ******** READ: {:x?})", &buf[..8.min(buf.len())]);
+                    log::debug!(" ******** READ: {:x?})", &buf[..8.min(buf.len())]);
                     Ok(buf.len())
                 } else {
                     Err(UsbError::WouldBlock)
@@ -2414,7 +2414,7 @@ impl UsbBus for CorigineWrapper {
     /// Sets or clears the STALL condition for an endpoint. If the endpoint is an OUT endpoint, it
     /// should be prepared to receive data again.
     fn set_stalled(&self, ep_addr: EndpointAddress, stalled: bool) {
-        log::info!(" ******* set stalled {:?}<-{:?}", ep_addr, stalled);
+        log::debug!(" ******* set stalled {:?}<-{:?}", ep_addr, stalled);
         self.core().handle_set_stalled(ep_addr.index() as u8, ep_addr.is_in(), stalled);
     }
 
@@ -2453,7 +2453,7 @@ impl UsbBus for CorigineWrapper {
     fn poll(&self) -> PollResult {
         log::debug!(" ******* polling");
         let result = self.hw.lock().unwrap().udc_handle_interrupt();
-        log::info!(" ----> result: {:x?}", result);
+        log::debug!(" ----> result: {:x?}", result);
         match result {
             CrgEvent::None => PollResult::None,
             CrgEvent::Connect => {
