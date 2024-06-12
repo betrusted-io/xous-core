@@ -254,9 +254,6 @@ pub(crate) fn main_hw() -> ! {
 
     #[cfg(feature = "cramium-soc")]
     {
-        log::info!("Starting USB hardware in 2 seconds...");
-        tt.sleep_ms(2000).ok();
-        log::info!("NOW!");
         // for the cramium target, call init only once via management structure
         usbwrapper.reset();
         let mut poweron = 0;
@@ -433,7 +430,7 @@ pub(crate) fn main_hw() -> ! {
     #[cfg(not(feature = "minimal"))]
     let mut view = Views::FidoWithKbd;
     #[cfg(feature = "cramium-soc")]
-    usb_dev.force_reset().ok(); // hard-coded to math the view specifier above
+    usb_dev.force_reset().ok(); // hard-coded to match the view specifier above
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
