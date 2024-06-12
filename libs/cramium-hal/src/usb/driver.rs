@@ -1378,10 +1378,14 @@ impl CorigineUsb {
                 #[cfg(feature = "std")]
                 log::debug!("{:?}", portsc);
 
-                if portsc.prc() && !portsc.pr() || portsc.csc() && portsc.ppc() && portsc.pp() && portsc.ccs()
-                {
+                if portsc.prc() && !portsc.pr() {
                     #[cfg(feature = "std")]
-                    log::info!("update_current_speed()");
+                    log::info!("update_current_speed() - reset done");
+                    self.update_current_speed();
+                }
+                if portsc.csc() && portsc.ppc() && portsc.pp() && portsc.ccs() {
+                    #[cfg(feature = "std")]
+                    log::info!("update_current_speed() - cable connect");
                     self.update_current_speed();
                 }
                 /*
@@ -1989,7 +1993,7 @@ impl CorigineUsb {
         };
         epcx.epcx_setup(&udc_ep);
         #[cfg(feature = "std")]
-        log::info!(
+        log::debug!(
             "dcbap {:x}/{:x}; ecpx *{:x}; epcx: {:x?}",
             self.csr.r(DCBAPHI),
             self.csr.r(DCBAPLO),
@@ -2000,12 +2004,12 @@ impl CorigineUsb {
         self.udc_ep[pei].ep_state = EpState::Running;
 
         #[cfg(feature = "std")]
-        log::info!("waiting for EP to go to enabled, baseline: {:x}, epcx: {:x?}", baseline_enable, epcx);
+        log::info!("waiting for EP{} to go to enabled, baseline: {:x}", ep_num, baseline_enable);
         loop {
             let new_enable = self.csr.r(EPENABLE);
             if baseline_enable != new_enable {
                 #[cfg(feature = "std")]
-                log::info!("EPENABLE {:x}, EPRUN {:x}", self.csr.r(EPENABLE), self.csr.r(EPRUNNING));
+                log::debug!("EPENABLE {:x}, EPRUN {:x}", self.csr.r(EPENABLE), self.csr.r(EPRUNNING));
                 baseline_enable = new_enable;
             }
             if self.csr.r(EPENABLE) & (1 << pei) != 0 {
@@ -2013,7 +2017,7 @@ impl CorigineUsb {
             }
         }
         #[cfg(feature = "std")]
-        log::info!("ENABLED");
+        log::debug!("ENABLED");
     }
 
     pub fn ep_disable(&mut self, ep_num: u8, dir: bool) {
@@ -2077,10 +2081,7 @@ impl CorigineUsb {
     }
 
     pub fn handle_set_stalled(&mut self, ep_num: u8, dir: bool, stalled: bool) {
-        let mut pei = 2 * ep_num as usize + if dir { 1 } else { 0 };
-        if ep_num == 0 {
-            pei = 0;
-        }
+        let pei = 2 * ep_num as usize + if dir { 1 } else { 0 };
         if stalled != self.stall_spec[pei].unwrap_or(false) {
             self.stall_spec[pei] = Some(stalled);
             self.ep0_enqueue_zlp(stalled, CRG_INT_TARGET);
@@ -2291,8 +2292,8 @@ impl UsbBus for CorigineWrapper {
                 self.core().ep_disable(index as u8, false);
             }
         }
-        log::info!("enabled EPs: {:x}", self.core().csr.r(EPENABLE));
-        log::info!("running EPs: {:x}", self.core().csr.r(EPRUNNING));
+        log::info!("enabled EPs: {:b}", self.core().csr.r(EPENABLE));
+        log::info!("running EPs: {:b}", self.core().csr.r(EPRUNNING));
     }
 
     /// Writes a single packet of data to the specified endpoint and returns number of bytes
