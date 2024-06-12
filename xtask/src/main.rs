@@ -497,7 +497,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .to_vec();
                 */
             // minimal config for USB debugging
-            let cramium_swap_pkgs = ["usb-device-xous", "cram-console"].to_vec();
+            let cramium_swap_pkgs = ["usb-device-xous"].to_vec(); // , "cram-console"
             if !builder.is_swap_set() {
                 builder.set_swap(0, 4 * 1024 * 1024);
             }
@@ -519,6 +519,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             builder.add_feature("quantum-timer");
             // builder.add_kernel_feature("v2p");
+            // builder.add_feature("mass-storage");
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),
                 Some("cramium-soc") => builder.target_cramium_soc(),
