@@ -71,6 +71,7 @@ cramium-soc = [
 ]
 minimal = ["mass-storage"]
 mass-storage = ["usbd_scsi", "usbd_mass_storage"]
+auto-trng = []
 mjolnir = [
 ] # the big hammer for debugging Spinal USB issues. A raw memory dump of config and descriptor space. Use with care.
 default = []
