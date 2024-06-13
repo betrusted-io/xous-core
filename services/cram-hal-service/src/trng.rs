@@ -12,6 +12,7 @@ pub const TRNG_TEST_BUF_LEN: usize = 2048;
 #[derive(Debug)]
 pub struct Trng {
     csprng: RefCell<rand_chacha::ChaCha8Rng>,
+    mode: api::TrngTestMode,
 }
 impl Trng {
     pub fn new(_xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
@@ -20,6 +21,7 @@ impl Trng {
                 (xous::create_server_id().unwrap().to_u32().0 as u64)
                     | ((xous::create_server_id().unwrap().to_u32().0 as u64) << 32),
             )),
+            mode: api::TrngTestMode::Raw,
         })
     }
 
@@ -76,14 +78,34 @@ impl Trng {
     }
 
     /// Sets the test mode according to the argument. Blocks until mode is set.
-    pub fn set_test_mode(&self, test_mode: api::TrngTestMode) {
-        log::info!("TODO: trng test mode setting: {:?}", test_mode);
-    }
+    pub fn set_test_mode(&mut self, test_mode: api::TrngTestMode) { self.mode = test_mode; }
 
     /// Gets test data from the TRNG.
-    pub fn get_test_data(&self) -> Result<[u8; TRNG_TEST_BUF_LEN], xous::Error> {
-        log::info!("TODO: get test data");
-        Ok([0u8; TRNG_TEST_BUF_LEN])
+    pub fn get_test_data(&mut self) -> Result<[u8; TRNG_TEST_BUF_LEN], xous::Error> {
+        match self.mode {
+            api::TrngTestMode::None => {
+                let mut buf = [0u8; TRNG_TEST_BUF_LEN];
+                self.fill_bytes(&mut buf);
+                Ok(buf)
+            }
+            api::TrngTestMode::Raw => {
+                let mut buf = [0u8; TRNG_TEST_BUF_LEN];
+                for chunk in buf.chunks_mut(16) {
+                    match xous::rsyscall(xous::SysCall::RawTrng(0, 0, 0, 0, 0, 0, 0))
+                        .expect("RawTrng syscall failed")
+                    {
+                        xous::Result::Scalar5(r0, r1, r2, r3, _) => {
+                            chunk[..4].copy_from_slice(&(r0 as u32).to_le_bytes());
+                            chunk[4..8].copy_from_slice(&(r1 as u32).to_le_bytes());
+                            chunk[8..12].copy_from_slice(&(r2 as u32).to_le_bytes());
+                            chunk[12..].copy_from_slice(&(r3 as u32).to_le_bytes());
+                        }
+                        _ => panic!("Bad syscall result"),
+                    }
+                }
+                Ok(buf)
+            }
+        }
     }
 }
 
