@@ -7,14 +7,9 @@ use std::sync::Arc;
 #[cfg(all(not(feature = "minimal"), any(feature = "cramium-soc")))]
 use cram_hal_service::api::KeyMap;
 #[cfg(feature = "cramium-soc")]
-use cram_hal_service::keyboard;
+use cram_hal_service::{keyboard, trng, trng::api::TrngTestMode};
 #[cfg(feature = "cramium-soc")]
-use cram_hal_service::trng;
-use cram_hal_service::trng::api::TrngTestMode;
-#[cfg(feature = "cramium-soc")]
-use cramium_hal::usb::driver::CorigineUsb;
-#[cfg(feature = "cramium-soc")]
-use cramium_hal::usb::driver::CorigineWrapper;
+use cramium_hal::usb::driver::{CorigineUsb, CorigineWrapper};
 #[cfg(all(not(feature = "minimal"), any(feature = "renode", feature = "precursor")))]
 use keyboard::KeyMap;
 use num_traits::*;
