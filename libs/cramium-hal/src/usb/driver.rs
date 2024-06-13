@@ -1088,7 +1088,7 @@ impl CorigineUsb {
         udc_ep.enq_pt = AtomicPtr::new(udc_ep.first_trb.load(Ordering::SeqCst));
         udc_ep.deq_pt = AtomicPtr::new(udc_ep.first_trb.load(Ordering::SeqCst));
         #[cfg(feature = "std")]
-        log::info!(
+        log::debug!(
             "ep0.enq_pt {:x}, ep0.deq_pt {:x}",
             udc_ep.enq_pt.load(Ordering::SeqCst) as usize,
             udc_ep.deq_pt.load(Ordering::SeqCst) as usize
@@ -1104,11 +1104,11 @@ impl CorigineUsb {
         let cmd_param1: u32 = 0;
         #[cfg(feature = "std")]
         {
-            log::info!(
+            log::debug!(
                 "ep0 ring dma addr = {:x}",
                 udc_ep.tran_ring_info.vaddr.load(Ordering::SeqCst) as usize
             );
-            log::info!("INIT EP0 CMD par0 = {:x} par1 = {:x}", cmd_param0, cmd_param1);
+            log::debug!("INIT EP0 CMD par0 = {:x} par1 = {:x}", cmd_param0, cmd_param1);
         }
         #[cfg(not(feature = "std"))]
         {
@@ -1154,7 +1154,7 @@ impl CorigineUsb {
                 self as *const CorigineUsb as *mut usize,
             )
             .expect("couldn't claim irq");
-            log::info!("interrupt claimed");
+            log::debug!("interrupt claimed");
         }
         // self.irq_csr.wfo(utralib::utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE, 1);
         // self.irq_csr.wfo(utralib::utra::irqarray1::EV_POLARITY_RISING, 0);
@@ -2156,7 +2156,7 @@ impl UsbBus for CorigineWrapper {
         max_packet_size: u16,
         _interval: u8,
     ) -> Result<EndpointAddress> {
-        log::info!("alloc_ep {:?} size: {} dir: {:?}", ep_addr, max_packet_size, ep_dir);
+        log::debug!("alloc_ep {:?} size: {} dir: {:?}", ep_addr, max_packet_size, ep_dir);
         let dir = match ep_dir {
             UsbDirection::Out => CRG_OUT,
             UsbDirection::In => CRG_IN,
@@ -2200,7 +2200,7 @@ impl UsbBus for CorigineWrapper {
     /// Enables and initializes the USB peripheral. Soon after enabling the device will be reset, so
     /// there is no need to perform a USB reset in this method.
     fn enable(&mut self) {
-        log::info!(" ******** enable");
+        log::debug!(" ******** enable");
     }
 
     /// Called when the host resets the device. This will be soon called after
