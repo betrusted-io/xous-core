@@ -14,7 +14,7 @@ cbor = { path = "../cbor" }
 arrayref = "0.3.6"
 subtle = { version = "2.2.3", default-features = false }
 trng = { path = "../../../../services/trng" }
-xous-names = { package = "xous-api-names", version = "0.9.59" }
+xous-names = { package = "xous-api-names", version = "0.9.60" }
 rand_core = "0.6.3"
 p256 = { version = "0.11.1", default-features = false, features = [
   "ecdsa",
