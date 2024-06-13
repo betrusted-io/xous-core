@@ -1,4 +1,3 @@
-use core::cmp::max;
 use core::convert::TryFrom;
 use core::mem::size_of;
 #[cfg(feature = "std")]
