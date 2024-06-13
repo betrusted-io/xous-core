@@ -542,6 +542,25 @@ pub enum SysCall {
     #[cfg(feature = "swap")]
     SwapOp(usize, usize, usize, usize, usize, usize, usize),
 
+    /// Retrieve four u32's from the hardware TRNG. These values are not used
+    /// by the kernel, and so should be generally safe to inspect so long as the TRNG
+    /// itself does not leak state through such inspections. Enabling this feature
+    /// is a trade-off between paranoia about leaked TRNG state, and paranoia about
+    /// the TRNG itself being unhealthy.
+    ///
+    /// In the case of a weak TRNG, it's recommended to enable this feature, so that its health can be
+    /// actively monitored.
+    ///
+    /// ## Arguments
+    ///   * The arguments have an implementation-specific meaning. Generally, they are provided to tune the
+    ///     TRNG into different modes to inspect its operation.
+    ///
+    /// ## Returns
+    /// Returns a Scalar5, where the first four values are outputs from the TRNG, and
+    /// the last one is 0.
+    #[cfg(feature = "raw-trng")]
+    RawTrng(usize, usize, usize, usize, usize, usize, usize),
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -597,6 +616,8 @@ pub enum SysCallNumber {
     RegisterSwapper = 43,
     #[cfg(feature = "swap")]
     SwapOp = 44,
+    #[cfg(feature = "raw-trng")]
+    RawTrng = 45,
 }
 
 impl SysCallNumber {
@@ -650,6 +671,8 @@ impl SysCallNumber {
             43 => RegisterSwapper,
             #[cfg(feature = "swap")]
             44 => SwapOp,
+            #[cfg(feature = "raw-trng")]
+            45 => RawTrng,
             _ => Invalid,
         }
     }
@@ -899,6 +922,10 @@ impl SysCall {
             SysCall::SwapOp(a1, a2, a3, a4, a5, a6, a7) => {
                 [SysCallNumber::SwapOp as usize, *a1, *a2, *a3, *a4, *a5, *a6, *a7]
             }
+            #[cfg(feature = "raw-trng")]
+            SysCall::RawTrng(a1, a2, a3, a4, a5, a6, a7) => {
+                [SysCallNumber::RawTrng as usize, *a1, *a2, *a3, *a4, *a5, *a6, *a7]
+            }
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => {
                 [SysCallNumber::Invalid as usize, *a1, *a2, *a3, *a4, *a5, *a6, *a7]
             }
@@ -1051,6 +1078,8 @@ impl SysCall {
             }
             #[cfg(feature = "swap")]
             SysCallNumber::SwapOp => SysCall::SwapOp(a1, a2, a3, a4, a5, a6, a7),
+            #[cfg(feature = "raw-trng")]
+            SysCallNumber::RawTrng => SysCall::RawTrng(a1, a2, a3, a4, a5, a6, a7),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
