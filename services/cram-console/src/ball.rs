@@ -1,6 +1,7 @@
 const BALL_RADIUS: i16 = 10;
 const MOMENTUM_LIMIT: i32 = 8;
 const BORDER_WIDTH: i16 = 5;
+use cram_hal_service::trng;
 use graphics_server::{Circle, ClipObjectList, ClipObjectType, DrawStyle, PixelColor, Point, Rectangle};
 
 pub struct Ball {
@@ -12,7 +13,7 @@ pub struct Ball {
     trng: trng::Trng,
 }
 impl Ball {
-    pub fn new(xns: &xous_api_names::XousNames) -> Ball {
+    pub fn new(xns: &xous_names::XousNames) -> Ball {
         let gfx = graphics_server::Gfx::new(xns).unwrap();
         gfx.draw_boot_logo().unwrap();
 
@@ -21,7 +22,7 @@ impl Ball {
         ball.style = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
         let clip = Rectangle::new(Point::new(0, 0), screensize);
         gfx.draw_circle(ball).unwrap();
-        let mut trng = trng::Trng::new(&xns).unwrap();
+        let trng = trng::Trng::new(&xns).unwrap();
         let x = ((trng.get_u32().unwrap() / 2) as i32) % (MOMENTUM_LIMIT * 2) - MOMENTUM_LIMIT;
         let y = ((trng.get_u32().unwrap() / 2) as i32) % (MOMENTUM_LIMIT * 2) - MOMENTUM_LIMIT;
         Ball { gfx, screensize, ball, momentum: Point::new(x as i16, y as i16), clip, trng }
