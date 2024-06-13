@@ -5,6 +5,7 @@ use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering::Relaxed};
 
 use xous_kernel::*;
 
+use crate::arch;
 use crate::arch::process::Process as ArchProcess;
 use crate::irq::{interrupt_claim, interrupt_free};
 use crate::mem::{MemoryManager, PAGE_SIZE};
@@ -12,7 +13,6 @@ use crate::server::{SenderID, WaitingMessage};
 use crate::services::SystemServices;
 #[cfg(feature = "swap")]
 use crate::swap::{Swap, SwapAbi};
-use crate::{arch, platform};
 
 /* Quoth Xobs:
  The idea behind SWITCHTO_CALLER was that you'd have a process act as a scheduler,
@@ -1109,10 +1109,10 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             // TODO: implement this platform call for other targets
             // Right now, there is no get_raw_u32() for precursor/renode/hosted
             Ok(xous_kernel::Result::Scalar5(
-                platform::rand::get_raw_u32() as usize,
-                platform::rand::get_raw_u32() as usize,
-                platform::rand::get_raw_u32() as usize,
-                platform::rand::get_raw_u32() as usize,
+                crate::arch::platform::rand::get_raw_u32() as usize,
+                crate::arch::platform::rand::get_raw_u32() as usize,
+                crate::arch::platform::rand::get_raw_u32() as usize,
+                crate::arch::platform::rand::get_raw_u32() as usize,
                 0,
             ))
         }
