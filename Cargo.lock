@@ -837,6 +837,8 @@ dependencies = [
 name = "cram-console"
 version = "0.1.0"
 dependencies = [
+ "cram-hal-service",
+ "cramium-hal",
  "gam",
  "graphics-server",
  "locales",
