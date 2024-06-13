@@ -119,6 +119,10 @@ fn map_fonts() -> MemoryRange {
         .store((fontregion.as_ptr() as usize + fontmap::MONO_OFFSET as usize) as u32, Ordering::SeqCst);
     blitstr2::fonts::tall::GLYPH_LOCATION
         .store((fontregion.as_ptr() as usize + fontmap::TALL_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::regular::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::REGULAR_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::small::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::SMALL_OFFSET as usize) as u32, Ordering::SeqCst);
 
     fontregion
 }

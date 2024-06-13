@@ -1104,6 +1104,18 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 }
             }
         }
+        #[cfg(feature = "raw-trng")]
+        SysCall::RawTrng(_a1, _a2, _a3, _a4, _a5, _a6, _a7) => {
+            // TODO: implement this platform call for other targets
+            // Right now, there is no get_raw_u32() for precursor/renode/hosted
+            Ok(xous_kernel::Result::Scalar5(
+                crate::platform::rand::get_raw_u32() as usize,
+                crate::platform::rand::get_raw_u32() as usize,
+                crate::platform::rand::get_raw_u32() as usize,
+                crate::platform::rand::get_raw_u32() as usize,
+                0,
+            ))
+        }
 
         /* https://github.com/betrusted-io/xous-core/issues/90
         SysCall::SetExceptionHandler(pc, sp) => SystemServices::with_mut(|ss| {

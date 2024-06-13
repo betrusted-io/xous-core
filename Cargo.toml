@@ -105,6 +105,7 @@ members = [
   "services/cram-hal-service",
   "services/xous-swapper",
   "services/test-swapper",
+  "services/cram-console",
 ]
 resolver = "2"
 

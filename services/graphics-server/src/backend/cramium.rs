@@ -92,6 +92,7 @@ pub fn claim_main_thread(f: impl FnOnce(MainThreadToken) -> Never + Send + 'stat
 
 pub struct XousDisplay {
     fb: [u32; FB_SIZE],
+    srfb: [u32; FB_SIZE],
     next_free_line: usize,
     spim: udma::Spim,
     devboot: bool,
@@ -219,8 +220,13 @@ impl XousDisplay {
             .expect("Couldn't allocate SPI channel for LCD")
         };
 
-        let mut display =
-            XousDisplay { fb: [0xFFFF_FFFFu32; FB_SIZE], spim, next_free_line: 0, devboot: false };
+        let mut display = XousDisplay {
+            fb: [0xFFFF_FFFFu32; FB_SIZE],
+            srfb: [0xFFFF_FFFFu32; FB_SIZE],
+            spim,
+            next_free_line: 0,
+            devboot: false,
+        };
 
         // initialize the DMA buffer with valid mode/address lines & blank data
         for line in 0..FB_LINES {
@@ -263,11 +269,19 @@ impl XousDisplay {
     }
 
     pub fn stash(&mut self) {
-        unimplemented!("Cramium platform does not yet support suspend/resume");
+        self.srfb.copy_from_slice(&self.fb);
+
+        for lines in 0..FB_LINES {
+            // set the dirty bits prior to stashing the frame buffer
+            self.srfb[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+        }
     }
 
     pub fn pop(&mut self) {
-        unimplemented!("Cramium platform does not yet support suspend/resume");
+        // skip copying the status bar, so that the status info is not overwritten by the pop.
+        // this is "fixed" at 34 pixels high (2 * Tall glyph height hint) per line 79 in gam/src/main.rs
+        self.fb[FB_WIDTH_WORDS * 34..FB_SIZE].copy_from_slice(&self.srfb[FB_WIDTH_WORDS * 34..FB_SIZE]);
+        self.redraw();
     }
 
     #[allow(dead_code)]

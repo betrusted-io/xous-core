@@ -491,13 +491,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // are resident, non-swapable, but end up making the slow kernel burn process take longer.
             let cramium_flash_pkgs =
                 ["xous-ticktimer", "xous-log", "cram-hal-service", "xous-names", "graphics-server"].to_vec();
-            /*
             let cramium_swap_pkgs =
                 ["gam", "modals", "ime-plugin-shell", "ime-frontend", "cram-console", "usb-device-xous"]
                     .to_vec();
-                */
             // minimal config for USB debugging
-            let cramium_swap_pkgs = ["usb-device-xous", "cram-console"].to_vec();
+            // let cramium_swap_pkgs = ["usb-device-xous"].to_vec(); // , "cram-console"
             if !builder.is_swap_set() {
                 builder.set_swap(0, 4 * 1024 * 1024);
             }
@@ -506,6 +504,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // builder.add_loader_feature("spi-alt-channel"); // this flag, when asserted, uses the J_QSPI
             // builder.add_loader_feature("irq-test");
             // builder.add_loader_feature("usb-test");
+            // builder.add_loader_feature("trng-test");
             // header. By default, we use JPC7_13 (J_QSPI does not work, for some reason; bit 3 is stuck
             // high...)
             builder.add_loader_feature("swap");
@@ -518,7 +517,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // builder.add_kernel_feature("debug-swap-verbose");
 
             builder.add_feature("quantum-timer");
+            builder.add_feature("auto-trng"); // automatically initialize TRNG tester inside USB stack
             // builder.add_kernel_feature("v2p");
+            builder.add_feature("mass-storage");
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),
                 Some("cramium-soc") => builder.target_cramium_soc(),

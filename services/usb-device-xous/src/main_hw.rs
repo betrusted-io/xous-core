@@ -7,13 +7,9 @@ use std::sync::Arc;
 #[cfg(all(not(feature = "minimal"), any(feature = "cramium-soc")))]
 use cram_hal_service::api::KeyMap;
 #[cfg(feature = "cramium-soc")]
-use cram_hal_service::keyboard;
+use cram_hal_service::{keyboard, trng};
 #[cfg(feature = "cramium-soc")]
-use cram_hal_service::trng;
-#[cfg(feature = "cramium-soc")]
-use cramium_hal::usb::driver::CorigineUsb;
-#[cfg(feature = "cramium-soc")]
-use cramium_hal::usb::driver::CorigineWrapper;
+use cramium_hal::usb::driver::{CorigineUsb, CorigineWrapper};
 #[cfg(all(not(feature = "minimal"), any(feature = "renode", feature = "precursor")))]
 use keyboard::KeyMap;
 use num_traits::*;
@@ -254,9 +250,6 @@ pub(crate) fn main_hw() -> ! {
 
     #[cfg(feature = "cramium-soc")]
     {
-        log::info!("Starting USB hardware in 2 seconds...");
-        tt.sleep_ms(2000).ok();
-        log::info!("NOW!");
         // for the cramium target, call init only once via management structure
         usbwrapper.reset();
         let mut poweron = 0;
@@ -404,7 +397,10 @@ pub(crate) fn main_hw() -> ! {
     let mut serial_listen_mode: SerialListenMode = SerialListenMode::NoListener;
     let mut serial_buf = Vec::<u8>::new();
     let mut serial_rx_trigger = false; // when true, the condition was met to pass data to the listener (but the listener was not yet installed)
+    #[cfg(not(feature = "cramium-soc"))]
     let trng = trng::Trng::new(&xns).unwrap();
+    #[cfg(feature = "cramium-soc")]
+    let mut trng = trng::Trng::new(&xns).unwrap();
     let mut serial_trng_buf = Vec::<u8>::new();
     let serial_trng_interval = Arc::new(AtomicU32::new(0));
     let mut serial_trng_cid: Option<xous::CID> = None;
@@ -430,10 +426,54 @@ pub(crate) fn main_hw() -> ! {
         100, // 100 * 64 bytes = 6.4kb, quite the backlog
     );
     // track which view is visible on the device core
-    #[cfg(not(feature = "minimal"))]
+    #[cfg(all(not(feature = "minimal"), not(feature = "cramium-soc")))]
     let mut view = Views::FidoWithKbd;
+
     #[cfg(feature = "cramium-soc")]
-    usb_dev.force_reset().ok(); // hard-coded to math the view specifier above
+    let mut view = Views::Serial;
+    #[cfg(feature = "cramium-soc")]
+    serial_device.force_reset().ok(); // hard-coded to match the view specifier above
+
+    #[cfg(feature = "auto-trng")]
+    std::thread::spawn({
+        let conn = cid;
+        move || {
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            loop {
+                tt.sleep_ms(2_000).ok();
+                let state = match xous::send_message(
+                    conn,
+                    xous::Message::new_blocking_scalar(Opcode::LinkStatus.to_usize().unwrap(), 0, 0, 0, 0),
+                ) {
+                    Ok(xous::Result::Scalar1(code)) => match code {
+                        0 => UsbDeviceState::Default,
+                        1 => UsbDeviceState::Addressed,
+                        2 => UsbDeviceState::Configured,
+                        3 => UsbDeviceState::Suspend,
+                        _ => panic!("Internal error: illegal status code"),
+                    },
+                    _ => panic!("Internal error: illegal return type"),
+                };
+                if state == UsbDeviceState::Configured {
+                    log::info!("Core connected");
+                    break;
+                }
+            }
+            tt.sleep_ms(3_000).ok();
+            log::info!("Starting serial sender");
+            xous::send_message(
+                conn,
+                xous::Message::new_scalar(
+                    Opcode::SerialHookTrngSender.to_usize().unwrap(),
+                    trng::api::TrngTestMode::Raw.to_usize().unwrap(),
+                    0,
+                    0,
+                    0,
+                ),
+            )
+            .unwrap();
+        }
+    });
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;

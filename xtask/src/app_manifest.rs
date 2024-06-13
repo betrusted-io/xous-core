@@ -183,6 +183,7 @@ pub(crate) fn app_menu_items(menu_items: &mut Vec::<MenuItem>, status_conn: u32)
     }
     writeln!(menu, "}}").unwrap();
     overwrite_if_changed(&menu, "services/status/src/app_autogen.rs");
+    overwrite_if_changed(&menu, "services/cram-console/src/app_autogen.rs");
 }
 
 fn overwrite_if_changed(new_string: &String, old_file: &str) {
