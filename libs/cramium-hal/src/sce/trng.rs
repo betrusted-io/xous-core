@@ -79,6 +79,13 @@ enum Mode {
 }
 
 const RAW_ENTRIES: usize = 16;
+/// The guardband is a number of entries of the TRNG to dispose of after
+/// sampling for QC. The idea is to allow the TRNG internal state to evolve
+/// for at least this many cycles before the next sample is taken, thus
+/// making it more difficult for any adversary to reason about the current
+/// state of the TRNG given the QC samples.
+const RAW_GUARDBAND: usize = 16;
+
 pub struct Trng {
     pub csr: CSR<u32>,
     _count: u16, // vestigial, to be removed?
@@ -150,6 +157,12 @@ impl Trng {
             *d = Some(self.csr.r(utra::trng::SFR_BUF));
         }
         let r = self.csr.r(utra::trng::SFR_BUF);
+        while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
+        // Run the TRNG state forward for some number of cycles to make it harder to draw
+        // any conclusions about the TRNG's state based on the reported raw samples.
+        for _ in 0..RAW_GUARDBAND {
+            let _ = Some(self.csr.r(utra::trng::SFR_SR));
+        }
         r
     }
 
