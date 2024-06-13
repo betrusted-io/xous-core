@@ -25,7 +25,6 @@ pub const KERNEL_OFFSET: usize = 0x4_0000;
 
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() {
-    use utra::trng::SFR_BUF;
     // Set up the initial clocks. This is done as a "poke array" into a table of addresses.
     // Why? because this is actually how it's done for the chip verification code. We can
     // make this nicer and more abstract with register meanings down the road, if necessary,
@@ -188,6 +187,14 @@ pub fn early_init() {
     };
     crate::println!("Baud freq is {} Hz, baudrate is {}", freq, baudrate);
     udma_uart.set_baud(baudrate, freq);
+
+    // Setup some global control registers that will allow the TRNG to operate once the kernel is
+    // booted. This is done so the kernel doesn't have to exclusively have rights to the SCE global
+    // registers just for this purpose.
+    let mut glbl_csr = CSR::new(utralib::utra::sce_glbsfr::HW_SCE_GLBSFR_BASE as *mut u32);
+    glbl_csr.wo(utra::sce_glbsfr::SFR_SUBEN, 0xff);
+    glbl_csr.wo(utra::sce_glbsfr::SFR_FFEN, 0x30);
+    glbl_csr.wo(utra::sce_glbsfr::SFR_FFCLR, 0xff05);
 
     // Board bring-up: send characters to confirm the UART is configured & ready to go for the logging crate!
     // The "boot gutter" also has a role to pause the system in "real mode" before VM is mapped in Xous
@@ -639,9 +646,8 @@ pub fn early_init() {
     #[cfg(feature = "trng-test")]
     {
         let mut csr = CSR::new(utralib::utra::trng::HW_TRNG_BASE as *mut u32);
-        let mut glbl_csr = CSR::new(utralib::utra::sce_glbsfr::HW_SCE_GLBSFR_BASE as *mut u32);
+        // assume: glbl_csr is already setup above, turning on clocks and setting up FIFOs
 
-        glbl_csr.wo(utra::sce_glbsfr::SFR_SUBEN, 0xff);
         csr.wo(utra::trng::SFR_CRSRC, 0xffff);
         csr.wo(utra::trng::SFR_CRANA, 0xffff);
         csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, 0xffff_ffff);
@@ -650,11 +656,8 @@ pub fn early_init() {
         csr.wo(utra::trng::SFR_OPT, 0); // opt
 
         loop {
-            crate::println!("wait for ready...");
             while csr.r(utra::trng::SFR_SR) & 0x100_0000 == 0 {}
-            for _ in 0..16 {
-                crate::println!("trng: {:x}", csr.r(SFR_BUF));
-            }
+            crate::println!("trng: {:x}", csr.r(utra::trng::SFR_BUF));
         }
 
         /*
