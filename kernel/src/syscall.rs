@@ -1109,10 +1109,10 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             // TODO: implement this platform call for other targets
             // Right now, there is no get_raw_u32() for precursor/renode/hosted
             Ok(xous_kernel::Result::Scalar5(
-                crate::arch::platform::rand::get_raw_u32() as usize,
-                crate::arch::platform::rand::get_raw_u32() as usize,
-                crate::arch::platform::rand::get_raw_u32() as usize,
-                crate::arch::platform::rand::get_raw_u32() as usize,
+                crate::platform::rand::get_raw_u32() as usize,
+                crate::platform::rand::get_raw_u32() as usize,
+                crate::platform::rand::get_raw_u32() as usize,
+                crate::platform::rand::get_raw_u32() as usize,
                 0,
             ))
         }
