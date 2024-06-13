@@ -41,7 +41,7 @@ xous-kernel = { package = "xous", version = "0.9.61", features = ["v2p"] }
 critical-section = "1.1.1"
 
 [features]
-cramium-soc = ["utralib/cramium-soc", "cramium-hal", "rand_chacha"]
+cramium-soc = ["utralib/cramium-soc", "cramium-hal", "rand_chacha", "raw-trng"]
 cramium-fpga = ["utralib/cramium-fpga"]
 atsama5d27 = ["utralib/atsama5d27"]
 precursor = ["utralib/precursor"]
@@ -58,6 +58,7 @@ v2p = ["xous-kernel/v2p"]
 swap = ["xous-kernel/swap", "loader/swap"]
 debug-swap = []
 debug-swap-verbose = []
+raw-trng = ["xous-kernel/raw-trng"]
 
 # patches for simulation targets ONLY. Applying these flags will result in totally broken security.
 hwsim = []
