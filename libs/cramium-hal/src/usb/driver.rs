@@ -284,11 +284,6 @@ pub struct Uicr {
     erdphi: u32,
 }
 
-const USB_CONTROL_ENDPOINT: u8 = 0;
-const USB_ISOCHRONOUS_ENDPOINT: u8 = 1;
-const USB_BULK_ENDPOINT: u8 = 2;
-const USB_INTERRUPT_ENDPOINT: u8 = 3;
-
 const CRG_UDC_CFG0_MAXSPEED_FS: u32 = 1;
 
 const CRG_UDC_ERDPLO_EHB: u32 = 1 << 3;
@@ -773,22 +768,6 @@ impl Default for UdcEvent {
     }
 }
 
-// Corigine USB device controller power management data structure
-#[derive(Default)]
-pub struct SelValue {
-    u2_pel_value: u16,
-    u2_sel_valu: u16,
-    u1_pel_value: u8,
-    u1_sel_value: u8,
-}
-/*
-const WAIT_FOR_SETUP: u8 = 0;
-const SETUP_PKT_PROCESS_IN_PROGRESS: u8 = 1;
-const DATA_STAGE_XFER: u8 = 2;
-const DATA_STAGE_RECV: u8 = 3;
-const STATUS_STAGE_XFER: u8 = 4;
-const STATUS_STAGE_RECV: u8 = 5;
-*/
 /* device speed */
 pub enum UsbDeviceSpeed {
     Unknown = 0,
@@ -798,21 +777,6 @@ pub enum UsbDeviceSpeed {
     Wireless,
     Super,
     SuperPlus,
-}
-
-/* device state */
-#[repr(u8)]
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum UsbDeviceState {
-    NotAttached = 0,
-    Attached,
-    Powered,
-    Reconnecting,
-    Unauthenticated,
-    Default,
-    Address,
-    Configured,
-    Suspended,
 }
 
 pub struct CorigineUsb {
@@ -841,19 +805,10 @@ pub struct CorigineUsb {
     suppress_ep0_send_set_addr: bool,
     stall_spec: [Option<bool>; CRG_EP_NUM * 2 + 2],
 
-    // power management data
-    sel_value: SelValue,
-
     speed: UsbDeviceSpeed,
-    device_state: UsbDeviceState,
-    cur_interface_num: u8,
 
     // actual hardware pointer value to pass to UDC; not directly accessed by Rust
     ep0_buf: AtomicPtr<u8>,
-
-    u2_rwe: u32,
-    feature_u1_enabled: u32,
-    feature_u2_enabled: u32,
 }
 impl CorigineUsb {
     /// Safety: this function is generally pretty unsafe because the underlying hardware needs raw pointers,
@@ -897,19 +852,13 @@ impl CorigineUsb {
             p_epcx: AtomicPtr::new(core::ptr::null_mut()),
             p_epcx_len: 0,
             udc_event: UdcEvent::default(),
-            sel_value: SelValue::default(),
             readout: [None; CRG_EP_NUM],
             setup: None,
             suppress_ep0_send_set_addr: false,
             stall_spec: [None; CRG_EP_NUM * 2 + 2],
             setup_tag: 0,
             speed: UsbDeviceSpeed::Unknown,
-            device_state: UsbDeviceState::NotAttached,
-            cur_interface_num: 0,
             ep0_buf: AtomicPtr::new(core::ptr::null_mut()),
-            u2_rwe: 0,
-            feature_u1_enabled: 0,
-            feature_u2_enabled: 0,
         }
     }
 
@@ -1548,11 +1497,11 @@ impl CorigineUsb {
                 // demo of setup packets working in loader
                 #[cfg(not(feature = "std"))]
                 {
-                    let request_type = setup_storage[0];
+                    let _request_type = setup_storage[0];
                     let request = setup_storage[1];
                     let value = u16::from_le_bytes(setup_storage[2..4].try_into().unwrap());
-                    let index = u16::from_le_bytes(setup_storage[4..6].try_into().unwrap());
-                    let length = u16::from_le_bytes(setup_storage[6..].try_into().unwrap());
+                    let _index = u16::from_le_bytes(setup_storage[4..6].try_into().unwrap());
+                    let _length = u16::from_le_bytes(setup_storage[6..].try_into().unwrap());
 
                     const SET_ADDRESS: u8 = 5;
                     const GET_DESCRIPTOR: u8 = 6;
@@ -1661,9 +1610,6 @@ impl CorigineUsb {
     }
 
     pub fn set_addr(&mut self, addr: u8, target: u32) {
-        self.device_state = UsbDeviceState::Address;
-        self.feature_u1_enabled = 0;
-        self.feature_u2_enabled = 0;
         self.issue_command(CmdType::SetAddr, self.csr.ms(CMDPARA0_CMD2_SET_ADDR, addr as u32), 0)
             .expect("couldn't issue command");
 
