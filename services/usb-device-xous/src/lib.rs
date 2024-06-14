@@ -448,6 +448,15 @@ impl UsbHid {
 
         Ok(())
     }
+
+    /// Attempts to set the logging level of the USB server
+    pub fn set_log_level(&self, level: LogLevel) {
+        send_message(
+            self.conn,
+            Message::new_scalar(Opcode::SetLogLevel.to_usize().unwrap(), level as usize, 0, 0, 0),
+        )
+        .unwrap();
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

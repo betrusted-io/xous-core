@@ -29,6 +29,8 @@ pub(crate) enum Opcode {
     SetAutotypeRate = 10,
     /// Register a USB event observer
     RegisterUsbObserver = 11,
+    /// Modify log level
+    SetLogLevel = 12,
 
     /// Send a U2F message
     U2fTx = 128,
@@ -185,4 +187,29 @@ pub struct HIDReportMessage {
 pub(crate) struct UsbListenerRegistration {
     pub server_name: xous_ipc::String<64>,
     pub listener_op_id: usize,
+}
+
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+#[repr(usize)]
+pub enum LogLevel {
+    Trace = 0,
+    Debug = 1,
+    Info = 2,
+    Warn = 3,
+    Err = 4,
+}
+
+impl TryFrom<usize> for LogLevel {
+    type Error = &'static str;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(LogLevel::Trace),
+            1 => Ok(LogLevel::Debug),
+            2 => Ok(LogLevel::Info),
+            3 => Ok(LogLevel::Warn),
+            4 => Ok(LogLevel::Err),
+            _ => Err("Invalid LogLevel"),
+        }
+    }
 }
