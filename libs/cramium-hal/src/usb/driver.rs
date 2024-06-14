@@ -1464,12 +1464,13 @@ impl CorigineUsb {
                             storage.copy_from_slice(hw_buf);
                             self.readout[ep_num as usize - 1] = Some(storage);
                             // re-enqueue the listener
-                            self.intr_xfer(
+                            self.ep_xfer(
                                 ep_num,
                                 dir,
                                 addr,
                                 CRG_UDC_APP_BUF_LEN,
                                 CRG_INT_TARGET,
+                                false,
                                 false,
                                 false,
                             );
@@ -1807,7 +1808,7 @@ impl CorigineUsb {
         self.knock_doorbell(0);
     }
 
-    pub fn intr_xfer(
+    pub fn ep_xfer(
         &mut self,
         ep_num: u8,
         dir: bool,
@@ -1816,6 +1817,7 @@ impl CorigineUsb {
         intr_target: u32,
         no_intr: bool,
         no_knock: bool,
+        append_zero_packet: bool,
     ) {
         let pei = 2 * ep_num as usize + if dir { 1 } else { 0 };
         let num_trb = if len != 0 {
@@ -1828,7 +1830,7 @@ impl CorigineUsb {
             unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
         #[cfg(feature = "std")]
         log::debug!(
-            "intr_xfer() pei: {}, enq_pt: {:x}, buf_addr: {:x}, pcs: {}, len: {:x}",
+            "ep_xfer() pei: {}, enq_pt: {:x}, buf_addr: {:x}, pcs: {}, len: {:x}",
             pei,
             enq_pt as *mut TransferTrbS as usize,
             addr,
@@ -1873,7 +1875,7 @@ impl CorigineUsb {
                 0,
                 0,
                 false,
-                false,
+                append_zero_packet,
                 intr_target,
             );
 
@@ -2230,12 +2232,13 @@ impl UsbBus for CorigineWrapper {
                 if dir == CRG_OUT {
                     let addr = self.core().get_app_buf_ptr(index as u8, dir);
                     // TODO: how do we deal with bulk endpoints??
-                    self.core().intr_xfer(
+                    self.core().ep_xfer(
                         index as u8,
                         dir,
                         addr,
                         CRG_UDC_APP_BUF_LEN,
                         CRG_INT_TARGET,
+                        false,
                         false,
                         false,
                     );
@@ -2302,12 +2305,13 @@ impl UsbBus for CorigineWrapper {
             let hw_buf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, CRG_UDC_APP_BUF_LEN) };
             assert!(buf.len() < CRG_UDC_APP_BUF_LEN, "write buffer size exceeded");
             hw_buf[..buf.len()].copy_from_slice(&buf);
-            self.core().intr_xfer(
+            self.core().ep_xfer(
                 ep_addr.index() as u8,
                 CRG_IN,
                 addr,
                 buf.len(),
                 CRG_INT_TARGET,
+                false,
                 false,
                 false,
             );
