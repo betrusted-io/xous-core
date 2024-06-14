@@ -71,10 +71,13 @@ pub fn init() {
         TRNG_KERNEL = Some(trng_kernel);
     }
 
-    // now run the CSPRNG a few cycles to fold more entropy into the pool before we start
-    // to use it for reals. 16 iterations will extract 512 bits out of the TRNG, so even
-    // if it is somewhat degraded, we'll be in good shape...
-    for _ in 0..16 {
+    // Now run the CSPRNG many cycles to fold more entropy into the pool before we start
+    // to use it for reals. The TRNG is quite low quality, so we run it for 128 cycles.
+    // Each cycle extracts 64 bits of compressed TRNG state, for 8192 bits total. Estimated
+    // entropy is around 1 in 32 bits on the compressed entropy feed, so this gets us ~256 bit
+    // strength on boot. The pool is constantly enhanced as the system runs, so it only improves
+    // over time.
+    for _ in 0..128 {
         let _ = get_u32();
     }
 }
@@ -84,7 +87,8 @@ pub fn get_u32() -> u32 {
     let mut state = LOCAL_RNG_STATE_LSB.load(Ordering::SeqCst) as u64
         | (LOCAL_RNG_STATE_MSB.load(Ordering::SeqCst) as u64) << 32;
 
-    // XOR in 32 bits of entropy from the HW TRNG pool.
+    // XOR in entropy from the HW TRNG pool.
+    // lsb
     state ^= unsafe {
         TRNG_KERNEL
             .as_mut()
@@ -92,6 +96,15 @@ pub fn get_u32() -> u32 {
             .get_u32()
             .expect("Error in random number generation")
     } as u64;
+    // msb
+    state ^= (unsafe {
+        TRNG_KERNEL
+            .as_mut()
+            .expect("TRNG_KERNEL driver not initialized")
+            .get_u32()
+            .expect("Error in random number generation")
+    } as u64)
+        << 32;
 
     let mut rng = ChaCha8Rng::seed_from_u64(state);
     let next_state = rng.next_u64();
