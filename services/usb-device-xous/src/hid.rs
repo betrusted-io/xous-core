@@ -92,6 +92,7 @@ impl<'a, B: UsbBus + 'a> UsbAllocatable<'a, B> for AppHIDConfig<'a> {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum AppHIDError {
     /// Returned when the maximum amount of packets allowed to stay in AppHID is reached, and the
     /// oldest is dropped.
