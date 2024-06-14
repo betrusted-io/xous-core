@@ -84,7 +84,7 @@ const RAW_ENTRIES: usize = 16;
 /// for at least this many cycles before the next sample is taken, thus
 /// making it more difficult for any adversary to reason about the current
 /// state of the TRNG given the QC samples.
-const RAW_GUARDBAND: usize = 16;
+const RAW_GUARDBAND: usize = 32;
 
 pub struct Trng {
     pub csr: CSR<u32>,
@@ -117,27 +117,6 @@ impl Trng {
         self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, 0xffff_ffff);
         self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN1, 0xffff_ffff);
 
-        /*
-        // set options
-        self.csr.wo(
-            utra::trng::SFR_OPT,
-            (((count as u32) << Options::GENERATION_COUNT_POS.bits())
-                & Options::GENERATION_COUNT_MASK.bits())
-                | Options::SEGMENT_B_SELECT.bits(),
-        );
-        // set configuration options
-        let healthest_len =
-            if count as u32 > (Config::HEALTHTEST_LEN_MASK.bits() >> Config::HEALTHTEST_LEN_POS.bits()) {
-                Config::HEALTHTEST_LEN_MASK.bits() >> Config::HEALTHTEST_LEN_POS.bits()
-            } else {
-                count as u32
-            };
-        self.csr.wo(
-            utra::trng::SFR_PP,
-            (Config::GEN_EN | Config::GEN_INTERVAL_4 | Config::RESEED_INTERVAL_1).bits()
-                | (healthest_len << Config::HEALTHTEST_LEN_POS.bits()) & Config::HEALTHTEST_LEN_MASK.bits(),
-        );
-        */
         self.csr.wo(
             utra::trng::SFR_PP,
             (Config::GEN_EN | Config::GEN_INTERVAL_4 | Config::RESEED_INTERVAL_1).bits()
@@ -152,39 +131,52 @@ impl Trng {
                 return r;
             }
         }
+
+        let mut rng_var: u8 = 0;
         while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
+        let mut sample = self.csr.r(utra::trng::SFR_BUF);
+        let mut i: u32 = 0;
         for d in self.raw.iter_mut() {
-            *d = Some(self.csr.r(utra::trng::SFR_BUF));
+            let mut output_buf = [0u8; 4];
+            for b in output_buf.iter_mut() {
+                loop {
+                    if i > 31 {
+                        i = 0;
+                        while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
+                        sample = self.csr.r(utra::trng::SFR_BUF);
+                    }
+                    if ((sample >> i) & 1) != 0 {
+                        *b = rng_var;
+                        // update loop vars *after* test and assignment
+                        i += 1;
+                        rng_var = rng_var.wrapping_add(1);
+                        // break so we're assigning to the next byte
+                        break;
+                    } else {
+                        // update all loop vars
+                        i += 1;
+                        rng_var = rng_var.wrapping_add(1);
+                    }
+                }
+            }
+            *d = Some(u32::from_le_bytes(output_buf));
         }
-        let r = self.csr.r(utra::trng::SFR_BUF);
-        while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
+
         // Run the TRNG state forward for some number of cycles to make it harder to draw
         // any conclusions about the TRNG's state based on the reported raw samples.
         for _ in 0..RAW_GUARDBAND {
+            while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
             let _ = Some(self.csr.r(utra::trng::SFR_SR));
         }
-        r
+
+        // return the first element of the generated array
+        self.raw[0].take().unwrap()
     }
 
     pub fn get_u32(&mut self) -> Option<u32> {
         match self.mode {
             Mode::Uninit => None,
-            Mode::Raw => {
-                /*
-                if self.count > 0 {
-                    self.count -= 1;
-                    while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
-                    Some(self.csr.r(utra::trng::SFR_BUF))
-                } else {
-                    // re-init generation automatically
-                    self.setup_raw_generation(32);
-                    self.count -= 1;
-                    while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
-                    Some(self.csr.r(utra::trng::SFR_BUF))
-                }
-                */
-                Some(self.get_raw())
-            }
+            Mode::Raw => Some(self.get_raw()),
             Mode::_Lfsr => {
                 todo!("LFSR mode not yet implemented");
             }
@@ -203,41 +195,4 @@ impl Trng {
     pub fn start(&mut self) { self.csr.wo(utra::trng::SFR_AR_GEN, START_CODE); }
 
     pub fn stop(&mut self) { self.csr.wo(utra::trng::SFR_AR_GEN, STOP_CODE); }
-}
-
-// some old test code
-#[cfg(feature = "delete-me-when-done")]
-pub fn trng_test() {
-    let mut trng = sce::trng::Trng::new(HW_TRNG_BASE);
-    trng.setup_raw_generation(256);
-    for _ in 0..8 {
-        crate::println!("trng raw: {:x}", trng.get_u32().unwrap_or(0xDEAD_BEEF));
-    }
-    let trng_csr = CSR::new(HW_TRNG_BASE as *mut u32);
-    /*
-    let mut trng = CSR::new(HW_TRNG_BASE as *mut u32);
-    trng.wo(utra::trng::SFR_CRSRC, 0xFFFF);
-    trng.wo(utra::trng::SFR_CRANA, 0xFFFF);
-    trng.wo(utra::trng::SFR_OPT, 0x10020);
-    trng.wo(utra::trng::SFR_PP, 0x1 << 14 | 0x2 << 12 | 0x20 << 6 | 1);
-
-    while (trng.r(utra::trng::SFR_SR) & (1 << 24)) == 0 {}
-    for _ in 0..8 {
-        crate::println!("trng raw: {:x}", trng.r(utra::trng::SFR_BUF));
-    }
-    */
-    // used for auto DMA i think...
-    #[cfg(feature = "autodma")]
-    {
-        trng.wo(utra::trng::SFR_AR_GEN, 0x5A); // start
-        while trng.rf(utra::trng::SFR_FR_SFR_FR) == 0 {}
-        trng.wfo(utra::trng::SFR_FR_SFR_FR, 1);
-        trng.wo(utra::trng::SFR_AR_GEN, 0xA5); // stop
-        let seg_rngb = unsafe {
-            core::slice::from_raw_parts(utralib::HW_SEG_RNGB_MEM as *const u32, utralib::HW_SEG_RNGB_MEM_LEN)
-        };
-        for &w in seg_rngb[..16].iter() {
-            crate::println!("trng: {:x}", w)
-        }
-    }
 }
