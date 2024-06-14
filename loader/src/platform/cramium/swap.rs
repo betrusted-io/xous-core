@@ -285,6 +285,7 @@ impl SwapHal {
             }
 
             // generate a random key for swap
+            crate::print!("Generating swap key...");
             let mut trng = sce::trng::Trng::new(utralib::generated::HW_TRNG_BASE as usize);
             trng.setup_raw_generation(32);
             let mut seed = 0u64;
@@ -295,9 +296,16 @@ impl SwapHal {
             // 1. whiten the existing TRNG data with ChaCha8
             // 2. XOR in another 32 bits of TRNG data
             // 3. create a new ChaCha8 from the resulting data
-            for _ in 0..16 {
+            for _ in 0..128 {
                 seed = cstrng.next_u64();
-                seed ^= trng.get_u32().expect("TRNG error") as u64;
+                for _ in 0..7 {
+                    let next = trng.get_u32().expect("TRNG error");
+                    // crate::print!("{:x?}", next); // uncomment to sanity check TRNG
+                    seed ^= next as u64;
+                    let next = trng.get_u32().expect("TRNG error");
+                    // crate::print!("{:x?}", next); // uncomment to sanity check TRNG
+                    seed ^= (next as u64) << 32;
+                }
                 cstrng = ChaCha8Rng::seed_from_u64(seed);
             }
             // now we might have a properly seeded cryptographically secure TRNG...
@@ -305,6 +313,7 @@ impl SwapHal {
             for word in dest_key.chunks_mut(core::mem::size_of::<u32>()) {
                 word.copy_from_slice(&cstrng.next_u32().to_be_bytes());
             }
+            crate::println!("done!");
 
             // safety: buf.data is aligned to 4096-byte boundary and filled with initialized data
             let ssh: &SwapSourceHeader =
