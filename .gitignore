@@ -7,6 +7,7 @@ services/xous-ticktimer/src/version.rs
 apps/i18n.json
 services/gam/src/apps.rs
 services/status/src/app_autogen.rs
+services/cram-console/src/app_autogen.rs
 
 # shouldn't be committed
 apps/vault/tools/crypto_data

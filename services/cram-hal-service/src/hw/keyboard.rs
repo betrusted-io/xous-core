@@ -159,7 +159,7 @@ fn keyboard_service() {
                         if key >= '\u{f700}' && key <= '\u{f8ff}' {
                             log::info!("ignoring key '{}'({:x})", key, key as u32); // ignore Apple PUA characters
                         } else {
-                            log::info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
+                            log::debug!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
                             xous::try_send_message(
                                 conn,
                                 xous::Message::new_scalar(

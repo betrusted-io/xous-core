@@ -11,7 +11,7 @@ resolver = "2"
 [dependencies]
 bitflags = "1.2.1"
 stats_alloc = { version = "0.1.8", optional = true }
-xous-kernel = { package = "xous", version = "0.9.61", features = [
+xous-kernel = { package = "xous", version = "0.9.62", features = [
     "forget-memory-messages",
 ] }
 utralib = { version = "0.1.24", optional = true, default-features = false }
@@ -20,7 +20,7 @@ cramium-hal = { path = "../libs/cramium-hal", optional = true, default-features 
 loader = { path = "../loader", optional = true, features = ["swap"] }
 
 [target.'cfg(any(windows,unix))'.dev-dependencies]
-xous-kernel = { package = "xous", version = "0.9.61", features = [
+xous-kernel = { package = "xous", version = "0.9.62", features = [
     "forget-memory-messages",
     "processes-as-threads",
 ] }
@@ -37,11 +37,11 @@ armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "upd
 ] }
 # FIXME: bring atsama5d27 target up to date so utralib dependency does not conflict
 # atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master" }
-xous-kernel = { package = "xous", version = "0.9.61", features = ["v2p"] }
+xous-kernel = { package = "xous", version = "0.9.62", features = ["v2p"] }
 critical-section = "1.1.1"
 
 [features]
-cramium-soc = ["utralib/cramium-soc", "cramium-hal", "rand_chacha"]
+cramium-soc = ["utralib/cramium-soc", "cramium-hal", "rand_chacha", "raw-trng"]
 cramium-fpga = ["utralib/cramium-fpga"]
 atsama5d27 = ["utralib/atsama5d27"]
 precursor = ["utralib/precursor"]
@@ -58,6 +58,7 @@ v2p = ["xous-kernel/v2p"]
 swap = ["xous-kernel/swap", "loader/swap"]
 debug-swap = []
 debug-swap-verbose = []
+raw-trng = ["xous-kernel/raw-trng"]
 
 # patches for simulation targets ONLY. Applying these flags will result in totally broken security.
 hwsim = []

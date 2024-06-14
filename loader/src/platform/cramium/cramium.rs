@@ -188,6 +188,14 @@ pub fn early_init() {
     crate::println!("Baud freq is {} Hz, baudrate is {}", freq, baudrate);
     udma_uart.set_baud(baudrate, freq);
 
+    // Setup some global control registers that will allow the TRNG to operate once the kernel is
+    // booted. This is done so the kernel doesn't have to exclusively have rights to the SCE global
+    // registers just for this purpose.
+    let mut glbl_csr = CSR::new(utralib::utra::sce_glbsfr::HW_SCE_GLBSFR_BASE as *mut u32);
+    glbl_csr.wo(utra::sce_glbsfr::SFR_SUBEN, 0xff);
+    glbl_csr.wo(utra::sce_glbsfr::SFR_FFEN, 0x30);
+    glbl_csr.wo(utra::sce_glbsfr::SFR_FFCLR, 0xff05);
+
     // Board bring-up: send characters to confirm the UART is configured & ready to go for the logging crate!
     // The "boot gutter" also has a role to pause the system in "real mode" before VM is mapped in Xous
     // makes things a little bit cleaner for JTAG ops, it seems.
@@ -635,6 +643,58 @@ pub fn early_init() {
         }
     }
 
+    #[cfg(feature = "trng-test")]
+    {
+        let mut csr = CSR::new(utralib::utra::trng::HW_TRNG_BASE as *mut u32);
+        // assume: glbl_csr is already setup above, turning on clocks and setting up FIFOs
+
+        csr.wo(utra::trng::SFR_CRSRC, 0xffff);
+        csr.wo(utra::trng::SFR_CRANA, 0xffff);
+        csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, 0xffff_ffff);
+        csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN1, 0xffff_ffff);
+        csr.wo(utra::trng::SFR_PP, 0xf805); // postproc
+        csr.wo(utra::trng::SFR_OPT, 0); // opt
+
+        loop {
+            while csr.r(utra::trng::SFR_SR) & 0x100_0000 == 0 {}
+            crate::println!("trng: {:x}", csr.r(utra::trng::SFR_BUF));
+        }
+
+        /*
+        csr.wo(utra::trng::SFR_AR_GEN, 0xA5);
+        csr.wo(utra::trng::SFR_CRSRC, 0xfff);
+        csr.wo(utra::trng::SFR_CRANA, 0xf0f);
+        csr.wo(utra::trng::SFR_PP, 0x1);
+        csr.wo(utra::trng::SFR_OPT, 0xff);
+        csr.wo(utra::trng::SFR_AR_GEN, 0x5A);
+        */
+
+        fn trng_start(csr: &mut CSR<u32>) { csr.wo(utra::trng::SFR_AR_GEN, 0x5A); }
+        fn trng_stop(csr: &mut CSR<u32>) { csr.wo(utra::trng::SFR_AR_GEN, 0xA5); }
+        fn trng_clock_enable(glbl_csr: &mut CSR<u32>) {
+            glbl_csr.wo(utra::sce_glbsfr::SFR_SUBEN, 0xff);
+            glbl_csr.wo(utra::sce_glbsfr::SFR_FFEN, 0x30);
+        };
+        fn trng_clock_disable(glbl_csr: &mut CSR<u32>) {
+            glbl_csr.wo(utra::sce_glbsfr::SFR_SUBEN, 0x00);
+            glbl_csr.wo(utra::sce_glbsfr::SFR_FFEN, 0x00);
+        };
+        fn trng_init(csr: &mut CSR<u32>) {
+            csr.wo(utra::trng::SFR_CRSRC, 0xFFFF);
+            csr.wo(utra::trng::SFR_CRANA, 0xFFFF);
+            csr.wo(utra::trng::SFR_OPT, 0x10020);
+            csr.wo(utra::trng::SFR_PP, 0x6801);
+        }
+        fn trng_continuous_prepare(csr: &mut CSR<u32>, glbl_csr: &mut CSR<u32>) {
+            trng_stop(csr);
+            glbl_csr.wo(utra::sce_glbsfr::SFR_FFCLR, 0xff05);
+            csr.wo(utra::trng::SFR_CRSRC, 0xFFFF);
+            csr.wo(utra::trng::SFR_CRANA, 0xFFFF);
+            csr.wo(utra::trng::SFR_OPT, 0x10040);
+            csr.wo(utra::trng::SFR_PP, 0xf821);
+            trng_start(csr);
+        }
+    }
     #[cfg(feature = "usb-test")]
     {
         udma_uart.write("USB basic test...\n\r".as_bytes());

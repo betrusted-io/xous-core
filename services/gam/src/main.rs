@@ -69,6 +69,10 @@ fn wrapped_main() -> ! {
 
     let screensize = gfx.screen_size().expect("Couldn't get screen size");
     // the status canvas is special -- there can only be one, and it is ultimately trusted
+    #[cfg(feature = "cramium-soc")]
+    let glyph_height_hint = gfx.glyph_height_hint(GlyphStyle::Tall).expect("couldn't get glyph height");
+    #[cfg(not(feature = "cramium-soc"))]
+    let glyph_height_hint = gfx.glyph_height_hint(GlyphStyle::Cjk).expect("couldn't get glyph height");
     let status_canvas = Canvas::new(
         Rectangle::new_coords(
             0,
@@ -76,7 +80,7 @@ fn wrapped_main() -> ! {
             screensize.x,
             // note: if this gets modified, the "pop" routine in gfx/backend/betrusted.rs also needs to be
             // updated
-            gfx.glyph_height_hint(GlyphStyle::Cjk).expect("couldn't get glyph height") as i16 * 2,
+            glyph_height_hint as i16 * 2,
         ),
         255,
         &trng,
