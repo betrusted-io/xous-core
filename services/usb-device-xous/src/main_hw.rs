@@ -1678,6 +1678,7 @@ pub(crate) fn main_hw() -> ! {
                     trng.set_test_mode(trng_mode);
                 }
                 log::info!("TRNG set to mode {:?}", trng_mode);
+                log::set_max_level(log::LevelFilter::Debug);
 
                 // The strategy here is when this is called, we start a thread that polls at some
                 // interval in milliseconds to see if the Tx buffer is empty and
