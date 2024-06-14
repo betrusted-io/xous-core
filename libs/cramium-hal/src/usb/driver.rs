@@ -1744,7 +1744,7 @@ impl CorigineUsb {
             0,
             true,
             false,
-            false,
+            USB_SEND,
             self.setup_tag,
             intr_target,
         );
@@ -2039,7 +2039,20 @@ impl CorigineUsb {
         // this works with linux, but not with windows.
         if stalled != self.stall_spec[pei].unwrap_or(false) {
             self.stall_spec[pei] = Some(stalled);
-            self.ep0_enqueue_zlp(stalled, CRG_INT_TARGET);
+            // this code is sus, too
+            if ep_num == 0 {
+                if dir == USB_RECV {
+                    self.ep0_enqueue_zlp(stalled, CRG_INT_TARGET);
+                } else {
+                    self.ep0_status(stalled, CRG_INT_TARGET);
+                }
+            } else {
+                if stalled {
+                    self.ep_halt(ep_num, dir);
+                } else {
+                    self.ep_unhalt(ep_num, dir);
+                }
+            }
         }
     }
 
@@ -2292,6 +2305,10 @@ impl UsbBus for CorigineWrapper {
                 );
                 self.core().ep0_enqueue(ep0_buf.as_ptr() as usize, buf.len(), CRG_INT_TARGET);
                 self.txn_offset.lock().unwrap()[ep_addr.index()] = txn_offset + mps as usize;
+            } else {
+                log::info!(" ******* ZLP EP0 ack"); // not sure if this is the right way to do it
+                let stalled = self.core().stall_spec[0].unwrap_or(false);
+                self.core().ep0_status(stalled, CRG_INT_TARGET);
             }
             Ok(buf.len())
         } else {
