@@ -132,6 +132,19 @@ impl Trng {
             }
         }
 
+        // Perform entropy compression. The TRNG itself is a sparse-1 oracle, which will
+        // occasionally emit a 1 in a stream of 0's. The 1 itself has some periodicity
+        // to it, but at a period unrelated to the system clock. The algorithm is basically
+        // as follows:
+        //   - `rng_var` is a counter [0-255] that spins according to the rate of this loop
+        //   - inspect the TRNG bitstream, bit-by-bit, from LSB to MSB.
+        //      - Every inspection, increment `rng_var`
+        //      - If the inspection result is 1, store `rng_var` as a compressed entropy bit
+        //      - If 0, keep searching; do not store, but also increment all the loop variables
+        // The result is a stream of at least uniformly distributed numbers. The resulting
+        // stream does have some long-term periodic behaviors in it, but it is also not entirely
+        // predictable. Basically, the randomness seems to fluctuate in and out based on how
+        // much noise is actually being coupled into the TRNG circuit.
         let mut rng_var: u8 = 0;
         while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
         let mut sample = self.csr.r(utra::trng::SFR_BUF);
