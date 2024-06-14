@@ -1794,7 +1794,7 @@ pub(crate) fn main_hw() -> ! {
                     continue;
                 }
                 let mut sent = false;
-                if serial_port.rts() {
+                if serial_port.dtr() {
                     if serial_trng_buf.len() < TRNG_PKT_SIZE {
                         match trng.get_test_data() {
                             Ok(data) => {
