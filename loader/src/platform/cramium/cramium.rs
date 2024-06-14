@@ -778,8 +778,8 @@ pub fn early_init() {
         }
     }
 
-    // udma_uart.write("Press any key to continue...".as_bytes());
-    // getc();
+    udma_uart.write("Press any key to continue...".as_bytes());
+    getc();
     udma_uart.write(b"\n\rBooting!\n\r");
 }
 
