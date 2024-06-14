@@ -14,9 +14,9 @@ stats_alloc = { version = "0.1.8", optional = true }
 xous-kernel = { package = "xous", version = "0.9.61", features = [
     "forget-memory-messages",
 ] }
-utralib = { version = "0.1.24", optional = true, default_features = false }
-rand_chacha = { version = "0.3.1", optional = true, default_features = false }
-cramium-hal = { path = "../libs/cramium-hal", optional = true, default_features = false }
+utralib = { version = "0.1.24", optional = true, default-features = false }
+rand_chacha = { version = "0.3.1", optional = true, default-features = false }
+cramium-hal = { path = "../libs/cramium-hal", optional = true, default-features = false }
 loader = { path = "../loader", optional = true, features = ["swap"] }
 
 [target.'cfg(any(windows,unix))'.dev-dependencies]
