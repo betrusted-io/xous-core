@@ -28,7 +28,7 @@ rkyv = { version = "0.4.3", default-features = false, features = [
 ] }
 
 susres = { package = "xous-api-susres", version = "0.9.58", optional = true }                  # used for the sleep now menu item
-cram-hal-service = { path = "../cram-hal-service", optional = true, default_features = false }
+cram-hal-service = { path = "../cram-hal-service", optional = true, default-features = false }
 
 enum_dispatch = "0.3.7"              # used for trait-based dispatch off of multiple layout objects.
 locales = { path = "../../locales" }
