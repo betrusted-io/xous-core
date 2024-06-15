@@ -2460,7 +2460,7 @@ impl UsbBus for CorigineWrapper {
             " ******* set stalled {:?}<-{:?}, {}",
             ep_addr.index(),
             stalled,
-            if dir { "OUT" } else { "IN" }
+            if ep_addr.is_in() { "OUT" } else { "IN" }
         );
         self.core().handle_set_stalled(ep_addr.index() as u8, ep_addr.is_in(), stalled);
     }
