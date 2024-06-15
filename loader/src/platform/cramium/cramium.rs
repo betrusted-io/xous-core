@@ -80,7 +80,7 @@ pub fn early_init() {
         let duart = utra::duart::HW_DUART_BASE as *mut u32;
         // ~2 second delay for debugger to attach
         let msg = b"boot\n\r";
-        for j in 0..5_000 {
+        for j in 0..1_000 {
             // variable count of .'s to create a sense of motion on the console
             for _ in 0..j & 0x7 {
                 while duart.add(utra::duart::SFR_SR.offset()).read_volatile() != 0 {}
@@ -195,6 +195,8 @@ pub fn early_init() {
     glbl_csr.wo(utra::sce_glbsfr::SFR_SUBEN, 0xff);
     glbl_csr.wo(utra::sce_glbsfr::SFR_FFEN, 0x30);
     glbl_csr.wo(utra::sce_glbsfr::SFR_FFCLR, 0xff05);
+
+    crate::platform::cramium::bootlogo::show_logo(freq, &mut udma_global, &mut iox);
 
     // Board bring-up: send characters to confirm the UART is configured & ready to go for the logging crate!
     // The "boot gutter" also has a role to pause the system in "real mode" before VM is mapped in Xous
