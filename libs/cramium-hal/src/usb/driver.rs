@@ -805,6 +805,10 @@ pub struct CorigineUsb {
     suppress_ep0_send_set_addr: bool,
     stall_spec: [Option<bool>; CRG_EP_NUM * 2 + 2],
 
+    max_packet_size: [Option<usize>; CRG_EP_NUM + 1],
+    app_enq_index: [usize; CRG_EP_NUM + 1],
+    app_deq_index: [usize; CRG_EP_NUM + 1],
+
     speed: UsbDeviceSpeed,
 
     // actual hardware pointer value to pass to UDC; not directly accessed by Rust
@@ -856,19 +860,73 @@ impl CorigineUsb {
             setup: None,
             suppress_ep0_send_set_addr: false,
             stall_spec: [None; CRG_EP_NUM * 2 + 2],
+            max_packet_size: [None; CRG_EP_NUM + 1],
+            app_enq_index: [0; CRG_EP_NUM + 1],
+            app_deq_index: [0; CRG_EP_NUM + 1],
             setup_tag: 0,
             speed: UsbDeviceSpeed::Unknown,
             ep0_buf: AtomicPtr::new(core::ptr::null_mut()),
         }
     }
 
-    pub fn get_app_buf_ptr(&self, ep_num: u8, dir: bool) -> usize {
+    pub fn get_app_buf_ptr(&mut self, ep_num: u8, dir: bool) -> Option<usize> {
+        let enq_index = self.app_enq_index[ep_num as usize];
+        let mps = self.max_packet_size[ep_num as usize].expect("max packet size was not initialized!");
+        let ep_num = ep_num as usize;
+        let new_index = self.app_enq_index[ep_num] + mps;
+        if new_index + mps > CRG_UDC_APP_BUF_LEN {
+            // we could do a circular buffer for enq/deq but I think a couple entries with a reset
+            // is typically enough. If we hit this, then yah, we have to implement a full circular buffer.
+            #[cfg(feature = "std")]
+            log::debug!("enqueue overflow");
+            None
+        } else {
+            self.app_enq_index[ep_num] = new_index;
+            if ep_num == 0 {
+                let addr = self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET + enq_index;
+                #[cfg(feature = "std")]
+                log::debug!("ep0 app_ptr: {:x} index {}", addr, enq_index);
+                Some(addr)
+            } else if ep_num <= CRG_EP_NUM {
+                let addr = self.ifram_base_ptr
+                    + CRG_UDC_APP_BUFOFFSET
+                    + ((ep_num - 1) as usize * 2 + if dir { 1 } else { 0 }) * CRG_UDC_APP_BUF_LEN
+                    + enq_index;
+                #[cfg(feature = "std")]
+                log::debug!("ep0 app_ptr: {:x} index {}", addr, enq_index);
+                Some(addr)
+            } else {
+                panic!("ep_num is out of range");
+            }
+        }
+    }
+
+    pub fn retire_app_buf_ptr(&mut self, ep_num: u8, dir: bool) -> usize {
+        let ep_num = ep_num as usize;
+        let deq_index = self.app_deq_index[ep_num];
+        self.app_deq_index[ep_num] +=
+            self.max_packet_size[ep_num].expect("max packet size was not initialized!");
+        #[cfg(feature = "std")]
+        log::debug!(
+            "ep{} retire: enq_index {}; deq_index {}",
+            ep_num,
+            self.app_enq_index[ep_num],
+            self.app_deq_index[ep_num]
+        );
+        if self.app_deq_index[ep_num] == self.app_enq_index[ep_num] {
+            #[cfg(feature = "std")]
+            log::debug!("Deq reset pointers to 0, ep{}", ep_num);
+            // reset the pointers to 0 if we're empty
+            self.app_deq_index[ep_num] = 0;
+            self.app_enq_index[ep_num] = 0;
+        }
         if ep_num == 0 {
-            self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET
-        } else if ep_num <= CRG_EP_NUM as u8 {
+            self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET + deq_index
+        } else if ep_num <= CRG_EP_NUM {
             self.ifram_base_ptr
                 + CRG_UDC_APP_BUFOFFSET
                 + ((ep_num - 1) as usize * 2 + if dir { 1 } else { 0 }) * CRG_UDC_APP_BUF_LEN
+                + deq_index
         } else {
             panic!("ep_num is out of range");
         }
@@ -1258,7 +1316,10 @@ impl CorigineUsb {
 
             match self.handle_event(event) {
                 CrgEvent::Connect => connect = true,
-                CrgEvent::Error => return CrgEvent::Error,
+                CrgEvent::Error => {
+                    #[cfg(feature = "std")]
+                    log::error!("Error in handle_event; ignoring error... {:?}", event);
+                }
                 CrgEvent::None => (),
                 CrgEvent::Data(o, i, s) => {
                     ep_out |= o;
@@ -1271,7 +1332,7 @@ impl CorigineUsb {
                 == self.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst)
             {
                 #[cfg(feature = "std")]
-                log::info!(
+                log::debug!(
                     " evt_last_trb {:x}",
                     self.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst) as usize
                 );
@@ -1455,15 +1516,18 @@ impl CorigineUsb {
                         log::debug!("EP{} xfer event, dir {}", ep_num, if dir { "OUT" } else { "IN" });
                         // xfer_complete
                         if dir == CRG_OUT {
-                            let addr = self.get_app_buf_ptr(ep_num, dir);
-                            let hw_buf = unsafe {
-                                core::slice::from_raw_parts_mut(addr as *mut u8, CRG_UDC_APP_BUF_LEN)
-                            };
+                            let addr = self.retire_app_buf_ptr(ep_num, dir);
+                            let mps = self.max_packet_size[ep_num as usize]
+                                .expect("max packet size was not initialized!");
+                            let hw_buf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, mps) };
                             // copy the whole hardware buffer contents -- even if it's bogus
                             let mut storage = [0u8; 512];
-                            storage.copy_from_slice(hw_buf);
+                            storage[..mps].copy_from_slice(hw_buf);
                             self.readout[ep_num as usize - 1] = Some(storage);
                             // re-enqueue the listener
+                            let addr = self
+                                .get_app_buf_ptr(ep_num, dir)
+                                .expect("retire should have opened an entry");
                             self.ep_xfer(
                                 ep_num,
                                 dir,
@@ -1476,6 +1540,7 @@ impl CorigineUsb {
                             );
                             ret = CrgEvent::Data(ep_num as u16, 0, 0);
                         } else {
+                            self.retire_app_buf_ptr(ep_num, dir);
                             ret = CrgEvent::Data(0, ep_num as u16, 0);
                         }
                     } else if comp_code == CompletionCode::MissedServiceError {
@@ -1870,7 +1935,7 @@ impl CorigineUsb {
                 chain_bit,
                 ioc,
                 false,
-                false,
+                false, // This is only valid if b_setup_stage is true
                 false,
                 0,
                 0,
@@ -2184,6 +2249,7 @@ impl UsbBus for CorigineWrapper {
         };
         if let Some(req_addr) = ep_addr {
             let index = req_addr.index();
+            self.core().max_packet_size[index] = Some(max_packet_size as usize);
             if self.free_ep[index].is_none() {
                 self.free_ep[index] = Some((dir, max_packet_size, hw_ep_type));
                 Ok(EndpointAddress::from_parts(index, ep_dir))
@@ -2204,6 +2270,7 @@ impl UsbBus for CorigineWrapper {
                 }
             }
             if let Some(index) = found_index {
+                self.core().max_packet_size[index] = Some(max_packet_size as usize);
                 self.free_ep[index] = Some((dir, max_packet_size, hw_ep_type));
                 Ok(EndpointAddress::from_parts(index, ep_dir))
             } else {
@@ -2243,7 +2310,10 @@ impl UsbBus for CorigineWrapper {
             if let Some((dir, max_packet_size, hw_ep_type)) = maybe_ep {
                 self.core().ep_enable(index as u8, dir, max_packet_size, hw_ep_type);
                 if dir == CRG_OUT {
-                    let addr = self.core().get_app_buf_ptr(index as u8, dir);
+                    let addr = self
+                        .core()
+                        .get_app_buf_ptr(index as u8, dir)
+                        .expect("should always be a buffer available at set_address");
                     // TODO: how do we deal with bulk endpoints??
                     self.core().ep_xfer(
                         index as u8,
@@ -2306,8 +2376,8 @@ impl UsbBus for CorigineWrapper {
                 self.core().ep0_enqueue(ep0_buf.as_ptr() as usize, buf.len(), CRG_INT_TARGET);
                 self.txn_offset.lock().unwrap()[ep_addr.index()] = txn_offset + mps as usize;
             } else {
-                log::info!(" ******* ZLP EP0 ack"); // not sure if this is the right way to do it
                 let stalled = self.core().stall_spec[0].unwrap_or(false);
+                log::info!(" ******* ZLP EP0 ack (stalled: {:?}", stalled); // not sure if this is the right way to do it
                 self.core().ep0_status(stalled, CRG_INT_TARGET);
             }
             Ok(buf.len())
@@ -2318,7 +2388,12 @@ impl UsbBus for CorigineWrapper {
                 buf.len(),
                 &buf[..8.min(buf.len())]
             );
-            let addr = self.core().get_app_buf_ptr(ep_addr.index() as u8, USB_RECV);
+            let addr = if let Some(addr) = self.core().get_app_buf_ptr(ep_addr.index() as u8, USB_RECV) {
+                addr
+            } else {
+                log::debug!("would block");
+                return Err(UsbError::WouldBlock);
+            };
             let hw_buf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, CRG_UDC_APP_BUF_LEN) };
             assert!(buf.len() < CRG_UDC_APP_BUF_LEN, "write buffer size exceeded");
             hw_buf[..buf.len()].copy_from_slice(&buf);
@@ -2332,6 +2407,7 @@ impl UsbBus for CorigineWrapper {
                 false,
                 false,
             );
+            log::debug!("ep{} initiated {}", ep_addr.index(), buf.len());
             Ok(buf.len())
         }
     }
@@ -2380,7 +2456,12 @@ impl UsbBus for CorigineWrapper {
     /// Sets or clears the STALL condition for an endpoint. If the endpoint is an OUT endpoint, it
     /// should be prepared to receive data again.
     fn set_stalled(&self, ep_addr: EndpointAddress, stalled: bool) {
-        log::debug!(" ******* set stalled {:?}<-{:?}", ep_addr, stalled);
+        log::debug!(
+            " ******* set stalled {:?}<-{:?}, {}",
+            ep_addr.index(),
+            stalled,
+            if dir { "OUT" } else { "IN" }
+        );
         self.core().handle_set_stalled(ep_addr.index() as u8, ep_addr.is_in(), stalled);
     }
 
