@@ -289,16 +289,16 @@ impl SwapHal {
             let mut trng = sce::trng::Trng::new(utralib::generated::HW_TRNG_BASE as usize);
             trng.setup_raw_generation(32);
 
-            #[cfg(feature="dump-trng")]
+            #[cfg(feature = "dump-trng")]
             {
                 let duart = utralib::generated::utra::duart::HW_DUART_BASE as *mut u32;
                 loop {
                     let d = trng.get_raw();
                     for b in d.to_le_bytes() {
                         unsafe {
-                            while duart.add(utralib::generated::utra::duart::SFR_SR.offset()).read_volatile() != 0
-                            {
-                            }
+                            while duart.add(utralib::generated::utra::duart::SFR_SR.offset()).read_volatile()
+                                != 0
+                            {}
                             duart
                                 .add(utralib::generated::utra::duart::SFR_TXD.offset())
                                 .write_volatile(b as char as u32);
