@@ -870,11 +870,25 @@ impl CorigineUsb {
     }
 
     pub fn get_app_buf_ptr(&mut self, ep_num: u8, dir: bool) -> Option<usize> {
-        let enq_index = self.app_enq_index[ep_num as usize];
+        let mut enq_index = self.app_enq_index[ep_num as usize];
         let mps = self.max_packet_size[ep_num as usize].expect("max packet size was not initialized!");
         let ep_num = ep_num as usize;
-        let new_index = self.app_enq_index[ep_num] + mps;
+        let mut new_index = self.app_enq_index[ep_num] + mps;
+
+        // normally check for overflow, but in the case of serial it seems to do better
+        // if we don't do that. I'm still not sure why we seem to miss some IN ACKs.
+        // TODO: figure this out
         if new_index + mps > CRG_UDC_APP_BUF_LEN {
+            // ignore the the dq pointer, overflow for now -- for some reason, we aren't
+            // getting all the interrupts we expect to be getting. Maybe some of them are
+            // being combined in a race condition or something like that?
+            new_index = 0;
+            enq_index = 0;
+            self.app_enq_index[ep_num] = 0;
+        }
+        if
+        /* new_index + mps > CRG_UDC_APP_BUF_LEN */
+        false {
             // we could do a circular buffer for enq/deq but I think a couple entries with a reset
             // is typically enough. If we hit this, then yah, we have to implement a full circular buffer.
             #[cfg(feature = "std")]
@@ -1521,7 +1535,7 @@ impl CorigineUsb {
                                 .expect("max packet size was not initialized!");
                             let hw_buf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, mps) };
                             // copy the whole hardware buffer contents -- even if it's bogus
-                            let mut storage = [0u8; 512];
+                            let mut storage = [0u8; CRG_UDC_APP_BUF_LEN];
                             storage[..mps].copy_from_slice(hw_buf);
                             self.readout[ep_num as usize - 1] = Some(storage);
                             // re-enqueue the listener
@@ -2388,27 +2402,61 @@ impl UsbBus for CorigineWrapper {
                 buf.len(),
                 &buf[..8.min(buf.len())]
             );
-            let addr = if let Some(addr) = self.core().get_app_buf_ptr(ep_addr.index() as u8, USB_RECV) {
-                addr
+            // Check for the serial port endpoint, and apply the patch on the `else`
+            if ep_addr.index() != 3 {
+                let addr = if let Some(addr) = self.core().get_app_buf_ptr(ep_addr.index() as u8, USB_RECV) {
+                    addr
+                } else {
+                    log::debug!("would block");
+                    return Err(UsbError::WouldBlock);
+                };
+                let hw_buf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, CRG_UDC_APP_BUF_LEN) };
+                assert!(buf.len() < CRG_UDC_APP_BUF_LEN, "write buffer size exceeded");
+                hw_buf[..buf.len()].copy_from_slice(&buf);
+                self.core().ep_xfer(
+                    ep_addr.index() as u8,
+                    CRG_IN,
+                    addr,
+                    buf.len(),
+                    CRG_INT_TARGET,
+                    false,
+                    false,
+                    false,
+                );
+                log::debug!("ep{} initiated {}", ep_addr.index(), buf.len());
+                Ok(buf.len())
             } else {
-                log::debug!("would block");
-                return Err(UsbError::WouldBlock);
-            };
-            let hw_buf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, CRG_UDC_APP_BUF_LEN) };
-            assert!(buf.len() < CRG_UDC_APP_BUF_LEN, "write buffer size exceeded");
-            hw_buf[..buf.len()].copy_from_slice(&buf);
-            self.core().ep_xfer(
-                ep_addr.index() as u8,
-                CRG_IN,
-                addr,
-                buf.len(),
-                CRG_INT_TARGET,
-                false,
-                false,
-                false,
-            );
-            log::debug!("ep{} initiated {}", ep_addr.index(), buf.len());
-            Ok(buf.len())
+                // special-case AZP for serial mode -- this seems to make the link more reliable :-O
+                // TODO: figure out how to make this hack more general -- this might make other functions
+                // not work well.
+                if buf.len() == 0 {
+                    Ok(0)
+                } else {
+                    let addr =
+                        if let Some(addr) = self.core().get_app_buf_ptr(ep_addr.index() as u8, USB_RECV) {
+                            addr
+                        } else {
+                            log::debug!("would block");
+                            return Err(UsbError::WouldBlock);
+                        };
+                    let hw_buf =
+                        unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, CRG_UDC_APP_BUF_LEN) };
+                    assert!(buf.len() < CRG_UDC_APP_BUF_LEN, "write buffer size exceeded");
+                    hw_buf[..buf.len()].copy_from_slice(&buf);
+                    self.core().ep_xfer(
+                        ep_addr.index() as u8,
+                        CRG_IN,
+                        addr,
+                        buf.len(),
+                        CRG_INT_TARGET,
+                        false,
+                        false,
+                        true,
+                    );
+                    log::debug!("ep{} initiated with AZP {}", ep_addr.index(), buf.len());
+                    Ok(buf.len())
+                }
+            }
         }
     }
 
