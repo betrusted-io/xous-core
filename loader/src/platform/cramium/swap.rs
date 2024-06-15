@@ -36,7 +36,7 @@ pub struct SwapHal {
     buf: RawPage,
 }
 
-fn setup_port(
+pub fn setup_port(
     iox: &mut Iox,
     port: IoxPort,
     pin: u8,
