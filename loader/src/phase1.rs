@@ -155,8 +155,10 @@ pub fn phase_1(cfg: &mut BootConfig) {
     // smashed if the stack overflows! It should be all 0's if the stack did not overrun.
     #[cfg(feature = "swap")]
     if SDBG && VDBG {
-        for (_i, _r) in
-            cfg.runtime_page_tracker[cfg.runtime_page_tracker.len() - 1024..].chunks(32).enumerate()
+        for (_i, _r) in cfg.runtime_page_tracker
+            [cfg.runtime_page_tracker.len() - 1024.min(cfg.runtime_page_tracker.len())..]
+            .chunks(32)
+            .enumerate()
         {
             println!("  rpt {:08x}: {:02x?}", cfg.runtime_page_tracker.len() - 1024 + _i * 32, _r);
         }
@@ -687,7 +689,10 @@ fn copy_processes(cfg: &mut BootConfig) {
 
                     let mut last_copy_vaddr = 0;
 
-                    for section in inis.sections.iter() {
+                    for (index, section) in inis.sections.iter().enumerate() {
+                        if SDBG {
+                            println!("Section {}: {:x?}", index, section);
+                        }
                         let mut dst_page_vaddr = section.virt as usize;
                         let mut bytes_to_copy = section.len();
 
@@ -734,8 +739,9 @@ fn copy_processes(cfg: &mut BootConfig) {
                             let src_swap_img_page = src_swap_img_addr & !(PAGE_SIZE - 1);
                             let src_swap_img_offset = src_swap_img_addr & (PAGE_SIZE - 1);
                             // it's almost free to check, so we check at every loop start
-                            if cfg.swap_hal.as_ref().expect("swap HAL uninit").decrypt_page_addr()
-                                != src_swap_img_page
+                            if (cfg.swap_hal.as_ref().expect("swap HAL uninit").decrypt_page_addr()
+                                != src_swap_img_page)
+                                && !section.no_copy()
                             {
                                 cfg.swap_hal
                                     .as_mut()

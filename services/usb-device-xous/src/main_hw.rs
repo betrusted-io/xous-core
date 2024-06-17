@@ -4,18 +4,29 @@ use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::sync::Arc;
 
-#[cfg(not(feature = "minimal"))]
+#[cfg(all(not(feature = "minimal"), any(feature = "cramium-soc")))]
+use cram_hal_service::api::KeyMap;
+#[cfg(feature = "cramium-soc")]
+use cram_hal_service::{keyboard, trng};
+#[cfg(feature = "cramium-soc")]
+use cramium_hal::usb::driver::{CorigineUsb, CorigineWrapper};
+#[cfg(all(not(feature = "minimal"), any(feature = "renode", feature = "precursor")))]
 use keyboard::KeyMap;
 use num_traits::*;
+#[cfg(feature = "cramium-soc")]
+use packed_struct::PackedStructSlice;
 use usb_device::class_prelude::*;
 use usb_device::prelude::*;
 use usb_device_xous::KeyboardLedsReport;
 use usb_device_xous::UsbDeviceType;
 use usbd_serial::SerialPort;
+#[cfg(any(feature = "precursor", feature = "renode"))]
 use utralib::generated::*;
+#[cfg(feature = "cramium-soc")]
+use utralib::AtomicCsr;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
-#[cfg(not(feature = "minimal"))]
+#[cfg(all(not(feature = "minimal"), any(feature = "precursor", feature = "renode")))]
 use xous_semver::SemVer;
 use xous_usb_hid::device::fido::RawFido;
 use xous_usb_hid::device::fido::RawFidoConfig;
@@ -79,16 +90,21 @@ pub(crate) fn main_hw() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
     let usbdev_sid = xns.register_name(api::SERVER_NAME_USB_DEVICE, None).expect("can't register server");
+    let cid = xous::connect(usbdev_sid).expect("couldn't create suspend callback connection");
     log::trace!("registered with NS -- {:?}", usbdev_sid);
     #[cfg(not(feature = "minimal"))]
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     let llio = llio::Llio::new(&xns);
     let tt = ticktimer_server::Ticktimer::new().unwrap();
     #[cfg(not(feature = "minimal"))]
     let native_kbd = keyboard::Keyboard::new(&xns).unwrap();
 
-    #[cfg(not(feature = "minimal"))]
+    #[cfg(all(not(feature = "minimal"), any(feature = "precursor", feature = "renode")))]
     let serial_number = format!("{:x}", llio.soc_dna().unwrap());
-    #[cfg(not(feature = "minimal"))]
+    #[cfg(all(not(feature = "minimal"), any(feature = "cramium-soc")))]
+    let serial_number = format!("TODO!!"); // implement in cramium-hal once we have a serial number API
+
+    #[cfg(all(not(feature = "minimal"), any(feature = "precursor", feature = "renode")))]
     {
         let minimum_ver = SemVer { maj: 0, min: 9, rev: 8, extra: 20, commit: None };
         let soc_ver = llio.soc_gitrev().unwrap();
@@ -161,6 +177,7 @@ pub(crate) fn main_hw() -> ! {
     }
 
     // Allocate memory range and CSR for sharing between all the views.
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     let usb = xous::syscall::map_memory(
         xous::MemoryAddress::new(utralib::HW_USBDEV_MEM),
         None,
@@ -168,6 +185,7 @@ pub(crate) fn main_hw() -> ! {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't map USB device memory range");
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     let csr = xous::syscall::map_memory(
         xous::MemoryAddress::new(utra::usbdev::HW_USBDEV_BASE),
         None,
@@ -176,33 +194,140 @@ pub(crate) fn main_hw() -> ! {
     )
     .expect("couldn't map USB CSR range");
 
+    #[cfg(feature = "cramium-soc")]
+    let usb_mapping = xous::syscall::map_memory(
+        xous::MemoryAddress::new(cramium_hal::usb::utra::CORIGINE_USB_BASE),
+        None,
+        cramium_hal::usb::utra::CORIGINE_USB_LEN,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't reserve register pages");
+    #[cfg(feature = "cramium-soc")]
+    let ifram_range = xous::syscall::map_memory(
+        xous::MemoryAddress::new(cramium_hal::usb::driver::CRG_UDC_MEMBASE),
+        xous::MemoryAddress::new(cramium_hal::usb::driver::CRG_UDC_MEMBASE), // make P & V addresses line up
+        cramium_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't allocate IFRAM pages");
+    #[cfg(feature = "cramium-soc")]
+    assert!(
+        cramium_hal::usb::driver::CRG_UDC_TOTAL_MEM_LEN <= cramium_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000
+    );
+    #[cfg(feature = "cramium-soc")]
+    log::info!(
+        "total memory len: {:x}, allocated: {:x}",
+        cramium_hal::usb::driver::CRG_UDC_TOTAL_MEM_LEN,
+        cramium_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000
+    );
+    #[cfg(feature = "cramium-soc")]
+    let irq_range = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utralib::utra::irqarray1::HW_IRQARRAY1_BASE),
+        None,
+        0x1000,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't allocate IFRAM pages");
+    #[cfg(feature = "cramium-soc")]
+    let usb = AtomicCsr::new(usb_mapping.as_ptr() as *mut u32);
+    #[cfg(feature = "cramium-soc")]
+    let irq_csr = AtomicCsr::new(irq_range.as_ptr() as *mut u32);
+    #[cfg(feature = "cramium-soc")]
+    let h_op: usize = Opcode::UsbIrqHandler.to_usize().unwrap();
+
     // Notes:
     //  - Most drivers would `Box()` the hardware management structure to make sure the compiler doesn't move
     //    its location. However, we can't do this here because we are trying to maintain compatibility with
     //    another crate that implements the USB stack which can't handle Box'd structures.
     //  - It is safe to call `.init()` repeatedly because within `init()` we have an atomic bool that tracks
     //    if the interrupt handler has been hooked, and ignores further requests to hook it.
+    #[cfg(feature = "cramium-soc")]
+    // safety: this is safe because we allocated ifram_range to have the same physical and virtual addresses
+    #[cfg(feature = "cramium-soc")]
+    let usbwrapper = CorigineWrapper::new(unsafe {
+        CorigineUsb::new(cid, h_op, ifram_range.as_ptr() as usize, usb.clone(), irq_csr.clone())
+    });
+
+    #[cfg(feature = "cramium-soc")]
+    {
+        // for the cramium target, call init only once via management structure
+        usbwrapper.reset();
+        let mut poweron = 0;
+        loop {
+            usbwrapper.core().udc_handle_interrupt();
+            if usbwrapper.core().pp() {
+                poweron += 1; // .pp() is a sham. MPW has no way to tell if power is applied. This needs to be fixed for NTO.
+            }
+            tt.sleep_ms(100).ok();
+            if poweron >= 4 {
+                break;
+            }
+        }
+        usbwrapper.core().reset();
+        usbwrapper.core().init();
+        usbwrapper.core().start();
+        usbwrapper.core().update_current_speed();
+        log::info!("HW started...");
+        #[cfg(feature = "pinger")]
+        std::thread::spawn({
+            let irq_csr = irq_csr.clone();
+            let usb = usb.clone();
+            move || {
+                let tt = ticktimer_server::Ticktimer::new().unwrap();
+                loop {
+                    log::info!(
+                        "   pd: {:x}/{:x} st: {:x}/{:x} cf: {:x}/{:x} cmd: {:x}",
+                        irq_csr.r(utralib::utra::irqarray1::EV_PENDING),
+                        irq_csr.r(utralib::utra::irqarray1::EV_STATUS),
+                        usb.r(cramium_hal::usb::utra::USBSTS),
+                        usb.r(cramium_hal::usb::utra::PORTSC),
+                        usb.r(cramium_hal::usb::utra::DEVCONFIG),
+                        usb.r(cramium_hal::usb::utra::EVENTCONFIG),
+                        usb.r(cramium_hal::usb::utra::USBCMD),
+                    );
+                    tt.sleep_ms(5000).ok();
+                }
+            }
+        });
+    }
+
+    #[cfg(any(feature = "renode", feature = "precursor"))]
     let usb_fidokbd_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+    #[cfg(feature = "cramium-soc")]
+    // safety: this is safe because we allocated ifram_range to have the same physical and virtual addresses
+    let usb_fidokbd_dev = usbwrapper.clone();
+    #[cfg(any(feature = "renode", feature = "precursor"))]
     usb_fidokbd_dev.init();
+    #[cfg(any(feature = "renode", feature = "precursor"))]
     let mut usbmgmt = usb_fidokbd_dev.get_iface();
     // before doing any allocs, clone a copy of the hardware access structure so we can build a second
     // view into the hardware with only FIDO descriptors
+    #[cfg(any(feature = "renode", feature = "precursor"))]
     let usb_fido_dev: SpinalUsbDevice = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+    #[cfg(feature = "cramium-soc")]
+    // safety: this is safe because we allocated ifram_range to have the same physical and virtual addresses
+    let usb_fido_dev = usbwrapper.clone();
+    #[cfg(any(feature = "renode", feature = "precursor"))]
     usb_fido_dev.init();
     // do the same thing for mass storage
-    #[cfg(feature = "mass-storage")]
+    #[cfg(all(feature = "mass-storage", any(feature = "precursor", feature = "renode")))]
     let ums_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+    #[cfg(all(feature = "mass-storage", any(feature = "cramium-soc")))]
+    // safety: this is safe because we allocated ifram_range to have the same physical and virtual addresses
+    let ums_dev = usbwrapper.clone();
     #[cfg(feature = "mass-storage")]
+    #[cfg(any(feature = "renode", feature = "precursor"))]
     ums_dev.init();
+    #[cfg(any(feature = "renode", feature = "precursor"))]
     let serial_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+    #[cfg(feature = "cramium-soc")]
+    // safety: this is safe because we allocated ifram_range to have the same physical and virtual addresses
+    let serial_dev = usbwrapper.clone();
+    #[cfg(any(feature = "renode", feature = "precursor"))]
     serial_dev.init();
 
-    // track which view is visible on the device core
-    #[cfg(not(feature = "minimal"))]
-    let mut view = Views::FidoWithKbd;
-
     // register a suspend/resume listener
-    let cid = xous::connect(usbdev_sid).expect("couldn't create suspend callback connection");
+    #[cfg(any(feature = "renode", feature = "precursor", feature = "hosted"))]
     let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, cid)
         .expect("couldn't create suspend/resume object");
 
@@ -272,7 +397,10 @@ pub(crate) fn main_hw() -> ! {
     let mut serial_listen_mode: SerialListenMode = SerialListenMode::NoListener;
     let mut serial_buf = Vec::<u8>::new();
     let mut serial_rx_trigger = false; // when true, the condition was met to pass data to the listener (but the listener was not yet installed)
+    #[cfg(not(feature = "cramium-soc"))]
     let trng = trng::Trng::new(&xns).unwrap();
+    #[cfg(feature = "cramium-soc")]
+    let mut trng = trng::Trng::new(&xns).unwrap();
     let mut serial_trng_buf = Vec::<u8>::new();
     let serial_trng_interval = Arc::new(AtomicU32::new(0));
     let mut serial_trng_cid: Option<xous::CID> = None;
@@ -282,7 +410,12 @@ pub(crate) fn main_hw() -> ! {
     const TRNG_BACKOFF_MS: u32 = 1;
     const TRNG_BACKOFF_MAX_MS: u32 = 1000; // cap on how far we backoff the polling rate
 
+    #[cfg(any(feature = "renode", feature = "precursor"))]
     let usb_hidv2_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+    #[cfg(feature = "cramium-soc")]
+    // safety: this is safe because we allocated ifram_range to have the same physical and virtual addresses
+    let usb_hidv2_dev = usbwrapper.clone();
+
     let hidv2_alloc = UsbBusAllocator::new(usb_hidv2_dev);
 
     let mut hidv2 = hid::AppHID::new(
@@ -292,6 +425,55 @@ pub(crate) fn main_hw() -> ! {
         AppHIDConfig::default(),
         100, // 100 * 64 bytes = 6.4kb, quite the backlog
     );
+    // track which view is visible on the device core
+    #[cfg(all(not(feature = "minimal"), not(feature = "cramium-soc")))]
+    let mut view = Views::FidoWithKbd;
+
+    #[cfg(feature = "cramium-soc")]
+    let mut view = Views::Serial;
+    #[cfg(feature = "cramium-soc")]
+    serial_device.force_reset().ok(); // hard-coded to match the view specifier above
+
+    #[cfg(feature = "auto-trng")]
+    std::thread::spawn({
+        let conn = cid;
+        move || {
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            loop {
+                tt.sleep_ms(2_000).ok();
+                let state = match xous::send_message(
+                    conn,
+                    xous::Message::new_blocking_scalar(Opcode::LinkStatus.to_usize().unwrap(), 0, 0, 0, 0),
+                ) {
+                    Ok(xous::Result::Scalar1(code)) => match code {
+                        0 => UsbDeviceState::Default,
+                        1 => UsbDeviceState::Addressed,
+                        2 => UsbDeviceState::Configured,
+                        3 => UsbDeviceState::Suspend,
+                        _ => panic!("Internal error: illegal status code"),
+                    },
+                    _ => panic!("Internal error: illegal return type"),
+                };
+                if state == UsbDeviceState::Configured {
+                    log::info!("Core connected");
+                    break;
+                }
+            }
+            tt.sleep_ms(3_000).ok();
+            log::info!("Starting serial sender");
+            xous::send_message(
+                conn,
+                xous::Message::new_scalar(
+                    Opcode::SerialHookTrngSender.to_usize().unwrap(),
+                    trng::api::TrngTestMode::Raw.to_usize().unwrap(),
+                    0,
+                    0,
+                    0,
+                ),
+            )
+            .unwrap();
+        }
+    });
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
@@ -416,6 +598,7 @@ pub(crate) fn main_hw() -> ! {
         }
     });
 
+    log::info!("starting main loop");
     loop {
         let mut msg = xous::receive_message(usbdev_sid).unwrap();
         let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
@@ -468,6 +651,7 @@ pub(crate) fn main_hw() -> ! {
                 .unwrap();
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
+            #[cfg(any(feature = "renode", feature = "precursor", feature = "hosted"))]
             Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 usbmgmt.xous_suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
@@ -869,6 +1053,32 @@ pub(crate) fn main_hw() -> ! {
                 }
 
                 let devtype: UsbDeviceType = core.try_into().unwrap();
+                #[cfg(feature = "cramium-soc")]
+                {
+                    match devtype {
+                        UsbDeviceType::FidoKbd => {
+                            usb_dev.force_reset().ok();
+                        }
+                        UsbDeviceType::Fido => {
+                            fido_dev.force_reset().ok();
+                        }
+                        #[cfg(feature = "mass-storage")]
+                        UsbDeviceType::MassStorage => {
+                            ums_device.force_reset().ok();
+                        }
+                        UsbDeviceType::HIDv2 => {
+                            hidv2.force_reset().ok();
+                        }
+                        UsbDeviceType::Serial => {
+                            serial_device.force_reset().ok();
+                        }
+                        UsbDeviceType::Debug => {
+                            log::warn!("No debug core in this target");
+                        }
+                    }
+                }
+
+                #[cfg(not(feature = "cramium-soc"))]
                 match devtype {
                     UsbDeviceType::Debug => {
                         log::info!("Connecting debug core; disconnecting USB device core");
@@ -985,6 +1195,8 @@ pub(crate) fn main_hw() -> ! {
                     }
                 }
 
+                #[cfg(feature = "cramium-soc")]
+                let mut usbmgmt = usbwrapper.core();
                 match devtype {
                     UsbDeviceType::Debug => {
                         if usbmgmt.is_device_connected() {
@@ -1086,6 +1298,8 @@ pub(crate) fn main_hw() -> ! {
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
             Some(Opcode::WhichCore) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                #[cfg(feature = "cramium-soc")]
+                let usbmgmt = usbwrapper.core();
                 if usbmgmt.is_device_connected() {
                     match view {
                         Views::FidoWithKbd => {
@@ -1110,6 +1324,8 @@ pub(crate) fn main_hw() -> ! {
                 }
             }),
             Some(Opcode::RestrictDebugAccess) => msg_scalar_unpack!(msg, restrict, _, _, _, {
+                #[cfg(feature = "cramium-soc")]
+                let mut usbmgmt = usbwrapper.core();
                 if restrict == 0 {
                     usbmgmt.disable_debug(false);
                 } else {
@@ -1117,6 +1333,8 @@ pub(crate) fn main_hw() -> ! {
                 }
             }),
             Some(Opcode::IsRestricted) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                #[cfg(feature = "cramium-soc")]
+                let usbmgmt = usbwrapper.core();
                 if usbmgmt.get_disable_debug() {
                     xous::return_scalar(msg.sender, 1).unwrap();
                 } else {
@@ -1124,6 +1342,8 @@ pub(crate) fn main_hw() -> ! {
                 }
             }),
             Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, update_req, new_state, _, _, {
+                #[cfg(feature = "cramium-soc")]
+                let mut usbmgmt = usbwrapper.core();
                 if update_req != 0 {
                     // if new_state is true (not 0), then try to lock the USB port
                     // if false, try to unlock the USB port

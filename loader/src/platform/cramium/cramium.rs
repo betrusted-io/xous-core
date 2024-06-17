@@ -34,8 +34,9 @@ pub fn early_init() {
     // Not all design changes have a rhyme or reason at this stage -- sometimes "it just works,
     // don't futz with it" is actually the answer that goes to production.
     use utralib::utra::sysctrl;
+
     unsafe {
-        // this is MANDATORY for any chip stapbility in real silicon, as the initial
+        // this is MANDATORY for any chip stability in real silicon, as the initial
         // clocks are too unstable to do anything otherwise. However, for the simulation
         // environment, this can (should?) be dropped
         let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
@@ -186,6 +187,14 @@ pub fn early_init() {
     };
     crate::println!("Baud freq is {} Hz, baudrate is {}", freq, baudrate);
     udma_uart.set_baud(baudrate, freq);
+
+    // Setup some global control registers that will allow the TRNG to operate once the kernel is
+    // booted. This is done so the kernel doesn't have to exclusively have rights to the SCE global
+    // registers just for this purpose.
+    let mut glbl_csr = CSR::new(utralib::utra::sce_glbsfr::HW_SCE_GLBSFR_BASE as *mut u32);
+    glbl_csr.wo(utra::sce_glbsfr::SFR_SUBEN, 0xff);
+    glbl_csr.wo(utra::sce_glbsfr::SFR_FFEN, 0x30);
+    glbl_csr.wo(utra::sce_glbsfr::SFR_FFCLR, 0xff05);
 
     // Board bring-up: send characters to confirm the UART is configured & ready to go for the logging crate!
     // The "boot gutter" also has a role to pause the system in "real mode" before VM is mapped in Xous
@@ -634,9 +643,144 @@ pub fn early_init() {
         }
     }
 
-    udma_uart.write("Press any key to continue...".as_bytes());
-    getc();
-    crate::println!("\n\rBooting!\n\r");
+    #[cfg(feature = "trng-test")]
+    {
+        let mut csr = CSR::new(utralib::utra::trng::HW_TRNG_BASE as *mut u32);
+        // assume: glbl_csr is already setup above, turning on clocks and setting up FIFOs
+
+        csr.wo(utra::trng::SFR_CRSRC, 0xffff);
+        csr.wo(utra::trng::SFR_CRANA, 0xffff);
+        csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, 0xffff_ffff);
+        csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN1, 0xffff_ffff);
+        csr.wo(utra::trng::SFR_PP, 0xf805); // postproc
+        csr.wo(utra::trng::SFR_OPT, 0); // opt
+
+        loop {
+            while csr.r(utra::trng::SFR_SR) & 0x100_0000 == 0 {}
+            crate::println!("trng: {:x}", csr.r(utra::trng::SFR_BUF));
+        }
+
+        /*
+        csr.wo(utra::trng::SFR_AR_GEN, 0xA5);
+        csr.wo(utra::trng::SFR_CRSRC, 0xfff);
+        csr.wo(utra::trng::SFR_CRANA, 0xf0f);
+        csr.wo(utra::trng::SFR_PP, 0x1);
+        csr.wo(utra::trng::SFR_OPT, 0xff);
+        csr.wo(utra::trng::SFR_AR_GEN, 0x5A);
+        */
+
+        fn trng_start(csr: &mut CSR<u32>) { csr.wo(utra::trng::SFR_AR_GEN, 0x5A); }
+        fn trng_stop(csr: &mut CSR<u32>) { csr.wo(utra::trng::SFR_AR_GEN, 0xA5); }
+        fn trng_clock_enable(glbl_csr: &mut CSR<u32>) {
+            glbl_csr.wo(utra::sce_glbsfr::SFR_SUBEN, 0xff);
+            glbl_csr.wo(utra::sce_glbsfr::SFR_FFEN, 0x30);
+        };
+        fn trng_clock_disable(glbl_csr: &mut CSR<u32>) {
+            glbl_csr.wo(utra::sce_glbsfr::SFR_SUBEN, 0x00);
+            glbl_csr.wo(utra::sce_glbsfr::SFR_FFEN, 0x00);
+        };
+        fn trng_init(csr: &mut CSR<u32>) {
+            csr.wo(utra::trng::SFR_CRSRC, 0xFFFF);
+            csr.wo(utra::trng::SFR_CRANA, 0xFFFF);
+            csr.wo(utra::trng::SFR_OPT, 0x10020);
+            csr.wo(utra::trng::SFR_PP, 0x6801);
+        }
+        fn trng_continuous_prepare(csr: &mut CSR<u32>, glbl_csr: &mut CSR<u32>) {
+            trng_stop(csr);
+            glbl_csr.wo(utra::sce_glbsfr::SFR_FFCLR, 0xff05);
+            csr.wo(utra::trng::SFR_CRSRC, 0xFFFF);
+            csr.wo(utra::trng::SFR_CRANA, 0xFFFF);
+            csr.wo(utra::trng::SFR_OPT, 0x10040);
+            csr.wo(utra::trng::SFR_PP, 0xf821);
+            trng_start(csr);
+        }
+    }
+    #[cfg(feature = "usb-test")]
+    {
+        udma_uart.write("USB basic test...\n\r".as_bytes());
+        let csr =
+            cramium_hal::usb::compat::AtomicCsr::new(cramium_hal::usb::utra::CORIGINE_USB_BASE as *mut u32);
+        let irq_csr =
+            cramium_hal::usb::compat::AtomicCsr::new(utralib::utra::irqarray1::HW_IRQARRAY1_BASE as *mut u32);
+        // safety: this is safe because we are in machine mode, and vaddr/paddr always pairs up
+        let mut usb = unsafe {
+            cramium_hal::usb::driver::CorigineUsb::new(
+                0, // is dummy in no-std
+                0, // is dummy in no-std
+                cramium_hal::usb::driver::CRG_UDC_MEMBASE,
+                csr,
+                irq_csr,
+            )
+        };
+        usb.reset();
+        let mut idle_timer = 0;
+        let mut vbus_on = false;
+        let mut vbus_on_count = 0;
+        let mut in_u0 = false;
+        let mut last_sc = 0;
+        loop {
+            let next_sc = csr.r(cramium_hal::usb::utra::PORTSC);
+            if last_sc != next_sc {
+                last_sc = next_sc;
+                crate::println!("**** SC update {:x?}", cramium_hal::usb::driver::PortSc(next_sc));
+                /*
+                if cramium_hal::usb::driver::PortSc(next_sc).pr() {
+                    crate::println!("  >>reset<<");
+                    usb.start();
+                    in_u0 = false;
+                    vbus_on_count = 0;
+                }
+                */
+            }
+            let event = usb.udc_handle_interrupt();
+            if event == cramium_hal::usb::driver::CrgEvent::None {
+                idle_timer += 1;
+            } else {
+                // crate::println!("*Event {:?} at {}", event, idle_timer);
+                idle_timer = 0;
+            }
+
+            if !vbus_on && vbus_on_count == 4 {
+                crate::println!("*Vbus on");
+                usb.reset();
+                usb.init();
+                usb.start();
+                vbus_on = true;
+                in_u0 = false;
+
+                let irq1 = irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
+                crate::println!("irq1: {:x}, status: {:x}", irq1, csr.r(cramium_hal::usb::utra::USBSTS));
+                irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, irq1);
+                // restore this to go on to boot
+                // break;
+            } else if usb.pp() && !vbus_on {
+                vbus_on_count += 1;
+                crate::println!("*Vbus_on_count: {}", vbus_on_count);
+                // mdelay(100);
+            } else if !usb.pp() && vbus_on {
+                crate::println!("*Vbus off");
+                usb.stop();
+                usb.reset();
+                vbus_on_count = 0;
+                vbus_on = false;
+                in_u0 = false;
+            } else if in_u0 && vbus_on {
+                // usb.udc_handle_interrupt();
+                // TODO
+            } else if usb.ccs() && vbus_on {
+                // usb.print_status(usb.csr.r(cramium_hal::usb::utra::PORTSC));
+                crate::println!("*Enter U0");
+                in_u0 = true;
+                let irq1 = irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
+                // usb.print_status(csr.r(cramium_hal::usb::utra::PORTSC));
+                irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, irq1);
+            }
+        }
+    }
+
+    // udma_uart.write("Press any key to continue...".as_bytes());
+    // getc();
+    udma_uart.write(b"\n\rBooting!\n\r");
 }
 
 #[cfg(feature = "platform-tests")]

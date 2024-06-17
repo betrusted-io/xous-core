@@ -78,20 +78,29 @@ enum Mode {
     _Aes,
 }
 
+const RAW_ENTRIES: usize = 16;
+/// The guardband is a number of entries of the TRNG to dispose of after
+/// sampling for QC. The idea is to allow the TRNG internal state to evolve
+/// for at least this many cycles before the next sample is taken, thus
+/// making it more difficult for any adversary to reason about the current
+/// state of the TRNG given the QC samples.
+const RAW_GUARDBAND: usize = 16;
+
 pub struct Trng {
     pub csr: CSR<u32>,
-    count: u16,
+    _count: u16, // vestigial, to be removed?
     mode: Mode,
+    raw: [Option<u32>; RAW_ENTRIES],
 }
 
 impl Trng {
     pub fn new(base_addr: usize) -> Self {
         let csr = CSR::new(base_addr as *mut u32);
-        Trng { csr, count: 0, mode: Mode::Uninit }
+        Trng { csr, _count: 0, mode: Mode::Uninit, raw: [None; RAW_ENTRIES] }
     }
 
     pub fn setup_raw_generation(&mut self, count: u16) {
-        self.count = count;
+        self._count = count;
         self.mode = Mode::Raw;
         // turn on all the entropy sources
         self.csr.wo(
@@ -104,6 +113,11 @@ impl Trng {
         );
         // turn on all the analog generators, and declare their outputs valid
         self.csr.wo(utra::trng::SFR_CRANA, (Analog::ENABLE_MASK | Analog::VALID_MASK).bits());
+        // enable the rng chains
+        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, 0xffff_ffff);
+        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN1, 0xffff_ffff);
+
+        /*
         // set options
         self.csr.wo(
             utra::trng::SFR_OPT,
@@ -123,12 +137,40 @@ impl Trng {
             (Config::GEN_EN | Config::GEN_INTERVAL_4 | Config::RESEED_INTERVAL_1).bits()
                 | (healthest_len << Config::HEALTHTEST_LEN_POS.bits()) & Config::HEALTHTEST_LEN_MASK.bits(),
         );
+        */
+        self.csr.wo(
+            utra::trng::SFR_PP,
+            (Config::GEN_EN | Config::GEN_INTERVAL_4 | Config::RESEED_INTERVAL_1).bits()
+                | Config::HEALTHEST_EN.bits(),
+        );
+        self.csr.wo(utra::trng::SFR_OPT, 0);
+    }
+
+    pub fn get_raw(&mut self) -> u32 {
+        for d in self.raw.iter_mut() {
+            if let Some(r) = d.take() {
+                return r;
+            }
+        }
+        while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
+        for d in self.raw.iter_mut() {
+            *d = Some(self.csr.r(utra::trng::SFR_BUF));
+        }
+        let r = self.csr.r(utra::trng::SFR_BUF);
+        while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
+        // Run the TRNG state forward for some number of cycles to make it harder to draw
+        // any conclusions about the TRNG's state based on the reported raw samples.
+        for _ in 0..RAW_GUARDBAND {
+            let _ = Some(self.csr.r(utra::trng::SFR_SR));
+        }
+        r
     }
 
     pub fn get_u32(&mut self) -> Option<u32> {
         match self.mode {
             Mode::Uninit => None,
             Mode::Raw => {
+                /*
                 if self.count > 0 {
                     self.count -= 1;
                     while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
@@ -140,6 +182,8 @@ impl Trng {
                     while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
                     Some(self.csr.r(utra::trng::SFR_BUF))
                 }
+                */
+                Some(self.get_raw())
             }
             Mode::_Lfsr => {
                 todo!("LFSR mode not yet implemented");
@@ -154,7 +198,7 @@ impl Trng {
         (self.csr.r(utra::trng::SFR_SR) & Status::GEN_COUNT_MASK.bits()) as u16
     }
 
-    pub fn get_count_remaining(&self) -> u16 { self.count }
+    pub fn get_count_remaining(&self) -> u16 { self._count }
 
     pub fn start(&mut self) { self.csr.wo(utra::trng::SFR_AR_GEN, START_CODE); }
 

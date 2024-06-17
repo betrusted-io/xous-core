@@ -619,6 +619,7 @@ impl Field {
     }
     pub const fn offset(&self) -> usize { self.offset }
     pub const fn mask(&self) -> usize { self.mask }
+    pub const fn register(&self) -> Register { self.register }
 }
 #[derive(Debug, Copy, Clone)]
 pub struct CSR<T> {
@@ -732,6 +733,9 @@ where
         AtomicCsr {
             base: Arc::new(AtomicPtr::new(base))
         }
+    }
+    pub unsafe fn base(&self) -> *mut T {
+        self.base.load(core::sync::atomic::Ordering::SeqCst) as *mut T
     }
     pub fn clone(&self) -> Self {
         AtomicCsr {

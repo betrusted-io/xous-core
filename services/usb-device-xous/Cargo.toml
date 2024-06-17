@@ -7,11 +7,11 @@ description = "Xous USB device drivers"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.61"
-xous-ipc = "0.9.61"
-log-server = { package = "xous-api-log", version = "0.1.57" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.57" }
-xous-names = { package = "xous-api-names", version = "0.9.59" }
+xous = "0.9.62"
+xous-ipc = "0.9.62"
+log-server = { package = "xous-api-log", version = "0.1.58" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.58" }
+xous-names = { package = "xous-api-names", version = "0.9.60" }
 log = "0.4.14"
 llio = { path = "../llio" }
 num-derive = { version = "0.3.3", default-features = false }
@@ -19,19 +19,25 @@ num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.4.3", default-features = false, features = [
     "const_generics",
 ] }
-susres = { package = "xous-api-susres", version = "0.9.57" }
-modals = { path = "../modals" }
-keyboard = { path = "../keyboard", features = ["inject-api"] }
+susres = { package = "xous-api-susres", version = "0.9.58" }
+modals = { path = "../modals", optional = true }
+keyboard = { path = "../keyboard", features = ["inject-api"], optional = true }
 bitfield = "0.13.2"
 vcell = "0.1.3"
 xous-semver = "0.1.2"
 utralib = { version = "0.1.24", optional = true, default-features = false }
-trng = { path = "../trng" }
+trng = { path = "../trng", optional = true }
 
-xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch="main" }
-embedded-time = "0.12.1"                                                    # required by the keyboard interface
-packed_struct = { version = "0.10", default-features = false }              # used by the xous-usb-hid crate
-num_enum = { version = "0.5", default-features = false }                    # used by the xous-usb-hid crate
+xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main" }
+embedded-time = "0.12.1"                                                                     # required by the keyboard interface
+packed_struct = { version = "0.10", default-features = false }                               # used by the xous-usb-hid crate
+num_enum = { version = "0.5", default-features = false }                                     # used by the xous-usb-hid crate
+
+cramium-hal = { path = "../../libs/cramium-hal", features = [
+    "std",
+], optional = true }
+cram-hal-service = { path = "../cram-hal-service", optional = true }
+
 
 # Mass storage support
 usbd_scsi = { path = "../../libs/mass-storage/usbd_scsi", optional = true }
@@ -54,11 +60,18 @@ rand = "0.8.5"
 rand_chacha = "0.3.1"
 
 [features]
-precursor = ["utralib/precursor", "utralib/std"]
-hosted = ["utralib/hosted", "utralib/std"]
-renode = ["utralib/renode", "utralib/std"]
+precursor = ["utralib/precursor", "utralib/std", "keyboard", "modals", "trng"]
+hosted = ["utralib/hosted", "utralib/std", "keyboard", "modals", "trng"]
+renode = ["utralib/renode", "utralib/std", "keyboard", "modals", "trng"]
+cramium-soc = [
+    "utralib/cramium-soc",
+    "utralib/std",
+    "cramium-hal",
+    "cram-hal-service",
+]
 minimal = ["mass-storage"]
 mass-storage = ["usbd_scsi", "usbd_mass_storage"]
+auto-trng = []
 mjolnir = [
 ] # the big hammer for debugging Spinal USB issues. A raw memory dump of config and descriptor space. Use with care.
 default = []

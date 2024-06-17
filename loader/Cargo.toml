@@ -17,7 +17,7 @@ utralib = { version = "0.1.24", optional = true, default-features = false }
 armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", optional = true }
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", optional = true }
 sha2-loader = { path = "./sha2-loader", default-features = false, optional = true }
-cramium-hal = { path = "../libs/cramium-hal", optional = true, default_features = false }
+cramium-hal = { path = "../libs/cramium-hal", optional = true, default-features = false }
 xous-pl230 = { path = "../libs/xous-pl230", optional = true, features = [
     "tests",
     "pio",
@@ -33,7 +33,7 @@ aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
     "aes",
 ], optional = true }
 crc = { version = "1.8.1", default-features = false }
-rand_chacha = { version = "0.3.1", optional = true, default_features = false }
+rand_chacha = { version = "0.3.1", optional = true, default-features = false }
 pio-proc = { version = "0.2.2", optional = true }
 pio = { version = "0.2.1", optional = true }
 riscv = { version = "0.5.6", package = "xous-riscv" }
@@ -94,5 +94,7 @@ quantum-timer-test = ["pio", "pio-proc"]
 spim-test = []
 spi-alt-channel = []
 irq-test = []
-resume = []                              # suspend/resume pathway code
-default = ["board-bringup", "irq-test"]
+usb-test = []
+trng-test = []
+resume = []                                          # suspend/resume pathway code
+default = ["board-bringup", "usb-test", "trng-test"]

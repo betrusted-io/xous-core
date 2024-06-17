@@ -95,7 +95,8 @@ fn keyboard_service() {
                 todo!();
             }
             Some(KeyboardOpcode::GetKeyMap) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                todo!();
+                log::warn!("Defaulting to DVORAK map");
+                xous::return_scalar(msg.sender, KeyMap::Dvorak.into()).expect("can't retrieve keymap");
             }),
             Some(KeyboardOpcode::SetRepeat) => msg_scalar_unpack!(msg, _rate, _delay, _, _, {
                 todo!();
@@ -158,7 +159,7 @@ fn keyboard_service() {
                         if key >= '\u{f700}' && key <= '\u{f8ff}' {
                             log::info!("ignoring key '{}'({:x})", key, key as u32); // ignore Apple PUA characters
                         } else {
-                            log::info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
+                            log::debug!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
                             xous::try_send_message(
                                 conn,
                                 xous::Message::new_scalar(

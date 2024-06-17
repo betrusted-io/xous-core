@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-xous-api-names = { version = "0.9.59", optional = true }
+xous-api-names = { version = "0.9.60", optional = true }
 log = { version = "0.4.14", optional = true }
 utralib = { version = "0.1.24", default-features = false, features = [
     "cramium-soc",
@@ -18,11 +18,13 @@ rkyv = { version = "0.4.3", default-features = false, features = [
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 riscv = { version = "0.5.6", package = "xous-riscv" }
+usb-device = { version = "0.2.8", features = ["log"], optional = true }
+bitfield = "0.13.2"
 
 # [target.'cfg(target_os = "xous")'.dependencies]
-xous = { version = "0.9.61", features = ["v2p"] }
+xous = { version = "0.9.62", features = ["v2p"] }
 
 [features]
-std = ["log", "xous-api-names"]
+std = ["log", "xous-api-names", "usb-device"]
 derive-rkyv = ["rkyv"]
 default = []
