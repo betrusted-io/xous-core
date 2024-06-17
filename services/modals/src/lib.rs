@@ -343,7 +343,13 @@ impl Modals {
         }
     }
 
-    /// this blocks until the image has been dismissed.
+    /// Shows image.
+    /// - Blocks until the image has been dismissed.
+    ///
+    /// [Code Example - procedurally generate image](https://github.com/betrusted-io/xous-core/blob/c84f4efba0d4a5ae690f147c57590134d3cafc27/services/modals/src/tests.rs#L174-L201)
+    /// [Code Example - show_image for procedurally generated](https://github.com/betrusted-io/xous-core/blob/c84f4efba0d4a5ae690f147c57590134d3cafc27/services/modals/src/tests.rs#L155-L163)
+    ///
+    /// [Code Example - show_image for downloaded image](https://github.com/betrusted-io/xous-core/blob/c84f4efba0d4a5ae690f147c57590134d3cafc27/services/shellchat/src/cmds/net_cmd.rs#L378-L483)
     #[cfg(feature = "ditherpunk")]
     pub fn show_image(&self, mut bm: Bitmap) -> Result<(), xous::Error> {
         self.lock();
@@ -415,7 +421,7 @@ impl Modals {
     /// Human interaction-enabled slider.
     ///
     /// - Interactable until home/enter is pressed.
-    /// - Use the arrow keys to shift the slider by a step in either direction.
+    /// - Use the D-pad to shift the slider by a step in either direction.
     /// - Note that it is possible to exceed start or end if you choose the 'step' value poorly.
     /// - Title text wraps, burden is on the consumer not to exceed available screen space.
     ///
@@ -473,6 +479,21 @@ impl Modals {
     ///   state. But, progress updates are meant to be fast and frequent, and generally if a progress bar
     ///   shows something whacky it's not going to affect a security outcome.
     ///
+    /// - suggestions for if you run into the queue overflow error:
+    ///   - preferred: reduce the rate at which updates occur by modifying the updater code to do less
+    ///     frequent updates. For example, instead of once every iteration of a loop, once every ten
+    ///     iterations. This will improve performance of the code and reduce UI churn as well. If this is not
+    ///     possible, you can add a sleep by doing something like the code below. This will reduce the rate at
+    ///     which your loop runs, as well as at which the UI updates.
+    /// ```
+    /// std::thread::sleep(std::time::Duration::from_millis(100)); 
+    /// ```
+    ///   - An alternative "softer" solution is to call yield. This will cause the producer to yield its time
+    ///     slice to other processes in the OS, which can give the progress bar a chance to catch up.
+    /// ```
+    /// xous::yield_slice(); 
+    /// ```
+    ///
     /// # Example
     /// ```
     /// use modals::Modals;
@@ -491,9 +512,10 @@ impl Modals {
             Ok(_) => (),
             Err(e) => {
                 log::warn!("update_progress failed with {:?}, skipping request", e);
-                // most likely issue is that the server queue is overfull because too many progress updates
-                // were sent sleep the sending thread to rate-limit requests, while discarding
-                // the current request.
+                // We got here because the modals inbound server queue has overflowed. The most likely reason
+                // is that too many progress updates were sent. The yield statement below causes the sending
+                // thread to sleep for the rest of its scheduling quantum, thus rate-limiting requests. The
+                // current request is simply discarded; no attempt is made to retry.
                 xous::yield_slice()
             }
         }
