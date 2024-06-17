@@ -91,12 +91,21 @@ pub struct Trng {
     _count: u16, // vestigial, to be removed?
     mode: Mode,
     raw: [Option<u32>; RAW_ENTRIES],
+    #[cfg(feature = "compress-entropy")]
+    rng_var: u8,
 }
 
 impl Trng {
     pub fn new(base_addr: usize) -> Self {
         let csr = CSR::new(base_addr as *mut u32);
-        Trng { csr, _count: 0, mode: Mode::Uninit, raw: [None; RAW_ENTRIES] }
+        #[cfg(feature = "compress-entropy")]
+        {
+            Trng { csr, _count: 0, mode: Mode::Uninit, raw: [None; RAW_ENTRIES], rng_var: 0 }
+        }
+        #[cfg(not(feature = "compress-entropy"))]
+        {
+            Trng { csr, _count: 0, mode: Mode::Uninit, raw: [None; RAW_ENTRIES] }
+        }
     }
 
     pub fn setup_raw_generation(&mut self, count: u16) {
@@ -113,9 +122,10 @@ impl Trng {
         );
         // turn on all the analog generators, and declare their outputs valid
         self.csr.wo(utra::trng::SFR_CRANA, (Analog::ENABLE_MASK | Analog::VALID_MASK).bits());
-        // enable the rng chains
-        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, 0xffff_ffff);
-        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN1, 0xffff_ffff);
+        // Enable the rng chains. This must be set correctly: get this wrong, and entropy drops from something
+        // like 0.5-0.8 bits/bit to ~0.01 bits/bit.
+        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, 0xfffe);
+        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN1, 0x1ffe);
 
         self.csr.wo(
             utra::trng::SFR_PP,
@@ -132,47 +142,63 @@ impl Trng {
             }
         }
 
-        // Perform entropy compression. The TRNG itself is a sparse-1 oracle, which will
-        // occasionally emit a 1 in a stream of 0's. The 1 itself has some periodicity
-        // to it, but at a period unrelated to the system clock. The algorithm is basically
-        // as follows:
-        //   - `rng_var` is a counter [0-255] that spins according to the rate of this loop
-        //   - inspect the TRNG bitstream, bit-by-bit, from LSB to MSB.
-        //      - Every inspection, increment `rng_var`
-        //      - If the inspection result is 1, store `rng_var` as a compressed entropy bit
-        //      - If 0, keep searching; do not store, but also increment all the loop variables
-        // The result is a stream of at least uniformly distributed numbers. The resulting
-        // stream does have some long-term periodic behaviors in it, but it is also not entirely
-        // predictable. Basically, the randomness seems to fluctuate in and out based on how
-        // much noise is actually being coupled into the TRNG circuit.
-        let mut rng_var: u8 = 0;
         while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
+        #[cfg(feature = "compress-entropy")]
         let mut sample = self.csr.r(utra::trng::SFR_BUF);
+        #[cfg(feature = "compress-entropy")]
         let mut i: u32 = 0;
         for d in self.raw.iter_mut() {
-            let mut output_buf = [0u8; 4];
-            for b in output_buf.iter_mut() {
-                loop {
-                    if i > 31 {
-                        i = 0;
-                        while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
-                        sample = self.csr.r(utra::trng::SFR_BUF);
-                    }
-                    if ((sample >> i) & 1) != 0 {
-                        *b = rng_var;
-                        // update loop vars *after* test and assignment
-                        i += 1;
-                        rng_var = rng_var.wrapping_add(1);
-                        // break so we're assigning to the next byte
-                        break;
-                    } else {
-                        // update all loop vars
-                        i += 1;
-                        rng_var = rng_var.wrapping_add(1);
+            // Perform entropy compression. The TRNG itself is a sparse-1 oracle, which will
+            // occasionally emit a 1 in a stream of 0's. The 1 itself has some periodicity
+            // to it, but at a period unrelated to the system clock. The algorithm is basically
+            // as follows:
+            //   - `rng_var` is a counter [0-255] that spins according to the rate of this loop
+            //   - inspect the TRNG bitstream, bit-by-bit, from LSB to MSB.
+            //      - Every inspection, increment `rng_var`
+            //      - If the inspection result is 1, store `rng_var` as a compressed entropy bit
+            //      - If 0, keep searching; do not store, but also increment all the loop variables
+            // The result is a stream of at least uniformly distributed numbers. The resulting
+            // stream does have some long-term periodic behaviors in it, but it is also not entirely
+            // predictable. Basically, the randomness seems to fluctuate in and out based on how
+            // much noise is actually being coupled into the TRNG circuit.
+            #[cfg(feature = "compress-entropy")]
+            {
+                let mut output_buf = [0u8; 4];
+                for b in output_buf.iter_mut() {
+                    loop {
+                        if i > 31 {
+                            i = 0;
+                            while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
+                            sample = self.csr.r(utra::trng::SFR_BUF);
+                        }
+                        if ((sample >> i) & 1) != 0 {
+                            *b = self.rng_var;
+                            // update loop vars *after* test and assignment
+                            i += 1;
+                            self.rng_var = self.rng_var.wrapping_add(1);
+                            // break so we're assigning to the next byte
+                            break;
+                        } else {
+                            // update all loop vars
+                            i += 1;
+                            self.rng_var = self.rng_var.wrapping_add(1);
+                        }
                     }
                 }
+                *d = Some(u32::from_le_bytes(output_buf));
             }
-            *d = Some(u32::from_le_bytes(output_buf));
+
+            // With the adjusted settings for the TRNG, the output is not perfect, but
+            // substantially better than before. Previously it was maybe one bit per
+            // 64 bits in entropy, now it looks like better than 0.5. Still more analysis
+            // needs to be done, there are some subtle biases in the generator but they
+            // are small enough we can pass the numbers directly into the CSPRNG for
+            // mixing without compression.
+            #[cfg(not(feature = "compress-entropy"))]
+            {
+                while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
+                *d = Some(self.csr.r(utra::trng::SFR_BUF));
+            }
         }
 
         // Run the TRNG state forward for some number of cycles to make it harder to draw
