@@ -94,7 +94,9 @@ pub fn init() {
     //
     // Each round pulls in 8*32 = 256 bits from HW TRNG 64 rounds of this would fold in 16,384 bits total.
     // Every subsequent call to get_u32() adds more entropy to the pool. This should give us about 100x safety
-    // margin.
+    // margin. The latest settings improvement on the TRNG makes me think this is extremely conservative, we
+    // could probably do fine with a 10x margin; but, the operation is fast enough that this allows us
+    // to be safe even if the TRNG is completely misconfigured.
     for _ in 0..64 {
         let _ = get_u32();
     }
