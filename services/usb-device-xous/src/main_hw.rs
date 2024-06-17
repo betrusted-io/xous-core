@@ -1,3 +1,4 @@
+use core::convert::TryFrom;
 use core::num::NonZeroU8;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::collections::VecDeque;
@@ -847,7 +848,7 @@ pub(crate) fn main_hw() -> ! {
                     }
                     Views::Serial => {
                         if serial_device.poll(&mut [&mut serial_port]) {
-                            let mut data: [u8; 1024] = [0u8; SERIAL_BUF_LEN];
+                            let mut data: [u8; SERIAL_BUF_LEN] = [0u8; SERIAL_BUF_LEN];
                             match serial_listen_mode {
                                 SerialListenMode::NoListener => match serial_port.read(&mut data) {
                                     Ok(len) => match std::str::from_utf8(&data[..len]) {
@@ -1677,6 +1678,7 @@ pub(crate) fn main_hw() -> ! {
                     trng.set_test_mode(trng_mode);
                 }
                 log::info!("TRNG set to mode {:?}", trng_mode);
+                // log::set_max_level(log::LevelFilter::Debug);
 
                 // The strategy here is when this is called, we start a thread that polls at some
                 // interval in milliseconds to see if the Tx buffer is empty and
@@ -1792,7 +1794,7 @@ pub(crate) fn main_hw() -> ! {
                     continue;
                 }
                 let mut sent = false;
-                if serial_port.rts() {
+                if serial_port.dtr() {
                     if serial_trng_buf.len() < TRNG_PKT_SIZE {
                         match trng.get_test_data() {
                             Ok(data) => {
@@ -1899,6 +1901,16 @@ pub(crate) fn main_hw() -> ! {
                     }
                 }
             }
+            Some(Opcode::SetLogLevel) => msg_scalar_unpack!(msg, level_code, _, _, _, {
+                let level = LogLevel::try_from(level_code).unwrap_or(LogLevel::Info);
+                match level {
+                    LogLevel::Trace => log::set_max_level(log::LevelFilter::Trace),
+                    LogLevel::Info => log::set_max_level(log::LevelFilter::Info),
+                    LogLevel::Debug => log::set_max_level(log::LevelFilter::Debug),
+                    LogLevel::Warn => log::set_max_level(log::LevelFilter::Warn),
+                    LogLevel::Err => log::set_max_level(log::LevelFilter::Error),
+                }
+            }),
             Some(Opcode::Quit) => {
                 log::warn!("Quit received, goodbye world!");
                 break;

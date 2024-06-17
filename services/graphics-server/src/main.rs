@@ -9,7 +9,12 @@ use backend::XousDisplay;
 mod op;
 
 mod logo;
+#[cfg(not(feature = "cramium-soc"))]
 mod poweron;
+#[cfg(feature = "cramium-soc")]
+mod poweron_bt;
+#[cfg(feature = "cramium-soc")]
+use poweron_bt as poweron;
 mod sleep_note;
 
 use api::*;
