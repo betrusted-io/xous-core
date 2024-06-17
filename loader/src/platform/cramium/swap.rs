@@ -317,6 +317,7 @@ impl SwapHal {
             //   1. XOR in another round of HW TRNG data into ChaCha8
             //   2. create a new ChaCha8 from the resulting data
             //   3. Run the ChaCha8 for a few rounds and XOR that back into the state
+            //
             // Each round pulls in 8*32 = 256 bits from HW TRNG
             // 64 rounds of this would fold in 16,384 bits total, about 100x safety margin.
             for _ in 0..64 {
