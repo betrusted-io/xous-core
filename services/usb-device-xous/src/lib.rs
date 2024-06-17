@@ -7,6 +7,7 @@ pub mod api;
 pub use api::*;
 use num_traits::*;
 use packed_struct::PackedStruct;
+#[cfg(feature = "cramium-soc")]
 use trng::api::TrngTestMode;
 pub use usb_device::device::UsbDeviceState;
 use xous::{send_message, Message, CID};
