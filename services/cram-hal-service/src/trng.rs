@@ -1,10 +1,11 @@
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use num_traits::ToBytes;
 use rand_chacha::ChaCha8Rng;
 use rand_core::{CryptoRng, RngCore, SeedableRng};
 
-const RESEED_INTERVAL: u32 = 32;
+const RESEED_INTERVAL: u32 = 128;
 
 static RESEED: AtomicU32 = AtomicU32::new(0);
 pub const TRNG_TEST_BUF_LEN: usize = 2048;
@@ -16,13 +17,23 @@ pub struct Trng {
 }
 impl Trng {
     pub fn new(_xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
-        Ok(Trng {
-            csprng: RefCell::new(ChaCha8Rng::seed_from_u64(
-                (xous::create_server_id().unwrap().to_u32().0 as u64)
-                    | ((xous::create_server_id().unwrap().to_u32().0 as u64) << 32),
-            )),
-            mode: api::TrngTestMode::Raw,
-        })
+        let mut seed = [0u8; 32];
+
+        // server_id is a random number from the hardware entropy pool. Note that this
+        // has already been conditioned and whitened, so we can use it directly.
+        let seed_l = xous::create_server_id().unwrap().to_array();
+        let seed_h = xous::create_server_id().unwrap().to_array();
+        for chunk in seed[..16].chunks_mut(4) {
+            for s in seed_l {
+                chunk.copy_from_slice(&s.to_le_bytes())
+            }
+        }
+        for chunk in seed[16..].chunks_mut(4) {
+            for s in seed_h {
+                chunk.copy_from_slice(&s.to_le_bytes())
+            }
+        }
+        Ok(Trng { csprng: RefCell::new(ChaCha8Rng::from_seed(seed)), mode: api::TrngTestMode::Raw })
     }
 
     fn reseed(&self) {
@@ -33,10 +44,23 @@ impl Trng {
         if reseed_ctr > RESEED_INTERVAL {
             RESEED.store(0, Ordering::SeqCst);
             // incorporate randomness from the TRNG
-            let half = self.csprng.borrow_mut().next_u32();
-            self.csprng.replace(rand_chacha::ChaCha8Rng::seed_from_u64(
-                (half as u64) << 32 | (xous::create_server_id().unwrap().to_u32().0 as u64),
-            ));
+            let mut seed = self.csprng.borrow_mut().get_seed();
+            // server_id is a random number from the hardware entropy pool
+            let seed_l = xous::create_server_id().unwrap().to_array();
+            let seed_h = xous::create_server_id().unwrap().to_array();
+            for (sd, pool) in seed[..16].chunks_mut(4).into_iter().zip(seed_l.iter().map(|s| s.to_le_bytes()))
+            {
+                for (sd_byte, &pool_byte) in sd.iter_mut().zip(pool.iter()) {
+                    *sd_byte ^= pool_byte;
+                }
+            }
+            for (sd, pool) in seed[16..].chunks_mut(4).into_iter().zip(seed_h.iter().map(|s| s.to_le_bytes()))
+            {
+                for (sd_byte, &pool_byte) in sd.iter_mut().zip(pool.iter()) {
+                    *sd_byte ^= pool_byte;
+                }
+            }
+            self.csprng.replace(rand_chacha::ChaCha8Rng::from_seed(seed));
         }
     }
 

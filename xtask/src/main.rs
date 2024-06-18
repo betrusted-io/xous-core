@@ -489,11 +489,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("cramium-fpga") | Some("cramium-soc") => {
             // placement in flash is a tension between dev convenience and RAM usage. Things in flash
             // are resident, non-swapable, but end up making the slow kernel burn process take longer.
-            let cramium_flash_pkgs =
-                ["xous-ticktimer", "xous-log", "cram-hal-service", "xous-names", "graphics-server"].to_vec();
-            let cramium_swap_pkgs =
-                ["gam", "modals", "ime-plugin-shell", "ime-frontend", "cram-console", "usb-device-xous"]
-                    .to_vec();
+            let cramium_flash_pkgs = [
+                "xous-ticktimer",
+                "xous-log",
+                "cram-hal-service",
+                "xous-names",
+                "graphics-server",
+                "gam",
+                "ime-plugin-shell",
+                "ime-frontend",
+            ]
+            .to_vec();
+            let cramium_swap_pkgs = ["modals", "cram-console", "usb-device-xous"].to_vec();
             // minimal config for USB debugging
             // let cramium_swap_pkgs = ["usb-device-xous"].to_vec(); // , "cram-console"
             if !builder.is_swap_set() {
@@ -505,6 +512,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // builder.add_loader_feature("irq-test");
             // builder.add_loader_feature("usb-test");
             // builder.add_loader_feature("trng-test");
+            // builder.add_loader_feature("dump-trng");
             // header. By default, we use JPC7_13 (J_QSPI does not work, for some reason; bit 3 is stuck
             // high...)
             builder.add_loader_feature("swap");
@@ -517,7 +525,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // builder.add_kernel_feature("debug-swap-verbose");
 
             builder.add_feature("quantum-timer");
-            builder.add_feature("auto-trng"); // automatically initialize TRNG tester inside USB stack
+            // builder.add_feature("auto-trng"); // automatically initialize TRNG tester inside USB stack
             // builder.add_kernel_feature("v2p");
             builder.add_feature("mass-storage");
             match task.as_deref() {

@@ -36,7 +36,7 @@ pub struct SwapHal {
     buf: RawPage,
 }
 
-fn setup_port(
+pub fn setup_port(
     iox: &mut Iox,
     port: IoxPort,
     pin: u8,
@@ -285,26 +285,64 @@ impl SwapHal {
             }
 
             // generate a random key for swap
+            crate::print!("Generating swap key...");
             let mut trng = sce::trng::Trng::new(utralib::generated::HW_TRNG_BASE as usize);
             trng.setup_raw_generation(32);
-            let mut seed = 0u64;
-            seed |= trng.get_u32().expect("TRNG error") as u64;
-            seed |= (trng.get_u32().expect("TRNG error") as u64) << 32;
-            let mut cstrng = ChaCha8Rng::seed_from_u64(seed);
-            // accumulate more TRNG data, because I don't trust it.
-            // 1. whiten the existing TRNG data with ChaCha8
-            // 2. XOR in another 32 bits of TRNG data
-            // 3. create a new ChaCha8 from the resulting data
-            for _ in 0..16 {
-                seed = cstrng.next_u64();
-                seed ^= trng.get_u32().expect("TRNG error") as u64;
-                cstrng = ChaCha8Rng::seed_from_u64(seed);
+
+            #[cfg(feature = "dump-trng")]
+            {
+                let duart = utralib::generated::utra::duart::HW_DUART_BASE as *mut u32;
+                loop {
+                    let d = trng.get_raw();
+                    for b in d.to_le_bytes() {
+                        unsafe {
+                            while duart.add(utralib::generated::utra::duart::SFR_SR.offset()).read_volatile()
+                                != 0
+                            {}
+                            duart
+                                .add(utralib::generated::utra::duart::SFR_TXD.offset())
+                                .write_volatile(b as char as u32);
+                        }
+                    }
+                }
+            }
+
+            // The first seed is always 0.
+            let mut seed = [0u8; 32];
+            // println!("seed: {:x?}", seed); // used to eyeball that things are working correctly
+            let mut cstrng = ChaCha8Rng::from_seed(seed);
+
+            // Accumulate TRNG data into the seed (which starts at 0).
+            // Repeat N times for good measure:
+            //   1. XOR in another round of HW TRNG data into ChaCha8
+            //   2. create a new ChaCha8 from the resulting data
+            //   3. Run the ChaCha8 for a few rounds and XOR that back into the state
+            //
+            // Each round pulls in 8*32 = 256 bits from HW TRNG
+            // 64 rounds of this would fold in 16,384 bits total, about 100x safety margin.
+            for _ in 0..64 {
+                seed = cstrng.get_seed();
+                for s in seed.chunks_mut(4) {
+                    let incoming = trng.get_u32().expect("TRNG error") ^ cstrng.next_u32();
+                    for (s_byte, &incoming_byte) in s.iter_mut().zip(incoming.to_le_bytes().iter()) {
+                        *s_byte ^= incoming_byte;
+                    }
+                }
+                // println!("seed: {:x?}", seed); // eyeball if things are working correctly
+                cstrng = ChaCha8Rng::from_seed(seed);
+                // mix up the internal state with output from the CSTRNG
+                for s in seed.chunks_mut(8) {
+                    for (s_byte, chacha_byte) in s.iter_mut().zip(cstrng.next_u64().to_le_bytes()) {
+                        *s_byte ^= chacha_byte;
+                    }
+                }
             }
             // now we might have a properly seeded cryptographically secure TRNG...
             let mut dest_key = [0u8; 32];
             for word in dest_key.chunks_mut(core::mem::size_of::<u32>()) {
                 word.copy_from_slice(&cstrng.next_u32().to_be_bytes());
             }
+            crate::println!("done!");
 
             // safety: buf.data is aligned to 4096-byte boundary and filled with initialized data
             let ssh: &SwapSourceHeader =

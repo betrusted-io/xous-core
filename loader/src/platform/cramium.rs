@@ -4,3 +4,5 @@ pub use cramium::*;
 pub mod swap;
 #[cfg(feature = "swap")]
 pub use swap::*;
+mod bootlogo;
+mod poweron_bt;

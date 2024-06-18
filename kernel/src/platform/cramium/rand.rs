@@ -3,6 +3,8 @@
 // SPDX-FileCopyrightText: 2024 bunnie <bunnie@kosagi.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use core::convert::TryInto;
+
 use cramium_hal::sce;
 use rand_chacha::rand_core::RngCore;
 use rand_chacha::rand_core::SeedableRng;
@@ -19,8 +21,16 @@ pub const TRNG_KERNEL_ADDR: usize = 0xffce_0000;
 pub static mut TRNG_KERNEL: Option<sce::trng::Trng> = None;
 use core::sync::atomic::{AtomicU32, Ordering};
 // these values are overwritten on boot with something out of the TRNG.
-static LOCAL_RNG_STATE_LSB: AtomicU32 = AtomicU32::new(0);
-static LOCAL_RNG_STATE_MSB: AtomicU32 = AtomicU32::new(0);
+static LOCAL_RNG_STATE: [AtomicU32; 8] = [
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+];
 
 /// Initialize TRNG driver.
 ///
@@ -63,43 +73,59 @@ pub fn init() {
     trng_kernel.setup_raw_generation(256);
 
     // setup the initial seeds with stuff out of the TRNG.
-    LOCAL_RNG_STATE_LSB.store(trng_kernel.get_u32().expect("TRNG error"), Ordering::SeqCst);
-    LOCAL_RNG_STATE_MSB.store(trng_kernel.get_u32().expect("TRNG error"), Ordering::SeqCst);
+    for state in LOCAL_RNG_STATE.iter() {
+        state.store(trng_kernel.get_u32().expect("TRNG error"), Ordering::SeqCst);
+    }
 
     // move the trng_kernel object into the static mut state
     unsafe {
         TRNG_KERNEL = Some(trng_kernel);
     }
 
-    // now run the CSPRNG a few cycles to fold more entropy into the pool before we start
-    // to use it for reals. 16 iterations will extract 512 bits out of the TRNG, so even
-    // if it is somewhat degraded, we'll be in good shape...
-    for _ in 0..16 {
+    // Accumulate more TRNG data, because I don't trust it. Note that ChaCha8's seed never changes:
+    // the output is just the seed + some generation distance from the seed. Thus to change the seed,
+    // we have to extract it, XOR it with data, and put it back into the machine.
+    //
+    // Repeat N times for good measure:
+    //   1. XOR in another round of HW TRNG data into the ChaCha8 state
+    //   2. Create the ChaCha8 cipher from the state
+    //   3. Run ChaCha8 and XOR its result into the state vector (obfuscate temporary dropouts in HW TRNG)
+    //   4. Store the state vector
+    //
+    // Each round pulls in 8*32 = 256 bits from HW TRNG 64 rounds of this would fold in 16,384 bits total.
+    // Every subsequent call to get_u32() adds more entropy to the pool. This should give us about 100x safety
+    // margin. The latest settings improvement on the TRNG makes me think this is extremely conservative, we
+    // could probably do fine with a 10x margin; but, the operation is fast enough that this allows us
+    // to be safe even if the TRNG is completely misconfigured.
+    for _ in 0..64 {
         let _ = get_u32();
     }
 }
 
 /// Retrieve random `u32`.
 pub fn get_u32() -> u32 {
-    let mut state = LOCAL_RNG_STATE_LSB.load(Ordering::SeqCst) as u64
-        | (LOCAL_RNG_STATE_MSB.load(Ordering::SeqCst) as u64) << 32;
+    let mut seed = [0u8; 32];
 
-    // XOR in 32 bits of entropy from the HW TRNG pool.
-    state ^= unsafe {
-        TRNG_KERNEL
-            .as_mut()
-            .expect("TRNG_KERNEL driver not initialized")
-            .get_u32()
-            .expect("Error in random number generation")
-    } as u64;
-
-    let mut rng = ChaCha8Rng::seed_from_u64(state);
-    let next_state = rng.next_u64();
-    // next state is extracted before the returned value, to reduce state
-    // leakage outside of the RNG.
-    let ret_val = rng.next_u32();
-    LOCAL_RNG_STATE_LSB.store(next_state as u32, Ordering::SeqCst);
-    LOCAL_RNG_STATE_MSB.store((next_state >> 32) as u32, Ordering::SeqCst);
+    // mix in more data from the TRNG while recovering the state from the kernel holding area
+    for (s, state) in seed.chunks_mut(4).zip(LOCAL_RNG_STATE.iter()) {
+        let incoming = get_raw_u32() ^ state.load(Ordering::SeqCst);
+        for (s_byte, &incoming_byte) in s.iter_mut().zip(incoming.to_le_bytes().iter()) {
+            *s_byte ^= incoming_byte;
+        }
+    }
+    let mut cstrng = ChaCha8Rng::from_seed(seed);
+    // mix up the internal state with output from the CSTRNG
+    for s in seed.chunks_mut(8) {
+        for (s_byte, chacha_byte) in s.iter_mut().zip(cstrng.next_u64().to_le_bytes()) {
+            *s_byte ^= chacha_byte;
+        }
+    }
+    // now extract one value from the CSPRNG
+    let ret_val = cstrng.next_u32();
+    // save the state into the kernel holding area
+    for (s, state) in seed.chunks(4).zip(LOCAL_RNG_STATE.iter()) {
+        state.store(u32::from_le_bytes(s.try_into().unwrap()), Ordering::SeqCst);
+    }
     ret_val
 }
 

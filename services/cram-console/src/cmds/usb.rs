@@ -78,6 +78,28 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     self.usb_dev.serial_clear_input_hooks();
                     write!(ret, "USB TRNG serial sending should be stopped.").ok();
                 }
+                "log" => {
+                    let level = if let Some(level) = tokens.next() {
+                        match level {
+                            "trace" => usb_device_xous::LogLevel::Trace,
+                            "debug" => usb_device_xous::LogLevel::Debug,
+                            "info" => usb_device_xous::LogLevel::Info,
+                            "warn" => usb_device_xous::LogLevel::Warn,
+                            "err" => usb_device_xous::LogLevel::Err,
+                            _ => {
+                                log::info!("Valid levels are trace, debug, info, warn, err");
+                                ret.write_str("Valid levels are trace, debug, info, warn, err").ok();
+                                return Ok(Some(ret));
+                            }
+                        }
+                    } else {
+                        log::info!("Valid levels are trace, debug, info, warn, err");
+                        ret.write_str("Valid levels are trace, debug, info, warn, err").ok();
+                        return Ok(Some(ret));
+                    };
+                    log::info!("Setting USB log level to {:?}", level);
+                    self.usb_dev.set_log_level(level);
+                }
                 "send" => match self.usb_dev.get_current_core() {
                     Ok(UsbDeviceType::FidoKbd) | Ok(UsbDeviceType::Serial) => {
                         let mut val = String::new();

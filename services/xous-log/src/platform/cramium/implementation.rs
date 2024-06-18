@@ -97,6 +97,7 @@ fn uart_handler(_irq_no: usize, _arg: *mut usize) {
             }
         }
         if unsafe { KBD_CONN != 0 } {
+            print!("{}", char::from_u32(c as u32).unwrap_or('.')); // local echo
             xous::try_send_message(unsafe { KBD_CONN }, xous::Message::new_scalar(0, c as usize, 0, 0, 0))
                 .ok();
         }
