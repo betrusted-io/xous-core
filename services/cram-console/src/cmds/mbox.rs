@@ -13,6 +13,7 @@ const TX_FIFO_DEPTH: u32 = 128;
 const CLIFFORD_SIZE: usize = 128;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[allow(dead_code)]
 pub enum MboxError {
     None,
     NotReady,
@@ -48,6 +49,7 @@ impl TryFrom<u16> for ToRvOp {
 
 #[repr(u16)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[allow(dead_code)]
 pub enum ToCm7Op {
     Invalid = 0,
 
