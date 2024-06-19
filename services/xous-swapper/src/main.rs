@@ -58,7 +58,8 @@ use debug::*;
 use loader::swap::{SwapAlloc, SwapSpec, SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
 use num_traits::*;
 use platform::{SwapHal, PAGE_SIZE};
-use xous::{MemoryFlags, MemoryRange, Result, CID, PID, SID};
+use xous::{MemoryFlags, MemoryRange, Result, PID};
+use xous_swapper::Opcode;
 
 /// Target of pages to free in case of a Hard OOM. Note that the PAGE_TARGET numbers
 /// are imprecise, in that there is a chance that one target is active during another
@@ -116,16 +117,6 @@ pub enum KernelOp {
     ReadFromSwap = 1,
     /// Hard OOM invocation - stop everything and free memory!
     HardOom = 3,
-}
-
-/// public userspace & swapper handler -> swapper userspace ABI
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-#[repr(usize)]
-pub enum Opcode {
-    /// Test messages
-    #[cfg(feature = "swap-userspace-testing")]
-    Test0,
-    None,
 }
 
 pub struct PtPage {
@@ -217,20 +208,18 @@ impl SwapperSharedState {
 }
 struct SharedStateStorage {
     pub inner: Option<SwapperSharedState>,
-    pub _conn: CID,
 }
 impl SharedStateStorage {
-    pub fn init(&mut self, sid: SID) {
+    pub fn init(&mut self) {
         // Register the swapper with the kernel. Written as a raw syscall, since this is
         // the only instance of its use (no point in use-once code to wrap it).
         // This is an "early registration" which allows us to see debug output quickly,
         // even before we can constitute all of our shared state
-        let (s0, s1, s2, s3) = sid.to_u32();
         xous::rsyscall(xous::SysCall::RegisterSwapper(
-            s0,
-            s1,
-            s2,
-            s3,
+            0,
+            0,
+            0,
+            0,
             swap_handler as *mut usize as usize,
             self as *mut SharedStateStorage as usize,
         ))
@@ -653,10 +642,8 @@ fn swap_handler(
 }
 
 fn main() {
-    let sid = xous::create_server().unwrap();
-    let conn = xous::connect(sid).unwrap();
-    let mut sss = Box::new(SharedStateStorage { _conn: conn, inner: None });
-    sss.init(sid);
+    let mut sss = Box::new(SharedStateStorage { inner: None });
+    sss.init();
 
     // init the log, but this is mostly unused.
     log_server::init_wait().unwrap();
@@ -705,6 +692,7 @@ fn main() {
     });
 
     // This thread pings the free memory level and will try to clear memory to avoid OOM
+    // This claims sss, and is mutually exclusive with other options that claim sss
     #[cfg(feature = "oom-doom")]
     std::thread::spawn({
         move || {
@@ -720,6 +708,9 @@ fn main() {
         }
     });
 
+    let xns = xous_api_names::XousNames::new().unwrap();
+    let sid = xns.register_name(xous_swapper::SWAPPER_PUBLIC_NAME, None).unwrap();
+
     let mut msg_opt = None;
     loop {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
@@ -727,6 +718,25 @@ fn main() {
         let op: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
         log::debug!("Swapper got {:x?}", op);
         match op {
+            Some(Opcode::GarbageCollect) => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let pages = scalar.arg1;
+                    if pages > HARD_OOM_PAGE_TARGET * 2 {
+                        log::warn!(
+                            "Not honoring excessive GC request, reducing to {} pages",
+                            HARD_OOM_PAGE_TARGET * 2
+                        );
+                    }
+                    sss.inner.as_mut().unwrap().pages_to_free = pages.max(HARD_OOM_PAGE_TARGET * 2);
+                    xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::ClearMemoryNow as usize, 0, 0, 0, 0, 0, 0))
+                        .expect("ClearMemoryNow syscall failed");
+                    sss.inner.as_mut().unwrap().pages_to_free = HARD_OOM_PAGE_TARGET;
+                    let free_pages = get_free_pages();
+                    log::info!("Free pages after GC: {}", free_pages);
+                    // return the current free page count
+                    scalar.arg1 = free_pages;
+                }
+            }
             #[cfg(feature = "swap-userspace-testing")]
             Some(Opcode::Test0) => {
                 log::info!("Free mem: {}kiB", get_free_pages() * PAGE_SIZE / 1024);
