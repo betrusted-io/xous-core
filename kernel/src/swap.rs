@@ -6,7 +6,7 @@ use core::cmp::Ordering;
 use loader::swap::SWAP_FLG_WIRED;
 use loader::swap::SWAP_RPT_VADDR;
 use xous_kernel::SWAPPER_PID;
-use xous_kernel::{SysCallResult, PID, SID, TID};
+use xous_kernel::{SysCallResult, PID, TID};
 
 use crate::arch::current_pid;
 use crate::arch::mem::MMUFlags;
@@ -142,6 +142,8 @@ impl SwapAlloc {
         });
     }
 
+    pub fn set_wired(&mut self) { self.vpn |= SWAP_FLG_WIRED; }
+
     #[cfg(feature = "debug-swap-verbose")]
     pub fn get_raw_vpn(&self) -> u32 { self.vpn }
 
@@ -174,7 +176,6 @@ impl Ord for SwapAlloc {
 #[cfg(baremetal)]
 #[no_mangle]
 static mut SWAP: Swap = Swap {
-    sid: SID::from_u32(0, 0, 0, 0),
     pc: 0,
     prev_op: None,
     nested_op: None,
@@ -194,8 +195,6 @@ static mut SWAP: Swap = Swap {
 };
 
 pub struct Swap {
-    /// SID for the swapper
-    sid: SID,
     /// PC for blocking handler
     pc: usize,
     /// previous op
@@ -298,10 +297,10 @@ impl Swap {
 
     pub fn register_handler(
         &mut self,
-        s0: u32,
-        s1: u32,
-        s2: u32,
-        s3: u32,
+        _s0: u32,
+        _s1: u32,
+        _s2: u32,
+        _s3: u32,
         handler: usize,
         state: usize,
     ) -> Result<xous_kernel::Result, xous_kernel::Error> {
@@ -320,15 +319,11 @@ impl Swap {
         self.used_pages = total_bytes / PAGE_SIZE;
 
         // now register the swapper
-        if self.sid == SID::from_u32(0, 0, 0, 0) {
-            self.sid = SID::from_u32(s0, s1, s2, s3);
+        if self.pc == 0 && self.swapper_state == 0 {
             self.pc = handler;
             self.swapper_state = state;
             #[cfg(feature = "debug-swap")]
-            println!(
-                "handler registered: sid {:?} pc {:?} state {:?}",
-                self.sid, self.pc, self.swapper_state
-            );
+            println!("handler registered: pc {:?} state {:?}", self.pc, self.swapper_state);
             Ok(xous_kernel::Result::Scalar5(0, 0, 0, 0, 0))
         } else {
             // someone is trying to steal the swapper's privileges!
@@ -643,7 +638,7 @@ impl Swap {
     /// as well as the physical address of the page.
     ///
     /// Note that the originating caller to this will update the epoch of the memory
-    /// alloc counter, so, we don't have to update it explicitly her (as we do with
+    /// alloc counter, so, we don't have to update it explicitly here (as we do with
     /// evict_page)
     ///
     /// This call diverges into the userspace swapper.
