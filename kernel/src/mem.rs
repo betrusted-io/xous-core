@@ -589,7 +589,10 @@ impl MemoryManager {
         flags: MemoryFlags,
         kind: xous_kernel::MemoryType,
     ) -> Result<xous_kernel::MemoryRange, xous_kernel::Error> {
+        #[cfg(baremetal)]
         let mut phys = phys_ptr as usize;
+        #[cfg(not(baremetal))]
+        let phys = phys_ptr as usize;
         let virt = self.find_virtual_address(virt_ptr, size, kind)?;
 
         // Determine if a contiguous chunk of RAM needs to be allocated for a device
@@ -602,6 +605,7 @@ impl MemoryManager {
             return self.reserve_range(virt, size, flags);
         }
 
+        #[cfg(baremetal)]
         if device_ram {
             // Device RAM allocation: search for contiguous block of physical RAM so we can share
             // the pages with e.g. DMA or other hardware resources.
