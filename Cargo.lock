@@ -856,6 +856,7 @@ dependencies = [
  "xous-ipc 0.9.62 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-pio",
  "xous-pl230",
+ "xous-swapper",
 ]
 
 [[package]]
