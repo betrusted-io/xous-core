@@ -640,15 +640,11 @@ impl MemoryManager {
                     #[cfg(feature = "debug-swap")]
                     println!("Block found starting at {:x}", phys);
                 } else {
-                    // See below comment about future enhancement to use swap to clear a memory range
                     return Err(xous_kernel::Error::OutOfMemory);
                 }
             } else {
                 // couldn't find a contiguous location large enough; OOM for now.
-                //
-                // If swap memory is active, we could recode this case to search for the
-                // longest existing run, and try to extend it by evicting physical pages
-                // to swap. But let's keep it simple for now.
+                // Punt to userland to clear up memory.
                 return Err(xous_kernel::Error::OutOfMemory);
             }
         }
