@@ -658,6 +658,7 @@ impl MemoryManager {
                 }
                 return Err(err);
             } else {
+                #[cfg(feature = "swap")]
                 if device_ram {
                     let offset = (claim_phys - self.ram_start) / PAGE_SIZE;
                     #[cfg(feature = "debug-swap")]
