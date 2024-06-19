@@ -589,12 +589,68 @@ impl MemoryManager {
         flags: MemoryFlags,
         kind: xous_kernel::MemoryType,
     ) -> Result<xous_kernel::MemoryRange, xous_kernel::Error> {
-        let phys = phys_ptr as usize;
+        let mut phys = phys_ptr as usize;
         let virt = self.find_virtual_address(virt_ptr, size, kind)?;
 
+        // Determine if a contiguous chunk of RAM needs to be allocated for a device
+        // This case happens when we don't specify a physical address, but also specify the DEV
+        // flag.
+        let device_ram = (flags & MemoryFlags::DEV == MemoryFlags::DEV) && (phys == 0);
+
         // If no physical address is specified, give the user the next available pages
-        if phys == 0 {
+        if phys == 0 && !device_ram {
             return self.reserve_range(virt, size, flags);
+        }
+
+        if device_ram {
+            // Device RAM allocation: search for contiguous block of physical RAM so we can share
+            // the pages with e.g. DMA or other hardware resources.
+            let pages_to_claim = size / PAGE_SIZE; // this is correct because only page-sized requests are allowed.
+            #[cfg(feature = "debug-swap")]
+            println!("Device RAM request. Searching for {} contiguous pages.", pages_to_claim);
+
+            // Safety: is it safe to iterate through MEMORY_ALLOCATIONS like this? I'm not actually sure.
+            // I suppose we could end up in trouble if the kernel is interrupted and the allocation table
+            // changes, but we don't have a locking mechanism for this sort of thing (yet). Until we have
+            // a better way to do this, it will have to do!
+            let mut range_start: Option<usize> = None;
+            let mut current_run = 0;
+            unsafe {
+                for (index, entry) in MEMORY_ALLOCATIONS.iter().enumerate() {
+                    if entry.is_none() {
+                        if let Some(_start) = range_start {
+                            current_run += 1;
+                        } else {
+                            range_start = Some(index);
+                            current_run = 1;
+                        }
+                    } else {
+                        range_start = None;
+                        current_run = 0;
+                    }
+                    if current_run >= pages_to_claim {
+                        break;
+                    }
+                }
+            }
+            if let Some(start) = range_start {
+                if current_run >= pages_to_claim {
+                    // success!
+                    phys = start * PAGE_SIZE + self.ram_start;
+                    #[cfg(feature = "debug-swap")]
+                    println!("Block found starting at {:x}", phys);
+                } else {
+                    // See below comment about future enhancement to use swap to clear a memory range
+                    return Err(xous_kernel::Error::OutOfMemory);
+                }
+            } else {
+                // couldn't find a contiguous location large enough; OOM for now.
+                //
+                // If swap memory is active, we could recode this case to search for the
+                // longest existing run, and try to extend it by evicting physical pages
+                // to swap. But let's keep it simple for now.
+                return Err(xous_kernel::Error::OutOfMemory);
+            }
         }
 
         // 1. Attempt to claim all physical pages in the range
@@ -605,9 +661,20 @@ impl MemoryManager {
                     self.release_page(rel_phys as *mut usize, pid).ok();
                 }
                 return Err(err);
+            } else {
+                if device_ram {
+                    let offset = (claim_phys - self.ram_start) / PAGE_SIZE;
+                    #[cfg(feature = "debug-swap")]
+                    println!("Address {:x} marked as wired", claim_phys);
+                    unsafe {
+                        MEMORY_ALLOCATIONS[offset].set_wired();
+                    }
+                }
             }
         }
 
+        #[cfg(feature = "debug-swap")]
+        println!("Mapping pa {:x} | va {:x} region of {} bytes", phys, virt as usize, size);
         // Actually perform the map.  At this stage, every physical page should be owned by us.
         for offset in (0..size).step_by(PAGE_SIZE) {
             if let Err(e) = crate::arch::mem::map_page_inner(
@@ -622,8 +689,28 @@ impl MemoryManager {
                     crate::arch::mem::unmap_page_inner(self, unmap_offset + virt as usize).ok();
                     self.release_page((unmap_offset + phys) as *mut usize, pid).ok();
                 }
+                #[cfg(feature = "debug-swap")]
+                println!("Error encountered in map_page_inner at last stage of mapping; releasing all pages");
                 return Err(e);
             }
+        }
+
+        if device_ram {
+            // The assumption is that device_ram pages are only ever allocated by a userspace call.
+            // If the kernel uses this to allocate kernel structures, it will fail.
+
+            // clear the memory first
+            unsafe { crate::mem::bzero(virt, virt.wrapping_add(size)) };
+
+            // now hand it to userspace
+            for offset in (0..size).step_by(PAGE_SIZE) {
+                crate::arch::mem::hand_page_to_user(virt.wrapping_add(offset))
+                    .expect("couldn't hand page to user");
+            }
+
+            // sanity check it
+            #[cfg(feature = "debug-swap-verbose")]
+            crate::arch::mem::MemoryMapping::current().print_map();
         }
 
         unsafe { MemoryRange::new(virt as usize, size) }
