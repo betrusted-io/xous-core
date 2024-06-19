@@ -922,7 +922,7 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
     // If the flags are nonzero, but the "Valid" bit is not 1 and
     // the page isn't shared, then this is a reserved page. Allocate
     // a real page to back it and resume execution.
-    if flags == 0 || flags & MMUFlags::S.bits() != 0 {
+    if flags == 0 || (flags & MMUFlags::S.bits()) != 0 {
         return Err(xous_kernel::Error::BadAddress);
     }
 
@@ -955,6 +955,13 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
             });
             *entry =
                 (ppn1 << 20) | (ppn0 << 10) | ((flags & !MMUFlags::P.bits()) | crate::arch::mem::FLG_VALID);
+            #[cfg(feature = "debug-swap")]
+            if flags & MMUFlags::S.bits() != 0 {
+                println!(
+                    "ensure_page_exists_inner(): fetched a page with S bit set. new entry: {:x} prev entry: {:x}",
+                    *entry, current_entry
+                );
+            }
             flush_mmu();
             return Ok(new_page);
         } else {
@@ -1126,7 +1133,29 @@ pub fn evict_page_inner(target_pid: PID, vaddr: usize) -> Result<usize, xous_ker
         target_map.activate().unwrap();
 
         // get the PTE in the target memory space
-        let entry = pagetable_entry(vaddr as usize)?;
+        let entry = match pagetable_entry(vaddr as usize) {
+            Ok(addr) => addr,
+            Err(e) => {
+                #[cfg(feature = "debug-swap")]
+                {
+                    crate::arch::mem::MemoryMapping::current().print_map();
+                    let vpn1 = (vaddr >> 22) & ((1 << 10) - 1);
+                    let l1_pt = unsafe { &(*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
+                    let l1_pte = l1_pt.entries[vpn1];
+                    println!(
+                        "evict_page_inner() PTE lookup error. vaddr in PID{}: {:x}, bad l1 pte: {:x}, err {:?}",
+                        target_pid.get(),
+                        vaddr,
+                        l1_pte,
+                        e
+                    );
+                }
+                let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
+                let swapper_map = system_services.get_process(swapper_pid).unwrap().mapping;
+                swapper_map.activate()?;
+                return Err(e);
+            }
+        };
         let target_pte = unsafe { entry.read_volatile() };
         let target_paddr = (target_pte >> 10) << 12;
 
@@ -1147,6 +1176,17 @@ pub fn evict_page_inner(target_pid: PID, vaddr: usize) -> Result<usize, xous_ker
         // sanity check
         if (target_pte & MMUFlags::VALID.bits() == 0) || (target_pte & MMUFlags::P.bits() != 0) {
             // return us to the swapper PID -- this call can only originate in the swapper
+            #[cfg(feature = "debug-swap")]
+            {
+                crate::arch::mem::MemoryMapping::current().print_map();
+                println!(
+                    "evict_page_inner() failed sanity check. PTE: {:x?} paddr: {:x} vaddr in PID{}: {:x}",
+                    target_pte,
+                    target_paddr,
+                    target_pid.get(),
+                    vaddr
+                );
+            }
             let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
             let swapper_map = system_services.get_process(swapper_pid).unwrap().mapping;
             swapper_map.activate()?;

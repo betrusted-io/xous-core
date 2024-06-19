@@ -92,6 +92,8 @@ mod pddb_cmd;
 use pddb_cmd::*;
 mod usb;
 use usb::*;
+mod mbox;
+use mbox::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
@@ -101,6 +103,7 @@ pub struct CmdEnv {
     #[cfg(feature = "pddb")]
     pddb_cmd: PddbCmd,
     usb_cmd: Usb,
+    mbox: Mbox,
 }
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
@@ -130,6 +133,7 @@ impl CmdEnv {
                 log::debug!("usb");
                 Usb::new()
             },
+            mbox: Mbox::new(),
         }
     }
 
@@ -152,6 +156,7 @@ impl CmdEnv {
             #[cfg(feature = "pddb")]
             &mut self.pddb_cmd,
             &mut self.usb_cmd,
+            &mut self.mbox,
         ];
 
         if let Some(cmdline) = maybe_cmdline {

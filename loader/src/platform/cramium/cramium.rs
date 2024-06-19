@@ -1009,7 +1009,13 @@ unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
 
         // Hits a 16:8:4:2:1 ratio on fclk:aclk:hclk:iclk:pclk
         // Resulting in 800:400:200:100:50 MHz assuming 800MHz fclk
+        #[cfg(feature = "fast-fclk")]
         daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x7fff); // fclk
+
+        // Hits a 8:8:4:2:1 ratio on fclk:aclk:hclk:iclk:pclk
+        // Resulting in 400:400:200:100:50 MHz assuming 800MHz fclk
+        #[cfg(not(feature = "fast-fclk"))]
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x7f7f); // fclk
         daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x3f7f); // aclk
         daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x1f3f); // hclk
         daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x0f1f); // iclk
