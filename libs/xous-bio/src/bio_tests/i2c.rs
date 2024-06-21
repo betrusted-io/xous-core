@@ -7,9 +7,9 @@ pub fn i2c_test() {
     print!("I2C tests\r");
 
     // clear prior test config state
-    let mut test_cfg = CSR::new(utra::main::HW_MAIN_BASE as *mut u32);
-    test_cfg.wo(utra::main::WDATA, 0);
-    test_cfg.wo(utra::main::WDATA, crate::bio_tests::TEST_I2C_MASK);
+    let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
+    test_cfg.wo(utra::csrtest::WTEST, 0);
+    test_cfg.wo(utra::csrtest::WTEST, crate::bio_tests::TEST_I2C_MASK);
 
     // setup the machine & test
     let mut bio_ss = BioSharedState::new();

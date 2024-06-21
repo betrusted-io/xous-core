@@ -7,8 +7,8 @@ pub fn spi_test() {
     print!("SPI test\r");
 
     // clear prior test config state
-    let mut test_cfg = CSR::new(utra::main::HW_MAIN_BASE as *mut u32);
-    test_cfg.wo(utra::main::WDATA, 0);
+    let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
+    test_cfg.wo(utra::csrtest::WTEST, 0);
 
     let mut bio_ss = BioSharedState::new();
     // stop all the machines, so that code can be loaded
