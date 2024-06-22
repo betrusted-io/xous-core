@@ -252,7 +252,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_show_bip39.png?raw=true)
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_show_bip39.png?raw=true)
     ///
     /// </details>
     ///
@@ -300,9 +300,9 @@ impl Modals {
     /// <details>
     ///     <summary>Example Images (from example code below)</summary>
     ///
-    /// ![Example Image - Initial](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_input_bip39_1.png?raw=true)
-    /// ![Example Image - Input](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_input_bip39_2.png?raw=true)
-    /// ![Example Image - Confirmation](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_input_bip39_3.png?raw=true)
+    /// ![Example Image - Initial](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_input_bip39_1.png?raw=true)
+    /// ![Example Image - Input](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_input_bip39_2.png?raw=true)
+    /// ![Example Image - Confirmation](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_input_bip39_3.png?raw=true)
     ///
     /// </details>
     ///
@@ -389,7 +389,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_start_progress.png?raw=true)
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_start_progress.png?raw=true)
     ///
     /// </details>
     ///
@@ -428,7 +428,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_slider.png?raw=true)
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_slider.png?raw=true)
     ///
     /// </details>
     ///
@@ -486,12 +486,12 @@ impl Modals {
     ///     possible, you can add a sleep by doing something like the code below. This will reduce the rate at
     ///     which your loop runs, as well as at which the UI updates.
     /// ```
-    /// std::thread::sleep(std::time::Duration::from_millis(100)); 
+    /// std::thread::sleep(std::time::Duration::from_millis(100));
     /// ```
     ///   - An alternative "softer" solution is to call yield. This will cause the producer to yield its time
     ///     slice to other processes in the OS, which can give the progress bar a chance to catch up.
     /// ```
-    /// xous::yield_slice(); 
+    /// xous::yield_slice();
     /// ```
     ///
     /// # Example
@@ -616,7 +616,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_get_radiobutton.png?raw=true)
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_get_radiobutton.png?raw=true)
     ///
     /// </details>
     ///
@@ -692,7 +692,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_get_checkbox.png?raw=true)
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_get_checkbox.png?raw=true)
     ///
     /// </details>
     ///
@@ -796,7 +796,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_dynamic_notification.png?raw=true)
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_dynamic_notification.png?raw=true)
     ///
     /// </details>
     ///
