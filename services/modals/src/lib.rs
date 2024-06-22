@@ -607,6 +607,36 @@ impl Modals {
         Ok(())
     }
 
+    /// Creates modal dialog from list of items (list created by add_list or add_list_item) and returns String
+    /// value of selected item.
+    /// - Dialog cannot be dismissed without pressing 'ok'.
+    /// - 'ok' text is not editable.
+    /// - Any or none of the checked items are acceptable to be returned.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image - Initial](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_get_radiobutton.png?raw=true)
+    ///
+    /// </details>
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// const RADIO_TEST: [&'static str; 4] = ["zebra", "cow", "horse", "cat"];
+    ///
+    /// for item in RADIO_TEST {
+    ///     modals.add_list_item(item).expect("couldn't build radio item list");
+    /// }
+    /// match modals.get_radiobutton("Pick an animal") {
+    ///     Ok(animal) => log::info!("{} was picked", animal),
+    ///     _ => log::error!("get_radiobutton failed"),
+    /// }
+    /// ```
     pub fn get_radiobutton(&self, prompt: &str) -> Result<String, xous::Error> {
         self.lock();
         let spec =
