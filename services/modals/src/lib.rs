@@ -810,14 +810,14 @@ impl Modals {
     /// modals
     ///     .dynamic_notification(Some("TITLE OF NOTIFICATION"), Some("Important details go here..."))
     ///     .unwrap();
-    /// /// do some stuff
+    /// // do some stuff
     /// modals
     ///     .dynamic_notification_update(
     ///         Some("Important update!"),
     ///         Some("We're almost there, please hold.."),
     ///     )
     ///     .unwrap();
-    /// /// do more stuff
+    /// // do more stuff
     /// modals.dynamic_notification_close().unwrap();
     /// ```
     pub fn dynamic_notification(&self, title: Option<&str>, text: Option<&str>) -> Result<(), xous::Error> {
@@ -899,10 +899,14 @@ impl Modals {
 
     fn unlock(&self) { self.have_lock.set(false); }
 
+    /// - needed for use with `dynamic_notification_blocking_listener`
+    /// - see `dynamic_notification_blocking_listener` for a code example.
     pub fn conn(&self) -> CID { self.conn }
 
     /// Don't leak this token outside of your server, otherwise, another server can pretend to be you and
     /// steal your modal information!
+    /// - needed for use with `dynamic_notification_blocking_listener`
+    /// - see `dynamic_notification_blocking_listener` for a code example.
     pub fn token(&self) -> [u32; 4] { self.token }
 }
 
@@ -933,6 +937,48 @@ impl Drop for Modals {
 ///
 /// This function is "broken out" so that it can be called from a thread without having
 /// to wrap a mutex around the primary Modals structure.
+///
+/// # Example
+/// ```
+/// use core::sync::atomic::{AtomicU32, Ordering};
+/// use std::sync::Arc;
+/// use modals::Modals;
+/// use xous_names::XousNames;
+/// let xns = XousNames::new().unwrap();
+/// let modals = Modals::new(&xns).unwrap();
+///
+/// let kbhit = Arc::new(AtomicU32::new(0));
+/// let token = modals.token().clone();
+/// let conn = modals.conn().clone();
+/// let kbhit = kbhit.clone();
+/// // start a keyboard listener
+/// kbhit.store(0, Ordering::SeqCst);
+/// modals
+///     .dynamic_notification(Some("Dynamic Notification Title!"), Some("we'll be listening.."))
+///     .unwrap();
+/// let _ = std::thread::spawn({
+///     let token = modals.token().clone();
+///     let conn = modals.conn().clone();
+///     let kbhit = kbhit.clone();
+///     move || {
+///         // note that if no key is hit, we get None back on dialog box close automatically
+///         match modals::dynamic_notification_blocking_listener(token, conn) {
+///             Ok(Some(c)) => {
+///                 log::trace!("kbhit got {}", c);
+///                 kbhit.store(c as u32, Ordering::SeqCst)
+///             }
+///             Ok(None) => {
+///                 log::trace!("kbhit exited or had no characters");
+///                 kbhit.store(0, Ordering::SeqCst)
+///             }
+///             Err(e) => {
+///                 log::error!("error waiting for keyboard hit from blocking listener: {:?}", e)
+///             }
+///         }
+///     }
+/// });
+/// // load the key hit from kbhit that's obtained from this listener to take dynamic actions while the dialog is active
+/// ```
 pub fn dynamic_notification_blocking_listener(
     token: [u32; 4],
     conn: CID,
