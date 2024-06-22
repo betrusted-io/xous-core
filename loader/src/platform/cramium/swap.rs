@@ -313,31 +313,39 @@ impl SwapHal {
             let mut cstrng = ChaCha8Rng::from_seed(seed);
 
             // Accumulate TRNG data into the seed (which starts at 0).
-            // Repeat N times for good measure:
-            //   1. XOR in another round of HW TRNG data into ChaCha8
-            //   2. create a new ChaCha8 from the resulting data
-            //   3. Run the ChaCha8 for a few rounds and XOR that back into the state
             //
             // Each round pulls in 8*32 = 256 bits from HW TRNG
-            // 64 rounds of this would fold in 16,384 bits total, about 100x safety margin.
+            // 64 rounds of this would fold in 16,384 bits total, about 100x safety margin
+            // from the minimum target of 128 bits.
             for _ in 0..64 {
+                // extract the seed of the current version of the CSPRNG
                 seed = cstrng.get_seed();
+                // XOR the seed with TRNG data
                 for s in seed.chunks_mut(4) {
-                    let incoming = trng.get_u32().expect("TRNG error") ^ cstrng.next_u32();
+                    let incoming = trng.get_u32().expect("TRNG error");
                     for (s_byte, &incoming_byte) in s.iter_mut().zip(incoming.to_le_bytes().iter()) {
                         *s_byte ^= incoming_byte;
                     }
                 }
                 // println!("seed: {:x?}", seed); // eyeball if things are working correctly
+
+                // Make a new CSPRNG from the old seed that was XOR'd with the TRNG data
                 cstrng = ChaCha8Rng::from_seed(seed);
-                // mix up the internal state with output from the CSTRNG
+
+                // Mix up the seed with output from the CSPRNG (as-seeded). The idea is to diffuse the
+                // TRNG data across all the bits of the state, just in case the TRNG has some biased bits.
                 for s in seed.chunks_mut(8) {
                     for (s_byte, chacha_byte) in s.iter_mut().zip(cstrng.next_u64().to_le_bytes()) {
                         *s_byte ^= chacha_byte;
                     }
                 }
+
+                // Make a final version of the CSPRNG based on the mixed state.
+                cstrng = ChaCha8Rng::from_seed(seed);
             }
-            // now we might have a properly seeded cryptographically secure TRNG...
+
+            // now we might have a properly seeded cryptographically secure TRNG...derive the ephemeral
+            // swap session key.
             let mut dest_key = [0u8; 32];
             for word in dest_key.chunks_mut(core::mem::size_of::<u32>()) {
                 word.copy_from_slice(&cstrng.next_u32().to_be_bytes());
