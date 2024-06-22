@@ -389,7 +389,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image - Initial](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_start_progress.png?raw=true)
+    /// ![Example Image](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_start_progress.png?raw=true)
     ///
     /// </details>
     ///
@@ -428,7 +428,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image - Initial](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_slider.png?raw=true)
+    /// ![Example Image](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_slider.png?raw=true)
     ///
     /// </details>
     ///
@@ -616,7 +616,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image - Initial](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_get_radiobutton.png?raw=true)
+    /// ![Example Image](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_get_radiobutton.png?raw=true)
     ///
     /// </details>
     ///
@@ -692,7 +692,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image - Initial](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_get_checkbox.png?raw=true)
+    /// ![Example Image](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_get_checkbox.png?raw=true)
     ///
     /// </details>
     ///
@@ -789,6 +789,37 @@ impl Modals {
         }
     }
 
+    /// Notification modal with title and text that can be updated.
+    /// - Modal cannot be dismissed by the user, you must close this dialog using `dynamic_notification_close`
+    /// - Burden is on the consumer to not exceed available space.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/rowr111/xous-core/blob/main/docs/images/modals_dynamic_notification.png?raw=true)
+    ///
+    /// </details>
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// modals
+    ///     .dynamic_notification(Some("TITLE OF NOTIFICATION"), Some("Important details go here..."))
+    ///     .unwrap();
+    /// /// do some stuff
+    /// modals
+    ///     .dynamic_notification_update(
+    ///         Some("Important update!"),
+    ///         Some("We're almost there, please hold.."),
+    ///     )
+    ///     .unwrap();
+    /// /// do more stuff
+    /// modals.dynamic_notification_close().unwrap();
+    /// ```
     pub fn dynamic_notification(&self, title: Option<&str>, text: Option<&str>) -> Result<(), xous::Error> {
         self.lock();
         let spec = DynamicNotification {
@@ -802,6 +833,8 @@ impl Modals {
         Ok(())
     }
 
+    /// - Calling this to update the dynamic_notification dialog is optional.
+    /// - See documentation for `dynamic_notification` for a code example.
     pub fn dynamic_notification_update(
         &self,
         title: Option<&str>,
@@ -818,6 +851,8 @@ impl Modals {
         Ok(())
     }
 
+    /// - You must call this method to dismiss `dynamic_notification` when it is no longer needed.
+    /// - See documentation for `dynamic_notification` for a code example.
     pub fn dynamic_notification_close(&self) -> Result<(), xous::Error> {
         send_message(
             self.conn,
