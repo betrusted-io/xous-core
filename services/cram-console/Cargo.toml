@@ -27,6 +27,7 @@ usb-device-xous = { path = "../usb-device-xous", default-features = false }
 cramium-hal = { path = "../../libs/cramium-hal", features = ["std"] }
 cram-hal-service = { path = "../cram-hal-service" }
 ime-plugin-shell = { path = "../ime-plugin-shell" }
+xous-swapper = { path = "../xous-swapper" }
 
 [features]
 "cramium-fpga" = ["utralib/cramium-fpga", "xous-pl230/cramium-fpga"]

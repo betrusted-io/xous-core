@@ -477,6 +477,13 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 
 # New in 0.9.17
 - Fix panic reporting in userspace panics. There was an API incompatibility between `std` and the panic handler where we instantiated the panic handler as a "well known service" but actually it needed to be registered with xous-names.
+- Added "device RAM allocation". A region of memory requested using the `map_memory` API with a physical address of `None` and a flag of `xous::MemoryFlags::DEV` will be allocated as contiguous physical pages of memory. It returns `OutOfMemory` if a contiguous block cannot be found; it is up to the userspace to de-allocate or swap out memory to create a large enough block. This API is useful for creating regions of RAM to be passed on to e.g. DMA devices or hardware coprocessors.
+- cleaned up swap API; removed elements that are no longer needed (e.g. SID/CID for userspace calls from kernel)
+- Cramium target:
+  - USB core able to enumerate, communicate to Linux devices. Windows compat still WIP.
+  - Mailbox protocol to other devices has been tested, working.
+  - TRNG has been tuned, partially validated.
+
 
 ## Roadmap
 - Lots of testing and bug fixes

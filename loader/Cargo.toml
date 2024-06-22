@@ -79,17 +79,21 @@ cramium-fpga = [
     "cramium-hal",
 ]
 atsama5d27 = ["utralib/atsama5d27", "armv7", "dep:atsama5d27"]
+
+# precursor flags
 platform-tests = []
-debug-print = []
-earlyprintk = []
 renode-bypass = []
 secboot = []
-simulation-only = []
+#default = ["debug-print"]
+
+# swap flag
+swap = ["aes-gcm-siv"]
+
+# cramium target flags
 board-bringup = []
 sram-margin = []
 boot-delay = []
-#default = ["debug-print"]
-swap = ["aes-gcm-siv"]
+simulation-only = []
 quantum-timer-test = ["pio", "pio-proc"]
 spim-test = []
 spi-alt-channel = []
@@ -97,5 +101,10 @@ irq-test = []
 usb-test = []
 trng-test = []
 dump-trng = []
+fast-fclk = []
+
+# general flags
+debug-print = []
+earlyprintk = []
 resume = []                              # suspend/resume pathway code
 default = ["board-bringup", "dump-trng"]

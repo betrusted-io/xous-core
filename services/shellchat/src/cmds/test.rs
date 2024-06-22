@@ -997,6 +997,48 @@ impl<'a> ShellCmdApi<'a> for Test {
                     xous::send_message(bench_new_cid, Message::new_blocking_scalar(1, 0, 0, 0, 0)).ok();
                     unsafe { xous::disconnect(bench_new_cid).ok() };
                 }
+                #[cfg(feature = "clifford-bench")]
+                // used to compare performance against Cramium target
+                "clifford" => {
+                    use std::convert::TryInto;
+                    const CLIFFORD_SIZE: usize = 128;
+
+                    const WIDTH: u32 = CLIFFORD_SIZE as _;
+                    const HEIGHT: u32 = CLIFFORD_SIZE as _;
+                    const X_CENTER: f32 = (WIDTH / 2) as f32;
+                    const Y_CENTER: f32 = (HEIGHT / 2) as f32;
+                    const SCALE: f32 = WIDTH as f32 / 5.1;
+                    const STEP: u8 = 16;
+                    const ITERATIONS: u32 = 200000;
+                    let mut buf = vec![255u8; (WIDTH * HEIGHT).try_into().unwrap()];
+                    let (a, b, c, d) = (-2.0, -2.4, 1.1, -0.9);
+                    let (mut x, mut y): (f32, f32) = (0.0, 0.0);
+
+                    log::info!("generating image");
+                    let start_time = env.ticktimer.elapsed_ms();
+                    for _ in 0..=ITERATIONS {
+                        // this takes a couple minutes to run
+                        let x1 = f32::sin(a * y) + c * f32::cos(a * x);
+                        let y1 = f32::sin(b * x) + d * f32::cos(b * y);
+                        (x, y) = (x1, y1);
+                        let (a, b): (u32, u32) =
+                            ((x * SCALE + X_CENTER) as u32, (y * SCALE + Y_CENTER) as u32);
+                        let i: usize = (a + WIDTH * b).try_into().unwrap();
+                        if buf[i] >= STEP {
+                            buf[i] -= STEP;
+                        }
+                    }
+                    log::info!(
+                        "Local finished in {:.2} s",
+                        (env.ticktimer.elapsed_ms() - start_time) as f32 / 1000.0
+                    );
+                    let img = gam::Img::new(buf, WIDTH.try_into().unwrap(), gam::PixelType::U8);
+                    log::info!("showing local version");
+                    let modal_size = gam::Point::new(CLIFFORD_SIZE as _, CLIFFORD_SIZE as _);
+                    let bm = gam::Bitmap::from_img(&img, Some(modal_size));
+                    let modals = modals::Modals::new(&env.xns).unwrap();
+                    modals.show_image(bm).expect("couldn't render attractor");
+                }
                 _ => {
                     () // do nothing
                 }

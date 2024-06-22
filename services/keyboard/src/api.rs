@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 pub const SERVER_NAME_KBD: &str = "_Matrix keyboard driver_";
 
+#[allow(dead_code)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct ScanCode {
     /// base key value
