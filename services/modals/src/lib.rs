@@ -649,6 +649,26 @@ impl Modals {
         Ok(String::from(itemname.as_str()))
     }
 
+    /// Gets selected index of radio button, *after* ok is pressed on get_radiobutton.
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// const RADIO_TEST: [&'static str; 4] = ["zebra", "cow", "horse", "cat"];
+    ///
+    /// for item in RADIO_TEST {
+    ///     modals.add_list_item(item).expect("couldn't build radio item list");
+    /// }
+    /// match modals.get_radiobutton("Pick an animal") {
+    ///     Ok(animal) => log::info!("{} was picked", animal),
+    ///     _ => log::error!("get_radiobutton failed"),
+    /// }
+    /// log::info!("Radio index selected = {:?}", modals.get_radio_index().unwrap());
+    /// ```
     pub fn get_radio_index(&self) -> Result<usize, xous::Error> {
         let msg = Message::new_blocking_scalar(Opcode::GetModalIndex.to_usize().unwrap(), 0, 0, 0, 0);
         match send_message(self.conn, msg) {
@@ -721,6 +741,36 @@ impl Modals {
         Ok(ret)
     }
 
+    /// Gets Vector of indices of checked items, *after* ok is pressed on get_checkbox.
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// const LIST_TEST: [&'static str; 5] = [
+    ///     "happy",
+    ///     "😃",
+    ///     "安",
+    ///     "peace &\n tranquility",
+    ///     "Once apon a time, in a land far far away, there was a",
+    /// ];
+    ///
+    /// let items: Vec<&str> = LIST_TEST.iter().map(|s| s.to_owned()).collect();
+    /// modals.add_list(items).expect("couldn't build list");
+    /// match modals.get_checkbox("You can have it all:") {
+    ///     Ok(things) => {
+    ///         log::info!("The user picked {} things:", things.len());
+    ///         for thing in things {
+    ///             log::info!("{}", thing);
+    ///         }
+    ///     }
+    ///     _ => log::error!("get_checkbox failed"),
+    /// }
+    /// log::info!("Checkbox indices selected = {:?}", modals.get_check_index());
+    /// ```
     pub fn get_check_index(&self) -> Result<Vec<usize>, xous::Error> {
         let mut ret = Vec::<usize>::new();
         let msg = Message::new_blocking_scalar(Opcode::GetModalIndex.to_usize().unwrap(), 0, 0, 0, 0);
