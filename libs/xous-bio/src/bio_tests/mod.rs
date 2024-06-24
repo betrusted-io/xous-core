@@ -90,12 +90,12 @@ pub fn report_api(d: u32) {
 pub fn bio_tests() {
     report_api(crate::get_id());
 
+    units::hello_world();
+    units::hello_multiverse();
+    spi::spi_test();
     units::aclk_tests();
     i2c::i2c_test();
     i2c::complex_i2c_test();
-    spi::spi_test();
-    units::hello_world();
-    units::hello_multiverse();
     units::fifo_basic();
     units::host_fifo_tests();
     units::fifo_level_tests();

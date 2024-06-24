@@ -14,7 +14,7 @@ pub fn spi_test() {
     // stop all the machines, so that code can be loaded
     bio_ss.bio.wo(utra::bio::SFR_CTRL, 0x0);
     let code = spi_driver();
-    print!("code length {}\r", code.len());
+    print!("SPI code length {}\r", code.len());
     bio_ss.load_code(code, 0);
 
     // configure fifo trigger levels
