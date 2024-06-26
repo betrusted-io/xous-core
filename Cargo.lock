@@ -1141,7 +1141,7 @@ dependencies = [
 [[package]]
 name = "curve25519-dalek"
 version = "4.1.2"
-source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#23c447c7ccd35d244394a0e5e7440a4dac2cfb5d"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#7e17771d12a48eb0952f34a23c6f78da4c83eb92"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -1160,7 +1160,7 @@ dependencies = [
 [[package]]
 name = "curve25519-dalek-derive"
 version = "0.1.1"
-source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#23c447c7ccd35d244394a0e5e7440a4dac2cfb5d"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#7e17771d12a48eb0952f34a23c6f78da4c83eb92"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4512,7 +4512,7 @@ dependencies = [
 [[package]]
 name = "sha2"
 version = "0.10.8"
-source = "git+https://github.com/betrusted-io/hashes.git?branch=sha2-v0.10.8-xous#607977bda0b39ceaee64a7eefc3796000e9b3efd"
+source = "git+https://github.com/betrusted-io/hashes.git?branch=sha2-v0.10.8-xous#2e4898726bead595335b6e75c88999f3316b7739"
 dependencies = [
  "cfg-if",
  "cpufeatures",
