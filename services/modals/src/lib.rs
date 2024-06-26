@@ -243,9 +243,30 @@ impl Modals {
         Ok(())
     }
 
-    /// this blocks until the notification has been acknowledged. It will attempt to render up to 256 bits
-    /// of `data` in bip39 format. Data must conform to the codeable lengths by BIP39, or else the routine
+    /// Modal dialog used to show up to 256 bits of `data` in bip39 format.
+    ///
+    /// - This dialog blocks until the notification has been acknowledged via [ Press any key ].
+    /// - Data must conform to the codeable lengths by BIP39, or else the routine
     /// will return immediately with an `InvalidString` error without showing any dialog box.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_show_bip39.png?raw=true)
+    ///
+    /// </details>
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// let refnum = 0b00000110001101100111100111001010000110110010100010110101110011111101101010011100000110000110101100110110011111100010011100011110u128;
+    /// let refvec = refnum.to_be_bytes().to_vec();
+    /// modals.show_bip39(Some("Some bip39 words"), &refvec).expect("couldn't show bip39 words");
+    /// ```
     pub fn show_bip39(&self, caption: Option<&str>, data: &Vec<u8>) -> Result<(), xous::Error> {
         match data.len() {
             16 | 20 | 24 | 28 | 32 => (),
@@ -268,6 +289,41 @@ impl Modals {
         Ok(())
     }
 
+    /// Input dialog used to accept bip39 formatted data.
+    ///
+    /// - This dialog blocks until either \[ F4 \] has been pressed to abort entry, or a phrase has been input
+    ///   and accepted via \[ enter \].
+    /// - Possible words will be auto-suggested during typing and \[ enter \] must be pressed after each word.
+    /// - Valid input will be shown in the bottom section of the dialog after an accepted phrase has been
+    ///   entered.
+    ///
+    /// <details>
+    ///     <summary>Example Images (from example code below)</summary>
+    ///
+    /// ![Example Image - Initial](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_input_bip39_1.png?raw=true)
+    /// ![Example Image - Input](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_input_bip39_2.png?raw=true)
+    /// ![Example Image - Confirmation](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_input_bip39_3.png?raw=true)
+    ///
+    /// </details>
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// log::info!(
+    ///     "type these words: alert record income curve mercy tree heavy loan hen recycle mean devote"
+    /// );
+    /// match modals.input_bip39(Some("Input BIP39 words")) {
+    ///     Ok(data) => {
+    ///         log::info!("got bip39 input: {:x?}", data);
+    ///         log::info!("reference: 0x063679ca1b28b5cfda9c186b367e271e");
+    ///     }
+    ///     Err(e) => log::error!("couldn't get input: {:?}", e),
+    /// }
+    /// ```
     pub fn input_bip39(&self, prompt: Option<&str>) -> Result<Vec<u8>, xous::Error> {
         self.lock();
         let spec = ManagedBip39 {
@@ -287,7 +343,13 @@ impl Modals {
         }
     }
 
-    /// this blocks until the image has been dismissed.
+    /// Shows image.
+    /// - Blocks until the image has been dismissed.
+    ///
+    /// [Code Example - procedurally generate image](https://github.com/betrusted-io/xous-core/blob/c84f4efba0d4a5ae690f147c57590134d3cafc27/services/modals/src/tests.rs#L174-L201)
+    /// [Code Example - show_image for procedurally generated](https://github.com/betrusted-io/xous-core/blob/c84f4efba0d4a5ae690f147c57590134d3cafc27/services/modals/src/tests.rs#L155-L163)
+    ///
+    /// [Code Example - show_image for downloaded image](https://github.com/betrusted-io/xous-core/blob/c84f4efba0d4a5ae690f147c57590134d3cafc27/services/shellchat/src/cmds/net_cmd.rs#L378-L483)
     #[cfg(feature = "ditherpunk")]
     pub fn show_image(&self, mut bm: Bitmap) -> Result<(), xous::Error> {
         self.lock();
@@ -317,6 +379,29 @@ impl Modals {
         Ok(())
     }
 
+    /// Generates progress bar (updated by update_progress, and closed by finish_progress).
+    ///
+    /// - This item cannot be dismissed/modified by the user.
+    /// - If 'current' is less than 'start' or more than 'end', progress will show 0 or 100 percent,
+    ///   respectively.
+    /// - Title text wraps, burden is on the consumer not to exceed the available screen space.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_start_progress.png?raw=true)
+    ///
+    /// </details>
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// modals.start_progress("Progress Quest", 0, 1000, 0).expect("couldn't raise progress bar");
+    /// ```
     pub fn start_progress(&self, title: &str, start: u32, end: u32, current: u32) -> Result<(), xous::Error> {
         self.lock();
         let spec = ManagedProgress {
@@ -333,6 +418,32 @@ impl Modals {
         Ok(())
     }
 
+    /// Human interaction-enabled slider.
+    ///
+    /// - Interactable until home/enter is pressed.
+    /// - Use the D-pad to shift the slider by a step in either direction.
+    /// - Note that it is possible to exceed start or end if you choose the 'step' value poorly.
+    /// - Title text wraps, burden is on the consumer not to exceed available screen space.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_slider.png?raw=true)
+    ///
+    /// </details>
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// let result = modals
+    ///     .slider("Human interaction-enabled slider!", 0, 100, 50, 1)
+    ///     .expect("slider test failed");
+    /// log::info!("result: {}", &result);
+    /// ```
     pub fn slider(
         &self,
         title: &str,
@@ -360,9 +471,36 @@ impl Modals {
         Ok(orig.0)
     }
 
-    /// note that this API is not atomically token-locked, so, someone could mess with the progress bar state
-    /// but, progress updates are meant to be fast and frequent, and generally if a progress bar shows
-    /// something whacky it's not going to affect a security outcome
+    /// Updates progress bar (created by start_progress, and closed by finish_progress).
+    ///
+    /// - This item cannot be dismissed/modified by the user.
+    /// - If you exceed 'end' of the progress bar with an update, it will show 100%.
+    /// - Note that this API is not atomically token-locked, so, someone could mess with the progress bar
+    ///   state. But, progress updates are meant to be fast and frequent, and generally if a progress bar
+    ///   shows something whacky it's not going to affect a security outcome.
+    ///
+    /// - suggestions for if you run into the queue overflow error:
+    ///   - preferred: reduce the rate at which updates occur by modifying the updater code to do less
+    ///     frequent updates. For example, instead of once every iteration of a loop, once every ten
+    ///     iterations. This will improve performance of the code and reduce UI churn as well. If this is not
+    ///     possible, you can add a sleep by doing something like the code below. This will reduce the rate at
+    ///     which your loop runs, as well as at which the UI updates. Example:
+    ///     `std::thread::sleep(std::time::Duration::from_millis(100));`
+    ///
+    ///   - An alternative "softer" solution is to call yield. This will cause the producer to yield its time
+    ///     slice to other processes in the OS, which can give the progress bar a chance to catch up. Example:
+    ///     `xous::yield_slice();`
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// modals.start_progress("Progress Quest", 0, 1000, 0).expect("couldn't raise progress bar");
+    /// modals.update_progress(10).expect("couldn't update progress bar");
+    /// ```
     pub fn update_progress(&self, current: u32) -> Result<(), xous::Error> {
         match xous::try_send_message(
             self.conn,
@@ -371,19 +509,34 @@ impl Modals {
             Ok(_) => (),
             Err(e) => {
                 log::warn!("update_progress failed with {:?}, skipping request", e);
-                // most likely issue is that the server queue is overfull because too many progress updates
-                // were sent sleep the sending thread to rate-limit requests, while discarding
-                // the current request.
+                // We got here because the modals inbound server queue has overflowed. The most likely reason
+                // is that too many progress updates were sent. The yield statement below causes the sending
+                // thread to sleep for the rest of its scheduling quantum, thus rate-limiting requests. The
+                // current request is simply discarded; no attempt is made to retry.
                 xous::yield_slice()
             }
         }
         Ok(())
     }
 
-    /// Close the progress bar, regardless of the current state
-    /// This is a blocking call, because you want the GAM to revert focus back to your context before you
-    /// continue with any drawing operations. Otherwise, they could be missed as the modal is still covering
-    /// your window.
+    /// Closes progress bar (created by start_progress, and updated by update_progress).
+    ///
+    ///  - Closes the progress bar, regardless of the current state.
+    ///  - This is a blocking call, because you want the GAM to revert focus back to your context before you
+    ///    continue with any drawing operations. Otherwise, they could be missed as the modal is still
+    ///    covering your window.
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// modals.start_progress("Progress Quest", 0, 1000, 0).expect("couldn't raise progress bar");
+    /// modals.update_progress(10).expect("couldn't update progress bar");
+    /// modals.finish_progress().expect("couldn't dismiss progress bar");
+    /// ```
     pub fn finish_progress(&self) -> Result<(), xous::Error> {
         self.lock();
         send_message(
@@ -401,6 +554,28 @@ impl Modals {
         Ok(())
     }
 
+    /// Creates a list to be used by get_radiobutton or get_checkbox.
+    /// - Does not display on its own, the above mentioned methods prompt display of the list.
+    /// - Burden is on the consumer to not exceed available screen space.
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// const LIST_TEST: [&'static str; 5] = [
+    ///     "happy",
+    ///     "😃",
+    ///     "安",
+    ///     "peace &\n tranquility",
+    ///     "Once apon a time, in a land far far away, there was a",
+    /// ];
+    ///
+    /// let items: Vec<&str> = LIST_TEST.iter().map(|s| s.to_owned()).collect();
+    /// modals.add_list(items).expect("couldn't build list");
+    /// ```
     pub fn add_list(&self, items: Vec<&str>) -> Result<(), xous::Error> {
         for (_, text) in items.iter().enumerate() {
             self.add_list_item(text).or(Err(xous::Error::InternalError))?;
@@ -408,6 +583,19 @@ impl Modals {
         Ok(())
     }
 
+    /// Add individual items to a list to be used by get_radiobutton or get_checkbox.
+    /// - Does not display on its own, the above mentioned methods prompt display of the list.
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// modals.add_list_item("yes").expect("failed radio yes");
+    /// modals.add_list_item("no").expect("failed radio no");
+    /// ```
     pub fn add_list_item(&self, item: &str) -> Result<(), xous::Error> {
         self.lock();
         let itemname = ManagedListItem { token: self.token, item: ItemName::new(item) };
@@ -416,6 +604,36 @@ impl Modals {
         Ok(())
     }
 
+    /// Creates modal dialog from list of items (list created by add_list or add_list_item) and returns String
+    /// value of selected item.
+    /// - Dialog cannot be dismissed without pressing 'ok'.
+    /// - 'ok' text is not editable.
+    /// - Any or none of the checked items are acceptable to be returned.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_get_radiobutton.png?raw=true)
+    ///
+    /// </details>
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// const RADIO_TEST: [&'static str; 4] = ["zebra", "cow", "horse", "cat"];
+    ///
+    /// for item in RADIO_TEST {
+    ///     modals.add_list_item(item).expect("couldn't build radio item list");
+    /// }
+    /// match modals.get_radiobutton("Pick an animal") {
+    ///     Ok(animal) => log::info!("{} was picked", animal),
+    ///     _ => log::error!("get_radiobutton failed"),
+    /// }
+    /// ```
     pub fn get_radiobutton(&self, prompt: &str) -> Result<String, xous::Error> {
         self.lock();
         let spec =
@@ -428,6 +646,26 @@ impl Modals {
         Ok(String::from(itemname.as_str()))
     }
 
+    /// Gets selected index of radio button, *after* ok is pressed on get_radiobutton.
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// const RADIO_TEST: [&'static str; 4] = ["zebra", "cow", "horse", "cat"];
+    ///
+    /// for item in RADIO_TEST {
+    ///     modals.add_list_item(item).expect("couldn't build radio item list");
+    /// }
+    /// match modals.get_radiobutton("Pick an animal") {
+    ///     Ok(animal) => log::info!("{} was picked", animal),
+    ///     _ => log::error!("get_radiobutton failed"),
+    /// }
+    /// log::info!("Radio index selected = {:?}", modals.get_radio_index().unwrap());
+    /// ```
     pub fn get_radio_index(&self) -> Result<usize, xous::Error> {
         let msg = Message::new_blocking_scalar(Opcode::GetModalIndex.to_usize().unwrap(), 0, 0, 0, 0);
         match send_message(self.conn, msg) {
@@ -442,6 +680,46 @@ impl Modals {
         }
     }
 
+    /// Creates modal dialog from list of items (list created by add_list or add_list_item) and returns Vector
+    /// of checked items.
+    /// - Dialog cannot be dismissed without pressing 'ok'.
+    /// - 'ok' text is not editable.
+    /// - Any or none of the checked items are acceptable to be returned.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_get_checkbox.png?raw=true)
+    ///
+    /// </details>
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// const LIST_TEST: [&'static str; 5] = [
+    ///     "happy",
+    ///     "😃",
+    ///     "安",
+    ///     "peace &\n tranquility",
+    ///     "Once apon a time, in a land far far away, there was a",
+    /// ];
+    ///
+    /// let items: Vec<&str> = LIST_TEST.iter().map(|s| s.to_owned()).collect();
+    /// modals.add_list(items).expect("couldn't build list");
+    /// match modals.get_checkbox("You can have it all:") {
+    ///     Ok(things) => {
+    ///         log::info!("The user picked {} things:", things.len());
+    ///         for thing in things {
+    ///             log::info!("{}", thing);
+    ///         }
+    ///     }
+    ///     _ => log::error!("get_checkbox failed"),
+    /// }
+    /// ```
     pub fn get_checkbox(&self, prompt: &str) -> Result<Vec<String>, xous::Error> {
         self.lock();
         let spec =
@@ -460,6 +738,36 @@ impl Modals {
         Ok(ret)
     }
 
+    /// Gets Vector of indices of checked items, *after* ok is pressed on get_checkbox.
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// const LIST_TEST: [&'static str; 5] = [
+    ///     "happy",
+    ///     "😃",
+    ///     "安",
+    ///     "peace &\n tranquility",
+    ///     "Once apon a time, in a land far far away, there was a",
+    /// ];
+    ///
+    /// let items: Vec<&str> = LIST_TEST.iter().map(|s| s.to_owned()).collect();
+    /// modals.add_list(items).expect("couldn't build list");
+    /// match modals.get_checkbox("You can have it all:") {
+    ///     Ok(things) => {
+    ///         log::info!("The user picked {} things:", things.len());
+    ///         for thing in things {
+    ///             log::info!("{}", thing);
+    ///         }
+    ///     }
+    ///     _ => log::error!("get_checkbox failed"),
+    /// }
+    /// log::info!("Checkbox indices selected = {:?}", modals.get_check_index());
+    /// ```
     pub fn get_check_index(&self) -> Result<Vec<usize>, xous::Error> {
         let mut ret = Vec::<usize>::new();
         let msg = Message::new_blocking_scalar(Opcode::GetModalIndex.to_usize().unwrap(), 0, 0, 0, 0);
@@ -478,6 +786,37 @@ impl Modals {
         }
     }
 
+    /// Notification modal with title and text that can be updated.
+    /// - Modal cannot be dismissed by the user, you must close this dialog using `dynamic_notification_close`
+    /// - Burden is on the consumer to not exceed available space.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_dynamic_notification.png?raw=true)
+    ///
+    /// </details>
+    ///
+    /// # Example
+    /// ```
+    /// use modals::Modals;
+    /// use xous_names::XousNames;
+    /// let xns = XousNames::new().unwrap();
+    /// let modals = Modals::new(&xns).unwrap();
+    ///
+    /// modals
+    ///     .dynamic_notification(Some("TITLE OF NOTIFICATION"), Some("Important details go here..."))
+    ///     .unwrap();
+    /// // do some stuff
+    /// modals
+    ///     .dynamic_notification_update(
+    ///         Some("Important update!"),
+    ///         Some("We're almost there, please hold.."),
+    ///     )
+    ///     .unwrap();
+    /// // do more stuff
+    /// modals.dynamic_notification_close().unwrap();
+    /// ```
     pub fn dynamic_notification(&self, title: Option<&str>, text: Option<&str>) -> Result<(), xous::Error> {
         self.lock();
         let spec = DynamicNotification {
@@ -491,6 +830,8 @@ impl Modals {
         Ok(())
     }
 
+    /// - Calling this to update the dynamic_notification dialog is optional.
+    /// - See documentation for `dynamic_notification` for a code example.
     pub fn dynamic_notification_update(
         &self,
         title: Option<&str>,
@@ -507,6 +848,8 @@ impl Modals {
         Ok(())
     }
 
+    /// - You must call this method to dismiss `dynamic_notification` when it is no longer needed.
+    /// - See documentation for `dynamic_notification` for a code example.
     pub fn dynamic_notification_close(&self) -> Result<(), xous::Error> {
         send_message(
             self.conn,
@@ -553,10 +896,14 @@ impl Modals {
 
     fn unlock(&self) { self.have_lock.set(false); }
 
+    /// - needed for use with `dynamic_notification_blocking_listener`
+    /// - see `dynamic_notification_blocking_listener` for a code example.
     pub fn conn(&self) -> CID { self.conn }
 
     /// Don't leak this token outside of your server, otherwise, another server can pretend to be you and
     /// steal your modal information!
+    /// - needed for use with `dynamic_notification_blocking_listener`
+    /// - see `dynamic_notification_blocking_listener` for a code example.
     pub fn token(&self) -> [u32; 4] { self.token }
 }
 
@@ -587,6 +934,48 @@ impl Drop for Modals {
 ///
 /// This function is "broken out" so that it can be called from a thread without having
 /// to wrap a mutex around the primary Modals structure.
+///
+/// # Example
+/// ```
+/// use core::sync::atomic::{AtomicU32, Ordering};
+/// use std::sync::Arc;
+/// use modals::Modals;
+/// use xous_names::XousNames;
+/// let xns = XousNames::new().unwrap();
+/// let modals = Modals::new(&xns).unwrap();
+///
+/// let kbhit = Arc::new(AtomicU32::new(0));
+/// let token = modals.token().clone();
+/// let conn = modals.conn().clone();
+/// let kbhit = kbhit.clone();
+/// // start a keyboard listener
+/// kbhit.store(0, Ordering::SeqCst);
+/// modals
+///     .dynamic_notification(Some("Dynamic Notification Title!"), Some("we'll be listening.."))
+///     .unwrap();
+/// let _ = std::thread::spawn({
+///     let token = modals.token().clone();
+///     let conn = modals.conn().clone();
+///     let kbhit = kbhit.clone();
+///     move || {
+///         // note that if no key is hit, we get None back on dialog box close automatically
+///         match modals::dynamic_notification_blocking_listener(token, conn) {
+///             Ok(Some(c)) => {
+///                 log::trace!("kbhit got {}", c);
+///                 kbhit.store(c as u32, Ordering::SeqCst)
+///             }
+///             Ok(None) => {
+///                 log::trace!("kbhit exited or had no characters");
+///                 kbhit.store(0, Ordering::SeqCst)
+///             }
+///             Err(e) => {
+///                 log::error!("error waiting for keyboard hit from blocking listener: {:?}", e)
+///             }
+///         }
+///     }
+/// });
+/// // load the key hit from kbhit that's obtained from this listener to take dynamic actions while the dialog is active
+/// ```
 pub fn dynamic_notification_blocking_listener(
     token: [u32; 4],
     conn: CID,

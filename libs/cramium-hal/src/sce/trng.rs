@@ -90,6 +90,8 @@ pub struct Trng {
     pub csr: CSR<u32>,
     _count: u16, // vestigial, to be removed?
     mode: Mode,
+    /// Buffer some raw entropy inside the kernel, so we can "burst out" entropy
+    /// for reseed operations without having to wait for the TRNG to regenerate data.
     raw: [Option<u32>; RAW_ENTRIES],
     #[cfg(feature = "compress-entropy")]
     rng_var: u8,
@@ -136,13 +138,16 @@ impl Trng {
     }
 
     pub fn get_raw(&mut self) -> u32 {
+        // Pull from the buffered entropy pool, until it's empty.
         for d in self.raw.iter_mut() {
             if let Some(r) = d.take() {
                 return r;
             }
         }
 
+        // If empty, refill the buffer.
         while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
+
         #[cfg(feature = "compress-entropy")]
         let mut sample = self.csr.r(utra::trng::SFR_BUF);
         #[cfg(feature = "compress-entropy")]
