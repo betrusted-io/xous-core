@@ -418,8 +418,8 @@ pub enum SysCall {
     ///
     /// ## Arguments
     ///
-    /// * **Index**: The item to adjust. Currently the following limits are supported: 1: Maximum heap size
-    ///   2: Current heap size
+    /// * **Index**: The item to adjust. Currently the following limits are supported: 1: Maximum heap size 2:
+    ///   Current heap size
     /// * **Current Limit**: Pass the current limit value here. The current limit must match in order for the
     ///   new limit to take effect. This is used to avoid a race condition if two threads try to set the same
     ///   limit.
@@ -464,8 +464,8 @@ pub enum SysCall {
     ///
     /// ## Arguments
     ///
-    /// * **MessageSender**: This is the `sender` from the message envelope. It is a unique ID that
-    ///   identifies this message, as well as the server it came from.
+    /// * **MessageSender**: This is the `sender` from the message envelope. It is a unique ID that identifies
+    ///   this message, as well as the server it came from.
     ///
     /// The remaining arguments depend on whether the message was a `BlockingScalar`
     /// message or a `MemoryMessage`. Note that this function should NOT be called

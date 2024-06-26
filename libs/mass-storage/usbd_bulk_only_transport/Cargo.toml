@@ -20,7 +20,7 @@ typenum               = "1.11.2"
 usbd_mass_storage     = { version = "0.1.0", path = "../usbd_mass_storage" }
 packing               = { version = "0.2.0", path = "../packing/packing" }
 log = "0.4.17"
-xous = "0.9.62"
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.58" }
+xous = "0.9.63"
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.59" }
 
 [features]
