@@ -3,7 +3,7 @@ use crate::*;
 const PIN_SDA: u32 = 2;
 const PIN_SCL: u32 = 3;
 
-pub fn i2c_test() {
+pub fn i2c_test() -> usize {
     print!("I2C tests\r");
 
     // clear prior test config state
@@ -17,7 +17,7 @@ pub fn i2c_test() {
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
     let code = crate::i2c::i2c_driver();
     print!("code length {}\r", code.len());
-    bio_ss.load_code(code, 0);
+    bio_ss.load_code(code, 0, BioCore::Core0);
 
     // configure & run the 0th machine
     // 400kHz clock -> 100kHz toggle rate = 0x7D0_0000 @ 800MHz rate FCLK
@@ -93,14 +93,16 @@ pub fn i2c_test() {
     bio_ss.bio.wo(utra::bio_bdma::SFR_IRQMASK_0, 0);
     if passing {
         print!("===I2C tests PASS===\r");
+        1
     } else {
         print!("===I2C tests FAIL===\r");
+        0
     }
 }
 
 /// This just generates some more complex I2C waveforms; we don't have a full I2C hardware
 /// unit in the upper level test bench, so we use manual waveform checking.
-pub fn complex_i2c_test() {
+pub fn complex_i2c_test() -> usize {
     print!("Complex I2C transactions\r");
     let mut bio_ss = BioSharedState::new();
     let mut i2c =
@@ -124,4 +126,5 @@ pub fn complex_i2c_test() {
         Err(_) => print!("read test FAIL\r"),
     }
     print!("===Exit complex I2C transactions===\r");
+    1
 }

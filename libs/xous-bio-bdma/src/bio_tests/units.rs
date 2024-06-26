@@ -8,12 +8,12 @@ use crate::*;
 // this test requires manual inspection of the outputs
 // the GPIO pins should toggle with 0x11, 0x12, 0x13...
 // at the specified quantum rate of the machine.
-pub fn hello_world() {
+pub fn hello_world() -> usize {
     print!("hello world test\r");
     let mut bio_ss = BioSharedState::new();
     let simple_test_code = hello_world_code();
     // copy code to reset vector for 0th machine
-    bio_ss.load_code(simple_test_code, 0);
+    bio_ss.load_code(simple_test_code, 0, BioCore::Core0);
 
     // configure & run the 0th machine
     // /32 clock
@@ -21,6 +21,7 @@ pub fn hello_world() {
     // start the machine
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x111);
     print!("===hello world PASS===\r");
+    1
 }
 #[rustfmt::skip]
 bio_code!(hello_world_code, HELLO_START, HELLO_END,
@@ -37,13 +38,19 @@ bio_code!(hello_world_code, HELLO_START, HELLO_END,
 // the GPIO pins should toggle with the following pattern:
 // 0x41312111, 0x42322212, 0x43332313, etc.
 // and they should be in sync-lock, no ragged transitions
-pub fn hello_multiverse() {
+pub fn hello_multiverse() -> usize {
     print!("multiverse\r");
     let mut bio_ss = BioSharedState::new();
     // stop all the machines, so that code can be loaded
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
-    let code = multiverse_code();
-    bio_ss.load_code(code, 0);
+    let code0 = multiverse_code0();
+    bio_ss.load_code(code0, 0, BioCore::Core0);
+    let code1 = multiverse_code1();
+    bio_ss.load_code(code1, 0, BioCore::Core1);
+    let code2 = multiverse_code2();
+    bio_ss.load_code(code2, 0, BioCore::Core2);
+    let code3 = multiverse_code3();
+    bio_ss.load_code(code3, 0, BioCore::Core3);
 
     // configure & run the 0th machine
     // /32 clock
@@ -63,31 +70,13 @@ pub fn hello_multiverse() {
     // start all the machines, all at once
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0xfff);
     print!("===multiverse PASS===\r");
+    1
 }
 #[rustfmt::skip]
-bio_code!(multiverse_code, MULTIVERSE_START, MULTIVERSE_END,
-    // Reset vectors for each core are aligned to 4-byte boundaries
-    // As long as the jump target is <2kiB from reset, this will emit
-    // a C-instruction, so it needs padding with a NOP. Unfortunately,
-    // I can't seem to figure out a way to force the assembler to always
-    // encode as uncompressed, so, you have to be aware of the jump destination
-    // for the assembler output to line up according to your expectation :(
-    //
-    // using 'c.j' syntax for the jump causes the assembler to emit an error,
-    // but the code still compiles, so...avoiding that for now. might be a bug,
-    // but I am very not interested in fixing that today.
-    //
-    // Also note that labels can only be numbers from 0-99, and, due to an llvm
+bio_code!(multiverse_code0, MULTIVERSE0_START, MULTIVERSE0_END,
+    // Note that labels can only be numbers from 0-99, and, due to an llvm
     // bug, labels made exclusively of 0 or 1 should be avoided because they get
     // interpreted as binary numbers. dat's some jank in the tank!!
-    "j 90f",
-    "nop",
-    "j 91f",
-    "nop",
-    "j 92f",
-    "nop",
-    "j 93f",
-    "nop",
     // mach 0 code
     "90:",
     // x26 sets the GPIO mask
@@ -100,7 +89,10 @@ bio_code!(multiverse_code, MULTIVERSE_START, MULTIVERSE_END,
     "mv   x21, x1",
     // x20 write causes core to wait until next sync quantum
     "mv   x20, zero",
-    "j 4b",
+    "j 4b"
+);
+#[rustfmt::skip]
+bio_code!(multiverse_code1, MULTIVERSE1_START, MULTIVERSE1_END,
     // mach 1 code
     "91:",
     "li   x2, 0xFF00",
@@ -110,7 +102,10 @@ bio_code!(multiverse_code, MULTIVERSE_START, MULTIVERSE_END,
     "add  x1, x1, 0x1",
     "slli x21, x1, 8",
     "mv   x20, zero",
-    "j 5b",
+    "j 5b"
+);
+#[rustfmt::skip]
+bio_code!(multiverse_code2, MULTIVERSE2_START, MULTIVERSE2_END,
     // mach 2 code
     "92:",
     "li   x2, 0xFF0000",
@@ -120,7 +115,10 @@ bio_code!(multiverse_code, MULTIVERSE_START, MULTIVERSE_END,
     "add  x1, x1, 0x1",
     "slli x21, x1, 16",
     "mv   x20, zero",
-    "j 6b",
+    "j 6b"
+);
+#[rustfmt::skip]
+bio_code!(multiverse_code3, MULTIVERSE3_START, MULTIVERSE3_END,
     // mach 3 code
     "93:",
     "li   x2, 0xFF000000",
@@ -141,7 +139,7 @@ bio_code!(multiverse_code, MULTIVERSE_START, MULTIVERSE_END,
 // but with a glitch before major transitions. The output could
 // be sync'd locked, but we leave it off for this test so we have
 // a demo of how things look when it's off.
-pub fn fifo_basic() {
+pub fn fifo_basic() -> usize {
     print!("FIFO basic\r");
     // clear any prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
@@ -150,8 +148,46 @@ pub fn fifo_basic() {
     let mut bio_ss = BioSharedState::new();
     // stop all the machines, so that code can be loaded
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
-    let code = fifo_basic_code();
-    bio_ss.load_code(code, 0);
+    bio_ss.load_code(fifo_basic0_code(), 0, BioCore::Core0);
+    bio_ss.load_code(fifo_basic1_code(), 0, BioCore::Core1);
+    bio_ss.load_code(fifo_basic2_code(), 0, BioCore::Core2);
+    bio_ss.load_code(fifo_basic3_code(), 0, BioCore::Core3);
+
+    // expect no error
+    match bio_ss.verify_code(&fifo_basic0_code(), 0, BioCore::Core0) {
+        Err(BioError::CodeCheck(at)) => {
+            print!("Core 0 rbk fail at {}\r", at);
+            return 0;
+        }
+        _ => (),
+    }
+    match bio_ss.verify_code(&fifo_basic1_code(), 0, BioCore::Core1) {
+        Err(BioError::CodeCheck(at)) => {
+            print!("Core 1 rbk fail at {}\r", at);
+            return 0;
+        }
+        _ => (),
+    }
+    match bio_ss.verify_code(&fifo_basic2_code(), 0, BioCore::Core2) {
+        Err(BioError::CodeCheck(at)) => {
+            print!("Core 2 rbk fail at {}\r", at);
+            return 0;
+        }
+        _ => (),
+    }
+    match bio_ss.verify_code(&fifo_basic3_code(), 0, BioCore::Core3) {
+        Err(BioError::CodeCheck(at)) => {
+            print!("Core 3 rbk fail at {}\r", at);
+            return 0;
+        }
+        _ => (),
+    }
+
+    // expect error
+    if bio_ss.verify_code(&fifo_basic1_code(), 0, BioCore::Core0).is_ok() {
+        print!("FAIL: Core 0 passed check with false code\r");
+        return 0;
+    }
 
     // configure & run the 0th machine
     // / 16. clock
@@ -164,17 +200,10 @@ pub fn fifo_basic() {
     // start all the machines, all at once
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0xfff);
     print!("===FIFO basic PASS===\r");
+    1
 }
 #[rustfmt::skip]
-bio_code!(fifo_basic_code, FIFO_BASIC_START, FIFO_BASIC_END,
-    "j 90f",
-    "nop",
-    "j 91f",
-    "nop",
-    "j 92f",
-    "nop",
-    "j 93f",
-    "nop",
+bio_code!(fifo_basic0_code, FIFO_BASIC0_START, FIFO_BASIC0_END,
     // mach 0 code
     "90:",
     "li x2, 0xFFFF",
@@ -187,7 +216,10 @@ bio_code!(fifo_basic_code, FIFO_BASIC_START, FIFO_BASIC_END,
     "mv x19, x1",
     "mv x20, zero",
     "mv x1, x19",
-    "j 11b",
+    "j 11b"
+);
+#[rustfmt::skip]
+bio_code!(fifo_basic1_code, FIFO_BASIC1_START, FIFO_BASIC1_END,
     // mach 1 code
     "91:",
     "li x2, 0xFFFF0000",
@@ -200,12 +232,18 @@ bio_code!(fifo_basic_code, FIFO_BASIC_START, FIFO_BASIC_END,
     "mv x18, x1",
     "mv x20, zero",
     "mv x1, x18",
-    "j 21b",
+    "j 21b"
+);
+#[rustfmt::skip]
+bio_code!(fifo_basic2_code, FIFO_BASIC2_START, FIFO_BASIC2_END,
     // mach 2 code
     "92:",
     "addi x18, x18, 2", // increment the value in fifo by 2
     "mv x20, zero",
-    "j 92b",
+    "j 92b"
+);
+#[rustfmt::skip]
+bio_code!(fifo_basic3_code, FIFO_BASIC3_START, FIFO_BASIC3_END,
     // mach 3 code
     "93:",
     "li x2, 0x40000",
@@ -228,7 +266,7 @@ bio_code!(fifo_basic_code, FIFO_BASIC_START, FIFO_BASIC_END,
 //
 // GPIO outputs are run without snapping in this case, because there is just one
 // machine updating outputs and no need to do that.
-pub fn host_fifo_tests() {
+pub fn host_fifo_tests() -> usize {
     print!("Host FIFO tests\r");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
@@ -237,8 +275,8 @@ pub fn host_fifo_tests() {
     let mut bio_ss = BioSharedState::new();
     // stop all the machines, so that code can be loaded
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
-    let code = fifo_host_bitbang();
-    bio_ss.load_code(code, 0);
+    bio_ss.load_code(fifo_host0_bitbang(), 0, BioCore::Core0);
+    bio_ss.load_code(fifo_host1_bitbang(), 0, BioCore::Core1);
     // reset all the fifos
     bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0xF);
 
@@ -297,8 +335,9 @@ pub fn host_fifo_tests() {
     test_cfg.wo(utra::csrtest::WTEST, 0);
     // stop machine & load code
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
-    let code = fifo_host_bitbang_level_trig();
-    bio_ss.load_code(code, 0);
+    bio_ss.load_code(fifo_host0_bitbang_level_trig(), 0, BioCore::Core0);
+    bio_ss.load_code(fifo_host1_bitbang_level_trig(), 0, BioCore::Core1);
+    bio_ss.load_code(fifo_host2_bitbang_level_trig(), 0, BioCore::Core2);
 
     // clear all events
     bio_ss.bio.wfo(utra::bio_bdma::SFR_EVENT_CLR_SFR_EVENT_CLR, 0xFFFF_FF);
@@ -352,17 +391,17 @@ pub fn host_fifo_tests() {
     print!("stop_check {:x}\r", stop_check);
     assert!(stop_check == stop_val);
     print!("===Host FIFO PASS===\r");
+    1
 }
 #[rustfmt::skip]
-bio_code!(fifo_host_bitbang, FIFO_HOST_BITBANG_START, FIFO_HOST_BITBANG_END,
-    "j 90f",
-    "nop",
-    "j 91f",
-    "nop",
+bio_code!(fifo_host0_bitbang, FIFO_HOST0_BITBANG_START, FIFO_HOST0_BITBANG_END,
     "90:",
     "mv x21, x16",
     "mv x20, zero",
-    "j 90b",
+    "j 90b"
+);
+#[rustfmt::skip]
+bio_code!(fifo_host1_bitbang, FIFO_HOST1_BITBANG_START, FIFO_HOST1_BITBANG_END,
     "91:",
     "mv x20, zero",
     "mv x17, x21",
@@ -386,15 +425,9 @@ bio_code!(fifo_host_bitbang, FIFO_HOST_BITBANG_START, FIFO_HOST_BITBANG_END,
 //  - acks core 0 on event bit 3
 #[rustfmt::skip]
 bio_code!(
-    fifo_host_bitbang_level_trig,
-    FIFO_HOST_BITBANG_LEVEL_TRIG_START,
-    FIFO_HOST_BITBANG_LEVEL_TRIG_END,
-    "j 90f",
-    "nop",
-    "j 91f",
-    "nop",
-    "j 92f",
-    "nop",
+    fifo_host0_bitbang_level_trig,
+    FIFO_HOST0_BITBANG_LEVEL_TRIG_START,
+    FIFO_HOST0_BITBANG_LEVEL_TRIG_END,
     "90:", // machine 0
     "li x2, 0xfeedface",
     "mv x21, x2",        // init gpio to the "i'm here" sentinel
@@ -409,7 +442,13 @@ bio_code!(
     "mv x28, x4",        // set the bit that machine 2 is listening to
     "mv x3, x30",        // wait for ack that gpio was sampled
     "mv x29, x3",        // clear the trigger
-    "j 20b",
+    "j 20b"
+);
+#[rustfmt::skip]
+bio_code!(
+    fifo_host1_bitbang_level_trig,
+    FIFO_HOST1_BITBANG_LEVEL_TRIG_START,
+    FIFO_HOST1_BITBANG_LEVEL_TRIG_END,
     "91:", // machine 1
     "li x1, 0x1",        // event bit 0
     "mv x27, x1",        // set trigger mask
@@ -418,7 +457,13 @@ bio_code!(
     "and x2, x2, x1",    // mask event result
     "mv x29, x2",        // clear the event trigger
     "mv x17, x21",       // gpio in -> fifo1
-    "j 21b",
+    "j 21b"
+);
+#[rustfmt::skip]
+bio_code!(
+    fifo_host2_bitbang_level_trig,
+    FIFO_HOST2_BITBANG_LEVEL_TRIG_START,
+    FIFO_HOST2_BITBANG_LEVEL_TRIG_END,
     "92:", // machine 2
     "li x2, 0x2",        // event bit 1
     "mv x27, x2",        // set trigger mask
@@ -442,7 +487,7 @@ struct FifoLevelTestConfig {
 
 // This can be done without any code running on the machines; the host can
 // set and observe all fifo levels and triggers directly.
-pub fn fifo_level_tests() {
+pub fn fifo_level_tests() -> usize {
     print!("FIFO level comprehensive\r");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
@@ -711,10 +756,11 @@ pub fn fifo_level_tests() {
             bio_ss.bio.wo(irq_mask_reg, 0);
         }
     }
-    print!("===FIFO level comprehensive PASS===\r")
+    print!("===FIFO level comprehensive PASS===\r");
+    1
 }
 
-pub fn aclk_tests() {
+pub fn aclk_tests() -> usize {
     print!("ACLK test\r");
     // clear any prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
@@ -724,7 +770,7 @@ pub fn aclk_tests() {
     // stop all the machines, so that code can be loaded
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
     let code = aclk_code();
-    bio_ss.load_code(code, 0);
+    bio_ss.load_code(code, 0, BioCore::Core1);
 
     // configure & run the 0th machine
     bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV1, 0xA_0000);
@@ -751,23 +797,11 @@ pub fn aclk_tests() {
 
     assert!(results[6] - results[5] == 10); // related to the clock divider
     print!("===ACLK test PASS===\r");
+    1
 }
 
 #[rustfmt::skip]
 bio_code!(aclk_code, ACLK_START, ACLK_END,
-    "j 90f",
-    "nop",
-    "j 91f",
-    "nop",
-    "j 92f",
-    "nop",
-    "j 93f",
-    "nop",
-    // mach 0 code
-    "90:",
-    "j 90b",
-    // mach 1 code
-    "91:",
     "mv x17, x31",
     "mv x17, x31",
     "mv x17, x31",
@@ -777,13 +811,5 @@ bio_code!(aclk_code, ACLK_START, ACLK_END,
     "mv x20, x0",
     "mv x17, x31",
     "mv x20, x0",
-    "mv x17, x31",
-    "40:",
-    "j 40b",
-    // mach 2 code
-    "92:",
-    "j 92b",
-    // mach 3 code
-    "93:",
-    "j 93b"
+    "mv x17, x31"
 );

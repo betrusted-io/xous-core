@@ -37,7 +37,7 @@ impl<'a> BioI2C<'a> {
         bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
         let code = i2c_driver();
         print!("I2C code length: {} bytes\r", code.len());
-        bio_ss.load_code(code, 0);
+        bio_ss.load_code(code, 0, BioCore::Core0);
 
         if hs {
             // 1600kHz clock -> 400kHz toggle rate = 0x1F4_0000 @ 800MHz rate FCLK
@@ -196,14 +196,6 @@ bio_code!(
     i2c_driver,
     I2C_DRIVER_START,
     I2C_DRIVER_END,
-    "j 90f",
-    "nop",
-    "j 91f",
-    "nop",
-    "j 92f",
-    "nop",
-    "j 93f",
-    "nop",
   "90:", // machine 0 code
     "mv x1, x16",        // x1 <- initiation command
     "andi x2, x1, 1",    // x2 <- r/w bit. write if 0.
@@ -339,12 +331,5 @@ bio_code!(
     // REPORT
     "slli x8, x8, 16",   // shift NACK count into place
     "add x18, x7, x8",   // x18 <- send ACK + NACK
-    "j 90b",             // wait for next command
-    // gutter unused machines
-  "91:",
-    "j 91b",
-  "92:",
-    "j 92b",
-  "93:",
-    "j 93b"
+    "j 90b"             // wait for next command
  );
