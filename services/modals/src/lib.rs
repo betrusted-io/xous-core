@@ -484,15 +484,12 @@ impl Modals {
     ///     frequent updates. For example, instead of once every iteration of a loop, once every ten
     ///     iterations. This will improve performance of the code and reduce UI churn as well. If this is not
     ///     possible, you can add a sleep by doing something like the code below. This will reduce the rate at
-    ///     which your loop runs, as well as at which the UI updates.
-    /// ```
-    /// std::thread::sleep(std::time::Duration::from_millis(100)); 
-    /// ```
+    ///     which your loop runs, as well as at which the UI updates. Example:
+    ///     `std::thread::sleep(std::time::Duration::from_millis(100));`
+    ///
     ///   - An alternative "softer" solution is to call yield. This will cause the producer to yield its time
-    ///     slice to other processes in the OS, which can give the progress bar a chance to catch up.
-    /// ```
-    /// xous::yield_slice(); 
-    /// ```
+    ///     slice to other processes in the OS, which can give the progress bar a chance to catch up. Example:
+    ///     `xous::yield_slice();`
     ///
     /// # Example
     /// ```
