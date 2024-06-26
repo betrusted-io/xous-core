@@ -1,6 +1,5 @@
 use utralib::utra::bio_bdma::{SFR_EVENT_STATUS_SFR_EVENT_STATUS, SFR_FLEVEL_PCLK_REGFIFO_LEVEL1};
 
-use super::report_api;
 use crate::*;
 
 pub fn spi_test() -> usize {
