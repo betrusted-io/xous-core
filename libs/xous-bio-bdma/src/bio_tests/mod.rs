@@ -1,5 +1,6 @@
 pub mod arith;
 pub(crate) mod debug;
+pub mod dma;
 pub mod i2c;
 pub mod spi;
 pub mod units;
