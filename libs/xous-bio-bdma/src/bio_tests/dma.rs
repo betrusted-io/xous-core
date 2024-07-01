@@ -139,6 +139,206 @@ bio_code!(dma_basic_code, DMA_BASIC_START, DMA_BASIC_END,
     "j 20b"
 );
 
+// test byte-wide modifications
+pub fn dma_bytes() -> usize {
+    let mut passing = 0;
+    print!("DMA bytes\r");
+    // clear prior test config state
+    let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
+    test_cfg.wo(utra::csrtest::WTEST, 0);
+
+    let mut bio_ss = BioSharedState::new();
+    // stop all the machines, so that code can be loaded
+    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
+    bio_ss.load_code(dma_bytes_code(), 0, BioCore::Core0);
+
+    // These actually "don't matter" because there are no synchronization instructions in the code
+    // Everything runs at "full tilt"
+    bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x1_0000);
+    // start the machine
+    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x111);
+
+    let mut main_mem_src: [u8; 64] = [0u8; 64];
+    let mut main_mem_dst: [u8; 64] = [0u8; 64];
+    // just conjure some locations out of thin air. Yes, these are weird addresses in decimal, meant to
+    // just poke into some not page aligned location in IFRAM.
+    let ifram_src =
+        unsafe { core::slice::from_raw_parts_mut((utralib::HW_IFRAM0_MEM + 0x2468) as *mut u8, 64) };
+    let ifram_dst =
+        unsafe { core::slice::from_raw_parts_mut((utralib::HW_IFRAM1_MEM + 0x1234) as *mut u8, 64) };
+    ifram_src.fill(0);
+    ifram_dst.fill(0);
+    passing += basic_u8(&mut bio_ss, &mut main_mem_src, &mut main_mem_dst, 0x8800, "Main->main");
+
+    main_mem_src.fill(0);
+    main_mem_dst.fill(0);
+    passing += basic_u8(&mut bio_ss, ifram_src, &mut main_mem_dst, 0x8840, "ifram0->main");
+
+    ifram_src.fill(0);
+    main_mem_dst.fill(0);
+    passing += basic_u8(&mut bio_ss, &mut main_mem_src, ifram_dst, 0x8880, "Main->ifram1");
+
+    main_mem_src.fill(0);
+    ifram_dst.fill(0);
+    passing += basic_u8(&mut bio_ss, ifram_src, ifram_dst, 0x88C0, "ifram0->ifram1");
+
+    print!("DMA bytes done.\r");
+    passing
+}
+
+fn basic_u8(
+    bio_ss: &mut BioSharedState,
+    src: &mut [u8],
+    dst: &mut [u8],
+    seed: u32,
+    name: &'static str,
+) -> usize {
+    assert!(src.len() == dst.len());
+    let mut tp = TestPattern::new(Some(seed));
+    for d in src.chunks_mut(4) {
+        d.copy_from_slice(&tp.next().to_le_bytes());
+    }
+    for d in dst.chunks_mut(4) {
+        d.copy_from_slice(&tp.next().to_le_bytes());
+    }
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, src.as_ptr() as u32); // src address
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, dst.as_ptr() as u32); // dst address
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, src.len() as u32); // bytes to move
+    print!("{} copy delay\r", name);
+    cache_flush();
+    let mut pass = 1;
+    for (i, &d) in src.iter().enumerate() {
+        let rbk = unsafe { dst.as_ptr().add(i).read_volatile() };
+        if rbk != d {
+            print!("{} DMA err @{}, {:x} rbk: {:x}\r", name, i, d, rbk);
+            pass = 0;
+        }
+    }
+    pass
+}
+
+#[rustfmt::skip]
+bio_code!(dma_bytes_code, DMA_BYTES_START, DMA_BYTES_END,
+  "20:",
+    "mv a3, x18",       // src address
+    "mv a2, x17",       // dst address
+    "mv a1, x16",       // wait for # of bytes to move
+
+    "add a4, a1, a3",   // a4 <- end condition based on source address increment
+
+  "30:",
+    "lb  t0, 0(a3)",    // blocks until load responds
+    "sb  t0, 0(a2)",    // blocks until store completes
+    "addi a3, a3, 1",   // 3 cycles
+    "addi a2, a2, 1",   // 3 cycles
+    "bne  a3, a4, 30b", // 5 cycles
+    "j 20b"
+);
+
+// test half-word modifications
+pub fn dma_u16() -> usize {
+    let mut passing = 0;
+    print!("DMA u16\r");
+    // clear prior test config state
+    let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
+    test_cfg.wo(utra::csrtest::WTEST, 0);
+
+    let mut bio_ss = BioSharedState::new();
+    // stop all the machines, so that code can be loaded
+    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
+    bio_ss.load_code(dma_u16_code(), 0, BioCore::Core3);
+
+    // These actually "don't matter" because there are no synchronization instructions in the code
+    // Everything runs at "full tilt"
+    bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV3, 0x1_0000);
+    // start the machine
+    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x888);
+
+    let mut main_mem_src: [u16; 64] = [0u16; 64];
+    let mut main_mem_dst: [u16; 64] = [0u16; 64];
+    // just conjure some locations out of thin air. Yes, these are weird addresses in decimal, meant to
+    // just poke into some not page aligned location in IFRAM.
+    let ifram_src =
+        unsafe { core::slice::from_raw_parts_mut((utralib::HW_IFRAM0_MEM + 0x3452) as *mut u16, 64) };
+    let ifram_dst =
+        unsafe { core::slice::from_raw_parts_mut((utralib::HW_IFRAM1_MEM + 0x3452) as *mut u16, 64) };
+    ifram_src.fill(0);
+    ifram_dst.fill(0);
+    passing += basic_u16(&mut bio_ss, &mut main_mem_src, &mut main_mem_dst, 0x1600, "Main->main");
+
+    main_mem_src.fill(0);
+    main_mem_dst.fill(0);
+    passing += basic_u16(&mut bio_ss, ifram_src, &mut main_mem_dst, 0x1640, "ifram0->main");
+
+    ifram_src.fill(0);
+    main_mem_dst.fill(0);
+    passing += basic_u16(&mut bio_ss, &mut main_mem_src, ifram_dst, 0x1680, "Main->ifram1");
+
+    main_mem_src.fill(0);
+    ifram_dst.fill(0);
+    passing += basic_u16(&mut bio_ss, ifram_src, ifram_dst, 0x16C0, "ifram0->ifram1");
+
+    print!("DMA u16 done.\r");
+    passing
+}
+
+fn basic_u16(
+    bio_ss: &mut BioSharedState,
+    src: &mut [u16],
+    dst: &mut [u16],
+    seed: u32,
+    name: &'static str,
+) -> usize {
+    assert!(src.len() == dst.len());
+    let mut tp = TestPattern::new(Some(seed));
+    for d in src.chunks_mut(2) {
+        let w = tp.next().to_le_bytes();
+        d.copy_from_slice(&[
+            u16::from_le_bytes(w[..2].try_into().unwrap()),
+            u16::from_le_bytes(w[2..].try_into().unwrap()),
+        ]);
+    }
+    for d in dst.chunks_mut(2) {
+        let w = tp.next().to_le_bytes();
+        d.copy_from_slice(&[
+            u16::from_le_bytes(w[..2].try_into().unwrap()),
+            u16::from_le_bytes(w[2..].try_into().unwrap()),
+        ]);
+    }
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, src.as_ptr() as u32); // src address
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, dst.as_ptr() as u32); // dst address
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, (src.len() * size_of::<u16>()) as u32); // bytes to move
+    print!("{} copy delay\r", name);
+    cache_flush();
+    let mut pass = 1;
+    for (i, &d) in src.iter().enumerate() {
+        let rbk = unsafe { dst.as_ptr().add(i).read_volatile() };
+        if rbk != d {
+            print!("{} DMA err @{}, {:x} rbk: {:x}\r", name, i, d, rbk);
+            pass = 0;
+        }
+    }
+    pass
+}
+
+#[rustfmt::skip]
+bio_code!(dma_u16_code, DMA_U16_START, DMA_U16_END,
+  "20:",
+    "mv a3, x18",       // src address
+    "mv a2, x17",       // dst address
+    "mv a1, x16",       // wait for # of bytes to move
+
+    "add a4, a1, a3",   // a4 <- end condition based on source address increment
+
+  "30:",
+    "lh  t0, 0(a3)",    // blocks until load responds
+    "sh  t0, 0(a2)",    // blocks until store completes
+    "addi a3, a3, 2",   // 3 cycles
+    "addi a2, a2, 2",   // 3 cycles
+    "bne  a3, a4, 30b", // 5 cycles
+    "j 20b"
+);
+
 /// Multi-core DMA copy. More performant, but uses two cores for address generation in
 /// parallel with the copy master.
 pub fn dma_multicore() -> usize {
@@ -329,8 +529,8 @@ bio_code!(dma_coincident_code, DMA_COINCIDENT_START, DMA_COINCIDENT_END,
     "slli a1, a1, 2",   // shift end condition
     "add a4, a1, a3",   // a4 <- end condition based on source address increment
   "30:",
-    "lw  t0, 0(a3)",    // blocks until load responds
-    "sw  t0, 0(a2)",    // blocks until store completes
+    "lw  t1, 0(a3)",    // blocks until load responds
+    "sw  t1, 0(a2)",    // blocks until store completes
     "addi a3, a3, 16",  // 3 cycles
     "addi a2, a2, 16",  // 3 cycles
     "blt  a3, a4, 30b", // 5 cycles
