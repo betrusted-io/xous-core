@@ -20,11 +20,11 @@
 //! - x25 -/w  (x26 & x25) -> `1` will make corresponding gpio pin an input
 //! - x26 r/w  mask GPIO action outputs
 //!
-//! Events - operate on a shared event register. Bits [7:0] are hard-wired to FIFO
-//! level flags, configured by the host; writes to bits [7:0] are ignored.
+//! Events - operate on a shared event register. Bits [31:24] are hard-wired to FIFO
+//! level flags, configured by the host; writes to bits [31:24] are ignored.
 //! - x27 -/w  mask event sensitivity bits
-//! - x28 -/w  `1` will set the corresponding event bit. Only [31:8] are wired up.
-//! - x29 -/w  `1` will clear the corresponding event bit Only [31:8] are wired up.
+//! - x28 -/w  `1` will set the corresponding event bit. Only [23:0] are wired up.
+//! - x29 -/w  `1` will clear the corresponding event bit Only [23:0] are wired up.
 //! - x30 r/-  halt until ((x27 & events) == x27), and return unmasked `events` value
 //!
 //! Core ID & debug:

@@ -108,7 +108,7 @@ fn basic_u32(
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, src.as_ptr() as u32); // src address
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, dst.as_ptr() as u32); // dst address
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, (src.len() * size_of::<u32>()) as u32); // bytes to move
-    print!("{} copy delay\r", name);
+    while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0x1 == 0 {}
     cache_flush();
     let mut pass = 1;
     for (i, &d) in src.iter().enumerate() {
@@ -126,6 +126,7 @@ bio_code!(dma_basic_code, DMA_BASIC_START, DMA_BASIC_END,
   "20:",
     "mv a3, x18",       // src address
     "mv a2, x17",       // dst address
+    "li x29, 0x1",      // clear event done flag - just before the last parameter arrives
     "mv a1, x16",       // wait for # of bytes to move
 
     "add a4, a1, a3",   // a4 <- end condition based on source address increment
@@ -136,6 +137,7 @@ bio_code!(dma_basic_code, DMA_BASIC_START, DMA_BASIC_END,
     "addi a3, a3, 4",   // 3 cycles
     "addi a2, a2, 4",   // 3 cycles
     "bne  a3, a4, 30b", // 5 cycles
+    "li x28, 0x1",      // flip event done flag
     "j 20b"
 );
 
@@ -169,18 +171,22 @@ pub fn dma_bytes() -> usize {
     ifram_src.fill(0);
     ifram_dst.fill(0);
     passing += basic_u8(&mut bio_ss, &mut main_mem_src, &mut main_mem_dst, 0x8800, "Main->main");
+    print!("m->m\r");
 
     main_mem_src.fill(0);
     main_mem_dst.fill(0);
     passing += basic_u8(&mut bio_ss, ifram_src, &mut main_mem_dst, 0x8840, "ifram0->main");
+    print!("0->m\r");
 
     ifram_src.fill(0);
     main_mem_dst.fill(0);
     passing += basic_u8(&mut bio_ss, &mut main_mem_src, ifram_dst, 0x8880, "Main->ifram1");
+    print!("m->1\r");
 
     main_mem_src.fill(0);
     ifram_dst.fill(0);
     passing += basic_u8(&mut bio_ss, ifram_src, ifram_dst, 0x88C0, "ifram0->ifram1");
+    print!("0->1\r");
 
     print!("DMA bytes done.\r");
     passing
@@ -204,7 +210,7 @@ fn basic_u8(
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, src.as_ptr() as u32); // src address
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, dst.as_ptr() as u32); // dst address
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, src.len() as u32); // bytes to move
-    print!("{} copy delay\r", name);
+    while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0x20 == 0 {}
     cache_flush();
     let mut pass = 1;
     for (i, &d) in src.iter().enumerate() {
@@ -222,6 +228,7 @@ bio_code!(dma_bytes_code, DMA_BYTES_START, DMA_BYTES_END,
   "20:",
     "mv a3, x18",       // src address
     "mv a2, x17",       // dst address
+    "li x29, 0x20",     // clear event done flag - just before the last parameter arrives
     "mv a1, x16",       // wait for # of bytes to move
 
     "add a4, a1, a3",   // a4 <- end condition based on source address increment
@@ -232,6 +239,7 @@ bio_code!(dma_bytes_code, DMA_BYTES_START, DMA_BYTES_END,
     "addi a3, a3, 1",   // 3 cycles
     "addi a2, a2, 1",   // 3 cycles
     "bne  a3, a4, 30b", // 5 cycles
+    "li x28, 0x20",     // flip event done flag
     "j 20b"
 );
 
@@ -265,19 +273,18 @@ pub fn dma_u16() -> usize {
     ifram_src.fill(0);
     ifram_dst.fill(0);
     passing += basic_u16(&mut bio_ss, &mut main_mem_src, &mut main_mem_dst, 0x1600, "Main->main");
-
     main_mem_src.fill(0);
     main_mem_dst.fill(0);
-    passing += basic_u16(&mut bio_ss, ifram_src, &mut main_mem_dst, 0x1640, "ifram0->main");
 
+    passing += basic_u16(&mut bio_ss, ifram_src, &mut main_mem_dst, 0x1640, "ifram0->main");
     ifram_src.fill(0);
     main_mem_dst.fill(0);
-    passing += basic_u16(&mut bio_ss, &mut main_mem_src, ifram_dst, 0x1680, "Main->ifram1");
 
+    passing += basic_u16(&mut bio_ss, &mut main_mem_src, ifram_dst, 0x1680, "Main->ifram1");
     main_mem_src.fill(0);
     ifram_dst.fill(0);
-    passing += basic_u16(&mut bio_ss, ifram_src, ifram_dst, 0x16C0, "ifram0->ifram1");
 
+    passing += basic_u16(&mut bio_ss, ifram_src, ifram_dst, 0x16C0, "ifram0->ifram1");
     print!("DMA u16 done.\r");
     passing
 }
@@ -308,7 +315,7 @@ fn basic_u16(
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, src.as_ptr() as u32); // src address
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, dst.as_ptr() as u32); // dst address
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, (src.len() * size_of::<u16>()) as u32); // bytes to move
-    print!("{} copy delay\r", name);
+    while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0x00F0_0000 != 0x00A0_0000 {} // multi-bit patterns, at high end of valid range
     cache_flush();
     let mut pass = 1;
     for (i, &d) in src.iter().enumerate() {
@@ -327,7 +334,8 @@ bio_code!(dma_u16_code, DMA_U16_START, DMA_U16_END,
     "mv a3, x18",       // src address
     "mv a2, x17",       // dst address
     "mv a1, x16",       // wait for # of bytes to move
-
+    "li x29, 0xA00000", // clear event done flag - just before the last parameter arrives
+    "li x28, 0x200000", // partial flip of event done state
     "add a4, a1, a3",   // a4 <- end condition based on source address increment
 
   "30:",
@@ -336,6 +344,7 @@ bio_code!(dma_u16_code, DMA_U16_START, DMA_U16_END,
     "addi a3, a3, 2",   // 3 cycles
     "addi a2, a2, 2",   // 3 cycles
     "bne  a3, a4, 30b", // 5 cycles
+    "li x28, 0x800000", // flip event done flag
     "j 20b"
 );
 
@@ -343,7 +352,7 @@ bio_code!(dma_u16_code, DMA_U16_START, DMA_U16_END,
 /// parallel with the copy master.
 pub fn dma_multicore() -> usize {
     let mut passing = 0;
-    print!("DMA basic\r");
+    print!("DMA fast\r");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -380,7 +389,9 @@ pub fn dma_multicore() -> usize {
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, (main_mem_src.len() * size_of::<u32>()) as u32); // bytes to move
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF3, main_mem_dst.as_ptr() as u32); // dst address
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF3, (main_mem_src.len() * size_of::<u32>()) as u32); // bytes to move
-    print!("Main memory copy delay (fast loop)\r");
+    while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0xF00 != 0x500 {} // trying some creative bit patterns
+    // wait for the fifo to clear, which means all copies are done
+    while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0) != 0 {}
     cache_flush();
     let mut pass = 1;
     for (i, &d) in main_mem_src.iter().enumerate() {
@@ -414,13 +425,15 @@ bio_code!(dma_mc_copy_code, DMA_MC_COPY_START, DMA_MC_COPY_END,
 bio_code!(dma_mc_src_addr_code, DMA_MC_SRC_ADDR_START, DMA_MC_SRC_ADDR_END,
   "20:",
     "mv a0, x18",  // src address on FIFO x18
+    "li x29, 0x500", // clear done state
+    "li x28, 0x400", // partial done
     "mv a1, x18",  // # bytes to copy on FIFO x18
     "add a2, a1, a0",
   "21:",
     "mv x16, a0",
     "addi a0, a0, 4",
     "bne a0, a2, 21b",
-  "j 20b"
+    "j 20b"
 );
 
 #[rustfmt::skip]
@@ -433,7 +446,8 @@ bio_code!(dma_mc_dst_addr_code, DMA_MC_DST_ADDR_START, DMA_MC_DST_ADDR_END,
     "mv x17, a0",
     "addi a0, a0, 4",
     "bne a0, a2, 21b",
-  "j 20b"
+    "li x28, 0x500", // finish the done criteria in this core
+    "j 20b"
 );
 
 /// Attempt to fire off all four engines at once, simultaneously, for maximum bus contention
@@ -475,13 +489,16 @@ pub fn dma_coincident() -> usize {
     ifram_dst.fill(0);
 
     passing += coincident_u32(&mut bio_ss, &mut main_mem_src, &mut main_mem_dst, 0x200, "DMA coincident");
-
+    print!("m->m\r");
     // try other memory banks
     passing += coincident_u32(&mut bio_ss, ifram_src, &mut main_mem_dst, 0x300, "ifram0->main");
+    print!("0->m\r");
     passing += coincident_u32(&mut bio_ss, &mut main_mem_src, ifram_dst, 0x400, "main->ifram1");
+    print!("m->1\r");
     passing += coincident_u32(&mut bio_ss, ifram_src, ifram_dst, 0x500, "ifram0->ifram1");
+    print!("0->1\r");
 
-    print!("DMA coincident done\r");
+    print!("DMA coincident done.\r");
     passing
 }
 
@@ -503,7 +520,7 @@ fn coincident_u32(
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, src.as_ptr() as u32); // src address
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, dst.as_ptr() as u32); // dst address
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, (src.len() * size_of::<u32>()) as u32 / 4); // bytes to move
-    print!("{} copy delay\r", name);
+    while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0xF_0000 != 0xF_0000 {} // one bit per core is set on completion of bits 8:12
     cache_flush();
     let mut pass = 1;
     for (i, &d) in src.iter().enumerate() {
@@ -518,11 +535,12 @@ fn coincident_u32(
 
 #[rustfmt::skip]
 bio_code!(dma_coincident_code, DMA_COINCIDENT_START, DMA_COINCIDENT_END,
-    "srli t0, x31, 30", // extract the offset
+    "srli t0, x31, 30", // extract the core number
     "slli t0, t0, 2",   // multiply by 4
   "20:",
     "mv a3, x18",       // src address
     "mv a2, x17",       // dst address
+    "li x29, 0xF0000",    // clear the completion bits
     "mv a1, x16",       // wait for # of bytes to move / 4
     "add a3, t0, a3",   // offset by core index
     "add a2, t0, a2",
@@ -534,5 +552,9 @@ bio_code!(dma_coincident_code, DMA_COINCIDENT_START, DMA_COINCIDENT_END,
     "addi a3, a3, 16",  // 3 cycles
     "addi a2, a2, 16",  // 3 cycles
     "blt  a3, a4, 30b", // 5 cycles
+    "srli t2, x31, 30", // extract the core number
+    "addi t2, t2, 16",  // bit position to flip is 16 + core number
+    "li   t1, 1",
+    "sll  x28, t1, t2", // set the bit corresponding to the core number
     "j 20b"
 );

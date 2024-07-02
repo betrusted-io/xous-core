@@ -290,7 +290,7 @@ pub fn host_fifo_tests() -> usize {
     // invert readbacks via I/O
     test_cfg.wo(utra::csrtest::WTEST, TEST_INVERT_MASK);
 
-    // start cores 1 & 2
+    // start cores 0 & 1
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x333);
 
     // clock some values into the bitbang fifo
