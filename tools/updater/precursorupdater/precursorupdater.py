@@ -548,10 +548,13 @@ def get_with_progress(url, name='Downloading'):
     return ret
 
 def get_usb_interface(config=False, peek=None, override_csr=None, force=False):
-    dev = usb.core.find(idProduct=0x5bf0, idVendor=0x1209)
+    try:
+        dev = usb.core.find(idProduct=0x5bf0, idVendor=0x1209)
+    except usb.core.NoBackendError:
+        raise ValueError('No USB library backend available (eg Libusb, OpenUSB, etc).\nSee: https://github.com/pyusb/pyusb/blob/master/docs/faq.rst#how-do-i-fix-no-backend-available-errors')
 
     if dev is None:
-        raise ValueError('Precursor device not found')
+        raise ValueError('Precursor device not found. Please check the USB cable and ensure that `usb debug` was run in Shellchat')
 
     dev.set_configuration()
     if config:
@@ -658,8 +661,8 @@ def main():
     # initial check to see if the Precursor device is there
     try:
         (locs, pc_usb) = get_usb_interface(args.config, args.peek, args.override_csr, args.force)
-    except ValueError:
-        print("Precursor device not found. Please check the USB cable and ensure that `usb debug` was run in Shellchat")
+    except ValueError as e:
+        print(str(e))
         exit(1)
 
     if args.config:
