@@ -558,3 +558,131 @@ bio_code!(dma_coincident_code, DMA_COINCIDENT_START, DMA_COINCIDENT_END,
     "sll  x28, t1, t2", // set the bit corresponding to the core number
     "j 20b"
 );
+
+/// This test configures the irq-out lines to generate a pattern of interrupts by one core, that
+/// are then fed back into the core via the dmareq lines. This interrupt pattern is
+/// picked up by another core, and cleared. If the core is unable to read the mask bits
+/// or if the request doesn't go through, the test will fail.
+pub fn dmareq_test() -> usize {
+    const BIO_IRQ_BASE: usize = 83 + 64; // event bit where our irqs are mapped to
+    const BIO_IRQ_OFFSET: usize = 16; // subtract this offset to get the actual bit location
+
+    let mut passing = 1;
+    print!("DMA requests\r");
+    // clear prior test config state
+    let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
+    test_cfg.wo(utra::csrtest::WTEST, 0);
+
+    let mut bio_ss = BioSharedState::new();
+    // stop all the machines, so that code can be loaded
+    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
+    bio_ss.load_code(dma_request_code(), 0, BioCore::Core0);
+    bio_ss.load_code(dma_response_code(), 0, BioCore::Core1);
+
+    // make sure the events are cleared
+    bio_ss.bio.wo(utra::bio_bdma::SFR_EVENT_CLR, 0xFFFF_FFFF);
+    // map irq requests to event set lines [3:0]
+    bio_ss.bio.wo(utra::bio_bdma::SFR_IRQMASK_0, 0x1);
+    bio_ss.bio.wo(utra::bio_bdma::SFR_IRQMASK_1, 0x2);
+    bio_ss.bio.wo(utra::bio_bdma::SFR_IRQMASK_2, 0x4);
+    bio_ss.bio.wo(utra::bio_bdma::SFR_IRQMASK_3, 0x8);
+
+    bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x1_0000);
+    bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV1, 0x1_0000);
+    // start the machines
+    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x333);
+
+    // map DMA req lines corresponding to our irq lines
+    // determine what bank and bit to set
+    let bank = (BIO_IRQ_BASE - BIO_IRQ_OFFSET) / 32;
+    let bit = (BIO_IRQ_BASE - BIO_IRQ_OFFSET) - bank * 32;
+    // activate the event mapping
+    unsafe {
+        bio_ss
+            .bio
+            .base()
+            .add(utra::bio_bdma::SFR_DMAREQ_MAP_CR_EVMAP5.offset() - bank)
+            .write_volatile(0xF << bit)
+    };
+
+    let dmareq_bit = (BIO_IRQ_BASE - BIO_IRQ_OFFSET) / 8;
+    print!("bank: {} bit: {} dmareq_bit {}\r", bank, bit, dmareq_bit);
+
+    // check that our whole range maps to just one dmareq bit
+    assert!(dmareq_bit == (BIO_IRQ_BASE - BIO_IRQ_OFFSET + 4) / 8);
+    // send the sensitivity bit to the responder
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, (1 << dmareq_bit) as u32);
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, unsafe {
+        // send the register to check for the bit mask
+        bio_ss.bio.base().add(utra::bio_bdma::SFR_DMAREQ_STAT_SR_EVSTAT5.offset() - bank)
+    } as u32);
+    // send the bit offset to look for
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, bit as u32);
+
+    for i in 1..15 {
+        // send the bit pattern into the event-set via core 0
+        bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, i);
+
+        let mut timeout = 0;
+        while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL2) == 0 {
+            timeout += 1;
+            if timeout > 200 {
+                print!("Timeout hit on {}", i);
+                passing = 0;
+                break;
+            }
+        }
+        let result = bio_ss.bio.r(utra::bio_bdma::SFR_RXF2);
+        if result != i {
+            print!("Event expected {}, got {}\r", i, result);
+            passing = 0;
+        }
+    }
+
+    // unmap the irqs
+    bio_ss.bio.wo(utra::bio_bdma::SFR_IRQMASK_0, 0x0);
+    bio_ss.bio.wo(utra::bio_bdma::SFR_IRQMASK_1, 0x0);
+    bio_ss.bio.wo(utra::bio_bdma::SFR_IRQMASK_2, 0x0);
+    bio_ss.bio.wo(utra::bio_bdma::SFR_IRQMASK_3, 0x0);
+    // unmap event mapping
+    for i in 0..6 {
+        unsafe {
+            bio_ss.bio.base().add(utra::bio_bdma::SFR_DMAREQ_MAP_CR_EVMAP5.offset() - i).write_volatile(0)
+        };
+    }
+
+    print!("DMA requests done.\r");
+    passing
+}
+
+#[rustfmt::skip]
+bio_code!(dma_request_code, DMA_REQUEST_START, DMA_REQUEST_END,
+  "20:",
+    "mv x28, x16",      // reflect FIFO0 into the event-set register
+    "j 20b"
+);
+
+#[rustfmt::skip]
+bio_code!(dma_response_code, DMA_RESPONSE_START, DMA_RESPONSE_END,
+    "mv a0, x17",       // sensitivity bit
+    "mv a1, x17",       // address to check for full status
+    "mv a2, x17",       // bit shift for status
+    "mv x27, a0",       // set sensitivity to bit as arriving on FIFO1
+  "20:",
+    "mv t0, x30",       // wait till an event bit is set
+    "lw t1, 0(a1)",     // read the corresponding register that has our event bitmask
+    "srl s0, t1, a2",   // shift the register to the right so the interesting bits are at 3:0
+    "li t2, 0xF",
+    "and t1, t2, s0",   // mask the result
+    "mv x29, t1",       // clear the interrupt condition
+
+    "li t0, 0",         // wait 64 cycles for the interrupt clear condition to propagate through the system
+    "li t1, 64",
+  "21:",
+    "addi t0, t0, 1",
+    "blt t0, t1, 21b",
+
+    "mv x29, a0",       // clear the incoming event bit
+    "mv x18, s0",       // send the result back for checking
+  "j 20b"
+);
