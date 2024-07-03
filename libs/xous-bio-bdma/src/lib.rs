@@ -25,7 +25,7 @@
 //! - x27 -/w  mask event sensitivity bits
 //! - x28 -/w  `1` will set the corresponding event bit. Only [23:0] are wired up.
 //! - x29 -/w  `1` will clear the corresponding event bit Only [23:0] are wired up.
-//! - x30 r/-  halt until ((x27 & events) == x27), and return unmasked `events` value
+//! - x30 r/-  halt until ((x27 & events) != 0), and return unmasked `events` value
 //!
 //! Core ID & debug:
 //! - x31 r/-  [31:30] -> core ID; [29:0] -> cpu clocks since reset

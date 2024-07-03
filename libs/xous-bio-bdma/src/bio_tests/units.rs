@@ -760,6 +760,239 @@ pub fn fifo_level_tests() -> usize {
     1
 }
 
+#[derive(Clone, Copy)]
+struct FifoLevelTestAliasConfig {
+    tx_reg: crate::Register,
+    rx_reg: crate::Register,
+    levels: [crate::Field; 2],
+    event_masks: [u32; 2],
+    event_reg: crate::Register,
+    check_level: crate::Field,
+    csr: CSR<u32>,
+}
+// Copy of the fifo_level_tests, but using aliased FIFO endpoints for injection and control.
+pub fn fifo_alias_tests() -> usize {
+    print!("FIFO level aliases\r");
+    // clear prior test config state
+    let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
+    test_cfg.wo(utra::csrtest::WTEST, 0);
+
+    let mut bio_ss = BioSharedState::new();
+    // stop all the machines, so that code can be loaded
+    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
+    // let code = fifo_level_tests_code();
+    // bio_ss.load_code(code, 0);
+
+    // configure fifo trigger levels
+    bio_ss.bio.wfo(utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL0, 0);
+    bio_ss.bio.wfo(utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL1, 9);
+    bio_ss.bio.wfo(utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL2, 1);
+    bio_ss.bio.wfo(utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL3, 8);
+    bio_ss.bio.wfo(utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL4, 2);
+    bio_ss.bio.wfo(utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL5, 7);
+    bio_ss.bio.wfo(utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL6, 4);
+    bio_ss.bio.wfo(utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL7, 4);
+    // configure the polarities
+    bio_ss.bio.wfo(utra::bio_bdma::SFR_ETYPE_FIFO_EVENT_EQ_MASK, 0b11_00_11_11);
+    bio_ss.bio.rmwf(utra::bio_bdma::SFR_ETYPE_FIFO_EVENT_LT_MASK, 0b11_01_01_00);
+    bio_ss.bio.rmwf(utra::bio_bdma::SFR_ETYPE_FIFO_EVENT_GT_MASK, 0b10_10_10_00);
+
+    /*
+    The structure of the FIFO events is that there are two event level configurations
+    per FIFO, structured as fifo [N] gets event level [N*2, N*2+1].
+
+    Each event level could trigger on equals, less than, greater than, or any combination
+    of the three.
+     */
+    let mut fifo_test_configs: [FifoLevelTestAliasConfig; 4] = [
+        FifoLevelTestAliasConfig {
+            tx_reg: utra::bio_fifo0::SFR_TXF0,
+            rx_reg: utra::bio_fifo0::SFR_RXF0,
+            levels: [
+                utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL0,
+                utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL1,
+            ],
+            event_masks: [0x1, 0x2],
+            event_reg: utra::bio_fifo0::SFR_EVENT_STATUS,
+            check_level: utra::bio_fifo0::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0,
+            csr: CSR::new(utra::bio_fifo0::HW_BIO_FIFO0_BASE as *mut u32),
+        },
+        FifoLevelTestAliasConfig {
+            tx_reg: utra::bio_fifo1::SFR_TXF1,
+            rx_reg: utra::bio_fifo1::SFR_RXF1,
+            levels: [
+                utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL2,
+                utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL3,
+            ],
+            event_masks: [0x4, 0x8],
+            event_reg: utra::bio_fifo1::SFR_EVENT_STATUS,
+            check_level: utra::bio_fifo1::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1,
+            csr: CSR::new(utra::bio_fifo1::HW_BIO_FIFO1_BASE as *mut u32),
+        },
+        FifoLevelTestAliasConfig {
+            tx_reg: utra::bio_fifo2::SFR_TXF2,
+            rx_reg: utra::bio_fifo2::SFR_RXF2,
+            levels: [
+                utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL4,
+                utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL5,
+            ],
+            event_masks: [0x10, 0x20],
+            event_reg: utra::bio_fifo2::SFR_EVENT_STATUS,
+            check_level: utra::bio_fifo2::SFR_FLEVEL_PCLK_REGFIFO_LEVEL2,
+            csr: CSR::new(utra::bio_fifo2::HW_BIO_FIFO2_BASE as *mut u32),
+        },
+        FifoLevelTestAliasConfig {
+            tx_reg: utra::bio_fifo3::SFR_TXF3,
+            rx_reg: utra::bio_fifo3::SFR_RXF3,
+            levels: [
+                utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL6,
+                utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL7,
+            ],
+            event_masks: [0x40, 0x80],
+            event_reg: utra::bio_fifo3::SFR_EVENT_STATUS,
+            check_level: utra::bio_fifo3::SFR_FLEVEL_PCLK_REGFIFO_LEVEL3,
+            csr: CSR::new(utra::bio_fifo3::HW_BIO_FIFO3_BASE as *mut u32),
+        },
+    ];
+    const FIFO_MAX: u32 = 3; // improve runtime by shortening this test - just want to exercise registers, not all cases
+    let mut rx_checks = [0u32; FIFO_MAX as usize];
+    let mut tx_state = 0x1;
+    let irq_masks: [Register; 4] = [
+        utra::bio_bdma::SFR_IRQMASK_0,
+        utra::bio_bdma::SFR_IRQMASK_1,
+        utra::bio_bdma::SFR_IRQMASK_2,
+        utra::bio_bdma::SFR_IRQMASK_3,
+    ];
+    let irqarray18 = CSR::new(utra::irqarray18::HW_IRQARRAY18_BASE as *mut u32);
+
+    for (bank, config) in fifo_test_configs.iter_mut().enumerate() {
+        let irq_mask_reg = irq_masks[bank];
+        let irq_mask = (1 << bank) as u32;
+        print!("irq_mask {:x}\r", irq_mask);
+        // we want to check that less than, equals, and greater than triggers work individually
+        // then we want to check that lt+eq and gt+eq work together
+        // lt+gt trigger doesn't make sense, we just don't check that
+        for (&level, &mask) in config.levels.iter().zip(config.event_masks.iter()) {
+            bio_ss.bio.wo(irq_mask_reg, mask << 24);
+            // reset all the fifos
+            bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0xF);
+            for test_level in 0..FIFO_MAX {
+                print!("test_level {:x} bank {:x}\r", test_level, bank);
+                // test eq at level
+                bio_ss.bio.wfo(level, test_level);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_EQ_MASK, mask);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_LT_MASK, 0);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_GT_MASK, 0);
+                // fill
+                for check_level in 0..FIFO_MAX {
+                    let ev_check = config.csr.r(config.event_reg) >> 24;
+                    // report_api(ev_check);
+                    if check_level == test_level {
+                        assert!(ev_check & mask == mask);
+                        // report_api(irqarray18.r(utra::irqarray18::EV_STATUS));
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        // report_api(irqarray18.r(utra::irqarray18::EV_STATUS));
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                    assert!(check_level == config.csr.rf(config.check_level));
+                    config.csr.wo(config.tx_reg, tx_state);
+                    // report_api(tx_state);
+                    rx_checks[check_level as usize] = tx_state;
+                    tx_state = crate::lfsr_next_u32(tx_state);
+                }
+                // drain
+                // report_api(0xdddd_dddd);
+                for check_level in 0..FIFO_MAX {
+                    let rx = config.csr.r(config.rx_reg);
+                    // report_api(rx);
+                    assert!(rx == rx_checks[check_level as usize]);
+                    let ev_check = config.csr.r(config.event_reg) >> 24;
+                    if FIFO_MAX - check_level - 1 == test_level {
+                        assert!(ev_check & mask == mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                }
+
+                // test lt at level
+                bio_ss.bio.wfo(level, test_level);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_EQ_MASK, 0);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_LT_MASK, mask);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_GT_MASK, 0);
+                // fill
+                for check_level in 0..FIFO_MAX {
+                    let ev_check = config.csr.r(config.event_reg) >> 24;
+                    if check_level < test_level {
+                        assert!(ev_check & mask == mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                    config.csr.wo(config.tx_reg, tx_state);
+                    rx_checks[check_level as usize] = tx_state;
+                    tx_state = crate::lfsr_next_u32(tx_state);
+                }
+                // drain
+                for check_level in 0..FIFO_MAX {
+                    let rx = config.csr.r(config.rx_reg);
+                    assert!(rx == rx_checks[check_level as usize]);
+                    let ev_check = config.csr.r(config.event_reg) >> 24;
+                    if FIFO_MAX - check_level - 1 < test_level {
+                        assert!(ev_check & mask == mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                }
+
+                // test gt at level ** TEST USING MAIN BANK NOT ALIAS **
+                bio_ss.bio.wfo(level, test_level);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_EQ_MASK, 0);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_LT_MASK, 0);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_GT_MASK, mask);
+                // fill
+                for check_level in 0..FIFO_MAX {
+                    let ev_check = bio_ss.bio.r(config.event_reg) >> 24;
+                    if check_level > test_level {
+                        assert!(ev_check & mask == mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                    bio_ss.bio.wo(config.tx_reg, tx_state);
+                    rx_checks[check_level as usize] = tx_state;
+                    tx_state = crate::lfsr_next_u32(tx_state);
+                }
+                // drain
+                for check_level in 0..FIFO_MAX {
+                    let rx = bio_ss.bio.r(config.rx_reg);
+                    assert!(rx == rx_checks[check_level as usize]);
+                    let ev_check = bio_ss.bio.r(config.event_reg) >> 24;
+                    if FIFO_MAX - check_level - 1 > test_level {
+                        assert!(ev_check & mask == mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                }
+            }
+            bio_ss.bio.wo(irq_mask_reg, 0);
+
+            // other cases not covered, this focuses on aliases, not correctness of all comparison cases
+        }
+    }
+    print!("===FIFO level alias PASS===\r");
+    1
+}
+
 pub fn aclk_tests() -> usize {
     print!("ACLK test\r");
     // clear any prior test config state
@@ -812,4 +1045,110 @@ bio_code!(aclk_code, ACLK_START, ACLK_END,
     "mv x17, x31",
     "mv x20, x0",
     "mv x17, x31"
+);
+
+#[derive(Clone, Copy)]
+struct EventAliasConfig {
+    event_set: crate::Register,
+    event_clr: crate::Register,
+    event_status: crate::Register,
+    csr: CSR<u32>,
+}
+pub fn event_aliases() -> usize {
+    print!("Event aliases test\r");
+    let mut event_test_configs: [EventAliasConfig; 4] = [
+        EventAliasConfig {
+            event_set: utra::bio_fifo0::SFR_EVENT_SET,
+            event_clr: utra::bio_fifo0::SFR_EVENT_CLR,
+            event_status: utra::bio_fifo0::SFR_EVENT_STATUS,
+            csr: CSR::new(utra::bio_fifo0::HW_BIO_FIFO0_BASE as *mut u32),
+        },
+        EventAliasConfig {
+            event_set: utra::bio_fifo1::SFR_EVENT_SET,
+            event_clr: utra::bio_fifo1::SFR_EVENT_CLR,
+            event_status: utra::bio_fifo1::SFR_EVENT_STATUS,
+            csr: CSR::new(utra::bio_fifo1::HW_BIO_FIFO1_BASE as *mut u32),
+        },
+        EventAliasConfig {
+            event_set: utra::bio_fifo2::SFR_EVENT_SET,
+            event_clr: utra::bio_fifo2::SFR_EVENT_CLR,
+            event_status: utra::bio_fifo2::SFR_EVENT_STATUS,
+            csr: CSR::new(utra::bio_fifo2::HW_BIO_FIFO2_BASE as *mut u32),
+        },
+        EventAliasConfig {
+            event_set: utra::bio_fifo3::SFR_EVENT_SET,
+            event_clr: utra::bio_fifo3::SFR_EVENT_CLR,
+            event_status: utra::bio_fifo3::SFR_EVENT_STATUS,
+            csr: CSR::new(utra::bio_fifo3::HW_BIO_FIFO3_BASE as *mut u32),
+        },
+    ];
+    // stop machine & load code
+    let mut bio_ss = BioSharedState::new();
+    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
+    bio_ss.load_code(event_alias_test_helper(), 0, BioCore::Core0);
+
+    // clear all events
+    bio_ss.bio.wfo(utra::bio_bdma::SFR_EVENT_CLR_SFR_EVENT_CLR, 0xFFFF_FF);
+
+    // start core 1
+    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x111);
+    let mut tp = crate::bio_tests::dma::TestPattern::new(Some(0));
+
+    let mut passing = 1;
+    for (i, config) in event_test_configs.iter_mut().enumerate() {
+        print!("  Checking bank {}...\r", i);
+        for _ in 0..3 {
+            // clear all events
+            bio_ss.bio.wfo(utra::bio_bdma::SFR_EVENT_CLR_SFR_EVENT_CLR, 0xFFFF_FF);
+            // get a random state
+            let test = tp.next() & 0xFF_FFFF;
+            // skip tests where no bits are set in the lower byte, as "something" there is needed to trigger
+            // the test
+            if test & 0xFF == 0 {
+                continue;
+            }
+            config.csr.wo(config.event_set, test);
+            while config.csr.r(config.event_status) & 0xFF != 0 { // check status with the bank register
+                // wait for the core to have done its thing
+            }
+            let result = bio_ss.bio.r(config.event_status); // read result using the base register
+            let expected = ((test & 0xFF) << 8) | ((test & 0xFF_FF00) & !((test & 0xFF) << 16));
+            if (result & 0xFF_FFFF) != expected {
+                print!("got: {:x} expect {:x}\r", result, expected);
+                passing = 0;
+            }
+            // test clearing from host bank
+            let next = tp.next() & 0xFFFF00;
+            config.csr.wo(config.event_clr, next);
+            let result_clr = config.csr.r(config.event_status);
+            let expected_clr = result & !next;
+            if result_clr != expected_clr {
+                print!("clr got: {:x} expect {:x}\r", result_clr, expected_clr);
+                passing = 0;
+            };
+        }
+    }
+    print!("Event aliases finished\r");
+    passing
+}
+
+#[rustfmt::skip]
+bio_code!(
+    event_alias_test_helper,
+    EVENT_ALIAS_TEST_HELPER_START,
+    EVENT_ALIAS_TEST_HELPER_END,
+  "20:",
+    "li a0, 0xFF",       // event bit 1; a0 is now also event mask
+    "mv x27, a0",        // set event mask
+  "22:",
+    "mv t0, x30",        // wait for event
+    "and t1, t0, a0",    // mask event
+    "slli t1, t1, 8",    // take the event that arrived on [7:0] and set bits in [15:8] based on the event
+    "mv x28, t1",
+    "and t1, t0, a0",    // re-compute the mask because it was overwritten
+    "slli t1, t1, 16",   // ...and clear bits in [23:16] based on the event
+    "mv x29, t1",
+    "and t1, t0, a0",    // re-compute the mask because it was overwritten
+    "mv x29, t1",        // clear the incoming event bits that were bits [7:0] to signal that we're done
+  "j 22b"
 );
