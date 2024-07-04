@@ -26,6 +26,8 @@ pub fn hello_world() -> usize {
 #[rustfmt::skip]
 bio_code!(hello_world_code, HELLO_START, HELLO_END,
     "add  x1, zero, 0x10",
+    // "li   x2, 0xFFFFFFFF",  // set all pins to outputs
+    // "mv   x24, x2",
     "0:",
     "add  x1, x1, 0x1",
     "mv   x21, x1",

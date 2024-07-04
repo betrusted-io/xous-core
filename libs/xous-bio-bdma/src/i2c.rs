@@ -219,7 +219,9 @@ bio_code!(
     // setup gpios
     "mv x20, x0",        // sync to clock stream
     "or x26, x4, x5",    // set GPIO mask
-    "or x23, x4, x5",    // clear SCL/SDA pins to 0 for "output low"
+    "or x12, x4, x5",    // form bitmask in true sense
+    "xori x12, x12, -1", // invert because you need to write 0 to set outputs to low
+    "mv x23, x12",       // clear SCL/SDA pins to 0 for "output low"
     "or x25, x4, x5",    // SCL/SDA to inputs
     // setup done
     "mv x20, x0",        // sync to clock stream
