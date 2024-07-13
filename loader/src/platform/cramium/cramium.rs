@@ -780,9 +780,30 @@ pub fn early_init() {
         }
     }
 
+    let aoc_base = utralib::CSR::new(0x4006_0000 as *mut u32);
+    unsafe {
+        for i in 0..0x50 / 4 {
+            crate::println!("aoc[{:x}]: {:x}", i * 4, aoc_base.base().add(i).read_volatile());
+        }
+        let pmu_cr = aoc_base.base().add(4).read_volatile();
+        crate::println!("pmu_cr: {:x}", pmu_cr);
+        aoc_base.base().add(4).write_volatile(pmu_cr & !1);
+        crate::println!("pmu_cr upd: {:x}", aoc_base.base().add(4).read_volatile());
+    }
+    // clock_tests(&mut udma_uart);
     udma_uart.write("Press any key to continue...".as_bytes());
     getc();
     udma_uart.write(b"\n\rBooting!\n\r");
+}
+
+fn clock_tests(udma_uart: &mut cramium_hal::udma::Uart) {
+    udma_uart.write("Press a key to go to WFI...".as_bytes());
+    getc();
+    crate::println!("Entering WFI");
+    unsafe {
+        core::arch::asm!("wfi");
+    }
+    crate::println!("Exited WFI");
 }
 
 #[cfg(feature = "platform-tests")]
