@@ -36,6 +36,10 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::FidoKbd).unwrap();
                     write!(ret, "USB connected to HID (FIDO + keyboard) core").unwrap();
                 }
+                "kbd" => {
+                    self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::KbdOnly).unwrap();
+                    write!(ret, "USB connected to keyboard only core").unwrap();
+                }
                 #[cfg(feature = "mass-storage")]
                 "ms" => {
                     self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::MassStorage).unwrap();
@@ -87,7 +91,7 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     write!(ret, "USB TRNG serial sending should be stopped.").ok();
                 }
                 "send" => match self.usb_dev.get_current_core() {
-                    Ok(UsbDeviceType::FidoKbd) | Ok(UsbDeviceType::Serial) => {
+                    Ok(UsbDeviceType::FidoKbd) | Ok(UsbDeviceType::Serial) | Ok(UsbDeviceType::KbdOnly) => {
                         let mut val = String::new();
                         join_tokens(&mut val, &mut tokens);
                         match self.usb_dev.send_str(&val) {
@@ -110,10 +114,12 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     }
                     test_str.push('\n');
                     match self.usb_dev.get_current_core() {
-                        Ok(UsbDeviceType::FidoKbd) => match self.usb_dev.send_str(&test_str) {
-                            Ok(n) => write!(ret, "Sent {} test string", n).unwrap(),
-                            Err(_e) => write!(ret, "Can't send: are we connected to a host?").unwrap(),
-                        },
+                        Ok(UsbDeviceType::FidoKbd) | Ok(UsbDeviceType::KbdOnly) => {
+                            match self.usb_dev.send_str(&test_str) {
+                                Ok(n) => write!(ret, "Sent {} test string", n).unwrap(),
+                                Err(_e) => write!(ret, "Can't send: are we connected to a host?").unwrap(),
+                            }
+                        }
                         Ok(UsbDeviceType::Debug) => {
                             write!(ret, "HID core not connected: please issue 'usb hid' first").unwrap();
                         }
@@ -132,10 +138,12 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     _ => write!(ret, "Invalid response checking status").unwrap(),
                 },
                 "leds" => match self.usb_dev.get_current_core() {
-                    Ok(UsbDeviceType::FidoKbd) => match self.usb_dev.get_led_state() {
-                        Ok(leds) => write!(ret, "LEDs: {:?}", leds).unwrap(),
-                        _ => write!(ret, "Not connected to USB host or other error").unwrap(),
-                    },
+                    Ok(UsbDeviceType::FidoKbd) | Ok(UsbDeviceType::KbdOnly) => {
+                        match self.usb_dev.get_led_state() {
+                            Ok(leds) => write!(ret, "LEDs: {:?}", leds).unwrap(),
+                            _ => write!(ret, "Not connected to USB host or other error").unwrap(),
+                        }
+                    }
                     Ok(UsbDeviceType::Debug) => {
                         write!(ret, "HID core not connected: please issue 'usb hid' first").unwrap();
                     }
@@ -150,6 +158,64 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     self.usb_dev.restrict_debug_access(false).unwrap();
                     write!(ret, "USB debug port unlocked: portions of the device are readable via USB!")
                         .unwrap();
+                }
+                #[cfg(feature = "nettype")]
+                "nettype" => {
+                    use std::io::{Read, Write};
+                    use std::net::TcpStream;
+                    use std::time::Duration;
+                    if let Some(url) = tokens.next() {
+                        match url.split_once('/') {
+                            Some((host, path)) => match TcpStream::connect((host, 80)) {
+                                Ok(mut stream) => {
+                                    stream.set_read_timeout(Some(Duration::from_millis(10_000))).unwrap();
+                                    stream.set_write_timeout(Some(Duration::from_millis(10_000))).unwrap();
+                                    log::info!("sending GET request");
+                                    match write!(stream, "GET /{} HTTP/1.1\r\n", path) {
+                                        Ok(_) => log::trace!("sent GET"),
+                                        Err(e) => {
+                                            log::error!("GET err {:?}", e);
+                                            write!(ret, "Error sending GET: {:?}", e).unwrap();
+                                        }
+                                    }
+                                    write!(
+                                        stream,
+                                        "Host: {}\r\nAccept: */*\r\nUser-Agent: Precursor/0.9.16\r\n",
+                                        host
+                                    )
+                                    .expect("stream error");
+                                    write!(stream, "Connection: close\r\n").expect("stream error");
+                                    write!(stream, "\r\n").expect("stream error");
+                                    log::info!("fetching response....");
+                                    let mut buf = [0u8; 4096];
+                                    match stream.read(&mut buf) {
+                                        Ok(len) => {
+                                            let s = std::string::String::from_utf8_lossy(
+                                                &buf[..len.min(buf.len())],
+                                            );
+                                            let mut parts = s.splitn(2, "\r\n\r\n");
+                                            let _header = parts.next().unwrap_or("");
+                                            let body = parts.next().unwrap_or("");
+                                            match self.usb_dev.send_str(&body) {
+                                                Ok(n) => write!(ret, "Sent {} chars", n).unwrap(),
+                                                Err(_e) => {
+                                                    write!(ret, "Can't send: are we connected to a host?")
+                                                        .unwrap()
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            write!(ret, "Didn't get response from host: {:?}", e).unwrap()
+                                        }
+                                    }
+                                }
+                                Err(e) => write!(ret, "Couldn't connect to {}:80: {:?}", host, e).unwrap(),
+                            },
+                            _ => write!(ret, "Usage: nettype bunniefoo.com/bunnie/test.txt").unwrap(),
+                        }
+                    } else {
+                        write!(ret, "Usage: nettype bunniefoo.com/bunnie/test.txt").unwrap();
+                    }
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
