@@ -6290,7 +6290,7 @@ dependencies = [
  "defmt",
  "log",
  "utralib 0.1.24",
- "xous 0.9.62 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.63 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
