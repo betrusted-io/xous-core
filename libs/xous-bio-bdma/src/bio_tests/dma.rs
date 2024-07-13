@@ -41,9 +41,17 @@ fn cache_flush() {
 
 /// Single-core, simple bus copy between main memory and peripheral space segments
 /// Less efficient than multi-core implementation, but uses less cores
-pub fn dma_basic() -> usize {
+///
+/// The `concurrent` flag causes the CPU to do concurrent traffic during the test to
+/// exercise contention on AXI bus.
+pub fn dma_basic(concurrent: bool) -> usize {
+    const TEST_LEN: usize = 64;
     let mut passing = 0;
-    print!("DMA basic\r");
+    if !concurrent {
+        print!("DMA basic\r");
+    } else {
+        print!("DMA cpu+dma concurrent\r");
+    }
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -62,31 +70,35 @@ pub fn dma_basic() -> usize {
     // start the machine
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x111);
 
-    let mut main_mem_src: [u32; 16] = [0u32; 16];
-    let mut main_mem_dst: [u32; 16] = [0u32; 16];
+    let mut main_mem_src: [u32; TEST_LEN] = [0u32; TEST_LEN];
+    let mut main_mem_dst: [u32; TEST_LEN] = [0u32; TEST_LEN];
     // just conjure some locations out of thin air. Yes, these are weird addresses in decimal, meant to
     // just poke into some not page aligned location in IFRAM.
     let ifram_src =
-        unsafe { core::slice::from_raw_parts_mut((utralib::HW_IFRAM0_MEM + 8200) as *mut u32, 16) };
+        unsafe { core::slice::from_raw_parts_mut((utralib::HW_IFRAM0_MEM + 8200) as *mut u32, TEST_LEN) };
     let ifram_dst =
-        unsafe { core::slice::from_raw_parts_mut((utralib::HW_IFRAM1_MEM + 10000) as *mut u32, 16) };
+        unsafe { core::slice::from_raw_parts_mut((utralib::HW_IFRAM1_MEM + 10000) as *mut u32, TEST_LEN) };
     ifram_src.fill(0);
     ifram_dst.fill(0);
-    passing += basic_u32(&mut bio_ss, &mut main_mem_src, &mut main_mem_dst, 0, "Main->main");
+    passing += basic_u32(&mut bio_ss, &mut main_mem_src, &mut main_mem_dst, 0, "Main->main", concurrent);
 
     main_mem_src.fill(0);
     main_mem_dst.fill(0);
-    passing += basic_u32(&mut bio_ss, ifram_src, &mut main_mem_dst, 0x40, "ifram0->main");
+    passing += basic_u32(&mut bio_ss, ifram_src, &mut main_mem_dst, 0x40, "ifram0->main", concurrent);
 
     ifram_src.fill(0);
     main_mem_dst.fill(0);
-    passing += basic_u32(&mut bio_ss, &mut main_mem_src, ifram_dst, 0x80, "Main->ifram1");
+    passing += basic_u32(&mut bio_ss, &mut main_mem_src, ifram_dst, 0x80, "Main->ifram1", concurrent);
 
     main_mem_src.fill(0);
     ifram_dst.fill(0);
-    passing += basic_u32(&mut bio_ss, ifram_src, ifram_dst, 0xC0, "ifram0->ifram1");
+    passing += basic_u32(&mut bio_ss, ifram_src, ifram_dst, 0xC0, "ifram0->ifram1", concurrent);
 
-    print!("DMA basic done.\r");
+    if !concurrent {
+        print!("DMA basic done.\r");
+    } else {
+        print!("DMA cpu+dma concurrent done.\r");
+    }
     passing
 }
 
@@ -96,6 +108,7 @@ fn basic_u32(
     dst: &mut [u32],
     seed: u32,
     name: &'static str,
+    concurrent: bool,
 ) -> usize {
     assert!(src.len() == dst.len());
     let mut tp = TestPattern::new(Some(seed));
@@ -105,17 +118,41 @@ fn basic_u32(
     for d in dst.iter_mut() {
         *d = tp.next();
     }
+    let mut pass = 1;
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, src.as_ptr() as u32); // src address
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, dst.as_ptr() as u32); // dst address
-    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, (src.len() * size_of::<u32>()) as u32); // bytes to move
-    while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0x1 == 0 {}
-    cache_flush();
-    let mut pass = 1;
-    for (i, &d) in src.iter().enumerate() {
-        let rbk = unsafe { dst.as_ptr().add(i).read_volatile() };
-        if rbk != d {
-            print!("{} DMA err @{}, {:x} rbk: {:x}\r", name, i, d, rbk);
-            pass = 0;
+    if !concurrent {
+        bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, (src.len() * size_of::<u32>()) as u32); // bytes to move
+        while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0x1 == 0 {}
+        cache_flush();
+        for (i, &d) in src.iter().enumerate() {
+            let rbk = unsafe { dst.as_ptr().add(i).read_volatile() };
+            if rbk != d {
+                print!("{} DMA err @{}, {:x} rbk: {:x}\r", name, i, d, rbk);
+                pass = 0;
+            }
+        }
+    } else {
+        // this flushes any read data from the cache, so that the CPU copy is forced to fetch
+        // the data from memory
+        cache_flush();
+        let len = src.len();
+        // note this kicks off a copy of only the first half of the slice
+        bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, (src.len() * size_of::<u32>()) as u32 / 2);
+        // the second half of the slice is copied by the CPU, simultaneously
+        dst[len / 2..].copy_from_slice(&src[len / 2..]);
+        cache_flush();
+        // run it twice to generate more traffic
+        dst[len / 2..].copy_from_slice(&src[len / 2..]);
+        // ... and wait for DMA to finish, if it has not already
+        while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0x1 == 0 {}
+        cache_flush();
+        for (i, &d) in src.iter().enumerate() {
+            let rbk = unsafe { dst.as_ptr().add(i).read_volatile() };
+            if rbk != d {
+                print!("(c) {} DMA err @{}, {:x} rbk: {:x}\r", name, i, d, rbk);
+                pass = 0;
+            }
         }
     }
     pass

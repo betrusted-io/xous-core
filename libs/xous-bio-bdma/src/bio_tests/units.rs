@@ -25,14 +25,17 @@ pub fn hello_world() -> usize {
 }
 #[rustfmt::skip]
 bio_code!(hello_world_code, HELLO_START, HELLO_END,
-    "add  x1, zero, 0x10",
-    // "li   x2, 0xFFFFFFFF",  // set all pins to outputs
-    // "mv   x24, x2",
-    "0:",
-    "add  x1, x1, 0x1",
-    "mv   x21, x1",
+    "li    t0, 0xFFFFFFFF",  // set all pins to outputs
+    "mv    x24, t0",
+    "li    a0, 1",
+  "20:",
+    "mv    x21, a0",
+    "slli  a0, a0, 1",
+    "bne   a0, zero, 21f",
+    "li    a0, 1",           // if a0 is 0, reset its value to 1
+  "21:",
     "mv   x20, zero",
-    "j 0b",
+    "j 20b",
     "nop"
 );
 
@@ -397,6 +400,9 @@ pub fn host_fifo_tests() -> usize {
 }
 #[rustfmt::skip]
 bio_code!(fifo_host0_bitbang, FIFO_HOST0_BITBANG_START, FIFO_HOST0_BITBANG_END,
+    "li    t0, 0xFFFFFFFF",
+    "mv    x26, t0",         // ensure mask is disabled
+    "mv    x25, t0",         // set all pins to inputs
     "90:",
     "mv x21, x16",
     "mv x20, zero",
