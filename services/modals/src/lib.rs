@@ -486,13 +486,17 @@ impl Modals {
     ///     possible, you can add a sleep by doing something like the code below. This will reduce the rate at
     ///     which your loop runs, as well as at which the UI updates.
     /// ```
-    /// std::thread::sleep(std::time::Duration::from_millis(100)); 
+    /// std::thread::sleep(std::time::Duration::from_millis(100)); // This comment needed to pass formatting checks
     /// ```
     ///   - An alternative "softer" solution is to call yield. This will cause the producer to yield its time
     ///     slice to other processes in the OS, which can give the progress bar a chance to catch up.
     /// ```
-    /// xous::yield_slice(); 
+    /// xous::yield_slice(); // This comment needed to pass formatting checks
     /// ```
+    /// The comments above are necessary because rustfmt puts trailing whitespace after the code if there
+    /// isn't  a comment. We have a requirement to have no trailing whitespace *and* for code to be
+    /// auto-formatted.  So, the dummy comment is there simply to resolve the two conflicting requirements
+    /// in the face of a buggy rust format (as of 1.81).
     ///
     /// # Example
     /// ```
