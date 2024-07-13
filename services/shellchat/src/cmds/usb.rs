@@ -36,10 +36,6 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::FidoKbd).unwrap();
                     write!(ret, "USB connected to HID (FIDO + keyboard) core").unwrap();
                 }
-                "kbd" => {
-                    self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::KbdOnly).unwrap();
-                    write!(ret, "USB connected to keyboard only core").unwrap();
-                }
                 #[cfg(feature = "mass-storage")]
                 "ms" => {
                     self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::MassStorage).unwrap();
@@ -91,7 +87,7 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     write!(ret, "USB TRNG serial sending should be stopped.").ok();
                 }
                 "send" => match self.usb_dev.get_current_core() {
-                    Ok(UsbDeviceType::FidoKbd) | Ok(UsbDeviceType::Serial) | Ok(UsbDeviceType::KbdOnly) => {
+                    Ok(UsbDeviceType::FidoKbd) | Ok(UsbDeviceType::Serial) => {
                         let mut val = String::new();
                         join_tokens(&mut val, &mut tokens);
                         match self.usb_dev.send_str(&val) {
@@ -114,12 +110,10 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     }
                     test_str.push('\n');
                     match self.usb_dev.get_current_core() {
-                        Ok(UsbDeviceType::FidoKbd) | Ok(UsbDeviceType::KbdOnly) => {
-                            match self.usb_dev.send_str(&test_str) {
-                                Ok(n) => write!(ret, "Sent {} test string", n).unwrap(),
-                                Err(_e) => write!(ret, "Can't send: are we connected to a host?").unwrap(),
-                            }
-                        }
+                        Ok(UsbDeviceType::FidoKbd) => match self.usb_dev.send_str(&test_str) {
+                            Ok(n) => write!(ret, "Sent {} test string", n).unwrap(),
+                            Err(_e) => write!(ret, "Can't send: are we connected to a host?").unwrap(),
+                        },
                         Ok(UsbDeviceType::Debug) => {
                             write!(ret, "HID core not connected: please issue 'usb hid' first").unwrap();
                         }
@@ -138,12 +132,10 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     _ => write!(ret, "Invalid response checking status").unwrap(),
                 },
                 "leds" => match self.usb_dev.get_current_core() {
-                    Ok(UsbDeviceType::FidoKbd) | Ok(UsbDeviceType::KbdOnly) => {
-                        match self.usb_dev.get_led_state() {
-                            Ok(leds) => write!(ret, "LEDs: {:?}", leds).unwrap(),
-                            _ => write!(ret, "Not connected to USB host or other error").unwrap(),
-                        }
-                    }
+                    Ok(UsbDeviceType::FidoKbd) => match self.usb_dev.get_led_state() {
+                        Ok(leds) => write!(ret, "LEDs: {:?}", leds).unwrap(),
+                        _ => write!(ret, "Not connected to USB host or other error").unwrap(),
+                    },
                     Ok(UsbDeviceType::Debug) => {
                         write!(ret, "HID core not connected: please issue 'usb hid' first").unwrap();
                     }
