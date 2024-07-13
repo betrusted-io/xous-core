@@ -13,7 +13,7 @@ utralib = { version = "0.1.24", default-features = false, features = [
 ] }
 
 [target.'cfg(target_os = "xous")'.dependencies]
-xous = "0.9.62"
+xous = "0.9.63"
 
 [features]
 cramium-soc = ["utralib/cramium-soc"]
