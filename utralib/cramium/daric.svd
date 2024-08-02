@@ -14132,6 +14132,20 @@ soc/candidate/pio/rp_pio.sv]]></description>
                             <lsb>5</lsb>
                             <description><![CDATA[snap_input_to_quantum read/write control register]]></description>
                         </field>
+                        <field>
+                            <name>disable_filter_peri</name>
+                            <msb>6</msb>
+                            <bitRange>[6:6]</bitRange>
+                            <lsb>6</lsb>
+                            <description><![CDATA[disable_filter_peri read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>disable_filter_mem</name>
+                            <msb>7</msb>
+                            <bitRange>[7:7]</bitRange>
+                            <lsb>7</lsb>
+                            <description><![CDATA[disable_filter_mem read/write control register]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
@@ -14891,6 +14905,38 @@ soc/candidate/pio/rp_pio.sv]]></description>
                     </fields>
                 </register>
                 <register>
+                    <name>SFR_MEM_GUTTER</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00a0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_mem_gutter</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_mem_gutter read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_PERI_GUTTER</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00a4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_peri_gutter</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_peri_gutter read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>SFR_DMAREQ_MAP_CR_EVMAP0</name>
                     <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x00b0</addressOffset>
@@ -15082,10 +15128,138 @@ soc/candidate/pio/rp_pio.sv]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>SFR_FILTER_BASE_0</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00e0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_base</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_base read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BOUNDS_0</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00e4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_bounds</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_bounds read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BASE_1</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00e8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_base</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_base read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BOUNDS_1</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00ec</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_bounds</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_bounds read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BASE_2</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00f0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_base</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_base read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BOUNDS_2</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00f4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_bounds</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_bounds read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BASE_3</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00f8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_base</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_base read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BOUNDS_3</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00fc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_bounds</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_bounds read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0xe0</size>
+                <size>0x100</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>

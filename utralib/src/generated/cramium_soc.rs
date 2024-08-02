@@ -4719,7 +4719,7 @@ pub mod utra {
     }
 
     pub mod bio_bdma {
-        pub const BIO_BDMA_NUMREGS: usize = 50;
+        pub const BIO_BDMA_NUMREGS: usize = 60;
 
         pub const SFR_CTRL: crate::Register = crate::Register::new(0, 0xfff);
         pub const SFR_CTRL_EN: crate::Field = crate::Field::new(4, 0, SFR_CTRL);
@@ -4731,11 +4731,13 @@ pub mod utra {
         pub const SFR_CFGINFO_CONSTANT1: crate::Field = crate::Field::new(8, 8, SFR_CFGINFO);
         pub const SFR_CFGINFO_CONSTANT2: crate::Field = crate::Field::new(16, 16, SFR_CFGINFO);
 
-        pub const SFR_CONFIG: crate::Register = crate::Register::new(2, 0x3f);
+        pub const SFR_CONFIG: crate::Register = crate::Register::new(2, 0xff);
         pub const SFR_CONFIG_SNAP_OUTPUT_TO_WHICH: crate::Field = crate::Field::new(2, 0, SFR_CONFIG);
         pub const SFR_CONFIG_SNAP_OUTPUT_TO_QUANTUM: crate::Field = crate::Field::new(1, 2, SFR_CONFIG);
         pub const SFR_CONFIG_SNAP_INPUT_TO_WHICH: crate::Field = crate::Field::new(2, 3, SFR_CONFIG);
         pub const SFR_CONFIG_SNAP_INPUT_TO_QUANTUM: crate::Field = crate::Field::new(1, 5, SFR_CONFIG);
+        pub const SFR_CONFIG_DISABLE_FILTER_PERI: crate::Field = crate::Field::new(1, 6, SFR_CONFIG);
+        pub const SFR_CONFIG_DISABLE_FILTER_MEM: crate::Field = crate::Field::new(1, 7, SFR_CONFIG);
 
         pub const SFR_FLEVEL: crate::Register = crate::Register::new(3, 0xffff);
         pub const SFR_FLEVEL_PCLK_REGFIFO_LEVEL0: crate::Field = crate::Field::new(4, 0, SFR_FLEVEL);
@@ -4870,6 +4872,12 @@ pub mod utra {
         pub const SFR_DBG3_DBG_PC: crate::Field = crate::Field::new(1, 0, SFR_DBG3);
         pub const SFR_DBG3_TRAP: crate::Field = crate::Field::new(1, 1, SFR_DBG3);
 
+        pub const SFR_MEM_GUTTER: crate::Register = crate::Register::new(40, 0xfffff);
+        pub const SFR_MEM_GUTTER_SFR_MEM_GUTTER: crate::Field = crate::Field::new(20, 0, SFR_MEM_GUTTER);
+
+        pub const SFR_PERI_GUTTER: crate::Register = crate::Register::new(41, 0xfffff);
+        pub const SFR_PERI_GUTTER_SFR_PERI_GUTTER: crate::Field = crate::Field::new(20, 0, SFR_PERI_GUTTER);
+
         pub const SFR_DMAREQ_MAP_CR_EVMAP0: crate::Register = crate::Register::new(44, 0xffffffff);
         pub const SFR_DMAREQ_MAP_CR_EVMAP0_CR_EVMAP0: crate::Field = crate::Field::new(32, 0, SFR_DMAREQ_MAP_CR_EVMAP0);
 
@@ -4905,6 +4913,30 @@ pub mod utra {
 
         pub const SFR_DMAREQ_STAT_SR_EVSTAT5: crate::Register = crate::Register::new(55, 0xffffffff);
         pub const SFR_DMAREQ_STAT_SR_EVSTAT5_SR_EVSTAT5: crate::Field = crate::Field::new(32, 0, SFR_DMAREQ_STAT_SR_EVSTAT5);
+
+        pub const SFR_FILTER_BASE_0: crate::Register = crate::Register::new(56, 0xfffff);
+        pub const SFR_FILTER_BASE_0_FILTER_BASE: crate::Field = crate::Field::new(20, 0, SFR_FILTER_BASE_0);
+
+        pub const SFR_FILTER_BOUNDS_0: crate::Register = crate::Register::new(57, 0xfffff);
+        pub const SFR_FILTER_BOUNDS_0_FILTER_BOUNDS: crate::Field = crate::Field::new(20, 0, SFR_FILTER_BOUNDS_0);
+
+        pub const SFR_FILTER_BASE_1: crate::Register = crate::Register::new(58, 0xfffff);
+        pub const SFR_FILTER_BASE_1_FILTER_BASE: crate::Field = crate::Field::new(20, 0, SFR_FILTER_BASE_1);
+
+        pub const SFR_FILTER_BOUNDS_1: crate::Register = crate::Register::new(59, 0xfffff);
+        pub const SFR_FILTER_BOUNDS_1_FILTER_BOUNDS: crate::Field = crate::Field::new(20, 0, SFR_FILTER_BOUNDS_1);
+
+        pub const SFR_FILTER_BASE_2: crate::Register = crate::Register::new(60, 0xfffff);
+        pub const SFR_FILTER_BASE_2_FILTER_BASE: crate::Field = crate::Field::new(20, 0, SFR_FILTER_BASE_2);
+
+        pub const SFR_FILTER_BOUNDS_2: crate::Register = crate::Register::new(61, 0xfffff);
+        pub const SFR_FILTER_BOUNDS_2_FILTER_BOUNDS: crate::Field = crate::Field::new(20, 0, SFR_FILTER_BOUNDS_2);
+
+        pub const SFR_FILTER_BASE_3: crate::Register = crate::Register::new(62, 0xfffff);
+        pub const SFR_FILTER_BASE_3_FILTER_BASE: crate::Field = crate::Field::new(20, 0, SFR_FILTER_BASE_3);
+
+        pub const SFR_FILTER_BOUNDS_3: crate::Register = crate::Register::new(63, 0xfffff);
+        pub const SFR_FILTER_BOUNDS_3_FILTER_BOUNDS: crate::Field = crate::Field::new(20, 0, SFR_FILTER_BOUNDS_3);
 
         pub const HW_BIO_BDMA_BASE: usize = 0x50124000;
     }
@@ -19287,6 +19319,16 @@ mod tests {
         let mut baz = bio_bdma_csr.zf(utra::bio_bdma::SFR_CONFIG_SNAP_INPUT_TO_QUANTUM, bar);
         baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_CONFIG_SNAP_INPUT_TO_QUANTUM, 1);
         bio_bdma_csr.wfo(utra::bio_bdma::SFR_CONFIG_SNAP_INPUT_TO_QUANTUM, baz);
+        let bar = bio_bdma_csr.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI);
+        bio_bdma_csr.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI, bar);
+        let mut baz = bio_bdma_csr.zf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI, bar);
+        baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI, 1);
+        bio_bdma_csr.wfo(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI, baz);
+        let bar = bio_bdma_csr.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM);
+        bio_bdma_csr.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM, bar);
+        let mut baz = bio_bdma_csr.zf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM, bar);
+        baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM, 1);
+        bio_bdma_csr.wfo(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM, baz);
 
         let foo = bio_bdma_csr.r(utra::bio_bdma::SFR_FLEVEL);
         bio_bdma_csr.wo(utra::bio_bdma::SFR_FLEVEL, foo);
@@ -19708,6 +19750,22 @@ mod tests {
         baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_DBG3_TRAP, 1);
         bio_bdma_csr.wfo(utra::bio_bdma::SFR_DBG3_TRAP, baz);
 
+        let foo = bio_bdma_csr.r(utra::bio_bdma::SFR_MEM_GUTTER);
+        bio_bdma_csr.wo(utra::bio_bdma::SFR_MEM_GUTTER, foo);
+        let bar = bio_bdma_csr.rf(utra::bio_bdma::SFR_MEM_GUTTER_SFR_MEM_GUTTER);
+        bio_bdma_csr.rmwf(utra::bio_bdma::SFR_MEM_GUTTER_SFR_MEM_GUTTER, bar);
+        let mut baz = bio_bdma_csr.zf(utra::bio_bdma::SFR_MEM_GUTTER_SFR_MEM_GUTTER, bar);
+        baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_MEM_GUTTER_SFR_MEM_GUTTER, 1);
+        bio_bdma_csr.wfo(utra::bio_bdma::SFR_MEM_GUTTER_SFR_MEM_GUTTER, baz);
+
+        let foo = bio_bdma_csr.r(utra::bio_bdma::SFR_PERI_GUTTER);
+        bio_bdma_csr.wo(utra::bio_bdma::SFR_PERI_GUTTER, foo);
+        let bar = bio_bdma_csr.rf(utra::bio_bdma::SFR_PERI_GUTTER_SFR_PERI_GUTTER);
+        bio_bdma_csr.rmwf(utra::bio_bdma::SFR_PERI_GUTTER_SFR_PERI_GUTTER, bar);
+        let mut baz = bio_bdma_csr.zf(utra::bio_bdma::SFR_PERI_GUTTER_SFR_PERI_GUTTER, bar);
+        baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_PERI_GUTTER_SFR_PERI_GUTTER, 1);
+        bio_bdma_csr.wfo(utra::bio_bdma::SFR_PERI_GUTTER_SFR_PERI_GUTTER, baz);
+
         let foo = bio_bdma_csr.r(utra::bio_bdma::SFR_DMAREQ_MAP_CR_EVMAP0);
         bio_bdma_csr.wo(utra::bio_bdma::SFR_DMAREQ_MAP_CR_EVMAP0, foo);
         let bar = bio_bdma_csr.rf(utra::bio_bdma::SFR_DMAREQ_MAP_CR_EVMAP0_CR_EVMAP0);
@@ -19803,6 +19861,70 @@ mod tests {
         let mut baz = bio_bdma_csr.zf(utra::bio_bdma::SFR_DMAREQ_STAT_SR_EVSTAT5_SR_EVSTAT5, bar);
         baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_DMAREQ_STAT_SR_EVSTAT5_SR_EVSTAT5, 1);
         bio_bdma_csr.wfo(utra::bio_bdma::SFR_DMAREQ_STAT_SR_EVSTAT5_SR_EVSTAT5, baz);
+
+        let foo = bio_bdma_csr.r(utra::bio_bdma::SFR_FILTER_BASE_0);
+        bio_bdma_csr.wo(utra::bio_bdma::SFR_FILTER_BASE_0, foo);
+        let bar = bio_bdma_csr.rf(utra::bio_bdma::SFR_FILTER_BASE_0_FILTER_BASE);
+        bio_bdma_csr.rmwf(utra::bio_bdma::SFR_FILTER_BASE_0_FILTER_BASE, bar);
+        let mut baz = bio_bdma_csr.zf(utra::bio_bdma::SFR_FILTER_BASE_0_FILTER_BASE, bar);
+        baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_FILTER_BASE_0_FILTER_BASE, 1);
+        bio_bdma_csr.wfo(utra::bio_bdma::SFR_FILTER_BASE_0_FILTER_BASE, baz);
+
+        let foo = bio_bdma_csr.r(utra::bio_bdma::SFR_FILTER_BOUNDS_0);
+        bio_bdma_csr.wo(utra::bio_bdma::SFR_FILTER_BOUNDS_0, foo);
+        let bar = bio_bdma_csr.rf(utra::bio_bdma::SFR_FILTER_BOUNDS_0_FILTER_BOUNDS);
+        bio_bdma_csr.rmwf(utra::bio_bdma::SFR_FILTER_BOUNDS_0_FILTER_BOUNDS, bar);
+        let mut baz = bio_bdma_csr.zf(utra::bio_bdma::SFR_FILTER_BOUNDS_0_FILTER_BOUNDS, bar);
+        baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_FILTER_BOUNDS_0_FILTER_BOUNDS, 1);
+        bio_bdma_csr.wfo(utra::bio_bdma::SFR_FILTER_BOUNDS_0_FILTER_BOUNDS, baz);
+
+        let foo = bio_bdma_csr.r(utra::bio_bdma::SFR_FILTER_BASE_1);
+        bio_bdma_csr.wo(utra::bio_bdma::SFR_FILTER_BASE_1, foo);
+        let bar = bio_bdma_csr.rf(utra::bio_bdma::SFR_FILTER_BASE_1_FILTER_BASE);
+        bio_bdma_csr.rmwf(utra::bio_bdma::SFR_FILTER_BASE_1_FILTER_BASE, bar);
+        let mut baz = bio_bdma_csr.zf(utra::bio_bdma::SFR_FILTER_BASE_1_FILTER_BASE, bar);
+        baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_FILTER_BASE_1_FILTER_BASE, 1);
+        bio_bdma_csr.wfo(utra::bio_bdma::SFR_FILTER_BASE_1_FILTER_BASE, baz);
+
+        let foo = bio_bdma_csr.r(utra::bio_bdma::SFR_FILTER_BOUNDS_1);
+        bio_bdma_csr.wo(utra::bio_bdma::SFR_FILTER_BOUNDS_1, foo);
+        let bar = bio_bdma_csr.rf(utra::bio_bdma::SFR_FILTER_BOUNDS_1_FILTER_BOUNDS);
+        bio_bdma_csr.rmwf(utra::bio_bdma::SFR_FILTER_BOUNDS_1_FILTER_BOUNDS, bar);
+        let mut baz = bio_bdma_csr.zf(utra::bio_bdma::SFR_FILTER_BOUNDS_1_FILTER_BOUNDS, bar);
+        baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_FILTER_BOUNDS_1_FILTER_BOUNDS, 1);
+        bio_bdma_csr.wfo(utra::bio_bdma::SFR_FILTER_BOUNDS_1_FILTER_BOUNDS, baz);
+
+        let foo = bio_bdma_csr.r(utra::bio_bdma::SFR_FILTER_BASE_2);
+        bio_bdma_csr.wo(utra::bio_bdma::SFR_FILTER_BASE_2, foo);
+        let bar = bio_bdma_csr.rf(utra::bio_bdma::SFR_FILTER_BASE_2_FILTER_BASE);
+        bio_bdma_csr.rmwf(utra::bio_bdma::SFR_FILTER_BASE_2_FILTER_BASE, bar);
+        let mut baz = bio_bdma_csr.zf(utra::bio_bdma::SFR_FILTER_BASE_2_FILTER_BASE, bar);
+        baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_FILTER_BASE_2_FILTER_BASE, 1);
+        bio_bdma_csr.wfo(utra::bio_bdma::SFR_FILTER_BASE_2_FILTER_BASE, baz);
+
+        let foo = bio_bdma_csr.r(utra::bio_bdma::SFR_FILTER_BOUNDS_2);
+        bio_bdma_csr.wo(utra::bio_bdma::SFR_FILTER_BOUNDS_2, foo);
+        let bar = bio_bdma_csr.rf(utra::bio_bdma::SFR_FILTER_BOUNDS_2_FILTER_BOUNDS);
+        bio_bdma_csr.rmwf(utra::bio_bdma::SFR_FILTER_BOUNDS_2_FILTER_BOUNDS, bar);
+        let mut baz = bio_bdma_csr.zf(utra::bio_bdma::SFR_FILTER_BOUNDS_2_FILTER_BOUNDS, bar);
+        baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_FILTER_BOUNDS_2_FILTER_BOUNDS, 1);
+        bio_bdma_csr.wfo(utra::bio_bdma::SFR_FILTER_BOUNDS_2_FILTER_BOUNDS, baz);
+
+        let foo = bio_bdma_csr.r(utra::bio_bdma::SFR_FILTER_BASE_3);
+        bio_bdma_csr.wo(utra::bio_bdma::SFR_FILTER_BASE_3, foo);
+        let bar = bio_bdma_csr.rf(utra::bio_bdma::SFR_FILTER_BASE_3_FILTER_BASE);
+        bio_bdma_csr.rmwf(utra::bio_bdma::SFR_FILTER_BASE_3_FILTER_BASE, bar);
+        let mut baz = bio_bdma_csr.zf(utra::bio_bdma::SFR_FILTER_BASE_3_FILTER_BASE, bar);
+        baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_FILTER_BASE_3_FILTER_BASE, 1);
+        bio_bdma_csr.wfo(utra::bio_bdma::SFR_FILTER_BASE_3_FILTER_BASE, baz);
+
+        let foo = bio_bdma_csr.r(utra::bio_bdma::SFR_FILTER_BOUNDS_3);
+        bio_bdma_csr.wo(utra::bio_bdma::SFR_FILTER_BOUNDS_3, foo);
+        let bar = bio_bdma_csr.rf(utra::bio_bdma::SFR_FILTER_BOUNDS_3_FILTER_BOUNDS);
+        bio_bdma_csr.rmwf(utra::bio_bdma::SFR_FILTER_BOUNDS_3_FILTER_BOUNDS, bar);
+        let mut baz = bio_bdma_csr.zf(utra::bio_bdma::SFR_FILTER_BOUNDS_3_FILTER_BOUNDS, bar);
+        baz |= bio_bdma_csr.ms(utra::bio_bdma::SFR_FILTER_BOUNDS_3_FILTER_BOUNDS, 1);
+        bio_bdma_csr.wfo(utra::bio_bdma::SFR_FILTER_BOUNDS_3_FILTER_BOUNDS, baz);
   }
 
     #[test]
