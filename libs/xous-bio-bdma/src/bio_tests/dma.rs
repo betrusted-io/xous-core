@@ -1,5 +1,7 @@
 use core::mem::size_of;
 
+use utra::bio_bdma::SFR_CFGINFO;
+
 use crate::*;
 
 pub struct TestPattern {
@@ -36,6 +38,136 @@ fn cache_flush() {
         "nop",
         "nop",
     );
+    }
+}
+
+pub fn dma_filter_off() {
+    let mut bio_ss = BioSharedState::new();
+    bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM, 1);
+    bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI, 1);
+}
+
+pub fn filter_test() -> usize {
+    print!("==Filter test==\r");
+    let mut passing = true;
+    use utralib::generated::HW_SRAM_MEM as RAM_BASE;
+    use utralib::generated::HW_SRAM_MEM_LEN as RAM_SIZE;
+
+    let mut bio_ss = BioSharedState::new();
+    // enable the filters
+    bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM, 0);
+    bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI, 0);
+
+    // "standard filter" setup
+    // the gutter for memory is the highest location of RAM
+    // the gutter for peripherals is the reporting test register
+    bio_ss.bio.wo(utra::bio_bdma::SFR_MEM_GUTTER, RAM_BASE as u32 + RAM_SIZE as u32 - 4);
+    bio_ss.bio.wo(utra::bio_bdma::SFR_PERI_GUTTER, utralib::HW_NULL_MEM as u32);
+    // allow access to RAM. ROM is implicitly denied since no access is created for it
+    bio_ss.bio.wo(utra::bio_bdma::SFR_FILTER_BASE_0, (RAM_BASE as u32) >> 12);
+    bio_ss.bio.wo(utra::bio_bdma::SFR_FILTER_BOUNDS_0, (RAM_SIZE as u32) >> 12);
+
+    // allow access from base of peripheral region to the edge of the BIO_BDMA config registers
+    bio_ss.bio.wo(utra::bio_bdma::SFR_FILTER_BASE_1, 0x4000_0000 >> 12);
+    bio_ss.bio.wo(utra::bio_bdma::SFR_FILTER_BOUNDS_1, (HW_BIO_BDMA_BASE as u32 - 0x4000_0000) >> 12);
+    // allow access from after BIO_BDMA config registers up to end of peripheral space. The next
+    // allowable bank after BIO_BDMA is HW_IOX_BASE so use that as the base for computations
+    bio_ss.bio.wo(utra::bio_bdma::SFR_FILTER_BASE_2, (HW_IOX_BASE as u32) >> 12);
+    bio_ss.bio.wo(utra::bio_bdma::SFR_FILTER_BOUNDS_2, (0x6000_0000 - HW_IOX_BASE as u32) >> 12);
+
+    // with the filters so set, test some transactions that "should" pass
+    if dma_basic(false) != 4 {
+        passing = false;
+        print!("DMA Filter: allowed transactions are incorrectly blocked");
+    };
+
+    // with the filters so set, test transaction that "should" fail:
+    // *** increments 3 ret values total
+    //   - access to the BIO_BDMA registers: try to disable the filters.
+    print!("attempt to violate peri filter\r");
+    cache_flush();
+    let naughty_dma_ptr: &mut [u32] = unsafe {
+        core::slice::from_raw_parts_mut(
+            (HW_BIO_BDMA_BASE + utra::bio_bdma::SFR_CONFIG.offset() * size_of::<u32>()) as *mut u32,
+            1,
+        )
+    };
+    // this hard-coded value would disable the filters
+    let target = [0xC0u32; 1];
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, target.as_ptr() as u32); // src address
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, naughty_dma_ptr.as_ptr() as u32); // dst address
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, 4); // initiate a single transfer
+    while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0x1 == 0 {}
+    cache_flush();
+    // check that the values did not change
+    if bio_ss.bio.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM) != 0 {
+        passing = false;
+        print!("peri range filter FAIL\r");
+    }
+    if bio_ss.bio.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI) != 0 {
+        passing = false;
+        print!("peri range filter FAIL\r");
+    }
+    // attempt to read the config word
+    bio_ss.bio.wo(
+        utra::bio_bdma::SFR_TXF2,
+        (utra::bio_bdma::HW_BIO_BDMA_BASE + SFR_CFGINFO.offset() * size_of::<u32>()) as u32,
+    ); // src address
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, target.as_ptr() as u32); // dst address
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, 4); // initiate a single transfer
+    while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0x1 == 0 {}
+    cache_flush();
+    if target[0] != 0x0 {
+        passing = false;
+        print!("peri range read filter FAIL\r")
+    }
+    print!("peri violation test done\r");
+
+    //   - access to ROM area
+    // *** increments 16 ret values total
+    print!("attempt to violate mem filter\r");
+    let val = [0xdead_beef; 1];
+    // stick a value in the gutter by writing to the ROM
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, val.as_ptr() as u32); // src address
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, 0x6000_0000); // dst address
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, 4); // initiate a single transfer
+    while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0x1 == 0 {}
+    cache_flush();
+
+    // attempt a read from the ROM area
+    let mut read_buf = [0u32; 16];
+    // there "should" be a signature block here
+    let read_src: &[u32] = unsafe { core::slice::from_raw_parts(0x6000_0000 as *const u32, 16) };
+    // confirm that our read source data isn't null
+    let mut is_null = true;
+    for d in read_src.iter() {
+        if *d != 0 {
+            is_null = false;
+            break;
+        }
+    }
+    assert!(!is_null, "test data range in ROM is bad (all nulls), pick a new one");
+    print!("initiate\r");
+    // now do the read; the resulting buffer should be filled with the gutter value
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, 0x6000_0000); // src address
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, read_buf.as_mut_ptr() as u32); // dst address
+    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, 4 * read_src.len() as u32); // initiate the transfer
+    while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0x1 == 0 {}
+    cache_flush();
+    print!("check\r");
+    for (i, d) in read_buf.iter().enumerate() {
+        if *d != val[0] {
+            print!("mem filter test fail. Expected {:x}, got {:x} at {}", val[0], *d, i);
+            passing = false;
+        }
+    }
+    print!("attempt to violate mem filter done\r");
+    if passing {
+        print!("==Filter test PASS==\n");
+        1
+    } else {
+        print!("==Filter test FAIL==\n");
+        0
     }
 }
 
@@ -111,6 +243,7 @@ fn basic_u32(
     concurrent: bool,
 ) -> usize {
     assert!(src.len() == dst.len());
+    print!("  - {}\r", name);
     let mut tp = TestPattern::new(Some(seed));
     for d in src.iter_mut() {
         *d = tp.next();
