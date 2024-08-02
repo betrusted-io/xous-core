@@ -188,6 +188,12 @@ pub fn early_init() {
     crate::println!("Baud freq is {} Hz, baudrate is {}", freq, baudrate);
     udma_uart.set_baud(baudrate, freq);
 
+    // these tests aren't safe, but we have to run them nonetheless
+    #[cfg(feature = "clock-tests")]
+    unsafe {
+        clock_tests(&mut udma_uart);
+    }
+
     // Setup some global control registers that will allow the TRNG to operate once the kernel is
     // booted. This is done so the kernel doesn't have to exclusively have rights to the SCE global
     // registers just for this purpose.
@@ -780,9 +786,82 @@ pub fn early_init() {
         }
     }
 
+    let aoc_base = utralib::CSR::new(0x4006_0000 as *mut u32);
+    unsafe {
+        for i in 0..0x50 / 4 {
+            crate::println!("aoc[{:x}]: {:x}", i * 4, aoc_base.base().add(i).read_volatile());
+        }
+        let pmu_cr = aoc_base.base().add(4).read_volatile();
+        crate::println!("pmu_cr: {:x}", pmu_cr);
+        aoc_base.base().add(4).write_volatile(pmu_cr & !1);
+        crate::println!("pmu_cr upd: {:x}", aoc_base.base().add(4).read_volatile());
+    }
     udma_uart.write("Press any key to continue...".as_bytes());
     getc();
     udma_uart.write(b"\n\rBooting!\n\r");
+}
+
+#[cfg(feature = "clock-tests")]
+unsafe fn clock_tests(udma_uart: &mut cramium_hal::udma::Uart) {
+    // this test hangs, because we don't have an interrupt waker to leave WFI at this point
+    if false {
+        udma_uart.write("\n\rPress a key to go to WFI...".as_bytes());
+        getc();
+        crate::println!("Entering WFI");
+        unsafe {
+            core::arch::asm!("wfi");
+        }
+        crate::println!("Exited WFI");
+    }
+
+    use utra::sysctrl;
+    let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
+
+    // switch to osc-only mode
+    if true {
+        crate::println!("Press a key to go to OSC-only...");
+        getc();
+        daric_cgu.add(sysctrl::SFR_CGUSEL1.offset()).write_volatile(1); // 0: RC, 1: XTAL
+        daric_cgu.add(sysctrl::SFR_CGUFSCR.offset()).write_volatile(48); // external crystal is 48MHz
+        daric_cgu.add(sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
+
+        // switch to OSC
+        daric_cgu.add(sysctrl::SFR_CGUSEL0.offset()).write_volatile(0); // clktop sel, 0:clksys, 1:clkpll0
+        daric_cgu.add(sysctrl::SFR_CGUSET.offset()).write_volatile(0x32); // commit
+
+        crate::println!("OSC-only now. Press any key to turn off PLL...");
+        daric_cgu.add(sysctrl::SFR_IPCEN.offset()).write_volatile(0);
+        daric_cgu.add(sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x32); // commit, must write 32
+        getc();
+        crate::println!("PLL off");
+        getc();
+        crate::println!("Dividers down");
+        // conservative dividers
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x7f1f);
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x7f1f);
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x3f1f);
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x1f1f);
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x0f1f);
+        // ungate all clocks
+        daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0x1);
+        daric_cgu.add(utra::sysctrl::SFR_HCLKGR.offset()).write_volatile(0x0);
+        daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0x0);
+        daric_cgu.add(utra::sysctrl::SFR_PCLKGR.offset()).write_volatile(0x0);
+        // commit clocks
+        daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
+        getc();
+    }
+
+    if false {
+        crate::println!("Press a key to lower clock from 800MHz -> 400MHz...");
+        getc();
+        init_clock_asic(400_000_000);
+        crate::println!("Press a key to lower clock from 400MHz -> 200MHz...");
+        getc();
+        init_clock_asic(200_000_000);
+        getc();
+    }
+    crate::println!("Leaving clock test");
 }
 
 #[cfg(feature = "platform-tests")]

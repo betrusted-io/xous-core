@@ -102,6 +102,7 @@ usb-test = []
 trng-test = []
 dump-trng = []
 fast-fclk = []
+clock-tests = []
 
 # general flags
 debug-print = []

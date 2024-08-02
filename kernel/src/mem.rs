@@ -380,8 +380,8 @@ impl MemoryManager {
 
     #[cfg(baremetal)]
     #[cfg(feature = "swap")]
-    /// Similar to alloc_page(), but this implementation can only be called in one location because
-    /// we need to know where to resume from after the OOM is recovered.
+    /// Similar to alloc_page(), but this implementation takes the vaddr being allocated so we
+    /// can do more detailed bookkeeping on least recently used pages.
     pub fn alloc_page_oomable(
         &mut self,
         pid: PID,

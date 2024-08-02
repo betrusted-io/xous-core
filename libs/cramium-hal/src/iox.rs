@@ -244,10 +244,6 @@ impl Iox {
     /// specified in the bitmask, corresponding to the PIO GPIO pin number. If a `0` is
     /// present in a bit position, it will turn off the PIO mux, but not change the AF setting.
     ///
-    /// VERY IMPORTANT: Note that the PIO GPIO number is *not* consistent with the
-    /// numbering order of the GPIO ports: in fact, it is reverse-order for PORT B and in-order with skips for
-    /// PORT C. Also, bits 22, 27, 30 and 31 are not mappable for the PIO.
-    ///
     /// Returns: a 32-entry array which records which GPIO bank and pin number was affected
     /// by the mapping request. The index of the array corresponds to the bit position in
     /// the bitmask. You may use this to pass as arguments to further functions
@@ -260,23 +256,23 @@ impl Iox {
 
             if enable {
                 let map: Option<(IoxPort, u8)> = match i {
-                    // Port B: reversed
-                    0 => Some((IoxPort::PB, 15)),
-                    1 => Some((IoxPort::PB, 14)),
-                    2 => Some((IoxPort::PB, 13)),
-                    3 => Some((IoxPort::PB, 12)),
-                    4 => Some((IoxPort::PB, 11)),
-                    5 => Some((IoxPort::PB, 10)),
-                    6 => Some((IoxPort::PB, 9)),
-                    7 => Some((IoxPort::PB, 8)),
-                    8 => Some((IoxPort::PB, 7)),
-                    9 => Some((IoxPort::PB, 6)),
-                    10 => Some((IoxPort::PB, 5)),
-                    11 => Some((IoxPort::PB, 4)),
-                    12 => Some((IoxPort::PB, 3)),
-                    13 => Some((IoxPort::PB, 2)),
-                    14 => Some((IoxPort::PB, 1)),
-                    15 => Some((IoxPort::PB, 0)),
+                    // For NTO the ports should be in correct order
+                    0 => Some((IoxPort::PB, 0)),
+                    1 => Some((IoxPort::PB, 1)),
+                    2 => Some((IoxPort::PB, 2)),
+                    3 => Some((IoxPort::PB, 3)),
+                    4 => Some((IoxPort::PB, 4)),
+                    5 => Some((IoxPort::PB, 5)),
+                    6 => Some((IoxPort::PB, 6)),
+                    7 => Some((IoxPort::PB, 7)),
+                    8 => Some((IoxPort::PB, 8)),
+                    9 => Some((IoxPort::PB, 9)),
+                    10 => Some((IoxPort::PB, 10)),
+                    11 => Some((IoxPort::PB, 11)),
+                    12 => Some((IoxPort::PB, 12)),
+                    13 => Some((IoxPort::PB, 13)),
+                    14 => Some((IoxPort::PB, 14)),
+                    15 => Some((IoxPort::PB, 15)),
                     // Port C
                     16 => Some((IoxPort::PC, 0)),
                     17 => Some((IoxPort::PC, 1)),
@@ -284,14 +280,16 @@ impl Iox {
                     19 => Some((IoxPort::PC, 3)),
                     20 => Some((IoxPort::PC, 4)),
                     21 => Some((IoxPort::PC, 5)),
-                    // Skip 22
+                    22 => Some((IoxPort::PC, 6)),
                     23 => Some((IoxPort::PC, 7)),
                     24 => Some((IoxPort::PC, 8)),
                     25 => Some((IoxPort::PC, 9)),
                     26 => Some((IoxPort::PC, 10)),
-                    // Skip 27
+                    27 => Some((IoxPort::PC, 11)),
                     28 => Some((IoxPort::PC, 12)),
                     29 => Some((IoxPort::PC, 13)),
+                    30 => Some((IoxPort::PC, 14)),
+                    31 => Some((IoxPort::PC, 15)),
                     _ => None,
                 };
                 if let Some((port, pin)) = map {

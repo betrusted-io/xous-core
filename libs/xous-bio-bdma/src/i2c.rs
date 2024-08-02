@@ -34,35 +34,35 @@ impl<'a> BioI2C<'a> {
             return None;
         }
         // stop all the machines, so that code can be loaded
-        bio_ss.bio.wo(utra::bio::SFR_CTRL, 0x0);
+        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
         let code = i2c_driver();
         print!("I2C code length: {} bytes\r", code.len());
-        bio_ss.load_code(code, 0);
+        bio_ss.load_code(code, 0, BioCore::Core0);
 
         if hs {
             // 1600kHz clock -> 400kHz toggle rate = 0x1F4_0000 @ 800MHz rate FCLK
-            bio_ss.bio.wo(utra::bio::SFR_QDIV0, 0x1F4_0000);
+            bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x1F4_0000);
         } else {
             // 400kHz clock -> 100kHz toggle rate = 0x7D0_0000 @ 800MHz rate FCLK
-            bio_ss.bio.wo(utra::bio::SFR_QDIV0, 0x7D0_0000);
+            bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x7D0_0000);
         }
 
         // clear all events
-        bio_ss.bio.wfo(utra::bio::SFR_EVENT_CLR_SFR_EVENT_CLR, 0xFFFF_FF);
+        bio_ss.bio.wfo(utra::bio_bdma::SFR_EVENT_CLR_SFR_EVENT_CLR, 0xFFFF_FF);
         // reset all the fifos
-        bio_ss.bio.wo(utra::bio::SFR_FIFO_CLR, 0xF);
+        bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0xF);
         // start core 0
-        bio_ss.bio.wo(utra::bio::SFR_CTRL, 0x111);
+        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x111);
         // don't snap GPIO outputs
-        bio_ss.bio.wo(utra::bio::SFR_CONFIG, 0);
+        bio_ss.bio.wo(utra::bio_bdma::SFR_CONFIG, 0);
 
         // configure interrupts
         // T/RX2 is the bank of interest for triggering interrupts
-        bio_ss.bio.wfo(utra::bio::SFR_ELEVEL_FIFO_EVENT_LEVEL4, 1); // corresponds to T/RXF2
-        bio_ss.bio.wfo(utra::bio::SFR_ETYPE_FIFO_EVENT_EQ_MASK, 0b00_01_00_00); // level4 mask EQ
-        bio_ss.bio.rmwf(utra::bio::SFR_ETYPE_FIFO_EVENT_GT_MASK, 0b00_01_00_00); // level4 mask GT
+        bio_ss.bio.wfo(utra::bio_bdma::SFR_ELEVEL_FIFO_EVENT_LEVEL4, 1); // corresponds to T/RXF2
+        bio_ss.bio.wfo(utra::bio_bdma::SFR_ETYPE_FIFO_EVENT_EQ_MASK, 0b00_01_00_00); // level4 mask EQ
+        bio_ss.bio.rmwf(utra::bio_bdma::SFR_ETYPE_FIFO_EVENT_GT_MASK, 0b00_01_00_00); // level4 mask GT
 
-        bio_ss.bio.wo(utra::bio::SFR_IRQMASK_0, 1 << (28 + irq_no) as u32);
+        bio_ss.bio.wo(utra::bio_bdma::SFR_IRQMASK_0, 1 << (28 + irq_no) as u32);
 
         Some(BioI2C { pin_sda: sda, pin_scl: scl, irq_no, bio_ss })
     }
@@ -92,25 +92,27 @@ impl<'a> BioI2C<'a> {
                 | 0 << 15
                 | wr_byte as u32;
             // start the Tx
-            self.bio_ss.bio.wo(utra::bio::SFR_TXF0, i2c_cmd);
+            self.bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, i2c_cmd);
             // write the bytes to send
             for &data in tx.iter() {
-                while self.bio_ss.bio.rf(utra::bio::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) > FIFO_HIGH_WATER_MARK {
+                while self.bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1)
+                    > FIFO_HIGH_WATER_MARK
+                {
                     if do_yield {
                         #[cfg(feature = "std")]
                         xous::yield_slice();
                     }
                 }
-                self.bio_ss.bio.wfo(utra::bio::SFR_TXF1_FDIN, data as u32);
+                self.bio_ss.bio.wfo(utra::bio_bdma::SFR_TXF1_FDIN, data as u32);
             }
             // wait for done
-            while self.bio_ss.bio.r(utra::bio::SFR_EVENT_STATUS) & (1 << self.irq_no + 28) == 0 {
+            while self.bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & (1 << self.irq_no + 28) == 0 {
                 if do_yield {
                     #[cfg(feature = "std")]
                     xous::yield_slice();
                 }
             }
-            let result_code = self.bio_ss.bio.r(utra::bio::SFR_RXF2);
+            let result_code = self.bio_ss.bio.r(utra::bio_bdma::SFR_RXF2);
             if result_code != (tx.len() as u32 + 1) {
                 #[cfg(not(feature = "tests"))]
                 return Err(Error);
@@ -133,25 +135,25 @@ impl<'a> BioI2C<'a> {
                     | (rx.len() as u32) << 15
                     | wr_byte as u32;
                 // start the Rx
-                self.bio_ss.bio.wo(utra::bio::SFR_TXF0, i2c_cmd);
+                self.bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, i2c_cmd);
                 // read the data
                 for data in rx.iter_mut() {
-                    while self.bio_ss.bio.rf(utra::bio::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) == 0 {
+                    while self.bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) == 0 {
                         if do_yield {
                             #[cfg(feature = "std")]
                             xous::yield_slice();
                         }
                     }
-                    *data = self.bio_ss.bio.rf(utra::bio::SFR_RXF1_FDOUT) as u8;
+                    *data = self.bio_ss.bio.rf(utra::bio_bdma::SFR_RXF1_FDOUT) as u8;
                 }
                 // wait for the status code
-                while self.bio_ss.bio.r(utra::bio::SFR_EVENT_STATUS) & (1 << self.irq_no + 28) == 0 {
+                while self.bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & (1 << self.irq_no + 28) == 0 {
                     if do_yield {
                         #[cfg(feature = "std")]
                         xous::yield_slice();
                     }
                 }
-                let result_code = self.bio_ss.bio.r(utra::bio::SFR_RXF2);
+                let result_code = self.bio_ss.bio.r(utra::bio_bdma::SFR_RXF2);
                 // should be 1 NACK on rx
                 if result_code != ((1 + rx.len() as u32 - 1) | 0x1_0000) {
                     #[cfg(not(feature = "tests"))]
@@ -194,14 +196,6 @@ bio_code!(
     i2c_driver,
     I2C_DRIVER_START,
     I2C_DRIVER_END,
-    "j 90f",
-    "nop",
-    "j 91f",
-    "nop",
-    "j 92f",
-    "nop",
-    "j 93f",
-    "nop",
   "90:", // machine 0 code
     "mv x1, x16",        // x1 <- initiation command
     "andi x2, x1, 1",    // x2 <- r/w bit. write if 0.
@@ -225,7 +219,9 @@ bio_code!(
     // setup gpios
     "mv x20, x0",        // sync to clock stream
     "or x26, x4, x5",    // set GPIO mask
-    "or x23, x4, x5",    // clear SCL/SDA pins to 0 for "output low"
+    "or x12, x4, x5",    // form bitmask in true sense
+    "xori x12, x12, -1", // invert because you need to write 0 to set outputs to low
+    "mv x23, x12",       // clear SCL/SDA pins to 0 for "output low"
     "or x25, x4, x5",    // SCL/SDA to inputs
     // setup done
     "mv x20, x0",        // sync to clock stream
@@ -337,12 +333,5 @@ bio_code!(
     // REPORT
     "slli x8, x8, 16",   // shift NACK count into place
     "add x18, x7, x8",   // x18 <- send ACK + NACK
-    "j 90b",             // wait for next command
-    // gutter unused machines
-  "91:",
-    "j 91b",
-  "92:",
-    "j 92b",
-  "93:",
-    "j 93b"
+    "j 90b"             // wait for next command
  );
