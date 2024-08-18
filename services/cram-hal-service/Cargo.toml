@@ -36,6 +36,10 @@ rkyv = { version = "0.4.3", default-features = false, features = [
 
 [features]
 app-uart = []
+pio = []
+pio-memlcd = []
+rawserial = []
+pinger = []
 swap = []
 # add this feature to enable pre-emption
 quantum-timer = ["utralib"]

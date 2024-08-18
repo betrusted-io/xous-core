@@ -25,6 +25,8 @@ bitfield = "0.13.2"
 xous = { version = "0.9.63", features = ["v2p"] }
 
 [features]
+compress-entropy = []
+magic-manual = []
 std = ["log", "xous-api-names", "usb-device"]
 derive-rkyv = ["rkyv"]
 default = []

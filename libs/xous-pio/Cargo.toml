@@ -19,6 +19,7 @@ xous = "0.9.63"
 cramium-soc = ["utralib/cramium-soc"]
 cramium-fpga = ["utralib/cramium-fpga"]
 rp2040 = ["defmt"]
+arty = []
 precursor = []
 hosted = []
 renode = []
