@@ -142,8 +142,8 @@ bio_code!(multiverse_code, MULTIVERSE_START, MULTIVERSE_END,
 pub fn fifo_basic() {
     print!("FIFO basic\r");
     // clear any prior test config state
-    let mut test_cfg = CSR::new(utra::main::HW_MAIN_BASE as *mut u32);
-    test_cfg.wo(utra::main::WDATA, 0);
+    let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
+    test_cfg.wo(utra::csrtest::WTEST, 0);
 
     let mut bio_ss = BioSharedState::new();
     // stop all the machines, so that code can be loaded
@@ -229,8 +229,8 @@ bio_code!(fifo_basic_code, FIFO_BASIC_START, FIFO_BASIC_END,
 pub fn host_fifo_tests() {
     print!("Host FIFO tests\r");
     // clear prior test config state
-    let mut test_cfg = CSR::new(utra::main::HW_MAIN_BASE as *mut u32);
-    test_cfg.wo(utra::main::WDATA, 0);
+    let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
+    test_cfg.wo(utra::csrtest::WTEST, 0);
 
     let mut bio_ss = BioSharedState::new();
     // stop all the machines, so that code can be loaded
@@ -248,7 +248,7 @@ pub fn host_fifo_tests() {
     bio_ss.bio.wo(utra::bio::SFR_CONFIG, 0);
 
     // invert readbacks via I/O
-    test_cfg.wo(utra::main::WDATA, TEST_INVERT_MASK);
+    test_cfg.wo(utra::csrtest::WTEST, TEST_INVERT_MASK);
 
     // start cores 1 & 2
     bio_ss.bio.wo(utra::bio::SFR_CTRL, 0x333);
@@ -292,7 +292,7 @@ pub fn host_fifo_tests() {
 
     // load next test
     // clear inversions, etc on readbacks via I/O
-    test_cfg.wo(utra::main::WDATA, 0);
+    test_cfg.wo(utra::csrtest::WTEST, 0);
     // stop machine & load code
     bio_ss.bio.wo(utra::bio::SFR_CTRL, 0x0);
     let code = fifo_host_bitbang_level_trig();
@@ -443,8 +443,8 @@ struct FifoLevelTestConfig {
 pub fn fifo_level_tests() {
     print!("FIFO level comprehensive\r");
     // clear prior test config state
-    let mut test_cfg = CSR::new(utra::main::HW_MAIN_BASE as *mut u32);
-    test_cfg.wo(utra::main::WDATA, 0);
+    let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
+    test_cfg.wo(utra::csrtest::WTEST, 0);
 
     let mut bio_ss = BioSharedState::new();
     // stop all the machines, so that code can be loaded
@@ -703,8 +703,8 @@ pub fn fifo_level_tests() {
 pub fn aclk_tests() {
     print!("ACLK test\r");
     // clear any prior test config state
-    let mut test_cfg = CSR::new(utra::main::HW_MAIN_BASE as *mut u32);
-    test_cfg.wo(utra::main::WDATA, 0);
+    let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
+    test_cfg.wo(utra::csrtest::WTEST, 0);
 
     let mut bio_ss = BioSharedState::new();
     // stop all the machines, so that code can be loaded

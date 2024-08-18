@@ -100,6 +100,7 @@ members = [
   "libs/tls",
   "libs/xous-pio",
   "libs/xous-bio",
+  "libs/xous-bio-bdma",
   "libs/xous-pl230",
   "libs/cramium-hal",
   "services/cram-hal-service",

@@ -3631,13 +3631,13 @@
             </addressBlock>
         </peripheral>
         <peripheral>
-            <name>UDMA_SDIO</name>
+            <name>UDMA_I2S_0</name>
             <baseAddress>0x5010D000</baseAddress>
-            <groupName>UDMA_SDIO</groupName>
+            <groupName>UDMA_I2S_0</groupName>
             <registers>
                 <register>
                     <name>REG_RX_SADDR</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_i2s/rtl/udma_i2s_reg_if.sv]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -3653,7 +3653,7 @@
                 </register>
                 <register>
                     <name>REG_RX_SIZE</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_i2s/rtl/udma_i2s_reg_if.sv]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -3669,7 +3669,7 @@
                 </register>
                 <register>
                     <name>REG_RX_CFG</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_i2s/rtl/udma_i2s_reg_if.sv]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -3680,6 +3680,13 @@
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[r_rx_continuous]]></description>
+                        </field>
+                        <field>
+                            <name>r_rx_datasize</name>
+                            <msb>2</msb>
+                            <bitRange>[2:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[r_rx_datasize]]></description>
                         </field>
                         <field>
                             <name>r_rx_en</name>
@@ -3699,7 +3706,7 @@
                 </register>
                 <register>
                     <name>REG_TX_SADDR</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_i2s/rtl/udma_i2s_reg_if.sv]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -3715,7 +3722,7 @@
                 </register>
                 <register>
                     <name>REG_TX_SIZE</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_i2s/rtl/udma_i2s_reg_if.sv]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -3731,7 +3738,7 @@
                 </register>
                 <register>
                     <name>REG_TX_CFG</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_i2s/rtl/udma_i2s_reg_if.sv]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -3742,6 +3749,13 @@
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[r_tx_continuous]]></description>
+                        </field>
+                        <field>
+                            <name>r_tx_datasize</name>
+                            <msb>2</msb>
+                            <bitRange>[2:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[r_tx_datasize]]></description>
                         </field>
                         <field>
                             <name>r_tx_en</name>
@@ -3760,216 +3774,220 @@
                     </fields>
                 </register>
                 <register>
-                    <name>REG_CMD_OP</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
+                    <name>REG_I2S_CLKCFG_SETUP</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_i2s/rtl/udma_i2s_reg_if.sv]]></description>
                     <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>r_cmd_rsp_type</name>
-                            <msb>2</msb>
-                            <bitRange>[2:0]</bitRange>
+                            <name>r_master_gen_clk_div</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[r_cmd_rsp_type]]></description>
+                            <description><![CDATA[r_master_gen_clk_div]]></description>
                         </field>
                         <field>
-                            <name>r_cmd_op</name>
-                            <msb>13</msb>
-                            <bitRange>[13:8]</bitRange>
+                            <name>r_slave_gen_clk_div</name>
+                            <msb>15</msb>
+                            <bitRange>[15:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[r_cmd_op]]></description>
+                            <description><![CDATA[r_slave_gen_clk_div]]></description>
                         </field>
                         <field>
-                            <name>r_cmd_stopopt</name>
-                            <msb>17</msb>
-                            <bitRange>[17:16]</bitRange>
+                            <name>r_common_gen_clk_div</name>
+                            <msb>23</msb>
+                            <bitRange>[23:16]</bitRange>
                             <lsb>16</lsb>
-                            <description><![CDATA[r_cmd_stopopt]]></description>
+                            <description><![CDATA[r_common_gen_clk_div]]></description>
+                        </field>
+                        <field>
+                            <name>r_slave_clk_en</name>
+                            <msb>24</msb>
+                            <bitRange>[24:24]</bitRange>
+                            <lsb>24</lsb>
+                            <description><![CDATA[r_slave_clk_en]]></description>
+                        </field>
+                        <field>
+                            <name>r_master_clk_en</name>
+                            <msb>25</msb>
+                            <bitRange>[25:25]</bitRange>
+                            <lsb>25</lsb>
+                            <description><![CDATA[r_master_clk_en]]></description>
+                        </field>
+                        <field>
+                            <name>r_pdm_clk_en</name>
+                            <msb>26</msb>
+                            <bitRange>[26:26]</bitRange>
+                            <lsb>26</lsb>
+                            <description><![CDATA[r_pdm_clk_en]]></description>
+                        </field>
+                        <field>
+                            <name>r_slave_sel_ext</name>
+                            <msb>28</msb>
+                            <bitRange>[28:28]</bitRange>
+                            <lsb>28</lsb>
+                            <description><![CDATA[r_slave_sel_ext]]></description>
+                        </field>
+                        <field>
+                            <name>r_slave_sel_num</name>
+                            <msb>29</msb>
+                            <bitRange>[29:29]</bitRange>
+                            <lsb>29</lsb>
+                            <description><![CDATA[r_slave_sel_num]]></description>
+                        </field>
+                        <field>
+                            <name>r_master_sel_ext</name>
+                            <msb>30</msb>
+                            <bitRange>[30:30]</bitRange>
+                            <lsb>30</lsb>
+                            <description><![CDATA[r_master_sel_ext]]></description>
+                        </field>
+                        <field>
+                            <name>r_master_sel_num</name>
+                            <msb>31</msb>
+                            <bitRange>[31:31]</bitRange>
+                            <lsb>31</lsb>
+                            <description><![CDATA[r_master_sel_num]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
-                    <name>REG_DATA_SETUP</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
+                    <name>REG_I2S_SLV_SETUP</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_i2s/rtl/udma_i2s_reg_if.sv]]></description>
+                    <addressOffset>0x0024</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>r_slave_i2s_words</name>
+                            <msb>2</msb>
+                            <bitRange>[2:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[r_slave_i2s_words]]></description>
+                        </field>
+                        <field>
+                            <name>r_slave_i2s_bits_word</name>
+                            <msb>12</msb>
+                            <bitRange>[12:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[r_slave_i2s_bits_word]]></description>
+                        </field>
+                        <field>
+                            <name>r_slave_i2s_lsb_first</name>
+                            <msb>16</msb>
+                            <bitRange>[16:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[r_slave_i2s_lsb_first]]></description>
+                        </field>
+                        <field>
+                            <name>r_slave_i2s_2ch</name>
+                            <msb>17</msb>
+                            <bitRange>[17:17]</bitRange>
+                            <lsb>17</lsb>
+                            <description><![CDATA[r_slave_i2s_2ch]]></description>
+                        </field>
+                        <field>
+                            <name>r_slave_i2s_en</name>
+                            <msb>31</msb>
+                            <bitRange>[31:31]</bitRange>
+                            <lsb>31</lsb>
+                            <description><![CDATA[r_slave_i2s_en]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>REG_I2S_MST_SETUP</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_i2s/rtl/udma_i2s_reg_if.sv]]></description>
                     <addressOffset>0x0028</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>r_data_en</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[r_data_en]]></description>
-                        </field>
-                        <field>
-                            <name>r_data_rwn</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[r_data_rwn]]></description>
-                        </field>
-                        <field>
-                            <name>r_data_quad</name>
+                            <name>r_master_i2s_words</name>
                             <msb>2</msb>
-                            <bitRange>[2:2]</bitRange>
-                            <lsb>2</lsb>
-                            <description><![CDATA[r_data_quad]]></description>
+                            <bitRange>[2:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[r_master_i2s_words]]></description>
                         </field>
                         <field>
-                            <name>r_data_block_num</name>
-                            <msb>15</msb>
-                            <bitRange>[15:8]</bitRange>
+                            <name>r_master_i2s_bits_word</name>
+                            <msb>12</msb>
+                            <bitRange>[12:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[r_data_block_num]]></description>
+                            <description><![CDATA[r_master_i2s_bits_word]]></description>
                         </field>
                         <field>
-                            <name>r_data_block_size</name>
-                            <msb>25</msb>
-                            <bitRange>[25:16]</bitRange>
+                            <name>r_master_i2s_lsb_first</name>
+                            <msb>16</msb>
+                            <bitRange>[16:16]</bitRange>
                             <lsb>16</lsb>
-                            <description><![CDATA[r_data_block_size]]></description>
+                            <description><![CDATA[r_master_i2s_lsb_first]]></description>
+                        </field>
+                        <field>
+                            <name>r_master_i2s_2ch</name>
+                            <msb>17</msb>
+                            <bitRange>[17:17]</bitRange>
+                            <lsb>17</lsb>
+                            <description><![CDATA[r_master_i2s_2ch]]></description>
+                        </field>
+                        <field>
+                            <name>r_master_i2s_en</name>
+                            <msb>31</msb>
+                            <bitRange>[31:31]</bitRange>
+                            <lsb>31</lsb>
+                            <description><![CDATA[r_master_i2s_en]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
-                    <name>REG_START</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
+                    <name>REG_I2S_PDM_SETUP</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_i2s/rtl/udma_i2s_reg_if.sv]]></description>
                     <addressOffset>0x002c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>r_sdio_start</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
+                            <name>r_slave_pdm_shift</name>
+                            <msb>2</msb>
+                            <bitRange>[2:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[r_sdio_start]]></description>
+                            <description><![CDATA[r_slave_pdm_shift]]></description>
                         </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>REG_RSP0</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
-                    <addressOffset>0x0030</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
                         <field>
-                            <name>cfg_rsp_data_i_31_0</name>
+                            <name>r_slave_pdm_decimation</name>
+                            <msb>12</msb>
+                            <bitRange>[12:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[r_slave_pdm_decimation]]></description>
+                        </field>
+                        <field>
+                            <name>r_slave_pdm_mode</name>
+                            <msb>14</msb>
+                            <bitRange>[14:13]</bitRange>
+                            <lsb>13</lsb>
+                            <description><![CDATA[r_slave_pdm_mode]]></description>
+                        </field>
+                        <field>
+                            <name>r_slave_pdm_en</name>
                             <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[cfg_rsp_data_i_31_0]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>REG_RSP1</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
-                    <addressOffset>0x0034</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>cfg_rsp_data_i_63_32</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[cfg_rsp_data_i_63_32]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>REG_RSP2</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
-                    <addressOffset>0x0038</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>cfg_rsp_data_i_95_64</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[cfg_rsp_data_i_95_64]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>REG_RSP3</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
-                    <addressOffset>0x003c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>cfg_rsp_data_i_127_96</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[cfg_rsp_data_i_127_96]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>REG_CLK_DIV</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
-                    <addressOffset>0x0040</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>r_clk_div_data</name>
-                            <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[r_clk_div_data]]></description>
-                        </field>
-                        <field>
-                            <name>r_clk_div_valid</name>
-                            <msb>8</msb>
-                            <bitRange>[8:8]</bitRange>
-                            <lsb>8</lsb>
-                            <description><![CDATA[r_clk_div_valid]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>REG_STATUS</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/ips/udma/udma_sdio/rtl/udma_sdio_reg_if.sv]]></description>
-                    <addressOffset>0x0044</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>r_eot</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[r_eot]]></description>
-                        </field>
-                        <field>
-                            <name>r_err</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[r_err]]></description>
+                            <bitRange>[31:31]</bitRange>
+                            <lsb>31</lsb>
+                            <description><![CDATA[r_slave_pdm_en]]></description>
                         </field>
                     </fields>
                 </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x48</size>
+                <size>0x30</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
         <peripheral>
-            <name>UDMA_I2S</name>
+            <name>UDMA_I2S_1</name>
             <baseAddress>0x5010E000</baseAddress>
-            <groupName>UDMA_I2S</groupName>
+            <groupName>UDMA_I2S_1</groupName>
             <registers>
                 <register>
                     <name>REG_RX_SADDR</name>
@@ -14015,13 +14033,13 @@ soc/candidate/pio/rp_pio.sv]]></description>
             </addressBlock>
         </peripheral>
         <peripheral>
-            <name>BIO</name>
+            <name>BIO_BDMA</name>
             <baseAddress>0x50124000</baseAddress>
-            <groupName>BIO</groupName>
+            <groupName>BIO_BDMA</groupName>
             <registers>
                 <register>
                     <name>SFR_CTRL</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14051,7 +14069,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_CFGINFO</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14081,7 +14099,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_CONFIG</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14114,11 +14132,25 @@ soc/candidate/pio/rp_pio.sv]]></description>
                             <lsb>5</lsb>
                             <description><![CDATA[snap_input_to_quantum read/write control register]]></description>
                         </field>
+                        <field>
+                            <name>disable_filter_peri</name>
+                            <msb>6</msb>
+                            <bitRange>[6:6]</bitRange>
+                            <lsb>6</lsb>
+                            <description><![CDATA[disable_filter_peri read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>disable_filter_mem</name>
+                            <msb>7</msb>
+                            <bitRange>[7:7]</bitRange>
+                            <lsb>7</lsb>
+                            <description><![CDATA[disable_filter_mem read/write control register]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>SFR_FLEVEL</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14155,7 +14187,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_TXF0</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14171,7 +14203,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_TXF1</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14187,7 +14219,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_TXF2</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14203,7 +14235,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_TXF3</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14219,7 +14251,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_RXF0</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14235,7 +14267,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_RXF1</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14251,7 +14283,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_RXF2</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0028</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14267,7 +14299,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_RXF3</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x002c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14283,7 +14315,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_ELEVEL</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0030</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14348,7 +14380,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_ETYPE</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0034</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14378,7 +14410,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_EVENT_SET</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0038</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14394,7 +14426,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_EVENT_CLR</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x003c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14410,7 +14442,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_EVENT_STATUS</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0040</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14426,7 +14458,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_EXTCLOCK</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0044</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14470,7 +14502,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_FIFO_CLR</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0048</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14486,127 +14518,127 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_QDIV0</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0050</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
                             <name>unused_div</name>
-                            <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[unused_div read/write control register]]></description>
                         </field>
                         <field>
                             <name>div_frac</name>
-                            <msb>15</msb>
-                            <bitRange>[15:8]</bitRange>
-                            <lsb>8</lsb>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
                             <description><![CDATA[div_frac read/write control register]]></description>
                         </field>
                         <field>
                             <name>div_int</name>
-                            <msb>31</msb>
-                            <bitRange>[31:16]</bitRange>
-                            <lsb>16</lsb>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
                             <description><![CDATA[div_int read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>SFR_QDIV1</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0054</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
                             <name>unused_div</name>
-                            <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[unused_div read/write control register]]></description>
                         </field>
                         <field>
                             <name>div_frac</name>
-                            <msb>15</msb>
-                            <bitRange>[15:8]</bitRange>
-                            <lsb>8</lsb>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
                             <description><![CDATA[div_frac read/write control register]]></description>
                         </field>
                         <field>
                             <name>div_int</name>
-                            <msb>31</msb>
-                            <bitRange>[31:16]</bitRange>
-                            <lsb>16</lsb>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
                             <description><![CDATA[div_int read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>SFR_QDIV2</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0058</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
                             <name>unused_div</name>
-                            <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[unused_div read/write control register]]></description>
                         </field>
                         <field>
                             <name>div_frac</name>
-                            <msb>15</msb>
-                            <bitRange>[15:8]</bitRange>
-                            <lsb>8</lsb>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
                             <description><![CDATA[div_frac read/write control register]]></description>
                         </field>
                         <field>
                             <name>div_int</name>
-                            <msb>31</msb>
-                            <bitRange>[31:16]</bitRange>
-                            <lsb>16</lsb>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
                             <description><![CDATA[div_int read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>SFR_QDIV3</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x005c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
                             <name>unused_div</name>
-                            <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[unused_div read/write control register]]></description>
                         </field>
                         <field>
                             <name>div_frac</name>
-                            <msb>15</msb>
-                            <bitRange>[15:8]</bitRange>
-                            <lsb>8</lsb>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
                             <description><![CDATA[div_frac read/write control register]]></description>
                         </field>
                         <field>
                             <name>div_int</name>
-                            <msb>31</msb>
-                            <bitRange>[31:16]</bitRange>
-                            <lsb>16</lsb>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
                             <description><![CDATA[div_int read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>SFR_SYNC_BYPASS</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0060</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14622,7 +14654,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_IO_OE_INV</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0064</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14638,7 +14670,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_IO_O_INV</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0068</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14654,7 +14686,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_IO_I_INV</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x006c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14670,7 +14702,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_IRQMASK_0</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0070</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14686,7 +14718,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_IRQMASK_1</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0074</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14702,7 +14734,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_IRQMASK_2</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0078</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14718,7 +14750,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_IRQMASK_3</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x007c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14734,7 +14766,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_IRQ_EDGE</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0080</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14750,7 +14782,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_DBG_PADOUT</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0084</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14766,7 +14798,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 </register>
                 <register>
                     <name>SFR_DBG_PADOE</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
                     <addressOffset>0x0088</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -14780,10 +14812,454 @@ soc/candidate/pio/rp_pio.sv]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>SFR_DBG0</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0090</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>dbg_pc</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[dbg_pc read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>trap</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[trap read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DBG1</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0094</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>dbg_pc</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[dbg_pc read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>trap</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[trap read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DBG2</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0098</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>dbg_pc</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[dbg_pc read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>trap</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[trap read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DBG3</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x009c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>dbg_pc</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[dbg_pc read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>trap</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[trap read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_MEM_GUTTER</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00a0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_mem_gutter</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_mem_gutter read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_PERI_GUTTER</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00a4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_peri_gutter</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_peri_gutter read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_MAP_CR_EVMAP0</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00b0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_evmap0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_evmap read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_MAP_CR_EVMAP1</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00b4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_evmap1</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_evmap read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_MAP_CR_EVMAP2</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00b8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_evmap2</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_evmap read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_MAP_CR_EVMAP3</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00bc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_evmap3</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_evmap read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_MAP_CR_EVMAP4</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00c0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_evmap4</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_evmap read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_MAP_CR_EVMAP5</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00c4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_evmap5</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_evmap read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_STAT_SR_EVSTAT0</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00c8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_evstat0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_evstat read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_STAT_SR_EVSTAT1</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00cc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_evstat1</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_evstat read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_STAT_SR_EVSTAT2</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00d0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_evstat2</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_evstat read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_STAT_SR_EVSTAT3</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00d4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_evstat3</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_evstat read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_STAT_SR_EVSTAT4</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00d8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_evstat4</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_evstat read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_STAT_SR_EVSTAT5</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00dc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_evstat5</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_evstat read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BASE_0</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00e0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_base</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_base read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BOUNDS_0</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00e4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_bounds</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_bounds read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BASE_1</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00e8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_base</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_base read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BOUNDS_1</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00ec</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_bounds</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_bounds read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BASE_2</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00f0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_base</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_base read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BOUNDS_2</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00f4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_bounds</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_bounds read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BASE_3</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00f8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_base</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_base read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BOUNDS_3</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x00fc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_bounds</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_bounds read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x8c</size>
+                <size>0x100</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -15752,6 +16228,522 @@ soc/candidate/mbox_v0.1.sv]]></description>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
+        <peripheral>
+            <name>BIO_FIFO0</name>
+            <baseAddress>0x50129000</baseAddress>
+            <groupName>BIO_FIFO0</groupName>
+            <registers>
+                <register>
+                    <name>SFR_FLEVEL</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>pclk_regfifo_level0</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[pclk_regfifo_level[0] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level1</name>
+                            <msb>7</msb>
+                            <bitRange>[7:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[pclk_regfifo_level[1] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level2</name>
+                            <msb>11</msb>
+                            <bitRange>[11:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[pclk_regfifo_level[2] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level3</name>
+                            <msb>15</msb>
+                            <bitRange>[15:12]</bitRange>
+                            <lsb>12</lsb>
+                            <description><![CDATA[pclk_regfifo_level[3] read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_TXF0</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdin</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdin read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RXF0</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0020</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdout</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdout read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_SET</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0038</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_set</name>
+                            <msb>23</msb>
+                            <bitRange>[23:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_set read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_CLR</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x003c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_clr</name>
+                            <msb>23</msb>
+                            <bitRange>[23:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_clr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_STATUS</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0040</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_status</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_status read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x44</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>BIO_FIFO1</name>
+            <baseAddress>0x5012A000</baseAddress>
+            <groupName>BIO_FIFO1</groupName>
+            <registers>
+                <register>
+                    <name>SFR_FLEVEL</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>pclk_regfifo_level0</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[pclk_regfifo_level[0] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level1</name>
+                            <msb>7</msb>
+                            <bitRange>[7:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[pclk_regfifo_level[1] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level2</name>
+                            <msb>11</msb>
+                            <bitRange>[11:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[pclk_regfifo_level[2] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level3</name>
+                            <msb>15</msb>
+                            <bitRange>[15:12]</bitRange>
+                            <lsb>12</lsb>
+                            <description><![CDATA[pclk_regfifo_level[3] read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_TXF1</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdin</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdin read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RXF1</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0024</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdout</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdout read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_SET</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0038</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_set</name>
+                            <msb>23</msb>
+                            <bitRange>[23:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_set read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_CLR</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x003c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_clr</name>
+                            <msb>23</msb>
+                            <bitRange>[23:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_clr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_STATUS</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0040</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_status</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_status read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x44</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>BIO_FIFO2</name>
+            <baseAddress>0x5012B000</baseAddress>
+            <groupName>BIO_FIFO2</groupName>
+            <registers>
+                <register>
+                    <name>SFR_FLEVEL</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>pclk_regfifo_level0</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[pclk_regfifo_level[0] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level1</name>
+                            <msb>7</msb>
+                            <bitRange>[7:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[pclk_regfifo_level[1] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level2</name>
+                            <msb>11</msb>
+                            <bitRange>[11:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[pclk_regfifo_level[2] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level3</name>
+                            <msb>15</msb>
+                            <bitRange>[15:12]</bitRange>
+                            <lsb>12</lsb>
+                            <description><![CDATA[pclk_regfifo_level[3] read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_TXF2</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdin</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdin read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RXF2</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0028</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdout</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdout read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_SET</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0038</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_set</name>
+                            <msb>23</msb>
+                            <bitRange>[23:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_set read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_CLR</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x003c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_clr</name>
+                            <msb>23</msb>
+                            <bitRange>[23:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_clr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_STATUS</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0040</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_status</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_status read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x44</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>BIO_FIFO3</name>
+            <baseAddress>0x5012C000</baseAddress>
+            <groupName>BIO_FIFO3</groupName>
+            <registers>
+                <register>
+                    <name>SFR_FLEVEL</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>pclk_regfifo_level0</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[pclk_regfifo_level[0] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level1</name>
+                            <msb>7</msb>
+                            <bitRange>[7:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[pclk_regfifo_level[1] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level2</name>
+                            <msb>11</msb>
+                            <bitRange>[11:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[pclk_regfifo_level[2] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level3</name>
+                            <msb>15</msb>
+                            <bitRange>[15:12]</bitRange>
+                            <lsb>12</lsb>
+                            <description><![CDATA[pclk_regfifo_level[3] read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_TXF3</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdin</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdin read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RXF3</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x002c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdout</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdout read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_SET</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0038</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_set</name>
+                            <msb>23</msb>
+                            <bitRange>[23:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_set read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_CLR</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x003c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_clr</name>
+                            <msb>23</msb>
+                            <bitRange>[23:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_clr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_STATUS</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio_bdma.sv]]></description>
+                    <addressOffset>0x0040</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_status</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_status read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x44</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
     </peripherals>
 
     <peripheral>
@@ -16218,7 +17210,7 @@ soc/candidate/mbox_v0.1.sv]]></description>
                 <size>0x00001000</size>
             </memoryRegion>
             <memoryRegion>
-                <name>BIO</name>
+                <name>BIO_BDMA</name>
                 <baseAddress>0x50124000</baseAddress>
                 <size>0x00001000</size>
             </memoryRegion>
@@ -16388,8 +17380,43 @@ soc/candidate/mbox_v0.1.sv]]></description>
                 <size>0x00001000</size>
             </memoryRegion>
             <memoryRegion>
-                <name>BIO_RAM</name>
+                <name>BIO_IMEM0</name>
                 <baseAddress>0x50125000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_IMEM1</name>
+                <baseAddress>0x50126000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_IMEM2</name>
+                <baseAddress>0x50127000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_IMEM3</name>
+                <baseAddress>0x50128000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_FIFO0</name>
+                <baseAddress>0x50129000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_FIFO1</name>
+                <baseAddress>0x5012A000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_FIFO2</name>
+                <baseAddress>0x5012B000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_FIFO3</name>
+                <baseAddress>0x5012C000</baseAddress>
                 <size>0x00001000</size>
             </memoryRegion>
         </memoryRegions>
