@@ -75,6 +75,9 @@ optional = true
 # git = "https://github.com/betrusted-io/engine25519-as.git"
 # rev = "274b82899d28535ac6d4b7869e26eef2039578d5"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(ci)', 'cfg(rustdoc)'] }
+
 [features]
 nightly = ["subtle/nightly"]
 default = ["std", "u32_backend"]

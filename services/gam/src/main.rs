@@ -1,6 +1,3 @@
-#![cfg_attr(baremetal, no_main)]
-#![cfg_attr(baremetal, no_std)]
-
 mod api;
 use api::*;
 mod canvas;

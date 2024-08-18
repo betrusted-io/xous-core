@@ -40,6 +40,9 @@ armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "upd
 xous-kernel = { package = "xous", version = "0.9.63", features = ["v2p"] }
 critical-section = "1.1.1"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(ci)', 'cfg(baremetal)'] }
+
 [features]
 cramium-soc = ["utralib/cramium-soc", "cramium-hal", "rand_chacha", "raw-trng"]
 cramium-fpga = ["utralib/cramium-fpga"]

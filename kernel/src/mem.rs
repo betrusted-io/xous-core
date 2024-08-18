@@ -269,7 +269,7 @@ impl MemoryManager {
         owned_bytes
     }
 
-    #[cfg(all(baremetal, feature = "print-debug"))]
+    #[cfg(all(baremetal, feature = "debug-print"))]
     pub fn print_ownership(&self) {
         println!("Ownership ({} bytes in all):", unsafe {
             MEMORY_ALLOCATIONS.len() + EXTRA_ALLOCATIONS.len()
