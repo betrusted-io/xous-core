@@ -154,4 +154,5 @@ locktests = [
 ] # for debugging some specific `std` tests cherry-picked out of the test suite
 simple-tls = ["rustls", "webpki-roots"]
 clifford-bench = []
+nettype = [] # takes a file from a URL and emits it as keystrokes
 default = [] # "debugprint"
