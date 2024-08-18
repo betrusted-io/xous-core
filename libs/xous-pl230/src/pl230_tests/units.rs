@@ -33,16 +33,16 @@ pub fn basic_tests(pl230: &mut Pl230) -> bool {
 
     const DMA_LEN: usize = 16;
     // setup the PL230 to do a simple transfer between two memory regions
-    // dma_mainram feature will cause us to DMA between main memory regions. This works under RTL sims.
-    #[cfg(feature = "dma_mainram")]
+    // dma-mainram feature will cause us to DMA between main memory regions. This works under RTL sims.
+    #[cfg(feature = "dma-mainram")]
     let mut region_a = [0u32; DMA_LEN];
-    #[cfg(feature = "dma_mainram")]
+    #[cfg(feature = "dma-mainram")]
     let region_b = [0u32; DMA_LEN];
     // The alternate is to DMA between IFRAM regions. This works under FPGA and RTL sim.
-    #[cfg(not(feature = "dma_mainram"))]
+    #[cfg(not(feature = "dma-mainram"))]
     let region_a =
         unsafe { core::slice::from_raw_parts_mut((utralib::HW_IFRAM0_MEM + 4096) as *mut u32, DMA_LEN) };
-    #[cfg(not(feature = "dma_mainram"))]
+    #[cfg(not(feature = "dma-mainram"))]
     let region_b = unsafe { core::slice::from_raw_parts_mut(utralib::HW_IFRAM1_MEM as *mut u32, DMA_LEN) };
     let mut state = 0x1111_1111;
     for d in region_a.iter_mut() {

@@ -489,7 +489,7 @@ fn swap_handler(
     let ss = sss.inner.as_mut().expect("Shared state should be initialized");
 
     let op: Option<KernelOp> = FromPrimitive::from_usize(opcode);
-    #[cfg(feature = "debug-print-verbose")]
+    #[cfg(feature = "debug-verbose")]
     writeln!(DebugUart {}, "got Opcode: {:?}", op).ok();
     match op {
         Some(KernelOp::ReadFromSwap) => {

@@ -287,7 +287,7 @@ impl<'a> ShellCmdApi<'a> for Mbox {
                     match self.try_send(clifford_pkt) {
                         Ok(_) => {
                             write!(ret, "Packet send Ok\n").ok();
-                            #[cfg(feature = "cifford-poll")]
+                            #[cfg(feature = "clifford-poll")]
                             {
                                 let start = env.ticktimer.elapsed_ms();
                                 while self.poll_not_ready() {

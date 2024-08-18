@@ -981,7 +981,7 @@ impl CorigineUsb {
             (0x0bc, 0x44087d5a),
             (0x110, 0x00000000),
         ];
-        #[cfg(feature = "magic_manual")]
+        #[cfg(feature = "magic-manual")]
         const MAGIC_TABLE: [(usize, u32); 17] = [
             (0x0fc, 0x00000001),
             (0x084, 0x01401388),

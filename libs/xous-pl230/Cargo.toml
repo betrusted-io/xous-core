@@ -26,6 +26,7 @@ renode = []
 pio = ["xous-pio"]
 dma-mainram = []
 baremetal = []
+debug-print = []
 
 tests = ["pio", "cramium-hal"]
 default = ["tests", "pio"]
