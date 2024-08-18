@@ -49,7 +49,7 @@ pub struct Com {
     ec_lock_id: Option<[u32; 4]>,
     ec_acquired: bool,
     /// this is a hack to make loopbacks work on smoltcp. Work-around taken from Redox, but tracking this
-    /// issue as well: https://github.com/smoltcp-rs/smoltcp/issues/50 and https://github.com/smoltcp-rs/smoltcp/issues/55
+    /// issue as well: <https://github.com/smoltcp-rs/smoltcp/issues/50> and <https://github.com/smoltcp-rs/smoltcp/issues/55>
     loopback_buf: RefCell<VecDeque<Vec<u8>>>,
 }
 impl Com {
