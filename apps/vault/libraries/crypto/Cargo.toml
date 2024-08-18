@@ -42,3 +42,4 @@ rfc6979 = "0.2.0"
 
 [features]
 with_ctap1 = []
+derive_debug = []

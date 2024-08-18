@@ -24,6 +24,7 @@ const VAULT_PASSWORD_REC_VERSION: u32 = 1;
 const VAULT_TOTP_REC_VERSION: u32 = 2;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum Error {
     IoError(std::io::Error),
     TotpSerError(TOTPSerializationError),
