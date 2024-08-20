@@ -74,6 +74,8 @@ Xous uses [Renode](https://renode.io/) as the preferred emulator, because
 it is easy to extend the hardware peripherals without recompiling the
 entire emulator.
 
+Due to a breaking change in Renode, this codebase is only compatible with Renode equal to or later than `1.15.2.7965 （e6e79aad-202408180425)`
+
 [Download Renode](https://renode.io/#downloads) and ensure it is in your path.
 For now, you need to [download the nightly build](https://dl.antmicro.com/projects/renode/builds/),
 until `DecodedOperation` is included in the release.
