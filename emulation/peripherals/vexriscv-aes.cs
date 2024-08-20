@@ -15,7 +15,7 @@ namespace Antmicro.Renode.Peripherals.CPU.Betrusted
         public AesVexRiscv(Core.Machine machine,
             uint hartId = 0,
             IRiscVTimeProvider timeProvider = null,
-            PrivilegeArchitecture privilegeArchitecture = PrivilegeArchitecture.Priv1_10,
+            PrivilegedArchitecture privilegeArchitecture = PrivilegedArchitecture.Priv1_10,
             string cpuType = "rv32im",
             bool builtInIrqController = true) : base(machine, hartId, timeProvider, privilegeArchitecture, cpuType, builtInIrqController)
         {
