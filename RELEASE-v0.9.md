@@ -483,7 +483,10 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - USB core able to enumerate, communicate to Linux devices. Windows compat still WIP.
   - Mailbox protocol to other devices has been tested, working.
   - TRNG has been tuned, partially validated.
-
+  - BIO-BDMA test cases added
+- Various fixes to track changes in Rust 1.80
+- Add documentation to the `modals` library (thanks @rowr111)
+- Due to a breaking change in Renode, this release is only compatible with Renode equal to or later than 1.15.2.7965（e6e79aad-202408180425) (see issue #570 / PR #572)
 
 ## Roadmap
 - Lots of testing and bug fixes
