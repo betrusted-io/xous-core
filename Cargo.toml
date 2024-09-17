@@ -125,6 +125,8 @@ exclude = [
   "api/xous-api-ticktimer",
   # The "packing" crate is forked and is a separate workspace
   "libs/mass-storage/packing",
+  # This directory is dedicated to out-of-tree tests and examples
+  "planning/",
 ]
 
 [profile.release]
