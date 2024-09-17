@@ -75,7 +75,7 @@ pub fn send_message(connection: CID, mut message: Message) -> core::result::Resu
                 br: Point { x: 420, y: 69 },
                 style: DrawStyle { fill_color: None, stroke_color: Some(PixelColor::Dark), stroke_width: 3 },
             });
-            buffer.replace::<Identity, _>(tv).unwrap();
+            buffer.replace(tv).unwrap();
             let ret = Result::MemoryReturned(body.offset, body.valid);
             println!("returning with {:?}", ret);
             Ok(ret)
@@ -102,7 +102,7 @@ impl<'buf> Buffer<'buf> {
         }
     }
 
-    pub fn into_buf<F, T>(src: &T) -> Self
+    fn into_buf_inner<F, T>(src: &T) -> Self
     where
         F: for<'a, 'b> SerializeWith<T, Serializer<'a, 'b>>,
     {
@@ -145,8 +145,13 @@ impl<'buf> Buffer<'buf> {
         xous_buf
     }
 
-    #[allow(dead_code)]
-    pub fn replace<F, T>(&mut self, src: T) -> core::result::Result<(), &'static str>
+    pub fn into_buf<T>(src: &T) -> Self
+    where
+    T: for<'b, 'a> rkyv::Serialize<rkyv::rancor::Strategy<rkyv::ser::Serializer<rkyv::ser::writer::Buffer<'b>, rkyv::ser::allocator::SubAllocator<'a>, ()>, rkyv::rancor::Panic>> {
+        Buffer::into_buf_inner::<Identity, T>(src)
+    }
+
+    fn replace_inner<F, T>(&mut self, src: T) -> core::result::Result<(), &'static str>
     where
         F: for<'a, 'b> SerializeWith<T, Serializer<'a, 'b>>,
     {
@@ -203,6 +208,14 @@ impl<'buf> Buffer<'buf> {
             msg.offset = MemoryAddress::new(self.used);
         }
         Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub fn replace<T>(&mut self, src: T) -> core::result::Result<(), &'static str>
+    where
+    T: for<'b, 'a> rkyv::Serialize<rkyv::rancor::Strategy<rkyv::ser::Serializer<rkyv::ser::writer::Buffer<'b>, rkyv::ser::allocator::SubAllocator<'a>, ()>, rkyv::rancor::Panic>>
+    {
+        self.replace_inner::<Identity, T>(src)
     }
 
     pub fn to_original<T, U, E>(&self) -> core::result::Result<T, E>

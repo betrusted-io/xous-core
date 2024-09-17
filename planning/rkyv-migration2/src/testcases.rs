@@ -202,7 +202,7 @@ pub enum Opcode {
 }
 
 pub fn draw_textview(conn: xous::CID, tv: &mut TextView) -> Result<(), xous::Error> {
-    let mut buf = crate::Buffer::into_buf::<rkyv::with::Identity, TextView>(tv);
+    let mut buf = crate::Buffer::into_buf(tv);
     buf.lend_mut(conn, Opcode::DrawTextView.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
     let tvr = buf.to_original::<TextView, _, rkyv::rancor::Error>().unwrap();

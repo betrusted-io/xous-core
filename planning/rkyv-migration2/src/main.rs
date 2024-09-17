@@ -2,7 +2,7 @@ mod buffer;
 use buffer::*;
 
 mod testcases;
-use rkyv::{deserialize, rancor::Error, with::Identity, Archive, Deserialize, Serialize};
+use rkyv::{deserialize, rancor::Error, Archive, Deserialize, Serialize};
 use testcases::*;
 
 // A test structure with rkyv derives
@@ -32,7 +32,7 @@ fn main() {
         string2: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.".to_string(),
     };
 
-    let buf = Buffer::into_buf::<Identity, Test>(&value); // AsBox
+    let buf = Buffer::into_buf(&value); // AsBox
 
     let f = buf.as_flat::<Test, _>().unwrap();
     println!("f: {:?}", f);
@@ -70,7 +70,7 @@ fn main() {
     tv.text.push_str(&value.string2);
     println!("Tv bounds computed before: {:?}", tv.bounds_computed);
 
-    let mut tv_buf = Buffer::into_buf::<Identity, _>(&tv);
+    let mut tv_buf = Buffer::into_buf(&tv);
     match tv_buf.lend_mut(1, 1) {
         Ok(r) => {
             println!("Returned {:?}", r);
