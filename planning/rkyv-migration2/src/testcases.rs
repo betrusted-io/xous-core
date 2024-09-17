@@ -205,7 +205,7 @@ pub fn draw_textview(conn: xous::CID, tv: &mut TextView) -> Result<(), xous::Err
     let mut buf = crate::Buffer::into_buf(tv);
     buf.lend_mut(conn, Opcode::DrawTextView.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
-    let tvr = buf.to_original::<TextView, _, rkyv::rancor::Error>().unwrap();
+    let tvr = buf.to_original::<TextView, _>().unwrap();
     tv.bounds_computed = tvr.bounds_computed;
     tv.cursor = tvr.cursor;
     tv.overflow = tvr.overflow;

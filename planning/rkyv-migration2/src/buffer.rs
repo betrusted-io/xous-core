@@ -66,7 +66,7 @@ pub fn send_message(connection: CID, mut message: Message) -> core::result::Resu
             // emulated TextView
             let mut buffer =
                 unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-            let mut tv = buffer.to_original::<crate::testcases::TextView, _, rkyv::rancor::Error>().unwrap();
+            let mut tv = buffer.to_original::<crate::testcases::TextView, _>().unwrap();
 
             println!("MSG: TextView");
             println!("Contents: {:?}", tv);
@@ -218,15 +218,14 @@ impl<'buf> Buffer<'buf> {
         self.replace_inner::<Identity, T>(src)
     }
 
-    pub fn to_original<T, U, E>(&self) -> core::result::Result<T, E>
+    pub fn to_original<T, U>(&self) -> core::result::Result<T, ()>
     where
         T: rkyv::Archive<Archived = U>,
         U: Portable,
-        E: std::fmt::Debug,
-        <T as Archive>::Archived: Deserialize<T, Strategy<rkyv::de::Pool, E>>,
+        <T as Archive>::Archived: Deserialize<T, Strategy<rkyv::de::Pool, rkyv::rancor::Error>>,
     {
         let r = unsafe { rkyv::access_unchecked::<U>(&self.slice[..self.used]) };
-        Ok(rkyv::deserialize::<T, E>(r).unwrap())
+        Ok(rkyv::deserialize::<T, rkyv::rancor::Error>(r).unwrap())
     }
 
     pub fn as_flat<T, U>(&self) -> core::result::Result<&U, ()>

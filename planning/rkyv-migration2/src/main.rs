@@ -37,7 +37,7 @@ fn main() {
     let f = buf.as_flat::<Test, _>().unwrap();
     println!("f: {:?}", f);
 
-    let t1 = buf.to_original::<Test, _, Error>().unwrap();
+    let t1 = buf.to_original::<Test, _>().unwrap();
     println!("t copy 1: {:?}", t1);
 
     println!("buf.slice: {:x?}", &buf[..buf.used()]);
@@ -74,7 +74,7 @@ fn main() {
     match tv_buf.lend_mut(1, 1) {
         Ok(r) => {
             println!("Returned {:?}", r);
-            let mut tv_orig = tv_buf.to_original::<TextView, _, Error>().unwrap();
+            let mut tv_orig = tv_buf.to_original::<TextView, _>().unwrap();
             println!("bounds_computed: {:?}", tv_orig.bounds_computed);
             assert_eq!(tv_orig.bounds_computed.unwrap().tl.x, 42);
             assert_eq!(tv_orig.bounds_computed.unwrap().tl.y, 42);
