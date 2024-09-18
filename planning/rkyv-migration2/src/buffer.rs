@@ -84,7 +84,7 @@ pub fn send_message(connection: CID, mut message: Message) -> core::result::Resu
     }
 }
 
-type Serializer<'a, 'b> = LowSerializer<'a, RkyvBuffer<'b>, SubAllocator<'a>, Panic>;
+type Serializer<'a, 'b> = LowSerializer<RkyvBuffer<'b>, SubAllocator<'a>, Panic>;
 
 impl<'buf> Buffer<'buf> {
     pub fn new(len: usize) -> Self {
