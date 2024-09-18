@@ -1,19 +1,24 @@
-use core::pin::Pin;
+use core::convert::TryInto;
+use std::cell::RefCell;
 
-use rkyv::archived_value;
-use rkyv::ser::Serializer;
-use rkyv::ArchiveUnsized;
-use rkyv::SerializeUnsized;
-use xous::{Error, MemoryMessage, Result, CID};
+use xous::{
+    map_memory, send_message, Error, MemoryFlags, MemoryMessage, MemoryRange, MemorySize, Message, Result,
+    CID,
+};
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct String<const N: usize> {
     bytes: [u8; N],
     len: u32, // length in bytes, not characters
+    should_drop: RefCell<bool>,
+    pages: RefCell<Option<MemoryRange>>,
 }
+const PAGE_SIZE: usize = 0x1000;
 
 impl<const N: usize> String<N> {
-    pub fn new() -> String<N> { String { bytes: [0; N], len: 0 } }
+    pub fn new() -> String<N> {
+        String { bytes: [0; N], len: 0, pages: RefCell::new(None), should_drop: RefCell::new(true) }
+    }
 
     // use a volatile write to ensure a clear operation is not optimized out
     // for ensuring that a string is cleared, e.g. at the exit of a function
@@ -65,11 +70,25 @@ impl<const N: usize> String<N> {
 
     /// Convert a `MemoryMessage` into a `String`
     pub fn from_message(message: &MemoryMessage) -> core::result::Result<String<N>, core::str::Utf8Error> {
-        let buf = unsafe { crate::Buffer::from_memory_message(message) };
-        let bytes = Pin::new(buf.as_ref());
-        let value = unsafe { archived_value::<String<N>>(&bytes, message.id as usize) };
-        let s = String::<N>::from_str(value.as_str());
-        Ok(s)
+        let mut new_str = Self::new();
+        let slice = unsafe { core::slice::from_raw_parts(message.buf.as_mut_ptr(), message.buf.len()) };
+        new_str.len = u32::from_le_bytes(slice[..4].try_into().unwrap());
+        new_str.bytes[..new_str.len as usize].copy_from_slice(&slice[4..4 + new_str.len as usize]);
+        *new_str.pages.borrow_mut() = Some(message.buf);
+        Ok(new_str)
+    }
+
+    fn ensure_pages(&self) {
+        let mut page_ref = self.pages.borrow_mut();
+        if page_ref.is_none() {
+            let flags = MemoryFlags::R | MemoryFlags::W;
+            let len_to_page = (N + (PAGE_SIZE - 1)) & !(PAGE_SIZE - 1);
+
+            // Allocate enough memory to hold the requested data
+            let new_mem =
+                map_memory(None, None, len_to_page, flags).expect("xous-ipc: OOM in buffer allocation");
+            *page_ref = Some(new_mem);
+        }
     }
 
     /// Perform an immutable lend of this String to the specified server.
@@ -77,19 +96,23 @@ impl<const N: usize> String<N> {
     /// Note that this convenience should only be used if the server only ever
     /// expects to deal with one type of String, ever. Otherwise, this should be
     /// implemented in the API and wrapped in an Enum to help decorate the functional
-    /// target of the string. An example of a server that uses this convencience function
+    /// target of the string. An example of a server that uses this convenience function
     /// is the logger.
     pub fn lend(
         &self,
         connection: CID,
         // id: crate::MessageId,
     ) -> core::result::Result<Result, Error> {
-        let mut writer = rkyv::ser::serializers::BufferSerializer::new(crate::Buffer::new(N));
-        let pos = writer.serialize_value(self).expect("xous::String -- couldn't archive self");
-        let xous_buffer = writer.into_inner();
+        self.ensure_pages();
+        let mut pages = self.pages.borrow_mut().expect("should be allocated");
+        // safety: interior representation is valid for all possible values of pages
+        let page_slice: &mut [u8] = unsafe { pages.as_slice_mut() };
+        page_slice[..4].copy_from_slice(&self.len.to_le_bytes());
+        page_slice[4..4 + (self.len as usize)].copy_from_slice(&self.bytes[..self.len as usize]);
 
-        // note that "id" is actually used as the position into the rkyv buffer
-        xous_buffer.lend(connection, pos as u32)
+        let msg =
+            MemoryMessage { id: 0, buf: pages, offset: None, valid: MemorySize::new(self.len as usize) };
+        send_message(connection, Message::Borrow(msg))
     }
 
     /// Move this string from the client into the server.
@@ -98,11 +121,18 @@ impl<const N: usize> String<N> {
         connection: CID,
         // id: crate::MessageId,
     ) -> core::result::Result<Result, Error> {
-        let mut writer = rkyv::ser::serializers::BufferSerializer::new(crate::Buffer::new(N));
-        let pos = writer.serialize_value(&self).expect("xous::String -- couldn't archive self");
-        let xous_buffer = writer.into_inner();
+        self.ensure_pages();
+        let mut pages = self.pages.borrow_mut().expect("should be allocated");
+        // safety: interior representation is valid for all possible values of pages
+        let page_slice: &mut [u8] = unsafe { pages.as_slice_mut() };
+        page_slice[..4].copy_from_slice(&self.len.to_le_bytes());
+        page_slice[4..4 + (self.len as usize)].copy_from_slice(&self.bytes[..self.len as usize]);
 
-        xous_buffer.send(connection, pos as u32)
+        let msg =
+            MemoryMessage { id: 0, buf: pages, offset: None, valid: MemorySize::new(self.len as usize) };
+        let result = send_message(connection, Message::Move(msg))?;
+        *self.should_drop.borrow_mut() = false;
+        Ok(result)
     }
 
     /// Clear the contents of this String and set the length to 0
@@ -236,68 +266,12 @@ impl<const N: usize> PartialEq for String<N> {
 
 impl<const N: usize> Eq for String<N> {}
 
-#[repr(C)]
-pub struct ArchivedString {
-    ptr: rkyv::RelPtr<str>,
-}
-
-impl ArchivedString {
-    // Provide a `str` view of an `ArchivedString`.
-    pub fn as_str(&self) -> &str {
-        unsafe {
-            // The as_ptr() function of RelPtr will get a pointer
-            // to its memory.
-            &*self.ptr.as_ptr()
+impl<const N: usize> Drop for String<N> {
+    fn drop(&mut self) {
+        if *self.should_drop.borrow() {
+            if let Some(pages) = self.pages.take() {
+                xous::unmap_memory(pages).expect("Buffer: failed to drop memory");
+            }
         }
     }
-}
-
-pub struct StringResolver {
-    bytes_pos: usize,
-    _metadata_resolver: rkyv::MetadataResolver<str>,
-}
-
-/// Turn a `String` into an archived object
-impl<const N: usize> rkyv::Archive for String<N> {
-    type Archived = ArchivedString;
-    type Resolver = StringResolver;
-
-    fn resolve(&self, pos: usize, resolver: Self::Resolver) -> Self::Archived {
-        Self::Archived {
-            ptr: unsafe {
-                self.as_str().unwrap().resolve_unsized(
-                    pos + rkyv::offset_of!(Self::Archived, ptr),
-                    resolver.bytes_pos,
-                    (),
-                )
-            },
-        }
-    }
-}
-
-// Turn a stream of bytes into an `ArchivedString`.
-impl<S: rkyv::ser::Serializer + ?Sized, const N: usize> rkyv::Serialize<S> for String<N> {
-    fn serialize(&self, serializer: &mut S) -> core::result::Result<Self::Resolver, S::Error> {
-        // This is where we want to write the bytes of our string and return
-        // a resolver that knows where those bytes were written.
-        // We also need to serialize the metadata for our str.
-        Ok(StringResolver {
-            bytes_pos: self.as_str().unwrap().serialize_unsized(serializer)?,
-            _metadata_resolver: self.as_str().unwrap().serialize_metadata(serializer)?,
-        })
-    }
-}
-// Turn an `ArchivedString` back into a String
-use rkyv::Fallible;
-impl<D: Fallible + ?Sized, const N: usize> rkyv::Deserialize<String<N>, D> for ArchivedString {
-    fn deserialize(&self, _deserializer: &mut D) -> core::result::Result<String<N>, D::Error> {
-        Ok(String::<N>::from_str(self.as_str()))
-    }
-}
-
-// a "no-op" deserializer for in-place data, required for rkyv 0.4.1
-// perhaps in rkyv 0.5 this will go away, see https://github.com/djkoloski/rkyv/issues/67
-pub struct XousDeserializer;
-impl rkyv::Fallible for XousDeserializer {
-    type Error = xous::Error;
 }
