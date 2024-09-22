@@ -15,8 +15,9 @@ log = "0.4.14"
 num-derive = { version = "0.4.1", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 susres = { package = "xous-api-susres", version = "0.9.59" }
-rkyv = { version = "0.4.3", default-features = false, features = [
-    "const_generics",
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
 ] }
 xous-ipc = "0.9.63"
 rand_core = "0.6.4" # the 0.6.4 API is necessary for compatibility with curve25519-dalek crates

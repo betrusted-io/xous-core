@@ -67,7 +67,7 @@ impl<'a> AlertModalBuilder<'a> {
 
     pub fn build(&self) -> Result<TextEntryPayloads, xous::Error> {
         self.modals.lock();
-        let mut final_placeholders: Option<[Option<(xous_ipc::String<256>, bool)>; 10]> = None;
+        let mut final_placeholders: Option<[Option<(String, bool)>; 10]> = None;
         let fields_amt = self.validators.len();
 
         if fields_amt == 0 {
@@ -78,7 +78,7 @@ impl<'a> AlertModalBuilder<'a> {
 
         match self.placeholders.len() {
             1.. => {
-                let mut pl: [Option<(xous_ipc::String<256>, bool)>; 10] = Default::default();
+                let mut pl: [Option<(String, bool)>; 10] = Default::default();
 
                 if fields_amt != self.placeholders.len() {
                     log::warn!("can't have more fields than placeholders");
@@ -88,7 +88,7 @@ impl<'a> AlertModalBuilder<'a> {
 
                 for (index, placeholder) in self.placeholders.iter().enumerate() {
                     if let Some((string, persist)) = placeholder {
-                        pl[index] = Some((xous_ipc::String::from_str(&string), *persist))
+                        pl[index] = Some((String::from(&string), *persist))
                     } else {
                         pl[index] = None
                     }
@@ -103,7 +103,7 @@ impl<'a> AlertModalBuilder<'a> {
 
         let mut spec = ManagedPromptWithTextResponse {
             token: self.modals.token,
-            prompt: xous_ipc::String::from_str(&self.prompt),
+            prompt: String::from(&self.prompt),
             fields: fields_amt as u32,
             placeholders: final_placeholders,
             growable: self.growable,
@@ -229,12 +229,12 @@ impl Modals {
     pub fn show_notification(&self, notification: &str, qrtext: Option<&str>) -> Result<(), xous::Error> {
         self.lock();
         let qrtext = match qrtext {
-            Some(text) => Some(xous_ipc::String::from_str(text)),
+            Some(text) => Some(String::from(text)),
             None => None,
         };
         let spec = ManagedNotification {
             token: self.token,
-            message: xous_ipc::String::from_str(notification),
+            message: String::from(notification),
             qrtext,
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
@@ -279,7 +279,7 @@ impl Modals {
         }
         let spec = ManagedBip39 {
             token: self.token,
-            caption: if let Some(c) = caption { Some(xous_ipc::String::from_str(c)) } else { None },
+            caption: if let Some(c) = caption { Some(String::from(c)) } else { None },
             bip39_data,
             bip39_len: if data.len() <= 32 { data.len() as u32 } else { 32 },
         };
@@ -328,7 +328,7 @@ impl Modals {
         self.lock();
         let spec = ManagedBip39 {
             token: self.token,
-            caption: if let Some(c) = prompt { Some(xous_ipc::String::from_str(c)) } else { None },
+            caption: if let Some(c) = prompt { Some(String::from(c)) } else { None },
             bip39_data: [0u8; 32],
             bip39_len: 0,
         };
@@ -406,7 +406,7 @@ impl Modals {
         self.lock();
         let spec = ManagedProgress {
             token: self.token,
-            title: xous_ipc::String::from_str(title),
+            title: String::from(title),
             start_work: start,
             end_work: end,
             current_work: current,
@@ -455,7 +455,7 @@ impl Modals {
         self.lock();
         let spec = ManagedProgress {
             token: self.token,
-            title: xous_ipc::String::from_str(title),
+            title: String::from(title),
             start_work: start,
             end_work: end,
             current_work: current,
@@ -644,7 +644,7 @@ impl Modals {
     pub fn get_radiobutton(&self, prompt: &str) -> Result<String, xous::Error> {
         self.lock();
         let spec =
-            ManagedPromptWithFixedResponse { token: self.token, prompt: xous_ipc::String::from_str(prompt) };
+            ManagedPromptWithFixedResponse { token: self.token, prompt: String::from(prompt) };
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::PromptWithFixedResponse.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))?;
@@ -730,7 +730,7 @@ impl Modals {
     pub fn get_checkbox(&self, prompt: &str) -> Result<Vec<String>, xous::Error> {
         self.lock();
         let spec =
-            ManagedPromptWithFixedResponse { token: self.token, prompt: xous_ipc::String::from_str(prompt) };
+            ManagedPromptWithFixedResponse { token: self.token, prompt: String::from(prompt) };
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::PromptWithMultiResponse.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))?;
@@ -828,8 +828,8 @@ impl Modals {
         self.lock();
         let spec = DynamicNotification {
             token: self.token,
-            title: if let Some(t) = title { Some(xous_ipc::String::from_str(t)) } else { None },
-            text: if let Some(t) = text { Some(xous_ipc::String::from_str(t)) } else { None },
+            title: if let Some(t) = title { Some(String::from(t)) } else { None },
+            text: if let Some(t) = text { Some(String::from(t)) } else { None },
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::DynamicNotification.to_u32().unwrap())
@@ -846,8 +846,8 @@ impl Modals {
     ) -> Result<(), xous::Error> {
         let spec = DynamicNotification {
             token: self.token,
-            title: if let Some(t) = title { Some(xous_ipc::String::from_str(t)) } else { None },
-            text: if let Some(t) = text { Some(xous_ipc::String::from_str(t)) } else { None },
+            title: if let Some(t) = title { Some(String::from(t)) } else { None },
+            text: if let Some(t) = text { Some(String::from(t)) } else { None },
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::UpdateDynamicNotification.to_u32().unwrap())

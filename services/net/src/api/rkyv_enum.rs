@@ -25,7 +25,7 @@ pub enum XousServerId {
     PrivateSid([u32; 4]),
     /// A name that needs to be looked up with XousNames. Easier to implement, but less secure as it requires
     /// an open connection slot that could be abused by other processes.
-    ServerName(xous_ipc::String<64>),
+    ServerName(String),
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]

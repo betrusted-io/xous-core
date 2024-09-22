@@ -15,9 +15,10 @@ log = "0.4.14"
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 xous-ipc = "0.9.63"
-rkyv = { version = "0.4.3", features = [
-    "const_generics",
-], default-features = false }
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+] }
 gam = { path = "../gam" }
 trng = { path = "../trng", optional = true }
 cram-hal-service = { path = "../cram-hal-service", optional = true } # provides trng for cramium-soc

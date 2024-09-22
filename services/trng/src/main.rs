@@ -701,7 +701,7 @@ fn main() -> ! {
                 let mut buffer =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let len = buffer.as_flat::<TrngBuf, _>().unwrap().len;
-                buffer.replace(trng.get_buf(len)).unwrap();
+                buffer.replace(trng.get_buf(len.into())).unwrap();
             }
             Some(api::Opcode::TestSetMode) => xous::msg_blocking_scalar_unpack!(msg, mode_code, _, _, _, {
                 if let Some(mode) = FromPrimitive::from_usize(mode_code) {

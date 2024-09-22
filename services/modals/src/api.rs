@@ -18,7 +18,7 @@ pub(crate) enum ValidationOp {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedPromptWithFixedResponse {
     pub token: [u32; 4],
-    pub prompt: xous_ipc::String<1024>,
+    pub prompt: String,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedListItem {
@@ -29,19 +29,19 @@ pub struct ManagedListItem {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedPromptWithTextResponse {
     pub token: [u32; 4],
-    pub prompt: xous_ipc::String<1024>,
+    pub prompt: String,
     pub fields: u32,
     /// placeholders
-    pub placeholders: Option<[Option<(xous_ipc::String<256>, bool)>; 10]>,
+    pub placeholders: Option<[Option<(String, bool)>; 10]>,
     pub growable: bool,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedNotification {
     pub token: [u32; 4],
-    pub message: xous_ipc::String<1024>,
+    pub message: String,
     // A Type 40 (177x177) qrcode with Medium data correction can encode max 3391 alphanumeric characters
-    pub qrtext: Option<xous_ipc::String<3000>>,
+    pub qrtext: Option<String>,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
@@ -49,7 +49,7 @@ pub struct ManagedBip39 {
     pub token: [u32; 4],
     pub bip39_data: [u8; 32],
     pub bip39_len: u32,
-    pub caption: Option<xous_ipc::String<1024>>,
+    pub caption: Option<String>,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
@@ -62,7 +62,7 @@ pub struct ManagedImage {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedProgress {
     pub token: [u32; 4],
-    pub title: xous_ipc::String<1024>,
+    pub title: String,
     // these are automatcally turned into percentages on a scale of 0->100%
     /// starting quanta to track (e.g. starting sector for erase).
     pub start_work: u32,
@@ -83,8 +83,8 @@ pub struct ManagedProgress {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct DynamicNotification {
     pub token: [u32; 4],
-    pub title: Option<xous_ipc::String<1024>>,
-    pub text: Option<xous_ipc::String<2048>>,
+    pub title: Option<String>,
+    pub text: Option<String>,
 }
 
 /// API note: enums with explicit numbers may not have their numbers re-ordered, especially

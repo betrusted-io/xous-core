@@ -650,7 +650,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 sorted_ssids.sort_unstable();
                 for (strongest_ssids, ret_list_item) in sorted_ssids.iter().zip(ret_list.list.iter_mut()) {
                     *ret_list_item = Some(SsidRecord {
-                        name: xous_ipc::String::<32>::from_str(&strongest_ssids.ssid),
+                        name: String::from(&strongest_ssids.ssid),
                         rssi: strongest_ssids.rssi,
                     });
                 }
