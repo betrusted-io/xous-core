@@ -2726,7 +2726,7 @@ impl<'a> RootKeys {
                 buf.lend_mut(self.gfx.conn(), self.gfx.bulk_read_fontmap_op())
                     .expect("couldn't do bulkread from gfx");
                 let br = buf.as_flat::<BulkRead, _>().unwrap();
-                hasher.update(&br.buf[..br.len as usize]);
+                hasher.update(&br.buf[..(<u32 as From<u32>>::from(br.len.into())) as usize]);
                 if br.len != bulkread.buf.len() as u32 {
                     log::trace!("non-full block len: {}", br.len);
                 }
@@ -2766,7 +2766,7 @@ impl<'a> RootKeys {
                 buf.lend_mut(self.gfx.conn(), self.gfx.bulk_read_fontmap_op())
                     .expect("couldn't do bulkread from gfx");
                 let br = buf.as_flat::<BulkRead, _>().unwrap();
-                hasher.update(&br.buf[..br.len as usize]);
+                hasher.update(&br.buf[..(<u32 as From<u32>>::from(br.len.into())) as usize]);
                 if br.len != bulkread.buf.len() as u32 {
                     log::trace!("non-full block len: {}", br.len);
                 }
