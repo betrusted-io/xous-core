@@ -413,8 +413,8 @@ const FILE_ID_SERVICES_PDDB_SRC_DICTIONARY: u32 = 1;
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct BasisRequestPassword {
-    db_name: xous_ipc::String<{ crate::api::BASIS_NAME_LEN }>,
-    plaintext_pw: Option<xous_ipc::String<{ crate::api::PASSWORD_LEN }>>,
+    db_name: String<{ crate::api::BASIS_NAME_LEN }>,
+    plaintext_pw: Option<String<{ crate::api::PASSWORD_LEN }>>,
 }
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum PasswordState {
@@ -896,14 +896,14 @@ fn wrapped_main() -> ! {
                         if let Some(pw) = ret.plaintext_pw {
                             match basis_cache.basis_create(
                                 &mut pddb_os,
-                                mgmt.name.as_str().expect("name is not valid utf-8"),
-                                pw.as_str().expect("password was not valid utf-8"),
+                                mgmt.name.as_str(),
+                                pw.as_str(),
                             ) {
                                 Ok(_) => {
                                     log::info!(
                                         "{}PDDB.CREATEOK,{},{}",
                                         xous::BOOKEND_START,
-                                        mgmt.name.as_str().unwrap(),
+                                        mgmt.name.as_str(),
                                         xous::BOOKEND_END
                                     );
                                     mgmt.code = PddbRequestCode::NoErr
@@ -940,8 +940,8 @@ fn wrapped_main() -> ! {
                             if let Some(pw) = ret.plaintext_pw {
                                 if let Some(basis) = basis_cache.basis_unlock(
                                     &mut pddb_os,
-                                    mgmt.name.as_str().expect("name is not valid utf-8"),
-                                    pw.as_str().expect("password was not valid utf-8"),
+                                    mgmt.name.as_str(),
+                                    pw.as_str(),
                                     mgmt.policy.unwrap_or(BasisRetentionPolicy::Persist),
                                 ) {
                                     if basis_cache.basis_contains(&basis.name) {
@@ -960,7 +960,7 @@ fn wrapped_main() -> ! {
                                     log::info!(
                                         "{}PDDB.UNLOCKOK,{},{}",
                                         xous::BOOKEND_START,
-                                        mgmt.name.as_str().unwrap(),
+                                        mgmt.name.as_str(),
                                         xous::BOOKEND_END
                                     );
                                     if basis_monitor_notifications.len() > 0 {
@@ -974,7 +974,7 @@ fn wrapped_main() -> ! {
                                     log::info!(
                                         "{}PDDB.BADPASS,{},{}",
                                         xous::BOOKEND_START,
-                                        mgmt.name.as_str().unwrap(),
+                                        mgmt.name.as_str(),
                                         xous::BOOKEND_END
                                     );
                                     modals
@@ -1019,7 +1019,7 @@ fn wrapped_main() -> ! {
                 match mgmt.code {
                     PddbRequestCode::Close => {
                         match basis_cache
-                            .basis_unmount(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"))
+                            .basis_unmount(&mut pddb_os, mgmt.name.as_str())
                         {
                             Ok(_) => {
                                 mgmt.code = PddbRequestCode::NoErr;
@@ -1050,7 +1050,7 @@ fn wrapped_main() -> ! {
                 match mgmt.code {
                     PddbRequestCode::Delete => {
                         match basis_cache
-                            .basis_delete(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"))
+                            .basis_delete(&mut pddb_os, mgmt.name.as_str())
                         {
                             Ok(_) => mgmt.code = PddbRequestCode::NoErr,
                             Err(e) => match e.kind() {
@@ -1078,12 +1078,12 @@ fn wrapped_main() -> ! {
                         unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                     let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
                     let bname = if req.basis_specified {
-                        Some(req.basis.as_str().unwrap())
+                        Some(req.basis.as_str())
                     } else {
                         Some(basis.as_str())
                     };
-                    let dict = req.dict.as_str().expect("dict utf-8 decode error");
-                    let key = req.key.as_str().expect("key utf-8 decode error");
+                    let dict = req.dict.as_str();
+                    let key = req.key.as_str();
                     log::debug!("get: {:?} {}", bname, key);
                     #[cfg(feature = "perfcounter")]
                     pddb_os.perf_entry(
@@ -1272,9 +1272,9 @@ fn wrapped_main() -> ! {
                 let mut buffer =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
-                let bname = if req.basis_specified { Some(req.basis.as_str().unwrap()) } else { None };
-                let dict = req.dict.as_str().expect("dict utf-8 decode error");
-                let key = req.key.as_str().expect("key utf-8 decode error");
+                let bname = if req.basis_specified { Some(req.basis.as_str()) } else { None };
+                let dict = req.dict.as_str();
+                let key = req.key.as_str();
                 match basis_cache.key_remove(&mut pddb_os, dict, key, bname, false) {
                     Ok(_) => {
                         let mut evict_list = Vec::<ApiToken>::new();
@@ -1342,8 +1342,8 @@ fn wrapped_main() -> ! {
                 }
                 log::info!("Deleting key list: {:?}", key_list);
                 let start = tt.elapsed_ms();
-                let bname = if req.basis_specified { Some(req.basis.as_str().unwrap()) } else { None };
-                let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                let bname = if req.basis_specified { Some(req.basis.as_str()) } else { None };
+                let dict = req.dict.as_str();
                 match basis_cache.key_list_remove(&mut pddb_os, dict, key_list, bname) {
                     Ok(_) => req.retcode = PddbRetcode::Ok,
                     Err(e) => match e.kind() {
@@ -1367,8 +1367,8 @@ fn wrapped_main() -> ! {
                 let mut buffer =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
-                let bname = if req.basis_specified { Some(req.basis.as_str().unwrap()) } else { None };
-                let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                let bname = if req.basis_specified { Some(req.basis.as_str()) } else { None };
+                let dict = req.dict.as_str();
                 log::debug!("attempting to remove dict {} basis {:?}", dict, bname);
                 match basis_cache.dict_remove(&mut pddb_os, dict, bname, false) {
                     Ok(_) => {
@@ -1464,8 +1464,8 @@ fn wrapped_main() -> ! {
                     continue;
                 }
                 key_token = Some(req.token);
-                let bname = if req.basis_specified { Some(req.basis.as_str().unwrap()) } else { None };
-                let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                let bname = if req.basis_specified { Some(req.basis.as_str()) } else { None };
+                let dict = req.dict.as_str();
                 log::debug!("counting keys in dict {} basis {:?}", dict, bname);
                 #[cfg(feature = "perfcounter")]
                 pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 0, std::line!());
@@ -1574,7 +1574,7 @@ fn wrapped_main() -> ! {
                 }
                 dict_token = Some(req.token);
                 dict_list.clear();
-                let bname = if req.basis_specified { Some(req.basis.as_str().unwrap()) } else { None };
+                let bname = if req.basis_specified { Some(req.basis.as_str()) } else { None };
                 let list = basis_cache.dict_list(&mut pddb_os, bname);
                 if list.len() > 0 {
                     req.index = list.len() as u32;
@@ -1601,7 +1601,7 @@ fn wrapped_main() -> ! {
                             req.code = PddbRequestCode::InternalError;
                         } else {
                             req.dict =
-                                xous_ipc::String::<DICT_NAME_LEN>::from_str(&dict_list[req.index as usize]);
+                                String::<DICT_NAME_LEN>::from_str(&dict_list[req.index as usize]);
                             req.code = PddbRequestCode::NoErr;
                             // the last index requested must be the highest one!
                             if req.index == dict_list.len() as u32 - 1 {
@@ -1734,9 +1734,9 @@ fn wrapped_main() -> ! {
                     // confirm data exists; setup the tracking state
                     let key_list: Vec<String> = match basis_cache.key_list(
                         &mut pddb_os,
-                        bulk_descriptor.dict.as_str().unwrap(),
+                        bulk_descriptor.dict.as_str(),
                         if bulk_descriptor.basis_specified {
-                            Some(bulk_descriptor.basis.as_str().unwrap())
+                            Some(bulk_descriptor.basis.as_str())
                         } else {
                             None
                         },
@@ -2184,14 +2184,14 @@ fn wrapped_main() -> ! {
                 let dbg = buffer.to_original::<PddbDangerousDebug, _>().unwrap();
                 match dbg.request {
                     DebugRequest::Dump => {
-                        log::info!("dumping pddb to {}", dbg.dump_name.as_str().unwrap());
+                        log::info!("dumping pddb to {}", dbg.dump_name.as_str());
                         #[cfg(not(feature = "autobasis"))]
-                        pddb_os.dbg_dump(Some(dbg.dump_name.as_str().unwrap().to_string()), None);
+                        pddb_os.dbg_dump(Some(dbg.dump_name.as_str().to_string()), None);
                         #[cfg(feature = "autobasis")]
                         {
                             let export_extra = pddb_os.dbg_extra();
                             pddb_os.dbg_dump(
-                                Some(dbg.dump_name.as_str().unwrap().to_string()),
+                                Some(dbg.dump_name.as_str().to_string()),
                                 Some(&export_extra),
                             );
                         }

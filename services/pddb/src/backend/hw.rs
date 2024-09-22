@@ -2777,7 +2777,7 @@ impl PddbOs {
                 Ok(bname) => {
                     let name = bname.first().as_str().to_string();
                     let request = BasisRequestPassword {
-                        db_name: xous_ipc::String::from_str(name.to_string()),
+                        db_name: String::from(name.to_string()),
                         plaintext_pw: None,
                     };
                     let mut buf = Buffer::into_buf(request).unwrap();
@@ -2785,7 +2785,7 @@ impl PddbOs {
                     let retpass = buf.to_original::<BasisRequestPassword, _>().unwrap();
                     // 2. validate the name/password combo
                     let basis_key =
-                        self.basis_derive_key(&name, retpass.plaintext_pw.unwrap().as_str().unwrap());
+                        self.basis_derive_key(&name, retpass.plaintext_pw.unwrap().as_str());
                     // validate the password by finding the root block of the basis. We rely entirely
                     // upon the AEAD with key commit to ensure the password is correct.
                     let maybe_entry = if let Some(basis_map) =
@@ -3446,7 +3446,7 @@ impl PddbOs {
                                 {
                                     Ok(bname) => {
                                         let request = BasisRequestPassword {
-                                            db_name: xous_ipc::String::from_str(bname.first().as_str()),
+                                            db_name: String::from(bname.first().as_str()),
                                             plaintext_pw: None,
                                         };
                                         let mut buf = Buffer::into_buf(request).unwrap();

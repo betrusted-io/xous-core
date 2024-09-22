@@ -264,7 +264,7 @@ pub type ApiToken = [u32; 3];
 pub struct PddbBasisList {
     /// the first 63 that fit in the list -- generally we anticipate not more than a few being open at a
     /// time, so this should be enough.
-    pub list: [xous_ipc::String<BASIS_NAME_LEN>; 63],
+    pub list: [String<BASIS_NAME_LEN>; 63],
     /// total number of basis open. Should be <= 63, but we allow it to be larger to indicate cases where
     /// this structure wasn't big enough.
     pub num: u32,
@@ -298,16 +298,16 @@ impl BasisRetentionPolicy {
 }
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbBasisRequest {
-    pub name: xous_ipc::String<BASIS_NAME_LEN>,
+    pub name: String<BASIS_NAME_LEN>,
     pub code: PddbRequestCode,
     pub policy: Option<BasisRetentionPolicy>,
 }
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbDictRequest {
     pub basis_specified: bool,
-    pub basis: xous_ipc::String<BASIS_NAME_LEN>,
-    pub dict: xous_ipc::String<DICT_NAME_LEN>,
-    pub key: xous_ipc::String<KEY_NAME_LEN>,
+    pub basis: String<BASIS_NAME_LEN>,
+    pub dict: String<DICT_NAME_LEN>,
+    pub key: String<KEY_NAME_LEN>,
     pub index: u32,
     pub token: [u32; 4],
     pub code: PddbRequestCode,
@@ -323,9 +323,9 @@ pub struct PddbDictRequest {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbKeyRequest {
     pub basis_specified: bool,
-    pub basis: xous_ipc::String<BASIS_NAME_LEN>,
-    pub dict: xous_ipc::String<DICT_NAME_LEN>,
-    pub key: xous_ipc::String<KEY_NAME_LEN>,
+    pub basis: String<BASIS_NAME_LEN>,
+    pub dict: String<DICT_NAME_LEN>,
+    pub key: String<KEY_NAME_LEN>,
     pub token: Option<ApiToken>,
     pub create_dict: bool,
     pub create_key: bool,
@@ -350,8 +350,8 @@ pub(crate) const MAX_PDDB_DELETE_LEN: usize = 3800; // approximate limit, might 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct PddbDeleteList {
     pub basis_specified: bool,
-    pub basis: xous_ipc::String<BASIS_NAME_LEN>,
-    pub dict: xous_ipc::String<DICT_NAME_LEN>,
+    pub basis: String<BASIS_NAME_LEN>,
+    pub dict: String<DICT_NAME_LEN>,
     pub data: [u8; MAX_PDDB_DELETE_LEN],
     pub retcode: PddbRetcode,
 }
@@ -524,8 +524,8 @@ pub struct PddbKeyAttrIpc {
     pub len: u64,
     pub reserved: u64,
     pub age: u64,
-    pub dict: xous_ipc::String<DICT_NAME_LEN>,
-    pub basis: xous_ipc::String<BASIS_NAME_LEN>,
+    pub dict: String<DICT_NAME_LEN>,
+    pub basis: String<BASIS_NAME_LEN>,
     pub flags: u32,
     pub index: u32,
     pub token: ApiToken,
@@ -537,8 +537,8 @@ impl PddbKeyAttrIpc {
             len: 0,
             reserved: 0,
             age: 0,
-            dict: xous_ipc::String::<DICT_NAME_LEN>::new(),
-            basis: xous_ipc::String::<BASIS_NAME_LEN>::new(),
+            dict: String::<DICT_NAME_LEN>::new(),
+            basis: String::<BASIS_NAME_LEN>::new(),
             flags: 0,
             index: 0,
             token,
@@ -552,8 +552,8 @@ impl PddbKeyAttrIpc {
             len: self.len as usize,
             reserved: self.reserved as usize,
             age: self.age as usize,
-            dict: String::from(self.dict.as_str().unwrap()),
-            basis: String::from(self.basis.as_str().unwrap()),
+            dict: String::from(self.dict.as_str()),
+            basis: String::from(self.basis.as_str()),
             flags: KeyFlags(self.flags),
             index: NonZeroU32::new(self.index).unwrap(),
         }
@@ -564,8 +564,8 @@ impl PddbKeyAttrIpc {
             len: attr.len as u64,
             reserved: attr.reserved as u64,
             age: attr.age as u64,
-            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(&attr.dict),
-            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&attr.basis),
+            dict: String::<DICT_NAME_LEN>::from_str(&attr.dict),
+            basis: String::<BASIS_NAME_LEN>::from_str(&attr.basis),
             flags: attr.flags.0,
             index: attr.index.get(),
             token,
@@ -579,7 +579,7 @@ impl PddbKeyAttrIpc {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbDangerousDebug {
     pub request: DebugRequest,
-    pub dump_name: xous_ipc::String<128>,
+    pub dump_name: String,
 }
 #[cfg(not(target_os = "xous"))]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]

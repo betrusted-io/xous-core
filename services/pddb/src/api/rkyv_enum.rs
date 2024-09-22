@@ -48,7 +48,7 @@ pub enum PddbRekeyOp {
     /// system basis keys are encrypted directly by the rootkeys enclave, so changing
     /// its password requires calling a routine in root_keys (that does not exist
     /// at this current time).
-    ChangePass(xous_ipc::String<BASIS_NAME_LEN>),
+    ChangePass(String<BASIS_NAME_LEN>),
     */
     /// Return codes
     Success,

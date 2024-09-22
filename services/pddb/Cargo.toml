@@ -17,7 +17,10 @@ susres = { package = "xous-api-susres", version = "0.9.59" }
 log = "0.4.14"
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-rkyv = { version = "0.4.3", features = ["const_generics"] }
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+] }
 trng = { path = "../trng" }
 spinor = { path = "../spinor" }
 aes = { path = "../aes" }

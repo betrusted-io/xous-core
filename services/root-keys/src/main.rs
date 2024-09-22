@@ -21,7 +21,7 @@ use tts_frontend::*;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 #[cfg(feature = "policy-menu")]
-use xous_ipc::String;
+use String;
 
 #[cfg(any(feature = "precursor", feature = "renode"))]
 mod implementation;
@@ -612,7 +612,7 @@ fn main() -> ! {
     {
         let mut menu_items = Vec::<MenuItem>::new();
         menu_items.push(MenuItem {
-            name: String::from_str(t!("rootkeys.policy_keep", locales::LANG)),
+            name: String::from(t!("rootkeys.policy_keep", locales::LANG)),
             action_conn: Some(main_cid),
             action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
             action_payload: MenuPayload::Scalar([
@@ -624,7 +624,7 @@ fn main() -> ! {
             close_on_select: true,
         });
         menu_items.push(MenuItem {
-            name: String::from_str(t!("rootkeys.policy_suspend", locales::LANG)),
+            name: String::from(t!("rootkeys.policy_suspend", locales::LANG)),
             action_conn: Some(main_cid),
             action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
             action_payload: MenuPayload::Scalar([
@@ -636,7 +636,7 @@ fn main() -> ! {
             close_on_select: true,
         });
         menu_items.push(MenuItem {
-            name: String::from_str(t!("rootkeys.policy_clear", locales::LANG)),
+            name: String::from(t!("rootkeys.policy_clear", locales::LANG)),
             action_conn: Some(main_cid),
             action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
             action_payload: MenuPayload::Scalar([

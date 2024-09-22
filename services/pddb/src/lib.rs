@@ -280,7 +280,7 @@ impl Pddb {
 
     /// return a list of all open bases
     pub fn list_basis(&self) -> Vec<String> {
-        let list_alloc = PddbBasisList { list: [xous_ipc::String::<BASIS_NAME_LEN>::default(); 63], num: 0 };
+        let list_alloc = PddbBasisList { list: [String::<BASIS_NAME_LEN>::default(); 63], num: 0 };
         let mut buf = Buffer::into_buf(list_alloc).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::ListBasis.to_u32().unwrap())
             .expect("Couldn't execute ListBasis opcode");
@@ -293,14 +293,14 @@ impl Pddb {
             if index as u32 == list.num {
                 break;
             }
-            ret.push(name.as_str().expect("name is not valid utf-8").to_string());
+            ret.push(name.as_str().to_string());
         }
         ret
     }
 
     /// The caller of this function will block and return only if the order of Bases has changed.
     pub fn monitor_basis(&self) -> Vec<String> {
-        let list_alloc = PddbBasisList { list: [xous_ipc::String::<BASIS_NAME_LEN>::default(); 63], num: 0 };
+        let list_alloc = PddbBasisList { list: [String::<BASIS_NAME_LEN>::default(); 63], num: 0 };
         let mut buf = Buffer::into_buf(list_alloc).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::BasisMonitor.to_u32().unwrap())
             .expect("Couldn't execute ListBasis opcode");
@@ -313,7 +313,7 @@ impl Pddb {
             if index as u32 == list.num {
                 break;
             }
-            ret.push(name.as_str().expect("name is not valid utf-8").to_string());
+            ret.push(name.as_str().to_string());
         }
         ret
     }
@@ -322,7 +322,7 @@ impl Pddb {
     /// if the PDDB is not mounted, returns None
     pub fn latest_basis(&self) -> Option<String> {
         let mgmt = PddbBasisRequest {
-            name: xous_ipc::String::<BASIS_NAME_LEN>::new(),
+            name: String::<BASIS_NAME_LEN>::new(),
             code: PddbRequestCode::Uninit,
             policy: None,
         };
@@ -331,7 +331,7 @@ impl Pddb {
             .expect("Couldn't execute ListBasis opcode");
         let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore list structure");
         match ret.code {
-            PddbRequestCode::NoErr => Some(ret.name.as_str().expect("name wasn't valid utf-8").to_string()),
+            PddbRequestCode::NoErr => Some(ret.name.as_str().to_string()),
             PddbRequestCode::NotMounted => None,
             _ => {
                 log::error!("Invalid return from latest basis call");
@@ -345,7 +345,7 @@ impl Pddb {
             return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
         }
         let mgmt = PddbBasisRequest {
-            name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
+            name: String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Create,
             policy: None,
         };
@@ -376,7 +376,7 @@ impl Pddb {
             return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
         }
         let mgmt = PddbBasisRequest {
-            name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
+            name: String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Open,
             policy,
         };
@@ -404,7 +404,7 @@ impl Pddb {
             return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
         }
         let mgmt = PddbBasisRequest {
-            name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
+            name: String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Close,
             policy: None,
         };
@@ -430,7 +430,7 @@ impl Pddb {
             return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
         }
         let mgmt = PddbBasisRequest {
-            name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
+            name: String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Delete,
             policy: None,
         };
@@ -477,9 +477,9 @@ impl Pddb {
             if bname.len() > BASIS_NAME_LEN - 1 {
                 return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
             }
-            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+            String::<BASIS_NAME_LEN>::from_str(bname)
         } else {
-            xous_ipc::String::<BASIS_NAME_LEN>::new()
+            String::<BASIS_NAME_LEN>::new()
         };
 
         if key_changed_cb.is_some() {
@@ -492,9 +492,9 @@ impl Pddb {
 
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
-            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
-            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
-            key: xous_ipc::String::<KEY_NAME_LEN>::from_str(key_name),
+            basis: String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: String::<DICT_NAME_LEN>::from_str(dict_name),
+            key: String::<KEY_NAME_LEN>::from_str(key_name),
             create_dict,
             create_key,
             token: None,
@@ -524,7 +524,7 @@ impl Pddb {
                         // i think these fields are redundant, let's save the storage and remove them for
                         // now... dict: String::from(dict_name),
                         //key: String::from(key_name),
-                        //basis: if basis_name.is_some() {Some(String::from(bname.as_str().unwrap()))} else
+                        //basis: if basis_name.is_some() {Some(String::from(bname.as_str()))} else
                         // {None},
                         pos: 0,
                         token,
@@ -560,9 +560,9 @@ impl Pddb {
             if bname.len() > BASIS_NAME_LEN - 1 {
                 return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
             }
-            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+            String::<BASIS_NAME_LEN>::from_str(bname)
         } else {
-            xous_ipc::String::<BASIS_NAME_LEN>::new()
+            String::<BASIS_NAME_LEN>::new()
         };
 
         let maybe_cb = self.cb.take();
@@ -571,9 +571,9 @@ impl Pddb {
 
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
-            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
-            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
-            key: xous_ipc::String::<KEY_NAME_LEN>::from_str(key_name),
+            basis: String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: String::<DICT_NAME_LEN>::from_str(dict_name),
+            key: String::<KEY_NAME_LEN>::from_str(key_name),
             create_dict: false,
             create_key: false,
             token: None,
@@ -614,14 +614,14 @@ impl Pddb {
             if bname.len() > BASIS_NAME_LEN - 1 {
                 return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
             }
-            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+            String::<BASIS_NAME_LEN>::from_str(bname)
         } else {
-            xous_ipc::String::<BASIS_NAME_LEN>::new()
+            String::<BASIS_NAME_LEN>::new()
         };
         let mut request = PddbDeleteList {
             basis_specified: basis_name.is_some(),
-            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
-            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
+            basis: String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: String::<DICT_NAME_LEN>::from_str(dict_name),
             retcode: PddbRetcode::Uninit,
             data: [0u8; MAX_PDDB_DELETE_LEN],
         };
@@ -670,9 +670,9 @@ impl Pddb {
             if bname.len() > BASIS_NAME_LEN - 1 {
                 return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
             }
-            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+            String::<BASIS_NAME_LEN>::from_str(bname)
         } else {
-            xous_ipc::String::<BASIS_NAME_LEN>::new()
+            String::<BASIS_NAME_LEN>::new()
         };
 
         let maybe_cb = self.cb.take();
@@ -681,9 +681,9 @@ impl Pddb {
 
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
-            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
-            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
-            key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+            basis: String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: String::<DICT_NAME_LEN>::from_str(dict_name),
+            key: String::<KEY_NAME_LEN>::new(),
             create_dict: false,
             create_key: false,
             token: None,
@@ -764,9 +764,9 @@ impl Pddb {
             if bname.len() > BASIS_NAME_LEN - 1 {
                 return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
             }
-            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+            String::<BASIS_NAME_LEN>::from_str(bname)
         } else {
-            xous_ipc::String::<BASIS_NAME_LEN>::new()
+            String::<BASIS_NAME_LEN>::new()
         };
         // this is a two-phase query, because it's quite likely that the number of keys can be very large in a
         // dict.
@@ -778,9 +778,9 @@ impl Pddb {
         ];
         let request = PddbDictRequest {
             basis_specified: basis_name.is_some(),
-            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
-            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
-            key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+            basis: String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: String::<DICT_NAME_LEN>::from_str(dict_name),
+            key: String::<KEY_NAME_LEN>::new(),
             index: 0,
             code: PddbRequestCode::Uninit,
             token,
@@ -877,9 +877,9 @@ impl Pddb {
             if bname.len() > BASIS_NAME_LEN - 1 {
                 return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
             }
-            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+            String::<BASIS_NAME_LEN>::from_str(bname)
         } else {
-            xous_ipc::String::<BASIS_NAME_LEN>::new()
+            String::<BASIS_NAME_LEN>::new()
         };
         // this is a two-phase query, because it's quite likely that the number of keys can be very large in a
         // dict.
@@ -891,9 +891,9 @@ impl Pddb {
         ];
         let request = PddbDictRequest {
             basis_specified: basis_name.is_some(),
-            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
-            dict: xous_ipc::String::<DICT_NAME_LEN>::new(),
-            key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+            basis: String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: String::<DICT_NAME_LEN>::new(),
+            key: String::<KEY_NAME_LEN>::new(),
             index: 0,
             code: PddbRequestCode::Uninit,
             token,
@@ -918,9 +918,9 @@ impl Pddb {
         for index in 0..count {
             let request = PddbDictRequest {
                 basis_specified: basis_name.is_some(),
-                basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
-                dict: xous_ipc::String::<DICT_NAME_LEN>::new(),
-                key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+                basis: String::<BASIS_NAME_LEN>::from_str(&bname),
+                dict: String::<DICT_NAME_LEN>::new(),
+                key: String::<KEY_NAME_LEN>::new(),
                 index,
                 code: PddbRequestCode::Uninit,
                 token,
@@ -935,7 +935,7 @@ impl Pddb {
             let response = buf.to_original::<PddbDictRequest, _>().unwrap();
             match response.code {
                 PddbRequestCode::NoErr => dict_list
-                    .push(String::from(response.dict.as_str().expect("utf-8 parse error in key name"))),
+                    .push(String::from(response.dict.as_str())),
                 _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
             }
         }
@@ -1107,9 +1107,9 @@ impl Pddb {
         // setup the request arguments
         let mut request = PddbDictRequest {
             basis_specified: basis.is_some(),
-            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis.unwrap_or("")),
-            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict),
-            key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+            basis: String::<BASIS_NAME_LEN>::from_str(basis.unwrap_or("")),
+            dict: String::<DICT_NAME_LEN>::from_str(dict),
+            key: String::<KEY_NAME_LEN>::new(),
             index: 0,
             token: [0u32; 4],
             code: PddbRequestCode::BulkRead,
@@ -1247,7 +1247,7 @@ impl Pddb {
     #[cfg(not(target_os = "xous"))]
     pub fn dbg_dump(&self, name: &str) -> Result<()> {
         let ipc =
-            PddbDangerousDebug { request: DebugRequest::Dump, dump_name: xous_ipc::String::from_str(name) };
+            PddbDangerousDebug { request: DebugRequest::Dump, dump_name: String::from(name) };
         let buf = Buffer::into_buf(ipc).or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
         buf.lend(self.conn, Opcode::DangerousDebug.to_u32().unwrap())
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))
@@ -1258,7 +1258,7 @@ impl Pddb {
     /// It's a cheesy way to test a power cycle, without having to power cycle.
     #[cfg(not(target_os = "xous"))]
     pub fn dbg_remount(&self) -> Result<()> {
-        let ipc = PddbDangerousDebug { request: DebugRequest::Remount, dump_name: xous_ipc::String::new() };
+        let ipc = PddbDangerousDebug { request: DebugRequest::Remount, dump_name: String::new() };
         let buf = Buffer::into_buf(ipc).or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
         buf.lend(self.conn, Opcode::DangerousDebug.to_u32().unwrap())
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))
@@ -1268,7 +1268,7 @@ impl Pddb {
     /// Forces a basis pruning, for testing the pruning and prune recovery code.
     #[cfg(not(target_os = "xous"))]
     pub fn dbg_prune(&self) -> Result<()> {
-        let ipc = PddbDangerousDebug { request: DebugRequest::Prune, dump_name: xous_ipc::String::new() };
+        let ipc = PddbDangerousDebug { request: DebugRequest::Prune, dump_name: String::new() };
         let buf = Buffer::into_buf(ipc).or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
         buf.lend(self.conn, Opcode::DangerousDebug.to_u32().unwrap())
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))
@@ -1278,7 +1278,7 @@ impl Pddb {
     /// Turns on debug spew
     #[cfg(not(target_os = "xous"))]
     pub fn dbg_set_debug(&self) -> Result<()> {
-        let ipc = PddbDangerousDebug { request: DebugRequest::SetDebug, dump_name: xous_ipc::String::new() };
+        let ipc = PddbDangerousDebug { request: DebugRequest::SetDebug, dump_name: String::new() };
         let buf = Buffer::into_buf(ipc).or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
         buf.lend(self.conn, Opcode::DangerousDebug.to_u32().unwrap())
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))
