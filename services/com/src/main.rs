@@ -10,7 +10,7 @@ use com_rs::*;
 use log::{error, info, trace};
 use num_traits::{FromPrimitive, ToPrimitive};
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, CID};
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 const LEGACY_REV: u32 = 0x8b5b_8e50; // this is the git rev shipped before we went to version tagging
 const LEGACY_TAG: u32 = 0x00_09_05_00; // this is corresponding tag
@@ -640,7 +640,7 @@ fn main() -> ! {
             }),
             Some(Opcode::Wf200PdsLine) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let l = buffer.to_original::<String<512>, _>().unwrap();
+                let l = buffer.to_original::<String, _>().unwrap();
                 info!("Wf200PdsLine got line {}", l);
                 let line = l.as_bytes();
                 let length = (l.len() + 0) as u16;
@@ -856,8 +856,8 @@ fn main() -> ! {
                     // return the raw characters?? for now, this is good enough for human
                     // eyes, but a scrollable list of SSIDs might be more useful with the raw u8
                     // representation
-                    let mut ssid_str = xous_ipc::String::<256>::from_str("Top 6 SSIDs:\n");
-                    let mut itemized = xous_ipc::String::<256>::new();
+                    let mut ssid_str = String::from("Top 6 SSIDs:\n");
+                    let mut itemized = String::new();
                     for i in 0..6 {
                         let mut stop = 0;
                         // truncate the nulls
@@ -872,10 +872,10 @@ fn main() -> ! {
                             Ok(textid) => {
                                 itemized.clear();
                                 write!(itemized, "{}. {}\n", i + 1, textid).unwrap();
-                                ssid_str.append(itemized.as_str().unwrap()).unwrap();
+                                ssid_str.push_str(&itemized);
                             }
                             _ => {
-                                ssid_str.append("-Parse Error-\n").unwrap();
+                                ssid_str.push_str("-Parse Error-\n");
                             }
                         }
                     }
@@ -910,7 +910,7 @@ fn main() -> ! {
                     let ssid_str =
                         core::str::from_utf8(&raw[2..2 + len as usize]).unwrap_or("UTF-8 parse error");
                     ssid_rec.name.clear(); // should be pre-cleared, but let's just be safe about it
-                    ssid_rec.name.append(ssid_str).ok(); // don't panic if we truncate
+                    ssid_rec.name.push_str(ssid_str);
                 }
                 buffer.replace(ssid_ret).unwrap();
             }
@@ -969,12 +969,11 @@ fn main() -> ! {
                 xous::return_scalar2(msg.sender, link as usize, dhcp as usize).unwrap();
             }),
             Some(Opcode::WlanSetSSID) => {
-                const WF200_SSID_LEN: usize = 32;
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let ssid = buffer.to_original::<String<WF200_SSID_LEN>, _>().unwrap();
+                let ssid = buffer.to_original::<String, _>().unwrap();
                 info!("WlanSetSSID: {}", ssid);
                 let mut str_ser = StringSer::<STR_32_WORDS>::new();
-                match str_ser.encode(&ssid.to_str()) {
+                match str_ser.encode(&ssid) {
                     Ok(tx_words) => {
                         com.txrx(ComState::WLAN_SET_SSID.verb);
                         for w in tx_words.iter() {
@@ -985,12 +984,11 @@ fn main() -> ! {
                 }
             }
             Some(Opcode::WlanSetPass) => {
-                const WF200_PASS_LEN: usize = 64;
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let pass = buffer.to_original::<String<WF200_PASS_LEN>, _>().unwrap();
+                let pass = buffer.to_original::<String, _>().unwrap();
                 info!("WlanSetPass *ssssh!*");
                 let mut str_ser = StringSer::<STR_64_WORDS>::new();
-                match str_ser.encode(&pass.to_str()) {
+                match str_ser.encode(&pass) {
                     Ok(tx_words) => {
                         com.txrx(ComState::WLAN_SET_PASS.verb);
                         for w in tx_words.iter() {
@@ -1046,10 +1044,7 @@ fn main() -> ! {
                     let status = WlanStatusIpc {
                         ssid: if let Some(rssi) = rssi {
                             log::debug!("RSSI: -{}dBm", rssi);
-                            Some(SsidRecord {
-                                rssi: rssi as u8,
-                                name: xous_ipc::String::<32>::from_str(ssid_str),
-                            })
+                            Some(SsidRecord { rssi: rssi as u8, name: String::from(ssid_str) })
                         } else {
                             None
                         },

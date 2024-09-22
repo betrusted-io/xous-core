@@ -52,24 +52,37 @@ pub(crate) struct FlashRecord {
     /// operation
     pub op: FlashOp,
 }
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SsidRecord {
-    pub name: xous_ipc::String<32>,
+    pub name: String,
     /// rssi is reported as the negative of actual rssi in dBm. Example: an rssi of -42dBm is reported as
     /// `42u8`.
     pub rssi: u8,
 }
 impl Default for SsidRecord {
-    fn default() -> Self { SsidRecord { name: xous_ipc::String::<32>::new(), rssi: 0 } }
+    fn default() -> Self { SsidRecord { name: String::new(), rssi: 0 } }
 }
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct SsidReturn {
     pub list: [SsidRecord; 8],
 }
 impl Default for SsidReturn {
-    fn default() -> Self { SsidReturn { list: [SsidRecord::default(); 8] } }
+    fn default() -> Self {
+        SsidReturn {
+            list: [
+                SsidRecord::default(),
+                SsidRecord::default(),
+                SsidRecord::default(),
+                SsidRecord::default(),
+                SsidRecord::default(),
+                SsidRecord::default(),
+                SsidRecord::default(),
+                SsidRecord::default(),
+            ],
+        }
+    }
 }
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct WlanStatusIpc {
     pub ssid: Option<SsidRecord>,
     pub link_state: u16, // this is slung around as a u16 to avoid pulling rkyv into the EC dependency tree
@@ -94,7 +107,7 @@ impl Default for WlanStatusIpc {
         }
     }
 }
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct WlanStatus {
     pub ssid: Option<SsidRecord>,
     pub link_state: com_rs::LinkState, // converted back into LinkState once it's across the IPC boundary
@@ -203,10 +216,10 @@ pub(crate) enum Opcode {
     Wf200Rev = 25,
 
     /// Send a line of PDS data
-    Wf200PdsLine = 26, //String<512>
+    Wf200PdsLine = 26, //String
 
     /// request for a listener to BattStats events
-    RegisterBattStatsListener = 27, //String<64>
+    RegisterBattStatsListener = 27, //String
 
     /// Reset the wifi chip
     Wf200Reset = 28,

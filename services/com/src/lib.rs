@@ -12,7 +12,7 @@ pub use com_rs::serdes::Ipv4Conf;
 use com_rs::{DhcpState, LinkState};
 use num_traits::{FromPrimitive, ToPrimitive};
 use xous::{msg_scalar_unpack, send_message, Error, Message, CID};
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 use xous_semver::SemVer;
 
 /// mapping of the callback function to the library user
@@ -184,10 +184,10 @@ impl Com {
         }
     }
 
-    pub fn send_pds_line(&self, s: &String<512>) -> Result<(), Error> {
+    pub fn send_pds_line(&self, s: &String) -> Result<(), Error> {
         use core::fmt::Write;
-        let mut clone_s: String<512> = String::new();
-        write!(clone_s, "{}", s.as_str().unwrap()).map_err(|_| xous::Error::AccessDenied)?;
+        let mut clone_s: String = String::new();
+        write!(clone_s, "{}", s.as_str()).map_err(|_| xous::Error::AccessDenied)?;
 
         let buf = Buffer::into_buf(clone_s).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::Wf200PdsLine.to_u32().unwrap()).map(|_| ())
@@ -317,12 +317,12 @@ impl Com {
 
     // superceded by ssid_fetch_as_list in versions later 0.9.5 (non-inclusive)
     #[deprecated]
-    pub fn ssid_fetch_as_string(&self) -> Result<xous_ipc::String<256>, xous::Error> {
-        let ssid_list = xous_ipc::String::<256>::new();
+    pub fn ssid_fetch_as_string(&self) -> Result<String, xous::Error> {
+        let ssid_list = String::new();
         let mut buf = Buffer::into_buf(ssid_list).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::SsidFetchAsString.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))?;
-        let response = buf.to_original::<xous_ipc::String<256>, _>().unwrap();
+        let response = buf.to_original::<String, _>().unwrap();
         Ok(response)
     }
 
@@ -338,10 +338,7 @@ impl Com {
         let response = buf.to_original::<SsidReturn, _>().unwrap();
         let mut ret = Vec::<(u8, std::string::String)>::new();
         for ssid in response.list {
-            ret.push((
-                ssid.rssi,
-                std::string::String::from(ssid.name.as_str().unwrap_or("UTF-8 Parse Error")),
-            ));
+            ret.push((ssid.rssi, ssid.name));
         }
         Ok(ret)
     }
@@ -513,7 +510,7 @@ impl Com {
         if s.len() > api::WF200_SSID_MAX_LEN {
             return Err(xous::Error::InvalidString);
         }
-        let mut copy: String<{ api::WF200_SSID_MAX_LEN }> = String::new();
+        let mut copy = String::new();
         let _ = write!(copy, "{}", s);
         let buf = Buffer::into_buf(copy).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::WlanSetSSID.to_u32().unwrap())
@@ -525,7 +522,7 @@ impl Com {
         if s.len() > api::WF200_PASS_MAX_LEN {
             return Err(xous::Error::InvalidString);
         }
-        let mut copy: String<{ api::WF200_PASS_MAX_LEN }> = String::new();
+        let mut copy = String::new();
         let _ = write!(copy, "{}", s);
         let buf = Buffer::into_buf(copy).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::WlanSetPass.to_u32().unwrap())
