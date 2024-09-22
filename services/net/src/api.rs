@@ -375,7 +375,7 @@ pub enum ScanState {
     /// Indicates that the wifi susbsystem is off
     Off,
 }
-#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, Default)]
+#[derive(Debug, Archive, Serialize, Deserialize, Clone, Default)]
 pub(crate) struct SsidList {
     /// IPC memory structures have to pre-allocate all their memory, but are always allocated in 4096-byte
     /// chunks. We could allocate up to maybe 100+ return values, but then we'd have to write a default
