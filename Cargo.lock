@@ -1889,6 +1889,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "flatipc"
+version = "0.1.0"
+dependencies = [
+ "flatipc-derive",
+ "xous 0.9.63 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "flatipc-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.77",
+]
+
+[[package]]
 name = "float-cmp"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
