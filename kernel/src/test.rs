@@ -6,8 +6,8 @@ use std::thread::JoinHandle;
 
 use crossbeam_channel::unbounded;
 #[cfg(feature = "report-memory")]
-use stats_alloc::{Region, Stats, StatsAlloc, INSTRUMENTED_SYSTEM};
-use xous_kernel::{rsyscall, SysCall};
+use stats_alloc::{INSTRUMENTED_SYSTEM, Region, Stats, StatsAlloc};
+use xous_kernel::{SysCall, rsyscall};
 
 use crate::kmain;
 #[cfg(feature = "report-memory")]
@@ -29,9 +29,9 @@ fn start_kernel(server_spec: &str) -> JoinHandle<()> {
         "XOUS_SERVER environment variable must be unset to run tests"
     );
 
+    use rand_chacha::ChaCha8Rng;
     use rand_chacha::rand_core::RngCore;
     use rand_chacha::rand_core::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
     let mut pid1_key = [0u8; 16];
     let mut rng = ChaCha8Rng::seed_from_u64(
         RNG_LOCAL_STATE.load(Ordering::SeqCst)

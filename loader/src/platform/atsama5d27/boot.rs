@@ -6,9 +6,9 @@ use core::mem;
 use core::num::NonZeroUsize;
 
 use armv7::structures::paging::{
-    PageTable as L2PageTable, PageTableDescriptor, PageTableMemory, PageTableType, TranslationTable,
-    TranslationTableDescriptor, TranslationTableMemory, TranslationTableType, PAGE_TABLE_FLAGS,
-    SMALL_PAGE_FLAGS,
+    PAGE_TABLE_FLAGS, PageTable as L2PageTable, PageTableDescriptor, PageTableMemory, PageTableType,
+    SMALL_PAGE_FLAGS, TranslationTable, TranslationTableDescriptor, TranslationTableMemory,
+    TranslationTableType,
 };
 use armv7::{PhysicalAddress, VirtualAddress};
 
@@ -17,7 +17,7 @@ use crate::consts::{
     KERNEL_ARGUMENT_OFFSET, KERNEL_STACK_PAGE_COUNT, LOADER_CODE_ADDRESS, PAGE_TABLE_OFFSET,
 };
 use crate::platform::atsama5d27::load::InitialProcess;
-use crate::{bzero, println, BootConfig, XousPid, PAGE_SIZE, WORD_SIZE};
+use crate::{BootConfig, PAGE_SIZE, WORD_SIZE, XousPid, bzero, println};
 
 const DEBUG_PAGE_MAPPING: bool = false;
 macro_rules! dprint {

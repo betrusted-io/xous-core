@@ -1,10 +1,10 @@
 use core::pin::Pin;
 
-use rkyv::archived_value;
-use rkyv::ser::Serializer;
 use rkyv::ArchiveUnsized;
 use rkyv::SerializeUnsized;
-use xous::{Error, MemoryMessage, Result, CID};
+use rkyv::archived_value;
+use rkyv::ser::Serializer;
+use xous::{CID, Error, MemoryMessage, Result};
 
 #[derive(Copy, Clone)]
 pub struct String<const N: usize> {

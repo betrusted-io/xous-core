@@ -14,7 +14,7 @@ use std::convert::TryInto;
 use bit_field::BitField;
 use gam::*;
 use num_traits::*;
-use xous::{send_message, Message, CID};
+use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;
 
 pub type TextValidationFn = fn(TextEntryPayload) -> Option<ValidatorErr>;

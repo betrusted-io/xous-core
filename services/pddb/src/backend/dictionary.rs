@@ -11,9 +11,9 @@ use bitfield::bitfield;
 use perflib::{PERFMETA_ENDBLOCK, PERFMETA_NONE, PERFMETA_STARTBLOCK};
 
 use super::*;
-use crate::api::*;
 #[cfg(feature = "perfcounter")]
 use crate::FILE_ID_SERVICES_PDDB_SRC_DICTIONARY;
+use crate::api::*;
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq)]

@@ -1,11 +1,11 @@
 #![cfg_attr(not(target_os = "none"), allow(dead_code))]
 
 use cipher::{
+    AlgorithmName, BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt, BlockSizeUser, Key,
+    KeyInit, KeySizeUser, ParBlocksSizeUser,
     consts::{U1, U16, U32},
     generic_array::GenericArray,
     inout::InOut,
-    AlgorithmName, BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt, BlockSizeUser, Key,
-    KeyInit, KeySizeUser, ParBlocksSizeUser,
 };
 
 use crate::Block;

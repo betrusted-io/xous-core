@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use api::*;
 use codec::{FrameRing, VolumeOps, ZERO_PCM};
 use num_traits::*;
-use xous::{msg_scalar_unpack, send_message, Message};
+use xous::{Message, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 use xous_tts_backend::*;
 

@@ -6,11 +6,11 @@ use core::cmp::Ordering;
 use loader::swap::SWAP_FLG_WIRED;
 use loader::swap::SWAP_RPT_VADDR;
 use xous_kernel::SWAPPER_PID;
-use xous_kernel::{SysCallResult, PID, TID};
+use xous_kernel::{PID, SysCallResult, TID};
 
 use crate::arch::current_pid;
-use crate::arch::mem::MMUFlags;
 use crate::arch::mem::EXCEPTION_STACK_TOP;
+use crate::arch::mem::MMUFlags;
 use crate::arch::mem::PAGE_SIZE;
 use crate::mem::MemoryManager;
 use crate::services::SystemServices;

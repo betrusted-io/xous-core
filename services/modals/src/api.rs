@@ -1,6 +1,6 @@
-use gam::modal::*;
 #[cfg(feature = "ditherpunk")]
 use gam::Tile;
+use gam::modal::*;
 
 pub(crate) const SERVER_NAME_MODALS: &str = "_Modal Dialog Server_";
 

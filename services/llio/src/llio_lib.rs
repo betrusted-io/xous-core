@@ -2,7 +2,7 @@ use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
 
 use num_traits::{FromPrimitive, ToPrimitive};
-use xous::{msg_scalar_unpack, send_message, Message, CID};
+use xous::{CID, Message, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 use xous_semver::SemVer;
 

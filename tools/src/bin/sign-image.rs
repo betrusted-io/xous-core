@@ -1,6 +1,6 @@
 use std::io::{Error, ErrorKind};
 
-use clap::{crate_version, App, Arg};
+use clap::{App, Arg, crate_version};
 use tools::sign_image::{load_pem, sign_file};
 
 const DEVKEY_PATH: &str = "devkey/dev.key";

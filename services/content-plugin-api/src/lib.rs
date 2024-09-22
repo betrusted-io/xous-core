@@ -1,6 +1,6 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-use xous::{send_message, Message, ScalarMessage, CID};
+use xous::{CID, Message, ScalarMessage, send_message};
 
 #[derive(Debug)]
 pub enum Opcode {

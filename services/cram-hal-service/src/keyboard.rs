@@ -1,5 +1,5 @@
 use num_traits::*;
-use xous::{send_message, Message};
+use xous::{Message, send_message};
 use xous_ipc::{Buffer, String};
 
 use crate::api::keyboard::*;

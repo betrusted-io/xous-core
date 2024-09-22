@@ -1,4 +1,4 @@
-use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
+use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
 
 use xous_ipc::Buffer;
 

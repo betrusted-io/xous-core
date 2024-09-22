@@ -27,7 +27,10 @@ use_small_heuristics = "Max"
 
 # Unstable features below
 unstable_features = true
-version = "Two"
+
+# Use the sorting method defined in Rust 2024
+style_edition = "2024"
+
 # code can be 110 characters, why not comments?
 comment_width = 110
 # quicker manual lookup

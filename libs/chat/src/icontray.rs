@@ -2,7 +2,7 @@ use std::thread;
 
 use ime_plugin_api::*;
 use num_traits::*;
-use xous::{msg_scalar_unpack, CID};
+use xous::{CID, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
 pub(crate) const SERVER_NAME_ICONTRAY: &'static str = "_chat icon tray plugin_";

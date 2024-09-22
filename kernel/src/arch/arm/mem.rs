@@ -4,16 +4,16 @@
 use core::num::NonZeroU8;
 
 pub use armv7::structures::paging::{
-    InMemoryRegister, PageTable as L2PageTable, PageTableDescriptor, PageTableMemory, PageTableType,
-    Readable, TranslationTable, TranslationTableDescriptor, TranslationTableMemory, TranslationTableType,
-    Writeable, PAGE_TABLE_FLAGS, PAGE_TABLE_SIZE, SMALL_PAGE_FLAGS,
+    InMemoryRegister, PAGE_TABLE_FLAGS, PAGE_TABLE_SIZE, PageTable as L2PageTable, PageTableDescriptor,
+    PageTableMemory, PageTableType, Readable, SMALL_PAGE_FLAGS, TranslationTable, TranslationTableDescriptor,
+    TranslationTableMemory, TranslationTableType, Writeable,
 };
 pub use armv7::{PhysicalAddress, VirtualAddress};
 use xous_kernel::{MemoryFlags, PID};
 
+use crate::SystemServices;
 use crate::arch::arm::process::InitialProcess;
 use crate::mem::MemoryManager;
-use crate::SystemServices;
 
 pub const DEFAULT_HEAP_BASE: usize = 0x3000_0000;
 pub const DEFAULT_MESSAGE_BASE: usize = 0x4000_0000;

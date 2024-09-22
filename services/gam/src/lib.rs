@@ -24,7 +24,7 @@ pub use graphics_server::api::{Point, Rectangle};
 pub use graphics_server::api::{TextOp, TextView};
 use ime_plugin_api::{ApiToken, ImefCallback};
 use num_traits::*;
-use xous::{send_message, Message, CID};
+use xous::{CID, Message, send_message};
 use xous_ipc::{Buffer, String};
 
 #[doc = include_str!("../README.md")]

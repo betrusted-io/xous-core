@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use cram_hal_service::trng;
 use graphics_server::*;
 
+use crate::Canvas;
 use crate::api::CanvasType;
 use crate::contexts::MISC_CONTEXT_DEFAULT_TRUST;
-use crate::Canvas;
 use crate::{LayoutApi, LayoutBehavior};
 const TRUST_OFFSET: u8 = 16;
 

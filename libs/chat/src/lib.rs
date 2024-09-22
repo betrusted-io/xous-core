@@ -4,7 +4,7 @@ pub mod icontray;
 pub mod ui;
 
 use std::convert::TryInto;
-use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
+use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -13,9 +13,9 @@ use gam::MenuItem;
 use graphics_server::api::GlyphStyle;
 use graphics_server::{Point, Rectangle, TextBounds, TextView};
 use num_traits::FromPrimitive;
-use ui::VisualProperties;
 pub use ui::BUSY_ANIMATION_RATE_MS;
-use xous::{msg_scalar_unpack, Error, CID, SID};
+use ui::VisualProperties;
+use xous::{CID, Error, SID, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
 /// Create a TextView with the default properties common to all text bubbles.

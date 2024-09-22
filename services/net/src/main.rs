@@ -25,8 +25,8 @@ use core::sync::atomic::{AtomicU16, AtomicU32, Ordering};
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
+use std::sync::mpsc::{Sender, channel};
 use std::thread;
 
 use byteorder::{ByteOrder, NetworkEndian};
@@ -37,7 +37,7 @@ use smoltcp::socket::{icmp, tcp, udp};
 use smoltcp::time::{Duration, Instant};
 use smoltcp::wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address};
 use smoltcp::wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, try_send_message, Message, CID, SID};
+use xous::{CID, Message, SID, msg_blocking_scalar_unpack, msg_scalar_unpack, try_send_message};
 use xous_ipc::Buffer;
 
 // 0 indicates no address is currently assigned

@@ -1,5 +1,5 @@
 use num_traits::*;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, MessageSender, CID};
+use xous::{CID, MessageSender, msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
 use crate::api;

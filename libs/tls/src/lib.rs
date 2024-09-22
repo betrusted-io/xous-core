@@ -12,13 +12,13 @@ use locales::t;
 use modals::Modals;
 use ota::OwnedTrustAnchor;
 use rkyv::{
-    de::deserializers::AllocDeserializer,
-    ser::{serializers::WriteSerializer, Serializer},
     Deserialize,
+    de::deserializers::AllocDeserializer,
+    ser::{Serializer, serializers::WriteSerializer},
 };
 use rustls::pki_types::{CertificateDer, TrustAnchor};
 use rustls::{ClientConfig, ClientConnection, RootCertStore};
-use x509_parser::prelude::{parse_x509_certificate, FromDer, X509Certificate};
+use x509_parser::prelude::{FromDer, X509Certificate, parse_x509_certificate};
 use xous_names::XousNames;
 
 /// PDDB Dict for tls trusted certificates keys

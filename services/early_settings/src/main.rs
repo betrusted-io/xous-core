@@ -3,7 +3,7 @@ use std::ops::Range;
 use early_settings::{Opcode, SERVER_NAME_ES};
 use num_traits::FromPrimitive;
 use spinor::Spinor;
-use xous::{msg_blocking_scalar_unpack, MemoryRange};
+use xous::{MemoryRange, msg_blocking_scalar_unpack};
 
 /*
 !!!! EARLY SETTINGS ALLOCATED SLOTS !!!!

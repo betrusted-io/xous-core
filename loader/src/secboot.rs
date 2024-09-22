@@ -1,8 +1,8 @@
 use ed25519_dalek_loader::Digest;
 use sha2_loader::Sha512;
 
-use crate::println;
 use crate::SIGBLOCK_SIZE;
+use crate::println;
 
 const VERSION_STR: &'static str = "Xous OS Loader v0.9.6\n\r";
 // v0.9.0 -- initial version

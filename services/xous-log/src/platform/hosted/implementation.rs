@@ -1,5 +1,5 @@
 use core::fmt::{Error, Write};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 
 enum ControlMessage {
     Text(String),

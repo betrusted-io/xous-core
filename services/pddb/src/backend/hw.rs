@@ -10,8 +10,8 @@ use std::collections::HashSet;
 use std::convert::TryInto;
 use std::io::{Error, ErrorKind, Result};
 
-use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt};
-use aes::{Aes256, Block, BLOCK_SIZE};
+use aes::cipher::{BlockDecrypt, BlockEncrypt, generic_array::GenericArray};
+use aes::{Aes256, BLOCK_SIZE, Block};
 use aes_gcm_siv::aead::{Aead, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
 use backend::bcrypt::*;
@@ -2503,16 +2503,13 @@ impl PddbOs {
                 let aad_local = self.data_aad(&name);
                 self.dna_mode = DnaMode::Migration;
                 let aad_incoming = self.data_aad(&name);
-                keymap.insert(
-                    &name,
-                    MigrationCiphers {
-                        pt_ecb,
-                        data_gcm_siv,
-                        aad_incoming,
-                        aad_local,
-                        data_key: basis_keys.data.into(),
-                    },
-                );
+                keymap.insert(&name, MigrationCiphers {
+                    pt_ecb,
+                    data_gcm_siv,
+                    aad_incoming,
+                    aad_local,
+                    data_key: basis_keys.data.into(),
+                });
                 modals.update_progress(index as u32 + 1).ok();
             }
 
@@ -2831,14 +2828,11 @@ impl PddbOs {
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
         }
         // done!
-        if self.yes_no_approval(
-            &modals,
-            match self.dna_mode {
-                DnaMode::Normal => t!("pddb.freespace.finished", locales::LANG),
-                DnaMode::Migration => t!("pddb.rekey.finished", locales::LANG),
-                DnaMode::Churn => t!("pddb.churn.finished", locales::LANG),
-            },
-        ) {
+        if self.yes_no_approval(&modals, match self.dna_mode {
+            DnaMode::Normal => t!("pddb.freespace.finished", locales::LANG),
+            DnaMode::Migration => t!("pddb.rekey.finished", locales::LANG),
+            DnaMode::Churn => t!("pddb.churn.finished", locales::LANG),
+        }) {
             Some(ret)
         } else {
             None

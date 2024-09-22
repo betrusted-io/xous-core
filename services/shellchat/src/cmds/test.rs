@@ -178,8 +178,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                 "frob" => {
                     const N: u32 = 10;
                     const M: usize = if cfg!(miri) { 10000 } else { 100000 };
-                    use std::sync::mpsc::channel;
                     use std::sync::RwLock;
+                    use std::sync::mpsc::channel;
                     use std::thread;
 
                     use rand::Rng;

@@ -1330,10 +1330,9 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 #[cfg(not(target_os = "xous"))]
                 "rkyvtest" => {
                     use rkyv::{
-                        archived_value,
+                        AlignedVec, Deserialize, archived_value,
                         de::deserializers::AllocDeserializer,
-                        ser::{serializers::WriteSerializer, Serializer},
-                        AlignedVec, Deserialize,
+                        ser::{Serializer, serializers::WriteSerializer},
                     };
                     let test = pddb::PddbKeyRecord {
                         name: "test".to_string(),

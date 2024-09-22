@@ -3,18 +3,18 @@ use std::convert::TryFrom;
 use std::fmt::Write as TextWrite;
 use std::io::{Error, ErrorKind, Read, Write};
 
-use dialogue::{post::Post, Dialogue};
-use gam::{menu_matic, MenuMatic, UxRegistration};
+use dialogue::{Dialogue, post::Post};
+use gam::{MenuMatic, UxRegistration, menu_matic};
 use graphics_server::api::GlyphStyle;
 use graphics_server::{DrawStyle, Gid, Line, PixelColor, Point, Rectangle, TextBounds, TextView};
 use locales::t;
 use modals::Modals;
-use rkyv::de::deserializers::AllocDeserializer;
-use rkyv::ser::serializers::WriteSerializer;
-use rkyv::ser::Serializer;
 use rkyv::Deserialize;
+use rkyv::de::deserializers::AllocDeserializer;
+use rkyv::ser::Serializer;
+use rkyv::ser::serializers::WriteSerializer;
 use ticktimer_server::Ticktimer;
-use xous::{MessageEnvelope, CID};
+use xous::{CID, MessageEnvelope};
 use xous_names::XousNames;
 
 use super::*;
@@ -707,15 +707,11 @@ impl Ui {
             self.gam
                 .draw_rectangle(
                     self.vp.canvas,
-                    Rectangle::new_with_style(
-                        Point::new(0, 0),
-                        self.vp.total_screensize,
-                        DrawStyle {
-                            fill_color: Some(PixelColor::Light),
-                            stroke_color: None,
-                            stroke_width: 0,
-                        },
-                    ),
+                    Rectangle::new_with_style(Point::new(0, 0), self.vp.total_screensize, DrawStyle {
+                        fill_color: Some(PixelColor::Light),
+                        stroke_color: None,
+                        stroke_width: 0,
+                    }),
                 )
                 .expect("can't clear canvas area");
 

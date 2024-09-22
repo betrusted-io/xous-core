@@ -6,7 +6,7 @@ use std::{
     process::Command,
 };
 
-use crate::{app_manifest::generate_app_menus, DynError};
+use crate::{DynError, app_manifest::generate_app_menus};
 
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]

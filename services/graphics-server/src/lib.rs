@@ -16,7 +16,7 @@ pub use api::BulkRead;
 use api::Opcode; // if you prefer to map the api into your local namespace
 pub use fontmap::*;
 use num_traits::ToPrimitive;
-use xous::{send_message, Message};
+use xous::{Message, send_message};
 use xous_ipc::Buffer;
 #[derive(Debug)]
 pub struct Gfx {

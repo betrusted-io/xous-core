@@ -64,11 +64,11 @@ impl UI {
         self.gam
             .draw_rectangle(
                 self.content,
-                Rectangle::new_with_style(
-                    Point::new(0, 0),
-                    self.screensize,
-                    DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 },
-                ),
+                Rectangle::new_with_style(Point::new(0, 0), self.screensize, DrawStyle {
+                    fill_color: Some(PixelColor::Light),
+                    stroke_color: None,
+                    stroke_width: 0,
+                }),
             )
             .expect("can't clear content area");
     }

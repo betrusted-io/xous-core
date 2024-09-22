@@ -4,7 +4,7 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 
-use quick_xml::events::{attributes::Attribute, Event};
+use quick_xml::events::{Event, attributes::Attribute};
 use quick_xml::name::QName;
 use quick_xml::reader::Reader;
 

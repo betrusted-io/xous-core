@@ -12,7 +12,7 @@ use std::thread::JoinHandle;
 
 pub use frontend::*;
 use num_traits::*;
-use xous::{msg_scalar_unpack, send_message, Message, CID, SID};
+use xous::{CID, Message, SID, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 pub(crate) static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 pub(crate) static POLLER_REFCOUNT: AtomicU32 = AtomicU32::new(0);
@@ -22,10 +22,9 @@ use std::cell::RefCell;
 use std::convert::TryInto;
 
 use rkyv::{
-    archived_value,
+    AlignedVec, Deserialize, archived_value,
     de::deserializers::AllocDeserializer,
-    ser::{serializers::WriteSerializer, Serializer},
-    AlignedVec, Deserialize,
+    ser::{Serializer, serializers::WriteSerializer},
 };
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]

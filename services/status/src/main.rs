@@ -21,16 +21,16 @@ use std::thread;
 
 use chrono::prelude::*;
 use com::api::*;
-use crossbeam::channel::{at, select, unbounded, Receiver, Sender};
+use crossbeam::channel::{Receiver, Sender, at, select, unbounded};
 use gam::{GamObjectList, GamObjectType};
 use graphics_server::api::GlyphStyle;
 use graphics_server::*;
 use locales::t;
 use num_traits::*;
 use root_keys::api::{BackupKeyboardLayout, BackupOp};
-use xous::{msg_scalar_unpack, send_message, Message, CID};
+use xous::{CID, Message, msg_scalar_unpack, send_message};
 
-use crate::preferences::{percentage_to_db, PrefsMenuUpdateOp};
+use crate::preferences::{PrefsMenuUpdateOp, percentage_to_db};
 
 const SERVER_NAME_STATUS_GID: &str = "_Status bar GID receiver_";
 const SERVER_NAME_STATUS: &str = "_Status_";

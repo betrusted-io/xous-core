@@ -3,7 +3,7 @@
 
 use core::fmt::{Error, Write};
 
-use atsama5d27::uart::{Uart as UartHw, Uart1, UART_BASE_ADDRESS};
+use atsama5d27::uart::{UART_BASE_ADDRESS, Uart as UartHw, Uart1};
 #[cfg(feature = "lcd-console")]
 use atsama5d27::{console::DisplayAndUartConsole, display::FramebufDisplay, lcdc::Lcdc};
 #[cfg(feature = "lcd-console")]

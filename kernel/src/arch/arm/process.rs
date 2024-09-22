@@ -3,7 +3,7 @@
 
 use core::mem;
 
-use xous_kernel::{arch::Arguments, ProcessInit, ProcessStartup, ThreadInit, PID, TID};
+use xous_kernel::{PID, ProcessInit, ProcessStartup, TID, ThreadInit, arch::Arguments};
 
 use crate::arch::mem::THREAD_CONTEXT_AREA;
 use crate::mem::PAGE_SIZE;
@@ -364,14 +364,9 @@ impl Process {
         if sp <= 16 {
             return Err(xous_kernel::Error::BadAddress);
         }
-        crate::arch::syscall::invoke(
-            thread,
-            pid == 1,
-            entrypoint,
-            (sp - 16) & !0xf,
-            EXIT_THREAD,
-            &[setup.arg1, setup.arg2, setup.arg3, setup.arg4],
-        );
+        crate::arch::syscall::invoke(thread, pid == 1, entrypoint, (sp - 16) & !0xf, EXIT_THREAD, &[
+            setup.arg1, setup.arg2, setup.arg3, setup.arg4,
+        ]);
         Ok(())
     }
 

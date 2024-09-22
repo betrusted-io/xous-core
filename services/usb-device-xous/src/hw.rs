@@ -7,7 +7,7 @@ use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 
 use usb_device::bus::PollResult;
-use usb_device::{class_prelude::*, Result, UsbDirection};
+use usb_device::{Result, UsbDirection, class_prelude::*};
 use utralib::generated::*;
 use xous::MemoryRange;
 

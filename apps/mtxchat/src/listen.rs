@@ -7,7 +7,7 @@ use url::Url;
 use xous::CID;
 use xous_ipc::Buffer;
 
-use crate::{get_username, web, MTX_LONG_TIMEOUT_MS};
+use crate::{MTX_LONG_TIMEOUT_MS, get_username, web};
 
 pub fn listen(
     url: &mut Url,

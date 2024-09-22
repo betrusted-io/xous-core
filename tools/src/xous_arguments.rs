@@ -2,7 +2,7 @@ use std::fmt;
 use std::io::{Cursor, Result, Seek, Write};
 pub type XousArgumentCode = u32;
 pub type XousSize = u32;
-use crc::{crc16, Hasher16};
+use crc::{Hasher16, crc16};
 
 #[macro_export]
 macro_rules! make_type {

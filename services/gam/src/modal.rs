@@ -28,9 +28,9 @@ use graphics_server::api::*;
 use num_traits::*;
 use xous_ipc::{Buffer, String};
 
-use crate::api::*;
 use crate::Gam;
 use crate::MsgForwarder;
+use crate::api::*;
 
 pub const MAX_ITEMS: usize = 8;
 

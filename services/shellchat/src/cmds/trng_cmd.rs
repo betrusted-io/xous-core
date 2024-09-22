@@ -87,8 +87,8 @@ impl<'a> ShellCmdApi<'a> for TrngCmd {
                 "api" => {
                     // the purpose of these tests is to check the edge-case code because
                     // the trng fetch is u32, but rand_core allows u8
-                    use rand::rngs::OsRng;
                     use rand::RngCore;
+                    use rand::rngs::OsRng;
                     let mut test1 = [0u8; 1];
                     OsRng.fill_bytes(&mut test1);
                     log::info!("test 1: {:?}", test1);

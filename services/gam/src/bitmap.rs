@@ -19,8 +19,8 @@ use std::convert::TryInto;
 use std::io::Read;
 use std::ops::Deref;
 
-use graphics_server::api::*;
 use graphics_server::PixelColor;
+use graphics_server::api::*;
 
 mod img;
 pub use img::*;

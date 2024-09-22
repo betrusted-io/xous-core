@@ -24,11 +24,11 @@ mod implementation {
     use susres::{RegManager, RegOrField, SuspendResume};
     use utralib::generated::*;
 
-    use crate::api::{
-        ExcursionTest, HealthTests, MiniRunsTest, NistTests, TrngBuf, TrngErrors, TrngTestBuf, TrngTestMode,
-        TRNG_TEST_BUF_LEN,
-    };
     use crate::TEST_CACHE_LEN;
+    use crate::api::{
+        ExcursionTest, HealthTests, MiniRunsTest, NistTests, TRNG_TEST_BUF_LEN, TrngBuf, TrngErrors,
+        TrngTestBuf, TrngTestMode,
+    };
 
     pub struct Trng {
         csr: utralib::CSR<u32>,
@@ -520,11 +520,11 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "xous"))]
 mod implementation {
+    use rand_chacha::ChaCha8Rng;
     use rand_chacha::rand_core::RngCore;
     use rand_chacha::rand_core::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
-    use crate::api::{HealthTests, TrngBuf, TrngErrors, TrngTestBuf, TrngTestMode, TRNG_TEST_BUF_LEN};
+    use crate::api::{HealthTests, TRNG_TEST_BUF_LEN, TrngBuf, TrngErrors, TrngTestBuf, TrngTestMode};
 
     pub struct Trng {
         rng: ChaCha8Rng,

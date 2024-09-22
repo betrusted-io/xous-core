@@ -8,7 +8,7 @@ macro_rules! block_cipher_test {
     ($name:ident, $test_name:expr, $test_case_name:ident, $cipher:ty) => {
         fn $name() -> String<1024> {
             use aes::cipher::{
-                consts::U16, generic_array::GenericArray, BlockDecryptMut, BlockEncryptMut, KeyInit,
+                BlockDecryptMut, BlockEncryptMut, KeyInit, consts::U16, generic_array::GenericArray,
             };
 
             fn run_test(key: &[u8], pt: &[u8], ct: &[u8]) -> (bool, GenericArray<u8, U16>) {

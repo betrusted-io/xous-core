@@ -392,18 +392,18 @@ use core::ops::Deref;
 use std::collections::{BTreeSet, HashMap};
 use std::io::ErrorKind;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use locales::t;
 use num_traits::*;
 use rkyv::{
-    de::deserializers::AllocDeserializer,
-    ser::{serializers::BufferSerializer, Serializer},
     Deserialize,
+    de::deserializers::AllocDeserializer,
+    ser::{Serializer, serializers::BufferSerializer},
 };
-use xous::{msg_blocking_scalar_unpack, send_message, Message};
+use xous::{Message, msg_blocking_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 
 #[cfg(feature = "perfcounter")]

@@ -6,11 +6,11 @@ use core::convert::TryInto;
 use core::mem::size_of;
 use core::num::NonZeroUsize;
 
-use aes::cipher::{BlockDecrypt, BlockEncrypt};
 use aes::Aes256;
+use aes::cipher::{BlockDecrypt, BlockEncrypt};
 use cipher::generic_array::GenericArray;
 use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::{edwards::CompressedEdwardsY, EdwardsPoint};
+use curve25519_dalek::{EdwardsPoint, edwards::CompressedEdwardsY};
 use ed25519_dalek::{DigestSigner, Signature, Signer, SigningKey, VerifyingKey};
 use gam::modal::{ActionType, Modal, ProgressBar, Slider};
 use graphics_server::BulkRead;
@@ -20,7 +20,7 @@ use num_traits::*;
 pub use oracle::FpgaKeySource;
 use rand_core::RngCore;
 use root_keys::key2bits::*;
-use sha2::{Digest, Sha256, Sha512Hw, Sha512Sw, Sha512_256Sw};
+use sha2::{Digest, Sha256, Sha512_256Sw, Sha512Hw, Sha512Sw};
 use utralib::generated::*;
 use xous::KERNEL_BACKUP_OFFSET;
 use xous_semver::SemVer;
@@ -28,8 +28,8 @@ use xous_semver::SemVer;
 use crate::api::PasswordType;
 use crate::bcrypt::*;
 use crate::sha512_digest::Sha512Prehash;
-use crate::{api::*, backups};
 use crate::{GatewareRegion, MetadataInFlash, SignatureResult, UpdateType};
+use crate::{api::*, backups};
 
 // TODO: add hardware acceleration for BCRYPT so we can hit the OWASP target without excessive UX delay
 const BCRYPT_COST: u32 = 7; // 10 is the minimum recommended by OWASP; takes 5696 ms to verify @ 10 rounds; 804 ms to verify 7 rounds

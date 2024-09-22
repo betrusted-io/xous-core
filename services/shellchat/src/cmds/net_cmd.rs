@@ -19,7 +19,7 @@ use {gam::DecodePng, std::str::FromStr};
 #[cfg(feature = "websocket")]
 use {
     tls::Tls,
-    tungstenite::{stream::MaybeTlsStream, WebSocket},
+    tungstenite::{WebSocket, stream::MaybeTlsStream},
 };
 
 use crate::{CommonEnv, ShellCmdApi};
@@ -645,9 +645,9 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     // this starts the performance counter
                     pm.start();
 
+                    use aes::Aes256;
                     use aes::cipher::generic_array::GenericArray;
                     use aes::cipher::{BlockEncrypt, KeyInit};
-                    use aes::Aes256;
 
                     let mut key_array: [u8; 32];
                     let mut data_array: [u8; 16];

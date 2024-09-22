@@ -5,11 +5,11 @@ use std::path::Path;
 
 use bitflags::bitflags;
 use log::debug;
+use xmas_elf::ElfFile;
 use xmas_elf::program::Type as ProgramType;
 use xmas_elf::sections::ShType;
 // Normal ELF flags
 use xmas_elf::sections::{SHF_ALLOC, SHF_EXECINSTR, SHF_WRITE};
-use xmas_elf::ElfFile;
 
 bitflags! {
     pub struct MiniElfFlags: u8 {

@@ -3,7 +3,7 @@
 pub mod api;
 pub use api::*;
 use num_traits::*;
-use xous::{send_message, Message, CID};
+use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;
 
 #[derive(Debug)]

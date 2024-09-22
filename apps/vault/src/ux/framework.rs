@@ -12,10 +12,10 @@ use locales::t;
 use num_traits::*;
 use pddb::Pddb;
 use usb_device_xous::UsbDeviceType;
-use vault::{utc_now, VaultOp};
+use vault::{VaultOp, utc_now};
 
 use crate::actions::ActionOp;
-use crate::totp::{generate_totp_code, get_current_unix_time, TotpAlgorithm, TotpEntry};
+use crate::totp::{TotpAlgorithm, TotpEntry, generate_totp_code, get_current_unix_time};
 use crate::{ItemLists, SelectedEntry, VaultMode};
 
 pub enum NavDir {
@@ -313,15 +313,11 @@ impl VaultUx {
             self.gam
                 .draw_rectangle(
                     self.content,
-                    Rectangle::new_with_style(
-                        Point::new(0, 0),
-                        self.screensize,
-                        DrawStyle {
-                            fill_color: Some(PixelColor::Light),
-                            stroke_color: None,
-                            stroke_width: 0,
-                        },
-                    ),
+                    Rectangle::new_with_style(Point::new(0, 0), self.screensize, DrawStyle {
+                        fill_color: Some(PixelColor::Light),
+                        stroke_color: None,
+                        stroke_width: 0,
+                    }),
                 )
                 .expect("can't clear content area");
             self.title_dirty = true; // just blanked the whole area, have to redraw the title.
@@ -364,15 +360,11 @@ impl VaultUx {
                     self.gam
                         .draw_rectangle(
                             self.content,
-                            Rectangle::new_with_style(
-                                tl,
-                                br,
-                                DrawStyle {
-                                    fill_color: Some(PixelColor::Light),
-                                    stroke_color: None,
-                                    stroke_width: 0,
-                                },
-                            ),
+                            Rectangle::new_with_style(tl, br, DrawStyle {
+                                fill_color: Some(PixelColor::Light),
+                                stroke_color: None,
+                                stroke_width: 0,
+                            }),
                         )
                         .expect("can't clear content area");
                     // reset the search
@@ -387,15 +379,11 @@ impl VaultUx {
             self.gam
                 .draw_rectangle(
                     self.content,
-                    Rectangle::new_with_style(
-                        tl,
-                        self.screensize,
-                        DrawStyle {
-                            fill_color: Some(PixelColor::Light),
-                            stroke_color: None,
-                            stroke_width: 0,
-                        },
-                    ),
+                    Rectangle::new_with_style(tl, self.screensize, DrawStyle {
+                        fill_color: Some(PixelColor::Light),
+                        stroke_color: None,
+                        stroke_width: 0,
+                    }),
                 )
                 .expect("can't clear content area");
         } else if dirty_tl.is_none() && dirty_br.is_none() {
@@ -405,15 +393,11 @@ impl VaultUx {
             self.gam
                 .draw_rectangle(
                     self.content,
-                    Rectangle::new_with_style(
-                        Point::new(0, insert_at + 1),
-                        self.screensize,
-                        DrawStyle {
-                            fill_color: Some(PixelColor::Light),
-                            stroke_color: None,
-                            stroke_width: 0,
-                        },
-                    ),
+                    Rectangle::new_with_style(Point::new(0, insert_at + 1), self.screensize, DrawStyle {
+                        fill_color: Some(PixelColor::Light),
+                        stroke_color: None,
+                        stroke_width: 0,
+                    }),
                 )
                 .expect("can't clear content area");
         }
@@ -467,21 +451,18 @@ impl VaultUx {
                 let width = (self.screensize.x - (self.margin.x * 2)) as i32;
                 let delta_width = (delta * width * 100) / (30 * 100);
                 self.gam
-                    .draw_rectangle(
-                        self.content,
-                        Rectangle {
-                            tl: Point::new(self.margin.x, TITLE_HEIGHT - (BAR_HEIGHT + BAR_GAP)),
-                            br: Point::new(
-                                self.screensize.x - self.margin.x - delta_width as i16,
-                                TITLE_HEIGHT - BAR_GAP,
-                            ),
-                            style: DrawStyle {
-                                fill_color: Some(PixelColor::Dark),
-                                stroke_color: None,
-                                stroke_width: 0,
-                            },
+                    .draw_rectangle(self.content, Rectangle {
+                        tl: Point::new(self.margin.x, TITLE_HEIGHT - (BAR_HEIGHT + BAR_GAP)),
+                        br: Point::new(
+                            self.screensize.x - self.margin.x - delta_width as i16,
+                            TITLE_HEIGHT - BAR_GAP,
+                        ),
+                        style: DrawStyle {
+                            fill_color: Some(PixelColor::Dark),
+                            stroke_color: None,
+                            stroke_width: 0,
                         },
-                    )
+                    })
                     .ok();
             }
             self.title_dirty = false;

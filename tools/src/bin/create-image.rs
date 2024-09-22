@@ -260,21 +260,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     ((csr_top - region.base) & !(PAGE_SIZE - 1)) + PAGE_SIZE
                 } + PAGE_SIZE;
-                map.insert(
-                    region.name.to_lowercase(),
-                    tools::utils::CsrMemoryRegion {
-                        start: region.base.try_into().unwrap(),
-                        length: length.try_into().unwrap(),
-                    },
-                );
+                map.insert(region.name.to_lowercase(), tools::utils::CsrMemoryRegion {
+                    start: region.base.try_into().unwrap(),
+                    length: length.try_into().unwrap(),
+                });
             } else {
-                map.insert(
-                    region.name.to_lowercase(),
-                    tools::utils::CsrMemoryRegion {
-                        start: region.base.try_into().unwrap(),
-                        length: region.size.try_into().unwrap(),
-                    },
-                );
+                map.insert(region.name.to_lowercase(), tools::utils::CsrMemoryRegion {
+                    start: region.base.try_into().unwrap(),
+                    length: region.size.try_into().unwrap(),
+                });
             }
         }
         // insert additional regions from core.svd, if specified
@@ -302,13 +296,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         break;
                     }
                     println!("{}: {:x}", region.name, region.base);
-                    map.insert(
-                        region.name.to_lowercase(),
-                        tools::utils::CsrMemoryRegion {
-                            start: region.base.try_into().unwrap(),
-                            length: region.size.try_into().unwrap(),
-                        },
-                    );
+                    map.insert(region.name.to_lowercase(), tools::utils::CsrMemoryRegion {
+                        start: region.base.try_into().unwrap(),
+                        length: region.size.try_into().unwrap(),
+                    });
                 }
             }
         }

@@ -5,11 +5,11 @@ use std::thread;
 use std::thread::JoinHandle;
 
 use num_traits::*;
-use xous::{msg_scalar_unpack, send_message, Message};
+use xous::{Message, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 
-use crate::api::*;
 use crate::NetConn;
+use crate::api::*;
 
 ///////// Ping implementation
 /// smoltcp's ICMP stack is a little weird. It's designed with an icmp packet

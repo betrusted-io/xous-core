@@ -1,6 +1,6 @@
 use crate::{
-    map_memory, send_message, unmap_memory, Error, MemoryMessage, MemoryRange, MemorySize, Message, Result,
-    CID,
+    CID, Error, MemoryMessage, MemoryRange, MemorySize, Message, Result, map_memory, send_message,
+    unmap_memory,
 };
 
 /// A buffered String suitable for sending across as a message

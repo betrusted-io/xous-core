@@ -4,7 +4,7 @@ use core::mem::size_of;
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, Error, KeyInit, Nonce, Tag};
 use cramium_hal::ifram::IframRange;
 use cramium_hal::udma::*;
-use loader::swap::{SwapSpec, SPIM_RAM_IFRAM_ADDR, SWAP_HAL_VADDR};
+use loader::swap::{SPIM_RAM_IFRAM_ADDR, SWAP_HAL_VADDR, SwapSpec};
 
 use crate::debug::*;
 

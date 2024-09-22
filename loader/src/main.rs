@@ -32,8 +32,8 @@ use bootconfig::BootConfig;
 use consts::*;
 pub use loader::*;
 use minielf::*;
-use phase1::{phase_1, InitialProcess};
-use phase2::{phase_2, ProgramDescription};
+use phase1::{InitialProcess, phase_1};
+use phase2::{ProgramDescription, phase_2};
 #[cfg(feature = "swap")]
 use platform::SwapHal;
 

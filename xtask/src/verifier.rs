@@ -4,8 +4,8 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
 
-use crate::builder::CrateSpec;
 use crate::DynError;
+use crate::builder::CrateSpec;
 
 pub fn check_project_consistency() -> Result<(), DynError> {
     // note: implementations no longer published as crates: just APIs as of March 2023

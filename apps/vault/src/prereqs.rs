@@ -1,6 +1,6 @@
 use std::fmt::Write;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
-use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
+use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
 use std::thread;
 use std::time::SystemTime;
 
@@ -10,7 +10,7 @@ use graphics_server::{DrawStyle, PixelColor, Point, Rectangle, TextView};
 use locales::t;
 use num_traits::*;
 use sntpc::{Error, NtpContext, NtpTimestampGenerator, NtpUdpSocket, Result};
-use xous::{send_message, Message};
+use xous::{Message, send_message};
 
 use crate::VaultOp;
 
@@ -84,15 +84,11 @@ pub(crate) fn prereqs(sid: xous::SID, time_conn: xous::CID) -> ([u32; 4], bool) 
                 if allow_redraw {
                     gam.draw_rectangle(
                         content,
-                        Rectangle::new_with_style(
-                            Point::new(0, 0),
-                            screensize,
-                            DrawStyle {
-                                fill_color: Some(PixelColor::Light),
-                                stroke_color: None,
-                                stroke_width: 0,
-                            },
-                        ),
+                        Rectangle::new_with_style(Point::new(0, 0), screensize, DrawStyle {
+                            fill_color: Some(PixelColor::Light),
+                            stroke_color: None,
+                            stroke_width: 0,
+                        }),
                     )
                     .expect("can't clear content area");
 

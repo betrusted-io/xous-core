@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 
 use log::info;
 use num_traits::*;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, MessageSender, CID};
+use xous::{CID, MessageSender, msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 #[cfg(feature = "rawserial")]
 const BLOCKING_QUEUE_LEN: usize = 128;
@@ -26,7 +26,7 @@ mod implementation {
     use xous::CID;
 
     use crate::mappings::*;
-    use crate::{api::*, KeyRawStates, RowCol};
+    use crate::{KeyRawStates, RowCol, api::*};
 
     /// note: the code is structured to use at most 16 rows or 16 cols
     const KBD_ROWS: usize = 9;

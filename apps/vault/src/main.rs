@@ -19,12 +19,12 @@ use actions::ActionOp;
 use itemcache::*;
 use locales::t;
 use num_traits::*;
-use ux::framework::{name_to_style, VaultUx, DEFAULT_FONT, FONT_LIST};
+use ux::framework::{DEFAULT_FONT, FONT_LIST, VaultUx, name_to_style};
 use vault::ctap::main_hid::HidIterType;
-use vault::env::xous::XousEnv;
 use vault::env::Env;
-use vault::{Transport, VaultOp, SELF_CONN};
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
+use vault::env::xous::XousEnv;
+use vault::{SELF_CONN, Transport, VaultOp};
+use xous::{Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 use xous_usb_hid::device::fido::*;
 

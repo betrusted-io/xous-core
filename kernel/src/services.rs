@@ -3,11 +3,11 @@
 
 use core::num::NonZeroU8;
 
-use xous_kernel::arch::ProcessStartup;
 use xous_kernel::MemoryRange;
+use xous_kernel::arch::ProcessStartup;
 // use core::mem;
 use xous_kernel::{
-    pid_from_usize, Error, MemoryAddress, Message, ProcessInit, ThreadInit, CID, PID, SID, TID,
+    CID, Error, MemoryAddress, Message, PID, ProcessInit, SID, TID, ThreadInit, pid_from_usize,
 };
 
 use crate::arch;

@@ -6,9 +6,9 @@
 use core::convert::TryInto;
 
 use cramium_hal::sce;
+use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::RngCore;
 use rand_chacha::rand_core::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 use xous_kernel::{MemoryFlags, MemoryType, PID};
 
 use crate::mem::MemoryManager;

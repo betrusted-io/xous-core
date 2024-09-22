@@ -1,9 +1,9 @@
 use core::convert::TryInto;
 
-use rkyv::{ser::Serializer, Fallible};
+use rkyv::{Fallible, ser::Serializer};
 use xous::{
-    map_memory, send_message, unmap_memory, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange,
-    MemorySize, Message, Result, CID,
+    CID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize, Message, Result,
+    map_memory, send_message, unmap_memory,
 };
 
 #[derive(Debug)]

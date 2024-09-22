@@ -3,8 +3,8 @@ use std::cell::RefCell;
 use std::io::ErrorKind;
 use std::io::{Read, Write};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 
 use gam::TextEntryPayload;
@@ -17,15 +17,15 @@ use perflib::*;
 use persistent_store::store::OPENSK2_DICT;
 use vault::env::xous::U2F_APP_DICT;
 use vault::{
-    atime_to_str, basis_change, ctap::data_formats::PublicKeyCredentialSource, deserialize_app_info,
-    serialize_app_info, utc_now, AppInfo, VAULT_ALLOC_HINT, VAULT_PASSWORD_DICT, VAULT_TOTP_DICT,
+    AppInfo, VAULT_ALLOC_HINT, VAULT_PASSWORD_DICT, VAULT_TOTP_DICT, atime_to_str, basis_change,
+    ctap::data_formats::PublicKeyCredentialSource, deserialize_app_info, serialize_app_info, utc_now,
 };
-use xous::{send_message, Message};
+use xous::{Message, send_message};
 
 use crate::storage::{self, PasswordRecord, StorageContent};
 use crate::totp::TotpAlgorithm;
-use crate::{storage::TotpRecord, ListItem, ListKey};
 use crate::{ItemLists, SelectedEntry, VaultMode};
+use crate::{ListItem, ListKey, storage::TotpRecord};
 #[cfg(feature = "vaultperf")]
 const FILE_ID_APPS_VAULT_SRC_ACTIONS: u32 = 1;
 
