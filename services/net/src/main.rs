@@ -444,8 +444,8 @@ fn main() -> ! {
                     let remote = IpAddress::from(pkt.endpoint);
                     // we take advantage of the fact that the same CID is always returned for repeated connect
                     // requests to the same SID.
-                    let cid = match pkt.server {
-                        XousServerId::PrivateSid(sid) => match xous::connect(SID::from_array(sid)) {
+                    let cid = match &pkt.server {
+                        XousServerId::PrivateSid(sid) => match xous::connect(SID::from_array(*sid)) {
                             Ok(cid) => cid,
                             Err(e) => {
                                 log::error!(
@@ -455,7 +455,7 @@ fn main() -> ! {
                                 continue;
                             }
                         },
-                        XousServerId::ServerName(name) => match xns.request_connection(name.to_str()) {
+                        XousServerId::ServerName(name) => match xns.request_connection(&name) {
                             Ok(cid) => cid,
                             Err(e) => {
                                 log::error!(
