@@ -40,7 +40,7 @@ pub struct VisualProperties {
 pub(crate) struct Ui {
     // optional structures that indicate new input to the Chat loop per iteration
     // an input string
-    pub input: Option<xous_ipc::String<{ POST_TEXT_MAX }>>,
+    pub input: Option<String<{ POST_TEXT_MAX }>>,
     // messages from other servers
     msg: Option<MessageEnvelope>,
 
@@ -105,9 +105,9 @@ impl Ui {
 
         let token = gam
             .register_ux(UxRegistration {
-                app_name: xous_ipc::String::<128>::from_str(app_name),
+                app_name: String::from(app_name),
                 ux_type: gam::UxType::Chat,
-                predictor: Some(xous_ipc::String::<64>::from_str(crate::icontray::SERVER_NAME_ICONTRAY)),
+                predictor: Some(String::from(crate::icontray::SERVER_NAME_ICONTRAY)),
                 listener: sid.to_array(), /* note disclosure of our SID to the GAM -- the secret is now
                                            * shared with the GAM! */
                 redraw_id: ChatOp::GamRedraw as u32,

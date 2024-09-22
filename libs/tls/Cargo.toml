@@ -21,7 +21,10 @@ pddb = { path = "../../services/pddb" }
 
 der = { version = "0.7.6", features = ["derive"] }
 locales = { path = "../../locales" }
-rkyv = "0.4.3"
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+] }
 sha2 = { version = "0.10.8" }
 
 # note requirement for patch to xous-ring in workspace Cargo.toml

@@ -30,8 +30,9 @@ cos_table = { path = "../../libs/cos_table" }
 pddb = { path = "../../services/pddb" }
 
 enumset = "1.1.2"
-rkyv = { version = "0.4.3", default-features = false, features = [
-    "const_generics",
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
 ] }
 
 [features]
