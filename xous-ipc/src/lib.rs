@@ -2,6 +2,3 @@
 
 mod buffer;
 pub use buffer::*;
-
-mod string;
-pub use string::*;

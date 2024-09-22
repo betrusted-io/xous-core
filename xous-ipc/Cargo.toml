@@ -12,8 +12,7 @@ homepage = "https://betrusted.io/"
 [dependencies]
 xous = "0.9.63"
 bitflags = { version = "1" }
-rkyv = { version = "0.8.7", default-features = false, features = [
+rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
-    "bytecheck",
 ] }
