@@ -154,7 +154,7 @@ impl<'a> ShellCmdApi<'a> for Test {
         let mut ret = String::new();
         write!(ret, "Test has run {} times.", self.state).unwrap();
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

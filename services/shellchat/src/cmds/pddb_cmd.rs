@@ -67,7 +67,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
         #[cfg(feature = "pddbtest")]
         let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [writeover] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]\n[test]";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "basislist" => {

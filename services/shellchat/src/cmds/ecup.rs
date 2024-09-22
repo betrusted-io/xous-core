@@ -21,7 +21,7 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
         let helpstring = "ecup [gw] [fw] [wf200] [auto]";
 
         log::debug!("ecup handling {}", &args);
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
         let ecup_conn = env.xns.request_connection_blocking("__ECUP server__").unwrap();
 
         if let Some(sub_cmd) = tokens.next() {

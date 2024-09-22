@@ -51,7 +51,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
         let mut ret = String::new();
         let helpstring = "sleep [now] [current] [ship] [kill] [coldboot] [killbounce] [sus] [stress] [crypton] [cryptoff] [wfioff] [wfion] [debugwfi]";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         // in all cases, we want the boost to be off to ensure a clean shutdown
         env.com.set_boost(false).unwrap();

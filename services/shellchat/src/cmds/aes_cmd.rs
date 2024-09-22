@@ -302,7 +302,7 @@ impl<'a> ShellCmdApi<'a> for Aes {
         let mut ret = String::new();
         let helpstring = "Aes [check128] [check128sw] [check256] [check256sw] [hwbench] [swbench] [susres]";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

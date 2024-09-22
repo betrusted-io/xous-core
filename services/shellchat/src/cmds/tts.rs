@@ -22,7 +22,7 @@ impl<'a> ShellCmdApi<'a> for Tts {
         let mut ret = String::new();
         let helpstring = "tts options: speak";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

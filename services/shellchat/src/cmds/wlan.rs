@@ -35,7 +35,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
         let helpstring = "wlan [on] [off] [setssid ...] [setpass ...] [join] [leave] [status] [save] [known]";
         let mut show_help = false;
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "on" => {

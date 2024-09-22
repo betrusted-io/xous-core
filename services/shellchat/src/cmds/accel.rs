@@ -15,7 +15,7 @@ impl<'a> ShellCmdApi<'a> for Accel {
         let mut ret = String::new();
         let helpstring = "accel has no options";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

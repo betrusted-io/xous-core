@@ -102,7 +102,7 @@ impl<'a> ShellCmdApi<'a> for Fcc {
         // no matter what, we want SSID scanning to be off
         env.com.set_ssid_scanning(false).expect("couldn't turn off SSID scanning");
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

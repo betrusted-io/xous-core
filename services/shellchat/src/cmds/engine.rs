@@ -314,7 +314,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
         #[cfg(not(feature = "engine-ll"))]
         let helpstring = "engine [susres] [dh] [ed] [wycheproof]";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

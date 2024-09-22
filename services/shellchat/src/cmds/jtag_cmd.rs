@@ -22,7 +22,7 @@ impl<'a> ShellCmdApi<'a> for JtagCmd {
         let mut ret = String::new();
         let helpstring = "jtag [id] [dna] [efuse] [cntl] [reset] [burn0]";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

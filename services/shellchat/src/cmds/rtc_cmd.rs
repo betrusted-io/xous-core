@@ -19,7 +19,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
         let mut ret = String::new();
         let helpstring = "rtc options: utc local";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

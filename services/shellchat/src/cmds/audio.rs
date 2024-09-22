@@ -77,7 +77,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
         let mut ret = String::new();
         let helpstring = "audio [play] [info]";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

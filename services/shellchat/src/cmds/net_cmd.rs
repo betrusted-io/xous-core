@@ -86,7 +86,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
         #[cfg(not(target_os = "xous"))]
         let helpstring = "net [udp [port]] [count]] [tcpget host/path]";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

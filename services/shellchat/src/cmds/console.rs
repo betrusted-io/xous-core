@@ -15,7 +15,7 @@ impl<'a> ShellCmdApi<'a> for Console {
         let mut ret = String::new();
         let helpstring = "Serial console options: kernel, log, app";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

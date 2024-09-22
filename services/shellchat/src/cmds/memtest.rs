@@ -169,7 +169,7 @@ impl<'a> ShellCmdApi<'a> for Memtest {
         let mut ret = String::new();
         let helpstring = "memest [test [iters]]";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

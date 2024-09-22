@@ -15,7 +15,7 @@ impl<'a> ShellCmdApi<'a> for Backlight {
         let mut ret = String::new();
         let helpstring = "backlight [on] [off] [0-5]";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             // note that the secondary backlight appears brighter, so generally, we want to set it to a lower

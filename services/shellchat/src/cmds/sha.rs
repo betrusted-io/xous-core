@@ -197,7 +197,7 @@ impl<'a> ShellCmdApi<'a> for Sha {
         let mut ret = String::new();
         let helpstring = "sha [check] [check256] [hwbench] [swbench] [susres]";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

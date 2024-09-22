@@ -19,7 +19,7 @@ impl<'a> ShellCmdApi<'a> for Ssid {
         let mut ret = String::new();
         let helpstring = "ssid [scan]";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
         if self.cb_id.is_none() {
             self.cb_id = Some(env.register_handler(String::from(self.verb())));
         }
