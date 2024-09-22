@@ -27,7 +27,7 @@ use_small_heuristics = "Max"
 
 # Unstable features below
 unstable_features = true
-style_edition = "2021"
+style_edition = "2024"
 # code can be 110 characters, why not comments?
 comment_width = 110
 # quicker manual lookup
