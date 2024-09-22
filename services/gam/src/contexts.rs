@@ -7,7 +7,7 @@ use gam::MAIN_MENU_NAME;
 use graphics_server::*;
 use ime_plugin_api::{ImeFrontEndApi, ImefDescriptor};
 use log::info;
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 use crate::api::Opcode;
 use crate::*;
@@ -67,7 +67,7 @@ pub(crate) struct UxContext {
     /// the type of the Ux defined here
     pub layout: UxLayout,
     /// what prediction engine is being used
-    pub predictor: Option<String<64>>,
+    pub predictor: Option<String>,
     /// a putative human-readable name given to the context. The name itself is stored in the TokenManager,
     /// not in this struct. Passed to the TokenManager to compute a trust level; add the app's name to
     /// tokens.rs EXPECTED_BOOT_CONTEXTS if you want this to succeed.
@@ -166,7 +166,7 @@ impl ContextManager {
         canvases: &mut HashMap<Gid, Canvas>,
         registration: UxRegistration,
     ) -> Option<[u32; 4]> {
-        let maybe_token = self.tm.claim_token(registration.app_name.as_str().unwrap());
+        let maybe_token = self.tm.claim_token(registration.app_name.as_str());
         if let Some(token) = maybe_token {
             match registration.ux_type {
                 UxType::Chat => {
@@ -224,7 +224,7 @@ impl ContextManager {
                         pred_token: None,
                     };
 
-                    if registration.app_name.as_str().unwrap() == MAIN_MENU_NAME {
+                    if registration.app_name.as_str() == MAIN_MENU_NAME {
                         log::debug!("main menu found and registered!");
                         assert!(
                             self.main_menu_app_token == None,
@@ -262,8 +262,8 @@ impl ContextManager {
                     };
                     self.contexts.insert(token, ux_context);
                     // this check gives permissions to password boxes to render inverted text
-                    if registration.app_name.as_str().unwrap() == gam::ROOTKEY_MODAL_NAME
-                        || registration.app_name.as_str().unwrap() == gam::PDDB_MODAL_NAME
+                    if registration.app_name.as_str() == gam::ROOTKEY_MODAL_NAME
+                        || registration.app_name.as_str() == gam::PDDB_MODAL_NAME
                     {
                         if !self.set_context_trust_level(token, BOOT_CONTEXT_TRUSTLEVEL - 1, canvases) {
                             log::error!("Couldn't set password box trust levels to fully trusted");
@@ -713,7 +713,7 @@ impl ContextManager {
 
     pub(crate) fn focused_app(&self) -> Option<[u32; 4]> { self.focused_context }
 
-    pub(crate) fn forward_input(&self, input: String<4000>) -> Result<(), xous::Error> {
+    pub(crate) fn forward_input(&self, input: String) -> Result<(), xous::Error> {
         if let Some(token) = self.focused_app() {
             if let Some(context) = self.contexts.get(&token) {
                 if let Some(input_op) = context.gotinput_id {

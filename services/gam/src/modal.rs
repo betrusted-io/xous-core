@@ -26,7 +26,7 @@ use enum_dispatch::enum_dispatch;
 pub use graphics_server::api::GlyphStyle;
 use graphics_server::api::*;
 use num_traits::*;
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 use crate::api::*;
 use crate::Gam;
@@ -69,11 +69,11 @@ pub enum ModalOpcode {
 
 /// We use a new type for item names, so that it's easy to resize this as needed.
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub struct ItemName(String<128>);
+pub struct ItemName(String);
 impl ItemName {
-    pub fn new(name: &str) -> Self { ItemName(String::<128>::from_str(name)) }
+    pub fn new(name: &str) -> Self { ItemName(String::from(name)) }
 
-    pub fn as_str(&self) -> &str { self.0.as_str().expect("couldn't convert item into string") }
+    pub fn as_str(&self) -> &str { self.0.as_str() }
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq, Default)]
@@ -87,8 +87,8 @@ pub struct Bip39EntryPayload {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq, Default)]
 pub struct TextEntryPayload {
     dirty: bool,
-    pub content: String<256>,
-    pub placeholder: Option<String<256>>,
+    pub content: String,
+    pub placeholder: Option<String>,
     pub placeholder_persist: bool,
     pub insertion_point: Option<usize>,
 }
@@ -104,7 +104,7 @@ impl TextEntryPayload {
         }
     }
 
-    pub fn new_with_fields(content: String<256>, placeholder: Option<String<256>>) -> Self {
+    pub fn new_with_fields(content: String, placeholder: Option<String>) -> Self {
         TextEntryPayload {
             dirty: false,
             content,
@@ -118,7 +118,7 @@ impl TextEntryPayload {
     /// password fields.
     pub fn volatile_clear(&mut self) { self.content.volatile_clear(); }
 
-    pub fn as_str(&self) -> &str { self.content.as_str().expect("couldn't convert textentry string") }
+    pub fn as_str(&self) -> &str { self.content.as_str() }
 }
 
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -207,7 +207,7 @@ pub struct Modal<'a> {
     pub inverted: bool,
     pub style: GlyphStyle,
     pub helper_data: Option<Buffer<'a>>,
-    pub name: String<128>,
+    pub name: String,
 
     // optimize draw time
     top_dirty: bool,
@@ -337,7 +337,7 @@ impl<'a> Modal<'a> {
         let gam = Gam::new(&xns).expect("can't connect to GAM");
         let authtoken = gam
             .register_ux(UxRegistration {
-                app_name: String::<128>::from_str(name),
+                app_name: String::from(name),
                 ux_type: UxType::Modal,
                 predictor: None,
                 listener: sid.to_array(),
@@ -391,7 +391,7 @@ impl<'a> Modal<'a> {
             inverted,
             style,
             helper_data: None,
-            name: String::<128>::from_str(name),
+            name: String::from(name),
             top_dirty: true,
             bot_dirty: true,
             top_memoized_height: None,
@@ -597,7 +597,7 @@ impl<'a> Modal<'a> {
             self.bot_dirty = true;
         }
 
-        let mut top_tv_temp = String::<3072>::new(); // size matches that used in TextView
+        let mut top_tv_temp = String::new(); // size matches that used in TextView
         if let Some(top_text) = update_top_text {
             write!(top_tv_temp, "{}", top_text).unwrap();
         } else {
@@ -611,7 +611,7 @@ impl<'a> Modal<'a> {
             Some(top_tv_temp.to_str())
         };
 
-        let mut bot_tv_temp = String::<3072>::new(); // size matches that used in TextView
+        let mut bot_tv_temp = String::new(); // size matches that used in TextView
         if let Some(bot_text) = update_bot_text {
             write!(bot_tv_temp, "{}", bot_text).unwrap();
         } else {

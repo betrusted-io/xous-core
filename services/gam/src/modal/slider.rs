@@ -19,7 +19,7 @@ pub struct Slider {
     pub is_progressbar: bool,
     pub is_password: bool,
     pub show_legend: bool,
-    pub units: xous_ipc::String<8>,
+    pub units: String,
 }
 impl Slider {
     pub fn new(
@@ -35,16 +35,16 @@ impl Slider {
     ) -> Self {
         let checked_units = if let Some(unit_str) = units {
             if unit_str.len() < 8 {
-                String::<8>::from_str(unit_str)
+                String::from(unit_str)
             } else {
                 log::error!(
                     "Unit string must be less than 8 *bytes* long (are you using unicode?), ignoring length {} string",
                     unit_str.len()
                 );
-                String::<8>::new()
+                String::new()
             }
         } else {
-            String::<8>::new() // just populate with a blank string, easier than checking Some/None later on everywhere
+            String::new() // just populate with a blank string, easier than checking Some/None later on everywhere
         };
 
         Slider {

@@ -22,13 +22,13 @@ use graphics_server::*;
 use log::info;
 use num_traits::*;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 /// This sets the initial app focus on boot
 const INITIAL_APP_FOCUS: &'static str = gam::APP_NAME_SHELLCHAT;
 
 static CB_TO_MAIN_CONN: AtomicU32 = AtomicU32::new(0);
-fn imef_cb(s: String<4000>) {
+fn imef_cb(s: String) {
     if CB_TO_MAIN_CONN.load(Ordering::Relaxed) != 0 {
         let cb_to_main_conn = CB_TO_MAIN_CONN.load(Ordering::Relaxed);
         let buf = xous_ipc::Buffer::into_buf(s).or(Err(xous::Error::InternalError)).unwrap();
@@ -532,7 +532,7 @@ fn wrapped_main() -> ! {
                 let mut buffer =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut tokenclaim = buffer.to_original::<TokenClaim, _>().unwrap();
-                tokenclaim.token = context_mgr.claim_token(tokenclaim.name.as_str().unwrap());
+                tokenclaim.token = context_mgr.claim_token(tokenclaim.name.as_str());
                 buffer.replace(tokenclaim).unwrap();
             }
             Some(Opcode::PredictorApiToken) => {
@@ -579,7 +579,7 @@ fn wrapped_main() -> ! {
                         move || {
                             let switchapp = SwitchToApp {
                                 token: gam_token,
-                                app_name: String::<128>::from_str(INITIAL_APP_FOCUS),
+                                app_name: String::from(INITIAL_APP_FOCUS),
                             };
                             let buf = Buffer::into_buf(switchapp).or(Err(xous::Error::InternalError))?;
                             buf.send(conn, Opcode::SwitchToApp.to_u32().unwrap())
@@ -597,7 +597,7 @@ fn wrapped_main() -> ! {
             Some(Opcode::InputLine) => {
                 // receive the keyboard input and pass it on to the context with focus
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let inputline = buffer.to_original::<String<4000>, _>().unwrap();
+                let inputline = buffer.to_original::<String, _>().unwrap();
                 log::debug!("received input line, forwarding on... {}", inputline);
                 match context_mgr.forward_input(inputline) {
                     Err(e) => log::warn!("InputLine missed its target {:?}; input ignored", e),
@@ -643,12 +643,12 @@ fn wrapped_main() -> ! {
                 let switchapp = buffer.to_original::<SwitchToApp, _>().unwrap();
                 log::debug!(
                     "trying to switch to {:?} with token {:?}",
-                    switchapp.app_name.as_str().unwrap(),
+                    switchapp.app_name.as_str(),
                     switchapp.token
                 );
 
                 if let Some(new_app_token) =
-                    context_mgr.find_app_token_by_name(switchapp.app_name.as_str().unwrap())
+                    context_mgr.find_app_token_by_name(switchapp.app_name.as_str())
                 {
                     if new_app_token != context_mgr.focused_app().unwrap_or([0, 0, 0, 0]) {
                         // two things:
@@ -683,7 +683,7 @@ fn wrapped_main() -> ! {
                                         Ok(_) => (),
                                         Err(_) => log::warn!(
                                             "failed to switch to {}, silent error!",
-                                            switchapp.app_name.as_str().unwrap()
+                                            switchapp.app_name.as_str()
                                         ),
                                     }
                                     continue;
@@ -696,7 +696,7 @@ fn wrapped_main() -> ! {
                                 Ok(_) => (),
                                 Err(_) => log::warn!(
                                     "failed to switch to {}, silent error!",
-                                    switchapp.app_name.as_str().unwrap()
+                                    switchapp.app_name.as_str()
                                 ),
                             }
                         }
@@ -708,7 +708,7 @@ fn wrapped_main() -> ! {
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut activation = buffer.to_original::<GamActivation, _>().unwrap();
                 log::debug!("got request to raise context {}", activation.name);
-                let result = context_mgr.raise_menu(activation.name.as_str().unwrap(), &gfx, &mut canvases);
+                let result = context_mgr.raise_menu(activation.name.as_str(), &gfx, &mut canvases);
                 activation.result = Some(match result {
                     Ok(_) => ActivationResult::Success,
                     Err(_) => ActivationResult::Failure,
@@ -737,7 +737,7 @@ fn wrapped_main() -> ! {
                 let mut phrase = Vec::<std::string::String>::new();
                 for maybe_word in spec.words {
                     if let Some(word) = maybe_word {
-                        phrase.push(word.as_str().unwrap().to_string());
+                        phrase.push(word.as_str().to_string());
                     }
                 }
                 match bip39::bip39_to_bytes(&phrase) {
@@ -760,7 +760,7 @@ fn wrapped_main() -> ! {
                 match bip39::bytes_to_bip39(&data) {
                     Ok(phrase) => {
                         for (word, returned) in phrase.iter().zip(spec.words.iter_mut()) {
-                            *returned = Some(xous_ipc::String::from_str(word));
+                            *returned = Some(String::from(word));
                         }
                     }
                     Err(_) => {
@@ -778,7 +778,7 @@ fn wrapped_main() -> ! {
                 let start = std::str::from_utf8(&spec.data[..spec.data_len as usize]).unwrap_or("");
                 let suggestions = bip39::suggest_bip39(start);
                 for (word, returned) in suggestions.iter().zip(spec.words.iter_mut()) {
-                    *returned = Some(xous_ipc::String::from_str(word));
+                    *returned = Some(String::from(word));
                 }
                 buffer.replace(spec).unwrap();
             }
