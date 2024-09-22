@@ -5,14 +5,14 @@ use std::cell::RefCell;
 use graphics_server::api::GlyphStyle;
 use graphics_server::api::*;
 use num_traits::*;
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 use crate::*;
 
 // TODO: figure out this, do we really have to limit ourselves to 10?
 const MAX_FIELDS: i16 = 10;
 
-pub type ValidatorErr = xous_ipc::String<256>;
+pub type ValidatorErr = String;
 
 pub type Payloads = [TextEntryPayload; MAX_FIELDS as usize];
 
@@ -102,18 +102,14 @@ impl TextEntry {
         }
     }
 
-    pub fn reset_action_payloads(
-        &mut self,
-        fields: u32,
-        placeholders: Option<[Option<(xous_ipc::String<256>, bool)>; 10]>,
-    ) {
+    pub fn reset_action_payloads(&mut self, fields: u32, placeholders: Option<[Option<(String, bool)>; 10]>) {
         let mut payload = vec![TextEntryPayload::default(); fields as usize];
 
         if let Some(placeholders) = placeholders {
             for (index, element) in payload.iter_mut().enumerate() {
-                if let Some((p, persist)) = placeholders[index] {
-                    element.placeholder = Some(p);
-                    element.placeholder_persist = persist;
+                if let Some((p, persist)) = &placeholders[index] {
+                    element.placeholder = Some(p.to_string());
+                    element.placeholder_persist = *persist;
                 } else {
                     element.placeholder = None;
                     element.placeholder_persist = false;
@@ -213,7 +209,7 @@ impl ActionApi for TextEntry {
                         tv.text.clear();
                         let content = {
                             if payload.placeholder.is_some() && payload.content.len().is_zero() {
-                                let placeholder_content = payload.placeholder.unwrap();
+                                let placeholder_content = payload.placeholder.as_deref().unwrap();
                                 placeholder_content.to_string()
                             } else {
                                 payload.content.to_string()
@@ -346,7 +342,7 @@ impl ActionApi for TextEntry {
                 Some(payload.content.len() as i32)
             };
             tv.text.clear(); // make sure this is blank
-            let payload_chars = payload.content.as_str().unwrap().chars().count();
+            let payload_chars = payload.content.as_str().chars().count();
             // TODO: condense the "above MAX_CHARS" chars length path a bit -- written out "the dumb way" just
             // to reason out the logic a bit
             match self.visibility {
@@ -356,7 +352,7 @@ impl ActionApi for TextEntry {
                             && payload.content.len().is_zero()
                             && !self.keys_hit[index]
                         {
-                            let placeholder_content = payload.placeholder.unwrap();
+                            let placeholder_content = payload.placeholder.as_ref().unwrap();
                             placeholder_content.to_string()
                         } else {
                             payload.content.to_string()
@@ -387,52 +383,50 @@ impl ActionApi for TextEntry {
                 }
                 TextEntryVisibility::Hidden => {
                     if payload_chars < MAX_CHARS {
-                        for _char in payload.content.as_str().unwrap().chars() {
-                            tv.text.push('*').expect("text field too long");
+                        for _char in payload.content.as_str().chars() {
+                            tv.text.push('*');
                         }
                     } else {
                         // just render a pure dummy string
-                        tv.text.push('.').unwrap();
-                        tv.text.push('.').unwrap();
-                        tv.text.push('.').unwrap();
+                        tv.text.push('.');
+                        tv.text.push('.');
+                        tv.text.push('.');
                         for _ in 0..(MAX_CHARS - 3) {
-                            tv.text.push('*').expect("text field too long");
+                            tv.text.push('*');
                         }
                     }
                     modal.gam.post_textview(&mut tv).expect("couldn't post textview");
                 }
                 TextEntryVisibility::LastChars => {
                     if payload_chars < MAX_CHARS {
-                        let hide_to = if payload.content.as_str().unwrap().chars().count() >= 2 {
-                            payload.content.as_str().unwrap().chars().count() - 2
+                        let hide_to = if payload.content.as_str().chars().count() >= 2 {
+                            payload.content.as_str().chars().count() - 2
                         } else {
                             0
                         };
-                        for (index, ch) in payload.content.as_str().unwrap().chars().enumerate() {
+                        for (index, ch) in payload.content.as_str().chars().enumerate() {
                             if index < hide_to {
-                                tv.text.push('*').expect("text field too long");
+                                tv.text.push('*');
                             } else {
-                                tv.text.push(ch).expect("text field too long");
+                                tv.text.push(ch);
                             }
                         }
                     } else {
-                        tv.text.push('.').unwrap();
-                        tv.text.push('.').unwrap();
-                        tv.text.push('.').unwrap();
-                        let hide_to = if payload.content.as_str().unwrap().chars().count() >= 2 {
-                            payload.content.as_str().unwrap().chars().count() - 2
+                        tv.text.push('.');
+                        tv.text.push('.');
+                        tv.text.push('.');
+                        let hide_to = if payload.content.as_str().chars().count() >= 2 {
+                            payload.content.as_str().chars().count() - 2
                         } else {
                             0
                         };
-                        for (index, ch) in payload.content.as_str().unwrap()
-                            [payload_chars - (MAX_CHARS - 3)..]
-                            .chars()
-                            .enumerate()
+                        for (index, ch) in
+                            payload.content.as_str()[payload_chars - (MAX_CHARS - 3)..].chars().enumerate()
                         {
                             if index + payload_chars - (MAX_CHARS - 3) < hide_to {
-                                tv.text.push('*').expect("text field too long");
+                                tv.text.push('*');
                             } else {
-                                tv.text.push(ch).expect("text field too long");
+                                tv.text.push(ch);
                             }
                         }
                     }
@@ -583,8 +577,8 @@ impl ActionApi for TextEntry {
                     }
                 } else if !self.is_password {
                     if payload.content.len() == 0 {
-                        if let Some(placeholder) = payload.placeholder {
-                            payload.content.append(placeholder.to_str()).ok();
+                        if let Some(placeholder) = payload.placeholder.as_ref() {
+                            payload.content.push_str(placeholder);
                         }
                     } else {
                         if let Some(index) = payload.insertion_point {
@@ -608,8 +602,8 @@ impl ActionApi for TextEntry {
                     }
                 } else if !self.is_password {
                     if payload.content.len() == 0 {
-                        if let Some(placeholder) = payload.placeholder {
-                            payload.content.append(placeholder.to_str()).ok();
+                        if let Some(placeholder) = payload.placeholder.as_ref() {
+                            payload.content.push_str(placeholder);
                         }
                     } else {
                         if let Some(index) = payload.insertion_point.take() {
@@ -624,8 +618,8 @@ impl ActionApi for TextEntry {
             }
             '∴' | '\u{d}' => {
                 if payload.content.len() == 0 && !self.keys_hit[self.selected_field as usize] {
-                    if let Some(placeholder) = payload.placeholder {
-                        payload.content.append(placeholder.to_str()).ok();
+                    if let Some(placeholder) = payload.placeholder.as_ref() {
+                        payload.content.push_str(placeholder);
                     }
                 }
                 if let Some(validator) = self.validator {
@@ -640,8 +634,8 @@ impl ActionApi for TextEntry {
                     self.action_payloads[..self.max_field_amount as usize].iter_mut().enumerate()
                 {
                     if raw_payload.content.len() == 0 && !self.keys_hit[index] {
-                        if let Some(placeholder) = raw_payload.placeholder {
-                            raw_payload.content.append(placeholder.to_str()).ok();
+                        if let Some(placeholder) = raw_payload.placeholder.as_ref() {
+                            raw_payload.content.push_str(placeholder);
                         }
                     }
                 }
@@ -691,7 +685,7 @@ impl ActionApi for TextEntry {
                 if payload.placeholder_persist && payload.placeholder.is_some() && payload.content.len() == 0
                 {
                     // copy the placeholder into the content string before processing the backspace
-                    payload.content.append(payload.placeholder.unwrap().to_str()).ok();
+                    payload.content.push_str(payload.placeholder.as_ref().unwrap());
                 }
                 if let Some(insertion_point) = payload.insertion_point {
                     if insertion_point > 0 {
@@ -699,20 +693,20 @@ impl ActionApi for TextEntry {
                             insertion_point < payload.content.len(),
                             "insertion point beyond content length!"
                         );
-                        let new_len = payload.content.as_str().unwrap().chars().count() - 1;
+                        let new_len = payload.content.as_str().chars().count() - 1;
 
                         // have to use a temporary string because index operators are not implemented on Xous
                         // strings
-                        let mut temp_str = String::<256>::new();
-                        let mut original = payload.content.as_str().unwrap().chars().enumerate().peekable();
+                        let mut temp_str = String::new();
+                        let mut original = payload.content.as_str().chars().enumerate().peekable();
                         // copy the data over, skipping the character that was deleted
                         loop {
                             if let Some((index, c)) = original.next() {
                                 if index < insertion_point.saturating_sub(1) {
-                                    temp_str.push(c).ok();
+                                    temp_str.push(c);
                                 } else {
                                     if let Some((_, next_char)) = original.peek() {
-                                        temp_str.push(*next_char).ok();
+                                        temp_str.push(*next_char);
                                     } else {
                                         break;
                                     }
@@ -722,13 +716,28 @@ impl ActionApi for TextEntry {
                             }
                         }
                         // now copy the data back into the original string
-                        let mut c_iter = temp_str.as_str().unwrap().chars();
+                        let mut c_iter = temp_str.as_str().chars();
                         payload.content.clear();
                         for _ in 0..new_len {
-                            payload.content.push(c_iter.next().unwrap()).unwrap();
+                            payload.content.push(c_iter.next().unwrap());
                         }
                         // clear the temp string
-                        temp_str.volatile_clear();
+                        // safety: we are going to turn the underlying pointer into NULL bytes, which is valid
+                        // UTF-8
+                        let temp_bytes = unsafe { temp_str.as_bytes_mut() };
+                        let len = temp_bytes.len();
+                        let ptr = temp_bytes.as_mut_ptr();
+                        for i in 0..len {
+                            // safety: the bounds were derived from a valid len; the pointer is aligned
+                            // because it's derived from a slice. We use the
+                            // "unsafe" version of this to force a zeroize
+                            // of contents and avoid optimizations that could otherwise cause this operation
+                            // to be skipped (e.g. dropping and de-allocating
+                            // without scrubbing)
+                            unsafe { ptr.add(i).write_volatile(0) };
+                        }
+                        // force all the writes to finish if they were re-ordered
+                        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
                         // bring the insertion point back one index
                         payload.insertion_point = Some(insertion_point.saturating_sub(1));
                     }
@@ -737,14 +746,27 @@ impl ActionApi for TextEntry {
                     // plaintext on the stack
                     if payload.content.len() > 0 {
                         // don't backspace if we have no string.
-                        let mut temp_str = String::<256>::from_str(payload.content.as_str().unwrap());
-                        let cur_len = temp_str.as_str().unwrap().chars().count();
-                        let mut c_iter = temp_str.as_str().unwrap().chars();
+                        let mut temp_str = String::from(payload.content.as_str());
+                        let cur_len = temp_str.as_str().chars().count();
+                        let mut c_iter = temp_str.as_str().chars();
                         payload.content.clear();
                         for _ in 0..cur_len - 1 {
-                            payload.content.push(c_iter.next().unwrap()).unwrap();
+                            payload.content.push(c_iter.next().unwrap());
                         }
-                        temp_str.volatile_clear();
+                        let temp_bytes = unsafe { temp_str.as_bytes_mut() };
+                        let len = temp_bytes.len();
+                        let ptr = temp_bytes.as_mut_ptr();
+                        for i in 0..len {
+                            // safety: the bounds were derived from a valid len; the pointer is aligned
+                            // because it's derived from a slice. We use the
+                            // "unsafe" version of this to force a zeroize
+                            // of contents and avoid optimizations that could otherwise cause this operation
+                            // to be skipped (e.g. dropping and de-allocating
+                            // without scrubbing)
+                            unsafe { ptr.add(i).write_volatile(0) };
+                        }
+                        // force all the writes to finish if they were re-ordered
+                        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
                     }
                 }
             }
@@ -756,7 +778,7 @@ impl ActionApi for TextEntry {
                     && payload.content.len() == 0
                 {
                     // copy the placeholder into the content string before processing the backspace
-                    payload.content.append(payload.placeholder.unwrap().to_str()).ok();
+                    payload.content.push_str(payload.placeholder.as_ref().unwrap());
                 }
                 self.keys_hit[self.selected_field as usize] = true;
                 #[cfg(feature = "tts")]
@@ -770,26 +792,41 @@ impl ActionApi for TextEntry {
                     _ => {
                         if let Some(insertion_point) = payload.insertion_point {
                             if insertion_point >= payload.content.len() {
-                                payload.content.push(k).expect("ran out of space storing password");
+                                payload.content.push(k);
                                 payload.insertion_point = None;
                             } else {
                                 // have to use a temporary string because index operators are not implemented
                                 // on Xous strings
-                                let mut temp_str = String::<256>::from_str(payload.content.as_str().unwrap());
-                                let cur_len = temp_str.as_str().unwrap().chars().count();
-                                let mut c_iter = temp_str.as_str().unwrap().chars();
+                                let mut temp_str = String::from(payload.content.as_str());
+                                let cur_len = temp_str.as_str().chars().count();
+                                let mut c_iter = temp_str.as_str().chars();
                                 payload.content.clear();
                                 for i in 0..cur_len {
                                     if i == insertion_point {
-                                        payload.content.push(k).ok(); // don't panic if we type too much, just silently drop the character
+                                        payload.content.push(k); // don't panic if we type too much, just silently drop the character
                                     }
-                                    payload.content.push(c_iter.next().unwrap()).unwrap();
+                                    payload.content.push(c_iter.next().unwrap());
                                 }
                                 payload.insertion_point = Some(insertion_point + 1);
-                                temp_str.volatile_clear();
+                                let temp_bytes = unsafe { temp_str.as_bytes_mut() };
+                                let len = temp_bytes.len();
+                                let ptr = temp_bytes.as_mut_ptr();
+                                for i in 0..len {
+                                    // safety: the bounds were derived from a valid len; the pointer is
+                                    // aligned because it's derived from a
+                                    // slice. We use the "unsafe" version
+                                    // of this to force a zeroize
+                                    // of contents and avoid optimizations that could otherwise cause this
+                                    // operation to be skipped (e.g.
+                                    // dropping and de-allocating
+                                    // without scrubbing)
+                                    unsafe { ptr.add(i).write_volatile(0) };
+                                }
+                                // force all the writes to finish if they were re-ordered
+                                core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
                             }
                         } else {
-                            payload.content.push(k).ok(); // don't panic if we type too much, just silently drop the character
+                            payload.content.push(k); // don't panic if we type too much, just silently drop the character
                         }
                         log::trace!("****update payload: {}", payload.content);
                         payload.dirty = true;
