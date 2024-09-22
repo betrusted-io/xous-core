@@ -162,10 +162,10 @@ impl ClipObjectList {
     }
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct TokenClaim {
     pub token: Option<[u32; 4]>,
-    pub name: xous_ipc::String<128>,
+    pub name: String,
 }
 
 /// the buffer length of this equal to the internal length passed by the

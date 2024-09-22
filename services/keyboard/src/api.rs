@@ -107,9 +107,9 @@ pub(crate) enum Opcode {
 // this structure is used to register a keyboard listener. Currently, we only accept
 // one trusted listener (enforced by name server and structurally in the code),
 // which is the GAM.
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub(crate) struct KeyboardRegistration {
-    pub server_name: xous_ipc::String<64>,
+    pub server_name: String,
     pub listener_op_id: usize,
 }
 

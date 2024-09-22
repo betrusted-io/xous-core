@@ -135,7 +135,7 @@ impl Gfx {
     }
 
     pub fn draw_textview(&self, tv: &mut TextView) -> Result<(), xous::Error> {
-        let mut buf = Buffer::into_buf(*tv).or(Err(xous::Error::InternalError))?;
+        let mut buf = Buffer::into_buf(tv.clone()).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::DrawTextView.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))?;
 
