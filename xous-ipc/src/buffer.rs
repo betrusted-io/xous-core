@@ -43,8 +43,8 @@ impl<'buf> Buffer<'buf> {
         }
     }
 
-    // use a volatile write to ensure a clear operation is not optimized out
-    // for ensuring that a buffer is cleared, e.g. at the exit of a function
+    /// use a volatile write to ensure a clear operation is not optimized out
+    /// for ensuring that a buffer is cleared, e.g. at the exit of a function
     pub fn volatile_clear(&mut self) {
         let b = self.slice.as_mut_ptr();
         for i in 0..self.slice.len() {
@@ -58,15 +58,15 @@ impl<'buf> Buffer<'buf> {
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
 
-    // use to serialize a buffer between process-local threads. mainly for spawning new threads with more
-    // complex argument structures.
+    /// use to serialize a buffer between process-local threads. mainly for spawning new threads with more
+    /// complex argument structures.
     #[allow(dead_code)]
     pub unsafe fn to_raw_parts(&self) -> (usize, usize, usize) {
         (self.pages.as_ptr() as usize, self.pages.len(), self.used)
     }
 
-    // use to serialize a buffer between process-local threads. mainly for spawning new threads with more
-    // complex argument structures.
+    /// use to serialize a buffer between process-local threads. mainly for spawning new threads with more
+    /// complex argument structures.
     #[allow(dead_code)]
     pub unsafe fn from_raw_parts(address: usize, len: usize, offset: usize) -> Self {
         let mem = MemoryRange::new(address, len).expect("invalid memory range args");
@@ -74,6 +74,33 @@ impl<'buf> Buffer<'buf> {
             pages: mem,
             slice: core::slice::from_raw_parts_mut(mem.as_mut_ptr(), mem.len()),
             used: offset,
+            should_drop: false,
+            memory_message: None,
+        }
+    }
+
+    /// Consume the buffer and return the underlying storage. Used for situations where we just want to
+    /// serialize into a buffer and then do something manually with the serialized data.
+    ///
+    /// Fails if the buffer was converted from a memory message -- the Drop semantics
+    /// of the memory message would cause problems with this conversion.
+    pub fn into_inner(mut self) -> core::result::Result<(MemoryRange, usize), Error> {
+        if self.memory_message.is_none() {
+            self.should_drop = false;
+            Ok((self.pages, self.used))
+        } else {
+            Err(Error::ShareViolation)
+        }
+    }
+
+    /// Inverse of into_inner(). Used to re-cycle pages back into a Buffer so we don't have
+    /// to re-allocate data. Only safe if the `pages` matches the criteria for mapped memory
+    /// pages in Xous: page-aligned, with lengths that are a multiple of a whole page size.
+    pub unsafe fn from_inner(pages: MemoryRange, used: usize) -> Self {
+        Buffer {
+            pages,
+            slice: core::slice::from_raw_parts_mut(pages.as_mut_ptr(), pages.len()),
+            used,
             should_drop: false,
             memory_message: None,
         }
@@ -237,24 +264,10 @@ impl<'buf> Buffer<'buf> {
             }
         }
 
-        // We must have a `memory_message` to update in order for this to work.
-        // Otherwise, we risk having the pointer go to somewhere invalid.
-        if self.memory_message.is_none() {
-            // Create this message using `from_memory_message_mut()` instead of
-            // `from_memory_message()`.
-            Err("couldn't serialize because buffer wasn't mutable")?;
-        }
-        // Unsafe Warning: Create a copy of the backing slice to hand to the deserializer.
-        // This is required because the deserializer consumes the buffer and returns it
-        // later as part of `.into_inner()`.
-        // The "correct" way to do this would be to implement `rkyv::Serializer` an `rkyv::Fallible`
-        // for ourselves.
-        let copied_slice =
-            unsafe { core::slice::from_raw_parts_mut(self.slice.as_mut_ptr(), self.slice.len()) };
         let mut scratch = [MaybeUninit::<u8>::uninit(); 256];
 
         let wrap = Wrap(&src, PhantomData::<F>);
-        let writer = RkyvBuffer::from(&mut copied_slice[..]);
+        let writer = RkyvBuffer::from(&mut self.slice[..]);
         let alloc = SubAllocator::new(&mut scratch);
 
         let serbuf = rkyv::api::low::to_bytes_in_with_alloc::<_, _, Panic>(&wrap, writer, alloc).unwrap();
@@ -295,17 +308,17 @@ impl<'buf> Buffer<'buf> {
         Ok(r)
     }
 
-    /// A representation identical to the original, but reequires copying to the stack. More expensive so uses
+    /// A representation identical to the original, but requires copying to the stack. More expensive so uses
     /// "to_" prefix.
     #[allow(dead_code)]
-    pub fn to_original<T, U>(&self) -> core::result::Result<T, ()>
+    pub fn to_original<T, U>(&self) -> core::result::Result<T, Error>
     where
         T: rkyv::Archive<Archived = U>,
         U: Portable,
         <T as Archive>::Archived: Deserialize<T, Strategy<rkyv::de::Pool, rkyv::rancor::Error>>,
     {
         let r = unsafe { rkyv::access_unchecked::<U>(&self.slice[..self.used]) };
-        Ok(rkyv::deserialize::<T, rkyv::rancor::Error>(r).unwrap())
+        rkyv::deserialize::<T, rkyv::rancor::Error>(r).map_err(|_| Error::InternalError)
     }
 
     pub fn used(&self) -> usize { self.used }
