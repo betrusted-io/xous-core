@@ -1,0 +1,28 @@
+# Copyright 2019 The Fuchsia Authors
+#
+# Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+# <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+# license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
+[package]
+edition = "2021"
+name = "flatipc-derive"
+version = "0.1.0"
+authors = ["Sean Cross <sean@xobs.io>"]
+description = "Custom derive for traits from the flatipc crate"
+license = "BSD-2-Clause OR Apache-2.0 OR MIT"
+repository = "https://github.com/betrusted/xous-flatipc"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "*"
+quote = "*"
+syn = { version = "2", features = ["parsing", "extra-traits"] }
+
+[features]
+xous = []
+default = []
