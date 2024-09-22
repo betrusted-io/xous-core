@@ -427,7 +427,7 @@ fn wrapped_main() -> ! {
                         }
                     }
                     renderer_modal.modify(
-                        Some(ActionType::Slider(progress_action.clone())),
+                        Some(ActionType::Slider(progress_action)),
                         None,
                         false,
                         None,
@@ -592,7 +592,7 @@ fn wrapped_main() -> ! {
                         #[cfg(feature = "tts")]
                         tts.tts_simple(config.title.as_str()).unwrap();
                         renderer_modal.modify(
-                            Some(ActionType::Slider(progress_action.clone())),
+                            Some(ActionType::Slider(progress_action)),
                             Some(config.title.as_str()),
                             false,
                             None,
