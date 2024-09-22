@@ -1589,7 +1589,7 @@ fn wrapped_main() -> ! {
                         if req.index >= dict_list.len() as u32 {
                             req.code = PddbRequestCode::InternalError;
                         } else {
-                            req.dict = String::<DICT_NAME_LEN>::from_str(&dict_list[req.index as usize]);
+                            req.dict = String::from(&dict_list[req.index as usize]);
                             req.code = PddbRequestCode::NoErr;
                             // the last index requested must be the highest one!
                             if req.index == dict_list.len() as u32 - 1 {

@@ -21,13 +21,6 @@ use core::ops::DerefMut;
 use std::cell::RefCell;
 use std::convert::TryInto;
 
-use rkyv::{
-    archived_value,
-    de::deserializers::AllocDeserializer,
-    ser::{serializers::WriteSerializer, Serializer},
-    AlignedVec, Deserialize,
-};
-
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub enum CbOp {
     Change,
@@ -280,7 +273,7 @@ impl Pddb {
 
     /// return a list of all open bases
     pub fn list_basis(&self) -> Vec<String> {
-        let list_alloc = PddbBasisList { list: [String::<BASIS_NAME_LEN>::default(); 63], num: 0 };
+        let list_alloc = PddbBasisList { list: std::array::from_fn(|_| String::new()), num: 0 };
         let mut buf = Buffer::into_buf(list_alloc).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::ListBasis.to_u32().unwrap())
             .expect("Couldn't execute ListBasis opcode");
@@ -300,7 +293,7 @@ impl Pddb {
 
     /// The caller of this function will block and return only if the order of Bases has changed.
     pub fn monitor_basis(&self) -> Vec<String> {
-        let list_alloc = PddbBasisList { list: [String::<BASIS_NAME_LEN>::default(); 63], num: 0 };
+        let list_alloc = PddbBasisList { list: std::array::from_fn(|_| String::new()), num: 0 };
         let mut buf = Buffer::into_buf(list_alloc).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::BasisMonitor.to_u32().unwrap())
             .expect("Couldn't execute ListBasis opcode");
@@ -321,11 +314,7 @@ impl Pddb {
     /// returns the latest basis that is opened -- this is where all new values are being sent by default
     /// if the PDDB is not mounted, returns None
     pub fn latest_basis(&self) -> Option<String> {
-        let mgmt = PddbBasisRequest {
-            name: String::<BASIS_NAME_LEN>::new(),
-            code: PddbRequestCode::Uninit,
-            policy: None,
-        };
+        let mgmt = PddbBasisRequest { name: String::new(), code: PddbRequestCode::Uninit, policy: None };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::LatestBasis.to_u32().unwrap())
             .expect("Couldn't execute ListBasis opcode");
@@ -344,11 +333,8 @@ impl Pddb {
         if basis_name.len() > BASIS_NAME_LEN - 1 {
             return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
         }
-        let mgmt = PddbBasisRequest {
-            name: String::<BASIS_NAME_LEN>::from_str(basis_name),
-            code: PddbRequestCode::Create,
-            policy: None,
-        };
+        let mgmt =
+            PddbBasisRequest { name: String::from(basis_name), code: PddbRequestCode::Create, policy: None };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::CreateBasis.to_u32().unwrap())
             .expect("Couldn't execute CreateBasis opcode");
@@ -375,11 +361,7 @@ impl Pddb {
         if basis_name.len() > BASIS_NAME_LEN - 1 {
             return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
         }
-        let mgmt = PddbBasisRequest {
-            name: String::<BASIS_NAME_LEN>::from_str(basis_name),
-            code: PddbRequestCode::Open,
-            policy,
-        };
+        let mgmt = PddbBasisRequest { name: String::from(basis_name), code: PddbRequestCode::Open, policy };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::OpenBasis.to_u32().unwrap())
             .expect("Couldn't execute OpenBasis opcode");
@@ -403,11 +385,8 @@ impl Pddb {
         if basis_name.len() > BASIS_NAME_LEN - 1 {
             return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
         }
-        let mgmt = PddbBasisRequest {
-            name: String::<BASIS_NAME_LEN>::from_str(basis_name),
-            code: PddbRequestCode::Close,
-            policy: None,
-        };
+        let mgmt =
+            PddbBasisRequest { name: String::from(basis_name), code: PddbRequestCode::Close, policy: None };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::CloseBasis.to_u32().unwrap())
             .expect("Couldn't execute CloseBasis opcode");
@@ -429,11 +408,8 @@ impl Pddb {
         if basis_name.len() > BASIS_NAME_LEN - 1 {
             return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
         }
-        let mgmt = PddbBasisRequest {
-            name: String::<BASIS_NAME_LEN>::from_str(basis_name),
-            code: PddbRequestCode::Delete,
-            policy: None,
-        };
+        let mgmt =
+            PddbBasisRequest { name: String::from(basis_name), code: PddbRequestCode::Delete, policy: None };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::DeleteBasis.to_u32().unwrap())
             .expect("Couldn't execute DeleteBasis opcode");
@@ -477,9 +453,9 @@ impl Pddb {
             if bname.len() > BASIS_NAME_LEN - 1 {
                 return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
             }
-            String::<BASIS_NAME_LEN>::from_str(bname)
+            String::from(bname)
         } else {
-            String::<BASIS_NAME_LEN>::new()
+            String::new()
         };
 
         if key_changed_cb.is_some() {
@@ -492,9 +468,9 @@ impl Pddb {
 
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
-            basis: String::<BASIS_NAME_LEN>::from_str(&bname),
-            dict: String::<DICT_NAME_LEN>::from_str(dict_name),
-            key: String::<KEY_NAME_LEN>::from_str(key_name),
+            basis: String::from(&bname),
+            dict: String::from(dict_name),
+            key: String::from(key_name),
             create_dict,
             create_key,
             token: None,
@@ -560,9 +536,9 @@ impl Pddb {
             if bname.len() > BASIS_NAME_LEN - 1 {
                 return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
             }
-            String::<BASIS_NAME_LEN>::from_str(bname)
+            String::from(bname)
         } else {
-            String::<BASIS_NAME_LEN>::new()
+            String::new()
         };
 
         let maybe_cb = self.cb.take();
@@ -571,9 +547,9 @@ impl Pddb {
 
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
-            basis: String::<BASIS_NAME_LEN>::from_str(&bname),
-            dict: String::<DICT_NAME_LEN>::from_str(dict_name),
-            key: String::<KEY_NAME_LEN>::from_str(key_name),
+            basis: String::from(&bname),
+            dict: String::from(dict_name),
+            key: String::from(key_name),
             create_dict: false,
             create_key: false,
             token: None,
@@ -614,14 +590,14 @@ impl Pddb {
             if bname.len() > BASIS_NAME_LEN - 1 {
                 return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
             }
-            String::<BASIS_NAME_LEN>::from_str(bname)
+            String::from(bname)
         } else {
-            String::<BASIS_NAME_LEN>::new()
+            String::new()
         };
         let mut request = PddbDeleteList {
             basis_specified: basis_name.is_some(),
-            basis: String::<BASIS_NAME_LEN>::from_str(&bname),
-            dict: String::<DICT_NAME_LEN>::from_str(dict_name),
+            basis: String::from(&bname),
+            dict: String::from(dict_name),
             retcode: PddbRetcode::Uninit,
             data: [0u8; MAX_PDDB_DELETE_LEN],
         };
@@ -670,9 +646,9 @@ impl Pddb {
             if bname.len() > BASIS_NAME_LEN - 1 {
                 return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
             }
-            String::<BASIS_NAME_LEN>::from_str(bname)
+            String::from(bname)
         } else {
-            String::<BASIS_NAME_LEN>::new()
+            String::new()
         };
 
         let maybe_cb = self.cb.take();
@@ -681,9 +657,9 @@ impl Pddb {
 
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
-            basis: String::<BASIS_NAME_LEN>::from_str(&bname),
-            dict: String::<DICT_NAME_LEN>::from_str(dict_name),
-            key: String::<KEY_NAME_LEN>::new(),
+            basis: String::from(&bname),
+            dict: String::from(dict_name),
+            key: String::new(),
             create_dict: false,
             create_key: false,
             token: None,
@@ -764,9 +740,9 @@ impl Pddb {
             if bname.len() > BASIS_NAME_LEN - 1 {
                 return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
             }
-            String::<BASIS_NAME_LEN>::from_str(bname)
+            String::from(bname)
         } else {
-            String::<BASIS_NAME_LEN>::new()
+            String::new()
         };
         // this is a two-phase query, because it's quite likely that the number of keys can be very large in a
         // dict.
@@ -778,9 +754,9 @@ impl Pddb {
         ];
         let request = PddbDictRequest {
             basis_specified: basis_name.is_some(),
-            basis: String::<BASIS_NAME_LEN>::from_str(&bname),
-            dict: String::<DICT_NAME_LEN>::from_str(dict_name),
-            key: String::<KEY_NAME_LEN>::new(),
+            basis: String::from(&bname),
+            dict: String::from(dict_name),
+            key: String::new(),
             index: 0,
             code: PddbRequestCode::Uninit,
             token,
@@ -877,9 +853,9 @@ impl Pddb {
             if bname.len() > BASIS_NAME_LEN - 1 {
                 return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
             }
-            String::<BASIS_NAME_LEN>::from_str(bname)
+            String::from(bname)
         } else {
-            String::<BASIS_NAME_LEN>::new()
+            String::new()
         };
         // this is a two-phase query, because it's quite likely that the number of keys can be very large in a
         // dict.
@@ -891,9 +867,9 @@ impl Pddb {
         ];
         let request = PddbDictRequest {
             basis_specified: basis_name.is_some(),
-            basis: String::<BASIS_NAME_LEN>::from_str(&bname),
-            dict: String::<DICT_NAME_LEN>::new(),
-            key: String::<KEY_NAME_LEN>::new(),
+            basis: String::from(&bname),
+            dict: String::new(),
+            key: String::new(),
             index: 0,
             code: PddbRequestCode::Uninit,
             token,
@@ -918,9 +894,9 @@ impl Pddb {
         for index in 0..count {
             let request = PddbDictRequest {
                 basis_specified: basis_name.is_some(),
-                basis: String::<BASIS_NAME_LEN>::from_str(&bname),
-                dict: String::<DICT_NAME_LEN>::new(),
-                key: String::<KEY_NAME_LEN>::new(),
+                basis: String::from(&bname),
+                dict: String::new(),
+                key: String::new(),
                 index,
                 code: PddbRequestCode::Uninit,
                 token,
@@ -1106,9 +1082,9 @@ impl Pddb {
         // setup the request arguments
         let mut request = PddbDictRequest {
             basis_specified: basis.is_some(),
-            basis: String::<BASIS_NAME_LEN>::from_str(basis.unwrap_or("")),
-            dict: String::<DICT_NAME_LEN>::from_str(dict),
-            key: String::<KEY_NAME_LEN>::new(),
+            basis: String::from(basis.unwrap_or("")),
+            dict: String::from(dict),
+            key: String::new(),
             index: 0,
             token: [0u32; 4],
             code: PddbRequestCode::BulkRead,
