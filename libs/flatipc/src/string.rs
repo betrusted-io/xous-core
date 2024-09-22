@@ -7,12 +7,8 @@ pub struct String<const N: usize> {
 unsafe impl<const N: usize> crate::IpcSafe for String<N> {}
 
 impl<const N: usize> String<N> {
-    pub fn new() -> Self {
-        String {
-            buffer: [0; N],
-            length: 0,
-        }
-    }
+    pub fn new() -> Self { String { buffer: [0; N], length: 0 } }
+
     pub fn from_str(s: &str) -> Self {
         let mut buffer = [0; N];
         let length = s.len();
@@ -22,9 +18,7 @@ impl<const N: usize> String<N> {
 }
 
 impl<const N: usize> From<&str> for String<N> {
-    fn from(value: &str) -> Self {
-        Self::from_str(value)
-    }
+    fn from(value: &str) -> Self { Self::from_str(value) }
 }
 
 impl<const N: usize> core::fmt::Write for String<N> {
@@ -46,9 +40,7 @@ impl<const N: usize> core::fmt::Debug for String<N> {
 }
 
 impl<const N: usize> Default for String<N> {
-    fn default() -> Self {
-        String::new()
-    }
+    fn default() -> Self { String::new() }
 }
 
 impl<const N: usize> core::fmt::Display for String<N> {
