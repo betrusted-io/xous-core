@@ -17,7 +17,7 @@ use num_traits::*;
 use xous::{send_message, Message, CID};
 use xous_ipc::Buffer;
 
-pub type TextValidationFn = fn(TextEntryPayload) -> Option<ValidatorErr>;
+pub type TextValidationFn = fn(&TextEntryPayload) -> Option<ValidatorErr>;
 
 pub struct AlertModalBuilder<'a> {
     prompt: String,
@@ -88,7 +88,7 @@ impl<'a> AlertModalBuilder<'a> {
 
                 for (index, placeholder) in self.placeholders.iter().enumerate() {
                     if let Some((string, persist)) = placeholder {
-                        pl[index] = Some((String::from(&string), *persist))
+                        pl[index] = Some((string.to_owned(), *persist))
                     } else {
                         pl[index] = None
                     }
@@ -101,16 +101,16 @@ impl<'a> AlertModalBuilder<'a> {
             // _ => panic!("somehow len of placeholders was neither zero or >= 1...?"),
         }
 
-        let mut spec = ManagedPromptWithTextResponse {
-            token: self.modals.token,
-            prompt: String::from(&self.prompt),
-            fields: fields_amt as u32,
-            placeholders: final_placeholders,
-            growable: self.growable,
-        };
-
+        let mut prompt = self.prompt.to_owned();
         // question: do we want to add a retry limit?
         loop {
+            let spec = ManagedPromptWithTextResponse {
+                token: self.modals.token,
+                prompt: String::from(&prompt),
+                fields: fields_amt as u32,
+                placeholders: final_placeholders.clone(),
+                growable: self.growable,
+            };
             let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
             buf.lend_mut(self.modals.conn, Opcode::PromptWithTextResponse.to_u32().unwrap())
                 .or(Err(xous::Error::InternalError))?;
@@ -119,9 +119,9 @@ impl<'a> AlertModalBuilder<'a> {
                     let mut form_validation_failed = false;
                     for (index, validator) in self.validators.iter().enumerate() {
                         if let Some(validator) = validator {
-                            if let Some(err_msg) = validator(response.content()[index]) {
-                                spec.prompt.clear();
-                                spec.prompt.append(err_msg.as_str().unwrap_or("UTF-8 error")).ok();
+                            if let Some(err_msg) = validator(&response.content()[index]) {
+                                prompt.clear();
+                                prompt.push_str(&err_msg);
                                 form_validation_failed = true;
                                 break; // one of the validator failed
                             }
@@ -232,11 +232,7 @@ impl Modals {
             Some(text) => Some(String::from(text)),
             None => None,
         };
-        let spec = ManagedNotification {
-            token: self.token,
-            message: String::from(notification),
-            qrtext,
-        };
+        let spec = ManagedNotification { token: self.token, message: String::from(notification), qrtext };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::Notification.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         self.unlock();
@@ -643,8 +639,7 @@ impl Modals {
     /// ```
     pub fn get_radiobutton(&self, prompt: &str) -> Result<String, xous::Error> {
         self.lock();
-        let spec =
-            ManagedPromptWithFixedResponse { token: self.token, prompt: String::from(prompt) };
+        let spec = ManagedPromptWithFixedResponse { token: self.token, prompt: String::from(prompt) };
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::PromptWithFixedResponse.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))?;
@@ -729,8 +724,7 @@ impl Modals {
     /// ```
     pub fn get_checkbox(&self, prompt: &str) -> Result<Vec<String>, xous::Error> {
         self.lock();
-        let spec =
-            ManagedPromptWithFixedResponse { token: self.token, prompt: String::from(prompt) };
+        let spec = ManagedPromptWithFixedResponse { token: self.token, prompt: String::from(prompt) };
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::PromptWithMultiResponse.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))?;
