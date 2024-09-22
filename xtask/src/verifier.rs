@@ -13,7 +13,7 @@ pub fn check_project_consistency() -> Result<(), DynError> {
     let check_pkgs = [
         // this set updates with kernel API changes
         "xous^0.9.63",
-        "xous-ipc^0.9.63",
+        "xous-ipc^0.10.0",
         "xous-api-log^0.1.59",
         "xous-api-names^0.9.61",
         "xous-api-susres^0.9.59",
