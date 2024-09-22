@@ -1,0 +1,38 @@
+
+# Various C code
+*.h text eol=lf
+*.c text eol=lf
+*.s text eol=lf
+*.S text eol=lf
+
+# Rust code
+*.rs text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+
+# Misc scripting files
+Makefile text eol=lf
+*.mk text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.py text eol=lf
+
+# Human-readable files
+*.md eol=lf
+README.* text eol=lf
+LICENSE text eol=lf
+*.txt text eol=lf
+
+# Binary files
+*.dfu binary
+*.png binary
+*.jpg binary
+*.bin binary
+*.elf binary
+
+# Git configuration files
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+# System description files
+*.svd eol=lf

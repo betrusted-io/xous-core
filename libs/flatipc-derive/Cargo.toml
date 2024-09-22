@@ -1,0 +1,20 @@
+[package]
+edition = "2021"
+name = "flatipc-derive"
+version = "0.1.0"
+authors = ["Sean Cross <sean@xobs.io>"]
+description = "Custom derive for traits from the flatipc crate"
+license = "BSD-2-Clause OR Apache-2.0 OR MIT"
+repository = "https://github.com/betrusted/xous-flatipc"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "*"
+quote = "*"
+syn = { version = "2", features = ["parsing", "extra-traits"] }
+
+[features]
+xous = []
+default = []
