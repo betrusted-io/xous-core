@@ -7,7 +7,7 @@ use ime_plugin_api::*;
 use log::{error, info};
 use num_traits::FromPrimitive;
 use xous::msg_scalar_unpack;
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
@@ -21,19 +21,19 @@ fn main() -> ! {
         .expect("can't register server");
     log::trace!("registered with NS -- {:?}", ime_sh_sid);
 
-    let mut history_store: HashMap<[u32; 4], Vec<String<64>>> = HashMap::new();
-    let mut active_history: Option<([u32; 4], Vec<String<64>>)> = None;
+    let mut history_store: HashMap<[u32; 4], Vec<String>> = HashMap::new();
+    let mut active_history: Option<([u32; 4], Vec<String>)> = None;
     let history_max = 4;
 
     /*
         use core::fmt::Write as CoreWriter;
-        let mut test1: String::<64> = String::new();
+        let mut test1: String = String::new();
         write!(test1, "This〰should overflow the box").unwrap();
         history.push(test1);
-        let mut test2: String::<64> = String::new();
+        let mut test2: String = String::new();
         write!(test2, "Another string too long").unwrap();
         history.push(test2);
-        let mut test3: String::<64> = String::new();
+        let mut test3: String = String::new();
         write!(test3, "未雨绸缪").unwrap();
         history.push(test3);
     */
@@ -87,10 +87,10 @@ fn main() -> ! {
             Some(Opcode::Picked) => {
                 if let Some((_token, history)) = &mut active_history {
                     let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let s = buffer.as_flat::<String<4000>, _>().unwrap();
+                    let s = buffer.as_flat::<String, _>().unwrap();
                     // the API allows for large picked feedback, but this implementation only keeps the first
                     // 64 characters
-                    let mut local_s: String<64> = String::new();
+                    let mut local_s: String = String::new();
                     use core::fmt::Write;
                     write!(local_s, "{}", s.as_str()).expect("overflowed history variable");
                     log::trace!("storing history value | {}", s.as_str());
@@ -117,21 +117,17 @@ fn main() -> ! {
                                 index = history.len() as u32 - 1;
                             }
                             let mut i = 1;
-                            for &s in history.iter() {
+                            let histlen = history.len();
+                            for s in history.into_iter() {
                                 // iterator is from oldest to newest, so do some math to go from newest to
                                 // oldest TIL: there is a .rev() feature in
                                 // iterators. Next time maybe use that instead.
-                                if (history.len() as u32 - i) == index {
+                                if (histlen as u32 - i) == index {
                                     // decompose the string into a character-by-character sequence
                                     // and then stuff byte-by-byte, as fits, into the return array
                                     prediction.string.clear();
-                                    for ch in s.as_str().unwrap().chars() {
-                                        if let Ok(_) = prediction.string.push(ch) {
-                                            // it's ok, carry on.
-                                        } else {
-                                            // we ran out of space, stop copying
-                                            break;
-                                        }
+                                    for ch in s.as_str().chars() {
+                                        prediction.string.push(ch);
                                     }
                                     prediction.valid = true;
                                     break;
