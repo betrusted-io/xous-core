@@ -1,4 +1,4 @@
-use xous_ipc::String as XousString;
+
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -13,9 +13,9 @@ impl<'a> ShellCmdApi<'a> for Logout {
 
     fn process(
         &mut self,
-        _args: XousString<1024>,
+        _args: String,
         env: &mut CommonEnv,
-    ) -> Result<Option<XousString<1024>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         env.logout();
         Ok(None)
     }

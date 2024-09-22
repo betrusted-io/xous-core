@@ -246,7 +246,7 @@ impl<'a> ActionManager<'a> {
                         .field(Some(password), Some(password_validator))
                         .build()
                     {
-                        Ok(text) => text.content()[0].content.as_str().unwrap().to_string(),
+                        Ok(text) => text.content()[0].content,
                         _ => {
                             log::error!("Name entry failed");
                             self.action_active.store(false, Ordering::SeqCst);
@@ -262,7 +262,7 @@ impl<'a> ActionManager<'a> {
                             .field(Some("20".to_string()), Some(length_validator))
                             .build()
                         {
-                            Ok(entry) => entry.content()[0].content.as_str().unwrap().parse::<u32>().unwrap(),
+                            Ok(entry) => &(entry.content()[0].content).parse::<u32>().unwrap(),
                             _ => {
                                 log::error!("Length entry failed");
                                 self.action_active.store(false, Ordering::SeqCst);
@@ -460,7 +460,7 @@ impl<'a> ActionManager<'a> {
                         .field(Some("0".to_string()), Some(count_validator))
                         .build()
                     {
-                        Ok(entry) => entry.content()[0].content.as_str().unwrap().parse::<u64>().unwrap(),
+                        Ok(entry) => &(entry.content()[0].content).parse::<u64>().unwrap(),
                         _ => {
                             log::error!("Count entry failed");
                             self.action_active.store(false, Ordering::SeqCst);
@@ -637,7 +637,7 @@ impl<'a> ActionManager<'a> {
             // different record storage format that's a bit funkier to edit.
             let maybe_update = match self.pddb.borrow().get(
                 dict,
-                entry.key_guid.as_str().unwrap(),
+                &entry.key_guid,
                 None,
                 false,
                 false,
@@ -668,8 +668,8 @@ impl<'a> ActionManager<'a> {
                                         .build()
                                         .expect("modals error in edit")
                                 };
-                                ai.name = edit_data.content()[0].content.as_str().unwrap().to_string();
-                                ai.notes = edit_data.content()[1].content.as_str().unwrap().to_string();
+                                ai.name = edit_data.content()[0].content.as_str().to_string();
+                                ai.notes = edit_data.content()[1].content.as_str().to_string();
                                 ai.atime = 0;
                                 ai
                             } else {
@@ -698,15 +698,12 @@ impl<'a> ActionManager<'a> {
                 }
             };
             if let Some((update, basis)) = maybe_update {
-                self.pddb
-                    .borrow()
-                    .delete_key(dict, entry.key_guid.as_str().unwrap(), Some(&basis))
-                    .unwrap_or_else(|e| {
-                        self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e))
-                    });
+                self.pddb.borrow().delete_key(dict, entry.key_guid.as_str(), Some(&basis)).unwrap_or_else(
+                    |e| self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e)),
+                );
                 match self.pddb.borrow().get(
                     dict,
-                    entry.key_guid.as_str().unwrap(),
+                    entry.key_guid.as_str(),
                     Some(&basis),
                     false,
                     true,
@@ -720,7 +717,7 @@ impl<'a> ActionManager<'a> {
                             0
                         });
                         // update the item cache so it appears on the screen
-                        let li = make_u2f_item_from_record(entry.key_guid.as_str().unwrap(), update);
+                        let li = make_u2f_item_from_record(entry.key_guid.as_str(), update);
                         self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
                     }
                     Err(e) => self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e)),
@@ -731,7 +728,7 @@ impl<'a> ActionManager<'a> {
         }
 
         let choice = choice.unwrap();
-        let key_guid = entry.key_guid.as_str().unwrap();
+        let key_guid = entry.key_guid.as_str();
         let mut storage = self.storage.borrow_mut();
 
         let maybe_edited = match choice {
@@ -775,23 +772,23 @@ impl<'a> ActionManager<'a> {
                         .build()
                         .expect("modals error in edit")
                 };
-                pw.name = edit_data.content()[0].content.as_str().unwrap().to_string();
-                pw.secret = edit_data.content()[1].content.as_str().unwrap().to_string();
-                pw.notes = edit_data.content()[2].content.as_str().unwrap().to_string();
-                pw.is_hotp = if edit_data.content()[6].content.as_str().unwrap().to_string().to_uppercase()
+                pw.name = edit_data.content()[0].content.as_str().to_string();
+                pw.secret = edit_data.content()[1].content.as_str().to_string();
+                pw.notes = edit_data.content()[2].content.as_str().to_string();
+                pw.is_hotp = if edit_data.content()[6].content.as_str().to_string().to_uppercase()
                     == "HOTP"
                 {
                     true
                 } else {
                     false
                 };
-                if let Ok(t) = u64::from_str_radix(edit_data.content()[3].content.as_str().unwrap(), 10) {
+                if let Ok(t) = u64::from_str_radix(edit_data.content()[3].content.as_str(), 10) {
                     pw.timestep = t;
                 }
-                if let Ok(alg) = TotpAlgorithm::try_from(edit_data.content()[4].content.as_str().unwrap()) {
+                if let Ok(alg) = TotpAlgorithm::try_from(edit_data.content()[4].content.as_str()) {
                     pw.algorithm = alg;
                 }
-                if let Ok(d) = u32::from_str_radix(edit_data.content()[5].content.as_str().unwrap(), 10) {
+                if let Ok(d) = u32::from_str_radix(edit_data.content()[5].content.as_str(), 10) {
                     pw.digits = d;
                 }
                 // update the disk
@@ -848,10 +845,10 @@ impl<'a> ActionManager<'a> {
                         .expect("modals error in edit")
                 };
 
-                pw.description = edit_data.content()[0].content.as_str().unwrap().to_string();
-                pw.username = edit_data.content()[1].content.as_str().unwrap().to_string();
-                pw.password = edit_data.content()[2].content.as_str().unwrap().to_string();
-                pw.notes = edit_data.content()[3].content.as_str().unwrap().to_string();
+                pw.description = edit_data.content()[0].content.as_str().to_string();
+                pw.username = edit_data.content()[1].content.as_str().to_string();
+                pw.password = edit_data.content()[2].content.as_str().to_string();
+                pw.notes = edit_data.content()[3].content.as_str().to_string();
 
                 // if the notes field starts with the word "bip39" (case insensitive), use BIP39 to
                 // display/edit the password field
@@ -909,7 +906,7 @@ impl<'a> ActionManager<'a> {
                             .field(Some(password), Some(password_validator))
                             .build()
                         {
-                            Ok(text) => text.content()[0].content.as_str().unwrap().to_string(),
+                            Ok(text) => text.content()[0].content.as_str().to_string(),
                             _ => {
                                 log::error!("Name entry failed");
                                 self.action_active.store(false, Ordering::SeqCst);
@@ -926,7 +923,7 @@ impl<'a> ActionManager<'a> {
                                 .build()
                             {
                                 Ok(entry) => {
-                                    entry.content()[0].content.as_str().unwrap().parse::<u32>().unwrap()
+                                    entry.content()[0].content.as_str().parse::<u32>().unwrap()
                                 }
                                 _ => {
                                     log::error!("Length entry failed");
@@ -1798,67 +1795,67 @@ impl<'a> ActionManager<'a> {
     }
 }
 
-pub(crate) fn totp_ss_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+pub(crate) fn totp_ss_validator(input: TextEntryPayload) -> Option<String> {
     let proposed_ss = input.as_str().to_uppercase();
     if let Some(ss) = base32::decode(base32::Alphabet::RFC4648 { padding: false }, &proposed_ss) {
         if ss.len() > 0 {
             return None;
         } else {
-            return Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_totp", locales::LANG)));
+            return Some(String::from(t!("vault.illegal_totp", locales::LANG)));
         }
     }
     if let Some(ss) = base32::decode(base32::Alphabet::RFC4648 { padding: true }, &proposed_ss) {
         if ss.len() > 0 {
             return None;
         } else {
-            return Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_totp", locales::LANG)));
+            return Some(String::from(t!("vault.illegal_totp", locales::LANG)));
         }
     }
     if let Some(ss) = base32::decode(base32::Alphabet::Crockford, &proposed_ss) {
         if ss.len() > 0 {
             return None;
         } else {
-            return Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_totp", locales::LANG)));
+            return Some(String::from(t!("vault.illegal_totp", locales::LANG)));
         }
     }
-    Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_totp", locales::LANG)))
+    Some(String::from(t!("vault.illegal_totp", locales::LANG)))
 }
-pub(crate) fn name_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+pub(crate) fn name_validator(input: TextEntryPayload) -> Option<String> {
     let proposed_name = input.as_str();
     if proposed_name.contains(['\n', ':']) {
         // the '\n' is reserved as the delimiter to end the name field, and ':' is the path separator
-        Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_char", locales::LANG)))
+        Some(String::from(t!("vault.illegal_char", locales::LANG)))
     } else {
         None
     }
 }
-pub(crate) fn password_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+pub(crate) fn password_validator(input: TextEntryPayload) -> Option<String> {
     let proposed_name = input.as_str();
     if proposed_name.contains(['\n']) {
         // the '\n' is reserved as the delimiter to end the name field
-        Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_char", locales::LANG)))
+        Some(String::from(t!("vault.illegal_char", locales::LANG)))
     } else {
         None
     }
 }
-fn length_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+fn length_validator(input: TextEntryPayload) -> Option<String> {
     let text_str = input.as_str();
     match text_str.parse::<u32>() {
         Ok(input_int) => {
             if input_int < 1 || input_int > 128 {
-                Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_number", locales::LANG)))
+                Some(String::from(t!("vault.illegal_number", locales::LANG)))
             } else {
                 None
             }
         }
-        _ => Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_number", locales::LANG))),
+        _ => Some(String::from(t!("vault.illegal_number", locales::LANG))),
     }
 }
-fn count_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+fn count_validator(input: TextEntryPayload) -> Option<String> {
     let text_str = input.as_str();
     match text_str.parse::<u64>() {
         Ok(_input_int) => None,
-        _ => Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_count", locales::LANG))),
+        _ => Some(String::from(t!("vault.illegal_count", locales::LANG))),
     }
 }
 

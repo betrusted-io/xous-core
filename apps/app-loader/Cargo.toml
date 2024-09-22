@@ -21,9 +21,10 @@ locales = { path = "../../locales" }
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 
-rkyv = { version = "0.4.3", features = [
-    "const_generics",
-], default-features = false }
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+] }
 
 ureq = { version = "2.9.4", features = ["json"] }
 url = "2.3.1"

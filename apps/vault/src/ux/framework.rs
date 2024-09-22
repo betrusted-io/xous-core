@@ -189,7 +189,7 @@ impl VaultUx {
             VaultMode::Password | VaultMode::Totp => {
                 self.menu_mgr.insert_item(
                     MenuItem {
-                        name: xous_ipc::String::from_str(t!("vault.menu_addnew", locales::LANG)),
+                        name: String::from(t!("vault.menu_addnew", locales::LANG)),
                         action_conn: Some(self.actions_conn),
                         action_opcode: ActionOp::MenuAddnew.to_u32().unwrap(),
                         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -199,7 +199,7 @@ impl VaultUx {
                 );
                 self.menu_mgr.insert_item(
                     MenuItem {
-                        name: xous_ipc::String::from_str(t!("vault.menu_autotype_username", locales::LANG)),
+                        name: String::from(t!("vault.menu_autotype_username", locales::LANG)),
                         action_conn: Some(self.main_conn),
                         action_opcode: VaultOp::MenuAutotype.to_u32().unwrap(),
                         action_payload: MenuPayload::Scalar([1, 0, 0, 0]),
@@ -209,7 +209,7 @@ impl VaultUx {
                 );
                 self.menu_mgr.insert_item(
                     MenuItem {
-                        name: xous_ipc::String::from_str(t!("vault.menu_autotype", locales::LANG)),
+                        name: String::from(t!("vault.menu_autotype", locales::LANG)),
                         action_conn: Some(self.main_conn),
                         action_opcode: VaultOp::MenuAutotype.to_u32().unwrap(),
                         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),

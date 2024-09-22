@@ -99,8 +99,8 @@ pub enum VaultMode {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct SelectedEntry {
-    pub key_guid: xous_ipc::String<256>,
-    pub description: xous_ipc::String<256>,
+    pub key_guid: String,
+    pub description: String,
     pub mode: VaultMode,
 }
 
@@ -492,7 +492,7 @@ fn main() -> ! {
                     continue;
                 }
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
+                let s = buffer.as_flat::<String, _>().unwrap();
                 log::debug!("Incremental input: {}", s.as_str());
                 vaultux.input(s.as_str()).expect("Vault couldn't accept input string");
                 send_message(conn, Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)).ok();
@@ -505,7 +505,7 @@ fn main() -> ! {
                     continue;
                 }
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
+                let s = buffer.as_flat::<String, _>().unwrap();
                 log::debug!("vaultux got input line: {}", s.as_str());
                 match s.as_str() {
                     "\u{0011}" => {
@@ -806,7 +806,7 @@ fn main() -> ! {
                         Some(|tf| match tf.as_str().parse::<usize>() {
                             Ok(_) => None,
                             Err(_) => {
-                                Some(xous_ipc::String::from_str(t!("prefs.autobacklight_err", locales::LANG)))
+                                Some(String::from(t!("prefs.autobacklight_err", locales::LANG)))
                             }
                         }),
                     )

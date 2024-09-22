@@ -33,8 +33,9 @@ pddb = { path = "../../services/pddb" }
 chat = { path = "../../libs/chat" }
 modals = { path = "../../services/modals" }
 percent-encoding = "2.2"
-rkyv = { version = "0.4.3", default-features = false, features = [
-    "const_generics",
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
 ] }
 serde = { version = "1.0", features = ["derive"] }
 tls = { path = "../../libs/tls" }

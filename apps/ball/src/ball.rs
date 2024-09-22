@@ -35,7 +35,7 @@ impl Ball {
 
         let token = gam
             .register_ux(UxRegistration {
-                app_name: xous_ipc::String::<128>::from_str(gam::APP_NAME_BALL),
+                app_name: String::from(gam::APP_NAME_BALL),
                 ux_type: gam::UxType::Framebuffer,
                 predictor: None,
                 listener: sid.to_array(), /* note disclosure of our SID to the GAM -- the secret is now

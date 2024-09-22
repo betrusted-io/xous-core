@@ -22,9 +22,9 @@ pub(crate) fn prereqs(sid: xous::SID, time_conn: xous::CID) -> ([u32; 4], bool) 
     let app_name_ref = gam::APP_NAME_VAULT;
     let token = gam
         .register_ux(UxRegistration {
-            app_name: xous_ipc::String::<128>::from_str(app_name_ref),
+            app_name: String::from(app_name_ref),
             ux_type: gam::UxType::Chat,
-            predictor: Some(xous_ipc::String::<64>::from_str(crate::ux::icontray::SERVER_NAME_ICONTRAY)),
+            predictor: Some(String::from(crate::ux::icontray::SERVER_NAME_ICONTRAY)),
             listener: sid.to_array(), /* note disclosure of our SID to the GAM -- the secret is now shared
                                        * with the GAM! */
             redraw_id: VaultOp::Redraw.to_u32().unwrap(),

@@ -53,7 +53,7 @@ fn wrapped_main() -> ! {
 
     let cid = xous::connect(sid).unwrap();
     chat.menu_add(MenuItem {
-        name: xous_ipc::String::from_str(t!("mtxchat.room.item", locales::LANG)),
+        name: String::from(t!("mtxchat.room.item", locales::LANG)),
         action_conn: Some(cid),
         action_opcode: MtxchatOp::Menu as u32,
         action_payload: MenuPayload::Scalar([MenuOp::Room as u32, 0, 0, 0]),
@@ -61,7 +61,7 @@ fn wrapped_main() -> ! {
     })
     .expect("failed add menu");
     chat.menu_add(MenuItem {
-        name: xous_ipc::String::from_str(t!("mtxchat.login.item", locales::LANG)),
+        name: String::from(t!("mtxchat.login.item", locales::LANG)),
         action_conn: Some(cid),
         action_opcode: MtxchatOp::Menu as u32,
         action_payload: MenuPayload::Scalar([MenuOp::Login as u32, 0, 0, 0]),
@@ -69,7 +69,7 @@ fn wrapped_main() -> ! {
     })
     .expect("failed add menu");
     chat.menu_add(MenuItem {
-        name: xous_ipc::String::from_str(t!("mtxchat.logout.item", locales::LANG)),
+        name: String::from(t!("mtxchat.logout.item", locales::LANG)),
         action_conn: Some(cid),
         action_opcode: MtxchatOp::Menu as u32,
         action_payload: MenuPayload::Scalar([MenuOp::Logout as u32, 0, 0, 0]),
@@ -77,7 +77,7 @@ fn wrapped_main() -> ! {
     })
     .expect("failed add menu");
     chat.menu_add(MenuItem {
-        name: xous_ipc::String::from_str(t!("mtxchat.close.item", locales::LANG)),
+        name: String::from(t!("mtxchat.close.item", locales::LANG)),
         action_conn: Some(cid),
         action_opcode: MtxchatOp::Menu as u32,
         action_payload: MenuPayload::Scalar([MenuOp::Noop as u32, 0, 0, 0]),
@@ -132,7 +132,7 @@ fn wrapped_main() -> ! {
             }
             Some(MtxchatOp::Post) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.to_original::<xous_ipc::String<{ POST_TEXT_MAX }>, _>().unwrap();
+                let s = buffer.to_original::<String<{ POST_TEXT_MAX }>, _>().unwrap();
                 if s.len() > 0 {
                     // capture input instead of calling here, so message can drop and calling server is
                     // released

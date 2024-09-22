@@ -41,7 +41,7 @@ impl UI {
         let gam = gam::Gam::new(&xns).expect("Can't connect to GAM");
         let gam_token = gam
             .register_ux(gam::UxRegistration {
-                app_name: xous_ipc::String::<128>::from_str(gam::APP_NAME_TRANSIENTDISK),
+                app_name: String::from(gam::APP_NAME_TRANSIENTDISK),
                 ux_type: gam::UxType::Chat,
                 predictor: None,
                 listener: sid.to_array(),

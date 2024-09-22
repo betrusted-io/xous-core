@@ -9,9 +9,10 @@ num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 xous = "0.9.63"
 xous-ipc = "0.9.63"
-rkyv = { version = "0.4.3", features = [
-    "const_generics",
-], default-features = false }
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+] }
 log-server = { package = "xous-api-log", version = "0.1.59" }
 xous-names = { package = "xous-api-names", version = "0.9.61" }
 gam = { path = "../../services/gam" }

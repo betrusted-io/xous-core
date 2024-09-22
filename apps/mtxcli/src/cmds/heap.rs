@@ -1,6 +1,6 @@
 use core::fmt::Write;
 
-use xous_ipc::String as XousString;
+
 
 use crate::{heap_usage, CommonEnv, ShellCmdApi};
 
@@ -13,12 +13,8 @@ impl Heap {
 impl<'a> ShellCmdApi<'a> for Heap {
     cmd_api!(heap);
 
-    fn process(
-        &mut self,
-        _args: XousString<1024>,
-        _env: &mut CommonEnv,
-    ) -> Result<Option<XousString<1024>>, xous::Error> {
-        let mut ret = XousString::<1024>::new();
+    fn process(&mut self, _args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
         let heap = heap_usage();
         write!(ret, "heap usage: {}", heap).unwrap();
         log::info!("heap usage: {}", heap);

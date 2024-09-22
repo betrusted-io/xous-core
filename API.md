@@ -48,12 +48,12 @@ be scoped to crate-local.
 ```rust
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct RichMemStruct {
-    pub name: xous_ipc::String::<64>,
+    pub name: String,
     pub stuff: [u32; 42],
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct AnotherRichStruct {
-    pub name: xous_ipc::String::<64>,
+    pub name: String,
     pub other: Option<bool>,
 }
 ```
@@ -75,7 +75,7 @@ Client state is held in an object defined in lib.rs.
 pub mod api;
 use api::{Callback, Opcode}; // if you prefer to map the api into your local namespace
 use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
-use xous_ipc::{String, Buffer};
+use xous_ipc::Buffer;
 use num_traits::{ToPrimitive, FromPrimitive};
 
 pub struct MyServer {
@@ -118,7 +118,7 @@ impl MyServer {
   pub fn send_richdata(&self, words: &str, stuff: [u32; 42]) -> Result<(), xous::Error> {
     // build the structure up. Note that RichMemStruct is just inside the API! the caller doesn't need to know about it.
     let mut rich_struct = RichMemStruct {
-      name: String::<64>::new(),
+      name: String::new(),
       stuff,
     };
     use core::fmt::Write;
@@ -132,7 +132,7 @@ impl MyServer {
   pub fn get_richdata(&self, stuff: [u32; 42]) -> Result<AnotherRichStruct, xous::Error> {
     // build the query up. We're going to re-use RichMemStruct, but it could be anything
     let mut rich_struct = RichMemStruct {
-      name: String::<64>::from_str("example rich query"),
+      name: String::from("example rich query"),
       stuff,
     };
     // now convert it into a Xous::Buffer, which can then be mutably lent to the server
@@ -145,7 +145,7 @@ impl MyServer {
     match buf.to_original().unwrap() {
       api::Return::ExampleMemoryReturn(rms) => {
         Ok( AnotherRichStruct {
-          name: String::<64>::from_str(rms.name),
+          name: String::from(rms.name),
           other: None,
         } )
       }
@@ -271,7 +271,7 @@ Note that all message types block the caller until they are returned.
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 use num_traits::FromPrimitive;
-use xous_ipc::{String, Buffer};
+use xous_ipc::Buffer;
 use api::Opcode;
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 
@@ -308,7 +308,7 @@ fn main() -> ! {
           let response = api::Return;
           if things_look_okay {
             let retstruct = AnotherRichStruct {
-              name: String::<64>::from_str(rms.as_str()),
+              name: String::from(rms.as_str()),
               other: Some(true),
             }
             response = api::Return::ExampleMemoryReturn(retstruct);

@@ -18,8 +18,8 @@ pub(crate) struct AppLoader {
     menu: MenuMatic,
     load_menu: MenuMatic,
     conn: xous::CID,
-    apps: Vec<xous_ipc::String<64>>,
-    possible_apps: Vec<(xous_ipc::String<64>, usize)>,
+    apps: Vec<String>,
+    possible_apps: Vec<(String, usize)>,
     server: Option<String>,
     current_menu: String,
 }
@@ -32,7 +32,7 @@ impl AppLoader {
         // the gam token
         let auth = gam
             .register_ux(UxRegistration {
-                app_name: xous_ipc::String::from_str(APP_NAME_APP_LOADER),
+                app_name: String::from(APP_NAME_APP_LOADER),
                 ux_type: gam::UxType::Modal,
                 predictor: None,
                 listener: sid.to_array(),
@@ -56,14 +56,14 @@ impl AppLoader {
 
         // the menu
         let set_server_item = MenuItem {
-            name: xous_ipc::String::from_str(t!("apploader.menu.setserver", locales::LANG)),
+            name: String::from(t!("apploader.menu.setserver", locales::LANG)),
             action_conn: Some(conn),
             action_opcode: Opcode::SetServer.to_u32().unwrap(),
             action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
             close_on_select: true,
         };
         let close_item = MenuItem {
-            name: xous_ipc::String::from_str(t!("apploader.close", locales::LANG)),
+            name: String::from(t!("apploader.close", locales::LANG)),
             action_conn: None,
             action_opcode: 0,
             action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -224,7 +224,7 @@ impl AppLoader {
                 Some("e.g. http://ip:port".to_string()),
                 Some(|payload: TextEntryPayload| match url::Url::parse(payload.as_str()) {
                     Ok(_) => None,
-                    Err(e) => Some(xous_ipc::String::from_str(&format!(
+                    Err(e) => Some(String::from(&format!(
                         "{}{}",
                         t!("apploader.setserver.error", locales::LANG),
                         e
@@ -237,7 +237,7 @@ impl AppLoader {
         if self.server.is_none() && payload.is_some() {
             self.menu.insert_item(
                 MenuItem {
-                    name: xous_ipc::String::from_str(t!("apploader.menu.reloadapplist", locales::LANG)),
+                    name: String::from(t!("apploader.menu.reloadapplist", locales::LANG)),
                     action_conn: Some(self.conn),
                     action_opcode: Opcode::ReloadAppList.to_u32().unwrap(),
                     action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -247,7 +247,7 @@ impl AppLoader {
             );
             self.menu.insert_item(
                 MenuItem {
-                    name: xous_ipc::String::from_str(t!("apploader.menu.addapp", locales::LANG)),
+                    name: String::from(t!("apploader.menu.addapp", locales::LANG)),
                     action_conn: Some(self.conn),
                     action_opcode: Opcode::AddAppMenu.to_u32().unwrap(),
                     action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -312,17 +312,17 @@ impl AppLoader {
             }
         }
         .iter()
-        .map(|(name, menus)| (xous_ipc::String::<64>::from_str(&name), *menus))
+        .map(|(name, menus)| (String::from(&name), *menus))
         .collect();
 
         for (old_name, _) in old {
-            self.load_menu.delete_item(old_name.as_str().unwrap());
+            self.load_menu.delete_item(&old_name);
         }
 
         for (i, (app, _)) in self.possible_apps.iter().enumerate() {
             self.load_menu.insert_item(
                 MenuItem {
-                    name: xous_ipc::String::from_str(app.to_str()),
+                    name: String::from(app.to_str()),
                     action_conn: Some(self.conn),
                     action_opcode: Opcode::AddApp.to_u32().unwrap(),
                     action_payload: gam::MenuPayload::Scalar([i.try_into().unwrap(), 0, 0, 0]),
@@ -338,7 +338,7 @@ impl AppLoader {
 
     pub(crate) fn dispatch_app(&self, index: usize) {
         if index < self.apps.len() {
-            let name: xous_ipc::String<64> = self.apps[index];
+            let name: String = self.apps[index];
             log::info!("Switching to app `{}'", name);
             self.gam
                 .switch_to_app(name.as_ref(), self.auth)

@@ -76,7 +76,7 @@ fn wrapped_main() -> ! {
             }
             Some(ChatTestOp::Post) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.to_original::<xous_ipc::String<{ POST_TEXT_MAX }>, _>().unwrap();
+                let s = buffer.to_original::<String<{ POST_TEXT_MAX }>, _>().unwrap();
                 if s.len() > 0 {
                     // capture input instead of calling here, so message can drop and calling server is
                     // released
