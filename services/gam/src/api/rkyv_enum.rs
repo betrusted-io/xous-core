@@ -34,7 +34,7 @@ pub(crate) enum Return {
     NotCurrentlyDrawable,
 }
 
-#[derive(Debug, Eq, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Eq, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub(crate) enum MenuMgrOp {
     // incoming is one of these ops
     AddItem,

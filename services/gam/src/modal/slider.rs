@@ -8,7 +8,7 @@ use crate::*;
 // the enum_actions API to update the progress state in an efficient manner.
 // Thus it does not include its own GAM reference; instead we create one on
 // the fly when needed.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct Slider {
     pub min: u32,
     pub max: u32,
@@ -132,7 +132,7 @@ impl ActionApi for Slider {
             // estimate width of current setting
             tv.bounds_computed = None;
             tv.bounds_hint = TextBounds::GrowableFromTl(Point::new(0, 0), maxwidth);
-            write!(tv, "{}{}", self.action_payload, self.units.to_str()).unwrap();
+            write!(tv, "{}{}", self.action_payload, &self.units).unwrap();
             modal.gam.bounds_compute_textview(&mut tv).expect("couldn't simulate text size");
             let textwidth = if let Some(bounds) = tv.bounds_computed {
                 bounds.br.x - bounds.tl.x

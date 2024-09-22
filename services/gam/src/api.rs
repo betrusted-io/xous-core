@@ -244,7 +244,7 @@ pub(crate) struct GamActivation {
     pub(crate) result: Option<ActivationResult>,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub(crate) struct MenuManagement {
     pub(crate) item: MenuItem,
     pub(crate) op: MenuMgrOp,

@@ -16,11 +16,11 @@ pub type ValidatorErr = String;
 
 pub type Payloads = [TextEntryPayload; MAX_FIELDS as usize];
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq, Default)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct TextEntryPayloads(Payloads, usize);
 
 impl TextEntryPayloads {
-    pub fn first(&self) -> TextEntryPayload { self.0[0] }
+    pub fn first(&self) -> TextEntryPayload { self.0[0].clone() }
 
     pub fn content(&self) -> Vec<TextEntryPayload> { self.0[..self.1].to_vec() }
 }
@@ -623,7 +623,7 @@ impl ActionApi for TextEntry {
                     }
                 }
                 if let Some(validator) = self.validator {
-                    if let Some(err_msg) = validator(*payload, self.action_opcode) {
+                    if let Some(err_msg) = validator(payload.clone(), self.action_opcode) {
                         payload.content.clear(); // reset the input field
                         return Some(err_msg);
                     }
@@ -646,8 +646,12 @@ impl ActionApi for TextEntry {
 
                 let mut payloads: TextEntryPayloads = Default::default();
                 payloads.1 = self.max_field_amount as usize;
-                payloads.0[..self.max_field_amount as usize]
-                    .copy_from_slice(&self.action_payloads[..self.max_field_amount as usize]);
+                for (dst, src) in payloads.0[..self.max_field_amount as usize]
+                    .iter_mut()
+                    .zip(self.action_payloads[..self.max_field_amount as usize].iter())
+                {
+                    *dst = src.clone();
+                }
                 let buf = Buffer::into_buf(payloads).expect("couldn't convert message to payload");
                 buf.send(self.action_conn, self.action_opcode)
                     .map(|_| ())

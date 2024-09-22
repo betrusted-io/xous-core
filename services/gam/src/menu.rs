@@ -184,7 +184,7 @@ impl<'a> Menu<'a> {
     // something)
     pub fn delete_item(&mut self, item: &str) -> bool {
         let len_before = self.items.len();
-        self.items.retain(|&candidate| candidate.name.as_str() != item);
+        self.items.retain(|candidate| candidate.name.as_str() != item);
 
         // now, recompute the height
         let mut total_items = self.num_items();
@@ -208,7 +208,7 @@ impl<'a> Menu<'a> {
         use core::fmt::Write;
         let canvas_size = self.gam.get_canvas_bounds(self.canvas).unwrap();
 
-        let item = self.items[index as usize];
+        let item = &self.items[index as usize];
         let mut item_tv = TextView::new(
             self.canvas,
             TextBounds::BoundingBox(Rectangle::new(
@@ -357,7 +357,7 @@ impl<'a> Menu<'a> {
             log::debug!("got key '{}'", k);
             match k {
                 '∴' => {
-                    let mi = self.items[self.index];
+                    let mi = &self.items[self.index];
                     // give up focus before issuing the command, as some commands conflict with loss of
                     // focus...
                     if mi.close_on_select {
@@ -562,12 +562,12 @@ pub fn menu_matic(
                         .expect("menu manager received unexpected message type");
                     match mgmt.op {
                         MenuMgrOp::AddItem => {
-                            menu.lock().unwrap().add_item(mgmt.item);
+                            menu.lock().unwrap().add_item(mgmt.item.clone());
                             mgmt.op = MenuMgrOp::Ok;
                             buffer.replace(mgmt).unwrap();
                         }
                         MenuMgrOp::InsertItem(at) => {
-                            if menu.lock().unwrap().insert_item(mgmt.item, at) {
+                            if menu.lock().unwrap().insert_item(mgmt.item.clone(), at) {
                                 mgmt.op = MenuMgrOp::Ok;
                                 buffer.replace(mgmt).unwrap();
                             } else {

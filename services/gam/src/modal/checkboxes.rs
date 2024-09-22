@@ -209,8 +209,8 @@ impl ActionApi for CheckBoxes {
                     self.gam.relinquish_focus().unwrap();
                     xous::yield_slice();
 
-                    let buf =
-                        Buffer::into_buf(self.action_payload).expect("couldn't convert message to payload");
+                    let buf = Buffer::into_buf(self.action_payload.clone())
+                        .expect("couldn't convert message to payload");
                     buf.send(self.action_conn, self.action_opcode)
                         .map(|_| ())
                         .expect("couldn't send action message");
