@@ -68,7 +68,7 @@ pub enum ModalOpcode {
 }
 
 /// We use a new type for item names, so that it's easy to resize this as needed.
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct ItemName(String);
 impl ItemName {
     pub fn new(name: &str) -> Self { ItemName(String::from(name)) }
@@ -84,7 +84,7 @@ pub struct Bip39EntryPayload {
     pub len: u32,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq, Default)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct TextEntryPayload {
     dirty: bool,
     pub content: String,
@@ -116,7 +116,20 @@ impl TextEntryPayload {
 
     /// Ensures that 0's are written to the storage of this struct, and not optimized out; important for
     /// password fields.
-    pub fn volatile_clear(&mut self) { self.content.volatile_clear(); }
+    pub fn volatile_clear(&mut self) {
+        let temp_bytes = unsafe { self.content.as_bytes_mut() };
+        let len = temp_bytes.len();
+        let ptr = temp_bytes.as_mut_ptr();
+        for i in 0..len {
+            // safety: the bounds were derived from a valid len; the pointer is aligned because it's derived
+            // from a slice. We use the "unsafe" version of this to force a zeroize of contents
+            // and avoid optimizations that could otherwise cause this operation to be skipped
+            // (e.g. dropping and de-allocating without scrubbing)
+            unsafe { ptr.add(i).write_volatile(0) };
+        }
+        // force all the writes to finish if they were re-ordered
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
 
     pub fn as_str(&self) -> &str { self.content.as_str() }
 }
@@ -127,7 +140,7 @@ impl SliderPayload {
     pub fn new(value: u32) -> Self { SliderPayload(value) }
 }
 
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct RadioButtonPayload(pub ItemName); // returns the name of the item corresponding to the radio button selection
 impl RadioButtonPayload {
     pub fn new(name: &str) -> Self { RadioButtonPayload(ItemName::new(name)) }
@@ -136,12 +149,12 @@ impl RadioButtonPayload {
 
     pub fn clear(&mut self) { self.0.0.clear(); }
 }
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct CheckBoxPayload(pub [Option<ItemName>; MAX_ITEMS]); // returns a list of potential items that could be selected
 impl CheckBoxPayload {
-    pub fn new() -> Self { CheckBoxPayload([None; MAX_ITEMS]) }
+    pub fn new() -> Self { CheckBoxPayload([const { None }; MAX_ITEMS]) }
 
-    pub fn payload(&self) -> [Option<ItemName>; MAX_ITEMS] { self.0 }
+    pub fn payload(self) -> [Option<ItemName>; MAX_ITEMS] { self.0 }
 
     pub fn contains(&self, name: &str) -> bool {
         for maybe_item in self.0.iter() {
@@ -404,7 +417,7 @@ impl<'a> Modal<'a> {
 
     pub fn activate(&self) {
         const POLL_DELAY_MS: usize = 857;
-        match self.gam.raise_modal(self.name.to_str()) {
+        match self.gam.raise_modal(&self.name) {
             Ok(_) => (),
             Err(_) => {
                 std::thread::spawn({
@@ -414,7 +427,7 @@ impl<'a> Modal<'a> {
                         let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
                         ticktimer.sleep_ms(POLL_DELAY_MS).unwrap();
                         let gam = crate::Gam::new(&xns).unwrap();
-                        while gam.raise_modal(name.to_str()).is_err() {
+                        while gam.raise_modal(&name).is_err() {
                             log::info!("Couldn't raise {}; retrying...", name);
                             ticktimer.sleep_ms(POLL_DELAY_MS).unwrap();
                         }
@@ -478,7 +491,7 @@ impl<'a> Modal<'a> {
         }
 
         let mut cur_height = self.margin;
-        if let Some(mut tv) = self.top_text {
+        if let Some(mut tv) = self.top_text.as_mut() {
             if do_redraw {
                 self.gam.post_textview(&mut tv).expect("couldn't draw text");
                 if let Some(bounds) = tv.bounds_computed {
@@ -526,7 +539,7 @@ impl<'a> Modal<'a> {
         self.action.redraw(cur_height, &self);
         cur_height += action_height;
 
-        if let Some(mut tv) = self.bot_text {
+        if let Some(mut tv) = self.bot_text.as_mut() {
             if do_redraw {
                 self.gam.post_textview(&mut tv).expect("couldn't draw text");
                 if let Some(bounds) = tv.bounds_computed {
@@ -552,7 +565,7 @@ impl<'a> Modal<'a> {
                 log::debug!("got key '{}'", k);
                 let err = self.action.key_action(k);
                 if let Some(err_msg) = err {
-                    self.modify(None, None, false, Some(err_msg.to_str()), false, None);
+                    self.modify(None, None, false, Some(&err_msg), false, None);
                 }
             }
         }
@@ -601,28 +614,28 @@ impl<'a> Modal<'a> {
         if let Some(top_text) = update_top_text {
             write!(top_tv_temp, "{}", top_text).unwrap();
         } else {
-            if let Some(top_text) = self.top_text {
+            if let Some(top_text) = self.top_text.as_ref() {
                 write!(top_tv_temp, "{}", top_text).unwrap();
             }
         };
         let top_text = if self.top_text.is_none() && update_top_text.is_none() {
             None
         } else {
-            Some(top_tv_temp.to_str())
+            Some(top_tv_temp.as_str())
         };
 
         let mut bot_tv_temp = String::new(); // size matches that used in TextView
         if let Some(bot_text) = update_bot_text {
             write!(bot_tv_temp, "{}", bot_text).unwrap();
         } else {
-            if let Some(bot_text) = self.bot_text {
+            if let Some(bot_text) = self.bot_text.as_ref() {
                 write!(bot_tv_temp, "{}", bot_text).unwrap();
             }
         };
         let bot_text = if self.bot_text.is_none() && update_bot_text.is_none() {
             None
         } else {
-            Some(bot_tv_temp.to_str())
+            Some(bot_tv_temp.as_str())
         };
 
         let style = if let Some(style) = update_style {
