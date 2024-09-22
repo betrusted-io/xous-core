@@ -4,13 +4,13 @@ description = "System call interface for Xous"
 edition = "2018"
 license = "MIT OR Apache-2.0"
 name = "xous-ipc"
-version = "0.10.0"
+version = "0.10.1"
 repository = "https://github.com/betrusted-io/xous-core/"
 homepage = "https://betrusted.io/"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.63"
+xous = "0.9.64"
 bitflags = { version = "1" }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",

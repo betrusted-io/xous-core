@@ -12,12 +12,12 @@ graphics-server = { path = "../graphics-server" }
 ime-plugin-api = { path = "../ime-plugin-api" }
 keyboard = { path = "../keyboard" }
 log = "0.4.14"
-log-server = { package = "xous-api-log", version = "0.1.59" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.59" }
-xous = "0.9.63"
+log-server = { package = "xous-api-log", version = "0.1.60" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.60" }
+xous = "0.9.64"
 locales = { path = "../../locales" }
-xous-ipc = "0.10.0"
-xous-names = { package = "xous-api-names", version = "0.9.61" }
+xous-ipc = "0.10.1"
+xous-names = { package = "xous-api-names", version = "0.9.62" }
 
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
@@ -28,7 +28,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
 
 tts-frontend = { path = "../tts" }
 
-utralib = { version = "0.1.24", optional = true, default-features = false }
+utralib = { version = "0.1.25", optional = true, default-features = false }
 
 [features]
 precursor = ["utralib/precursor"]

@@ -7,18 +7,18 @@ description = "USB test & development stub"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.63"
-log-server = { package = "xous-api-log", version = "0.1.59" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.59" }
-xous-names = { package = "xous-api-names", version = "0.9.61" }
+xous = "0.9.64"
+log-server = { package = "xous-api-log", version = "0.1.60" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.60" }
+xous-names = { package = "xous-api-names", version = "0.9.62" }
 log = "0.4.14"
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-susres = { package = "xous-api-susres", version = "0.9.59" }
+susres = { package = "xous-api-susres", version = "0.9.60" }
 keyboard = { path = "../keyboard" }
 bitfield = "0.13.2"
 vcell = "0.1.3"
-utralib = { version = "0.1.24", optional = true, default-features = false }
+utralib = { version = "0.1.25", optional = true, default-features = false }
 
 xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main" }
 embedded-time = "0.12.1"                                                                     # required by the keyboard interface

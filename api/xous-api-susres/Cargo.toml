@@ -1,6 +1,6 @@
 [package]
 name = "xous-api-susres"
-version = "0.9.59"
+version = "0.9.60"
 authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "Manager of suspend/resume operations"
@@ -10,10 +10,10 @@ homepage = "https://betrusted.io/xous-book/"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.63"
-xous-ipc = "0.10.0"
-log-server = { package = "xous-api-log", version = "0.1.59" }
-xous-names = { package = "xous-api-names", version = "0.9.61" }
+xous = "0.9.64"
+xous-ipc = "0.10.1"
+log-server = { package = "xous-api-log", version = "0.1.60" }
+xous-names = { package = "xous-api-names", version = "0.9.62" }
 log = "0.4.14"
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
@@ -22,7 +22,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "alloc",
 ] }
 
-utralib = { version = "0.1.24", optional = true, default-features = false }
+utralib = { version = "0.1.25", optional = true, default-features = false }
 
 [features]
 precursor = ["utralib/precursor"]
