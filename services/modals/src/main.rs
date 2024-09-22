@@ -427,7 +427,7 @@ fn wrapped_main() -> ! {
                         }
                     }
                     renderer_modal.modify(
-                        Some(ActionType::Slider(progress_action)),
+                        Some(ActionType::Slider(progress_action.clone())),
                         None,
                         false,
                         None,
@@ -450,7 +450,7 @@ fn wrapped_main() -> ! {
             // ------------------ INTERNAL APIS --------------------
             Some(Opcode::InitiateOp) => {
                 log::debug!("InitiateOp called");
-                match op {
+                match &op {
                     RendererState::RunText(config) => {
                         log::debug!("initiating text entry modal");
                         #[cfg(feature = "tts")]
@@ -460,7 +460,7 @@ fn wrapped_main() -> ! {
                         renderer_modal.modify(
                             Some(ActionType::TextEntry({
                                 let mut ta = text_action.clone();
-                                ta.reset_action_payloads(config.fields, config.placeholders);
+                                ta.reset_action_payloads(config.fields, config.placeholders.clone());
 
                                 ta
                             })),
@@ -480,7 +480,7 @@ fn wrapped_main() -> ! {
                         );
                         let text = config.message.as_str();
                         let tmp: String;
-                        let qrtext = match config.qrtext {
+                        let qrtext = match &config.qrtext {
                             Some(text) => {
                                 tmp = text.to_string();
                                 Some(tmp.as_str())
@@ -506,7 +506,7 @@ fn wrapped_main() -> ! {
                             Opcode::NotificationReturn.to_u32().unwrap(),
                         );
                         let mut text = String::new();
-                        if let Some(c) = config.caption {
+                        if let Some(c) = &config.caption {
                             text.push_str(c.as_str());
                             text.push_str("\n\n");
                         }
@@ -542,7 +542,7 @@ fn wrapped_main() -> ! {
                             Opcode::Bip39Return.to_u32().unwrap(),
                         );
                         let mut text = String::new();
-                        if let Some(c) = config.caption {
+                        if let Some(c) = &config.caption {
                             text.push_str(c.as_str());
                         }
 
@@ -592,7 +592,7 @@ fn wrapped_main() -> ! {
                         #[cfg(feature = "tts")]
                         tts.tts_simple(config.title.as_str()).unwrap();
                         renderer_modal.modify(
-                            Some(ActionType::Slider(progress_action)),
+                            Some(ActionType::Slider(progress_action.clone())),
                             Some(config.title.as_str()),
                             false,
                             None,
@@ -610,7 +610,7 @@ fn wrapped_main() -> ! {
                         list_hash.clear();
                         list_selected = 0u32;
                         for item in fixed_items.iter() {
-                            radiobuttons.add_item(*item);
+                            radiobuttons.add_item(item.clone());
                             list_hash.insert(item.as_str().to_string(), list_hash.len());
                         }
                         fixed_items.clear();
@@ -637,7 +637,7 @@ fn wrapped_main() -> ! {
                         list_hash.clear();
                         list_selected = 0u32;
                         for item in fixed_items.iter() {
-                            checkbox.add_item(*item);
+                            checkbox.add_item(item.clone());
                             list_hash.insert(item.as_str().to_string(), list_hash.len());
                         }
                         fixed_items.clear();
@@ -664,13 +664,13 @@ fn wrapped_main() -> ! {
                         }
                         dynamic_notification_active = true;
                         let mut top_text = String::new();
-                        if let Some(title) = config.title {
+                        if let Some(title) = &config.title {
                             #[cfg(feature = "tts")]
                             tts.tts_simple(title.as_str()).unwrap();
                             top_text.push_str(title.as_str());
                         }
                         let mut bot_text = String::new();
-                        if let Some(text) = config.text {
+                        if let Some(text) = &config.text {
                             #[cfg(feature = "tts")]
                             tts.tts_simple(text.as_str()).unwrap();
                             bot_text.push_str(text.as_str());
@@ -713,16 +713,16 @@ fn wrapped_main() -> ! {
                     token_lock = None;
                 }*/
             }),
-            Some(Opcode::DoUpdateDynamicNotification) => match op {
+            Some(Opcode::DoUpdateDynamicNotification) => match &op {
                 RendererState::RunDynamicNotification(config) => {
                     //log::set_max_level(log::LevelFilter::Trace);
                     //renderer_modal.gam.set_debug_level(log::LevelFilter::Debug);
                     let mut top_text = String::new();
-                    if let Some(title) = config.title {
+                    if let Some(title) = &config.title {
                         top_text.push_str(title.as_str());
                     }
                     let mut bot_text = String::new();
-                    if let Some(text) = config.text {
+                    if let Some(text) = &config.text {
                         bot_text.push_str(text.as_str());
                     }
                     renderer_modal.modify(
@@ -911,7 +911,7 @@ fn wrapped_main() -> ! {
                         let mut response = unsafe {
                             Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap())
                         };
-                        response.replace(item).unwrap();
+                        response.replace(item.clone()).unwrap();
                         op = RendererState::None;
                         match list_hash.get(item.as_str()) {
                             Some(index) => {
@@ -948,7 +948,7 @@ fn wrapped_main() -> ! {
                         let mut response = unsafe {
                             Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap())
                         };
-                        response.replace(item).unwrap();
+                        response.replace(item.clone()).unwrap();
                         op = RendererState::None;
                         for (_, check_item) in item.payload().iter().enumerate() {
                             match check_item {
