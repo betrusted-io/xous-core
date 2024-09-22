@@ -16,8 +16,9 @@ log = "0.4.14"
 llio = { path = "../llio" }
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-rkyv = { version = "0.4.3", default-features = false, features = [
-    "const_generics",
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
 ] }
 susres = { package = "xous-api-susres", version = "0.9.59" }
 modals = { path = "../modals", optional = true }

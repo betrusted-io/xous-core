@@ -14,7 +14,7 @@ pub(crate) enum Opcode {
     Quit,
 }
 
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TtsFrontendMsg {
-    pub text: xous_ipc::String<2048>,
+    pub text: String,
 }

@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use xous_ipc::String;
+use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -18,14 +18,14 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
 
     fn process(
         &mut self,
-        args: String<1024>,
+        args: String,
         env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    ) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
         let helpstring = "ecup [gw] [fw] [wf200] [auto]";
 
-        log::debug!("ecup handling {}", args.as_str().unwrap());
-        let mut tokens = args.as_str().unwrap().split(' ');
+        log::debug!("ecup handling {}", &args);
+        let mut tokens = &args.split(' ');
         let ecup_conn = env.xns.request_connection_blocking("__ECUP server__").unwrap();
 
         if let Some(sub_cmd) = tokens.next() {

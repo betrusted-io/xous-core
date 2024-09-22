@@ -1,6 +1,7 @@
-use crate::{ShellCmdApi, CommonEnv};
-use xous_ipc::String;
 use num_traits::*;
+use String;
+
+use crate::{CommonEnv, ShellCmdApi};
 
 #[derive(Debug)]
 pub struct Memtest {
@@ -12,21 +13,24 @@ impl Memtest {
         let sid = xous::create_server().unwrap();
         let sid_tuple = sid.to_u32();
 
-        let cb_id = env.register_handler(String::<256>::from_str("memtest"));
+        let cb_id = env.register_handler(String::from("memtest"));
         CB_ID.store(cb_id, Ordering::Relaxed);
 
-        xous::create_thread_4(test_thread, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+        xous::create_thread_4(
+            test_thread,
+            sid_tuple.0 as usize,
+            sid_tuple.1 as usize,
+            sid_tuple.2 as usize,
+            sid_tuple.3 as usize,
+        )
+        .unwrap();
 
-        Memtest {
-            memtest_cid: xous::connect(sid).unwrap(),
-            start_time: None,
-        }
+        Memtest { memtest_cid: xous::connect(sid).unwrap(), start_time: None }
     }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
 static CB_ID: AtomicU32 = AtomicU32::new(0);
-
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum TestOp {
@@ -57,13 +61,15 @@ pub fn test_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                     None,
                     256 * 1024, // min 128k so we are working through the L2 cache
                     xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
-                ).expect("couldn't allocate RAM for testing");
+                )
+                .expect("couldn't allocate RAM for testing");
                 let mut testdst = xous::syscall::map_memory(
                     None,
                     None,
                     256 * 1024,
                     xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
-                ).expect("couldn't allocate RAM for testing");
+                )
+                .expect("couldn't allocate RAM for testing");
 
                 let testsrc_slice: &mut [u32] = testsrc.as_slice_mut();
                 let testdst_slice: &mut [u32] = testdst.as_slice_mut();
@@ -102,7 +108,8 @@ pub fn test_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                         }
                         offset += 1;
                     }
-                    // compare random data twice -- if read error, error locs will differ; if write error, errors locs are identical
+                    // compare random data twice -- if read error, error locs will differ; if write error,
+                    // errors locs are identical
                     offset = 0;
                     for (&src, &dst) in testsrc_slice.iter().zip(testdst_slice.iter()) {
                         dummy += src;
@@ -128,15 +135,22 @@ pub fn test_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 xous::syscall::unmap_memory(testsrc).expect("couldn't de-allocate test region");
                 xous::syscall::unmap_memory(testdst).expect("couldn't de-allocate test region");
 
-                xous::send_message(callback_conn,
-                    xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
-                    errs as usize, iters as usize, dummy as usize, 0,)
-                ).unwrap();
+                xous::send_message(
+                    callback_conn,
+                    xous::Message::new_scalar(
+                        CB_ID.load(Ordering::Relaxed) as usize,
+                        errs as usize,
+                        iters as usize,
+                        dummy as usize,
+                        0,
+                    ),
+                )
+                .unwrap();
             }),
             Some(TestOp::Quit) => {
                 log::info!("quitting memtest thread");
                 break;
-            },
+            }
             None => {
                 log::error!("received unknown opcode");
             }
@@ -146,14 +160,16 @@ pub fn test_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 }
 
 impl<'a> ShellCmdApi<'a> for Memtest {
-    cmd_api!(memtest); // inserts boilerplate for command API
+    cmd_api!(memtest);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    // inserts boilerplate for command API
+
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
-        let mut ret = String::<1024>::new();
+        let mut ret = String::new();
         let helpstring = "memest [test [iters]]";
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = &args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
@@ -168,26 +184,37 @@ impl<'a> ShellCmdApi<'a> for Memtest {
                     };
                     let start = env.ticktimer.elapsed_ms();
                     self.start_time = Some(start);
-                    xous::send_message(self.memtest_cid,
-                        xous::Message::new_scalar(TestOp::StartBasic.to_usize().unwrap(), iters as usize, 0, 0, 0)
-                    ).unwrap();
+                    xous::send_message(
+                        self.memtest_cid,
+                        xous::Message::new_scalar(
+                            TestOp::StartBasic.to_usize().unwrap(),
+                            iters as usize,
+                            0,
+                            0,
+                            0,
+                        ),
+                    )
+                    .unwrap();
                     write!(ret, "Starting memtest with {} iters", iters).unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
                 }
             }
-
         } else {
             write!(ret, "{}", helpstring).unwrap();
         }
         Ok(Some(ret))
     }
 
-    fn callback(&mut self, msg: &xous::MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(
+        &mut self,
+        msg: &xous::MessageEnvelope,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
 
-        let mut ret = String::<1024>::new();
+        let mut ret = String::new();
 
         xous::msg_scalar_unpack!(msg, errs, iters, dummy, _, {
             let end = env.ticktimer.elapsed_ms();

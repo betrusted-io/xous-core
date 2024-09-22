@@ -17,8 +17,9 @@ trng = { path = "../trng" }
 com = { path = "../com" }
 llio = { path = "../llio" }
 
-rkyv = { version = "0.4.3", default-features = false, features = [
-    "const_generics",
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
 ] }
 xous-ipc = "0.9.63"
 num-derive = { version = "0.3.3", default-features = false }

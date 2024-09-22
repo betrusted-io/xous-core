@@ -1485,7 +1485,7 @@ pub(crate) fn main_hw() -> ! {
                         // check keymap on every call because we may need to toggle this for e.g. plugging
                         // into a new host with a different map
                         let native_map = native_kbd.get_keymap().unwrap();
-                        for ch in usb_send.s.as_str().unwrap().chars() {
+                        for ch in usb_send.s.as_str().chars() {
                             // ASSUME: user's keyboard type matches the preference on their Precursor device.
                             let codes = match native_map {
                                 KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(ch),

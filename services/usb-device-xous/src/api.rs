@@ -92,7 +92,7 @@ pub(crate) enum Opcode {
 // The log crate depends on this API not changing.
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct UsbString {
-    pub s: xous_ipc::String<4000>,
+    pub s: String,
     pub sent: Option<u32>,
 }
 
@@ -151,7 +151,7 @@ pub const SERIAL_ASCII_BUFLEN: usize = 512;
 pub const SERIAL_BINARY_BUFLEN: usize = 128;
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct UsbSerialAscii {
-    pub s: xous_ipc::String<SERIAL_ASCII_BUFLEN>,
+    pub s: String<SERIAL_ASCII_BUFLEN>,
     pub delimiter: Option<char>,
 }
 
@@ -185,7 +185,7 @@ pub struct HIDReportMessage {
 /// this structure is used to register a USB listener.
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub(crate) struct UsbListenerRegistration {
-    pub server_name: xous_ipc::String<64>,
+    pub server_name: String,
     pub listener_op_id: usize,
 }
 

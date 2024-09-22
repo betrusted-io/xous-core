@@ -2,7 +2,7 @@ use std::time::SystemTime;
 
 use chrono::offset::Utc;
 use chrono::{DateTime, NaiveDateTime};
-use xous_ipc::String;
+use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -16,14 +16,14 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
 
     fn process(
         &mut self,
-        args: String<1024>,
+        args: String,
         _env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
-        let mut ret = String::<1024>::new();
+        let mut ret = String::new();
         let helpstring = "rtc options: utc local";
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = &args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
@@ -67,9 +67,9 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
         &mut self,
         _msg: &xous::MessageEnvelope,
         _env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
-        let mut ret = String::<1024>::new();
+        let mut ret = String::new();
         write!(ret, "{}", "Unrecognized callback to RTC").unwrap();
         Ok(Some(ret))
     }

@@ -1,7 +1,7 @@
 use core::fmt::Write;
 use std::io::Write as PddbWrite;
 
-use xous_ipc::String;
+use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -32,14 +32,14 @@ impl<'a> ShellCmdApi<'a> for Wlan {
 
     fn process(
         &mut self,
-        args: String<1024>,
+        args: String,
         env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    ) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
         let helpstring = "wlan [on] [off] [setssid ...] [setpass ...] [join] [leave] [status] [save] [known]";
         let mut show_help = false;
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = &args.split(' ');
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "on" => {
@@ -59,14 +59,14 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                 "setssid" => {
                     // stop the connection manager from running if we're setting up an AP
                     env.netmgr.connection_manager_stop().unwrap();
-                    let mut val = String::<1024>::new();
+                    let mut val = String::new();
                     join_tokens(&mut val, &mut tokens);
                     if val.len() == 0 {
                         let _ = write!(ret, "Error: SSID too short");
                     } else {
-                        let _ = match env.com.wlan_set_ssid(val.as_str().expect("not valid utf-8")) {
+                        let _ = match env.com.wlan_set_ssid(val.as_str()) {
                             Ok(_) => {
-                                self.current_ssid = Some(std::string::String::from(val.as_str().unwrap()));
+                                self.current_ssid = Some(std::string::String::from(val.as_str()));
                                 write!(
                                     ret,
                                     "wlan setssid {}.\nConnection manager paused during configuration.",
@@ -80,11 +80,11 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                 }
                 "setpass" => {
                     env.netmgr.connection_manager_stop().unwrap();
-                    let mut val = String::<1024>::new();
+                    let mut val = String::new();
                     join_tokens(&mut val, &mut tokens);
-                    let _ = match env.com.wlan_set_pass(val.as_str().expect("not valid utf-8")) {
+                    let _ = match env.com.wlan_set_pass(val.as_str()) {
                         Ok(_) => {
-                            self.current_pass = Some(std::string::String::from(val.as_str().unwrap()));
+                            self.current_pass = Some(std::string::String::from(val.as_str()));
                             write!(
                                 ret,
                                 "wlan setpass {}.\nConnection manager paused during configuration.",
@@ -214,7 +214,7 @@ This is intended to reverse the effect of .split(' ') in the context of a very s
 command parser. This is a lazy way to avoid building a parser for quoted strings, since
 SSIDs or passwords might include spaces.
 */
-fn join_tokens<'a>(buf: &mut String<1024>, tokens: impl Iterator<Item = &'a str>) {
+fn join_tokens<'a>(buf: &mut String, tokens: impl Iterator<Item = &'a str>) {
     for (i, tok) in tokens.enumerate() {
         if i == 0 {
             write!(buf, "{}", tok).unwrap();

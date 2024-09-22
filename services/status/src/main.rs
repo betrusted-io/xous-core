@@ -1017,14 +1017,14 @@ fn wrapped_main() -> ! {
                 // third: construct an array of the new elements to add to the menu.
                 let new_elems = [
                     gam::MenuItem {
-                        name: xous_ipc::String::from_str(t!("mainmenu.backlighton", locales::LANG)),
+                        name: String::from(t!("mainmenu.backlighton", locales::LANG)),
                         action_conn: Some(com.conn()),
                         action_opcode: com.getop_backlight(),
                         action_payload: gam::MenuPayload::Scalar([191 >> 3, 191 >> 3, 0, 0]),
                         close_on_select: true,
                     },
                     gam::MenuItem {
-                        name: xous_ipc::String::from_str(t!("mainmenu.backlightoff", locales::LANG)),
+                        name: String::from(t!("mainmenu.backlightoff", locales::LANG)),
                         action_conn: Some(com.conn()),
                         action_opcode: com.getop_backlight(),
                         action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),

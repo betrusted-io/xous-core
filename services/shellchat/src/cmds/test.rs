@@ -9,7 +9,7 @@ use base64::encode;
 use codec::*;
 use num_traits::*;
 use xous::{Message, MessageEnvelope};
-use xous_ipc::String;
+use String;
 
 use crate::oqc_test::OqcOp;
 use crate::{CommonEnv, ShellCmdApi};
@@ -149,16 +149,16 @@ impl<'a> ShellCmdApi<'a> for Test {
 
     fn process(
         &mut self,
-        args: String<1024>,
+        args: String,
         env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         const SENTINEL: &'static str = "|TSTR";
 
         self.state += 1;
-        let mut ret = String::<1024>::new();
+        let mut ret = String::new();
         write!(ret, "Test has run {} times.", self.state).unwrap();
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = &args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
@@ -550,7 +550,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }
 
                     if self.callback_id.is_none() {
-                        let cb_id = env.register_handler(String::<256>::from_str(self.verb()));
+                        let cb_id = env.register_handler(String::from(self.verb()));
                         log::trace!("hooking frame callback with ID {}", cb_id);
                         self.codec.hook_frame_callback(cb_id, self.callback_conn).unwrap(); // any non-handled IDs get routed to our callback port
                         self.callback_id = Some(cb_id);
@@ -800,7 +800,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     self.codec.set_speaker_volume(VolumeOps::RestoreDefault, None).unwrap();
                     self.codec.set_headphone_volume(VolumeOps::RestoreDefault, None).unwrap();
                     if self.callback_id.is_none() {
-                        let cb_id = env.register_handler(String::<256>::from_str(self.verb()));
+                        let cb_id = env.register_handler(String::from(self.verb()));
                         log::trace!("hooking frame callback with ID {}", cb_id);
                         self.codec.hook_frame_callback(cb_id, self.callback_conn).unwrap(); // any non-handled IDs get routed to our callback port
                         self.callback_id = Some(cb_id);
@@ -1051,7 +1051,7 @@ impl<'a> ShellCmdApi<'a> for Test {
         &mut self,
         msg: &MessageEnvelope,
         env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         const AMPLITUDE: f32 = 0.8;
 
         match &msg.body {

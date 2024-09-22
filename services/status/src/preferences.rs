@@ -154,7 +154,7 @@ impl PrefHandler for DevicePrefs {
             .actions()
             .iter()
             .map(|action| gam::MenuItem {
-                name: xous_ipc::String::from_str(&action.to_string()),
+                name: String::from(&action.to_string()),
                 action_conn: Some(cid),
                 action_opcode: action.to_u32().unwrap(),
                 action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -163,7 +163,7 @@ impl PrefHandler for DevicePrefs {
             .collect::<Vec<gam::MenuItem>>();
 
         menus.push(gam::MenuItem {
-            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", locales::LANG)),
+            name: String::from(t!("mainmenu.closemenu", locales::LANG)),
             action_conn: None,
             action_opcode: 0,
             action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -346,7 +346,7 @@ impl DevicePrefs {
                 Some(cv.to_string()),
                 Some(|tf| match tf.as_str().parse::<u64>() {
                     Ok(_) => None,
-                    Err(_) => Some(xous_ipc::String::from_str(t!("prefs.autobacklight_err", locales::LANG))),
+                    Err(_) => Some(String::from(t!("prefs.autobacklight_err", locales::LANG))),
                 }),
             )
             .build()
@@ -367,7 +367,7 @@ impl DevicePrefs {
                 Some(cv.to_string()),
                 Some(|tf| match tf.as_str().parse::<u64>() {
                     Ok(_) => None,
-                    Err(_) => Some(xous_ipc::String::from_str(t!("prefs.autobacklight_err", locales::LANG))),
+                    Err(_) => Some(String::from(t!("prefs.autobacklight_err", locales::LANG))),
                 }),
             )
             .build()
@@ -522,21 +522,21 @@ impl DevicePrefs {
         menu.delete_item(t!("mainmenu.closemenu", locales::LANG));
         menu.delete_item(&DevicePrefsOp::AudioOn.to_string());
         menu.add_item(gam::MenuItem {
-            name: xous_ipc::String::from_str(&DevicePrefsOp::AudioOff.to_string()),
+            name: String::from(&DevicePrefsOp::AudioOff.to_string()),
             action_conn: Some(self.menu_global_conn),
             action_opcode: DevicePrefsOp::AudioOff.to_u32().unwrap(),
             action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
             close_on_select: true,
         });
         menu.add_item(gam::MenuItem {
-            name: xous_ipc::String::from_str(&DevicePrefsOp::EarpieceVolume.to_string()),
+            name: String::from(&DevicePrefsOp::EarpieceVolume.to_string()),
             action_conn: Some(self.menu_global_conn),
             action_opcode: DevicePrefsOp::EarpieceVolume.to_u32().unwrap(),
             action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
             close_on_select: true,
         });
         menu.add_item(gam::MenuItem {
-            name: xous_ipc::String::from_str(&DevicePrefsOp::HeadsetVolume.to_string()),
+            name: String::from(&DevicePrefsOp::HeadsetVolume.to_string()),
             action_conn: Some(self.menu_global_conn),
             action_opcode: DevicePrefsOp::HeadsetVolume.to_u32().unwrap(),
             action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -544,7 +544,7 @@ impl DevicePrefs {
         });
 
         menu.add_item(gam::MenuItem {
-            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", locales::LANG)),
+            name: String::from(t!("mainmenu.closemenu", locales::LANG)),
             action_conn: None,
             action_opcode: 0,
             action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -571,14 +571,14 @@ impl DevicePrefs {
         menu.delete_item(&DevicePrefsOp::EarpieceVolume.to_string());
         menu.delete_item(&DevicePrefsOp::HeadsetVolume.to_string());
         menu.add_item(gam::MenuItem {
-            name: xous_ipc::String::from_str(&DevicePrefsOp::AudioOn.to_string()),
+            name: String::from(&DevicePrefsOp::AudioOn.to_string()),
             action_conn: Some(self.menu_global_conn),
             action_opcode: DevicePrefsOp::AudioOn.to_u32().unwrap(),
             action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
             close_on_select: true,
         });
         menu.add_item(gam::MenuItem {
-            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", locales::LANG)),
+            name: String::from(t!("mainmenu.closemenu", locales::LANG)),
             action_conn: None,
             action_opcode: 0,
             action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),

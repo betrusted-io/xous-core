@@ -4,7 +4,7 @@ use gam::*;
 use locales::t;
 use num_traits::*;
 use root_keys::RootKeys;
-use xous_ipc::String;
+use String;
 
 use crate::StatusOpcode;
 
@@ -23,7 +23,7 @@ pub fn create_main_menu(
     /*
     #[cfg(not(feature="tts"))]
     menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.backlighton", locales::LANG)),
+        name: String::from(t!("mainmenu.backlighton", locales::LANG)),
         action_conn: Some(com.conn()),
         action_opcode: com.getop_backlight(),
         action_payload: MenuPayload::Scalar([191 >> 3, 191 >> 3, 0, 0]),
@@ -32,7 +32,7 @@ pub fn create_main_menu(
 
     #[cfg(not(feature="tts"))]
     menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.backlightoff", locales::LANG)),
+        name: String::from(t!("mainmenu.backlightoff", locales::LANG)),
         action_conn: Some(com.conn()),
         action_opcode: com.getop_backlight(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -40,7 +40,7 @@ pub fn create_main_menu(
     }); */
 
     menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.sleep", locales::LANG)),
+        name: String::from(t!("mainmenu.sleep", locales::LANG)),
         action_conn: Some(status_conn),
         action_opcode: StatusOpcode::TrySuspend.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -48,7 +48,7 @@ pub fn create_main_menu(
     });
 
     menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.app", locales::LANG)),
+        name: String::from(t!("mainmenu.app", locales::LANG)),
         action_conn: Some(status_conn),
         action_opcode: StatusOpcode::SubmenuApp.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -56,7 +56,7 @@ pub fn create_main_menu(
     });
 
     menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.preferences", locales::LANG)),
+        name: String::from(t!("mainmenu.preferences", locales::LANG)),
         action_conn: Some(status_conn),
         action_opcode: StatusOpcode::Preferences.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -66,14 +66,14 @@ pub fn create_main_menu(
     let key_init = keys.lock().unwrap().is_initialized().unwrap();
     if !key_init {
         menuitems.push(MenuItem {
-            name: String::from_str(t!("mainmenu.init_keys", locales::LANG)),
+            name: String::from(t!("mainmenu.init_keys", locales::LANG)),
             action_conn: Some(key_conn),
             action_opcode: keys.lock().unwrap().get_try_init_keys_op(),
             action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
             close_on_select: true,
         });
         menuitems.push(MenuItem {
-            name: String::from_str(t!("mainmenu.provision_gateware", locales::LANG)),
+            name: String::from(t!("mainmenu.provision_gateware", locales::LANG)),
             action_conn: Some(key_conn),
             // note this is using the blind copy opcode -- makes a copy without installing keys
             action_opcode: keys.lock().unwrap().get_blind_copy_gateware_op(),
@@ -82,7 +82,7 @@ pub fn create_main_menu(
         });
 
         menuitems.push(MenuItem {
-            name: String::from_str(t!("mainmenu.force_ecup", locales::LANG)),
+            name: String::from(t!("mainmenu.force_ecup", locales::LANG)),
             action_conn: Some(status_conn),
             action_opcode: StatusOpcode::ForceEcUpdate.to_u32().unwrap(),
             action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -90,7 +90,7 @@ pub fn create_main_menu(
         });
     } else {
         menuitems.push(MenuItem {
-            name: String::from_str(t!("mainmenu.provision_gateware", locales::LANG)),
+            name: String::from(t!("mainmenu.provision_gateware", locales::LANG)),
             action_conn: Some(key_conn),
             // note this is using the update opcode -- makes a copy while installing keys
             action_opcode: keys.lock().unwrap().get_update_gateware_op(),
@@ -99,7 +99,7 @@ pub fn create_main_menu(
         });
 
         menuitems.push(MenuItem {
-            name: String::from_str(t!("mainmenu.force_ecup", locales::LANG)),
+            name: String::from(t!("mainmenu.force_ecup", locales::LANG)),
             action_conn: Some(status_conn),
             action_opcode: StatusOpcode::ForceEcUpdate.to_u32().unwrap(),
             action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -107,7 +107,7 @@ pub fn create_main_menu(
         });
 
         menuitems.push(MenuItem {
-            name: String::from_str(t!("mainmenu.selfsign", locales::LANG)),
+            name: String::from(t!("mainmenu.selfsign", locales::LANG)),
             action_conn: Some(key_conn),
             action_opcode: keys.lock().unwrap().get_try_selfsign_op(),
             action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -116,7 +116,7 @@ pub fn create_main_menu(
     }
 
     menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.pddb", locales::LANG)),
+        name: String::from(t!("mainmenu.pddb", locales::LANG)),
         action_conn: Some(status_conn),
         action_opcode: StatusOpcode::SubmenuPddb.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -126,7 +126,7 @@ pub fn create_main_menu(
     #[cfg(feature = "efuse")]
     if keys.lock().unwrap().is_zero_key().unwrap() == Some(true) {
         menuitems.push(MenuItem {
-            name: String::from_str(t!("mainmenu.backup_key", locales::LANG)),
+            name: String::from(t!("mainmenu.backup_key", locales::LANG)),
             action_conn: Some(status_conn),
             action_opcode: StatusOpcode::BurnBackupKey.to_u32().unwrap(),
             action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -136,7 +136,7 @@ pub fn create_main_menu(
 
     if key_init {
         menuitems.push(MenuItem {
-            name: String::from_str(t!("mainmenu.prep_backup", locales::LANG)),
+            name: String::from(t!("mainmenu.prep_backup", locales::LANG)),
             action_conn: Some(status_conn),
             action_opcode: StatusOpcode::PrepareBackup.to_u32().unwrap(),
             action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -145,7 +145,7 @@ pub fn create_main_menu(
     }
 
     menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.lockdevice", locales::LANG)),
+        name: String::from(t!("mainmenu.lockdevice", locales::LANG)),
         action_conn: Some(status_conn),
         action_opcode: StatusOpcode::Reboot.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -153,14 +153,14 @@ pub fn create_main_menu(
     });
 
     menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.battery_disconnect", locales::LANG)),
+        name: String::from(t!("mainmenu.battery_disconnect", locales::LANG)),
         action_conn: Some(status_conn),
         action_opcode: StatusOpcode::BatteryDisconnect.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
     menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.closemenu", locales::LANG)),
+        name: String::from(t!("mainmenu.closemenu", locales::LANG)),
         action_conn: None,
         action_opcode: 0,
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),

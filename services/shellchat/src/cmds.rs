@@ -4,22 +4,18 @@ use std::collections::HashMap;
 #[cfg(feature = "shellperf")]
 use utralib::generated::*;
 use xous::MessageEnvelope;
-use xous_ipc::String;
+use String;
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
     // user implemented:
     // called to process the command with the remainder of the string attached
-    fn process(
-        &mut self,
-        args: String<1024>,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error>;
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error>;
     // called to process incoming messages that may have been origniated by the most recently issued command
     fn callback(
         &mut self,
         msg: &MessageEnvelope,
         _env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         log::info!("received unhandled message {:?}", msg);
         Ok(None)
     }
@@ -45,7 +41,7 @@ pub struct CommonEnv {
     com: com::Com,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
-    cb_registrations: HashMap<u32, String<256>>,
+    cb_registrations: HashMap<u32, String>,
     trng: Trng,
     netmgr: net::NetManager,
     #[allow(dead_code)]
@@ -59,7 +55,7 @@ pub struct CommonEnv {
     event_csr: AtomicCsr<u32>,
 }
 impl CommonEnv {
-    pub fn register_handler(&mut self, verb: String<256>) -> u32 {
+    pub fn register_handler(&mut self, verb: String) -> u32 {
         let mut key: u32;
         loop {
             key = self.trng.get_u32().unwrap();
@@ -157,7 +153,7 @@ use aes_cmd::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
-    lastverb: String<256>,
+    lastverb: String,
     ///// 2. declare storage for your command here.
     sleep_cmd: Sleep,
     sensors_cmd: Sensors,
@@ -256,7 +252,7 @@ impl CmdEnv {
 
         CmdEnv {
             common_env: _common,
-            lastverb: String::<256>::new(),
+            lastverb: String::new(),
             ///// 3. initialize your storage, by calling new()
             sleep_cmd: {
                 log::debug!("sleep");
@@ -333,10 +329,10 @@ impl CmdEnv {
 
     pub fn dispatch(
         &mut self,
-        maybe_cmdline: Option<&mut String<1024>>,
+        maybe_cmdline: Option<&mut String>,
         maybe_callback: Option<&MessageEnvelope>,
-    ) -> Result<Option<String<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    ) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
 
         let mut echo_cmd = Echo {}; // this command has no persistent storage, so we can "create" it every time we call dispatch (but it's a zero-cost absraction so this doesn't actually create any instructions)
         let mut ver_cmd = Ver {};
@@ -383,7 +379,7 @@ impl CmdEnv {
         if let Some(cmdline) = maybe_cmdline {
             let maybe_verb = tokenize(cmdline);
 
-            let mut cmd_ret: Result<Option<String<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<String>, xous::Error> = Ok(None);
             if let Some(verb_string) = maybe_verb {
                 let verb = verb_string.to_str();
 
@@ -405,7 +401,7 @@ impl CmdEnv {
                     write!(ret, "Commands: ").unwrap();
                     for cmd in commands.iter() {
                         if !first {
-                            ret.append(", ")?;
+                            ret.push_str(", ");
                         }
                         ret.append(cmd.verb())?;
                         first = false;
@@ -418,7 +414,7 @@ impl CmdEnv {
                 Ok(None)
             }
         } else if let Some(callback) = maybe_callback {
-            let mut cmd_ret: Result<Option<String<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<String>, xous::Error> = Ok(None);
             // first check and see if we have a callback registration; if not, just map to the last verb
             let verb = match self.common_env.cb_registrations.get(&(callback.body.id() as u32)) {
                 Some(verb) => verb.to_str(),
@@ -444,11 +440,11 @@ impl CmdEnv {
 /// modifies the incoming line by removing the token and returning the remainder
 /// returns the found token
 /// note: we don't have split() because of nostd
-pub fn tokenize(line: &mut String<1024>) -> Option<String<1024>> {
-    let mut token = String::<1024>::new();
-    let mut retline = String::<1024>::new();
+pub fn tokenize(line: &mut String) -> Option<String> {
+    let mut token = String::new();
+    let mut retline = String::new();
 
-    let lineiter = line.as_str().unwrap().chars();
+    let lineiter = line.as_str().chars();
     let mut foundspace = false;
     let mut foundrest = false;
     for ch in lineiter {
@@ -466,6 +462,6 @@ pub fn tokenize(line: &mut String<1024>) -> Option<String<1024>> {
         }
     }
     line.clear();
-    write!(line, "{}", retline.as_str().unwrap()).unwrap();
+    write!(line, "{}", retline.as_str()).unwrap();
     if token.len() > 0 { Some(token) } else { None }
 }
