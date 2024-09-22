@@ -845,7 +845,9 @@ fn main() -> ! {
                 match xns.request_connection_blocking(kr.server_name.as_str()) {
                     Ok(cid) => {
                         listener_conn = Some(cid);
-                        listener_op = Some(kr.listener_op_id as usize);
+                        listener_op = Some(<usize as From<usize>>::from(<u32 as From<u32>>::from(
+                            kr.listener_op_id.into(),
+                        ) as usize));
                     }
                     Err(e) => {
                         log::error!("couldn't connect to listener: {:?}", e);
@@ -860,7 +862,7 @@ fn main() -> ! {
                 match xns.request_connection_blocking(kr.server_name.as_str()) {
                     Ok(cid) => {
                         raw_listener_conn = Some(cid);
-                        raw_listener_op = Some(kr.listener_op_id as u32);
+                        raw_listener_op = Some(<u32 as From<u32>>::from(kr.listener_op_id.into()));
                     }
                     Err(e) => {
                         log::error!("couldn't connect to listener: {:?}", e);
@@ -876,7 +878,10 @@ fn main() -> ! {
                     match xns.request_connection_blocking(kr.server_name.as_str()) {
                         Ok(cid) => {
                             observer_conn = Some(cid);
-                            observer_op = Some(kr.listener_op_id as usize);
+                            observer_op = Some(<usize as From<usize>>::from(<u32 as From<u32>>::from(
+                                kr.listener_op_id.into(),
+                            )
+                                as usize));
                         }
                         Err(e) => {
                             log::error!("couldn't connect to observer: {:?}", e);
