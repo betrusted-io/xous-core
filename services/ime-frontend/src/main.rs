@@ -708,7 +708,7 @@ impl InputTracker {
                             .get_prediction(i as u32, api_token)
                             .expect("couldn't query prediction engine")
                         {
-                            Some(String::from(prediction.as_str().unwrap_or("UTF-8 Error")))
+                            Some(String::from(prediction.as_str()))
                         } else {
                             None
                         };
@@ -874,10 +874,7 @@ fn main() -> ! {
                                 token.expect("didn't get the disconnect token!"),
                             ));
                         }
-                        _ => error!(
-                            "can't find predictive engine {}, retaining existing one.",
-                            s.as_str()
-                        ),
+                        _ => error!("can't find predictive engine {}, retaining existing one.", s.as_str()),
                     }
                 }
                 log::debug!("predictor: {:?}, api_token: {:?}", tracker.get_predictor(), api_token);

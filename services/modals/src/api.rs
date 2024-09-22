@@ -4,7 +4,7 @@ use gam::Tile;
 
 pub(crate) const SERVER_NAME_MODALS: &str = "_Modal Dialog Server_";
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct Validation {
     pub text: TextEntryPayload,
     pub opcode: u32,
@@ -15,18 +15,18 @@ pub(crate) enum ValidationOp {
     Quit,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct ManagedPromptWithFixedResponse {
     pub token: [u32; 4],
     pub prompt: String,
 }
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct ManagedListItem {
     pub token: [u32; 4],
     pub item: ItemName,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct ManagedPromptWithTextResponse {
     pub token: [u32; 4],
     pub prompt: String,
@@ -36,7 +36,7 @@ pub struct ManagedPromptWithTextResponse {
     pub growable: bool,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct ManagedNotification {
     pub token: [u32; 4],
     pub message: String,
@@ -44,7 +44,7 @@ pub struct ManagedNotification {
     pub qrtext: Option<String>,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct ManagedBip39 {
     pub token: [u32; 4],
     pub bip39_data: [u8; 32],
@@ -59,7 +59,7 @@ pub struct ManagedImage {
     pub tiles: [Option<Tile>; 6],
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct ManagedProgress {
     pub token: [u32; 4],
     pub title: String,
@@ -80,7 +80,7 @@ pub struct ManagedProgress {
 /// This isn't a terribly useful notification -- it's basically read-only, no interactivity,
 /// but you can animate the text. Mainly used for testing routines. Might be modifiable
 /// into something more useful with a bit of thought, but for now, MVP.
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct DynamicNotification {
     pub token: [u32; 4],
     pub title: Option<String>,
