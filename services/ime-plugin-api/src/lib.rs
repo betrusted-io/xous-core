@@ -4,13 +4,13 @@ mod rkyv_enum;
 use num_traits::{FromPrimitive, ToPrimitive};
 pub use rkyv_enum::*;
 use xous::{send_message, Message, CID};
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Prediction {
     pub index: u32,
     pub valid: bool,
-    pub string: String<1000>,
+    pub string: String,
     pub api_token: [u32; 4],
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -61,10 +61,10 @@ impl From<usize> for PredictionTriggers {
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum Opcode {
     /// update with the latest input candidate. Replaces the previous input.
-    Input, //(String<4000>),
+    Input, //(String),
 
     /// feed back to the IME plugin as to what was picked, so predictions can be updated
-    Picked, //(String<4000>),
+    Picked, //(String),
 
     /// Undo the last Picked value. To be used when a user hits backspace after picking a prediction
     /// note that repeated calls to Unpick will have an implementation-defined behavior
@@ -88,9 +88,9 @@ pub enum Opcode {
 pub trait PredictionApi {
     fn get_prediction_triggers(&self) -> Result<PredictionTriggers, xous::Error>;
     fn unpick(&self) -> Result<(), xous::Error>;
-    fn set_input(&self, s: String<4000>) -> Result<(), xous::Error>;
-    fn feedback_picked(&self, s: String<4000>) -> Result<(), xous::Error>;
-    fn get_prediction(&self, index: u32, api_token: [u32; 4]) -> Result<Option<String<4000>>, xous::Error>;
+    fn set_input(&self, s: String) -> Result<(), xous::Error>;
+    fn feedback_picked(&self, s: String) -> Result<(), xous::Error>;
+    fn get_prediction(&self, index: u32, api_token: [u32; 4]) -> Result<Option<String>, xous::Error>;
     /// gets an exclusive lock on the predictor. Returns an error if the predictor is already locked.
     fn acquire(&self, api_token: Option<[u32; 4]>) -> Result<[u32; 4], xous::Error>;
     /// releases the lock. Also clears any sensitive data that may be in the predictor.
@@ -137,7 +137,7 @@ impl PredictionApi for PredictionPlugin {
         }
     }
 
-    fn set_input(&self, s: String<4000>) -> Result<(), xous::Error> {
+    fn set_input(&self, s: String) -> Result<(), xous::Error> {
         match self.connection {
             Some(cid) => {
                 let buf = Buffer::into_buf(s).or(Err(xous::Error::InternalError))?;
@@ -148,7 +148,7 @@ impl PredictionApi for PredictionPlugin {
         }
     }
 
-    fn feedback_picked(&self, s: String<4000>) -> Result<(), xous::Error> {
+    fn feedback_picked(&self, s: String) -> Result<(), xous::Error> {
         match self.connection {
             Some(cid) => {
                 let buf = Buffer::into_buf(s).or(Err(xous::Error::InternalError))?;
@@ -161,10 +161,10 @@ impl PredictionApi for PredictionPlugin {
     }
 
     /// this function could disclose sensitive data, so it requires an API token to call
-    fn get_prediction(&self, index: u32, api_token: [u32; 4]) -> Result<Option<String<4000>>, xous::Error> {
+    fn get_prediction(&self, index: u32, api_token: [u32; 4]) -> Result<Option<String>, xous::Error> {
         match self.connection {
             Some(cid) => {
-                let prediction = Prediction { index, string: String::<1000>::new(), valid: false, api_token };
+                let prediction = Prediction { index, string: String::new(), valid: false, api_token };
                 let mut buf = Buffer::into_buf(prediction).or(Err(xous::Error::InternalError))?;
                 buf.lend_mut(cid, Opcode::Prediction.to_u32().unwrap())
                     .or(Err(xous::Error::InternalError))?;
@@ -175,7 +175,7 @@ impl PredictionApi for PredictionPlugin {
                     Return::Prediction(pred) => {
                         log::trace!("|API: got {:?}", pred);
                         if pred.valid {
-                            let mut ret = String::<4000>::new();
+                            let mut ret = String::new();
                             use core::fmt::Write as CoreWrite;
                             write!(ret, "{}", pred.string).unwrap();
                             Ok(Some(ret))
@@ -242,7 +242,7 @@ pub enum ImefOpcode {
     ConnectBackend,
 
     /// register a listener for finalized inputs
-    RegisterListener, //(String<64>),
+    RegisterListener, //(String),
 
     /// internal use for passing keyboard events from the keyboard callback
     ProcessKeys,
@@ -257,22 +257,22 @@ pub enum ImefOpcode {
 }
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum ImefCallback {
-    GotInputLine, //(String<4000>),
+    GotInputLine, //(String),
     Drop,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct ImefDescriptor {
     pub input_canvas: Option<graphics_server::Gid>,
     pub prediction_canvas: Option<graphics_server::Gid>,
-    pub predictor: Option<String<64>>,
+    pub predictor: Option<String>,
     pub token: [u32; 4], // token used to lookup our connected app inside the GAM
     pub predictor_token: Option<[u32; 4]>,
 }
 
 pub trait ImeFrontEndApi {
     fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<(), xous::Error>;
-    fn hook_listener_callback(&mut self, cb: fn(String<4000>)) -> Result<(), xous::Error>;
+    fn hook_listener_callback(&mut self, cb: fn(String)) -> Result<(), xous::Error>;
     fn redraw(&self, force_all: bool) -> Result<(), xous::Error>;
     fn send_keyevent(&self, keys: [char; 4]) -> Result<(), xous::Error>;
     fn conn(&self) -> xous::CID;
@@ -281,7 +281,7 @@ pub trait ImeFrontEndApi {
 }
 
 pub const SERVER_NAME_IME_FRONT: &str = "_IME front end_";
-static mut INPUT_CB: Option<fn(String<4000>)> = None;
+static mut INPUT_CB: Option<fn(String)> = None;
 
 pub struct ImeFrontEnd {
     cid: CID,
@@ -363,7 +363,7 @@ impl ImeFrontEndApi for ImeFrontEnd {
         .map(|_| ())
     }
 
-    fn hook_listener_callback(&mut self, cb: fn(String<4000>)) -> Result<(), xous::Error> {
+    fn hook_listener_callback(&mut self, cb: fn(String)) -> Result<(), xous::Error> {
         if unsafe { INPUT_CB }.is_some() {
             return Err(xous::Error::MemoryInUse); // can't hook it twice
         }
@@ -410,7 +410,7 @@ fn callback_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ImefCallback::GotInputLine) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let inputline = buffer.to_original::<String<4000>, _>().unwrap();
+                let inputline = buffer.to_original::<String, _>().unwrap();
                 unsafe {
                     if let Some(cb) = INPUT_CB {
                         cb(inputline)

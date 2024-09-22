@@ -34,7 +34,7 @@ struct InputTracker {
     /// our current prediction engine
     predictor: Option<PredictionPlugin>,
     /// the name & token of our engine, so we can disconnect later on
-    pub predictor_conn: Option<(xous_ipc::String<64>, [u32; 4])>,
+    pub predictor_conn: Option<(String, [u32; 4])>,
     /// cached copy of the predictor's triggers for predictions. Only valid if predictor is not None
     pred_triggers: Option<PredictionTriggers>,
     /// set if we're in a state where a backspace should trigger an unpredict
@@ -276,10 +276,10 @@ impl InputTracker {
         newkeys: [char; 4],
         force_redraw: bool,
         api_token: [u32; 4],
-    ) -> Result<Option<xous_ipc::String<4000>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         let debug1 = false;
         let mut update_predictor = force_redraw;
-        let mut retstring: Option<xous_ipc::String<4000>> = None;
+        let mut retstring: Option<String> = None;
         if let Some(ic) = self.input_canvas {
             if debug1 {
                 info!("updating input area");
@@ -311,7 +311,7 @@ impl InputTracker {
                             self.can_unpick = false;
                             self.last_trigger_char = None;
                         } else {
-                            return Ok(Some(xous_ipc::String::<4000>::from_str("←")));
+                            return Ok(Some(String::from("←")));
                         }
                     }
                     '→' => {
@@ -324,7 +324,7 @@ impl InputTracker {
                             self.can_unpick = false;
                             self.last_trigger_char = None;
                         } else {
-                            return Ok(Some(xous_ipc::String::<4000>::from_str("→")));
+                            return Ok(Some(String::from("→")));
                         }
                     }
                     '↑' => {
@@ -336,7 +336,7 @@ impl InputTracker {
                             self.can_unpick = false;
                             self.last_trigger_char = None;
                         } else {
-                            return Ok(Some(xous_ipc::String::<4000>::from_str("↑")));
+                            return Ok(Some(String::from("↑")));
                         }
                     }
                     '↓' => {
@@ -351,7 +351,7 @@ impl InputTracker {
                             // prior to the last word...
                             self.last_trigger_char = Some(self.characters);
                         } else {
-                            return Ok(Some(xous_ipc::String::<4000>::from_str("↓")));
+                            return Ok(Some(String::from("↓")));
                         }
                     }
                     '\u{0011}' => {
@@ -360,7 +360,7 @@ impl InputTracker {
                             self.insert_prediction(0);
                             do_redraw = true;
                         } else {
-                            retstring = Some(xous_ipc::String::<4000>::from_str("\u{0011}"));
+                            retstring = Some(String::from("\u{0011}"));
                             do_redraw = true;
                         }
                     }
@@ -370,7 +370,7 @@ impl InputTracker {
                             self.insert_prediction(1);
                             do_redraw = true;
                         } else {
-                            retstring = Some(xous_ipc::String::<4000>::from_str("\u{0012}"));
+                            retstring = Some(String::from("\u{0012}"));
                             do_redraw = true;
                         }
                     }
@@ -380,7 +380,7 @@ impl InputTracker {
                             self.insert_prediction(2);
                             do_redraw = true;
                         } else {
-                            retstring = Some(xous_ipc::String::<4000>::from_str("\u{0013}"));
+                            retstring = Some(String::from("\u{0013}"));
                             do_redraw = true;
                         }
                     }
@@ -390,7 +390,7 @@ impl InputTracker {
                             self.insert_prediction(3);
                             do_redraw = true;
                         } else {
-                            retstring = Some(xous_ipc::String::<4000>::from_str("\u{0014}"));
+                            retstring = Some(String::from("\u{0014}"));
                             do_redraw = true;
                         }
                     }
@@ -471,7 +471,7 @@ impl InputTracker {
                     }
                     '\u{000d}' => {
                         // carriage return
-                        let mut ret = xous_ipc::String::<4000>::new();
+                        let mut ret = String::new();
                         write!(ret, "{}", self.line.as_str()).expect("couldn't copy input line to output");
                         retstring = Some(ret);
 
@@ -479,12 +479,12 @@ impl InputTracker {
                             if trigger.newline {
                                 self.predictor
                                     .unwrap()
-                                    .feedback_picked(xous_ipc::String::<4000>::from_str(&self.line))
+                                    .feedback_picked(String::from(&self.line))
                                     .expect("couldn't send feedback to predictor");
                             } else if trigger.punctuation {
                                 self.predictor
                                     .unwrap()
-                                    .feedback_picked(xous_ipc::String::<4000>::from_str(&self.pred_phrase))
+                                    .feedback_picked(String::from(&self.pred_phrase))
                                     .expect("couldn't send feedback to predictor");
                             }
                         }
@@ -528,9 +528,7 @@ impl InputTracker {
                                 if self.pred_phrase.len() > 0 {
                                     self.predictor
                                         .unwrap()
-                                        .feedback_picked(xous_ipc::String::<4000>::from_str(
-                                            &self.pred_phrase,
-                                        ))
+                                        .feedback_picked(String::from(&self.pred_phrase))
                                         .expect("couldn't send feedback to predictor");
                                     self.pred_phrase.clear();
                                     self.can_unpick = true;
@@ -541,9 +539,7 @@ impl InputTracker {
                                 if self.pred_phrase.len() > 0 {
                                     self.predictor
                                         .unwrap()
-                                        .feedback_picked(xous_ipc::String::<4000>::from_str(
-                                            &self.pred_phrase,
-                                        ))
+                                        .feedback_picked(String::from(&self.pred_phrase))
                                         .expect("couldn't send feedback to predictor");
                                     self.pred_phrase.clear();
                                     self.can_unpick = true;
@@ -700,7 +696,7 @@ impl InputTracker {
             if update_predictor {
                 if self.pred_phrase.len() > 0 || self.menu_mode {
                     if let Some(pred) = self.predictor {
-                        pred.set_input(xous_ipc::String::<4000>::from_str(&self.pred_phrase))
+                        pred.set_input(String::from(&self.pred_phrase))
                             .expect("couldn't update predictor with current input");
                     }
                 }
@@ -786,7 +782,7 @@ impl InputTracker {
                         p_tv.ellipsis = true;
                         p_tv.style = gam::SYSTEM_STYLE;
                         write!(p_tv.text, "{}", pred_str).expect("can't write the prediction string");
-                        log::trace!("posting string with length {}", p_tv.text.as_str().unwrap().len());
+                        log::trace!("posting string with length {}", p_tv.text.as_str().len());
                         self.gam.post_textview(&mut p_tv).expect("couldn't post prediction text");
                         i += 1;
                     }
@@ -853,14 +849,14 @@ fn main() -> ! {
                 if let Some(pred) = tracker.get_predictor() {
                     pred.release(api_token.take().unwrap().api_token); // api token *should* be Some() if pred is Some()
                     if let Some((name, token)) = tracker.predictor_conn {
-                        xns.disconnect_with_token(name.as_str().unwrap(), token)
+                        xns.disconnect_with_token(name.as_str(), token)
                            .expect("couldn't disconnect from previous predictor. Something is wrong with internal state!");
                     }
                     tracker.predictor_conn = None;
                     tracker.set_predictor(None);
                 }
                 if let Some(s) = descriptor.predictor {
-                    match xns.request_connection_with_token(s.as_str().unwrap()) {
+                    match xns.request_connection_with_token(s.as_str()) {
                         Ok((pc, token)) => {
                             let pred = ime_plugin_api::PredictionPlugin { connection: Some(pc) };
                             match pred.acquire(descriptor.predictor_token) {
@@ -874,13 +870,13 @@ fn main() -> ! {
                             }
                             tracker.set_predictor(Some(pred));
                             tracker.predictor_conn = Some((
-                                xous_ipc::String::<64>::from_str(s.as_str().unwrap()),
+                                String::from(s.as_str()),
                                 token.expect("didn't get the disconnect token!"),
                             ));
                         }
                         _ => error!(
                             "can't find predictive engine {}, retaining existing one.",
-                            s.as_str().unwrap()
+                            s.as_str()
                         ),
                     }
                 }

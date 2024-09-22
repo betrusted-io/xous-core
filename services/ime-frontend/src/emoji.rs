@@ -1,13 +1,13 @@
 use gam::*;
 use ime_plugin_api::ImefOpcode;
 use num_traits::*;
-use xous_ipc::String;
+use String;
 
 // imef_conn must come from outside the scope of the macro because of hygeine rules.
 macro_rules! emoji_item {
     ($emoji:expr, $imef_conn:ident) => {
         MenuItem {
-            name: String::from_str(&$emoji.to_string()),
+            name: String::from(&$emoji.to_string()),
             action_conn: Some($imef_conn),
             action_opcode: ImefOpcode::ProcessKeys.to_u32().unwrap(),
             action_payload: MenuPayload::Scalar([
@@ -36,7 +36,7 @@ pub(crate) fn emoji_menu(imef_conn: xous::CID) {
                     emoji_item!('😅', imef_conn),
                     emoji_item!('🤣', imef_conn),
                     MenuItem {
-                        name: String::from_str("Close Menu"),
+                        name: String::from("Close Menu"),
                         action_conn: None,
                         action_opcode: 0,
                         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),

@@ -5,7 +5,7 @@ use ime_plugin_api::*;
 use num_traits::FromPrimitive;
 use tts_frontend::*;
 use xous::msg_scalar_unpack;
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
@@ -59,7 +59,7 @@ fn main() -> ! {
             Some(Opcode::Input) => {}
             Some(Opcode::Picked) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.as_flat::<String<4000>, _>().unwrap();
+                let s = buffer.as_flat::<String, _>().unwrap();
                 tts.tts_simple(s.as_str()).unwrap();
             }
             Some(Opcode::Prediction) => {
