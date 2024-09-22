@@ -9,6 +9,7 @@ authors = [
     "Isis Lovecruft <isis@patternsinthevoid.net>",
     "Henry de Valence <hdevalence@hdevalence.ca>",
 ]
+edition = "2015"
 readme = "README.md"
 license = "BSD-3-Clause"
 repository = "https://github.com/dalek-cryptography/curve25519-dalek"
