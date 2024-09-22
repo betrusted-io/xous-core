@@ -52,9 +52,7 @@ impl Repl {
             .register_ux(UxRegistration {
                 app_name: String::from(gam::APP_NAME_SHELLCHAT),
                 ux_type: gam::UxType::Chat,
-                predictor: Some(String::from(
-                    ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL,
-                )),
+                predictor: Some(String::from(ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL)),
                 listener: sid.to_array(), /* note disclosure of our SID to the GAM -- the secret is now
                                            * shared with the GAM! */
                 redraw_id: ShellOpcode::Redraw.to_u32().unwrap(),
@@ -126,10 +124,8 @@ impl Repl {
         // take the input and pass it on to the various command parsers, and attach result
         if let Some(local) = &self.input {
             log::trace!("processing line: {}", local);
-            if let Some(res) = self
-                .env
-                .dispatch(Some(&mut String::from(&local)), None)
-                .expect("command dispatch failed")
+            if let Some(res) =
+                self.env.dispatch(Some(&mut String::from(&local)), None).expect("command dispatch failed")
             {
                 let output_history =
                     History { text: String::from(res.as_str().unwrap_or("UTF-8 Error")), is_input: false };

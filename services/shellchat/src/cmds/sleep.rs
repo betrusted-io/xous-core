@@ -45,11 +45,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: String,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String>, xous::Error> {
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
 
         let mut ret = String::new();

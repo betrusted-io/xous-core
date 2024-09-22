@@ -147,11 +147,7 @@ fn simple_kilofloat_parse(input: &str) -> core::result::Result<i32, ParseIntErro
 impl<'a> ShellCmdApi<'a> for Test {
     cmd_api!(test);
 
-    fn process(
-        &mut self,
-        args: String,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String>, xous::Error> {
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         const SENTINEL: &'static str = "|TSTR";
 
         self.state += 1;

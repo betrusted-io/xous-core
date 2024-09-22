@@ -11,11 +11,7 @@ impl Sensors {
 impl<'a> ShellCmdApi<'a> for Sensors {
     cmd_api!(sensors);
 
-    fn process(
-        &mut self,
-        _args: String,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String>, xous::Error> {
+    fn process(&mut self, _args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::new();
 

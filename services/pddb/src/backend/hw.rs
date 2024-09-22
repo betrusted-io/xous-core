@@ -2776,16 +2776,13 @@ impl PddbOs {
             match modals.alert_builder(t!("pddb.freespace.name", locales::LANG)).field(None, None).build() {
                 Ok(bname) => {
                     let name = bname.first().as_str().to_string();
-                    let request = BasisRequestPassword {
-                        db_name: String::from(name.to_string()),
-                        plaintext_pw: None,
-                    };
+                    let request =
+                        BasisRequestPassword { db_name: String::from(name.to_string()), plaintext_pw: None };
                     let mut buf = Buffer::into_buf(request).unwrap();
                     buf.lend_mut(self.pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
                     let retpass = buf.to_original::<BasisRequestPassword, _>().unwrap();
                     // 2. validate the name/password combo
-                    let basis_key =
-                        self.basis_derive_key(&name, retpass.plaintext_pw.unwrap().as_str());
+                    let basis_key = self.basis_derive_key(&name, retpass.plaintext_pw.unwrap().as_str());
                     // validate the password by finding the root block of the basis. We rely entirely
                     // upon the AEAD with key commit to ensure the password is correct.
                     let maybe_entry = if let Some(basis_map) =

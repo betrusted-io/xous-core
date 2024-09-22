@@ -11,11 +11,7 @@ impl TrngCmd {
 impl<'a> ShellCmdApi<'a> for TrngCmd {
     cmd_api!(trng);
 
-    fn process(
-        &mut self,
-        args: String,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String>, xous::Error> {
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::new();
         let helpstring = "trng [pump]";

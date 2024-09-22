@@ -60,11 +60,7 @@ fn simple_kilofloat_parse(input: &str) -> core::result::Result<i32, ParseIntErro
 impl<'a> ShellCmdApi<'a> for Audio {
     cmd_api!(audio);
 
-    fn process(
-        &mut self,
-        args: String,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String>, xous::Error> {
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         let mut ret = String::new();
         let helpstring = t!("replapp.audio.help", locales::LANG);
         let mut tokens = &args.split(' ');

@@ -805,9 +805,7 @@ fn main() -> ! {
                         Some(cv.to_string()),
                         Some(|tf| match tf.as_str().parse::<usize>() {
                             Ok(_) => None,
-                            Err(_) => {
-                                Some(String::from(t!("prefs.autobacklight_err", locales::LANG)))
-                            }
+                            Err(_) => Some(String::from(t!("prefs.autobacklight_err", locales::LANG))),
                         }),
                     )
                     .build()

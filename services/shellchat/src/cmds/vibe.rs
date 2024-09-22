@@ -15,11 +15,7 @@ impl<'a> ShellCmdApi<'a> for Vibe {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: String,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String>, xous::Error> {
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         let mut ret = String::new();
         let helpstring = "vibe [on] [off] [long] [double]";
 

@@ -60,11 +60,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: String,
-        _env: &mut CommonEnv,
-    ) -> Result<Option<String>, xous::Error> {
+    fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         let mut ret = String::new();
         #[cfg(not(feature = "pddbtest"))]
         let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [writeover] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]";

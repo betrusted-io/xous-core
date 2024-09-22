@@ -30,11 +30,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: String,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String>, xous::Error> {
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         let mut ret = String::new();
         let helpstring = "wlan [on] [off] [setssid ...] [setpass ...] [join] [leave] [status] [save] [known]";
         let mut show_help = false;

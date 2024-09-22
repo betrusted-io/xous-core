@@ -175,10 +175,8 @@ impl Chat {
     /// * `pddb_dict` - the pddb dict holding all Dialogues for this Chat App
     /// * `pddb_key` - the pddb key holding a Dialogue
     pub fn dialogue_set(&self, pddb_dict: &str, pddb_key: Option<&str>) -> Result<(), Error> {
-        let dialogue = api::Dialogue {
-            dict: String::from(pddb_dict),
-            key: pddb_key.map(|key| String::from(key)),
-        };
+        let dialogue =
+            api::Dialogue { dict: String::from(pddb_dict), key: pddb_key.map(|key| String::from(key)) };
         match Buffer::into_buf(dialogue) {
             Ok(buf) => buf.send(self.cid, ChatOp::DialogueSet as u32).map(|_| ()),
             Err(_) => Err(xous::Error::InternalError),

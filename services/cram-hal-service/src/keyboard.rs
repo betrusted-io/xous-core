@@ -17,20 +17,16 @@ impl Keyboard {
     }
 
     pub fn register_listener(&self, server_name: &str, action_opcode: usize) {
-        let kr = KeyboardRegistration {
-            server_name: String::from(server_name),
-            listener_op_id: action_opcode,
-        };
+        let kr =
+            KeyboardRegistration { server_name: String::from(server_name), listener_op_id: action_opcode };
         let buf = Buffer::into_buf(kr).unwrap();
         buf.lend(self.conn, KeyboardOpcode::RegisterListener.to_u32().unwrap())
             .expect("couldn't register listener");
     }
 
     pub fn register_observer(&self, server_name: &str, action_opcode: usize) {
-        let kr = KeyboardRegistration {
-            server_name: String::from(server_name),
-            listener_op_id: action_opcode,
-        };
+        let kr =
+            KeyboardRegistration { server_name: String::from(server_name), listener_op_id: action_opcode };
         let buf = Buffer::into_buf(kr).unwrap();
         buf.lend(self.conn, KeyboardOpcode::RegisterKeyObserver.to_u32().unwrap())
             .expect("couldn't register listener");

@@ -934,8 +934,7 @@ impl Pddb {
                 .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
             let response = buf.to_original::<PddbDictRequest, _>().unwrap();
             match response.code {
-                PddbRequestCode::NoErr => dict_list
-                    .push(String::from(response.dict.as_str())),
+                PddbRequestCode::NoErr => dict_list.push(String::from(response.dict.as_str())),
                 _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
             }
         }
@@ -1246,8 +1245,7 @@ impl Pddb {
     /// Triggers a dump of the PDDB to host disk
     #[cfg(not(target_os = "xous"))]
     pub fn dbg_dump(&self, name: &str) -> Result<()> {
-        let ipc =
-            PddbDangerousDebug { request: DebugRequest::Dump, dump_name: String::from(name) };
+        let ipc = PddbDangerousDebug { request: DebugRequest::Dump, dump_name: String::from(name) };
         let buf = Buffer::into_buf(ipc).or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
         buf.lend(self.conn, Opcode::DangerousDebug.to_u32().unwrap())
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))

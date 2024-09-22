@@ -1,5 +1,3 @@
-
-
 use crate::{CommonEnv, ShellCmdApi};
 
 #[derive(Debug)]
@@ -11,11 +9,7 @@ impl Login {
 impl<'a> ShellCmdApi<'a> for Login {
     cmd_api!(login);
 
-    fn process(
-        &mut self,
-        _args: String,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String>, xous::Error> {
+    fn process(&mut self, _args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         env.login();
         Ok(None)
     }

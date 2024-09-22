@@ -1,7 +1,5 @@
 use core::fmt::Write;
 
-
-
 use crate::{heap_usage, CommonEnv, ShellCmdApi};
 
 #[derive(Debug)]

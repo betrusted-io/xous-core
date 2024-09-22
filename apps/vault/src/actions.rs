@@ -775,9 +775,7 @@ impl<'a> ActionManager<'a> {
                 pw.name = edit_data.content()[0].content.as_str().to_string();
                 pw.secret = edit_data.content()[1].content.as_str().to_string();
                 pw.notes = edit_data.content()[2].content.as_str().to_string();
-                pw.is_hotp = if edit_data.content()[6].content.as_str().to_string().to_uppercase()
-                    == "HOTP"
-                {
+                pw.is_hotp = if edit_data.content()[6].content.as_str().to_string().to_uppercase() == "HOTP" {
                     true
                 } else {
                     false
@@ -922,9 +920,7 @@ impl<'a> ActionManager<'a> {
                                 .field(Some("20".to_string()), Some(length_validator))
                                 .build()
                             {
-                                Ok(entry) => {
-                                    entry.content()[0].content.as_str().parse::<u32>().unwrap()
-                                }
+                                Ok(entry) => entry.content()[0].content.as_str().parse::<u32>().unwrap(),
                                 _ => {
                                     log::error!("Length entry failed");
                                     self.action_active.store(false, Ordering::SeqCst);

@@ -105,18 +105,12 @@ pub(crate) fn password_ux_manager(
                     Some(t!("pddb.password", locales::LANG)),
                     false,
                     Some(
-                        format!("{}'{}'", t!("pddb.password_for", locales::LANG), db_name.as_str())
-                            .as_str(),
+                        format!("{}'{}'", t!("pddb.password_for", locales::LANG), db_name.as_str()).as_str(),
                     ),
                     false,
                     None,
                 );
-                log::info!(
-                    "{}PDDB.REQPW,{},{}",
-                    xous::BOOKEND_START,
-                    db_name.as_str(),
-                    xous::BOOKEND_END
-                );
+                log::info!("{}PDDB.REQPW,{},{}", xous::BOOKEND_START, db_name.as_str(), xous::BOOKEND_END);
                 pddb_modal.activate();
                 dr = Some(msg);
             }

@@ -18,11 +18,7 @@ impl<'a> ShellCmdApi<'a> for Usb {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: String,
-        _env: &mut CommonEnv,
-    ) -> Result<Option<String>, xous::Error> {
+    fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         let mut ret = String::new();
         #[cfg(not(feature = "mass-storage"))]
         let helpstring = "usb [hid] [fido] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest]";

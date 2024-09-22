@@ -894,11 +894,7 @@ fn wrapped_main() -> ! {
                         buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
                         let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
                         if let Some(pw) = ret.plaintext_pw {
-                            match basis_cache.basis_create(
-                                &mut pddb_os,
-                                mgmt.name.as_str(),
-                                pw.as_str(),
-                            ) {
+                            match basis_cache.basis_create(&mut pddb_os, mgmt.name.as_str(), pw.as_str()) {
                                 Ok(_) => {
                                     log::info!(
                                         "{}PDDB.CREATEOK,{},{}",
@@ -1018,9 +1014,7 @@ fn wrapped_main() -> ! {
                 notify_of_disconnect(&mut pddb_os, &token_dict, &mut basis_cache);
                 match mgmt.code {
                     PddbRequestCode::Close => {
-                        match basis_cache
-                            .basis_unmount(&mut pddb_os, mgmt.name.as_str())
-                        {
+                        match basis_cache.basis_unmount(&mut pddb_os, mgmt.name.as_str()) {
                             Ok(_) => {
                                 mgmt.code = PddbRequestCode::NoErr;
                                 if basis_monitor_notifications.len() > 0 {
@@ -1049,9 +1043,7 @@ fn wrapped_main() -> ! {
                 notify_of_disconnect(&mut pddb_os, &token_dict, &mut basis_cache);
                 match mgmt.code {
                     PddbRequestCode::Delete => {
-                        match basis_cache
-                            .basis_delete(&mut pddb_os, mgmt.name.as_str())
-                        {
+                        match basis_cache.basis_delete(&mut pddb_os, mgmt.name.as_str()) {
                             Ok(_) => mgmt.code = PddbRequestCode::NoErr,
                             Err(e) => match e.kind() {
                                 ErrorKind::NotFound => mgmt.code = PddbRequestCode::NotFound,
@@ -1077,11 +1069,8 @@ fn wrapped_main() -> ! {
                     let mut buffer =
                         unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                     let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
-                    let bname = if req.basis_specified {
-                        Some(req.basis.as_str())
-                    } else {
-                        Some(basis.as_str())
-                    };
+                    let bname =
+                        if req.basis_specified { Some(req.basis.as_str()) } else { Some(basis.as_str()) };
                     let dict = req.dict.as_str();
                     let key = req.key.as_str();
                     log::debug!("get: {:?} {}", bname, key);
@@ -1600,8 +1589,7 @@ fn wrapped_main() -> ! {
                         if req.index >= dict_list.len() as u32 {
                             req.code = PddbRequestCode::InternalError;
                         } else {
-                            req.dict =
-                                String::<DICT_NAME_LEN>::from_str(&dict_list[req.index as usize]);
+                            req.dict = String::<DICT_NAME_LEN>::from_str(&dict_list[req.index as usize]);
                             req.code = PddbRequestCode::NoErr;
                             // the last index requested must be the highest one!
                             if req.index == dict_list.len() as u32 - 1 {
@@ -2190,10 +2178,7 @@ fn wrapped_main() -> ! {
                         #[cfg(feature = "autobasis")]
                         {
                             let export_extra = pddb_os.dbg_extra();
-                            pddb_os.dbg_dump(
-                                Some(dbg.dump_name.as_str().to_string()),
-                                Some(&export_extra),
-                            );
+                            pddb_os.dbg_dump(Some(dbg.dump_name.as_str().to_string()), Some(&export_extra));
                         }
                     }
                     DebugRequest::Remount => {

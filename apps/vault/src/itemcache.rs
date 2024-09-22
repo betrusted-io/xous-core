@@ -416,12 +416,8 @@ impl FilteredListView {
             log::debug!("filter start: {}", self.filter_start());
             if r.contains(&(self.selection_index + self.filter_start())) {
                 Some(SelectedEntry {
-                    key_guid: String::from(
-                        &self.list[self.selection_index + self.filter_start()].guid,
-                    ),
-                    description: String::from(
-                        &self.list[self.selection_index + self.filter_start()].name,
-                    ),
+                    key_guid: String::from(&self.list[self.selection_index + self.filter_start()].guid),
+                    description: String::from(&self.list[self.selection_index + self.filter_start()].name),
                     mode,
                 })
             } else {

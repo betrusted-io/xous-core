@@ -15,11 +15,7 @@ impl Ssid {
 impl<'a> ShellCmdApi<'a> for Ssid {
     cmd_api!(ssid);
 
-    fn process(
-        &mut self,
-        args: String,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String>, xous::Error> {
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         let mut ret = String::new();
         let helpstring = "ssid [scan]";
 

@@ -71,11 +71,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: String,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String>, xous::Error> {
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         if self.callback_id.is_none() {
             let cb_id = env.register_handler(String::from(self.verb()));
             log::trace!("hooking net callback with ID {}", cb_id);
@@ -727,9 +723,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 log::debug!("sending ping to {:?}", ipaddr);
                                 if self.ping.is_none() {
                                     self.ping = Some(net::protocols::Ping::non_blocking_handle(
-                                        XousServerId::ServerName(String::from(
-                                            crate::SERVER_NAME_SHELLCHAT,
-                                        )),
+                                        XousServerId::ServerName(String::from(crate::SERVER_NAME_SHELLCHAT)),
                                         self.callback_id.unwrap() as usize,
                                     ));
                                 }
