@@ -1891,7 +1891,7 @@ pub(crate) fn main_hw() -> ! {
                     match xns.request_connection_blocking(ur.server_name.as_str()) {
                         Ok(cid) => {
                             observer_conn = Some(cid);
-                            observer_op = Some(ur.listener_op_id as usize);
+                            observer_op = Some(<u32 as From<u32>>::from(ur.listener_op_id.into()) as usize);
                         }
                         Err(e) => {
                             log::error!("couldn't connect to observer: {:?}", e);

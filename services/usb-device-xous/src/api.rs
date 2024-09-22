@@ -147,7 +147,6 @@ impl TryFrom<usize> for UsbDeviceType {
     }
 }
 
-pub const SERIAL_ASCII_BUFLEN: usize = 512;
 pub const SERIAL_BINARY_BUFLEN: usize = 128;
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct UsbSerialAscii {
