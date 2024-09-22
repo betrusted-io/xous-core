@@ -209,9 +209,9 @@ impl<'buf> Buffer<'buf> {
         let writer = RkyvBuffer::from(&mut xous_buf.slice[..]);
         let alloc = SubAllocator::new(&mut scratch);
 
-        let serbuf =
+        let serialized_buf =
             rkyv::api::low::to_bytes_in_with_alloc::<_, _, Panic>(&wrap, writer, alloc).map_err(|_| ())?;
-        xous_buf.used = serbuf.pos();
+        xous_buf.used = serialized_buf.pos();
         println!("pos: {}", xous_buf.used);
         println!("scratch: {:x?}", &scratch[..16]);
         Ok(xous_buf)
@@ -270,8 +270,9 @@ impl<'buf> Buffer<'buf> {
         let writer = RkyvBuffer::from(&mut self.slice[..]);
         let alloc = SubAllocator::new(&mut scratch);
 
-        let serbuf = rkyv::api::low::to_bytes_in_with_alloc::<_, _, Panic>(&wrap, writer, alloc).unwrap();
-        self.used = serbuf.pos();
+        let serialized_buf =
+            rkyv::api::low::to_bytes_in_with_alloc::<_, _, Panic>(&wrap, writer, alloc).unwrap();
+        self.used = serialized_buf.pos();
 
         if let Some(ref mut msg) = self.memory_message.as_mut() {
             msg.offset = MemoryAddress::new(self.used);
