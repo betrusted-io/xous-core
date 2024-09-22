@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rkyv = { version = "0.8.7", default-features = false, features = ["std", "alloc", "bytecheck"] }
+rkyv = { version = "0.8.8", default-features = false, features = ["std", "alloc", "bytecheck"] }
 xous = { version = "0.9.63", features = ["forget-memory-messages"]}
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
