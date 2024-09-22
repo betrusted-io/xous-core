@@ -25,15 +25,15 @@ impl Default for ConnectRequest {
 }
 
 #[cfg(feature = "usb")]
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct UsbString {
-    pub s: xous_ipc::String<4000>,
+    pub s: String,
     pub sent: Option<u32>,
 }
 
 #[cfg(feature = "usb")]
 fn usb_send_str(conn: xous::CID, s: &str) {
-    let serializer = UsbString { s: xous_ipc::String::<4000>::from_str(s), sent: None };
+    let serializer = UsbString { s: String::from(s), sent: None };
     let buf = xous_ipc::Buffer::into_buf(serializer).expect("usb error");
     // failures to send are silent & ignored; also, this API doesn't block.
     buf.send(conn, 8192 /* LogString */).expect("usb error");
@@ -48,7 +48,7 @@ fn reader_thread(arg: usize) {
     let mut usb_serial: Option<xous::CID> = None;
     // use a stack-allocated string to ensure no heap thrashing results from String manipulations
     #[cfg(feature = "usb")]
-    let mut usb_str = xous_ipc::String::<4000>::new();
+    let mut usb_str = String::new();
 
     println!("LOG: my PID is {}", xous::process::id());
     let mut counter: usize = 0;
@@ -124,21 +124,21 @@ fn reader_thread(arg: usize) {
                             // inefficient
                             write!(usb_str, "{}:", level).ok();
                             for c in module_slice {
-                                usb_str.push_byte(*c).ok();
+                                usb_str.push(*c as char);
                             }
                             write!(usb_str, ": ").ok();
                             for c in args_slice {
-                                usb_str.push_byte(*c).ok();
+                                usb_str.push(*c as char);
                             }
                             write!(usb_str, " (").ok();
                             for c in file_slice {
-                                usb_str.push_byte(*c).ok();
+                                usb_str.push(*c as char);
                             }
                             if let Some(line) = lr.line {
                                 write!(usb_str, ":{}", line.get()).ok();
                             }
                             writeln!(usb_str, ")").ok();
-                            usb_send_str(conn, usb_str.to_str());
+                            usb_send_str(conn, &usb_str);
                         }
                     }
                     api::Opcode::StandardOutput | api::Opcode::StandardError => {

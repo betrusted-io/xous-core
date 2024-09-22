@@ -8,7 +8,7 @@ use num_traits::FromPrimitive;
 use xous::{msg_blocking_scalar_unpack, MessageEnvelope};
 use xous_api_names::api::*;
 use xous_api_names::*;
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 #[derive(PartialEq)]
 #[repr(C)]
@@ -371,9 +371,7 @@ fn main() -> ! {
                 let mem = msg.body.memory_message_mut().unwrap();
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
                 let registration = buffer.to_original::<Registration, _>().unwrap();
-                let name = XousServerName::from_str(
-                    registration.name.as_str().expect("couldn't convert server name to string"),
-                );
+                let name = XousServerName::from_str(registration.name.as_str());
 
                 let response: api::Return;
                 let mut should_connect = false;
@@ -462,10 +460,8 @@ fn main() -> ! {
             Some(api::Opcode::Lookup) => {
                 let mem = msg.body.memory_message_mut().unwrap();
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
-                let name_string = buffer.to_original::<String<64>, _>().unwrap();
-                let name = XousServerName::from_str(
-                    name_string.as_str().expect("couldn't convert server name to string"),
-                );
+                let name_string = buffer.to_original::<String, _>().unwrap();
+                let name = XousServerName::from_str(name_string.as_str());
                 log::trace!("Lookup request for '{}'", name);
                 let response: api::Return;
                 if let (Some(server_sid), token) = name_table.connect(&name) {
@@ -494,9 +490,7 @@ fn main() -> ! {
                     // here eventually.
                     let (c1, c2, c3, c4) = xous::create_server_id().unwrap().to_u32();
                     let auth_request = AuthenticateRequest {
-                        name: String::<64>::from_str(
-                            name_string.as_str().expect("couldn't convert server name to string"),
-                        ),
+                        name: String::from(name_string.as_str()),
                         pubkey_id: [0; 20], // placeholder
                         challenge: [c1, c2, c3, c4],
                     };
@@ -524,7 +518,7 @@ fn main() -> ! {
                 let mem = msg.body.memory_message_mut().unwrap();
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
                 let disconnect = buffer.to_original::<Disconnect, _>().unwrap();
-                let name = XousServerName::from_str(disconnect.name.as_str().unwrap());
+                let name = XousServerName::from_str(disconnect.name.as_str());
                 let response = if name_table.disconnect_with_token(&name, disconnect.token) {
                     api::Return::Success
                 } else {
