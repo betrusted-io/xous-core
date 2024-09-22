@@ -5,7 +5,7 @@ use atsama5d27::{
     pmc::PeripheralId,
 };
 use utralib::{HW_AIC_BASE, HW_SAIC_BASE};
-use xous_kernel::{arch::irq::IrqNumber, MemoryFlags, MemoryType, PID};
+use xous_kernel::{MemoryFlags, MemoryType, PID, arch::irq::IrqNumber};
 
 use crate::arch::irq::_irq_handler_rust;
 use crate::mem::MemoryManager;

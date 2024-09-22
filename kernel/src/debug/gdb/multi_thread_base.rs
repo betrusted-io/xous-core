@@ -2,9 +2,9 @@ use core::convert::TryInto;
 
 use gdbstub::common::Tid;
 use gdbstub::target;
+use gdbstub::target::TargetResult;
 use gdbstub::target::ext::base::multithread::MultiThreadBase;
 use gdbstub::target::ext::base::single_register_access::SingleRegisterAccessOps;
-use gdbstub::target::TargetResult;
 
 use super::XousTarget;
 

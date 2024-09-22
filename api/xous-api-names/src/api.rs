@@ -105,8 +105,8 @@ pub struct AuthenticatedLookup {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[repr(C)]
 pub struct AuthenticateRequest {
-    pub name: String, // a copy of the originally requested lookup
-    pub pubkey_id: [u8; 20],        // 160-bit pubkey ID encoded in network order (big endian)
+    pub name: String,        // a copy of the originally requested lookup
+    pub pubkey_id: [u8; 20], // 160-bit pubkey ID encoded in network order (big endian)
     pub challenge: [u32; 4],
 }
 

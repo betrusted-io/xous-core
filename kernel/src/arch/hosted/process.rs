@@ -7,7 +7,7 @@ use std::io::Write;
 use std::net::TcpStream;
 use std::thread_local;
 
-use xous_kernel::{ProcessInit, ProcessKey, ProcessStartup, ThreadInit, PID, TID};
+use xous_kernel::{PID, ProcessInit, ProcessKey, ProcessStartup, TID, ThreadInit};
 
 use crate::services::ProcessInner;
 

@@ -8,9 +8,9 @@ use crate::Exception
 #[cfg(feature = "processes-as-threads")]
 pub use crate::arch::ProcessArgsAsThread;
 use crate::{
-    pid_from_usize, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize,
-    MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs, ProcessInit, Result, ScalarMessage,
-    SysCallResult, ThreadInit, CID, PID, SID, TID,
+    CID, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize, MemoryType,
+    Message, MessageEnvelope, MessageSender, PID, ProcessArgs, ProcessInit, Result, SID, ScalarMessage,
+    SysCallResult, TID, ThreadInit, pid_from_usize,
 };
 
 #[derive(Debug, PartialEq)]

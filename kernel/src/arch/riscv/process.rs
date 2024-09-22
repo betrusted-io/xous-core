@@ -8,7 +8,7 @@ pub const EXCEPTION_TID: TID = 1;
 pub const INITIAL_TID: TID = 2;
 pub const IRQ_TID: TID = 0;
 
-use xous_kernel::{ProcessInit, ProcessStartup, ThreadInit, PID, TID};
+use xous_kernel::{PID, ProcessInit, ProcessStartup, TID, ThreadInit};
 
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
@@ -414,14 +414,9 @@ impl Process {
             *val = 0;
         }
         thread.sepc = 0;
-        crate::arch::syscall::invoke(
-            thread,
-            pid == 1,
-            entrypoint,
-            (sp - 16) & !0xf,
-            EXIT_THREAD,
-            &[setup.arg1, setup.arg2, setup.arg3, setup.arg4],
-        );
+        crate::arch::syscall::invoke(thread, pid == 1, entrypoint, (sp - 16) & !0xf, EXIT_THREAD, &[
+            setup.arg1, setup.arg2, setup.arg3, setup.arg4,
+        ]);
         Ok(())
     }
 

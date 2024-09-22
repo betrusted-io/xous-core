@@ -4,15 +4,15 @@
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use riscv::register::{scause, sepc, sstatus, stval};
-use xous_kernel::{SysCall, PID, TID};
+use xous_kernel::{PID, SysCall, TID};
 
 use crate::arch::current_pid;
 use crate::arch::exception::RiscvException;
 use crate::arch::mem::MemoryMapping;
 #[cfg(feature = "swap")]
 use crate::arch::process::RETURN_FROM_SWAPPER;
+use crate::arch::process::{EXIT_THREAD, RETURN_FROM_ISR, Thread};
 use crate::arch::process::{Process as ArchProcess, RETURN_FROM_EXCEPTION_HANDLER};
-use crate::arch::process::{Thread, EXIT_THREAD, RETURN_FROM_ISR};
 use crate::services::SystemServices;
 #[cfg(feature = "swap")]
 use crate::swap::Swap;

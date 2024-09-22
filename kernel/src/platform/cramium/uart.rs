@@ -8,17 +8,17 @@ use xous_kernel::{MemoryFlags, MemoryType};
 
 #[cfg(feature = "cramium-fpga")]
 use crate::{
+    PID,
     debug::shell::process_characters,
     io::{SerialRead, SerialWrite},
     mem::MemoryManager,
-    PID,
 };
 #[cfg(feature = "cramium-soc")]
 use crate::{
+    PID,
     debug::shell::process_characters,
     io::{SerialRead, SerialWrite},
     mem::MemoryManager,
-    PID,
 };
 
 /// UART virtual address.

@@ -1,9 +1,9 @@
 use gdbstub::arch::SingleStepGdbBehavior;
+use gdbstub::target::Target;
 use gdbstub::target::ext::base::BaseOps;
 use gdbstub::target::ext::breakpoints::BreakpointsOps;
 use gdbstub::target::ext::extended_mode::ExtendedModeOps;
 use gdbstub::target::ext::monitor_cmd::MonitorCmdOps;
-use gdbstub::target::Target;
 
 use super::XousTarget;
 

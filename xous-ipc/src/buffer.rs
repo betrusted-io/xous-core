@@ -2,15 +2,15 @@ use core::mem::MaybeUninit;
 use std::marker::PhantomData;
 
 use rkyv::{
+    Archive, Deserialize, Place, Portable, Serialize,
     api::low::LowSerializer,
     rancor::{Panic, Strategy},
-    ser::{allocator::SubAllocator, writer::Buffer as RkyvBuffer, Positional},
+    ser::{Positional, allocator::SubAllocator, writer::Buffer as RkyvBuffer},
     with::{ArchiveWith, Identity, SerializeWith},
-    Archive, Deserialize, Place, Portable, Serialize,
 };
 use xous::{
-    map_memory, send_message, unmap_memory, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange,
-    MemorySize, Message, Result, CID,
+    CID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize, Message, Result,
+    map_memory, send_message, unmap_memory,
 };
 
 #[derive(Debug)]
@@ -219,15 +219,15 @@ impl<'buf> Buffer<'buf> {
     pub fn into_buf<T>(src: T) -> core::result::Result<Self, ()>
     where
         T: for<'b, 'a> rkyv::Serialize<
-            rkyv::rancor::Strategy<
-                rkyv::ser::Serializer<
-                    rkyv::ser::writer::Buffer<'b>,
-                    rkyv::ser::allocator::SubAllocator<'a>,
-                    (),
+                rkyv::rancor::Strategy<
+                    rkyv::ser::Serializer<
+                        rkyv::ser::writer::Buffer<'b>,
+                        rkyv::ser::allocator::SubAllocator<'a>,
+                        (),
+                    >,
+                    rkyv::rancor::Panic,
                 >,
-                rkyv::rancor::Panic,
             >,
-        >,
     {
         Buffer::into_buf_inner::<Identity, T>(&src)
     }
@@ -282,15 +282,15 @@ impl<'buf> Buffer<'buf> {
     pub fn replace<T>(&mut self, src: T) -> core::result::Result<(), &'static str>
     where
         T: for<'b, 'a> rkyv::Serialize<
-            rkyv::rancor::Strategy<
-                rkyv::ser::Serializer<
-                    rkyv::ser::writer::Buffer<'b>,
-                    rkyv::ser::allocator::SubAllocator<'a>,
-                    (),
+                rkyv::rancor::Strategy<
+                    rkyv::ser::Serializer<
+                        rkyv::ser::writer::Buffer<'b>,
+                        rkyv::ser::allocator::SubAllocator<'a>,
+                        (),
+                    >,
+                    rkyv::rancor::Panic,
                 >,
-                rkyv::rancor::Panic,
             >,
-        >,
     {
         self.replace_inner::<Identity, T>(src)
     }

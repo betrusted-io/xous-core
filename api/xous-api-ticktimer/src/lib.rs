@@ -3,7 +3,7 @@
 pub mod api;
 
 use num_traits::ToPrimitive;
-use xous::{send_message, Error, CID};
+use xous::{CID, Error, send_message};
 use xous_semver::SemVer;
 
 #[derive(Debug)]
