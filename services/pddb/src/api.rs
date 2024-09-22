@@ -270,7 +270,7 @@ pub struct PddbBasisList {
     pub num: u32,
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone)]
 pub enum PddbRequestCode {
     Create = 0,
     Open = 1,
@@ -302,7 +302,7 @@ pub struct PddbBasisRequest {
     pub code: PddbRequestCode,
     pub policy: Option<BasisRetentionPolicy>,
 }
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct PddbDictRequest {
     pub basis_specified: bool,
     pub basis: String,

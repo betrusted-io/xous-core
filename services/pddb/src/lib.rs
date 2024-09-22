@@ -1075,9 +1075,7 @@ impl Pddb {
         } else {
             DEFAULT_LIMIT
         };
-        let mut msg_mem =
-            xous::map_memory(None, None, alloc_target, xous::MemoryFlags::R | xous::MemoryFlags::W)
-                .expect("Likely OOM in allocating read_dict buffer");
+        let mut buf = Buffer::new(alloc_target);
 
         // setup the request arguments
         let mut request = PddbDictRequest {
@@ -1097,40 +1095,47 @@ impl Pddb {
         let mut check_total_keys;
         let mut check_key_index = 0;
         loop {
-            let mut serializer = WriteSerializer::new(AlignedVec::new());
-            let pos = serializer.serialize_value(&request).unwrap();
-            let buf = serializer.into_inner();
-            // Safety: `u8` contains no undefined values
-            unsafe { msg_mem.as_slice_mut()[..buf.len()].copy_from_slice(buf.as_slice()) };
+            // serializes PddbDictRequest into a buffer whose size is set as `alloc_target`
+            buf.replace(request.clone()).expect("Xous internal error");
+            let (pages, used) = buf.into_inner().expect("API failure");
+
             // initiate the request: assemble a MemoryMessage
             let msg = xous::MemoryMessage {
                 id: Opcode::DictBulkRead.to_usize().unwrap(),
-                buf: msg_mem,
-                offset: xous::MemoryAddress::new(pos),
-                valid: xous::MemorySize::new(buf.len()),
+                buf: pages,
+                offset: xous::MemoryAddress::new(used),
+                valid: xous::MemorySize::new(alloc_target),
             };
             // do a mutable lend to the server
             let (_pos, _valid) = match xous::send_message(self.conn, Message::MutableBorrow(msg)) {
                 Ok(xous::Result::MemoryReturned(offset, valid)) => (offset, valid),
-                _ => return Err(Error::new(ErrorKind::Other, "Xous internal error")),
+                _ => {
+                    xous::unmap_memory(pages).unwrap();
+                    return Err(Error::new(ErrorKind::Other, "Xous internal error"));
+                }
             };
-            // unpack the return code. The result is not a single rkyv struct, it's hand-packed binary data.
+            // unpack the return code. The result is not a single rkyv struct, it's hand-packed binary data,
+            // with a directly-written `repr(C)` BulkReadHeader record at the top which recordes where in the
+            // message we can find the individual rkyv'd structs.
             // Unpack it.
             let mut index = 0;
             let mut header = BulkReadHeader::default();
             // Safety: `u8` contains no undefined values
             header
                 .deref_mut()
-                .copy_from_slice(unsafe { &msg_mem.as_slice()[index..index + size_of::<BulkReadHeader>()] });
+                .copy_from_slice(unsafe { &pages.as_slice()[index..index + size_of::<BulkReadHeader>()] });
             index += size_of::<BulkReadHeader>();
+
             match FromPrimitive::from_u32(header.code).unwrap_or(PddbBulkReadCode::InternalError) {
                 PddbBulkReadCode::NotFound => {
+                    xous::unmap_memory(pages).unwrap();
                     return Err(Error::new(
                         ErrorKind::NotFound,
                         format!("Bulk Read: dictionary '{}' not found", dict),
                     ));
                 }
                 PddbBulkReadCode::Busy => {
+                    xous::unmap_memory(pages).unwrap();
                     return Err(Error::new(ErrorKind::TimedOut, "PDDB server busy or request timed out"));
                 }
                 PddbBulkReadCode::Streaming | PddbBulkReadCode::Last => {
@@ -1148,38 +1153,36 @@ impl Pddb {
                     let mut key_count = 0;
                     log::debug!("header: {:?}", header);
                     while key_count < header.len {
-                        if index + size_of::<u32>() * 2 > msg_mem.len() {
+                        if index + size_of::<u32>() * 2 > pages.len() {
                             // quit if we don't have enough space to decode at least another two indices
                             break;
                         }
                         // Safety: `u32` contains no undefined values
                         let size = unsafe {
                             u32::from_le_bytes(
-                                msg_mem.as_slice()[index..index + size_of::<u32>()].try_into().unwrap(),
+                                pages.as_slice()[index..index + size_of::<u32>()].try_into().unwrap(),
                             )
                         };
                         index += size_of::<u32>();
                         // Safety: `u32` contains no undefined values
                         let pos = unsafe {
                             u32::from_le_bytes(
-                                msg_mem.as_slice()[index..index + size_of::<u32>()].try_into().unwrap(),
+                                pages.as_slice()[index..index + size_of::<u32>()].try_into().unwrap(),
                             )
                         };
                         index += size_of::<u32>();
                         log::trace!("unpacking message at {}({})", size, pos);
                         if size != 0 && pos != 0 {
-                            //log::info!("extract archive: {}, {}, {}, {}", index, size, pos, msg_mem.len());
-                            //log::info!("{:x?}", &msg_mem.as_slice::<u8>()[index..index + (size as usize)]);
-                            let archived = unsafe {
-                                archived_value::<PddbKeyRecord>(
-                                    &msg_mem.as_slice()[index..index + (size as usize)],
-                                    pos as usize,
+                            //log::info!("extract archive: {}, {}, {}, {}", index, size, pos, pages.len());
+                            //log::info!("{:x?}", &pages.as_slice::<u8>()[index..index + (size as usize)]);
+                            let r = unsafe {
+                                rkyv::access_unchecked::<ArchivedPddbKeyRecord>(
+                                    &pages.as_slice()[index..index + (size as usize)],
                                 )
                             };
                             //log::info!("increment index");
                             index += size as usize;
-                            //log::info!("new index: {}", index);
-                            let key = match archived.deserialize(&mut AllocDeserializer) {
+                            let key = match rkyv::deserialize::<PddbKeyRecord, rkyv::rancor::Error>(r) {
                                 Ok(r) => r,
                                 Err(e) => {
                                     log::error!("deserialization error: {:?}", e);
@@ -1201,11 +1204,17 @@ impl Pddb {
                     }
                     // if this is the last block, quit the loop
                     if header.code == (PddbBulkReadCode::Last as u32) {
+                        xous::unmap_memory(pages).unwrap();
                         break;
                     }
                 }
-                _ => return Err(Error::new(ErrorKind::Other, "Bulk read invalid return value")),
+                _ => {
+                    xous::unmap_memory(pages).unwrap();
+                    return Err(Error::new(ErrorKind::Other, "Bulk read invalid return value"));
+                }
             }
+            // safety: safe because we're re-constituting from a previously blown up buffer
+            buf = unsafe { Buffer::from_inner(pages, used) };
         }
         if check_total_keys != check_key_index {
             log::error!(
@@ -1214,7 +1223,14 @@ impl Pddb {
                 check_key_index
             );
         }
-        xous::unmap_memory(msg_mem).unwrap();
+        // blow up the buffer and de-allocate its interior memory. I think this could also be
+        // accomplished by just setting should_drop = `true` and letting Drop happen as it goes
+        // out of scope, but I find the explicit unmap matching the map at the top to be comforting.
+        //
+        // It also brings into relief the fact that I think we're leaking memory whenever we return
+        // with an API failure: the unmap_memory() path is missing in those cases.
+        // let (pages, _used) = buf.into_inner().expect("API failure");
+        // xous::unmap_memory(pages).unwrap();
         Ok(ret)
     }
 

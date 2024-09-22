@@ -1,3 +1,9 @@
+use core::mem::MaybeUninit;
+use core::sync::atomic::AtomicU32;
+use core::sync::atomic::Ordering;
+
+use xous_ipc::Buffer;
+
 /// Fill `dest` with random bytes from the system's preferred random number
 /// source.
 ///
@@ -12,11 +18,6 @@
 /// significantly slower than a user-space CSPRNG; for the latter consider
 /// [`rand::thread_rng`](https://docs.rs/rand/*/rand/fn.thread_rng.html).
 use crate::util::slice_as_uninit;
-use core::sync::atomic::AtomicU32;
-use core::sync::atomic::Ordering;
-use core::mem::MaybeUninit;
-
-use xous_ipc::Buffer;
 
 static TRNG_CONN: AtomicU32 = AtomicU32::new(0);
 
@@ -52,8 +53,9 @@ pub fn fill_buf(data: &mut [u32]) {
     let mut buf = Buffer::into_buf(tb).unwrap();
     buf.lend_mut(TRNG_CONN.load(Ordering::SeqCst), 1 /* FillTrng */).unwrap();
     let rtb = buf.as_flat::<TrngBuf, _>().unwrap();
-    assert!(rtb.len as usize == data.len());
-    data.copy_from_slice(&rtb.data);
+    assert!(usize::from(rtb.len) == data.len());
+    // FIXME
+    // data.copy_from_slice(&rtb.data);
 }
 
 pub fn next_u32() -> u32 {

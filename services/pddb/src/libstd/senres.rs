@@ -158,7 +158,7 @@ pub trait Senres {
         Self: core::marker::Sized,
     {
         let reader = Reader { backing: self, offset: core::cell::Cell::new(0) };
-        if SENRES_V1_MAGIC != reader.try_get_from().ok()? {
+        if SENRES_V1_MAGIC != reader.try_get_from::<u32>().ok()? {
             return None;
         }
         let target_fourcc: [u8; 4] = reader.try_get_from().ok()?;

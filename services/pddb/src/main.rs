@@ -370,6 +370,7 @@ use api::*;
 mod backend;
 use backend::*;
 mod ux;
+use rkyv::with::Identity;
 use ux::*;
 mod menu;
 use menu::*;
@@ -391,6 +392,8 @@ use core::mem::size_of;
 use core::ops::Deref;
 use std::collections::{BTreeSet, HashMap};
 use std::io::ErrorKind;
+use std::marker::PhantomData;
+use std::mem::MaybeUninit;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -399,9 +402,11 @@ use std::thread;
 use locales::t;
 use num_traits::*;
 use rkyv::{
-    de::deserializers::AllocDeserializer,
-    ser::{serializers::BufferSerializer, Serializer},
-    Deserialize,
+    api::low::LowSerializer,
+    rancor::Panic,
+    ser::{allocator::SubAllocator, writer::Buffer as RkyvBuffer, Positional},
+    with::{ArchiveWith, SerializeWith},
+    Archive, Place, Serialize,
 };
 use xous::{msg_blocking_scalar_unpack, send_message, Message};
 use xous_ipc::Buffer;
@@ -413,8 +418,8 @@ const FILE_ID_SERVICES_PDDB_SRC_DICTIONARY: u32 = 1;
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct BasisRequestPassword {
-    db_name: String<{ crate::api::BASIS_NAME_LEN }>,
-    plaintext_pw: Option<String<{ crate::api::PASSWORD_LEN }>>,
+    db_name: String,
+    plaintext_pw: Option<String>,
 }
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum PasswordState {
@@ -455,6 +460,31 @@ struct FileHandle {
 fn main() -> ! {
     let stack_size = 1024 * 1024;
     std::thread::Builder::new().stack_size(stack_size).spawn(wrapped_main).unwrap().join().unwrap()
+}
+
+/// For manual serialization to rkyv in this crate.
+type Serializer<'a, 'b> = LowSerializer<RkyvBuffer<'b>, SubAllocator<'a>, Panic>;
+struct Wrap<'a, F, T>(&'a T, PhantomData<F>);
+
+impl<F, T> Archive for Wrap<'_, F, T>
+where
+    F: ArchiveWith<T>,
+{
+    type Archived = <F as ArchiveWith<T>>::Archived;
+    type Resolver = <F as ArchiveWith<T>>::Resolver;
+
+    fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
+        F::resolve_with(self.0, resolver, out)
+    }
+}
+
+impl<'a, 'b, F, T> Serialize<Serializer<'a, 'b>> for Wrap<'_, F, T>
+where
+    F: SerializeWith<T, Serializer<'a, 'b>>,
+{
+    fn serialize(&self, serializer: &mut Serializer<'a, 'b>) -> core::result::Result<Self::Resolver, Panic> {
+        F::serialize_with(self.0, serializer)
+    }
 }
 
 fn wrapped_main() -> ! {
@@ -626,6 +656,9 @@ fn wrapped_main() -> ! {
     // turn on (or off) performance profiling, if the feature is enabled
     #[cfg(feature = "perfcounter")]
     pddb_os.set_use_perf(true);
+
+    // for alloc-less serializations
+    let mut scratch = [MaybeUninit::<u8>::uninit(); 256];
 
     // register a suspend/resume listener
     let mut susres =
@@ -889,7 +922,8 @@ fn wrapped_main() -> ! {
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 match mgmt.code {
                     PddbRequestCode::Create => {
-                        let request = BasisRequestPassword { db_name: mgmt.name, plaintext_pw: None };
+                        let request =
+                            BasisRequestPassword { db_name: mgmt.name.to_string(), plaintext_pw: None };
                         let mut buf = Buffer::into_buf(request).unwrap();
                         buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
                         let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
@@ -929,7 +963,8 @@ fn wrapped_main() -> ! {
                     PddbRequestCode::Open => {
                         let mut finished = false;
                         while !finished {
-                            let request = BasisRequestPassword { db_name: mgmt.name, plaintext_pw: None };
+                            let request =
+                                BasisRequestPassword { db_name: mgmt.name.to_string(), plaintext_pw: None };
                             let mut buf = Buffer::into_buf(request).unwrap();
                             buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
                             let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
@@ -1698,9 +1733,13 @@ fn wrapped_main() -> ! {
                 // unpack the descriptor
                 #[cfg(feature = "perfcounter")]
                 pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 5, std::line!());
-                let pos = range.offset.map(|o| o.get()).unwrap_or_default();
-                let r = unsafe { rkyv::archived_value::<PddbDictRequest>(buf, pos) };
-                let bulk_descriptor = r.deserialize(&mut AllocDeserializer).unwrap();
+                let r = unsafe {
+                    rkyv::access_unchecked::<ArchivedPddbDictRequest>(
+                        &buf[..range.offset.expect("Missing offset in DictBulkRead request").get()],
+                    )
+                };
+                let bulk_descriptor = rkyv::deserialize::<PddbDictRequest, rkyv::rancor::Error>(r)
+                    .expect("malformed DictBulkRead request");
                 // check for a timeout; retire state if we did timeout
                 #[cfg(feature = "perfcounter")]
                 pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 5, std::line!());
@@ -1871,13 +1910,17 @@ fn wrapped_main() -> ! {
                                         };
                                         state.read_total += attr.len; // commit the read length early
                                         let (prebuf, sbuf) = buf.split_at_mut(size_of::<u32>() * 2);
-                                        let mut serializer = BufferSerializer::new(sbuf);
-                                        let len = size_of::<ArchivedPddbKeyRecord>();
-                                        match serializer.serialize_value(&rec) {
-                                            Ok(pos) => SerializeResult::Success(
-                                                pos,
-                                                len,
-                                                serializer.into_inner(),
+
+                                        let wrap = Wrap(&rec, PhantomData::<Identity>);
+                                        let writer = RkyvBuffer::from(&mut *sbuf);
+                                        let alloc = SubAllocator::new(&mut scratch);
+                                        match rkyv::api::low::to_bytes_in_with_alloc::<_, _, Panic>(
+                                            &wrap, writer, alloc,
+                                        ) {
+                                            Ok(serbuf) => SerializeResult::Success(
+                                                serbuf.pos(),
+                                                size_of::<ArchivedPddbKeyRecord>(),
+                                                sbuf,
                                                 key_name,
                                                 prebuf,
                                             ),
@@ -1908,13 +1951,16 @@ fn wrapped_main() -> ! {
                                     data: None,
                                 };
                                 let (pre_buf, buf) = buf.split_at_mut(size_of::<u32>() * 2);
-                                let mut serializer = BufferSerializer::new(buf);
-                                let len = size_of::<ArchivedPddbKeyRecord>();
-                                match serializer.serialize_value(&rec) {
-                                    Ok(pos) => SerializeResult::Success(
-                                        pos,
-                                        len,
-                                        serializer.into_inner(),
+                                let wrap = Wrap(&rec, PhantomData::<Identity>);
+                                let writer = RkyvBuffer::from(&mut *buf);
+                                let alloc = SubAllocator::new(&mut scratch);
+                                match rkyv::api::low::to_bytes_in_with_alloc::<_, _, Panic>(
+                                    &wrap, writer, alloc,
+                                ) {
+                                    Ok(serbuf) => SerializeResult::Success(
+                                        serbuf.pos(),
+                                        size_of::<ArchivedPddbKeyRecord>(),
+                                        buf,
                                         key_name,
                                         pre_buf,
                                     ),

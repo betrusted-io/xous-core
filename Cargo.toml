@@ -140,8 +140,8 @@ opt-level = "s" # z,s: Optimize for size instead of performance; 1 for easier de
 
 # prefer hardware-accelerated versions of services
 [patch.crates-io]
-sha2 = { git = "https://github.com/betrusted-io/hashes.git", branch = "sha2-v0.10.8-xous" }
-# sha2 = { path = "../hashes/sha2" }
+# sha2 = { git = "https://github.com/betrusted-io/hashes.git", branch = "sha2-v0.10.8-xous" }
+sha2 = { path = "../hashes/sha2" }
 
 [patch.crates-io.aes]
 path = "services/aes"
@@ -186,13 +186,16 @@ path = "./utralib"
 path = "./svd2utra"
 # [patch.crates-io.xous]
 # path = "./xous-rs"
-# [patch.crates-io.xous-ipc]
-# path = "./xous-ipc"
-# [patch.crates-io.xous-api-names]
-# path = "./api/xous-api-names"
-# [patch.crates-io.xous-api-susres]
-# path = "./api/xous-api-susres"
-# [patch.crates-io.xous-api-log]
-# path = "./api/xous-api-log"
-# [patch.crates-io.xous-api-ticktimer]
-# path = "./api/xous-api-ticktimer"
+[patch.crates-io.xous-ipc]
+path = "./xous-ipc"
+[patch.crates-io.xous-api-names]
+path = "./api/xous-api-names"
+[patch.crates-io.xous-api-susres]
+path = "./api/xous-api-susres"
+[patch.crates-io.xous-api-log]
+path = "./api/xous-api-log"
+[patch.crates-io.xous-api-ticktimer]
+path = "./api/xous-api-ticktimer"
+
+[patch.crates-io.xous-tts-backend]
+path = "../tts-backend"

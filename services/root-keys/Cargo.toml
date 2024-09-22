@@ -20,7 +20,7 @@ com = { path = "../com" }
 xous-semver = "0.1.2"
 utralib = { version = "0.1.24", optional = true, default-features = false }
 
-xous-ipc = "0.9.63"
+xous-ipc = "0.10.0"
 num-derive = { version = "0.4.1", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [

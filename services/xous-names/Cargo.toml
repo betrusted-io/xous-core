@@ -13,7 +13,7 @@ homepage = "https://betrusted.io/"
 xous-api-names = "0.9.61"
 log-server = { package = "xous-api-log", version = "0.1.59" }
 xous = "0.9.63"
-xous-ipc = "0.9.63"
+xous-ipc = "0.10.0"
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 log = "0.4.14"

@@ -16,7 +16,7 @@ susres = { package = "xous-api-susres", version = "0.9.59" }
 llio = { path = "../llio" }
 trng = { path = "../trng" }
 
-xous-ipc = "0.9.63"
+xous-ipc = "0.10.0"
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [

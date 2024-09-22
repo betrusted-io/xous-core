@@ -14,7 +14,7 @@ ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.59" }
 susres = { package = "xous-api-susres", version = "0.9.59" }
 typenum = "1.12"
 xous = "0.9.63"
-xous-ipc = "0.9.63"
+xous-ipc = "0.10.0"
 xous-names = { package = "xous-api-names", version = "0.9.61" }
 trng = { path = "../trng" }
 llio = { path = "../llio" }
