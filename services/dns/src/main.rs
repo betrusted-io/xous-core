@@ -14,7 +14,7 @@ use api::*;
 use net::NetIpAddr;
 use num_traits::*;
 use xous::msg_scalar_unpack;
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 // KISS DNS
 
@@ -543,7 +543,7 @@ fn main() -> ! {
                 let mut buf =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let name = buf.to_original::<String<DNS_NAME_LENGTH_LIMIT>, _>().unwrap();
-                let name_std = std::string::String::from(name.as_str().unwrap());
+                let name_std = std::string::String::from(name.as_str());
                 if let Some(cache_entry) = dns_cache.get(&name_std) {
                     // pick a random entry
                     let rand = resolver.trng_u32() as usize % cache_entry.len();
@@ -559,13 +559,13 @@ fn main() -> ! {
                         }
                     }
                 } else {
-                    match resolver.resolve(name.as_str().unwrap()) {
+                    match resolver.resolve(name.as_str()) {
                         Ok(cache_entry) => {
                             if cache_entry.len() > 0 {
                                 dns_cache.insert(name_std, cache_entry);
 
                                 // now pick the entry back out again, as it was consumed...
-                                let name_std = std::string::String::from(name.as_str().unwrap());
+                                let name_std = std::string::String::from(name.as_str());
                                 let cache_entry = dns_cache.get(&name_std).unwrap();
 
                                 // pick a random entry from the query response

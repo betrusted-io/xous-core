@@ -4,7 +4,7 @@ use std::net::IpAddr;
 use net::NetIpAddr;
 use num_traits::ToPrimitive;
 use xous::CID;
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 use crate::api::*;
 
