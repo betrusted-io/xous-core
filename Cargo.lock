@@ -6590,7 +6590,7 @@ dependencies = [
 
 [[package]]
 name = "xous-tts-backend"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "log",
  "num-derive 0.3.3",
