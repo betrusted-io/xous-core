@@ -27,7 +27,7 @@ impl Dns {
         if let Ok(simple_ip) = name.parse::<IpAddr>() {
             Ok(NetIpAddr::from(simple_ip))
         } else {
-            let alloc_name = String::<DNS_NAME_LENGTH_LIMIT>::from_str(name);
+            let alloc_name = String::from(name);
             let mut buf = Buffer::into_buf(alloc_name).or(Err(DnsResponseCode::UnknownError))?;
             buf.lend_mut(self.conn, Opcode::Lookup.to_u32().unwrap())
                 .or(Err(DnsResponseCode::UnknownError))?;

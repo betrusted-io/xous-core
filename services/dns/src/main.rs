@@ -542,7 +542,7 @@ fn main() -> ! {
             Some(Opcode::Lookup) => {
                 let mut buf =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let name = buf.to_original::<String<DNS_NAME_LENGTH_LIMIT>, _>().unwrap();
+                let name = buf.to_original::<String, _>().unwrap();
                 let name_std = std::string::String::from(name.as_str());
                 if let Some(cache_entry) = dns_cache.get(&name_std) {
                     // pick a random entry
