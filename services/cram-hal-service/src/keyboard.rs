@@ -1,6 +1,6 @@
 use num_traits::*;
 use xous::{send_message, Message};
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 use crate::api::keyboard::*;
 
@@ -18,7 +18,7 @@ impl Keyboard {
 
     pub fn register_listener(&self, server_name: &str, action_opcode: usize) {
         let kr = KeyboardRegistration {
-            server_name: String::<64>::from_str(server_name),
+            server_name: String::from(server_name),
             listener_op_id: action_opcode,
         };
         let buf = Buffer::into_buf(kr).unwrap();
@@ -28,7 +28,7 @@ impl Keyboard {
 
     pub fn register_observer(&self, server_name: &str, action_opcode: usize) {
         let kr = KeyboardRegistration {
-            server_name: String::<64>::from_str(server_name),
+            server_name: String::from(server_name),
             listener_op_id: action_opcode,
         };
         let buf = Buffer::into_buf(kr).unwrap();

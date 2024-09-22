@@ -100,7 +100,7 @@ pub(crate) enum KeyboardOpcode {
 // which is the GAM.
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub(crate) struct KeyboardRegistration {
-    pub server_name: xous_ipc::String<64>,
+    pub server_name: String,
     pub listener_op_id: usize,
 }
 

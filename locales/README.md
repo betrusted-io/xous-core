@@ -44,7 +44,7 @@ the following idiom:
 // insert `locales = {path = "../../locales"}` inside the Cargo.toml of the server
 use locales::t;
 
-name: String::<64>::from_str(t!("mainmenu.backlighton", locales::LANG)),
+name: String::from(t!("mainmenu.backlighton", locales::LANG)),
 ```
 
 The `t!(string_reference, language)` takes `string_reference` which is a programmer-readable

@@ -50,9 +50,9 @@ impl Repl {
 
         let token = gam
             .register_ux(UxRegistration {
-                app_name: xous_ipc::String::<128>::from_str(gam::APP_NAME_SHELLCHAT),
+                app_name: String::from(gam::APP_NAME_SHELLCHAT),
                 ux_type: gam::UxType::Chat,
-                predictor: Some(xous_ipc::String::<64>::from_str(
+                predictor: Some(String::from(
                     ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL,
                 )),
                 listener: sid.to_array(), /* note disclosure of our SID to the GAM -- the secret is now
@@ -128,7 +128,7 @@ impl Repl {
             log::trace!("processing line: {}", local);
             if let Some(res) = self
                 .env
-                .dispatch(Some(&mut xous_ipc::String::<1024>::from_str(&local)), None)
+                .dispatch(Some(&mut String::from(&local)), None)
                 .expect("command dispatch failed")
             {
                 let output_history =
