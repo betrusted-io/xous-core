@@ -37,8 +37,7 @@ impl<'a> ShellCmdApi<'a> for Ssid {
                     write!(ret, "RSSI reported in dBm:\n").unwrap();
                     for ssid in ssid_list {
                         if ssid.name.len() > 0 {
-                            write!(ret, "-{} {}\n", ssid.rssi, &ssid.name.as_str().unwrap_or("UTF-8 error"))
-                                .unwrap();
+                            write!(ret, "-{} {}\n", ssid.rssi, &ssid.name.as_str()).unwrap();
                         }
                     }
                     write!(ret, "Scan state: {:?}\n", state).unwrap();

@@ -695,13 +695,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                                 write!(ret, "RSSI reported in dBm:\n").unwrap();
                                 for ssid in ssid_list {
                                     if ssid.name.len() > 0 {
-                                        write!(
-                                            ret,
-                                            "-{} {}\n",
-                                            ssid.rssi,
-                                            &ssid.name.as_str().unwrap_or("UTF-8 error")
-                                        )
-                                        .unwrap();
+                                        write!(ret, "-{} {}\n", ssid.rssi, &ssid.name.as_str()).unwrap();
                                     }
                                 }
                                 write!(
@@ -736,8 +730,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                             net_up = status.link_state == com_rs::LinkState::Connected;
                             dhcp_ok = status.ipv4.dhcp == com_rs::DhcpState::Bound;
                             ssid_ok = if let Some(ssid) = status.ssid {
-                                log::info!("got ssid: {}", ssid.name.as_str().unwrap_or("invalid"));
-                                ssid.name.as_str().unwrap_or("invalid") == "precursortest"
+                                log::info!("got ssid: {}", ssid.name.as_str());
+                                ssid.name.as_str() == "precursortest"
                             } else {
                                 false
                             };

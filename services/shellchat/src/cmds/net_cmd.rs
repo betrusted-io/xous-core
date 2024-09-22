@@ -13,6 +13,7 @@ use num_traits::*;
 #[cfg(feature = "shellperf")]
 use perflib::*;
 use xous::MessageEnvelope;
+use xous_ipc::Buffer;
 use String;
 #[cfg(feature = "ditherpunk")]
 use {gam::DecodePng, std::str::FromStr};
@@ -22,7 +23,7 @@ use {
     tungstenite::{stream::MaybeTlsStream, WebSocket},
 };
 
-use crate::{CommonEnv, ShellCmdApi};
+use crate::{CommonEnv, ShellCmdApi, ShellOpcode};
 
 pub struct NetCmd {
     callback_id: Option<u32>,
@@ -303,7 +304,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 let mut iters = 0;
                                 let mut s = String::new();
                                 write!(s, "UDP server {} started", index).unwrap();
-                                s.send(self_cid).unwrap();
+                                let buf = Buffer::into_buf(s.to_string()).unwrap();
+                                buf.send(self_cid, ShellOpcode::Line.to_u32().unwrap()).unwrap();
                                 loop {
                                     s.clear();
                                     let mut buf = [0u8; NET_MTU];
@@ -318,7 +320,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                 std::str::from_utf8(&buf[..bytes]).unwrap()
                                             )
                                             .unwrap();
-                                            s.send(self_cid).unwrap();
+                                            let buf = Buffer::into_buf(s.to_string()).unwrap();
+                                            buf.send(self_cid, ShellOpcode::Line.to_u32().unwrap()).unwrap();
                                             if do_response {
                                                 match udp.send_to(
                                                     format!("Server {} received {} bytes\r\n", index, bytes)
@@ -347,7 +350,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 }
                                 s.clear();
                                 write!(s, "UDP server {} rx closed after {} iters", index, iters).unwrap();
-                                s.send(self_cid).unwrap();
+                                let buf = Buffer::into_buf(s.to_string()).unwrap();
+                                buf.send(self_cid, ShellOpcode::Line.to_u32().unwrap()).unwrap();
                             }
                         });
                     }
@@ -841,7 +845,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 }
             }
             xous::Message::Move(m) => {
-                let s = String::from_message(m).unwrap();
+                let buffer = unsafe { Buffer::from_memory_message(m) };
+                let s = buffer.as_flat::<String, _>().unwrap();
                 write!(ret, "{}", s.as_str()).unwrap();
             }
             _ => {
