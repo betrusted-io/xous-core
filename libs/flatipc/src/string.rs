@@ -23,6 +23,7 @@ impl<const N: usize> From<&str> for String<N> {
 
 impl<const N: usize> core::fmt::Write for String<N> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        assert!(self.length <= self.buffer.len());
         if s.len() + self.length > N {
             return Err(core::fmt::Error);
         }
@@ -52,7 +53,7 @@ impl<const N: usize> core::fmt::Display for String<N> {
 
 impl<const N: usize> AsRef<str> for String<N> {
     fn as_ref(&self) -> &str {
-        // Safe because we guarantee the buffer is valid UTF-8
-        unsafe { core::str::from_utf8_unchecked(&self.buffer[0..self.length]) }
+        assert!(self.length <= self.buffer.len());
+        core::str::from_utf8(&self.buffer[0..self.length]).unwrap()
     }
 }

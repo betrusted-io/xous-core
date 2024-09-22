@@ -21,6 +21,7 @@ impl<T, const N: usize> Vec<T, N> {
     }
 
     pub fn pop(&mut self) -> Option<T> {
+        assert!(self.length <= self.buffer.len());
         if self.length > 0 {
             self.length -= 1;
             unsafe { Some(self.buffer[self.length].as_ptr().read()) }
@@ -29,17 +30,23 @@ impl<T, const N: usize> Vec<T, N> {
         }
     }
 
-    pub fn len(&self) -> usize { self.length }
+    pub fn len(&self) -> usize {
+        assert!(self.length <= self.buffer.len());
+        self.length
+    }
 
     pub fn as_slice(&self) -> &[T] {
+        assert!(self.length <= self.buffer.len());
         unsafe { core::slice::from_raw_parts(self.buffer.as_ptr() as *const T, self.length) }
     }
 
     pub fn as_mut_slice(&mut self) -> &mut [T] {
+        assert!(self.length <= self.buffer.len());
         unsafe { core::slice::from_raw_parts_mut(self.buffer.as_mut_ptr() as *mut T, self.length) }
     }
 
     pub fn clear(&mut self) {
+        assert!(self.length <= self.buffer.len());
         for i in 0..self.length {
             unsafe {
                 core::ptr::drop_in_place(&mut self.buffer[i]);
@@ -56,6 +63,7 @@ impl<T, const N: usize> Vec<T, N> {
     where
         T: Clone,
     {
+        assert!(self.length <= self.buffer.len());
         if new_len > self.length {
             for _ in self.length..new_len {
                 self.push(value.clone());
