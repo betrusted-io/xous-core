@@ -212,8 +212,6 @@ impl<'buf> Buffer<'buf> {
         let serialized_buf =
             rkyv::api::low::to_bytes_in_with_alloc::<_, _, Panic>(&wrap, writer, alloc).map_err(|_| ())?;
         xous_buf.used = serialized_buf.pos();
-        println!("pos: {}", xous_buf.used);
-        println!("scratch: {:x?}", &scratch[..16]);
         Ok(xous_buf)
     }
 
@@ -221,15 +219,15 @@ impl<'buf> Buffer<'buf> {
     pub fn into_buf<T>(src: T) -> core::result::Result<Self, ()>
     where
         T: for<'b, 'a> rkyv::Serialize<
-                rkyv::rancor::Strategy<
-                    rkyv::ser::Serializer<
-                        rkyv::ser::writer::Buffer<'b>,
-                        rkyv::ser::allocator::SubAllocator<'a>,
-                        (),
-                    >,
-                    rkyv::rancor::Panic,
+            rkyv::rancor::Strategy<
+                rkyv::ser::Serializer<
+                    rkyv::ser::writer::Buffer<'b>,
+                    rkyv::ser::allocator::SubAllocator<'a>,
+                    (),
                 >,
+                rkyv::rancor::Panic,
             >,
+        >,
     {
         Buffer::into_buf_inner::<Identity, T>(&src)
     }
@@ -284,15 +282,15 @@ impl<'buf> Buffer<'buf> {
     pub fn replace<T>(&mut self, src: T) -> core::result::Result<(), &'static str>
     where
         T: for<'b, 'a> rkyv::Serialize<
-                rkyv::rancor::Strategy<
-                    rkyv::ser::Serializer<
-                        rkyv::ser::writer::Buffer<'b>,
-                        rkyv::ser::allocator::SubAllocator<'a>,
-                        (),
-                    >,
-                    rkyv::rancor::Panic,
+            rkyv::rancor::Strategy<
+                rkyv::ser::Serializer<
+                    rkyv::ser::writer::Buffer<'b>,
+                    rkyv::ser::allocator::SubAllocator<'a>,
+                    (),
                 >,
+                rkyv::rancor::Panic,
             >,
+        >,
     {
         self.replace_inner::<Identity, T>(src)
     }
