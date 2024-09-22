@@ -62,7 +62,7 @@ pub(crate) enum UxLayout {
     Framebuffer,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct UxContext {
     /// the type of the Ux defined here
     pub layout: UxLayout,
@@ -517,7 +517,7 @@ impl ContextManager {
                         } else {
                             None
                         },
-                        predictor: context.predictor,
+                        predictor: context.predictor.clone(),
                         token: context.gam_token,
                         predictor_token: context.pred_token,
                     };

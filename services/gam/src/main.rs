@@ -553,11 +553,7 @@ fn wrapped_main() -> ! {
                 let registration = buffer.to_original::<UxRegistration, _>().unwrap();
 
                 let init_focus_found =
-                    if registration.app_name.as_str().unwrap_or("UTF-8 error") == INITIAL_APP_FOCUS {
-                        true
-                    } else {
-                        false
-                    };
+                    if registration.app_name.as_str() == INITIAL_APP_FOCUS { true } else { false };
                 // note that we are currently assigning all Ux registrations a trust level consistent with a
                 // boot context (ultimately trusted) this needs to be modified later on once
                 // we allow post-boot apps to be created
@@ -577,10 +573,8 @@ fn wrapped_main() -> ! {
                         let gam_token = gam_token.clone();
                         let conn = CB_TO_MAIN_CONN.load(Ordering::SeqCst);
                         move || {
-                            let switchapp = SwitchToApp {
-                                token: gam_token,
-                                app_name: String::from(INITIAL_APP_FOCUS),
-                            };
+                            let switchapp =
+                                SwitchToApp { token: gam_token, app_name: String::from(INITIAL_APP_FOCUS) };
                             let buf = Buffer::into_buf(switchapp).or(Err(xous::Error::InternalError))?;
                             buf.send(conn, Opcode::SwitchToApp.to_u32().unwrap())
                                 .or(Err(xous::Error::InternalError))
@@ -647,9 +641,7 @@ fn wrapped_main() -> ! {
                     switchapp.token
                 );
 
-                if let Some(new_app_token) =
-                    context_mgr.find_app_token_by_name(switchapp.app_name.as_str())
-                {
+                if let Some(new_app_token) = context_mgr.find_app_token_by_name(switchapp.app_name.as_str()) {
                     if new_app_token != context_mgr.focused_app().unwrap_or([0, 0, 0, 0]) {
                         // two things:
                         // 1. [0, 0, 0, 0] is simply a very unlikely GID because it's a 128 bit TRNG, and this
@@ -735,7 +727,7 @@ fn wrapped_main() -> ! {
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut spec = buffer.to_original::<Bip39Ipc, _>().unwrap();
                 let mut phrase = Vec::<std::string::String>::new();
-                for maybe_word in spec.words {
+                for maybe_word in spec.words.iter() {
                     if let Some(word) = maybe_word {
                         phrase.push(word.as_str().to_string());
                     }
