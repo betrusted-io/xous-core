@@ -200,7 +200,7 @@ fn clifford() -> Img {
     Img::new(buf, WIDTH.try_into().unwrap(), PixelType::U8)
 }
 
-fn test_validator(input: TextEntryPayload) -> Option<String> {
+fn test_validator(input: &TextEntryPayload) -> Option<String> {
     let text_str = input.as_str();
     match text_str.parse::<u32>() {
         Ok(_input_int) => None,
