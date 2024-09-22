@@ -90,9 +90,9 @@ pub struct WlanStatusIpc {
 }
 impl WlanStatusIpc {
     #[allow(dead_code)]
-    pub fn from_status(status: WlanStatus) -> Self {
+    pub fn from_status(status: &WlanStatus) -> Self {
         WlanStatusIpc {
-            ssid: status.ssid,
+            ssid: status.ssid.to_owned(),
             link_state: status.link_state as u16,
             ipv4: status.ipv4.encode_u16(),
         }
