@@ -404,7 +404,7 @@ use num_traits::*;
 use rkyv::{
     Archive, Place, Serialize,
     api::low::LowSerializer,
-    rancor::Panic,
+    rancor::Failure,
     ser::{Positional, allocator::SubAllocator, writer::Buffer as RkyvBuffer},
     with::{ArchiveWith, SerializeWith},
 };
@@ -463,7 +463,7 @@ fn main() -> ! {
 }
 
 /// For manual serialization to rkyv in this crate.
-type Serializer<'a, 'b> = LowSerializer<RkyvBuffer<'b>, SubAllocator<'a>, Panic>;
+type Serializer<'a, 'b> = LowSerializer<RkyvBuffer<'b>, SubAllocator<'a>, Failure>;
 struct Wrap<'a, F, T>(&'a T, PhantomData<F>);
 
 impl<F, T> Archive for Wrap<'_, F, T>
@@ -482,7 +482,10 @@ impl<'a, 'b, F, T> Serialize<Serializer<'a, 'b>> for Wrap<'_, F, T>
 where
     F: SerializeWith<T, Serializer<'a, 'b>>,
 {
-    fn serialize(&self, serializer: &mut Serializer<'a, 'b>) -> core::result::Result<Self::Resolver, Panic> {
+    fn serialize(
+        &self,
+        serializer: &mut Serializer<'a, 'b>,
+    ) -> core::result::Result<Self::Resolver, Failure> {
         F::serialize_with(self.0, serializer)
     }
 }
@@ -1914,7 +1917,7 @@ fn wrapped_main() -> ! {
                                         let wrap = Wrap(&rec, PhantomData::<Identity>);
                                         let writer = RkyvBuffer::from(&mut *sbuf);
                                         let alloc = SubAllocator::new(&mut scratch);
-                                        match rkyv::api::low::to_bytes_in_with_alloc::<_, _, Panic>(
+                                        match rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(
                                             &wrap, writer, alloc,
                                         ) {
                                             Ok(serbuf) => {
@@ -1950,7 +1953,7 @@ fn wrapped_main() -> ! {
                                 let wrap = Wrap(&rec, PhantomData::<Identity>);
                                 let writer = RkyvBuffer::from(&mut *buf);
                                 let alloc = SubAllocator::new(&mut scratch);
-                                match rkyv::api::low::to_bytes_in_with_alloc::<_, _, Panic>(
+                                match rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(
                                     &wrap, writer, alloc,
                                 ) {
                                     Ok(serbuf) => {
