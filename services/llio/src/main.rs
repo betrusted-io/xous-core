@@ -11,15 +11,15 @@ use llio_hw::*;
 
 #[cfg(not(target_os = "xous"))]
 mod llio_hosted;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::thread;
 
 #[cfg(not(target_os = "xous"))]
 use llio_hosted::*;
 use num_traits::*;
 use xous::messages::sender::Sender;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, try_send_message, Message, CID};
+use xous::{CID, Message, msg_blocking_scalar_unpack, msg_scalar_unpack, try_send_message};
 use xous_ipc::Buffer;
 
 use crate::RTC_PWR_MODE;
@@ -579,12 +579,10 @@ fn main() -> ! {
                 i2c.i2c_mutex_acquire();
                 // set clock units to 1 second, output pulse length to ~218ms
                 // and program the elapsed time (TIMERB_CLK is followed by TIMERB)
-                i2c.i2c_write(
-                    ABRTCMC_I2C_ADR,
-                    ABRTCMC_TIMERB_CLK,
-                    &[(TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()],
-                )
-                .expect("RTC access error");
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB_CLK, &[(TimerClk::CLK_1_S
+                    | TimerClk::PULSE_218_MS)
+                    .bits()])
+                    .expect("RTC access error");
                 // program elapsed time
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB, &[seconds]).expect("RTC access error");
                 // enable timerb countdown interrupt, also clears any prior interrupt flag

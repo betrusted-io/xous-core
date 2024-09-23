@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use locales::t;
 use modals::Modals;
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::WebPkiServerVerifier;
-use rustls::crypto::{ring, verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::crypto::{WebPkiSupportedAlgorithms, ring, verify_tls12_signature, verify_tls13_signature};
 use rustls::pki_types::{CertificateDer, Der, ServerName, TrustAnchor, UnixTime};
 use rustls::{CertificateError, DigitallySignedStruct, Error, RootCertStore, SignatureScheme};
 use xous_names::XousNames;

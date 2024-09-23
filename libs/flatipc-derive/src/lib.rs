@@ -2,7 +2,7 @@ use std::sync::atomic::AtomicUsize;
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, spanned::Spanned, DeriveInput};
+use syn::{DeriveInput, parse_macro_input, spanned::Spanned};
 
 fn ast_hash(ast: &syn::DeriveInput) -> usize {
     use std::hash::{Hash, Hasher};

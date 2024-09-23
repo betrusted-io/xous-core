@@ -2,11 +2,11 @@
 // SPDX-FileCopyrightText: 2023 Foundation Devices, Inc <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use armv7::PhysicalAddress;
 use armv7::structures::paging::{
     PageTable as L2PageTable, PageTableMemory, PageTableType, TranslationTable, TranslationTableMemory,
     TranslationTableType,
 };
-use armv7::PhysicalAddress;
 use atsama5d27::uart::{Uart as UartHw, Uart1};
 
 type UartType = UartHw<Uart1>;

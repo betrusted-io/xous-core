@@ -7,11 +7,11 @@ use std::thread::JoinHandle;
 
 //use crate::api::udp::*;
 use num_traits::*;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, Message, SID};
+use xous::{Message, SID, msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
-use crate::api::*;
 use crate::NetConn;
+use crate::api::*;
 
 pub struct DnsServerManager {
     net: NetConn,

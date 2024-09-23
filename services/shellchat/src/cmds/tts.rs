@@ -1,7 +1,7 @@
 use core::fmt::Write;
 
-use tts_frontend::*;
 use String;
+use tts_frontend::*;
 
 use crate::{CommonEnv, ShellCmdApi};
 

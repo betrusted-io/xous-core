@@ -1,8 +1,8 @@
 use std::io::Read;
 
 use gam::{
-    menu_matic, Gam, MenuItem, MenuMatic, TextEntryPayload, UxRegistration, APP_MENU_0_APP_LOADER,
-    APP_MENU_1_APP_LOADER, APP_NAME_APP_LOADER,
+    APP_MENU_0_APP_LOADER, APP_MENU_1_APP_LOADER, APP_NAME_APP_LOADER, Gam, MenuItem, MenuMatic,
+    TextEntryPayload, UxRegistration, menu_matic,
 };
 use locales::t;
 use modals::Modals;

@@ -8,7 +8,7 @@ use std::{
 use hmac::{Hmac, Mac};
 use num_traits::*;
 use sha1::Sha1;
-use xous::{send_message, Message};
+use xous::{Message, send_message};
 
 use crate::VaultMode;
 

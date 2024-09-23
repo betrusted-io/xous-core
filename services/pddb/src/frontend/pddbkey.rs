@@ -2,7 +2,7 @@ use std::io::{Error, ErrorKind, Result};
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use num_traits::*;
-use xous::{send_message, Message, CID};
+use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;
 
 use crate::*;

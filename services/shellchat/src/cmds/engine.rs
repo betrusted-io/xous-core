@@ -1,9 +1,9 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
+use String;
 #[cfg(feature = "engine-ll")]
 use engine_25519::*;
 use num_traits::*;
-use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 static CB_ID: AtomicU32 = AtomicU32::new(0);

@@ -1,4 +1,4 @@
-use core::num::{NonZeroU16, NonZeroU8};
+use core::num::{NonZeroU8, NonZeroU16};
 use std::cell::RefCell;
 
 use utralib::generated::*;

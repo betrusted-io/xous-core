@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 
+use quick_xml::Reader;
 use quick_xml::events::Event;
 use quick_xml::name::QName;
-use quick_xml::Reader;
 
 #[derive(Debug)]
 pub enum ParseError {

@@ -3,7 +3,7 @@
 pub mod api;
 pub use api::*;
 use num_traits::{FromPrimitive, ToPrimitive};
-use xous::{send_message, Message, CID};
+use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;
 
 /// This is a keyword reserved for the "arg4" slot of a scalar callback, where args are numbered 1-4.

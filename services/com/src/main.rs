@@ -5,11 +5,11 @@ mod api;
 use core::convert::TryInto;
 
 use api::*;
-use com_rs::serdes::{Ipv4Conf, StringSer, STR_32_WORDS, STR_64_WORDS};
+use com_rs::serdes::{Ipv4Conf, STR_32_WORDS, STR_64_WORDS, StringSer};
 use com_rs::*;
 use log::{error, info, trace};
 use num_traits::{FromPrimitive, ToPrimitive};
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, CID};
+use xous::{CID, msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
 const LEGACY_REV: u32 = 0x8b5b_8e50; // this is the git rev shipped before we went to version tagging
@@ -44,9 +44,9 @@ mod implementation {
     use susres::{RegManager, RegOrField, SuspendResume};
     use utralib::generated::*;
 
+    use crate::WorkRequest;
     use crate::api::BattStats;
     use crate::return_battstats;
-    use crate::WorkRequest;
 
     const STD_TIMEOUT: u32 = 100;
 
@@ -248,9 +248,9 @@ mod implementation {
     use com_rs::*;
     use log::error;
 
+    use crate::WorkRequest;
     use crate::api::BattStats;
     use crate::return_battstats;
-    use crate::WorkRequest;
 
     pub struct XousCom {
         pub workqueue: Vec<WorkRequest>,

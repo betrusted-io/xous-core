@@ -7,7 +7,7 @@ use api::*;
 use backend::Codec;
 use log::info;
 use num_traits::{FromPrimitive, ToPrimitive};
-use xous::{msg_scalar_unpack, CID};
+use xous::{CID, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
 #[derive(Copy, Clone, Debug)]

@@ -288,13 +288,10 @@ impl Codec {
             let code_right = analog_volume_db_to_code(gain_db_right);
             self.w(0, &[1]); // select page 1
             self.w(31, &[0b1_1_00011_0]); // headphones powered up
-            self.w(
-                36,
-                &[
-                    0b1_000_0000 | code_left,  // HPL
-                    0b1_000_0000 | code_right, // HPR
-                ],
-            );
+            self.w(36, &[
+                0b1_000_0000 | code_left,  // HPL
+                0b1_000_0000 | code_right, // HPR
+            ]);
         }
         self.i2c.i2c_mutex_release();
     }
@@ -408,34 +405,25 @@ impl Codec {
         // PLLP = 1, PLLR = 1, PLLJ = 7, PLLD = 1680, NDAC = *12*, MDAC = 7, DOSR = 128, MADC = 2 , NADC =
         // *42* ^^ from page 68 of datasheet, fs=48kHz/12MHz clkin line, with *bold* items multiplied
         // by 6 to get to 8kHz
-        self.w(
-            5,
-            &[
-                0b1001_0001,                // P, R = 1, 1 and pll powered up
-                7,                          // PLLJ = 7
-                ((1680 >> 8) & 0xFF) as u8, // D MSB of 1680
-                (1680 & 0xFF) as u8,        // D LSB of 1680
-            ],
-        );
+        self.w(5, &[
+            0b1001_0001,                // P, R = 1, 1 and pll powered up
+            7,                          // PLLJ = 7
+            ((1680 >> 8) & 0xFF) as u8, // D MSB of 1680
+            (1680 & 0xFF) as u8,        // D LSB of 1680
+        ]);
 
-        self.w(
-            11,
-            &[
-                0x80 | 12, // NADC = 12 (set to 2 for 48kHz)
-                0x80 | 7,  // MDAC = 7
-                0,         // DOSR = MSB of 128
-                128,       // DOSR = LSB of 128
-            ],
-        );
+        self.w(11, &[
+            0x80 | 12, // NADC = 12 (set to 2 for 48kHz)
+            0x80 | 7,  // MDAC = 7
+            0,         // DOSR = MSB of 128
+            128,       // DOSR = LSB of 128
+        ]);
 
-        self.w(
-            18,
-            &[
-                0x80 | 42, // NADC = 42 (set to 7 for 48kHz)
-                0x80 | 2,  // MADC = 2
-                128,       // AOSR = 128
-            ],
-        );
+        self.w(18, &[
+            0x80 | 42, // NADC = 42 (set to 7 for 48kHz)
+            0x80 | 2,  // MADC = 2
+            128,       // AOSR = 128
+        ]);
         self.i2c.i2c_mutex_release();
     }
 
@@ -449,16 +437,13 @@ impl Codec {
 
         // 32 bits/word * 2 channels * 8000 samples/s = 512_000 = BCLK
         // pick off of DAC_MOD_CLK = 1.024MHz
-        self.w(
-            27,
-            &[
-                0b00_00_1_1_0_1, /* I2S standard, 16 bits per sample, BCLK output, WCLK output, DOUT is
-                                  * Hi-Z when unused */
-                0b0,           // no offset on left justification
-                0b0000_0_1_01, // BDIV_CLKIN = DAC_MOD_CLK, BCLK active even when powered down
-                0b1000_0010,   // BCLK_N_VAL = 2, N divider is powered up
-            ],
-        );
+        self.w(27, &[
+            0b00_00_1_1_0_1, /* I2S standard, 16 bits per sample, BCLK output, WCLK output, DOUT is
+                              * Hi-Z when unused */
+            0b0,           // no offset on left justification
+            0b0000_0_1_01, // BDIV_CLKIN = DAC_MOD_CLK, BCLK active even when powered down
+            0b1000_0010,   // BCLK_N_VAL = 2, N divider is powered up
+        ]);
 
         // "word width" (WCLK) timing is implied based on the DAC fs computed
         // at the end of the clock tree, and WCLK simply toggles every other sample, so there is no
@@ -509,24 +494,18 @@ impl Codec {
         //self.w(35, &[0b01_0_1_01_1_0]);
 
         // internal volume control
-        self.w(
-            36,
-            &[
-                0b1_001_1110, // HPL channel control on, -15dB
-                0b1_001_1110, // HPR channel control on, -15dB
-                0b1_000_1100, // SPK control on, -6dB
-            ],
-        );
+        self.w(36, &[
+            0b1_001_1110, // HPL channel control on, -15dB
+            0b1_001_1110, // HPR channel control on, -15dB
+            0b1_000_1100, // SPK control on, -6dB
+        ]);
 
         // driver PGA control
-        self.w(
-            40,
-            &[
-                0b0_0011_111,   // HPL driver PGA = 3dB, not muted, all gains applied
-                0b0_0011_111,   // HPR driver PGA = 3dB, not muted, all gains applied
-                0b000_01_1_0_1, // SPK gain = 12 dB, driver not muted, all gains applied
-            ],
-        );
+        self.w(40, &[
+            0b0_0011_111,   // HPL driver PGA = 3dB, not muted, all gains applied
+            0b0_0011_111,   // HPR driver PGA = 3dB, not muted, all gains applied
+            0b000_01_1_0_1, // SPK gain = 12 dB, driver not muted, all gains applied
+        ]);
 
         // HP driver control -- 16us short circuit debounce, best DAC performance, HPL/HPR as headphone
         // drivers
@@ -563,18 +542,15 @@ impl Codec {
         // ADC digital volume control coarse adjust
         self.w(83, &[0b0]); // +0.0 dB
 
-        self.w(
-            86,
-            &[
-                0b1_011_0000, // AGC enabled, target level = -12dB
-                0b00_10101_0, // hysteresis 1dB, noise threshold = -((value-1)*2 + 30): 21 => -70dB
-                100,          // max gain = code/2 dB
-                0b_00010_000, // attack time = 0b_acode_mul = (acode*32*mul)/Fs
-                0b_01101_000, // decay time  = 0b_dcode_mul = (dcode*32*mul)/Fs
-                0x01,         // noise debounce time = code*4 / fs
-                0x01,         // signal debounce time = code*4 / fs
-            ],
-        );
+        self.w(86, &[
+            0b1_011_0000, // AGC enabled, target level = -12dB
+            0b00_10101_0, // hysteresis 1dB, noise threshold = -((value-1)*2 + 30): 21 => -70dB
+            100,          // max gain = code/2 dB
+            0b_00010_000, // attack time = 0b_acode_mul = (acode*32*mul)/Fs
+            0b_01101_000, // decay time  = 0b_dcode_mul = (dcode*32*mul)/Fs
+            0x01,         // noise debounce time = code*4 / fs
+            0x01,         // signal debounce time = code*4 / fs
+        ]);
         self.i2c.i2c_mutex_release();
     }
 

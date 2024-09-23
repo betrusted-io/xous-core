@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use log::{error, info};
 use num_traits::FromPrimitive;
-use xous::{msg_blocking_scalar_unpack, MessageEnvelope};
+use xous::{MessageEnvelope, msg_blocking_scalar_unpack};
 use xous_api_names::api::*;
 use xous_api_names::*;
 use xous_ipc::Buffer;
@@ -135,17 +135,14 @@ impl CheckedHashMap {
                     .expect("couldn't create token")
                     .to_array(),
             );
-        self.map.insert(
-            name,
-            Connection {
-                sid,
-                current_conns: 0,
-                max_conns,
-                _allow_authenticate: false, // for now, we don't support authenticated connections
-                _auth_conns: 0,
-                token,
-            },
-        );
+        self.map.insert(name, Connection {
+            sid,
+            current_conns: 0,
+            max_conns,
+            _allow_authenticate: false, // for now, we don't support authenticated connections
+            _auth_conns: 0,
+            token,
+        });
         Ok(())
     }
 

@@ -3,8 +3,8 @@ use std::io::{Cursor, Result, Seek, SeekFrom, Write};
 use std::process::Command;
 
 use aes_gcm_siv::{
-    aead::{Aead, KeyInit, Payload},
     Aes256GcmSiv, Nonce,
+    aead::{Aead, KeyInit, Payload},
 };
 
 const SWAP_VERSION: u32 = 0x01_01_0000;

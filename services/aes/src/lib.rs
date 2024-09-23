@@ -14,7 +14,7 @@
 mod soft;
 pub use cipher;
 use cipher::{
-    consts::{U16, U8},
+    consts::{U8, U16},
     generic_array::GenericArray,
 };
 pub use soft::{Aes128Soft, Aes192, Aes256Soft};

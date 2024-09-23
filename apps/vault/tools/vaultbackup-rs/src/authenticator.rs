@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use protobuf::Message;
 
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));

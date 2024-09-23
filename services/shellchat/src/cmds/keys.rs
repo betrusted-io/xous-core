@@ -1,5 +1,5 @@
-use root_keys::api::{AesRootkeyType, Block};
 use String;
+use root_keys::api::{AesRootkeyType, Block};
 
 use crate::{CommonEnv, ShellCmdApi};
 

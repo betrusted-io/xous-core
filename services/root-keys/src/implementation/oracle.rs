@@ -1,7 +1,7 @@
 use core::convert::TryInto;
 
-use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 use aes::Aes256;
+use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 use cipher::generic_array::GenericArray;
 
 use crate::api::*;

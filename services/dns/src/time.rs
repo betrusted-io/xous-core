@@ -1,7 +1,7 @@
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::num::ParseIntError;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 /// The `time_server` is unique is that it is written for exclusive use by `libstd` to extract time.
 ///
 /// It also has a single hook that is callable from the PDDB to initialize a time value once the
@@ -37,7 +37,7 @@ use num_traits::*;
 use pddb::PddbMountPoller;
 // ntp imports
 use sntpc::{Error, NtpContext, NtpTimestampGenerator, NtpUdpSocket, Result};
-use xous::{send_message, Message};
+use xous::{Message, send_message};
 
 /// This is a "well known name" used by `libstd` to connect to the time server
 /// Anyone who wants to check if time has been initialized would use this name.

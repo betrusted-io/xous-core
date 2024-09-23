@@ -1,8 +1,8 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
+use String;
 use num_traits::*;
 use sha2::Digest;
-use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 static CB_ID: AtomicU32 = AtomicU32::new(0);

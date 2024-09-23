@@ -14,8 +14,8 @@
 use std::cmp::max;
 use std::convert::TryInto;
 
-use crate::bitmap::BITS_PER_WORD;
 use crate::PixelColor;
+use crate::bitmap::BITS_PER_WORD;
 
 /// Burkes dithering diffusion scheme was chosen for its modest resource
 /// requirements with impressive quality outcome.

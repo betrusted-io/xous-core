@@ -8,11 +8,11 @@ use com::{SsidRecord, WlanStatus, WlanStatusIpc};
 use com_rs::{ConnectResult, LinkState};
 use net::MIN_EC_REV;
 use num_traits::*;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, try_send_message, Message};
+use xous::{Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, try_send_message};
 use xous_ipc::Buffer;
 
-use crate::api::*;
 use crate::ComIntSources;
+use crate::api::*;
 
 #[allow(dead_code)]
 const BOOT_POLL_INTERVAL_MS: usize = 4_758; // a slightly faster poll during boot so we acquire wifi faster once PDDB is mounted

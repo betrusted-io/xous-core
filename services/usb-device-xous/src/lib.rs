@@ -10,7 +10,7 @@ use packed_struct::PackedStruct;
 use rkyv::option::ArchivedOption;
 use trng::api::TrngTestMode;
 pub use usb_device::device::UsbDeviceState;
-use xous::{send_message, Message, CID};
+use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;
 pub use xous_usb_hid::device::fido::RawFidoReport;
 pub use xous_usb_hid::device::keyboard::KeyboardLedsReport;

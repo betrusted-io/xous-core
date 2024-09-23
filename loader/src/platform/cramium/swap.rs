@@ -5,11 +5,11 @@ use cramium_hal::ifram::IframRange;
 use cramium_hal::iox::*;
 use cramium_hal::sce;
 use cramium_hal::udma::*;
-use loader::swap::SPIM_RAM_IFRAM_ADDR;
 use loader::APP_UART_IFRAM_ADDR;
+use loader::swap::SPIM_RAM_IFRAM_ADDR;
+use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::RngCore;
 use rand_chacha::rand_core::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 
 use crate::bootconfig::BootConfig;
 use crate::swap::*;

@@ -19,15 +19,12 @@
 //! Any object may be made into an IPC object provided it follows the following
 //! requirements:
 //!
-//! - **The object is `#[repr(C)]`** - This is required to ensure the objecty
-//!   has a well-defined layout in memory. Other representations may shift
-//!   depending on optimizations.
-//! - **The object only contains fields that are `IpcSafe`** - This trait is
-//!   implemented on primitive types that are able to be sent across an IPC
-//!   boundary. This includes all integers, floats, and booleans. It also
-//!   includes arrays of `IpcSafe` types, `Option<T>` where `T` is `IpcSafe`,
-//!   and `Result<T, E>` where `T` and `E` are `IpcSafe`. Pointers and
-//!   references are not `IpcSafe` and may not be used.
+//! - **The object is `#[repr(C)]`** - This is required to ensure the objecty has a well-defined layout in
+//!   memory. Other representations may shift depending on optimizations.
+//! - **The object only contains fields that are `IpcSafe`** - This trait is implemented on primitive types
+//!   that are able to be sent across an IPC boundary. This includes all integers, floats, and booleans. It
+//!   also includes arrays of `IpcSafe` types, `Option<T>` where `T` is `IpcSafe`, and `Result<T, E>` where
+//!   `T` and `E` are `IpcSafe`. Pointers and references are not `IpcSafe` and may not be used.
 //!
 //! When deriving `Ipc`, a new type will be created with the same name as
 //! the original type prefixed with `Ipc`. For example, if you derive `Ipc`
@@ -120,8 +117,8 @@ extern crate self as flatipc;
 pub use flatipc_derive::{Ipc, IpcSafe};
 #[cfg(feature = "xous")]
 mod backend {
-    pub use xous::Error;
     pub use xous::CID;
+    pub use xous::Error;
 }
 
 #[cfg(not(feature = "xous"))]
@@ -135,7 +132,7 @@ mod backend {
     }
 }
 
-pub use backend::{Error, CID};
+pub use backend::{CID, Error};
 
 pub mod string;
 pub use string::String;

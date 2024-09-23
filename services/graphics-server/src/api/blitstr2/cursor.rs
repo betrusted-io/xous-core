@@ -1,10 +1,10 @@
 // Copyright (c) 2022 Sam Blenny
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-use super::cliprect::ClipRect;
-use super::pt::Pt;
 use super::GlyphSprite;
 use super::TypesetWord;
+use super::cliprect::ClipRect;
+use super::pt::Pt;
 
 /// Cursor specifies a drawing position along a line of text. Lines of text can
 /// be different heights. Line_height is for keeping track of the tallest

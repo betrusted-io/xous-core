@@ -15,10 +15,10 @@ pub(crate) mod fixslice;
 use core::fmt;
 
 use cipher::{
-    consts::{U16, U24, U32},
-    inout::InOut,
     AlgorithmName, BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt, BlockSizeUser, Key,
     KeyInit, KeySizeUser, ParBlocksSizeUser,
+    consts::{U16, U24, U32},
+    inout::InOut,
 };
 use fixslice::{BatchBlocks, FixsliceBlocks, FixsliceKeys128, FixsliceKeys192, FixsliceKeys256};
 

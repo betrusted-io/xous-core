@@ -8,7 +8,7 @@ macro_rules! block_cipher_test {
     ($name:ident, $test_name:expr, $test_case_name:ident, $cipher:ty) => {
         fn $name() -> String {
             use aes::cipher::{
-                consts::U16, generic_array::GenericArray, BlockDecryptMut, BlockEncryptMut, KeyInit,
+                BlockDecryptMut, BlockEncryptMut, KeyInit, consts::U16, generic_array::GenericArray,
             };
 
             fn run_test(key: &[u8], pt: &[u8], ct: &[u8]) -> (bool, GenericArray<u8, U16>) {
@@ -111,10 +111,10 @@ macro_rules! block_cipher_test {
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
+use String;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 use aes::{Aes128, Aes128Soft, Aes256, Aes256Soft};
 use num_traits::*;
-use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 static CB_ID: AtomicU32 = AtomicU32::new(0);

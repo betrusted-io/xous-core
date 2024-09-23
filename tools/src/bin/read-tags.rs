@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process;
 use std::slice;
 
-use crc::{crc16, Hasher16};
+use crc::{Hasher16, crc16};
 
 fn read_u32_from_ptr(p: *const u8) -> u32 {
     let sl = unsafe { slice::from_raw_parts(p, 4) };

@@ -4,11 +4,11 @@ use core::{mem, slice};
 use armv7::structures::paging::TranslationTableMemory;
 #[cfg(all(feature = "atsama5d27", feature = "debug-print"))]
 use armv7::{
-    structures::paging::{
-        InMemoryRegister, PageTableDescriptor, Readable, TranslationTableDescriptor, TranslationTableType,
-        SMALL_PAGE_FLAGS,
-    },
     VirtualAddress,
+    structures::paging::{
+        InMemoryRegister, PageTableDescriptor, Readable, SMALL_PAGE_FLAGS, TranslationTableDescriptor,
+        TranslationTableType,
+    },
 };
 
 use crate::*;

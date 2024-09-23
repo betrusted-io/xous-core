@@ -2,7 +2,7 @@ use core::convert::TryFrom;
 use core::mem::size_of;
 #[cfg(feature = "std")]
 use core::sync::atomic::AtomicBool;
-use core::sync::atomic::{compiler_fence, AtomicPtr, Ordering};
+use core::sync::atomic::{AtomicPtr, Ordering, compiler_fence};
 #[cfg(feature = "std")]
 use std::sync::{Arc, Mutex};
 
@@ -10,7 +10,7 @@ use bitfield::bitfield;
 #[cfg(feature = "std")]
 use usb_device::bus::PollResult;
 #[cfg(feature = "std")]
-use usb_device::{class_prelude::*, Result, UsbDirection};
+use usb_device::{Result, UsbDirection, class_prelude::*};
 #[cfg(feature = "std")]
 use utralib::generated::*;
 

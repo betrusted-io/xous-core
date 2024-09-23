@@ -2,9 +2,9 @@ use core::fmt::Write as FmtWrite;
 #[allow(unused_imports)]
 use std::io::{Read, Seek, SeekFrom, Write};
 
+use String;
 #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
 use pddb::PDDB_A_LEN;
-use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -1326,10 +1326,9 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 #[cfg(not(target_os = "xous"))]
                 "rkyvtest" => {
                     use rkyv::{
-                        archived_value,
+                        AlignedVec, Deserialize, archived_value,
                         de::deserializers::AllocDeserializer,
-                        ser::{serializers::WriteSerializer, Serializer},
-                        AlignedVec, Deserialize,
+                        ser::{Serializer, serializers::WriteSerializer},
                     };
                     let test = pddb::PddbKeyRecord {
                         name: "test".to_string(),
