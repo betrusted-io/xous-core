@@ -69,7 +69,6 @@ impl Trng {
         let mut buf = tb.into_ipc();
         buf.lend_mut(self.conn, api::Opcode::FillTrng.to_usize().unwrap())
             .or(Err(xous::Error::InternalError))?;
-        println!("{}", tb.len); // this shouldn't be possible
         if buf.len as usize != data.len() {
             return Err(xous::Error::InternalError);
         }

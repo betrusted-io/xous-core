@@ -22,6 +22,8 @@ rkyv = { version = "0.8.8", default-features = false, features = [
 xous-ipc = "0.10.1"
 rand_core = "0.6.4" # the 0.6.4 API is necessary for compatibility with curve25519-dalek crates
 utralib = { version = "0.1.25", optional = true, default-features = false }
+flatipc = { path = "../../libs/flatipc" }
+flatipc-derive = { path = "../../libs/flatipc-derive" }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 rand = "0.8.5"

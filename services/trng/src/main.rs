@@ -3,6 +3,7 @@
 
 mod api;
 use api::*;
+use flatipc::Ipc;
 use log::info;
 use num_traits::*;
 use xous::CID;
@@ -24,11 +25,11 @@ mod implementation {
     use susres::{RegManager, RegOrField, SuspendResume};
     use utralib::generated::*;
 
-    use crate::api::{
-        ExcursionTest, HealthTests, MiniRunsTest, NistTests, TrngBuf, TrngErrors, TrngTestBuf, TrngTestMode,
-        TRNG_TEST_BUF_LEN,
-    };
     use crate::TEST_CACHE_LEN;
+    use crate::api::{
+        ExcursionTest, HealthTests, MiniRunsTest, NistTests, TRNG_TEST_BUF_LEN, TrngErrors, TrngTestBuf,
+        TrngTestMode,
+    };
 
     pub struct Trng {
         csr: utralib::CSR<u32>,
@@ -370,12 +371,11 @@ mod implementation {
             }
         }
 
-        pub fn get_buf(&mut self, len: u16) -> TrngBuf {
-            let mut tb = TrngBuf { data: [0; 1024], len };
-            for i in 0..len as usize {
-                tb.data[i] = self.get_data_eager();
+        pub fn get_buf(&mut self, buf: &mut trng::api::IpcTrngBuf) {
+            let len = buf.len as usize;
+            for d in buf.data[..len].iter_mut() {
+                *d = self.get_data_eager();
             }
-            tb
         }
 
         pub fn get_trng(&mut self, count: usize) -> [u32; 2] {
@@ -520,11 +520,11 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "xous"))]
 mod implementation {
+    use rand_chacha::ChaCha8Rng;
     use rand_chacha::rand_core::RngCore;
     use rand_chacha::rand_core::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
-    use crate::api::{HealthTests, TrngBuf, TrngErrors, TrngTestBuf, TrngTestMode, TRNG_TEST_BUF_LEN};
+    use crate::api::{HealthTests, TRNG_TEST_BUF_LEN, TrngErrors, TrngTestBuf, TrngTestMode};
 
     pub struct Trng {
         rng: ChaCha8Rng,
@@ -555,16 +555,15 @@ mod implementation {
         #[allow(dead_code)]
         pub fn wait_full(&self) {}
 
-        pub fn get_buf(&mut self, len: u16) -> TrngBuf {
+        pub fn get_buf(&mut self, buf: &mut trng::api::IpcTrngBuf) {
             if self.msgcount < 3 {
                 log::info!("hosted mode TRNG is *not* random, it is a deterministic LFSR");
             }
             self.msgcount += 1;
-            let mut data = [0; 1024];
-            for d in data.iter_mut() {
+            let len = buf.len as usize;
+            for d in buf.data[..len].iter_mut() {
                 *d = self.rng.next_u32();
             }
-            TrngBuf { data, len }
         }
 
         pub fn get_trng(&mut self, _count: usize) -> [u32; 2] {
@@ -698,10 +697,14 @@ fn main() -> ! {
                 buffer.replace(trng.get_errors()).unwrap();
             }
             Some(api::Opcode::FillTrng) => {
-                let mut buffer =
-                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let len = buffer.as_flat::<TrngBuf, _>().unwrap().len;
-                buffer.replace(trng.get_buf(len.into())).unwrap();
+                let mm = msg.body.memory_message_mut().unwrap();
+                // safety: the slice is `u8` and all values are representable
+                let buffer = trng::api::IpcTrngBuf::from_slice_mut(
+                    unsafe { mm.buf.as_slice_mut() },
+                    mm.offset.unwrap().get(),
+                )
+                .expect("couldn't unpack FillTrng buffer");
+                trng.get_buf(buffer);
             }
             Some(api::Opcode::TestSetMode) => xous::msg_blocking_scalar_unpack!(msg, mode_code, _, _, _, {
                 if let Some(mode) = FromPrimitive::from_usize(mode_code) {
