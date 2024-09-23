@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use String;
 use com::api::NET_MTU;
 use net::NetPingCallback;
 #[cfg(any(feature = "precursor", feature = "renode"))]
@@ -14,13 +15,12 @@ use num_traits::*;
 use perflib::*;
 use xous::MessageEnvelope;
 use xous_ipc::Buffer;
-use String;
 #[cfg(feature = "ditherpunk")]
 use {gam::DecodePng, std::str::FromStr};
 #[cfg(feature = "websocket")]
 use {
     tls::Tls,
-    tungstenite::{stream::MaybeTlsStream, WebSocket},
+    tungstenite::{WebSocket, stream::MaybeTlsStream},
 };
 
 use crate::{CommonEnv, ShellCmdApi, ShellOpcode};
@@ -645,9 +645,9 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     // this starts the performance counter
                     pm.start();
 
+                    use aes::Aes256;
                     use aes::cipher::generic_array::GenericArray;
                     use aes::cipher::{BlockEncrypt, KeyInit};
-                    use aes::Aes256;
 
                     let mut key_array: [u8; 32];
                     let mut data_array: [u8; 16];
