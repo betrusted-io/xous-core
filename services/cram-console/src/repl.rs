@@ -122,11 +122,9 @@ impl Repl {
 
         let mut dirty = true;
         // take the input and pass it on to the various command parsers, and attach result
-        if let Some(local) = &self.input {
+        if let Some(local) = &mut self.input {
             log::trace!("processing line: {}", local);
-            if let Some(res) =
-                self.env.dispatch(Some(&mut String::from(&local)), None).expect("command dispatch failed")
-            {
+            if let Some(res) = self.env.dispatch(Some(local), None).expect("command dispatch failed") {
                 let output_history = History { text: String::from(res.as_str()), is_input: false };
                 self.circular_push(output_history);
             } else {

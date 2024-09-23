@@ -1,11 +1,11 @@
 use core::fmt::Write;
 use std::collections::HashMap;
 
+use String;
 use cram_hal_service::trng;
 #[cfg(feature = "shellperf")]
 use utralib::generated::*;
 use xous::MessageEnvelope;
-use String;
 
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
@@ -160,7 +160,7 @@ impl CmdEnv {
 
             let mut cmd_ret: Result<Option<String>, xous::Error> = Ok(None);
             if let Some(verb_string) = maybe_verb {
-                let verb = verb_string.to_str();
+                let verb = &verb_string;
 
                 // search through the list of commands linearly until one matches,
                 // then run it.
@@ -168,7 +168,7 @@ impl CmdEnv {
                 for cmd in commands.iter_mut() {
                     if cmd.matches(verb) {
                         match_found = true;
-                        cmd_ret = cmd.process(*cmdline, &mut self.common_env);
+                        cmd_ret = cmd.process(cmdline.to_string(), &mut self.common_env);
                         self.lastverb.clear();
                         write!(self.lastverb, "{}", verb).expect("SHCH: couldn't record last verb");
                     };
@@ -182,7 +182,7 @@ impl CmdEnv {
                         if !first {
                             ret.push_str(", ");
                         }
-                        ret.append(cmd.verb())?;
+                        ret.push_str(cmd.verb());
                         first = false;
                     }
                     Ok(Some(ret))
@@ -196,8 +196,8 @@ impl CmdEnv {
             let mut cmd_ret: Result<Option<String>, xous::Error> = Ok(None);
             // first check and see if we have a callback registration; if not, just map to the last verb
             let verb = match self.common_env.cb_registrations.get(&(callback.body.id() as u32)) {
-                Some(verb) => verb.to_str(),
-                None => self.lastverb.to_str(),
+                Some(verb) => &verb,
+                None => &self.lastverb,
             };
             // now dispatch
             let mut verbfound = false;
@@ -228,13 +228,13 @@ pub fn tokenize(line: &mut String) -> Option<String> {
     let mut foundrest = false;
     for ch in lineiter {
         if ch != ' ' && !foundspace {
-            token.push(ch).unwrap();
+            token.push(ch);
         } else if foundspace && foundrest {
-            retline.push(ch).unwrap();
+            retline.push(ch);
         } else if foundspace && ch != ' ' {
             // handle case of multiple spaces in a row
             foundrest = true;
-            retline.push(ch).unwrap();
+            retline.push(ch);
         } else {
             foundspace = true;
             // consume the space

@@ -25,7 +25,7 @@ impl<'a> ShellCmdApi<'a> for Usb {
         #[cfg(feature = "mass-storage")]
         let helpstring = "usb [hid] [fido] [ms] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest] [console] [noconsole]";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

@@ -1,7 +1,7 @@
+use String;
 use modals::Modals;
 use utra::mailbox;
 use utralib::generated::*;
-use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -181,7 +181,7 @@ impl<'a> ShellCmdApi<'a> for Mbox {
         let mut ret = String::new();
         let helpstring = "mbox [knock]";
 
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
