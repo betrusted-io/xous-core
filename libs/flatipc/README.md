@@ -33,6 +33,12 @@ assert_eq!(ipc_value.inner, 42);
 let value = SimpleValue::from_ipc(ipc_value);
 ```
 
+Note that `value` is normally consumed by `.to_ipc()`, but if a `Copy` derive is added
+to `SimpleValue` you can still access `value` after the transformation. However, this
+value is a copy and operations on `value` after `.to_ipc()` are not necessarily
+reflected in `ipc_value`, even if the message send operation happens after those operations.
+Thus, caution is advised when using `Copy` traits on `Ipc` structures.
+
 ## Using IPC
 
 An important feature is the ability to send the data across process boundaries. Two common operations
@@ -70,16 +76,19 @@ pub struct SimpleValue {
     inner: u32,
 }
 
-let mut message =   None;
-while connection.receive(&mut message).is_ok() {;
-    let message = message.unwrap();
-    match message.opcode {
+let mut message: Option<Envelope> =   None;
+loop {
+    xous::reply_and_receive_next(server_id, &mut message).unwrap();
+    let msg = message.as_mut().unwrap();
+    match msg.body.id() {
         0x1234 => {
-            let Some(value) = IpcSimpleValue::from_ipc_mut(&mut message.data, message.signature) else {
+            let memory_message = msg.body.memory_message_mut().unwrap();
+            if let Some(value) = IpcSimpleValue::from_memory_message_mut(&memory_message) {
+                println!("The value is {}", value.inner);
+                value.inner += 1;
+            } else {
                 continue;
             }
-            println!("The value is {}", value.inner);
-            value.inner += 1;
         }
         // ...
     }
