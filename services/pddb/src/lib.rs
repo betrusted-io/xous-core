@@ -12,7 +12,7 @@ use std::thread::JoinHandle;
 
 pub use frontend::*;
 use num_traits::*;
-use xous::{msg_scalar_unpack, send_message, Message, CID, SID};
+use xous::{CID, Message, SID, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 pub(crate) static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 pub(crate) static POLLER_REFCOUNT: AtomicU32 = AtomicU32::new(0);
@@ -1043,14 +1043,12 @@ impl Pddb {
                - `total`: u32 with total number of keys to be transmitted (shouldn't change over the life of the session)
                - `token`: [u32; 4] confirming or establishing the session token (shouldn't change over the life of the session)
                First record start at data[24]:
-                   - `size` of archived struct: u32
                    - `pos` of archived struct, relative to the current start: u32
-                   - data[u8] of length `size`
-               Next record start at data[24 + size]:
-                   - `size` of archived struct: u32
+                   - data[u8] of length `pos`
+               Next record start at data[24 + pos]:
                    - `pos` of archived struct, relative to the current start: u32
-                   - data[u8] of length `size`
-               If `size` and `pos` are both zero, then, there are no more valid records in the return structure.
+                   - data[u8] of length `pos`
+               If `pos` is zero, then, there are no more valid records in the return structure.
 
           The caller shall repeatedly call `DictBulkRead` until the `code` is `Last`, at which point the token
           is deleted from the server, freeing it to service a new transaction. The caller should then collate the
@@ -1153,17 +1151,10 @@ impl Pddb {
                     let mut key_count = 0;
                     log::debug!("header: {:?}", header);
                     while key_count < header.len {
-                        if index + size_of::<u32>() * 2 > pages.len() {
+                        if index + size_of::<u32>() > pages.len() {
                             // quit if we don't have enough space to decode at least another two indices
                             break;
                         }
-                        // Safety: `u32` contains no undefined values
-                        let size = unsafe {
-                            u32::from_le_bytes(
-                                pages.as_slice()[index..index + size_of::<u32>()].try_into().unwrap(),
-                            )
-                        };
-                        index += size_of::<u32>();
                         // Safety: `u32` contains no undefined values
                         let pos = unsafe {
                             u32::from_le_bytes(
@@ -1171,17 +1162,17 @@ impl Pddb {
                             )
                         };
                         index += size_of::<u32>();
-                        log::trace!("unpacking message at {}({})", size, pos);
-                        if size != 0 && pos != 0 {
+                        log::trace!("unpacking message from {}-{}", index, index + pos as usize);
+                        if pos != 0 {
                             //log::info!("extract archive: {}, {}, {}, {}", index, size, pos, pages.len());
                             //log::info!("{:x?}", &pages.as_slice::<u8>()[index..index + (size as usize)]);
                             let r = unsafe {
                                 rkyv::access_unchecked::<ArchivedPddbKeyRecord>(
-                                    &pages.as_slice()[index..index + (size as usize)],
+                                    &pages.as_slice()[index..index + (pos as usize)],
                                 )
                             };
                             //log::info!("increment index");
-                            index += size as usize;
+                            index += pos as usize;
                             let key = match rkyv::deserialize::<PddbKeyRecord, rkyv::rancor::Error>(r) {
                                 Ok(r) => r,
                                 Err(e) => {

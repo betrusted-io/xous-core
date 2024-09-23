@@ -395,20 +395,20 @@ use std::io::ErrorKind;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use locales::t;
 use num_traits::*;
 use rkyv::{
+    Archive, Place, Serialize,
     api::low::LowSerializer,
     rancor::Panic,
-    ser::{allocator::SubAllocator, writer::Buffer as RkyvBuffer, Positional},
+    ser::{Positional, allocator::SubAllocator, writer::Buffer as RkyvBuffer},
     with::{ArchiveWith, SerializeWith},
-    Archive, Place, Serialize,
 };
-use xous::{msg_blocking_scalar_unpack, send_message, Message};
+use xous::{Message, msg_blocking_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 
 #[cfg(feature = "perfcounter")]
@@ -1834,11 +1834,11 @@ fn wrapped_main() -> ! {
                     // now loop through and pack data into the slice
                     let (header_buf, mut buf) = buf.split_at_mut(size_of::<BulkReadHeader>());
                     enum SerializeResult<'a> {
-                        Success(usize, usize, &'a mut [u8], String, &'a mut [u8]),
+                        Success(usize, &'a mut [u8], String, &'a mut [u8]),
                         Failure(String),
                     }
                     loop {
-                        if buf.len() < size_of::<u32>() * 2 {
+                        if buf.len() < size_of::<u32>() {
                             // not enough space to hold our header records, break and get a new buf
                             break;
                         }
@@ -1909,7 +1909,7 @@ fn wrapped_main() -> ! {
                                             data: if d.len() > 0 { Some(d) } else { None },
                                         };
                                         state.read_total += attr.len; // commit the read length early
-                                        let (prebuf, sbuf) = buf.split_at_mut(size_of::<u32>() * 2);
+                                        let (prebuf, sbuf) = buf.split_at_mut(size_of::<u32>());
 
                                         let wrap = Wrap(&rec, PhantomData::<Identity>);
                                         let writer = RkyvBuffer::from(&mut *sbuf);
@@ -1917,13 +1917,9 @@ fn wrapped_main() -> ! {
                                         match rkyv::api::low::to_bytes_in_with_alloc::<_, _, Panic>(
                                             &wrap, writer, alloc,
                                         ) {
-                                            Ok(serbuf) => SerializeResult::Success(
-                                                serbuf.pos(),
-                                                size_of::<ArchivedPddbKeyRecord>(),
-                                                sbuf,
-                                                key_name,
-                                                prebuf,
-                                            ),
+                                            Ok(serbuf) => {
+                                                SerializeResult::Success(serbuf.pos(), sbuf, key_name, prebuf)
+                                            }
                                             Err(_) => SerializeResult::Failure(key_name),
                                         }
                                     }
@@ -1957,13 +1953,9 @@ fn wrapped_main() -> ! {
                                 match rkyv::api::low::to_bytes_in_with_alloc::<_, _, Panic>(
                                     &wrap, writer, alloc,
                                 ) {
-                                    Ok(serbuf) => SerializeResult::Success(
-                                        serbuf.pos(),
-                                        size_of::<ArchivedPddbKeyRecord>(),
-                                        buf,
-                                        key_name,
-                                        pre_buf,
-                                    ),
+                                    Ok(serbuf) => {
+                                        SerializeResult::Success(serbuf.pos(), buf, key_name, pre_buf)
+                                    }
                                     Err(_) => SerializeResult::Failure(key_name),
                                 }
                             }
@@ -1981,19 +1973,13 @@ fn wrapped_main() -> ! {
                             std::line!(),
                         );
                         match ser_result {
-                            SerializeResult::Success(pos, len, sbuf, _key_name, pre_buf) => {
-                                log::debug!("packing message of {}({})", len + pos, pos);
+                            SerializeResult::Success(pos, sbuf, _key_name, pre_buf) => {
+                                log::debug!("packing message to pos {}", pos);
                                 // data can fit, copy it into the buffer.
                                 state.buf_starting_key_index += 1;
                                 header.len += 1;
-                                // read length increment was handled when the data was copied into the
-                                // serialization buffer.
-                                pre_buf[..4].copy_from_slice(
-                                    //&(sbuf.len() as u32).to_le_bytes()
-                                    &((len + pos) as u32).to_le_bytes(),
-                                );
-                                pre_buf[4..8].copy_from_slice(&(pos as u32).to_le_bytes());
-                                (_, buf) = sbuf.split_at_mut(len + pos);
+                                pre_buf[..4].copy_from_slice(&(pos as u32).to_le_bytes());
+                                (_, buf) = sbuf.split_at_mut(pos);
                             }
                             SerializeResult::Failure(key_name) => {
                                 log::debug!(
