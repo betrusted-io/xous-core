@@ -24,7 +24,7 @@ pub use graphics_server::api::{Point, Rectangle};
 pub use graphics_server::api::{TextOp, TextView};
 use ime_plugin_api::{ApiToken, ImefCallback};
 use num_traits::*;
-use xous::{send_message, Message, CID};
+use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;
 
 #[doc = include_str!("../README.md")]
@@ -146,10 +146,16 @@ impl Gam {
         }
     }
 
-    /// this "posts" a textview -- it's not a "draw" as the update is neither guaranteed nor instantaneous
+    /// This "posts" a textview -- it's not a "draw" as the update is neither guaranteed nor instantaneous
     /// the GAM first has to check that the textview is allowed to be updated, and then it will decide when
     /// the actual screen update is allowed
+    ///
+    /// This will also truncate any text that is too long to fit into a single paged-sized transaction, as set
+    /// by `graphics_server::api::TEXTVIEW_LEN`
     pub fn post_textview(&self, tv: &mut TextView) -> Result<(), xous::Error> {
+        if tv.text.len() > graphics_server::api::TEXTVIEW_LEN {
+            tv.text.truncate(graphics_server::api::TEXTVIEW_LEN);
+        }
         tv.set_op(TextOp::Render);
         // force the clip_rect to none, in case a stale value from a previous bounds computation was hanging
         // out the bounds should /always/ come from the GAM canvas when doing a "live fire" redraw
