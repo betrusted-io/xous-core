@@ -5,11 +5,11 @@ use std::sync::Arc;
 #[cfg(feature = "extra-tests")]
 use std::time::Instant;
 
+use String;
 use base64::encode;
 use codec::*;
 use num_traits::*;
 use xous::{Message, MessageEnvelope};
-use String;
 
 use crate::oqc_test::OqcOp;
 use crate::{CommonEnv, ShellCmdApi};
@@ -174,8 +174,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                 "frob" => {
                     const N: u32 = 10;
                     const M: usize = if cfg!(miri) { 10000 } else { 100000 };
-                    use std::sync::mpsc::channel;
                     use std::sync::RwLock;
+                    use std::sync::mpsc::channel;
                     use std::thread;
 
                     use rand::Rng;
@@ -372,9 +372,9 @@ impl<'a> ShellCmdApi<'a> for Test {
                         }
                         const ROUNDS: usize = 16; // pump a bunch of data to trigger another trng buffer refill, resetting the stats
                         for _ in 0..ROUNDS {
-                            let mut buf: [u32; 1024] = [0; 1024];
+                            let mut buf: [u32; 1020] = [0; 1020];
                             env.trng.fill_buf(&mut buf).unwrap();
-                            log::debug!("pump samples: {:x}, {:x}, {:x}", buf[0], buf[512], buf[1023]); // prevent the pump values from being optimized out
+                            log::debug!("pump samples: {:x}, {:x}, {:x}", buf[0], buf[512], buf[1019]); // prevent the pump values from being optimized out
                         }
                         ht = env.trng.get_health_tests().unwrap();
                     }
