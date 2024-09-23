@@ -17,7 +17,7 @@ impl<'a> ShellCmdApi<'a> for Help {
 
     fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         let mut ret = String::new();
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(slashcmd) = tokens.next() {
             let cmd = if slashcmd.starts_with("/") { &slashcmd[1..] } else { slashcmd };

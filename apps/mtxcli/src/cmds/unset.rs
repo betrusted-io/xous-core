@@ -15,7 +15,7 @@ impl<'a> ShellCmdApi<'a> for Unset {
 
     fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         let mut ret = String::new();
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(key) = tokens.next() {
             match key {
