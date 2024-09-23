@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use rkyv::{
     Archive, Deserialize, Place, Portable, Serialize,
     api::low::LowSerializer,
-    rancor::{Panic, Strategy},
+    rancor::{Failure, Strategy},
     ser::{Positional, allocator::SubAllocator, writer::Buffer as RkyvBuffer},
     with::{ArchiveWith, Identity, SerializeWith},
 };
@@ -23,7 +23,7 @@ pub struct Buffer<'buf> {
 }
 const PAGE_SIZE: usize = 0x1000;
 
-type Serializer<'a, 'b> = LowSerializer<RkyvBuffer<'b>, SubAllocator<'a>, Panic>;
+type Serializer<'a, 'b> = LowSerializer<RkyvBuffer<'b>, SubAllocator<'a>, Failure>;
 
 impl<'buf> Buffer<'buf> {
     #[allow(dead_code)]
@@ -198,7 +198,7 @@ impl<'buf> Buffer<'buf> {
             fn serialize(
                 &self,
                 serializer: &mut Serializer<'a, 'b>,
-            ) -> core::result::Result<Self::Resolver, Panic> {
+            ) -> core::result::Result<Self::Resolver, Failure> {
                 F::serialize_with(self.0, serializer)
             }
         }
@@ -210,7 +210,7 @@ impl<'buf> Buffer<'buf> {
         let alloc = SubAllocator::new(&mut scratch);
 
         let serialized_buf =
-            rkyv::api::low::to_bytes_in_with_alloc::<_, _, Panic>(&wrap, writer, alloc).map_err(|_| ())?;
+            rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(&wrap, writer, alloc).map_err(|_| ())?;
         xous_buf.used = serialized_buf.pos();
         Ok(xous_buf)
     }
@@ -225,7 +225,7 @@ impl<'buf> Buffer<'buf> {
                         rkyv::ser::allocator::SubAllocator<'a>,
                         (),
                     >,
-                    rkyv::rancor::Panic,
+                    rkyv::rancor::Failure,
                 >,
             >,
     {
@@ -257,7 +257,7 @@ impl<'buf> Buffer<'buf> {
             fn serialize(
                 &self,
                 serializer: &mut Serializer<'a, 'b>,
-            ) -> core::result::Result<Self::Resolver, Panic> {
+            ) -> core::result::Result<Self::Resolver, Failure> {
                 F::serialize_with(self.0, serializer)
             }
         }
@@ -269,7 +269,7 @@ impl<'buf> Buffer<'buf> {
         let alloc = SubAllocator::new(&mut scratch);
 
         let serialized_buf =
-            rkyv::api::low::to_bytes_in_with_alloc::<_, _, Panic>(&wrap, writer, alloc).unwrap();
+            rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(&wrap, writer, alloc).unwrap();
         self.used = serialized_buf.pos();
 
         if let Some(ref mut msg) = self.memory_message.as_mut() {
@@ -288,7 +288,7 @@ impl<'buf> Buffer<'buf> {
                         rkyv::ser::allocator::SubAllocator<'a>,
                         (),
                     >,
-                    rkyv::rancor::Panic,
+                    rkyv::rancor::Failure,
                 >,
             >,
     {
