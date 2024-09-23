@@ -67,7 +67,7 @@ pub(crate) fn icontray_server(conn_to_main: xous::CID) {
                 // every key press, the four slots get queried
                 prediction.string.clear();
                 if prediction.index < ICONS.len() as u32 {
-                    prediction.string.append(ICONS[prediction.index as usize]).ok();
+                    prediction.string.push_str(ICONS[prediction.index as usize]);
                     prediction.valid = true;
                 } else {
                     prediction.valid = false;
