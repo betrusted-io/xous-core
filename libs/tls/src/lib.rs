@@ -13,7 +13,7 @@ use modals::Modals;
 use ota::{ArchivedOwnedTrustAnchor, OwnedTrustAnchor};
 use rustls::pki_types::{CertificateDer, TrustAnchor};
 use rustls::{ClientConfig, ClientConnection, RootCertStore};
-use x509_parser::prelude::{parse_x509_certificate, FromDer, X509Certificate};
+use x509_parser::prelude::{FromDer, X509Certificate, parse_x509_certificate};
 use xous_names::XousNames;
 
 /// PDDB Dict for tls trusted certificates keys
@@ -165,8 +165,9 @@ impl Tls {
             Ok(mut pddb_key) => {
                 let mut bytes = [0u8; ota::MAX_OTA_BYTES];
                 match pddb_key.read(&mut bytes) {
-                    Ok(_) => {
-                        let ata = unsafe { rkyv::access_unchecked::<ArchivedOwnedTrustAnchor>(&bytes[..]) };
+                    Ok(pos) => {
+                        let ata =
+                            unsafe { rkyv::access_unchecked::<ArchivedOwnedTrustAnchor>(&bytes[..pos]) };
                         let ta = rkyv::deserialize::<OwnedTrustAnchor, rkyv::rancor::Error>(ata).ok();
                         log::info!("get trust anchor {}", key);
                         log::trace!("get trust anchor'{}' = '{:?}'", key, &ta);
