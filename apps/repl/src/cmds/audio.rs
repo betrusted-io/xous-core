@@ -1,9 +1,9 @@
 use core::fmt::Write;
 
+use String;
 use codec::*;
 use locales::t;
 use xous::{Message, MessageEnvelope};
-use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -63,7 +63,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
     fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         let mut ret = String::new();
         let helpstring = t!("replapp.audio.help", locales::LANG);
-        let mut tokens = &args.split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
