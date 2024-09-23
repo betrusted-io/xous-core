@@ -1,11 +1,12 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 pub mod api;
-use api::{TrngTestMode, TRNG_TEST_BUF_LEN};
+use api::{TRNG_TEST_BUF_LEN, TrngTestMode};
+use flatipc::{IntoIpc, Ipc};
 use num_traits::*;
 // the 0.5.1 API is necessary for compatibility with curve25519-dalek crates
 use rand_core::{CryptoRng, RngCore};
-use xous::{send_message, CID};
+use xous::{CID, send_message};
 use xous_ipc::Buffer;
 
 #[derive(Debug)]
@@ -60,19 +61,19 @@ impl Trng {
     }
 
     pub fn fill_buf(&self, data: &mut [u32]) -> Result<(), xous::Error> {
-        let mut tb = api::TrngBuf { data: [0; 1024], len: 0 };
+        let mut tb = api::TrngBuf { data: [0; 1020], len: 0 };
         if data.len() > tb.data.len() {
             return Err(xous::Error::OutOfMemory);
         }
         tb.len = data.len() as u16;
-        let mut buf = Buffer::into_buf(tb).or(Err(xous::Error::InternalError))?;
-        buf.lend_mut(self.conn, api::Opcode::FillTrng.to_u32().unwrap())
+        let mut buf = tb.into_ipc();
+        buf.lend_mut(self.conn, api::Opcode::FillTrng.to_usize().unwrap())
             .or(Err(xous::Error::InternalError))?;
-        let rtb: api::TrngBuf = buf.to_original().unwrap();
-        if rtb.len as usize != data.len() {
+        println!("{}", tb.len); // this shouldn't be possible
+        if buf.len as usize != data.len() {
             return Err(xous::Error::InternalError);
         }
-        for (&src, dst) in rtb.data.iter().zip(data.iter_mut()) {
+        for (&src, dst) in buf.data.iter().zip(data.iter_mut()) {
             *dst = src;
         }
         Ok(())
@@ -184,7 +185,7 @@ impl RngCore for Trng {
         // one page is the max size we can do with the fill_buf() API
         let chunks_page = dest.chunks_exact_mut(4096);
         for chunks in chunks_page.into_iter() {
-            let mut data: [u32; 4096 / 4] = [0; 4096 / 4];
+            let mut data: [u32; 4080 / 4] = [0; 4080 / 4];
             self.fill_buf(&mut data).expect("couldn't fill page-sized TRNG buffer");
             for (&src, dst) in data.iter().zip(chunks.chunks_exact_mut(4)) {
                 for (&src_byte, dst_byte) in src.to_le_bytes().iter().zip(dst.iter_mut()) {
