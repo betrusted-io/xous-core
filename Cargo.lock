@@ -2162,6 +2162,7 @@ version = "0.2.12"
 dependencies = [
  "cfg-if",
  "compiler_builtins",
+ "flatipc",
  "js-sys",
  "libc",
  "rkyv 0.8.8",
@@ -2171,7 +2172,6 @@ dependencies = [
  "wasm-bindgen-test",
  "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
- "xous-ipc 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5392,6 +5392,8 @@ dependencies = [
 name = "trng"
 version = "0.1.0"
 dependencies = [
+ "flatipc",
+ "flatipc-derive",
  "log",
  "num-derive 0.4.2",
  "num-traits",
