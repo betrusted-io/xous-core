@@ -23,6 +23,6 @@ packing               = { version = "0.2.0", path = "../packing/packing" }
 usbd_bulk_only_transport = { version = "0.1.0", path = "../usbd_bulk_only_transport" }
 log = "0.4.17"
 xous = "0.9.64"
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.60" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.61" }
 
 [features]

@@ -14,12 +14,12 @@ ime-plugin-api = { path = "../ime-plugin-api" }
 ime-plugin-shell = { path = "../ime-plugin-shell" }
 keyboard = { path = "../keyboard", optional = true }
 log = "0.4.14"
-log-server = { package = "xous-api-log", version = "0.1.60" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.60" }
+log-server = { package = "xous-api-log", version = "0.1.61" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.61" }
 trng = { path = "../trng", optional = true }
 xous = "0.9.64"
-xous-ipc = "0.10.1"
-xous-names = { package = "xous-api-names", version = "0.9.62" }
+xous-ipc = "0.10.2"
+xous-names = { package = "xous-api-names", version = "0.9.63" }
 
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
@@ -28,7 +28,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "alloc",
 ] }
 
-susres = { package = "xous-api-susres", version = "0.9.60", optional = true }                  # used for the sleep now menu item
+susres = { package = "xous-api-susres", version = "0.9.61", optional = true }                  # used for the sleep now menu item
 cram-hal-service = { path = "../cram-hal-service", optional = true, default-features = false }
 
 enum_dispatch = "0.3.7"              # used for trait-based dispatch off of multiple layout objects.

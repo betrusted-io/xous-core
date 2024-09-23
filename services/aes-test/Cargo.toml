@@ -10,7 +10,7 @@ version = "0.1.0"
 aes = { path = "../aes" }
 hex-literal = "0.3.1"
 log = "0.4.14"
-log-server = { package = "xous-api-log", version = "0.1.60" }
+log-server = { package = "xous-api-log", version = "0.1.61" }
 xous = "0.9.64"
 
 [features]
