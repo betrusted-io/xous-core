@@ -130,7 +130,7 @@ impl ActionApi for CheckBoxes {
             #[cfg(feature = "tts")]
             {
                 self.tts.tts_blocking(t!("checkbox.select_and_close_tts", locales::LANG)).unwrap();
-                for item in self.action_payload.payload().iter() {
+                for item in self.action_payload.clone().payload().iter() {
                     if let Some(name) = item {
                         self.tts.tts_blocking(name.as_str()).unwrap();
                     }
