@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use String;
 use com::api::NET_MTU;
 use net::NetPingCallback;
 #[cfg(any(feature = "precursor", feature = "renode"))]
@@ -13,16 +14,16 @@ use num_traits::*;
 #[cfg(feature = "shellperf")]
 use perflib::*;
 use xous::MessageEnvelope;
-use xous_ipc::String;
+use xous_ipc::Buffer;
 #[cfg(feature = "ditherpunk")]
 use {gam::DecodePng, std::str::FromStr};
 #[cfg(feature = "websocket")]
 use {
     tls::Tls,
-    tungstenite::{stream::MaybeTlsStream, WebSocket},
+    tungstenite::{WebSocket, stream::MaybeTlsStream},
 };
 
-use crate::{CommonEnv, ShellCmdApi};
+use crate::{CommonEnv, ShellCmdApi, ShellOpcode};
 
 pub struct NetCmd {
     callback_id: Option<u32>,
@@ -71,26 +72,22 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: String<1024>,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         if self.callback_id.is_none() {
-            let cb_id = env.register_handler(String::<256>::from_str(self.verb()));
+            let cb_id = env.register_handler(String::from(self.verb()));
             log::trace!("hooking net callback with ID {}", cb_id);
             self.callback_id = Some(cb_id);
         }
 
         use core::fmt::Write;
-        let mut ret = String::<1024>::new();
+        let mut ret = String::new();
         #[cfg(any(feature = "precursor", feature = "renode"))]
         let helpstring = "net [udp [rx socket] [tx dest socket]] [ping [host] [count]] [tcpget host/path]";
         // no ping in hosted mode -- why would you need it? we're using the host's network connection.
         #[cfg(not(target_os = "xous"))]
         let helpstring = "net [udp [port]] [count]] [tcpget host/path]";
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
@@ -305,9 +302,10 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             move || {
                                 const ITERS: usize = 4;
                                 let mut iters = 0;
-                                let mut s = xous_ipc::String::<512>::new();
+                                let mut s = String::new();
                                 write!(s, "UDP server {} started", index).unwrap();
-                                s.send(self_cid).unwrap();
+                                let buf = Buffer::into_buf(s.to_string()).unwrap();
+                                buf.send(self_cid, ShellOpcode::Line.to_u32().unwrap()).unwrap();
                                 loop {
                                     s.clear();
                                     let mut buf = [0u8; NET_MTU];
@@ -322,7 +320,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                 std::str::from_utf8(&buf[..bytes]).unwrap()
                                             )
                                             .unwrap();
-                                            s.send(self_cid).unwrap();
+                                            let buf = Buffer::into_buf(s.to_string()).unwrap();
+                                            buf.send(self_cid, ShellOpcode::Line.to_u32().unwrap()).unwrap();
                                             if do_response {
                                                 match udp.send_to(
                                                     format!("Server {} received {} bytes\r\n", index, bytes)
@@ -351,7 +350,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 }
                                 s.clear();
                                 write!(s, "UDP server {} rx closed after {} iters", index, iters).unwrap();
-                                s.send(self_cid).unwrap();
+                                let buf = Buffer::into_buf(s.to_string()).unwrap();
+                                buf.send(self_cid, ShellOpcode::Line.to_u32().unwrap()).unwrap();
                             }
                         });
                     }
@@ -525,10 +525,10 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     }
                     let mut err = false;
                     if let Some(socket) = &mut self.ws {
-                        let mut val = String::<1024>::new();
+                        let mut val = String::new();
                         join_tokens(&mut val, &mut tokens);
                         if val.len() > 0 {
-                            socket.send(tungstenite::Message::Text(val.as_str().unwrap().into())).unwrap();
+                            socket.send(tungstenite::Message::Text(val.as_str().into())).unwrap();
                         } else {
                             socket.send(tungstenite::Message::Text("Hello WebSocket".into())).unwrap();
                         }
@@ -645,9 +645,9 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     // this starts the performance counter
                     pm.start();
 
+                    use aes::Aes256;
                     use aes::cipher::generic_array::GenericArray;
                     use aes::cipher::{BlockEncrypt, KeyInit};
-                    use aes::Aes256;
 
                     let mut key_array: [u8; 32];
                     let mut data_array: [u8; 16];
@@ -727,9 +727,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 log::debug!("sending ping to {:?}", ipaddr);
                                 if self.ping.is_none() {
                                     self.ping = Some(net::protocols::Ping::non_blocking_handle(
-                                        XousServerId::ServerName(xous_ipc::String::from_str(
-                                            crate::SERVER_NAME_SHELLCHAT,
-                                        )),
+                                        XousServerId::ServerName(String::from(crate::SERVER_NAME_SHELLCHAT)),
                                         self.callback_id.unwrap() as usize,
                                     ));
                                 }
@@ -783,11 +781,11 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
         &mut self,
         msg: &MessageEnvelope,
         _env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
 
         log::debug!("net callback");
-        let mut ret = String::<1024>::new();
+        let mut ret = String::new();
         match &msg.body {
             xous::Message::Scalar(xous::ScalarMessage { id: _, arg1, arg2, arg3, arg4 }) => {
                 let dispatch = *arg1;
@@ -847,8 +845,9 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 }
             }
             xous::Message::Move(m) => {
-                let s = xous_ipc::String::<512>::from_message(m).unwrap();
-                write!(ret, "{}", s.as_str().unwrap()).unwrap();
+                let buffer = unsafe { Buffer::from_memory_message(m) };
+                let s = buffer.as_flat::<String, _>().unwrap();
+                write!(ret, "{}", s.as_str()).unwrap();
             }
             _ => {
                 log::error!("got unrecognized message type in callback handler")
@@ -1027,7 +1026,7 @@ fn heap_usage() -> usize {
 }
 
 #[cfg(feature = "websocket")]
-fn join_tokens<'a>(buf: &mut String<1024>, tokens: impl Iterator<Item = &'a str>) {
+fn join_tokens<'a>(buf: &mut String, tokens: impl Iterator<Item = &'a str>) {
     use core::fmt::Write;
     for (i, tok) in tokens.enumerate() {
         if i == 0 {

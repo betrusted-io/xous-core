@@ -3,7 +3,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 #[cfg(feature = "engine-ll")]
 use engine_25519::*;
 use num_traits::*;
-use xous_ipc::String;
+use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 static CB_ID: AtomicU32 = AtomicU32::new(0);
@@ -281,7 +281,7 @@ impl Engine {
         let sid = xous::create_server().unwrap();
         let sid_tuple = sid.to_u32();
 
-        let cb_id = env.register_handler(String::<256>::from_str("engine"));
+        let cb_id = env.register_handler(String::from("engine"));
         CB_ID.store(cb_id, Ordering::Relaxed);
 
         xous::create_thread_4(
@@ -306,19 +306,15 @@ impl<'a> ShellCmdApi<'a> for Engine {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: String<1024>,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
-        let mut ret = String::<1024>::new();
+        let mut ret = String::new();
         #[cfg(feature = "engine-ll")]
         let helpstring = "engine [check] [bench] [benchdh] [susres] [dh] [ed] [wycheproof]";
         #[cfg(not(feature = "engine-ll"))]
         let helpstring = "engine [susres] [dh] [ed] [wycheproof]";
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
@@ -583,11 +579,11 @@ impl<'a> ShellCmdApi<'a> for Engine {
         &mut self,
         msg: &xous::MessageEnvelope,
         env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
 
         log::debug!("benchmark callback");
-        let mut ret = String::<1024>::new();
+        let mut ret = String::new();
 
         xous::msg_scalar_unpack!(msg, passes, fails, result_type, iters, {
             let end = env.ticktimer.elapsed_ms();

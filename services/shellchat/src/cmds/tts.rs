@@ -1,7 +1,7 @@
 use core::fmt::Write;
 
 use tts_frontend::*;
-use xous_ipc::String;
+use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -18,22 +18,18 @@ impl<'a> ShellCmdApi<'a> for Tts {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: String<1024>,
-        _env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
         let helpstring = "tts options: speak";
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "speak" => {
-                    let mut text = String::<1024>::new();
+                    let mut text = String::new();
                     join_tokens(&mut text, &mut tokens);
-                    self.fe.tts_simple(text.as_str().expect("not valid utf-8")).unwrap();
+                    self.fe.tts_simple(text.as_str()).unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
@@ -46,7 +42,7 @@ impl<'a> ShellCmdApi<'a> for Tts {
     }
 }
 
-fn join_tokens<'a>(buf: &mut String<1024>, tokens: impl Iterator<Item = &'a str>) {
+fn join_tokens<'a>(buf: &mut String, tokens: impl Iterator<Item = &'a str>) {
     for (i, tok) in tokens.enumerate() {
         if i == 0 {
             write!(buf, "{}", tok).unwrap();

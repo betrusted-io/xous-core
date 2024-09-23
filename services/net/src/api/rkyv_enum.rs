@@ -19,13 +19,13 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use rkyv::{Archive, Deserialize, Serialize};
 use smoltcp::wire::IpAddress;
 
-#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
+#[derive(Debug, Archive, Serialize, Deserialize, Clone)]
 pub enum XousServerId {
     /// A SID that is shared directly with the Net crate; a private, single-use SID for best security
     PrivateSid([u32; 4]),
     /// A name that needs to be looked up with XousNames. Easier to implement, but less secure as it requires
     /// an open connection slot that could be abused by other processes.
-    ServerName(xous_ipc::String<64>),
+    ServerName(String),
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]

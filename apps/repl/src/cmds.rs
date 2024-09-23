@@ -1,23 +1,19 @@
 use core::fmt::Write;
 use std::collections::HashMap;
 
+use String;
 use xous::MessageEnvelope;
-use xous_ipc::String;
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
     // user implemented:
     // called to process the command with the remainder of the string attached
-    fn process(
-        &mut self,
-        args: String<1024>,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error>;
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error>;
     // called to process incoming messages that may have been origniated by the most recently issued command
     fn callback(
         &mut self,
         msg: &MessageEnvelope,
         _env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         log::info!("received unhandled message {:?}", msg);
         Ok(None)
     }
@@ -46,12 +42,12 @@ pub struct CommonEnv {
     codec: codec::Codec,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
-    cb_registrations: HashMap<u32, String<256>>,
+    cb_registrations: HashMap<u32, String>,
     trng: Trng,
     xns: xous_names::XousNames,
 }
 impl CommonEnv {
-    pub fn register_handler(&mut self, verb: String<256>) -> u32 {
+    pub fn register_handler(&mut self, verb: String) -> u32 {
         let mut key: u32;
         loop {
             key = self.trng.get_u32().unwrap();
@@ -83,7 +79,7 @@ use audio::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
-    lastverb: String<256>,
+    lastverb: String,
     ///// 2. declare storage for your command here.
     audio_cmd: Audio,
 }
@@ -104,7 +100,7 @@ impl CmdEnv {
         log::info!("done creating CommonEnv");
         CmdEnv {
             common_env: common,
-            lastverb: String::<256>::new(),
+            lastverb: String::new(),
             ///// 3. initialize your storage, by calling new()
             audio_cmd: Audio::new(&xns),
         }
@@ -112,10 +108,10 @@ impl CmdEnv {
 
     pub fn dispatch(
         &mut self,
-        maybe_cmdline: Option<&mut String<1024>>,
+        maybe_cmdline: Option<&mut String>,
         maybe_callback: Option<&MessageEnvelope>,
-    ) -> Result<Option<String<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    ) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
 
         let commands: &mut [&mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
@@ -125,9 +121,9 @@ impl CmdEnv {
         if let Some(cmdline) = maybe_cmdline {
             let maybe_verb = tokenize(cmdline);
 
-            let mut cmd_ret: Result<Option<String<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<String>, xous::Error> = Ok(None);
             if let Some(verb_string) = maybe_verb {
-                let verb = verb_string.to_str();
+                let verb = &verb_string;
 
                 // search through the list of commands linearly until one matches,
                 // then run it.
@@ -135,7 +131,7 @@ impl CmdEnv {
                 for cmd in commands.iter_mut() {
                     if cmd.matches(verb) {
                         match_found = true;
-                        cmd_ret = cmd.process(*cmdline, &mut self.common_env);
+                        cmd_ret = cmd.process(cmdline.to_string(), &mut self.common_env);
                         self.lastverb.clear();
                         write!(self.lastverb, "{}", verb).expect("couldn't record last verb");
                     };
@@ -147,9 +143,9 @@ impl CmdEnv {
                     write!(ret, "Commands: ").unwrap();
                     for cmd in commands.iter() {
                         if !first {
-                            ret.append(", ")?;
+                            ret.push_str(", ");
                         }
-                        ret.append(cmd.verb())?;
+                        ret.push_str(cmd.verb());
                         first = false;
                     }
                     Ok(Some(ret))
@@ -160,11 +156,11 @@ impl CmdEnv {
                 Ok(None)
             }
         } else if let Some(callback) = maybe_callback {
-            let mut cmd_ret: Result<Option<String<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<String>, xous::Error> = Ok(None);
             // first check and see if we have a callback registration; if not, just map to the last verb
             let verb = match self.common_env.cb_registrations.get(&(callback.body.id() as u32)) {
-                Some(verb) => verb.to_str(),
-                None => self.lastverb.to_str(),
+                Some(verb) => &verb,
+                None => &self.lastverb,
             };
             // now dispatch
             let mut verbfound = false;
@@ -185,28 +181,28 @@ impl CmdEnv {
 /// extract the first token, as delimited by spaces
 /// modifies the incoming line by removing the token and returning the remainder
 /// returns the found token
-pub fn tokenize(line: &mut String<1024>) -> Option<String<1024>> {
-    let mut token = String::<1024>::new();
-    let mut retline = String::<1024>::new();
+pub fn tokenize(line: &mut String) -> Option<String> {
+    let mut token = String::new();
+    let mut retline = String::new();
 
-    let lineiter = line.as_str().unwrap().chars();
+    let lineiter = line.chars();
     let mut foundspace = false;
     let mut foundrest = false;
     for ch in lineiter {
         if ch != ' ' && !foundspace {
-            token.push(ch).unwrap();
+            token.push(ch);
         } else if foundspace && foundrest {
-            retline.push(ch).unwrap();
+            retline.push(ch);
         } else if foundspace && ch != ' ' {
             // handle case of multiple spaces in a row
             foundrest = true;
-            retline.push(ch).unwrap();
+            retline.push(ch);
         } else {
             foundspace = true;
             // consume the space
         }
     }
     line.clear();
-    write!(line, "{}", retline.as_str().unwrap()).unwrap();
+    write!(line, "{}", &retline).unwrap();
     if token.len() > 0 { Some(token) } else { None }
 }

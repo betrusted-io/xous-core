@@ -16,13 +16,13 @@ ime-plugin-shell = { path = "../ime-plugin-shell" }
 ime-plugin-tts = { path = "../ime-plugin-tts" }
 llio = { path = "../llio" }
 log = "0.4.14"
-log-server = { package = "xous-api-log", version = "0.1.59" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.59" }
-xous = "0.9.63"
-xous-ipc = "0.9.63"
-xous-names = { package = "xous-api-names", version = "0.9.61" }
+log-server = { package = "xous-api-log", version = "0.1.61" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.61" }
+xous = "0.9.64"
+xous-ipc = "0.10.2"
+xous-names = { package = "xous-api-names", version = "0.9.63" }
 keyboard = { path = "../keyboard" }
-susres = { package = "xous-api-susres", version = "0.9.59" }
+susres = { package = "xous-api-susres", version = "0.9.61" }
 codec = { path = "../codec" }
 sha2 = { version = "0.10.8" }
 digest = "0.10.7"
@@ -36,7 +36,7 @@ dns = { path = "../dns" }
 pddb = { path = "../pddb" }
 modals = { path = "../modals" }
 usb-device-xous = { path = "../usb-device-xous" }
-utralib = { version = "0.1.24", optional = true, default-features = false }
+utralib = { version = "0.1.25", optional = true, default-features = false }
 
 tts-frontend = { path = "../tts" }
 locales = { path = "../../locales" }
@@ -45,8 +45,9 @@ trng = { path = "../trng" }
 
 num-derive = { version = "0.4.1", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-rkyv = { version = "0.4.3", default-features = false, features = [
-    "const_generics",
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
 ] }
 
 chrono = { version = "0.4.33", default-features = false, features = ["std"] }

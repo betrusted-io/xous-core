@@ -4,7 +4,7 @@ pub mod icontray;
 pub mod ui;
 
 use std::convert::TryInto;
-use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
+use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -13,9 +13,9 @@ use gam::MenuItem;
 use graphics_server::api::GlyphStyle;
 use graphics_server::{Point, Rectangle, TextBounds, TextView};
 use num_traits::FromPrimitive;
-use ui::VisualProperties;
 pub use ui::BUSY_ANIMATION_RATE_MS;
-use xous::{msg_scalar_unpack, Error, CID, SID};
+use ui::VisualProperties;
+use xous::{CID, Error, SID, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
 /// Create a TextView with the default properties common to all text bubbles.
@@ -175,10 +175,8 @@ impl Chat {
     /// * `pddb_dict` - the pddb dict holding all Dialogues for this Chat App
     /// * `pddb_key` - the pddb key holding a Dialogue
     pub fn dialogue_set(&self, pddb_dict: &str, pddb_key: Option<&str>) -> Result<(), Error> {
-        let dialogue = api::Dialogue {
-            dict: xous_ipc::String::from_str(pddb_dict),
-            key: pddb_key.map(|key| xous_ipc::String::from_str(key)),
-        };
+        let dialogue =
+            api::Dialogue { dict: String::from(pddb_dict), key: pddb_key.map(|key| String::from(key)) };
         match Buffer::into_buf(dialogue) {
             Ok(buf) => buf.send(self.cid, ChatOp::DialogueSet as u32).map(|_| ()),
             Err(_) => Err(xous::Error::InternalError),
@@ -224,17 +222,17 @@ impl Chat {
         attach_url: Option<&str>,
     ) -> Result<(), Error> {
         let mut post = api::Post {
-            dialogue_id: xous_ipc::String::new(),
-            author: xous_ipc::String::new(),
+            dialogue_id: String::new(),
+            author: String::new(),
             timestamp,
-            text: xous_ipc::String::new(),
+            text: String::new(),
             attach_url: match attach_url {
-                Some(url) => Some(xous_ipc::String::from_str(url)),
+                Some(url) => Some(String::from(url)),
                 None => None,
             },
         };
-        post.author.append(author).unwrap();
-        post.text.append(text).unwrap();
+        post.author.push_str(author);
+        post.text.push_str(text);
         match Buffer::into_buf(post) {
             Ok(buf) => buf.send(self.cid, ChatOp::PostAdd as u32).map(|_| ()),
             Err(_) => Err(xous::Error::InternalError),
@@ -262,8 +260,8 @@ impl Chat {
     ///
     /// Error if unable to send the msg to the Chat UI server
     pub fn post_find(&self, author: &str, timestamp: u64) -> Result<Option<usize>, Error> {
-        let mut find = Find { author: xous_ipc::String::new(), timestamp, key: None };
-        find.author.append(author).unwrap();
+        let mut find = Find { author: String::new(), timestamp, key: None };
+        find.author.push_str(author);
         match Buffer::into_buf(find) {
             Ok(mut buf) => match buf.lend_mut(self.cid, ChatOp::PostFind as u32) {
                 Ok(..) => {
@@ -299,7 +297,7 @@ impl Chat {
     ///
     /// This method implements the latest recommendation of panicing on internal errors.
     pub fn set_status_text(&self, msg: &str) {
-        let bm = BusyMessage { busy_msg: xous_ipc::String::from_str(msg) };
+        let bm = BusyMessage { busy_msg: String::from(msg) };
         Buffer::into_buf(bm)
             .expect("internal error")
             .send(self.cid, ChatOp::SetStatusText as u32)
@@ -326,7 +324,7 @@ impl Chat {
     /// and update the text, especially when we have multiple potential servers vying
     /// to set a busy state.
     pub fn set_status_idle_text(&self, msg: &str) {
-        let bm = BusyMessage { busy_msg: xous_ipc::String::from_str(msg) };
+        let bm = BusyMessage { busy_msg: String::from(msg) };
         Buffer::into_buf(bm)
             .expect("internal error")
             .send(self.cid, ChatOp::SetStatusIdleText as u32)
@@ -427,12 +425,12 @@ pub fn server(
             Some(ChatOp::SetStatusText) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.to_original::<BusyMessage, _>().unwrap();
-                ui.set_status_text(s.busy_msg.as_str().unwrap());
+                ui.set_status_text(s.busy_msg.as_str());
             }
             Some(ChatOp::SetStatusIdleText) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.to_original::<BusyMessage, _>().unwrap();
-                ui.set_status_idle_text(s.busy_msg.as_str().unwrap());
+                ui.set_status_idle_text(s.busy_msg.as_str());
             }
             Some(ChatOp::SetBusyAnimationState) => msg_scalar_unpack!(msg, state, _, _, _, {
                 if state != 0 {
@@ -467,7 +465,7 @@ pub fn server(
                     Some(key) => Some(key.to_string()),
                     None => None,
                 };
-                ui.dialogue_set(dialogue.dict.as_str().unwrap(), dialogue_key.as_deref());
+                ui.dialogue_set(dialogue.dict.as_str(), dialogue_key.as_deref());
             }
             Some(ChatOp::GamChangeFocus) => {
                 log::info!("ChatOp::GamChangeFocus");
@@ -487,7 +485,7 @@ pub fn server(
             Some(ChatOp::GamLine) => {
                 log::info!("got ChatOp::GamLine");
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
+                let s = buffer.as_flat::<String, _>().unwrap();
                 match s.as_str() {
                     "\u{0011}" => {}
                     "\u{0012}" => {}
@@ -588,9 +586,9 @@ pub fn server(
                             Ok(post) => ui
                                 .post_add(
                                     &dialogue_id,
-                                    post.author.as_str().unwrap(),
+                                    post.author.as_str(),
                                     post.timestamp,
-                                    post.text.as_str().unwrap(),
+                                    post.text.as_str(),
                                     None, // TODO implement
                                 )
                                 .unwrap(),
@@ -610,7 +608,7 @@ pub fn server(
                 log::info!("ChatOp::PostAdd");
                 let mut buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 if let Ok(mut find) = buffer.to_original::<Find, _>() {
-                    find.key = ui.post_find(find.author.as_str().unwrap(), find.timestamp);
+                    find.key = ui.post_find(find.author.as_str(), find.timestamp);
                     buffer.replace(find).expect("couldn't serialize return");
                 } else {
                     log::warn!("failed to serialize Find");
@@ -648,7 +646,7 @@ pub fn now() -> u64 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_s
 /// "context-free" (cf) communication with the chat object.
 /// This is accomplished by making a copy of the connection to the chat server.
 pub fn cf_set_status_text(chat_cid: xous::CID, msg: &str) {
-    let bm = BusyMessage { busy_msg: xous_ipc::String::from_str(msg) };
+    let bm = BusyMessage { busy_msg: String::from(msg) };
     Buffer::into_buf(bm)
         .expect("internal error")
         .send(chat_cid, ChatOp::SetStatusText as u32)

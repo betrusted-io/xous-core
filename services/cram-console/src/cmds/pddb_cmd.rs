@@ -4,7 +4,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 
 #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
 use pddb::PDDB_A_LEN;
-use xous_ipc::String;
+use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -60,18 +60,14 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: String<1024>,
-        _env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
         #[cfg(not(feature = "pddbtest"))]
         let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [writeover] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]";
         #[cfg(feature = "pddbtest")]
         let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [writeover] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]\n[test]";
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = &args.split(' ');
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "basislist" => {
@@ -287,7 +283,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         if let Some((dict, keyname)) = descriptor.split_once(':') {
                             match self.pddb.get(dict, keyname, None, true, true, Some(256), None::<fn()>) {
                                 Ok(mut key) => {
-                                    let mut val = String::<1024>::new();
+                                    let mut val = String::new();
                                     join_tokens(&mut val, &mut tokens);
                                     if val.len() > 0 {
                                         match key.write(&val.as_bytes()[..val.len()]) {
@@ -1582,7 +1578,7 @@ fn make_vector(basis_number: usize, vtype: VectorType) -> Vec<u8> {
     vector
 }
 
-fn join_tokens<'a>(buf: &mut String<1024>, tokens: impl Iterator<Item = &'a str>) {
+fn join_tokens<'a>(buf: &mut String, tokens: impl Iterator<Item = &'a str>) {
     for (i, tok) in tokens.enumerate() {
         if i == 0 {
             write!(buf, "{}", tok).unwrap();

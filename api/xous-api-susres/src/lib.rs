@@ -6,7 +6,7 @@
 pub mod api;
 pub use api::*;
 use num_traits::{FromPrimitive, ToPrimitive};
-use xous::{msg_scalar_unpack, send_message, Message, CID};
+use xous::{CID, Message, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 
 #[derive(Debug)]

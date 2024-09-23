@@ -212,7 +212,7 @@ fn main() -> ! {
                 #[cfg(not(feature = "timestamp"))]
                 {
                     let v = crate::api::VersionString {
-                        version: xous_ipc::String::from_str("--no-timestamp requested for build"),
+                        version: String::from("--no-timestamp requested for build"),
                     };
                     buf.replace(v).unwrap();
                 }

@@ -822,105 +822,105 @@ pub(crate) enum ValidatorOp {
     UxSeconds,
 }
 
-fn tz_ux_validator(input: TextEntryPayload) -> Option<ValidatorErr> {
+fn tz_ux_validator(input: &TextEntryPayload) -> Option<ValidatorErr> {
     let text_str = input.as_str();
 
     match simple_kilofloat_parse(text_str) {
         Ok(input) => {
             if input < -12_000 || input > 14_000 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", locales::LANG)));
+                return Some(ValidatorErr::from(t!("rtc.range_err", locales::LANG)));
             }
         }
-        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", locales::LANG))),
+        _ => return Some(ValidatorErr::from(t!("rtc.integer_err", locales::LANG))),
     }
     None
 }
 
-fn rtc_ux_validate_month(input: TextEntryPayload) -> Option<ValidatorErr> {
+fn rtc_ux_validate_month(input: &TextEntryPayload) -> Option<ValidatorErr> {
     let text_str = input.as_str();
 
     let input = match text_str.parse::<u32>() {
         Ok(input_int) => input_int,
-        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", locales::LANG))),
+        _ => return Some(ValidatorErr::from(t!("rtc.integer_err", locales::LANG))),
     };
 
     if input < 1 || input > 12 {
-        return Some(ValidatorErr::from_str(t!("rtc.range_err", locales::LANG)));
+        return Some(ValidatorErr::from(t!("rtc.range_err", locales::LANG)));
     }
 
     None
 }
 
-fn rtc_ux_validate_day(input: TextEntryPayload) -> Option<ValidatorErr> {
+fn rtc_ux_validate_day(input: &TextEntryPayload) -> Option<ValidatorErr> {
     let text_str = input.as_str();
 
     let input = match text_str.parse::<u32>() {
         Ok(input_int) => input_int,
-        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", locales::LANG))),
+        _ => return Some(ValidatorErr::from(t!("rtc.integer_err", locales::LANG))),
     };
 
     if input < 1 || input > 31 {
-        return Some(ValidatorErr::from_str(t!("rtc.range_err", locales::LANG)));
+        return Some(ValidatorErr::from(t!("rtc.range_err", locales::LANG)));
     }
 
     None
 }
 
-fn rtc_ux_validate_year(input: TextEntryPayload) -> Option<ValidatorErr> {
+fn rtc_ux_validate_year(input: &TextEntryPayload) -> Option<ValidatorErr> {
     let text_str = input.as_str();
 
     let input = match text_str.parse::<u32>() {
         Ok(input_int) => input_int,
-        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", locales::LANG))),
+        _ => return Some(ValidatorErr::from(t!("rtc.integer_err", locales::LANG))),
     };
 
     if input > 99 {
-        return Some(ValidatorErr::from_str(t!("rtc.range_err", locales::LANG)));
+        return Some(ValidatorErr::from(t!("rtc.range_err", locales::LANG)));
     }
 
     None
 }
 
-fn rtc_ux_validate_hour(input: TextEntryPayload) -> Option<ValidatorErr> {
+fn rtc_ux_validate_hour(input: &TextEntryPayload) -> Option<ValidatorErr> {
     let text_str = input.as_str();
 
     let input = match text_str.parse::<u32>() {
         Ok(input_int) => input_int,
-        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", locales::LANG))),
+        _ => return Some(ValidatorErr::from(t!("rtc.integer_err", locales::LANG))),
     };
 
     if input > 23 {
-        return Some(ValidatorErr::from_str(t!("rtc.range_err", locales::LANG)));
+        return Some(ValidatorErr::from(t!("rtc.range_err", locales::LANG)));
     }
 
     None
 }
 
-fn rtc_ux_validate_minute(input: TextEntryPayload) -> Option<ValidatorErr> {
+fn rtc_ux_validate_minute(input: &TextEntryPayload) -> Option<ValidatorErr> {
     let text_str = input.as_str();
 
     let input = match text_str.parse::<u32>() {
         Ok(input_int) => input_int,
-        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", locales::LANG))),
+        _ => return Some(ValidatorErr::from(t!("rtc.integer_err", locales::LANG))),
     };
 
     if input > 59 {
-        return Some(ValidatorErr::from_str(t!("rtc.range_err", locales::LANG)));
+        return Some(ValidatorErr::from(t!("rtc.range_err", locales::LANG)));
     }
 
     None
 }
 
-fn rtc_ux_validate_seconds(input: TextEntryPayload) -> Option<ValidatorErr> {
+fn rtc_ux_validate_seconds(input: &TextEntryPayload) -> Option<ValidatorErr> {
     let text_str = input.as_str();
 
     let input = match text_str.parse::<u32>() {
         Ok(input_int) => input_int,
-        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", locales::LANG))),
+        _ => return Some(ValidatorErr::from(t!("rtc.integer_err", locales::LANG))),
     };
 
     if input > 59 {
-        return Some(ValidatorErr::from_str(t!("rtc.range_err", locales::LANG)));
+        return Some(ValidatorErr::from(t!("rtc.range_err", locales::LANG)));
     }
 
     None

@@ -8,7 +8,7 @@ use core::fmt::Write;
 
 use api::Disconnect;
 use num_traits::ToPrimitive;
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 /// A page-aligned stack allocation for connection requests
 #[repr(C, align(4096))]
@@ -62,8 +62,8 @@ impl XousNames {
     /// effectively blocks further services from connecting to the server in a
     /// Trust-On-First-Use (TOFU) model.
     pub fn register_name(&self, name: &str, max_conns: Option<u32>) -> Result<xous::SID, xous::Error> {
-        let mut registration = api::Registration { name: String::<64>::new(), conn_limit: max_conns };
-        // could also do String::from_str() but in this case we want things to fail if the string is too long.
+        let mut registration = api::Registration { name: String::new(), conn_limit: max_conns };
+        // could also do String::from() but in this case we want things to fail if the string is too long.
         write!(registration.name, "{}", name).expect("name probably too long");
 
         let mut buf = Buffer::into_buf(registration).or(Err(xous::Error::InternalError))?;
@@ -90,7 +90,7 @@ impl XousNames {
         &self,
         name: &str,
     ) -> Result<(xous::CID, Option<[u32; 4]>), xous::Error> {
-        let mut lookup_name = xous_ipc::String::<64>::new();
+        let mut lookup_name = String::new();
         write!(lookup_name, "{}", name).expect("name probably too long");
         let mut buf = Buffer::into_buf(lookup_name).or(Err(xous::Error::InternalError))?;
 
@@ -106,7 +106,7 @@ impl XousNames {
     /// Disconnects from server with `name`. Must provide the same `token` returned on
     /// connection, or else the call will be disregarded.
     pub fn disconnect_with_token(&self, name: &str, token: [u32; 4]) -> Result<(), xous::Error> {
-        let disconnect = Disconnect { name: String::<64>::from_str(name), token };
+        let disconnect = Disconnect { name: String::from(name), token };
         let mut buf = Buffer::into_buf(disconnect).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, api::Opcode::Disconnect.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))?;
@@ -125,7 +125,7 @@ impl XousNames {
     /// problem during the boot process as the server start order is not guaranteed. Refer to
     /// `request_connection_blocking()` for a call that will automatically retry.
     pub fn request_connection(&self, name: &str) -> Result<xous::CID, xous::Error> {
-        let mut lookup_name = xous_ipc::String::<64>::new();
+        let mut lookup_name = String::new();
         write!(lookup_name, "{}", name).expect("name probably too long");
 
         let mut buf = Buffer::into_buf(lookup_name).or(Err(xous::Error::InternalError))?;

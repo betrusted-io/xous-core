@@ -1,8 +1,8 @@
-use crate::definitions::SysCallResult;
 use crate::MemoryAddress;
 use crate::MemoryFlags;
 use crate::MemoryRange;
 use crate::TID;
+use crate::definitions::SysCallResult;
 
 pub mod irq;
 mod syscall;

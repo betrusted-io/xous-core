@@ -14,8 +14,8 @@ use std::io::Read;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::thread_local;
 
-use crossbeam_channel::{unbounded, Receiver, RecvError, RecvTimeoutError, Sender};
-use xous_kernel::{ProcessInit, ProcessKey, Result, SysCall, ThreadInit, PID, TID};
+use crossbeam_channel::{Receiver, RecvError, RecvTimeoutError, Sender, unbounded};
+use xous_kernel::{PID, ProcessInit, ProcessKey, Result, SysCall, TID, ThreadInit};
 
 use crate::arch::process::Process;
 use crate::services::SystemServices;
@@ -64,9 +64,9 @@ static LOCAL_RNG_STATE: AtomicU64 = AtomicU64::new(2);
 
 #[cfg(not(test))]
 fn generate_pid_key() -> [u8; 16] {
+    use rand_chacha::ChaCha8Rng;
     use rand_chacha::rand_core::RngCore;
     use rand_chacha::rand_core::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     let mut process_key = [0u8; 16];
     let mut rng = ChaCha8Rng::seed_from_u64(

@@ -200,10 +200,10 @@ fn clifford() -> Img {
     Img::new(buf, WIDTH.try_into().unwrap(), PixelType::U8)
 }
 
-fn test_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+fn test_validator(input: &TextEntryPayload) -> Option<String> {
     let text_str = input.as_str();
     match text_str.parse::<u32>() {
         Ok(_input_int) => None,
-        _ => return Some(xous_ipc::String::<256>::from_str("enter an integer value")),
+        _ => return Some(String::from("enter an integer value")),
     }
 }

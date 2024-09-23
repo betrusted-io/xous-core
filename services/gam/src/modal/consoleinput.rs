@@ -13,7 +13,7 @@ impl Clone for ConsoleInput {
         ConsoleInput {
             action_conn: self.action_conn,
             action_opcode: self.action_opcode,
-            action_payload: self.action_payload,
+            action_payload: self.action_payload.clone(),
             gam: crate::Gam::new(&xous_names::XousNames::new().unwrap()).unwrap(),
         }
     }
@@ -48,7 +48,8 @@ impl ActionApi for ConsoleInput {
                 self.gam.relinquish_focus().unwrap();
                 xous::yield_slice();
 
-                let buf = Buffer::into_buf(self.action_payload).expect("couldn't convert message to payload");
+                let buf = Buffer::into_buf(self.action_payload.clone())
+                    .expect("couldn't convert message to payload");
                 buf.send(self.action_conn, self.action_opcode)
                     .map(|_| ())
                     .expect("couldn't send action message");
@@ -56,7 +57,7 @@ impl ActionApi for ConsoleInput {
             }
             _ => {
                 // text entry
-                self.action_payload.content.push(k).expect("ran out of space storing password");
+                self.action_payload.content.push(k);
                 log::trace!("****update payload: {}", self.action_payload.content);
             }
         }

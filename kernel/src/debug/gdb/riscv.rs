@@ -2,9 +2,9 @@ use core::convert::TryInto;
 use core::hint::unreachable_unchecked;
 
 use gdbstub::common::Tid;
+use gdbstub::target::Target;
 use gdbstub::target::ext::base::multithread::MultiThreadBase;
 use gdbstub::target::ext::base::single_register_access::SingleRegisterAccess;
-use gdbstub::target::Target;
 use gdbstub_arch::riscv::reg::id::RiscvRegId;
 
 // mod disasm;

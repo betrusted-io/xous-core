@@ -1,6 +1,6 @@
 use core::ops::Add;
 
-use xous_ipc::String;
+use String;
 
 use crate::api::{Cursor, Gid, GlyphStyle, Point, Rectangle};
 
@@ -72,10 +72,10 @@ impl From<usize> for TextOp {
 }
 
 // roughly 168 bytes to represent the rest of the struct, and we want to fill out the 4096 byte page with text
-const TEXTVIEW_LEN: usize = 3072;
+pub const TEXTVIEW_LEN: usize = 3072;
 pub const TEXTVIEW_DEFAULT_STYLE: GlyphStyle = GlyphStyle::Regular;
 
-#[derive(Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TextView {
     // this is the operation as specified for the GAM. Note this is different from the "op" when sent to
     // graphics-server only the GAM should be sending TextViews to the graphics-server, and a different
@@ -116,7 +116,7 @@ pub struct TextView {
     // this field tracks the state of a busy animation, if `Some`
     pub busy_animation_state: Option<u32>,
 
-    pub text: String<3072>,
+    pub text: String,
 }
 impl TextView {
     pub fn new(canvas: Gid, bounds_hint: TextBounds) -> Self {
@@ -130,7 +130,7 @@ impl TextView {
             bounds_hint,
             bounds_computed: None,
             style: TEXTVIEW_DEFAULT_STYLE,
-            text: String::<3072>::new(),
+            text: String::new(),
             cursor: Cursor::new(0, 0, 0),
             insertion: None,
             ellipsis: false,
@@ -156,7 +156,7 @@ impl TextView {
 
     pub fn get_canvas_gid(&self) -> Gid { self.canvas }
 
-    pub fn to_str(&self) -> &str { self.text.as_str().unwrap() }
+    pub fn to_str(&self) -> &str { self.text.as_str() }
 
     pub fn clear_str(&mut self) { self.text.clear() }
 
@@ -169,7 +169,7 @@ impl TextView {
         self.bounds_hint = t.bounds_hint;
         self.bounds_computed = t.bounds_computed;
         self.style = t.style;
-        self.text = t.text;
+        self.text = t.text.clone();
         self.cursor = t.cursor;
         self.draw_border = t.draw_border;
         self.clear_area = t.clear_area;

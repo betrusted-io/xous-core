@@ -24,8 +24,8 @@ pub use graphics_server::api::{Point, Rectangle};
 pub use graphics_server::api::{TextOp, TextView};
 use ime_plugin_api::{ApiToken, ImefCallback};
 use num_traits::*;
-use xous::{send_message, Message, CID};
-use xous_ipc::{Buffer, String};
+use xous::{CID, Message, send_message};
+use xous_ipc::Buffer;
 
 #[doc = include_str!("../README.md")]
 
@@ -146,10 +146,16 @@ impl Gam {
         }
     }
 
-    /// this "posts" a textview -- it's not a "draw" as the update is neither guaranteed nor instantaneous
+    /// This "posts" a textview -- it's not a "draw" as the update is neither guaranteed nor instantaneous
     /// the GAM first has to check that the textview is allowed to be updated, and then it will decide when
     /// the actual screen update is allowed
+    ///
+    /// This will also truncate any text that is too long to fit into a single paged-sized transaction, as set
+    /// by `graphics_server::api::TEXTVIEW_LEN`
     pub fn post_textview(&self, tv: &mut TextView) -> Result<(), xous::Error> {
+        if tv.text.len() > graphics_server::api::TEXTVIEW_LEN {
+            tv.text.truncate(graphics_server::api::TEXTVIEW_LEN);
+        }
         tv.set_op(TextOp::Render);
         // force the clip_rect to none, in case a stale value from a previous bounds computation was hanging
         // out the bounds should /always/ come from the GAM canvas when doing a "live fire" redraw
@@ -321,7 +327,7 @@ impl Gam {
     }
 
     pub fn claim_token(&self, name: &str) -> Result<Option<[u32; 4]>, xous::Error> {
-        let tokenclaim = TokenClaim { token: None, name: String::<128>::from_str(name) };
+        let tokenclaim = TokenClaim { token: None, name: String::from(name) };
         let mut buf = Buffer::into_buf(tokenclaim).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::ClaimToken.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         let returned_claim = buf.to_original::<TokenClaim, _>().unwrap();
@@ -331,7 +337,7 @@ impl Gam {
 
     #[cfg(feature = "unsafe-app-loading")]
     pub fn register_name(&self, name: &str, auth_token: [u32; 4]) -> Result<(), xous::Error> {
-        let name_registration = NameRegistration { name: String::<128>::from_str(name), auth_token };
+        let name_registration = NameRegistration { name: String::from(name), auth_token };
         let buf = Buffer::into_buf(name_registration).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::RegisterName.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         Ok(())
@@ -446,7 +452,7 @@ impl Gam {
     /// Failure to switch *is silent* because waiting for an activation to go through and
     /// confirm can cause a deadlock condition.
     pub fn switch_to_app(&self, app_name: &str, token: [u32; 4]) -> Result<(), xous::Error> {
-        let switchapp = SwitchToApp { token, app_name: String::<128>::from_str(app_name) };
+        let switchapp = SwitchToApp { token, app_name: String::from(app_name) };
         let buf = Buffer::into_buf(switchapp).or(Err(xous::Error::InternalError))?;
         buf.send(self.conn, Opcode::SwitchToApp.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))
@@ -454,7 +460,7 @@ impl Gam {
     }
 
     pub fn raise_menu(&self, menu_name_str: &str) -> Result<(), xous::Error> {
-        let menu_name = GamActivation { name: String::<128>::from_str(menu_name_str), result: None };
+        let menu_name = GamActivation { name: String::from(menu_name_str), result: None };
         let mut buf = Buffer::into_buf(menu_name).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::RaiseMenu.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))
@@ -519,7 +525,7 @@ impl Gam {
         let mut ret = Vec::<std::string::String>::new();
         for word in result.words {
             if let Some(w) = word {
-                ret.push(w.as_str().unwrap().to_string());
+                ret.push(w.as_str().to_string());
             }
         }
         if ret.len() == 0 { Err(xous::Error::InvalidString) } else { Ok(ret) }
@@ -532,7 +538,7 @@ impl Gam {
         }
         let mut ipc = Bip39Ipc::default();
         for (word, slot) in bip39.iter().zip(ipc.words.iter_mut()) {
-            *slot = Some(xous_ipc::String::from_str(word))
+            *slot = Some(String::from(word))
         }
         let mut buf = Buffer::into_buf(ipc).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::Bip39toBytes.to_u32().unwrap())
@@ -560,7 +566,7 @@ impl Gam {
         let mut suggestions = Vec::<std::string::String>::new();
         for word in result.words {
             if let Some(w) = word {
-                suggestions.push(w.as_str().unwrap().to_string())
+                suggestions.push(w.as_str().to_string())
             }
         }
         Ok(suggestions)

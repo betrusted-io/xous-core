@@ -3,8 +3,8 @@ use std::cell::RefCell;
 use std::io::ErrorKind;
 use std::io::{Read, Write};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 
 use gam::TextEntryPayload;
@@ -17,15 +17,15 @@ use perflib::*;
 use persistent_store::store::OPENSK2_DICT;
 use vault::env::xous::U2F_APP_DICT;
 use vault::{
-    atime_to_str, basis_change, ctap::data_formats::PublicKeyCredentialSource, deserialize_app_info,
-    serialize_app_info, utc_now, AppInfo, VAULT_ALLOC_HINT, VAULT_PASSWORD_DICT, VAULT_TOTP_DICT,
+    AppInfo, VAULT_ALLOC_HINT, VAULT_PASSWORD_DICT, VAULT_TOTP_DICT, atime_to_str, basis_change,
+    ctap::data_formats::PublicKeyCredentialSource, deserialize_app_info, serialize_app_info, utc_now,
 };
-use xous::{send_message, Message};
+use xous::{Message, send_message};
 
 use crate::storage::{self, PasswordRecord, StorageContent};
 use crate::totp::TotpAlgorithm;
-use crate::{storage::TotpRecord, ListItem, ListKey};
 use crate::{ItemLists, SelectedEntry, VaultMode};
+use crate::{ListItem, ListKey, storage::TotpRecord};
 #[cfg(feature = "vaultperf")]
 const FILE_ID_APPS_VAULT_SRC_ACTIONS: u32 = 1;
 
@@ -164,7 +164,7 @@ impl<'a> ActionManager<'a> {
                     .field(None, Some(password_validator))
                     .build()
                 {
-                    Ok(text) => text.content()[0].content.as_str().unwrap_or("UTF-8 error").to_string(),
+                    Ok(text) => &text.content()[0].content,
                     _ => {
                         log::error!("Name entry failed");
                         self.action_active.store(false, Ordering::SeqCst);
@@ -179,7 +179,7 @@ impl<'a> ActionManager<'a> {
                     .field(None, Some(password_validator))
                     .build()
                 {
-                    Ok(text) => text.content()[0].content.as_str().unwrap_or("UTF-8 error").to_string(),
+                    Ok(text) => &text.content()[0].content,
                     _ => {
                         log::error!("Name entry failed");
                         self.action_active.store(false, Ordering::SeqCst);
@@ -246,7 +246,7 @@ impl<'a> ActionManager<'a> {
                         .field(Some(password), Some(password_validator))
                         .build()
                     {
-                        Ok(text) => text.content()[0].content.as_str().unwrap().to_string(),
+                        Ok(text) => &text.content()[0].content,
                         _ => {
                             log::error!("Name entry failed");
                             self.action_active.store(false, Ordering::SeqCst);
@@ -262,7 +262,7 @@ impl<'a> ActionManager<'a> {
                             .field(Some("20".to_string()), Some(length_validator))
                             .build()
                         {
-                            Ok(entry) => entry.content()[0].content.as_str().unwrap().parse::<u32>().unwrap(),
+                            Ok(entry) => &(entry.content()[0].content).parse::<u32>().unwrap(),
                             _ => {
                                 log::error!("Length entry failed");
                                 self.action_active.store(false, Ordering::SeqCst);
@@ -322,7 +322,7 @@ impl<'a> ActionManager<'a> {
                         #[cfg(feature = "ux-swap-delay")]
                         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                         let pg2 = PasswordGenerator {
-                            length: length as usize,
+                            length: *length as usize,
                             numbers: number,
                             lowercase_letters: lower,
                             uppercase_letters: upper,
@@ -342,13 +342,13 @@ impl<'a> ActionManager<'a> {
                         }
                     } else {
                         approved = true;
-                        maybe_password
+                        maybe_password.to_string()
                     };
                 }
                 let mut record = storage::PasswordRecord {
                     version: VAULT_PASSWORD_REC_VERSION,
-                    description,
-                    username,
+                    description: description.to_string(),
+                    username: username.to_string(),
                     password,
                     notes: if bip39 {
                         "bip39".to_string()
@@ -382,7 +382,7 @@ impl<'a> ActionManager<'a> {
                     .field(None, Some(password_validator))
                     .build()
                 {
-                    Ok(text) => text.content()[0].content.as_str().unwrap_or("UTF-8 error").to_string(),
+                    Ok(text) => &text.content()[0].content,
                     _ => {
                         log::error!("Name entry failed");
                         self.action_active.store(false, Ordering::SeqCst);
@@ -422,7 +422,7 @@ impl<'a> ActionManager<'a> {
                     .field(None, Some(totp_ss_validator))
                     .build()
                 {
-                    Ok(text) => text.content()[0].content.as_str().unwrap_or("UTF-8 error").to_string(),
+                    Ok(text) => &text.content()[0].content,
                     _ => {
                         log::error!("TOTP ss entry failed");
                         self.action_active.store(false, Ordering::SeqCst);
@@ -460,7 +460,7 @@ impl<'a> ActionManager<'a> {
                         .field(Some("0".to_string()), Some(count_validator))
                         .build()
                     {
-                        Ok(entry) => entry.content()[0].content.as_str().unwrap().parse::<u64>().unwrap(),
+                        Ok(entry) => (entry.content()[0].content).parse::<u64>().unwrap(),
                         _ => {
                             log::error!("Count entry failed");
                             self.action_active.store(false, Ordering::SeqCst);
@@ -475,7 +475,7 @@ impl<'a> ActionManager<'a> {
                 // record after entering it.
                 let mut totp = storage::TotpRecord {
                     version: VAULT_TOTP_REC_VERSION,
-                    name: description,
+                    name: description.to_string(),
                     secret: validated_secret,
                     algorithm: TotpAlgorithm::HmacSha1,
                     digits: 6,
@@ -512,20 +512,19 @@ impl<'a> ActionManager<'a> {
 
             if choice.is_none() {
                 // we're dealing with FIDO stuff, use the custom code path
-                let dictionary =
-                    match usize::from_str_radix(entry.key_guid.as_str().unwrap_or("UTF8-error"), 10) {
-                        Ok(fido_key) => {
-                            if vault::ctap::storage::key::CREDENTIALS.contains(&fido_key) {
-                                persistent_store::store::OPENSK2_DICT // heuristic: all fido2 keys are simple integers
-                            } else {
-                                U2F_APP_DICT
-                            }
+                let dictionary = match usize::from_str_radix(entry.key_guid.as_str(), 10) {
+                    Ok(fido_key) => {
+                        if vault::ctap::storage::key::CREDENTIALS.contains(&fido_key) {
+                            persistent_store::store::OPENSK2_DICT // heuristic: all fido2 keys are simple integers
+                        } else {
+                            U2F_APP_DICT
                         }
-                        Err(_) => U2F_APP_DICT, // u2f keys are long hex strings
-                    };
+                    }
+                    Err(_) => U2F_APP_DICT, // u2f keys are long hex strings
+                };
                 match self.pddb.borrow().get(
                     dictionary,
-                    entry.key_guid.as_str().unwrap_or("UTF8-error"),
+                    entry.key_guid.as_str(),
                     None,
                     false,
                     false,
@@ -536,7 +535,7 @@ impl<'a> ActionManager<'a> {
                         let attr = candidate.attributes().expect("couldn't get key attributes");
                         match self.pddb.borrow().delete_key(
                             dictionary,
-                            entry.key_guid.as_str().unwrap_or("UTF8-error"),
+                            entry.key_guid.as_str(),
                             Some(&attr.basis),
                         ) {
                             Ok(_) => {
@@ -556,7 +555,7 @@ impl<'a> ActionManager<'a> {
             } else {
                 // we're deleting either a password, or a totp
                 let choice = choice.unwrap();
-                let guid = entry.key_guid.as_str().unwrap_or("UTF8-error");
+                let guid = entry.key_guid.as_str();
                 if entry.mode == VaultMode::Password {
                     // self.modals.show_notification(&format!("deleting key {}", guid), None).ok();
                     // if it's a password, we have to pull the full record, and then reconstitute the
@@ -604,7 +603,7 @@ impl<'a> ActionManager<'a> {
         match entry.mode {
             VaultMode::Password => {
                 let choice = storage::ContentKind::Password;
-                let guid = entry.key_guid.as_str().unwrap_or("UTF8-error");
+                let guid = entry.key_guid.as_str();
                 let storage = self.storage.borrow_mut();
                 let pw: storage::PasswordRecord = match storage.get_record(&choice, guid) {
                     Ok(record) => record,
@@ -637,7 +636,7 @@ impl<'a> ActionManager<'a> {
             // different record storage format that's a bit funkier to edit.
             let maybe_update = match self.pddb.borrow().get(
                 dict,
-                entry.key_guid.as_str().unwrap(),
+                &entry.key_guid,
                 None,
                 false,
                 false,
@@ -668,8 +667,8 @@ impl<'a> ActionManager<'a> {
                                         .build()
                                         .expect("modals error in edit")
                                 };
-                                ai.name = edit_data.content()[0].content.as_str().unwrap().to_string();
-                                ai.notes = edit_data.content()[1].content.as_str().unwrap().to_string();
+                                ai.name = edit_data.content()[0].content.as_str().to_string();
+                                ai.notes = edit_data.content()[1].content.as_str().to_string();
                                 ai.atime = 0;
                                 ai
                             } else {
@@ -698,15 +697,12 @@ impl<'a> ActionManager<'a> {
                 }
             };
             if let Some((update, basis)) = maybe_update {
-                self.pddb
-                    .borrow()
-                    .delete_key(dict, entry.key_guid.as_str().unwrap(), Some(&basis))
-                    .unwrap_or_else(|e| {
-                        self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e))
-                    });
+                self.pddb.borrow().delete_key(dict, entry.key_guid.as_str(), Some(&basis)).unwrap_or_else(
+                    |e| self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e)),
+                );
                 match self.pddb.borrow().get(
                     dict,
-                    entry.key_guid.as_str().unwrap(),
+                    entry.key_guid.as_str(),
                     Some(&basis),
                     false,
                     true,
@@ -720,7 +716,7 @@ impl<'a> ActionManager<'a> {
                             0
                         });
                         // update the item cache so it appears on the screen
-                        let li = make_u2f_item_from_record(entry.key_guid.as_str().unwrap(), update);
+                        let li = make_u2f_item_from_record(entry.key_guid.as_str(), update);
                         self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
                     }
                     Err(e) => self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e)),
@@ -731,7 +727,7 @@ impl<'a> ActionManager<'a> {
         }
 
         let choice = choice.unwrap();
-        let key_guid = entry.key_guid.as_str().unwrap();
+        let key_guid = entry.key_guid.as_str();
         let mut storage = self.storage.borrow_mut();
 
         let maybe_edited = match choice {
@@ -775,23 +771,21 @@ impl<'a> ActionManager<'a> {
                         .build()
                         .expect("modals error in edit")
                 };
-                pw.name = edit_data.content()[0].content.as_str().unwrap().to_string();
-                pw.secret = edit_data.content()[1].content.as_str().unwrap().to_string();
-                pw.notes = edit_data.content()[2].content.as_str().unwrap().to_string();
-                pw.is_hotp = if edit_data.content()[6].content.as_str().unwrap().to_string().to_uppercase()
-                    == "HOTP"
-                {
+                pw.name = edit_data.content()[0].content.as_str().to_string();
+                pw.secret = edit_data.content()[1].content.as_str().to_string();
+                pw.notes = edit_data.content()[2].content.as_str().to_string();
+                pw.is_hotp = if edit_data.content()[6].content.as_str().to_string().to_uppercase() == "HOTP" {
                     true
                 } else {
                     false
                 };
-                if let Ok(t) = u64::from_str_radix(edit_data.content()[3].content.as_str().unwrap(), 10) {
+                if let Ok(t) = u64::from_str_radix(edit_data.content()[3].content.as_str(), 10) {
                     pw.timestep = t;
                 }
-                if let Ok(alg) = TotpAlgorithm::try_from(edit_data.content()[4].content.as_str().unwrap()) {
+                if let Ok(alg) = TotpAlgorithm::try_from(edit_data.content()[4].content.as_str()) {
                     pw.algorithm = alg;
                 }
-                if let Ok(d) = u32::from_str_radix(edit_data.content()[5].content.as_str().unwrap(), 10) {
+                if let Ok(d) = u32::from_str_radix(edit_data.content()[5].content.as_str(), 10) {
                     pw.digits = d;
                 }
                 // update the disk
@@ -848,10 +842,10 @@ impl<'a> ActionManager<'a> {
                         .expect("modals error in edit")
                 };
 
-                pw.description = edit_data.content()[0].content.as_str().unwrap().to_string();
-                pw.username = edit_data.content()[1].content.as_str().unwrap().to_string();
-                pw.password = edit_data.content()[2].content.as_str().unwrap().to_string();
-                pw.notes = edit_data.content()[3].content.as_str().unwrap().to_string();
+                pw.description = edit_data.content()[0].content.as_str().to_string();
+                pw.username = edit_data.content()[1].content.as_str().to_string();
+                pw.password = edit_data.content()[2].content.as_str().to_string();
+                pw.notes = edit_data.content()[3].content.as_str().to_string();
 
                 // if the notes field starts with the word "bip39" (case insensitive), use BIP39 to
                 // display/edit the password field
@@ -909,7 +903,7 @@ impl<'a> ActionManager<'a> {
                             .field(Some(password), Some(password_validator))
                             .build()
                         {
-                            Ok(text) => text.content()[0].content.as_str().unwrap().to_string(),
+                            Ok(text) => text.content()[0].content.as_str().to_string(),
                             _ => {
                                 log::error!("Name entry failed");
                                 self.action_active.store(false, Ordering::SeqCst);
@@ -925,9 +919,7 @@ impl<'a> ActionManager<'a> {
                                 .field(Some("20".to_string()), Some(length_validator))
                                 .build()
                             {
-                                Ok(entry) => {
-                                    entry.content()[0].content.as_str().unwrap().parse::<u32>().unwrap()
-                                }
+                                Ok(entry) => entry.content()[0].content.as_str().parse::<u32>().unwrap(),
                                 _ => {
                                     log::error!("Length entry failed");
                                     self.action_active.store(false, Ordering::SeqCst);
@@ -1445,7 +1437,7 @@ impl<'a> ActionManager<'a> {
             .field(None, Some(name_validator))
             .build()
         {
-            Ok(text) => text.content()[0].content.as_str().unwrap_or("UTF-8 error").to_string(),
+            Ok(text) => &text.content()[0].content,
             _ => {
                 log::error!("Name entry failed");
                 self.action_active.store(false, Ordering::SeqCst);
@@ -1499,7 +1491,7 @@ impl<'a> ActionManager<'a> {
                     .field(None, Some(name_validator))
                     .build()
                 {
-                    Ok(text) => text.content()[0].content.as_str().unwrap_or("UTF-8 error").to_string(),
+                    Ok(text) => &text.content()[0].content,
                     Err(e) => {
                         self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e));
                         return;
@@ -1798,67 +1790,67 @@ impl<'a> ActionManager<'a> {
     }
 }
 
-pub(crate) fn totp_ss_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+pub(crate) fn totp_ss_validator(input: &TextEntryPayload) -> Option<String> {
     let proposed_ss = input.as_str().to_uppercase();
     if let Some(ss) = base32::decode(base32::Alphabet::RFC4648 { padding: false }, &proposed_ss) {
         if ss.len() > 0 {
             return None;
         } else {
-            return Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_totp", locales::LANG)));
+            return Some(String::from(t!("vault.illegal_totp", locales::LANG)));
         }
     }
     if let Some(ss) = base32::decode(base32::Alphabet::RFC4648 { padding: true }, &proposed_ss) {
         if ss.len() > 0 {
             return None;
         } else {
-            return Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_totp", locales::LANG)));
+            return Some(String::from(t!("vault.illegal_totp", locales::LANG)));
         }
     }
     if let Some(ss) = base32::decode(base32::Alphabet::Crockford, &proposed_ss) {
         if ss.len() > 0 {
             return None;
         } else {
-            return Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_totp", locales::LANG)));
+            return Some(String::from(t!("vault.illegal_totp", locales::LANG)));
         }
     }
-    Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_totp", locales::LANG)))
+    Some(String::from(t!("vault.illegal_totp", locales::LANG)))
 }
-pub(crate) fn name_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+pub(crate) fn name_validator(input: &TextEntryPayload) -> Option<String> {
     let proposed_name = input.as_str();
     if proposed_name.contains(['\n', ':']) {
         // the '\n' is reserved as the delimiter to end the name field, and ':' is the path separator
-        Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_char", locales::LANG)))
+        Some(String::from(t!("vault.illegal_char", locales::LANG)))
     } else {
         None
     }
 }
-pub(crate) fn password_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+pub(crate) fn password_validator(input: &TextEntryPayload) -> Option<String> {
     let proposed_name = input.as_str();
     if proposed_name.contains(['\n']) {
         // the '\n' is reserved as the delimiter to end the name field
-        Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_char", locales::LANG)))
+        Some(String::from(t!("vault.illegal_char", locales::LANG)))
     } else {
         None
     }
 }
-fn length_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+fn length_validator(input: &TextEntryPayload) -> Option<String> {
     let text_str = input.as_str();
     match text_str.parse::<u32>() {
         Ok(input_int) => {
             if input_int < 1 || input_int > 128 {
-                Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_number", locales::LANG)))
+                Some(String::from(t!("vault.illegal_number", locales::LANG)))
             } else {
                 None
             }
         }
-        _ => Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_number", locales::LANG))),
+        _ => Some(String::from(t!("vault.illegal_number", locales::LANG))),
     }
 }
-fn count_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+fn count_validator(input: &TextEntryPayload) -> Option<String> {
     let text_str = input.as_str();
     match text_str.parse::<u64>() {
         Ok(_input_int) => None,
-        _ => Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_count", locales::LANG))),
+        _ => Some(String::from(t!("vault.illegal_count", locales::LANG))),
     }
 }
 

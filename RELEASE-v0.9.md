@@ -475,7 +475,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - keymap is checked on every call to send a key to the USB keyboard. This allows us to toggle the keymap temporarily to allow typing into hosts with a different keymap (instead of requiring a reboot)
 - Encrypted swap: encrypted swap will allow Xous to run on microcontrollers that have small internal memory footprints, and rely on external SPI RAM for backing storage. This should create a step function in physical security when running on a microcontroller with sufficient internal protected RAM to hold the working set and core OS, as it will complicated attacks that attempt to read out off-chip RAM.
 
-# New in 0.9.17
+# New in 0.10.0
 - Fix panic reporting in userspace panics. There was an API incompatibility between `std` and the panic handler where we instantiated the panic handler as a "well known service" but actually it needed to be registered with xous-names.
 - Added "device RAM allocation". A region of memory requested using the `map_memory` API with a physical address of `None` and a flag of `xous::MemoryFlags::DEV` will be allocated as contiguous physical pages of memory. It returns `OutOfMemory` if a contiguous block cannot be found; it is up to the userspace to de-allocate or swap out memory to create a large enough block. This API is useful for creating regions of RAM to be passed on to e.g. DMA devices or hardware coprocessors.
 - cleaned up swap API; removed elements that are no longer needed (e.g. SID/CID for userspace calls from kernel)
@@ -487,6 +487,19 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Various fixes to track changes in Rust 1.80
 - Add documentation to the `modals` library (thanks @rowr111)
 - Due to a breaking change in Renode, this release is only compatible with Renode equal to or later than 1.15.2.7965（e6e79aad-202408180425) (see issue #570 / PR #572)
+- Migrate to `rkyv` v0.8+.
+  - This is a breaking change: `xous-ipc` is now at 0.10
+  - Xous minor version incremented to 0.10.0 to note the breakage
+  - All prior `chat-test` sessions need to have their PDDB keys manually deleted due to changes in serialization format
+    - No other user-facing backward compatibility issues other than that noted above!
+  - `xous-ipc::String<N>` API is now deprecated. We can now serialize `String` natively between crates (and `Vec` too)
+    - Note that this pushes length-checking of `String` onto the caller: if the `String` is too large, you will get a run-time crash reported as a failure in `rancor-0.1.0` with a form like "created a new `Panic` from: overflowed buffer while writing ### bytes into buffer of length 0 (capacity is 4096)".
+    - The resolution to this is to either ensure that all elements can fit within a single page of memory (if that's the desired behavior)
+    - Or, check the total runtime size of the dynamic allocations and allocate more pages prior to sending the data
+  - Number of pages to allocate could be automated inside the `xous-ipc` crate, but this will be delegated to a future time with a new API.
+  - Most applications were forward-ported, except for `app-loader` which has already bit-rotted for other reasons and may be deprecated because we can use "swap" space to effectively do app loading (to be made available in future hardware revs)
+  - Serialization is a bit easier now with the new `rkyv`, we don't have to track a `pos` explicitly; all of the archival metadata is now stuck at the end of the archive, so all you need to know is the final length of the serialized record and you're done.
+
 
 ## Roadmap
 - Lots of testing and bug fixes

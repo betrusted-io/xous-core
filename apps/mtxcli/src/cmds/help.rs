@@ -2,7 +2,6 @@ use core::fmt::Write;
 
 use locales::t;
 use xous::{Message, MessageEnvelope, StringBuffer};
-use xous_ipc::String as XousString;
 
 use crate::cmds::*;
 use crate::{CommonEnv, ShellCmdApi};
@@ -16,13 +15,9 @@ impl Help {
 impl<'a> ShellCmdApi<'a> for Help {
     cmd_api!(help);
 
-    fn process(
-        &mut self,
-        args: XousString<1024>,
-        _env: &mut CommonEnv,
-    ) -> Result<Option<XousString<1024>>, xous::Error> {
-        let mut ret = XousString::<1024>::new();
-        let mut tokens = args.as_str().unwrap().split(' ');
+    fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
+        let mut tokens = args.split(' ');
 
         if let Some(slashcmd) = tokens.next() {
             let cmd = if slashcmd.starts_with("/") { &slashcmd[1..] } else { slashcmd };
@@ -75,10 +70,10 @@ impl<'a> ShellCmdApi<'a> for Help {
         &mut self,
         msg: &MessageEnvelope,
         env: &mut CommonEnv,
-    ) -> Result<Option<XousString<1024>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         match &msg.body {
             Message::Scalar(xous::ScalarMessage { id: _, arg1: _, arg2: _, arg3: _, arg4: async_msg_id }) => {
-                let mut ret = XousString::<1024>::new();
+                let mut ret = String::new();
                 let warning = match *async_msg_id {
                     CLOCK_NOT_SET_ID => {
                         t!("mtxcli.clock.warning", locales::LANG)
@@ -144,7 +139,7 @@ impl<'a> ShellCmdApi<'a> for Help {
                 let str_buf = unsafe { StringBuffer::from_memory_message(mm) };
                 let msg = str_buf.to_str();
                 // log::info!("async message \"{}\"", msg);
-                let mut ret = XousString::<1024>::new();
+                let mut ret = String::new();
                 if msg.starts_with(SENTINEL) {
                     let msgv: Vec<&str> = msg.split(SENTINEL).collect();
                     if msgv.len() == 4 {

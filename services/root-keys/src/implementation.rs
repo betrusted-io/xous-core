@@ -2632,7 +2632,7 @@ impl<'a> RootKeys {
     #[cfg(feature = "hazardous-debug")]
     fn debug_print_key(&self, offset: usize, num_bits: usize, name: &str) {
         use core::fmt::Write;
-        let mut debugstr = xous_ipc::String::<4096>::new();
+        let mut debugstr = String::new();
         write!(debugstr, "{}", name).unwrap();
         for word in self.sensitive_data.borrow_mut().as_slice::<u32>()
             [offset..offset as usize + num_bits / (size_of::<u32>() * 8)]
@@ -2726,7 +2726,7 @@ impl<'a> RootKeys {
                 buf.lend_mut(self.gfx.conn(), self.gfx.bulk_read_fontmap_op())
                     .expect("couldn't do bulkread from gfx");
                 let br = buf.as_flat::<BulkRead, _>().unwrap();
-                hasher.update(&br.buf[..br.len as usize]);
+                hasher.update(&br.buf[..(<u32 as From<u32>>::from(br.len.into())) as usize]);
                 if br.len != bulkread.buf.len() as u32 {
                     log::trace!("non-full block len: {}", br.len);
                 }
@@ -2766,7 +2766,7 @@ impl<'a> RootKeys {
                 buf.lend_mut(self.gfx.conn(), self.gfx.bulk_read_fontmap_op())
                     .expect("couldn't do bulkread from gfx");
                 let br = buf.as_flat::<BulkRead, _>().unwrap();
-                hasher.update(&br.buf[..br.len as usize]);
+                hasher.update(&br.buf[..(<u32 as From<u32>>::from(br.len.into())) as usize]);
                 if br.len != bulkread.buf.len() as u32 {
                     log::trace!("non-full block len: {}", br.len);
                 }

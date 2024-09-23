@@ -9,35 +9,35 @@ pub fn create_submenu(vault_conn: xous::CID, actions_conn: xous::CID, menu_mgr: 
     let mut menu_items = Vec::<MenuItem>::new();
 
     menu_items.push(MenuItem {
-        name: xous_ipc::String::from_str(t!("vault.menu_edit", locales::LANG)),
+        name: String::from(t!("vault.menu_edit", locales::LANG)),
         action_conn: Some(vault_conn),
         action_opcode: VaultOp::MenuEditStage1.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
     menu_items.push(MenuItem {
-        name: xous_ipc::String::from_str(t!("vault.menu_delete", locales::LANG)),
+        name: String::from(t!("vault.menu_delete", locales::LANG)),
         action_conn: Some(vault_conn),
         action_opcode: VaultOp::MenuDeleteStage1.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
     menu_items.push(MenuItem {
-        name: xous_ipc::String::from_str(t!("vault.menu_unlock_basis", locales::LANG)),
+        name: String::from(t!("vault.menu_unlock_basis", locales::LANG)),
         action_conn: Some(actions_conn),
         action_opcode: ActionOp::MenuUnlockBasis.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
     menu_items.push(MenuItem {
-        name: xous_ipc::String::from_str(t!("vault.menu_manage_basis", locales::LANG)),
+        name: String::from(t!("vault.menu_manage_basis", locales::LANG)),
         action_conn: Some(actions_conn),
         action_opcode: ActionOp::MenuManageBasis.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
     menu_items.push(MenuItem {
-        name: xous_ipc::String::from_str(t!("vault.menu_change_font", locales::LANG)),
+        name: String::from(t!("vault.menu_change_font", locales::LANG)),
         action_conn: Some(vault_conn),
         action_opcode: VaultOp::MenuChangeFont.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -45,35 +45,35 @@ pub fn create_submenu(vault_conn: xous::CID, actions_conn: xous::CID, menu_mgr: 
     });
     #[cfg(feature = "vault-testing")]
     menu_items.push(MenuItem {
-        name: xous_ipc::String::from_str("Generate test vectors"),
+        name: String::from("Generate test vectors"),
         action_conn: Some(actions_conn),
         action_opcode: ActionOp::GenerateTests.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
     menu_items.push(MenuItem {
-        name: xous_ipc::String::from_str(t!("vault.menu_readout_mode", locales::LANG)),
+        name: String::from(t!("vault.menu_readout_mode", locales::LANG)),
         action_conn: Some(vault_conn),
         action_opcode: VaultOp::MenuReadoutMode.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
     menu_items.push(MenuItem {
-        name: xous_ipc::String::from_str(t!("prefs.autotype_rate", locales::LANG)),
+        name: String::from(t!("prefs.autotype_rate", locales::LANG)),
         action_conn: Some(vault_conn),
         action_opcode: VaultOp::MenuAutotypeRate.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
     menu_items.push(MenuItem {
-        name: xous_ipc::String::from_str(t!("vault.menu_set_lefty_mode", locales::LANG)),
+        name: String::from(t!("vault.menu_set_lefty_mode", locales::LANG)),
         action_conn: Some(vault_conn),
         action_opcode: VaultOp::MenuLeftyMode.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
     menu_items.push(MenuItem {
-        name: xous_ipc::String::from_str(t!("vault.menu_close", locales::LANG)),
+        name: String::from(t!("vault.menu_close", locales::LANG)),
         action_conn: Some(actions_conn),
         action_opcode: ActionOp::MenuClose.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),

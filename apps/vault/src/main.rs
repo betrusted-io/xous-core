@@ -19,12 +19,12 @@ use actions::ActionOp;
 use itemcache::*;
 use locales::t;
 use num_traits::*;
-use ux::framework::{name_to_style, VaultUx, DEFAULT_FONT, FONT_LIST};
+use ux::framework::{DEFAULT_FONT, FONT_LIST, VaultUx, name_to_style};
 use vault::ctap::main_hid::HidIterType;
-use vault::env::xous::XousEnv;
 use vault::env::Env;
-use vault::{Transport, VaultOp, SELF_CONN};
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
+use vault::env::xous::XousEnv;
+use vault::{SELF_CONN, Transport, VaultOp};
+use xous::{Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 use xous_usb_hid::device::fido::*;
 
@@ -97,10 +97,10 @@ pub enum VaultMode {
     Password,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct SelectedEntry {
-    pub key_guid: xous_ipc::String<256>,
-    pub description: xous_ipc::String<256>,
+    pub key_guid: String,
+    pub description: String,
     pub mode: VaultMode,
 }
 
@@ -492,7 +492,7 @@ fn main() -> ! {
                     continue;
                 }
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
+                let s = buffer.as_flat::<String, _>().unwrap();
                 log::debug!("Incremental input: {}", s.as_str());
                 vaultux.input(s.as_str()).expect("Vault couldn't accept input string");
                 send_message(conn, Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)).ok();
@@ -505,7 +505,7 @@ fn main() -> ! {
                     continue;
                 }
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
+                let s = buffer.as_flat::<String, _>().unwrap();
                 log::debug!("vaultux got input line: {}", s.as_str());
                 match s.as_str() {
                     "\u{0011}" => {
@@ -805,9 +805,7 @@ fn main() -> ! {
                         Some(cv.to_string()),
                         Some(|tf| match tf.as_str().parse::<usize>() {
                             Ok(_) => None,
-                            Err(_) => {
-                                Some(xous_ipc::String::from_str(t!("prefs.autobacklight_err", locales::LANG)))
-                            }
+                            Err(_) => Some(String::from(t!("prefs.autobacklight_err", locales::LANG))),
                         }),
                     )
                     .build()

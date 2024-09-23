@@ -69,24 +69,24 @@ pub const POST_TEXT_MAX: usize = 3072;
 
 #[derive(Archive, Serialize, Deserialize, Debug)]
 pub struct Find {
-    pub author: xous_ipc::String<128>,
+    pub author: String,
     pub timestamp: u64,
     pub key: Option<usize>, // the return post key if found.
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug)]
 pub struct Dialogue {
-    pub dict: xous_ipc::String<128>,
-    pub key: Option<xous_ipc::String<128>>,
+    pub dict: String,
+    pub key: Option<String>,
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug)]
 pub struct Post {
-    pub dialogue_id: xous_ipc::String<128>,
-    pub author: xous_ipc::String<128>,
+    pub dialogue_id: String,
+    pub author: String,
     pub timestamp: u64,
-    pub text: xous_ipc::String<POST_TEXT_MAX>,
-    pub attach_url: Option<xous_ipc::String<128>>,
+    pub text: String,
+    pub attach_url: Option<String>,
 }
 
 /// Events are sent to the Chat App when key things occur in the Chat UI
@@ -128,5 +128,5 @@ pub enum AuthorFlag {
 
 #[derive(Archive, Serialize, Deserialize, Debug)]
 pub struct BusyMessage {
-    pub busy_msg: xous_ipc::String<128>,
+    pub busy_msg: String,
 }

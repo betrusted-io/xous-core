@@ -105,18 +105,12 @@ pub(crate) fn password_ux_manager(
                     Some(t!("pddb.password", locales::LANG)),
                     false,
                     Some(
-                        format!("{}'{}'", t!("pddb.password_for", locales::LANG), db_name.as_str().unwrap())
-                            .as_str(),
+                        format!("{}'{}'", t!("pddb.password_for", locales::LANG), db_name.as_str()).as_str(),
                     ),
                     false,
                     None,
                 );
-                log::info!(
-                    "{}PDDB.REQPW,{},{}",
-                    xous::BOOKEND_START,
-                    db_name.as_str().unwrap(),
-                    xous::BOOKEND_END
-                );
+                log::info!("{}PDDB.REQPW,{},{}", xous::BOOKEND_START, db_name.as_str(), xous::BOOKEND_END);
                 pddb_modal.activate();
                 dr = Some(msg);
             }
@@ -129,7 +123,7 @@ pub(crate) fn password_ux_manager(
                         Buffer::from_memory_message_mut(response.body.memory_message_mut().unwrap())
                     };
                     let mut request = buffer.to_original::<BasisRequestPassword, _>().unwrap();
-                    request.plaintext_pw = Some(xous_ipc::String::from_str(pw.first().as_str()));
+                    request.plaintext_pw = Some(String::from(pw.first().as_str()));
                     // return the password to the caller
                     buffer.replace(request).unwrap();
                     // response goes out of scope here and calls Drop which returns the message

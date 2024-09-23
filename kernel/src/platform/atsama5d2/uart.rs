@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2022 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use atsama5d27::uart::{Uart as UartHw, Uart1, UART_BASE_ADDRESS};
-use xous_kernel::{arch::irq::IrqNumber, MemoryFlags, MemoryType};
+use atsama5d27::uart::{UART_BASE_ADDRESS, Uart as UartHw, Uart1};
+use xous_kernel::{MemoryFlags, MemoryType, arch::irq::IrqNumber};
 
 use crate::{
+    PID,
     debug::shell::process_characters,
     io::{SerialRead, SerialWrite},
     mem::MemoryManager,
-    PID,
 };
 
 const UART_NUMBER: usize = 1;

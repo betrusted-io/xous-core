@@ -1017,14 +1017,14 @@ fn wrapped_main() -> ! {
                 // third: construct an array of the new elements to add to the menu.
                 let new_elems = [
                     gam::MenuItem {
-                        name: xous_ipc::String::from_str(t!("mainmenu.backlighton", locales::LANG)),
+                        name: String::from(t!("mainmenu.backlighton", locales::LANG)),
                         action_conn: Some(com.conn()),
                         action_opcode: com.getop_backlight(),
                         action_payload: gam::MenuPayload::Scalar([191 >> 3, 191 >> 3, 0, 0]),
                         close_on_select: true,
                     },
                     gam::MenuItem {
-                        name: xous_ipc::String::from_str(t!("mainmenu.backlightoff", locales::LANG)),
+                        name: String::from(t!("mainmenu.backlightoff", locales::LANG)),
                         action_conn: Some(com.conn()),
                         action_opcode: com.getop_backlight(),
                         action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -1033,7 +1033,7 @@ fn wrapped_main() -> ! {
                 ];
 
                 new_elems.iter().enumerate().for_each(|(index, element)| {
-                    let _ = menu_manager.insert_item(*element, index);
+                    let _ = menu_manager.insert_item(element.clone(), index);
                 });
             }
             Some(StatusOpcode::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
@@ -1087,12 +1087,11 @@ fn wrapped_main() -> ! {
                         )
                         .unwrap();
                     } else {
-                        if let Some(ssid) = wifi_status.ssid {
+                        if let Some(ssid) = &wifi_status.ssid {
                             log::debug!("RSSI: -{}dBm", ssid.rssi);
                             compute_bars(&mut wifi_bars, ssid.rssi);
                             bars(&gam, status_gid, &wifi_bars, Point { x: 310, y: 13 }, (3, 2), 3, 2);
-                            write!(&mut battstats_tv, "{}", ssid.name.as_str().unwrap_or("UTF-8 Error"),)
-                                .unwrap();
+                            write!(&mut battstats_tv, "{}", ssid.name.as_str(),).unwrap();
                         } else {
                             if wifi_status.link_state == com_rs::LinkState::ResetHold {
                                 write!(&mut battstats_tv, "{}", t!("stats.wifi_off", locales::LANG)).unwrap();

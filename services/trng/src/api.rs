@@ -37,15 +37,11 @@ pub struct TrngErrors {
     pub pending_mask: u32,
 }
 
-/// Performance issue just noticed: the data field is exactly 4096 bytes long, which means
-/// the "len" field overflows the structure to be 2 pages. This will cause a lot of extra
-/// zero-ing of pages, thrashing the cache and also pegging the CPU for useless work.
-/// Consider revising the data field down to 1023 words in length, but need to revisit the
-/// library implemnetations to make sure this doesn't break any existing code.
-/// Note that this structure had to be mirrored into the local "getrandom" implementation
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, flatipc::Ipc)]
+/// Note that this structure is mirrored in imports/getrandom/src/xous.rs
+#[repr(C)]
 pub struct TrngBuf {
-    pub data: [u32; 1024],
+    pub data: [u32; 1020],
     pub len: u16,
 }
 

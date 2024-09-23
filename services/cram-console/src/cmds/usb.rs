@@ -18,18 +18,14 @@ impl<'a> ShellCmdApi<'a> for Usb {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: xous_ipc::String<1024>,
-        _env: &mut CommonEnv,
-    ) -> Result<Option<xous_ipc::String<1024>>, xous::Error> {
-        let mut ret = xous_ipc::String::<1024>::new();
+    fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
         #[cfg(not(feature = "mass-storage"))]
         let helpstring = "usb [hid] [fido] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest]";
         #[cfg(feature = "mass-storage")]
         let helpstring = "usb [hid] [fido] [ms] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest] [console] [noconsole]";
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

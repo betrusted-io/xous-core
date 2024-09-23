@@ -1,5 +1,3 @@
-use xous_ipc::String as XousString;
-
 use crate::cmds::*;
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -12,11 +10,7 @@ impl Status {
 impl<'a> ShellCmdApi<'a> for Status {
     cmd_api!(status);
 
-    fn process(
-        &mut self,
-        _args: XousString<1024>,
-        env: &mut CommonEnv,
-    ) -> Result<Option<XousString<1024>>, xous::Error> {
+    fn process(&mut self, _args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         if env.logged_in {
             env.scalar_async_msg(LOGGED_IN_ID);
         } else {

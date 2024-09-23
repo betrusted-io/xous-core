@@ -77,5 +77,5 @@ pub enum Opcode {
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct VersionString {
-    pub version: xous_ipc::String<512>,
+    pub version: String,
 }

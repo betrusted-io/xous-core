@@ -1,5 +1,5 @@
-use gdbstub::target::ext::breakpoints::{Breakpoints, SwBreakpoint, SwBreakpointOps};
 use gdbstub::target::TargetResult;
+use gdbstub::target::ext::breakpoints::{Breakpoints, SwBreakpoint, SwBreakpointOps};
 
 use super::XousTarget;
 

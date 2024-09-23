@@ -1,7 +1,7 @@
 use core::fmt::Write;
 
 use xous::MessageEnvelope;
-use xous_ipc::String;
+use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -15,17 +15,13 @@ impl Ssid {
 impl<'a> ShellCmdApi<'a> for Ssid {
     cmd_api!(ssid);
 
-    fn process(
-        &mut self,
-        args: String<1024>,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
         let helpstring = "ssid [scan]";
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = args.split(' ');
         if self.cb_id.is_none() {
-            self.cb_id = Some(env.register_handler(String::<256>::from_str(self.verb())));
+            self.cb_id = Some(env.register_handler(String::from(self.verb())));
         }
 
         if let Some(sub_cmd) = tokens.next() {
@@ -41,8 +37,7 @@ impl<'a> ShellCmdApi<'a> for Ssid {
                     write!(ret, "RSSI reported in dBm:\n").unwrap();
                     for ssid in ssid_list {
                         if ssid.name.len() > 0 {
-                            write!(ret, "-{} {}\n", ssid.rssi, &ssid.name.as_str().unwrap_or("UTF-8 error"))
-                                .unwrap();
+                            write!(ret, "-{} {}\n", ssid.rssi, &ssid.name.as_str()).unwrap();
                         }
                     }
                     write!(ret, "Scan state: {:?}\n", state).unwrap();
@@ -61,8 +56,8 @@ impl<'a> ShellCmdApi<'a> for Ssid {
         &mut self,
         _msg: &MessageEnvelope,
         _env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
-        let ret = String::<1024>::new();
+    ) -> Result<Option<String>, xous::Error> {
+        let ret = String::new();
         Ok(Some(ret))
     }
 }

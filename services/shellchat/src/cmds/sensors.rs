@@ -1,4 +1,4 @@
-use xous_ipc::String;
+use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -11,13 +11,9 @@ impl Sensors {
 impl<'a> ShellCmdApi<'a> for Sensors {
     cmd_api!(sensors);
 
-    fn process(
-        &mut self,
-        _args: String<1024>,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    fn process(&mut self, _args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
-        let mut ret = String::<1024>::new();
+        let mut ret = String::new();
 
         let milli_celcius = (((env.llio.adc_temperature().unwrap() as u32) * 12304) - 27_315_000) / 100;
         write!(

@@ -7,7 +7,6 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH}; // to help gen_txn_id
 
 use xous::{Message, MessageEnvelope, StringBuffer};
-use xous_ipc::String as XousString;
 
 mod migrations;
 use migrations::run_migrations;
@@ -83,17 +82,13 @@ fn get_version(ticktimer: &ticktimer_server::Ticktimer) -> String {
 pub trait ShellCmdApi<'a> {
     // user implemented:
     // called to process the command with the remainder of the string attached
-    fn process(
-        &mut self,
-        args: XousString<1024>,
-        env: &mut CommonEnv,
-    ) -> Result<Option<XousString<1024>>, xous::Error>;
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error>;
     // called to process incoming messages that may have been origniated by the most recently issued command
     fn callback(
         &mut self,
         msg: &MessageEnvelope,
         _env: &mut CommonEnv,
-    ) -> Result<Option<XousString<1024>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         log::info!("received unhandled message {:?}", msg);
         Ok(None)
     }
@@ -117,7 +112,7 @@ use trng::*;
 #[derive(Debug)]
 pub struct CommonEnv {
     ticktimer: ticktimer_server::Ticktimer,
-    cb_registrations: HashMap<u32, XousString<256>>,
+    cb_registrations: HashMap<u32, String>,
     async_msg_callback_id: u32,
     async_msg_conn: u32,
     trng: Trng,
@@ -171,7 +166,7 @@ impl CommonEnv {
         common
     }
 
-    pub fn register_handler(&mut self, verb: XousString<256>) -> u32 {
+    pub fn register_handler(&mut self, verb: String) -> u32 {
         let mut key: u32;
         loop {
             key = self.trng.get_u32().unwrap();
@@ -188,7 +183,7 @@ impl CommonEnv {
     // as it is already an unsual command
     pub fn register_async_msg(&mut self) {
         self.async_msg_conn = self.xns.request_connection_blocking(crate::SERVER_NAME_MTXCLI).unwrap();
-        self.async_msg_callback_id = self.register_handler(XousString::<256>::from_str("help"));
+        self.async_msg_callback_id = self.register_handler(String::from("help"));
     }
 
     pub fn scalar_async_msg(&self, async_msg_id: usize) {
@@ -609,7 +604,7 @@ use unset::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
-    lastverb: XousString<256>,
+    lastverb: String,
     ///// 2. declare storage for your command here.
     get_cmd: Get,
     heap_cmd: Heap,
@@ -626,7 +621,7 @@ impl CmdEnv {
         common_env.register_async_msg();
         CmdEnv {
             common_env,
-            lastverb: XousString::<256>::new(),
+            lastverb: String::new(),
             ///// 3. initialize your storage, by calling new()
             get_cmd: Get::new(),
             heap_cmd: Heap::new(),
@@ -641,10 +636,10 @@ impl CmdEnv {
 
     pub fn dispatch(
         &mut self,
-        maybe_cmdline: Option<&mut XousString<1024>>,
+        maybe_cmdline: Option<&mut String>,
         maybe_callback: Option<&MessageEnvelope>,
-    ) -> Result<Option<XousString<1024>>, xous::Error> {
-        let mut ret = XousString::<1024>::new();
+    ) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
         self.common_env.first_line = true;
 
         let commands: &mut [&mut dyn ShellCmdApi] = &mut [
@@ -717,9 +712,9 @@ impl CmdEnv {
 
             let maybe_verb = tokenize(cmdline);
 
-            let mut cmd_ret: Result<Option<XousString<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<String>, xous::Error> = Ok(None);
             if let Some(verb_string) = maybe_verb {
-                let verb = verb_string.to_str();
+                let verb = &verb_string;
 
                 // if verb starts with a slash then it's a command (else chat)
                 if verb.starts_with("/") {
@@ -730,7 +725,7 @@ impl CmdEnv {
                     for cmd in commands.iter_mut() {
                         if cmd.matches(command) {
                             match_found = true;
-                            cmd_ret = cmd.process(*cmdline, &mut self.common_env);
+                            cmd_ret = cmd.process(cmdline.to_string(), &mut self.common_env);
                             self.lastverb.clear();
                             write!(self.lastverb, "{}", verb).expect("couldn't record last verb");
                         };
@@ -742,10 +737,10 @@ impl CmdEnv {
                         write!(ret, "Commands: ").unwrap();
                         for cmd in commands.iter() {
                             if !first {
-                                ret.append(", ")?;
+                                ret.push_str(", ");
                             }
-                            ret.append("/")?;
-                            ret.append(cmd.verb())?;
+                            ret.push_str("/");
+                            ret.push_str(cmd.verb());
                             first = false;
                         }
                         Ok(Some(ret))
@@ -756,7 +751,7 @@ impl CmdEnv {
                     // chat
                     let mut text = String::from(verb);
                     text.push_str(" ");
-                    text.push_str(cmdline.to_str());
+                    text.push_str(cmdline);
                     self.common_env.user_says(&text);
                     // only for sync case Ok(Some(ret))
                     Ok(None)
@@ -766,11 +761,11 @@ impl CmdEnv {
                 Ok(None)
             }
         } else if let Some(callback) = maybe_callback {
-            let mut cmd_ret: Result<Option<XousString<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<String>, xous::Error> = Ok(None);
             // first check and see if we have a callback registration; if not, just map to the last verb
             let verb = match self.common_env.cb_registrations.get(&(callback.body.id() as u32)) {
-                Some(verb) => verb.to_str(),
-                None => self.lastverb.to_str(),
+                Some(verb) => &verb,
+                None => &self.lastverb,
             };
             // now dispatch
             let mut verbfound = false;
@@ -791,29 +786,29 @@ impl CmdEnv {
 /// extract the first token, as delimited by spaces
 /// modifies the incoming line by removing the token and returning the remainder
 /// returns the found token
-pub fn tokenize(line: &mut XousString<1024>) -> Option<XousString<1024>> {
-    let mut token = XousString::<1024>::new();
-    let mut retline = XousString::<1024>::new();
+pub fn tokenize(line: &mut String) -> Option<String> {
+    let mut token = String::new();
+    let mut retline = String::new();
 
-    let lineiter = line.as_str().unwrap().chars();
+    let lineiter = line.chars();
     let mut foundspace = false;
     let mut foundrest = false;
     for ch in lineiter {
         if ch != ' ' && !foundspace {
-            token.push(ch).unwrap();
+            token.push(ch);
         } else if foundspace && foundrest {
-            retline.push(ch).unwrap();
+            retline.push(ch);
         } else if foundspace && ch != ' ' {
             // handle case of multiple spaces in a row
             foundrest = true;
-            retline.push(ch).unwrap();
+            retline.push(ch);
         } else {
             foundspace = true;
             // consume the space
         }
     }
     line.clear();
-    write!(line, "{}", retline.as_str().unwrap()).unwrap();
+    write!(line, "{}", retline).unwrap();
     if token.len() > 0 { Some(token) } else { None }
 }
 

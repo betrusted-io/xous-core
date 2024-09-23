@@ -76,7 +76,7 @@ impl HidConnection for XousHidConnection {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 struct Ctap1Request {
-    reason: xous_ipc::String::<1024>,
+    reason: String,
     app_id: [u8; 32],
     approved: bool,
 }
@@ -698,7 +698,7 @@ impl UserPresence for XousEnv {
         self.last_user_presence_request = Some(Instant::now());
 
         let request = Ctap1Request {
-            reason: xous_ipc::String::from_str(&reason),
+            reason: String::from(&reason),
             app_id,
             approved: false
         };

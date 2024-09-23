@@ -69,7 +69,14 @@ impl<'a, 'b> ProgressBar<'a, 'b> {
         if new_percent != self.current_progress_percent {
             log::debug!("progress: {}", new_percent);
             self.slider.set_state(new_percent);
-            self.modal.modify(Some(crate::ActionType::Slider(*self.slider)), None, false, None, false, None);
+            self.modal.modify(
+                Some(crate::ActionType::Slider(self.slider.clone())),
+                None,
+                false,
+                None,
+                false,
+                None,
+            );
             self.modal.redraw(); // stage the modal box pixels to the back buffer
             xous::yield_slice(); // this gives time for the GAM to do the sending
             self.current_progress_percent = new_percent;

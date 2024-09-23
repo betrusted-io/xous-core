@@ -3,7 +3,7 @@
 pub mod api;
 
 use num_traits::ToPrimitive;
-use xous::{send_message, Error, CID};
+use xous::{CID, Error, send_message};
 use xous_semver::SemVer;
 
 #[derive(Debug)]
@@ -72,11 +72,11 @@ impl Ticktimer {
     ///
     ///     * A `String` containing the version information of the latest build
     pub fn get_version(&self) -> String {
-        let alloc = api::VersionString { version: xous_ipc::String::new() };
+        let alloc = api::VersionString { version: String::new() };
         let mut buf = xous_ipc::Buffer::into_buf(alloc).expect("couldn't convert version request");
         buf.lend_mut(self.conn, api::Opcode::GetVersion.to_u32().unwrap()).expect("couldn't get version");
         let v = buf.to_original::<api::VersionString, _>().expect("couldn't revert buffer");
-        String::from(v.version.as_str().unwrap())
+        v.version
     }
 
     pub fn get_version_semver(&self) -> SemVer {

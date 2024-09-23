@@ -81,11 +81,11 @@ impl Ping {
 
     /// Send a single ping immediately, with the result going to an asynchronous callback
     pub fn ping(&self, remote: IpAddr) -> bool {
-        if let Some(cbs) = self.callback_server {
+        if let Some(cbs) = self.callback_server.as_ref() {
             if let Some(dispatch_op) = self.dispatch_opcode {
                 let ping = NetPingPacket {
                     endpoint: NetIpAddr::from(remote),
-                    server: cbs,
+                    server: cbs.clone(),
                     return_opcode: dispatch_op,
                     sent_ok: None,
                 };
@@ -113,7 +113,7 @@ impl Ping {
     /// Send multiple pings by spawning a helper thread. Results go to the asynchronous callback
     /// specified during the creation of the Ping object.
     pub fn ping_spawn_thread(&self, remote: IpAddr, count: usize, delay_ms: usize) -> Option<JoinHandle<()>> {
-        if let Some(cbs) = self.callback_server {
+        if let Some(cbs) = &self.callback_server {
             if let Some(dispatch_op) = self.dispatch_opcode {
                 let handle = thread::spawn({
                     let cbs = cbs.clone();
@@ -125,7 +125,7 @@ impl Ping {
                         while cur_count < count {
                             let ping = NetPingPacket {
                                 endpoint: NetIpAddr::from(remote),
-                                server: cbs,
+                                server: cbs.clone(),
                                 return_opcode: dispatch_op,
                                 sent_ok: None,
                             };

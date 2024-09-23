@@ -9,7 +9,7 @@ it in the services/shellchat/src/cmds/ directory:
 
 ```Rust
 use crate::{ShellCmdApi, CommonEnv};
-use xous_ipc::String;
+use String;
 
 #[derive(Debug)]
 pub struct Echo {
@@ -18,7 +18,7 @@ pub struct Echo {
 impl<'a> ShellCmdApi<'a> for Echo {
     cmd_api!(echo); // inserts boilerplate for command API
 
-    fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         Ok(Some(rest))
     }
 }
@@ -154,14 +154,12 @@ impl Repl {
 
         let token = gam
             .register_ux(UxRegistration {
-                app_name: xous_ipc::String::<128>::from_str(gam::APP_NAME_SHELLCHAT),
+                app_name: String::from(gam::APP_NAME_SHELLCHAT),
                 ux_type: gam::UxType::Chat,
                 #[cfg(not(feature = "tts"))]
-                predictor: Some(xous_ipc::String::<64>::from_str(
-                    ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL,
-                )),
+                predictor: Some(String::from(ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL)),
                 #[cfg(feature = "tts")]
-                predictor: Some(xous_ipc::String::<64>::from_str(ime_plugin_tts::SERVER_NAME_IME_PLUGIN_TTS)),
+                predictor: Some(String::from(ime_plugin_tts::SERVER_NAME_IME_PLUGIN_TTS)),
                 listener: sid.to_array(), /* note disclosure of our SID to the GAM -- the secret is now
                                            * shared with the GAM! */
                 redraw_id: ShellOpcode::Redraw.to_u32().unwrap(),
@@ -233,21 +231,16 @@ impl Repl {
 
         let mut dirty = true;
         // take the input and pass it on to the various command parsers, and attach result
-        if let Some(local) = &self.input {
+        if let Some(local) = &mut self.input {
             log::trace!("processing line: {}", local);
-            if let Some(res) = self
-                .env
-                .dispatch(Some(&mut xous_ipc::String::<1024>::from_str(&local)), None)
-                .expect("command dispatch failed")
-            {
+            if let Some(res) = self.env.dispatch(Some(local), None).expect("command dispatch failed") {
                 #[cfg(feature = "tts")]
                 {
                     let mut output = t!("shellchat.output-tts", locales::LANG).to_string();
-                    output.push_str(res.as_str().unwrap_or("UTF-8 error"));
+                    output.push_str(res.as_str());
                     self.tts.tts_simple(&output).unwrap();
                 }
-                let output_history =
-                    History { text: String::from(res.as_str().unwrap_or("UTF-8 Error")), is_input: false };
+                let output_history = History { text: String::from(res.as_str()), is_input: false };
                 self.circular_push(output_history);
             } else {
                 dirty = false;
@@ -258,11 +251,10 @@ impl Repl {
                 #[cfg(feature = "tts")]
                 {
                     let mut output = t!("shellchat.output-tts", locales::LANG).to_string();
-                    output.push_str(res.as_str().unwrap_or("UTF-8 error"));
+                    output.push_str(res.as_str());
                     self.tts.tts_simple(&output).unwrap();
                 }
-                let output_history =
-                    History { text: String::from(res.as_str().unwrap_or("UTF-8 Error")), is_input: false };
+                let output_history = History { text: String::from(res.as_str()), is_input: false };
                 self.circular_push(output_history);
             } else {
                 dirty = false;
@@ -449,7 +441,7 @@ fn wrapped_main() -> ! {
         match shell_op {
             Some(ShellOpcode::Line) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
+                let s = buffer.as_flat::<String, _>().unwrap();
                 log::trace!("shell got input line: {}", s.as_str());
                 #[cfg(feature = "tts")]
                 {
@@ -512,7 +504,7 @@ fn autobasis_launcher(sid: xous::SID) {
             pddb.is_mounted_blocking();
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             tt.sleep_ms(5000).unwrap();
-            let cmd = xous_ipc::String::<4000>::from_str("pddb btest");
+            let cmd = String::from("pddb btest");
             let buf = Buffer::into_buf(cmd).unwrap();
             buf.send(conn, ShellOpcode::Line.to_u32().unwrap()).expect("couldn't kick off the CI");
             log::info!("CI run started");

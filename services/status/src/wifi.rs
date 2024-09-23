@@ -86,7 +86,7 @@ impl PrefHandler for WLANMan {
             .actions()
             .iter()
             .map(|action| gam::MenuItem {
-                name: xous_ipc::String::from_str(&action.to_string()),
+                name: String::from(&action.to_string()),
                 action_conn: Some(cid),
                 action_opcode: action.to_u32().unwrap(),
                 action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -95,7 +95,7 @@ impl PrefHandler for WLANMan {
             .collect::<Vec<gam::MenuItem>>();
 
         menus.push(gam::MenuItem {
-            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", locales::LANG)),
+            name: String::from(t!("mainmenu.closemenu", locales::LANG)),
             action_conn: None,
             action_opcode: 0,
             action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -146,7 +146,7 @@ impl WLANMan {
                 Some("SSID".to_string()),
                 Some(|text| {
                     if text.as_str().is_empty() {
-                        return Some(xous_ipc::String::from_str("SSID cannot be empty"));
+                        return Some(String::from("SSID cannot be empty"));
                     }
 
                     None

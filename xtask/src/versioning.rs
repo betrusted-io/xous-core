@@ -73,11 +73,11 @@ fn print_header<U: Write>(out: &mut U) {
 
 pub(crate) fn get_version() -> crate::api::VersionString {
     let mut v = crate::api::VersionString {
-        version: xous_ipc::String::new()
+        version: String::new()
     };
-    v.version.append(SEMVER).ok();
-    v.version.append("\n").ok();
-    v.version.append(TIMESTAMP).ok();
+    v.version.push_str(SEMVER);
+    v.version.push_str("\n");
+    v.version.push_str(TIMESTAMP);
     v
 }
 "####;

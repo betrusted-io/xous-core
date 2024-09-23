@@ -19,7 +19,8 @@ pub struct Slider {
     pub is_progressbar: bool,
     pub is_password: bool,
     pub show_legend: bool,
-    pub units: xous_ipc::String<8>,
+    pub units: [u8; 8],
+    pub units_len: usize,
 }
 impl Slider {
     pub fn new(
@@ -33,19 +34,19 @@ impl Slider {
         is_progressbar: bool,
         show_legend: bool,
     ) -> Self {
-        let checked_units = if let Some(unit_str) = units {
-            if unit_str.len() < 8 {
-                String::<8>::from_str(unit_str)
+        let mut units_storage = [0u8; 8];
+        let mut units_len = 0;
+        if let Some(unit_str) = units {
+            if unit_str.as_bytes().len() <= 8 {
+                units_storage[..unit_str.as_bytes().len()].copy_from_slice(unit_str.as_bytes());
+                units_len = unit_str.as_bytes().len();
             } else {
                 log::error!(
                     "Unit string must be less than 8 *bytes* long (are you using unicode?), ignoring length {} string",
-                    unit_str.len()
+                    unit_str.as_bytes().len()
                 );
-                String::<8>::new()
             }
-        } else {
-            String::<8>::new() // just populate with a blank string, easier than checking Some/None later on everywhere
-        };
+        }
 
         Slider {
             action_conn,
@@ -56,7 +57,8 @@ impl Slider {
             max,
             step,
             action_payload: initial_setting,
-            units: checked_units,
+            units: units_storage,
+            units_len,
             show_legend,
         }
     }
@@ -132,7 +134,13 @@ impl ActionApi for Slider {
             // estimate width of current setting
             tv.bounds_computed = None;
             tv.bounds_hint = TextBounds::GrowableFromTl(Point::new(0, 0), maxwidth);
-            write!(tv, "{}{}", self.action_payload, self.units.to_str()).unwrap();
+            write!(
+                tv,
+                "{}{}",
+                self.action_payload,
+                String::from_utf8(self.units[..self.units_len].to_vec()).unwrap_or("UTF8-Err".to_string())
+            )
+            .unwrap();
             modal.gam.bounds_compute_textview(&mut tv).expect("couldn't simulate text size");
             let textwidth = if let Some(bounds) = tv.bounds_computed {
                 bounds.br.x - bounds.tl.x

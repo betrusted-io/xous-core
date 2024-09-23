@@ -184,7 +184,7 @@ impl NetManager {
         let mut ret = Vec::<SsidRecord>::new();
         for maybe_item in ssid_list.list.iter() {
             if let Some(item) = maybe_item {
-                ret.push(*item);
+                ret.push(item.clone());
             }
         }
         Ok((ret, ssid_list.state))

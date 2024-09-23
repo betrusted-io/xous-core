@@ -4,7 +4,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 
 #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
 use pddb::PDDB_A_LEN;
-use xous_ipc::String;
+use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -60,18 +60,14 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: String<1024>,
-        _env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
         #[cfg(not(feature = "pddbtest"))]
         let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [writeover] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]";
         #[cfg(feature = "pddbtest")]
         let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [writeover] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]\n[test]";
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = args.split(' ');
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "basislist" => {
@@ -287,7 +283,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         if let Some((dict, keyname)) = descriptor.split_once(':') {
                             match self.pddb.get(dict, keyname, None, true, true, Some(256), None::<fn()>) {
                                 Ok(mut key) => {
-                                    let mut val = String::<1024>::new();
+                                    let mut val = String::new();
                                     join_tokens(&mut val, &mut tokens);
                                     if val.len() > 0 {
                                         match key.write(&val.as_bytes()[..val.len()]) {
@@ -1328,50 +1324,6 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     write!(ret, "Prune finished").ok();
                 }
                 #[cfg(not(target_os = "xous"))]
-                "rkyvtest" => {
-                    use rkyv::{
-                        archived_value,
-                        de::deserializers::AllocDeserializer,
-                        ser::{serializers::WriteSerializer, Serializer},
-                        AlignedVec, Deserialize,
-                    };
-                    let test = pddb::PddbKeyRecord {
-                        name: "test".to_string(),
-                        len: 64,
-                        reserved: 128,
-                        age: 0,
-                        index: core::num::NonZeroU32::new(1).unwrap(),
-                        basis: ".System".to_string(),
-                        data: Some(vec![0; 64]),
-                    };
-                    let mut serializer = WriteSerializer::new(AlignedVec::new());
-                    let pos = serializer.serialize_value(&test).unwrap();
-                    let buf = serializer.into_inner();
-                    log::info!("serialized test len: {}", buf.len());
-                    log::info!("more buf props: {}, {}", buf.as_slice().len(), pos);
-                    let archived = unsafe { archived_value::<pddb::PddbKeyRecord>(buf.as_slice(), pos) };
-                    let deserialized = archived.deserialize(&mut AllocDeserializer).unwrap();
-                    log::info!("deserialized: {:?}", deserialized);
-
-                    let test2 = pddb::PddbKeyRecord {
-                        name: "test test test".to_string(),
-                        len: 5000,
-                        reserved: 128,
-                        age: 0,
-                        index: core::num::NonZeroU32::new(1).unwrap(),
-                        basis: ".System".to_string(),
-                        data: Some(vec![0; 5000]),
-                    };
-                    let mut serializer = WriteSerializer::new(AlignedVec::new());
-                    let pos = serializer.serialize_value(&test2).unwrap();
-                    let buf = serializer.into_inner();
-                    log::info!("serialized test2 len: {}", buf.len());
-                    log::info!("more buf props: {}, {}", buf.as_slice().len(), pos);
-                    let archived = unsafe { archived_value::<pddb::PddbKeyRecord>(buf.as_slice(), pos) };
-                    let deserialized = archived.deserialize(&mut AllocDeserializer).unwrap();
-                    log::info!("deserialized: {:?}", deserialized);
-                }
-                #[cfg(not(target_os = "xous"))]
                 "bulktest" => {
                     let bulk_read = self.pddb.read_dict(TEST_DICT, None, Some(131072)).unwrap();
                     log::info!("read {} records", bulk_read.len());
@@ -1582,7 +1534,7 @@ fn make_vector(basis_number: usize, vtype: VectorType) -> Vec<u8> {
     vector
 }
 
-fn join_tokens<'a>(buf: &mut String<1024>, tokens: impl Iterator<Item = &'a str>) {
+fn join_tokens<'a>(buf: &mut String, tokens: impl Iterator<Item = &'a str>) {
     for (i, tok) in tokens.enumerate() {
         if i == 0 {
             write!(buf, "{}", tok).unwrap();

@@ -63,13 +63,13 @@ pub(crate) enum Opcode {
     GpioIntAsFalling, //(u32),
     GpioIntPending,
     GpioIntEna,       //(u32),
-    GpioIntSubscribe, //(String<64>), //
+    GpioIntSubscribe, //(String), //
     GpioIntHappened,
 
     /// set UART mux
     UartMux, //(UartType),
 
-    // InfoLitexId, //(String<64>), // TODO: returns the ASCII string baked into the FPGA that describes the
+    // InfoLitexId, //(String), // TODO: returns the ASCII string baked into the FPGA that describes the
     // FPGA build, inside Registration
     InfoDna,
     InfoGit,
@@ -106,9 +106,9 @@ pub(crate) enum Opcode {
     AdcGpio2,
 
     /// events
-    EventComSubscribe, //(String<64>),
-    //EventRtcSubscribe, //(String<64>),
-    EventUsbAttachSubscribe, //(String<64>),
+    EventComSubscribe, //(String),
+    //EventRtcSubscribe, //(String),
+    EventUsbAttachSubscribe, //(String),
     EventComEnable,          //(bool),
     //EventRtcEnable, //(bool),
     EventUsbAttachEnable, //(bool),

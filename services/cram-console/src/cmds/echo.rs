@@ -1,4 +1,4 @@
-use xous_ipc::String;
+use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -10,11 +10,7 @@ impl<'a> ShellCmdApi<'a> for Echo {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: String<1024>,
-        _env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         Ok(Some(args))
     }
 }

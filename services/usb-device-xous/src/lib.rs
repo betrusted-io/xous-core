@@ -7,6 +7,7 @@ pub mod api;
 pub use api::*;
 use num_traits::*;
 use packed_struct::PackedStruct;
+use rkyv::option::ArchivedOption;
 use trng::api::TrngTestMode;
 pub use usb_device::device::UsbDeviceState;
 use xous::{send_message, Message, CID};
@@ -226,7 +227,7 @@ impl UsbHid {
     /// This will attempt to send a string using an API based on the currently connected device
     /// If it's a Keyboard, it will "type" it; if it's a UART, it will just blast it out the Tx.
     pub fn send_str(&self, s: &str) -> Result<usize, xous::Error> {
-        let serializer = UsbString { s: xous_ipc::String::<4000>::from_str(s), sent: None };
+        let serializer = UsbString { s: String::from(s), sent: None };
         let mut buf = Buffer::into_buf(serializer).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::SendString.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         let returned = buf.to_original::<UsbString, _>().or(Err(xous::Error::InternalError))?;
@@ -313,13 +314,13 @@ impl UsbHid {
     /// will return as soon as a character (or series of characters) have been received (thus the return
     /// `String` will be piecemeal)
     pub fn serial_wait_ascii(&self, delimiter: Option<char>) -> String {
-        let req = UsbSerialAscii { s: xous_ipc::String::new(), delimiter };
+        let req = UsbSerialAscii { s: String::new(), delimiter };
         let mut buf = Buffer::into_buf(req).or(Err(xous::Error::InternalError)).expect("Internal error");
         buf.lend_mut(self.conn, Opcode::SerialHookAscii.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))
             .expect("Internal error");
         let resp = buf.to_original::<UsbSerialAscii, _>().unwrap();
-        resp.s.to_str().to_string()
+        resp.s
     }
 
     /// Blocks until enough binary data has been received to fill the buffer
@@ -375,10 +376,8 @@ impl UsbHid {
     }
 
     pub fn register_u2f_observer(&self, server_name: &str, action_opcode: usize) {
-        let kr = UsbListenerRegistration {
-            server_name: xous_ipc::String::<64>::from_str(server_name),
-            listener_op_id: action_opcode,
-        };
+        let kr =
+            UsbListenerRegistration { server_name: String::from(server_name), listener_op_id: action_opcode };
         let buf = Buffer::into_buf(kr).unwrap();
         buf.lend(self.conn, Opcode::RegisterUsbObserver.to_u32().unwrap())
             .expect("couldn't register listener");
@@ -428,7 +427,7 @@ impl UsbHid {
         let report = buf.as_flat::<HIDReportMessage, _>().unwrap();
 
         match &report.data {
-            rkyv::core_impl::ArchivedOption::Some(data) => {
+            ArchivedOption::Some(data) => {
                 let mut ret = HIDReport::default();
 
                 for (&s, d) in data.0[..data.0.len() as usize].iter().zip(ret.0.iter_mut()) {
@@ -437,7 +436,7 @@ impl UsbHid {
 
                 Ok(ret)
             }
-            rkyv::core_impl::ArchivedOption::None => Err(xous::Error::UnknownError),
+            ArchivedOption::None => Err(xous::Error::UnknownError),
         }
     }
 

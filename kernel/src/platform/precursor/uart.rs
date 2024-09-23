@@ -6,10 +6,10 @@ use utralib::generated::*;
 use xous_kernel::{MemoryFlags, MemoryType};
 
 use crate::{
+    PID,
     debug::shell::process_characters,
     io::{SerialRead, SerialWrite},
     mem::MemoryManager,
-    PID,
 };
 
 /// UART virtual address.

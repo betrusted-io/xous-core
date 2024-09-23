@@ -1485,7 +1485,7 @@ pub(crate) fn main_hw() -> ! {
                         // check keymap on every call because we may need to toggle this for e.g. plugging
                         // into a new host with a different map
                         let native_map = native_kbd.get_keymap().unwrap();
-                        for ch in usb_send.s.as_str().unwrap().chars() {
+                        for ch in usb_send.s.as_str().chars() {
                             // ASSUME: user's keyboard type matches the preference on their Precursor device.
                             let codes = match native_map {
                                 KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(ch),
@@ -1891,7 +1891,7 @@ pub(crate) fn main_hw() -> ! {
                     match xns.request_connection_blocking(ur.server_name.as_str()) {
                         Ok(cid) => {
                             observer_conn = Some(cid);
-                            observer_op = Some(ur.listener_op_id as usize);
+                            observer_op = Some(<u32 as From<u32>>::from(ur.listener_op_id.into()) as usize);
                         }
                         Err(e) => {
                             log::error!("couldn't connect to observer: {:?}", e);

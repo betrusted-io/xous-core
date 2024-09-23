@@ -22,14 +22,14 @@ impl TtsFrontend {
     /// A fully synchronous text to speech call. The text is turned into speech and played immediately.
     /// If there is speech currently playing, it is cut short and the new text takes its place.
     pub fn tts_simple(&self, text: &str) -> Result<(), xous::Error> {
-        let msg = TtsFrontendMsg { text: xous_ipc::String::from_str(text) };
+        let msg = TtsFrontendMsg { text: String::from(text) };
         let buf = Buffer::into_buf(msg).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::TextToSpeech.to_u32().unwrap()).map(|_| ())
     }
 
     /// This blocks until the text is finished rendering
     pub fn tts_blocking(&self, text: &str) -> Result<(), xous::Error> {
-        let msg = TtsFrontendMsg { text: xous_ipc::String::from_str(text) };
+        let msg = TtsFrontendMsg { text: String::from(text) };
         let buf = Buffer::into_buf(msg).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::TextToSpeechBlocking.to_u32().unwrap()).map(|_| ())
     }

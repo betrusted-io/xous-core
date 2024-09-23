@@ -1,7 +1,7 @@
 use gam::*;
 use locales::t;
 use num_traits::*;
-use xous_ipc::String;
+use String;
 
 use crate::StatusOpcode;
 
@@ -10,7 +10,7 @@ pub fn create_main_menu(menu_management_sid: xous::SID, status_conn: xous::CID) 
     let mut menuitems = Vec::<MenuItem>::new();
 
     menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.app", locales::LANG)),
+        name: String::from(t!("mainmenu.app", locales::LANG)),
         action_conn: Some(status_conn),
         action_opcode: StatusOpcode::SubmenuApp.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -19,7 +19,7 @@ pub fn create_main_menu(menu_management_sid: xous::SID, status_conn: xous::CID) 
 
     #[cfg(feature = "pddb")]
     menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.pddb", locales::LANG)),
+        name: String::from(t!("mainmenu.pddb", locales::LANG)),
         action_conn: Some(status_conn),
         action_opcode: StatusOpcode::SubmenuPddb.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -27,7 +27,7 @@ pub fn create_main_menu(menu_management_sid: xous::SID, status_conn: xous::CID) 
     });
 
     menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.closemenu", locales::LANG)),
+        name: String::from(t!("mainmenu.closemenu", locales::LANG)),
         action_conn: None,
         action_opcode: 0,
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),

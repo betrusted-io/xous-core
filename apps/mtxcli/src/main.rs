@@ -65,7 +65,7 @@ fn wrapped_main() -> ! {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(MtxcliOp::Line) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
+                let s = buffer.as_flat::<String, _>().unwrap();
                 log::trace!("mtxcli got input line: {}", s.as_str());
                 mtxcli.input(s.as_str()).expect("MTXCLI couldn't accept input string");
                 update_mtxcli = true; // set a flag, instead of calling here, so message can drop and calling server is released

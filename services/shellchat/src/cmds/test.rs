@@ -9,7 +9,7 @@ use base64::encode;
 use codec::*;
 use num_traits::*;
 use xous::{Message, MessageEnvelope};
-use xous_ipc::String;
+use String;
 
 use crate::oqc_test::OqcOp;
 use crate::{CommonEnv, ShellCmdApi};
@@ -147,18 +147,14 @@ fn simple_kilofloat_parse(input: &str) -> core::result::Result<i32, ParseIntErro
 impl<'a> ShellCmdApi<'a> for Test {
     cmd_api!(test);
 
-    fn process(
-        &mut self,
-        args: String<1024>,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         const SENTINEL: &'static str = "|TSTR";
 
         self.state += 1;
-        let mut ret = String::<1024>::new();
+        let mut ret = String::new();
         write!(ret, "Test has run {} times.", self.state).unwrap();
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
@@ -550,7 +546,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }
 
                     if self.callback_id.is_none() {
-                        let cb_id = env.register_handler(String::<256>::from_str(self.verb()));
+                        let cb_id = env.register_handler(String::from(self.verb()));
                         log::trace!("hooking frame callback with ID {}", cb_id);
                         self.codec.hook_frame_callback(cb_id, self.callback_conn).unwrap(); // any non-handled IDs get routed to our callback port
                         self.callback_id = Some(cb_id);
@@ -699,13 +695,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                                 write!(ret, "RSSI reported in dBm:\n").unwrap();
                                 for ssid in ssid_list {
                                     if ssid.name.len() > 0 {
-                                        write!(
-                                            ret,
-                                            "-{} {}\n",
-                                            ssid.rssi,
-                                            &ssid.name.as_str().unwrap_or("UTF-8 error")
-                                        )
-                                        .unwrap();
+                                        write!(ret, "-{} {}\n", ssid.rssi, &ssid.name.as_str()).unwrap();
                                     }
                                 }
                                 write!(
@@ -740,8 +730,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                             net_up = status.link_state == com_rs::LinkState::Connected;
                             dhcp_ok = status.ipv4.dhcp == com_rs::DhcpState::Bound;
                             ssid_ok = if let Some(ssid) = status.ssid {
-                                log::info!("got ssid: {}", ssid.name.as_str().unwrap_or("invalid"));
-                                ssid.name.as_str().unwrap_or("invalid") == "precursortest"
+                                log::info!("got ssid: {}", ssid.name.as_str());
+                                ssid.name.as_str() == "precursortest"
                             } else {
                                 false
                             };
@@ -800,7 +790,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     self.codec.set_speaker_volume(VolumeOps::RestoreDefault, None).unwrap();
                     self.codec.set_headphone_volume(VolumeOps::RestoreDefault, None).unwrap();
                     if self.callback_id.is_none() {
-                        let cb_id = env.register_handler(String::<256>::from_str(self.verb()));
+                        let cb_id = env.register_handler(String::from(self.verb()));
                         log::trace!("hooking frame callback with ID {}", cb_id);
                         self.codec.hook_frame_callback(cb_id, self.callback_conn).unwrap(); // any non-handled IDs get routed to our callback port
                         self.callback_id = Some(cb_id);
@@ -1051,7 +1041,7 @@ impl<'a> ShellCmdApi<'a> for Test {
         &mut self,
         msg: &MessageEnvelope,
         env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         const AMPLITUDE: f32 = 0.8;
 
         match &msg.body {

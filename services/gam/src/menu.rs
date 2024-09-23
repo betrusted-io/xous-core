@@ -5,7 +5,7 @@ pub use graphics_server::*;
 use num_traits::*;
 #[cfg(feature = "tts")]
 use tts_frontend::TtsFrontend;
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 use crate::api::*;
 use crate::Gam;
@@ -45,7 +45,7 @@ impl<'a> Menu<'a> {
         let gam = Gam::new(&xns).expect("can't connect to GAM");
         let authtoken = gam
             .register_ux(UxRegistration {
-                app_name: String::<128>::from_str(name),
+                app_name: String::from(name),
                 ux_type: UxType::Menu,
                 predictor: None,
                 listener: sid.to_array(),
@@ -117,7 +117,7 @@ impl<'a> Menu<'a> {
 
     /// Appends a menu item to the end of the current Menu
     pub fn add_item(&mut self, new_item: MenuItem) {
-        if new_item.name.as_str().unwrap() == "🔇" {
+        if new_item.name.as_str() == "🔇" {
             // suppress the addition of menu items that are not applicable for a given locale
             return;
         }
@@ -146,7 +146,7 @@ impl<'a> Menu<'a> {
     // Attempts to insert a MenuItem at the index given. This displaces the item at that index down
     // by one slot. Returns false if the index is invalid.
     pub fn insert_item(&mut self, new_item: MenuItem, at: usize) -> bool {
-        if new_item.name.as_str().unwrap() == "🔇" {
+        if new_item.name.as_str() == "🔇" {
             // suppress the addition of menu items that are not applicable for a given locale
             return false;
         }
@@ -184,7 +184,7 @@ impl<'a> Menu<'a> {
     // something)
     pub fn delete_item(&mut self, item: &str) -> bool {
         let len_before = self.items.len();
-        self.items.retain(|&candidate| candidate.name.as_str().unwrap() != item);
+        self.items.retain(|candidate| candidate.name.as_str() != item);
 
         // now, recompute the height
         let mut total_items = self.num_items();
@@ -208,7 +208,7 @@ impl<'a> Menu<'a> {
         use core::fmt::Write;
         let canvas_size = self.gam.get_canvas_bounds(self.canvas).unwrap();
 
-        let item = self.items[index as usize];
+        let item = &self.items[index as usize];
         let mut item_tv = TextView::new(
             self.canvas,
             TextBounds::BoundingBox(Rectangle::new(
@@ -220,11 +220,11 @@ impl<'a> Menu<'a> {
         if with_marker {
             write!(item_tv.text, "\u{25B6}").unwrap();
             #[cfg(feature = "tts")]
-            self.tts.tts_simple(item.name.as_str().unwrap()).unwrap();
+            self.tts.tts_simple(item.name.as_str()).unwrap();
         } else {
             write!(item_tv.text, "\t").unwrap();
         }
-        write!(item_tv.text, "{}", item.name.as_str().unwrap()).unwrap();
+        write!(item_tv.text, "{}", item.name.as_str()).unwrap();
         item_tv.draw_border = false;
         item_tv.style = crate::SYSTEM_STYLE;
         item_tv.margin = Point::new(0, 0);
@@ -357,7 +357,7 @@ impl<'a> Menu<'a> {
             log::debug!("got key '{}'", k);
             match k {
                 '∴' => {
-                    let mi = self.items[self.index];
+                    let mi = &self.items[self.index];
                     // give up focus before issuing the command, as some commands conflict with loss of
                     // focus...
                     if mi.close_on_select {
@@ -371,7 +371,7 @@ impl<'a> Menu<'a> {
                         #[cfg(feature = "tts")]
                         {
                             let mut phrase = "select ".to_string();
-                            phrase.push_str(mi.name.as_str().unwrap());
+                            phrase.push_str(mi.name.as_str());
                             self.tts.tts_blocking(&phrase).unwrap();
                         }
                         match mi.action_payload {
@@ -449,7 +449,7 @@ impl MenuMatic {
     pub fn delete_item(&self, item_name: &str) -> bool {
         let mm = MenuManagement {
             item: MenuItem {
-                name: String::from_str(item_name),
+                name: String::from(item_name),
                 // the rest are ignored
                 action_conn: None,
                 action_opcode: 0,
@@ -468,7 +468,7 @@ impl MenuMatic {
         let op = MenuManagement {
             item: MenuItem {
                 // dummy item, not used
-                name: xous_ipc::String::<64>::new(),
+                name: String::new(),
                 action_conn: None,
                 action_opcode: 0,
                 action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -562,12 +562,12 @@ pub fn menu_matic(
                         .expect("menu manager received unexpected message type");
                     match mgmt.op {
                         MenuMgrOp::AddItem => {
-                            menu.lock().unwrap().add_item(mgmt.item);
+                            menu.lock().unwrap().add_item(mgmt.item.clone());
                             mgmt.op = MenuMgrOp::Ok;
                             buffer.replace(mgmt).unwrap();
                         }
                         MenuMgrOp::InsertItem(at) => {
-                            if menu.lock().unwrap().insert_item(mgmt.item, at) {
+                            if menu.lock().unwrap().insert_item(mgmt.item.clone(), at) {
                                 mgmt.op = MenuMgrOp::Ok;
                                 buffer.replace(mgmt).unwrap();
                             } else {
@@ -576,7 +576,7 @@ pub fn menu_matic(
                             }
                         }
                         MenuMgrOp::DeleteItem => {
-                            if !menu.lock().unwrap().delete_item(mgmt.item.name.as_str().unwrap()) {
+                            if !menu.lock().unwrap().delete_item(mgmt.item.name.as_str()) {
                                 mgmt.op = MenuMgrOp::Err;
                             } else {
                                 mgmt.op = MenuMgrOp::Ok;

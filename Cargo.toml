@@ -198,3 +198,6 @@ path = "./svd2utra"
 # path = "./api/xous-api-log"
 # [patch.crates-io.xous-api-ticktimer]
 # path = "./api/xous-api-ticktimer"
+
+# [patch.crates-io.xous-tts-backend]
+# path = "../tts-backend"

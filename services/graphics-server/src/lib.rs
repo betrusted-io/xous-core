@@ -13,10 +13,10 @@ pub mod op;
 pub mod fontmap;
 pub use api::ArchivedBulkRead;
 pub use api::BulkRead;
-use api::Opcode; // if you prefer to map the api into your local namespace
+use api::{Opcode, TEXTVIEW_LEN}; // if you prefer to map the api into your local namespace
 pub use fontmap::*;
 use num_traits::ToPrimitive;
-use xous::{send_message, Message};
+use xous::{Message, send_message};
 use xous_ipc::Buffer;
 #[derive(Debug)]
 pub struct Gfx {
@@ -134,8 +134,13 @@ impl Gfx {
         }
     }
 
+    /// This function will truncate a TextView string if it is too long to transmit in
+    /// a single page of memory.
     pub fn draw_textview(&self, tv: &mut TextView) -> Result<(), xous::Error> {
-        let mut buf = Buffer::into_buf(*tv).or(Err(xous::Error::InternalError))?;
+        if tv.text.len() > TEXTVIEW_LEN {
+            tv.text.truncate(TEXTVIEW_LEN);
+        }
+        let mut buf = Buffer::into_buf(tv.clone()).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::DrawTextView.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))?;
 

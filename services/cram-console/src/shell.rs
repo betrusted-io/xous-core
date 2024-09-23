@@ -62,7 +62,7 @@ fn shell() {
         match shell_op {
             Some(ShellOpcode::Line) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
+                let s = buffer.as_flat::<String, _>().unwrap();
                 log::trace!("shell got input line: {}", s.as_str());
                 #[cfg(feature = "tts")]
                 {

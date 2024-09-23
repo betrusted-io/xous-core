@@ -4,28 +4,28 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
 
-use crate::builder::CrateSpec;
 use crate::DynError;
+use crate::builder::CrateSpec;
 
 pub fn check_project_consistency() -> Result<(), DynError> {
     // note: implementations no longer published as crates: just APIs as of March 2023
     // TODO: retire utralib/svd2utra from publication as well
     let check_pkgs = [
         // this set updates with kernel API changes
-        "xous^0.9.63",
-        "xous-ipc^0.9.63",
-        "xous-api-log^0.1.59",
-        "xous-api-names^0.9.61",
-        "xous-api-susres^0.9.59",
-        "xous-api-ticktimer^0.9.59",
+        "xous^0.9.64",
+        "xous-ipc^0.10.2",
+        "xous-api-log^0.1.61",
+        "xous-api-names^0.9.63",
+        "xous-api-susres^0.9.61",
+        "xous-api-ticktimer^0.9.61",
     ];
     // utra/svd2utra changes are downgraded to warnings because these now prefer to pull
     // from the local patch version, so any inconsistency simply indicates we forgot to
     // publish the packages, rather than something nefarious has happened.
     let warn_pkgs = [
         // this set is only updated if the utralib changes
-        "utralib^0.1.24",
-        "svd2utra^0.1.22",
+        "utralib^0.1.25",
+        "svd2utra^0.1.23",
     ];
     for pkg in check_pkgs {
         verify(pkg.into(), true)?;

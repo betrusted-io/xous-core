@@ -4,7 +4,7 @@ mod rkyv_enum;
 use graphics_server::api::Tile;
 use graphics_server::api::{Gid, Point};
 pub use rkyv_enum::*;
-use xous_ipc::String;
+use String;
 
 pub(crate) const SERVER_NAME_GAM: &str = "_Graphical Abstraction Manager_";
 
@@ -69,10 +69,10 @@ pub struct SetAudioOpcode {
     pub opcode: u32,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct SwitchToApp {
     pub token: [u32; 4],
-    pub app_name: String<128>,
+    pub app_name: String,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
@@ -82,15 +82,15 @@ pub enum UxType {
     Modal,
     Framebuffer,
 }
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct UxRegistration {
     // request specification
-    pub app_name: String<128>, /* the putative name of our application - GAM may modify this if a spoof
-                                * attempt is detected */
+    pub app_name: String, /* the putative name of our application - GAM may modify this if a spoof
+                           * attempt is detected */
     pub ux_type: UxType,
-    pub predictor: Option<String<64>>, /* optional specification for an IME prediction engine to use. This
-                                        * can be updated later on, or None and a default engine will be
-                                        * provided. */
+    pub predictor: Option<String>, /* optional specification for an IME prediction engine to use. This
+                                    * can be updated later on, or None and a default engine will be
+                                    * provided. */
 
     // Callbacks:
     /// SID ofserver for callbacks from the GAM. Note this is a disclosure of the SID, which is normally a
@@ -114,7 +114,7 @@ pub struct UxRegistration {
 #[cfg(feature = "unsafe-app-loading")]
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct NameRegistration {
-    pub name: String<128>,
+    pub name: String,
     pub auth_token: [u32; 4],
 }
 
@@ -240,19 +240,19 @@ pub enum ActivationResult {
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct GamActivation {
-    pub(crate) name: xous_ipc::String<128>,
+    pub(crate) name: String,
     pub(crate) result: Option<ActivationResult>,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub(crate) struct MenuManagement {
     pub(crate) item: MenuItem,
     pub(crate) op: MenuMgrOp,
 }
 
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct MenuItem {
-    pub name: String<64>,
+    pub name: String,
     /// if action_conn is None, this is a NOP menu item (it just does nothing and closes the menu)
     pub action_conn: Option<xous::CID>,
     pub action_opcode: u32, // this is ignored if action_conn is None
@@ -289,9 +289,9 @@ pub struct GidRecord {
     pub canvas_type: CanvasType,
 }
 
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Default)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Default)]
 pub struct Bip39Ipc {
     pub data: [u8; 32],
     pub data_len: u32,
-    pub words: [Option<xous_ipc::String<8>>; 24],
+    pub words: [Option<String>; 24],
 }

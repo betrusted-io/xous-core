@@ -56,7 +56,7 @@ impl HIDv2Demo {
         let gam = gam::Gam::new(&xns).expect("Can't connect to GAM");
         let gam_token = gam
             .register_ux(gam::UxRegistration {
-                app_name: xous_ipc::String::<128>::from_str(gam::APP_NAME_HIDV2),
+                app_name: String::from(gam::APP_NAME_HIDV2),
                 ux_type: gam::UxType::Chat,
                 predictor: None,
                 listener: sid.to_array(),

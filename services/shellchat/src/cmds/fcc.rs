@@ -1,18 +1,17 @@
-use crate::{ShellCmdApi, CommonEnv};
-use xous_ipc::String;
-use com::Com;
-use ticktimer_server::Ticktimer;
-use llio::Llio;
+use core::fmt::Write;
+use core::sync::atomic::{AtomicBool, Ordering};
 
+use com::Com;
+use llio::Llio;
+use ticktimer_server::Ticktimer;
+use xous::{Message, MessageEnvelope, ScalarMessage};
+use String;
+
+use crate::cmds::pds::Rate;
+use crate::cmds::pds::PDS_DATA;
 #[allow(unused_imports)]
 use crate::cmds::pds::PDS_STOP_DATA;
-use crate::cmds::pds::PDS_DATA;
-use crate::cmds::pds::Rate;
-
-use core::fmt::Write;
-
-use xous::{Message, ScalarMessage, MessageEnvelope};
-use core::sync::atomic::{AtomicBool, Ordering};
+use crate::{CommonEnv, ShellCmdApi};
 static CB_RUN: AtomicBool = AtomicBool::new(false);
 static CB_GO: AtomicBool = AtomicBool::new(false);
 pub fn callback_thread(callback_id: usize) {
@@ -26,10 +25,13 @@ pub fn callback_thread(callback_id: usize) {
             ticktimer.sleep_ms(20_000).unwrap();
             // after we wait, check and see if we still need the callback...
             if CB_GO.load(Ordering::Relaxed) {
-                // send a message that will get routed to our callback handler, locatable with the `callback_id`
-                xous::send_message(callback_conn, Message::Scalar(ScalarMessage{
-                    id: callback_id, arg1: 0, arg2: 0, arg3: 0, arg4: 0,
-                })).unwrap();
+                // send a message that will get routed to our callback handler, locatable with the
+                // `callback_id`
+                xous::send_message(
+                    callback_conn,
+                    Message::Scalar(ScalarMessage { id: callback_id, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+                )
+                .unwrap();
             }
         } else {
             ticktimer.sleep_ms(250).unwrap(); // a little more polite than simply busy-waiting
@@ -41,22 +43,24 @@ pub fn callback_thread(callback_id: usize) {
 pub struct Fcc {
     channel: Option<u8>,
     rate: Option<Rate>,
-    pds_list: [Option<String::<512>>; 8],
+    pds_list: [Option<String>; 8],
     go: bool,
     tx_start_time: u64,
 }
 impl Fcc {
     pub fn new(env: &mut CommonEnv) -> Fcc {
-        let callback_id = env.register_handler(String::<256>::from_str("fcc"));
-        xous::create_thread_1(callback_thread, callback_id as usize).expect("couldn't create callback generator thread");
+        let callback_id = env.register_handler(String::from("fcc"));
+        xous::create_thread_1(callback_thread, callback_id as usize)
+            .expect("couldn't create callback generator thread");
         Fcc {
             channel: None, //Some(2), // default to simplify testing, replace with None
-            rate: None, //Some(Rate::B1Mbps),  // default to simplify testing, replace with None
+            rate: None,    //Some(Rate::B1Mbps),  // default to simplify testing, replace with None
             pds_list: [None; 8],
             go: false,
             tx_start_time: 0,
         }
     }
+
     fn send_pds(&self, com: &Com, ticktimer: &Ticktimer) {
         for &maybe_pds in self.pds_list.iter() {
             if let Some(pds) = maybe_pds {
@@ -67,17 +71,19 @@ impl Fcc {
             }
         }
     }
+
     fn clear_pds(&mut self) {
         for pds in self.pds_list.iter_mut() {
             *pds = None;
         }
     }
+
     fn stop_tx(&mut self, _com: &com::Com, ticktimer: &Ticktimer, llio: &Llio) {
         self.go = false;
         CB_GO.store(false, Ordering::Relaxed);
         CB_RUN.store(false, Ordering::Relaxed); // make sure the callback function is disabled
         self.clear_pds();
-        //self.pds_list[0] = Some(String::<512>::from_str(PDS_STOP_DATA));
+        //self.pds_list[0] = Some(String::from(PDS_STOP_DATA));
         //self.send_pds(&com, &ticktimer);
         //self.clear_pds();
         llio.ec_reset().unwrap();
@@ -85,16 +91,18 @@ impl Fcc {
     }
 }
 impl<'a> ShellCmdApi<'a> for Fcc {
-    cmd_api!(fcc); // inserts boilerplate for command API
+    cmd_api!(fcc);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    // inserts boilerplate for command API
+
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
         let helpstring = "fcc [ch 1-11] [euch 1-13] [rate <code>] [go] [stop] [rev] [res]\nrate code: b[1,2,5.5,11], g[6,9,12,18,24,36,48,54], mcs[0-7]";
 
         // no matter what, we want SSID scanning to be off
         env.com.set_ssid_scanning(false).expect("couldn't turn off SSID scanning");
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
@@ -110,7 +118,7 @@ impl<'a> ShellCmdApi<'a> for Fcc {
                 "stop" => {
                     self.stop_tx(&env.com, &env.ticktimer, &env.llio);
                     write!(ret, "{}", "Transmission stopped").unwrap();
-                },
+                }
                 "go" => {
                     if let Some(channel) = self.channel {
                         if channel < 1 || channel > 14 {
@@ -122,8 +130,8 @@ impl<'a> ShellCmdApi<'a> for Fcc {
                                 for record in PDS_DATA.iter() {
                                     if record.rate == rate {
                                         let mut index: usize = 0;
-                                        for &line in record.pds_data[(channel-1) as usize].iter() {
-                                            self.pds_list[index] = Some(String::<512>::from_str(line));
+                                        for &line in record.pds_data[(channel - 1) as usize].iter() {
+                                            self.pds_list[index] = Some(String::from(line));
                                             index += 1;
                                         }
                                         found = true;
@@ -138,7 +146,12 @@ impl<'a> ShellCmdApi<'a> for Fcc {
                                     self.tx_start_time = env.ticktimer.elapsed_ms();
                                     CB_RUN.store(true, Ordering::Relaxed); // initiate the callback for the next wakeup
                                 } else {
-                                    write!(ret, "Rate/channel combo not found: ch {} rate {:?}", channel, rate).unwrap();
+                                    write!(
+                                        ret,
+                                        "Rate/channel combo not found: ch {} rate {:?}",
+                                        channel, rate
+                                    )
+                                    .unwrap();
                                 }
                             } else {
                                 write!(ret, "{}", "No rate selected").unwrap();
@@ -147,7 +160,7 @@ impl<'a> ShellCmdApi<'a> for Fcc {
                     } else {
                         write!(ret, "{}", "No channel selected").unwrap();
                     }
-                },
+                }
                 "ch" => {
                     if let Some(ch_str) = tokens.next() {
                         if let Ok(ch) = ch_str.parse::<u8>() {
@@ -209,7 +222,8 @@ impl<'a> ShellCmdApi<'a> for Fcc {
                             write!(ret, "Rate set to {:?}", rate).unwrap();
                         }
                     } else {
-                        write!(ret, "Specify rate code of b[1,2,5.5,11], g[6,9,12,18,24,36,48,54], mcs[0-7]").unwrap();
+                        write!(ret, "Specify rate code of b[1,2,5.5,11], g[6,9,12,18,24,36,48,54], mcs[0-7]")
+                            .unwrap();
                     }
                 }
                 _ => {
@@ -222,15 +236,20 @@ impl<'a> ShellCmdApi<'a> for Fcc {
         Ok(Some(ret))
     }
 
-    fn callback(&mut self, _msg: &MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    fn callback(
+        &mut self,
+        _msg: &MessageEnvelope,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
         if self.go {
             if (env.ticktimer.elapsed_ms() - self.tx_start_time) > (1000 * 60 * 5) {
                 self.stop_tx(&env.com, &env.ticktimer, &env.llio);
                 write!(ret, "5 minute timeout on TX, stopping for TX overheat safety!").unwrap();
             } else {
                 self.send_pds(&env.com, &env.ticktimer);
-                write!(ret, "TX renewed: ch {} rate {:?}", self.channel.unwrap(), self.rate.unwrap()).unwrap();
+                write!(ret, "TX renewed: ch {} rate {:?}", self.channel.unwrap(), self.rate.unwrap())
+                    .unwrap();
                 CB_RUN.store(true, Ordering::Relaxed); // re-initiate the callback
             }
         } else {

@@ -6,7 +6,7 @@ mod aes256tests;
 /// Define block cipher test
 macro_rules! block_cipher_test {
     ($name:ident, $test_name:expr, $test_case_name:ident, $cipher:ty) => {
-        fn $name() -> String<1024> {
+        fn $name() -> String {
             use aes::cipher::{
                 consts::U16, generic_array::GenericArray, BlockDecryptMut, BlockEncryptMut, KeyInit,
             };
@@ -64,7 +64,7 @@ macro_rules! block_cipher_test {
                 true
             }
 
-            let mut ret = String::<1024>::new();
+            let mut ret = String::new();
             write!(ret, "test {} passed", $test_name).unwrap();
             for (i, test) in $test_case_name.iter().enumerate() {
                 let (pass, block) = run_test(&test.key, &test.pt, &test.ct);
@@ -114,7 +114,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 use aes::{Aes128, Aes128Soft, Aes256, Aes256Soft};
 use num_traits::*;
-use xous_ipc::String;
+use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 static CB_ID: AtomicU32 = AtomicU32::new(0);
@@ -267,7 +267,7 @@ impl Aes {
         let sid = xous::create_server().unwrap();
         let sid_tuple = sid.to_u32();
 
-        let cb_id = env.register_handler(String::<256>::from_str("aes"));
+        let cb_id = env.register_handler(String::from("aes"));
         CB_ID.store(cb_id, Ordering::Relaxed);
 
         xous::create_thread_4(
@@ -298,15 +298,11 @@ impl<'a> ShellCmdApi<'a> for Aes {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: String<1024>,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
         let helpstring = "Aes [check128] [check128sw] [check256] [check256sw] [hwbench] [swbench] [susres]";
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
@@ -381,9 +377,9 @@ impl<'a> ShellCmdApi<'a> for Aes {
         &mut self,
         msg: &xous::MessageEnvelope,
         env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         log::debug!("benchmark callback");
-        let mut ret = String::<1024>::new();
+        let mut ret = String::new();
 
         xous::msg_scalar_unpack!(msg, pass, hw_mode, keybits, _, {
             let end = env.ticktimer.elapsed_ms();

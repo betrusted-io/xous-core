@@ -1,3 +1,9 @@
+use core::mem::MaybeUninit;
+use core::sync::atomic::AtomicU32;
+use core::sync::atomic::Ordering;
+
+use flatipc::{IntoIpc, Ipc};
+
 /// Fill `dest` with random bytes from the system's preferred random number
 /// source.
 ///
@@ -12,17 +18,13 @@
 /// significantly slower than a user-space CSPRNG; for the latter consider
 /// [`rand::thread_rng`](https://docs.rs/rand/*/rand/fn.thread_rng.html).
 use crate::util::slice_as_uninit;
-use core::sync::atomic::AtomicU32;
-use core::sync::atomic::Ordering;
-use core::mem::MaybeUninit;
-
-use xous_ipc::Buffer;
 
 static TRNG_CONN: AtomicU32 = AtomicU32::new(0);
 
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, flatipc::Ipc)]
+#[repr(C)]
 struct TrngBuf {
-    pub data: [u32; 1024],
+    pub data: [u32; 1020],
     pub len: u16,
 }
 
@@ -46,14 +48,14 @@ pub fn getrandom_inner(dest: &mut [MaybeUninit<u8>]) -> Result<(), crate::error:
 }
 
 pub fn fill_buf(data: &mut [u32]) {
-    let mut tb = TrngBuf { data: [0; 1024], len: 0 };
+    let mut tb = TrngBuf { data: [0; 1020], len: 0 };
     assert!(data.len() <= tb.data.len());
     tb.len = data.len() as u16;
-    let mut buf = Buffer::into_buf(tb).unwrap();
+    let mut buf = tb.into_ipc();
     buf.lend_mut(TRNG_CONN.load(Ordering::SeqCst), 1 /* FillTrng */).unwrap();
-    let rtb = buf.as_flat::<TrngBuf, _>().unwrap();
-    assert!(rtb.len as usize == data.len());
-    data.copy_from_slice(&rtb.data);
+    assert!(usize::from(buf.len) == data.len());
+    let len = buf.len as usize;
+    data.copy_from_slice(&buf.data[..len]);
 }
 
 pub fn next_u32() -> u32 {
@@ -117,19 +119,18 @@ fn fill_bytes(dest: &mut [MaybeUninit<u8>]) {
         // initializing the empty 4k-page...
         let remainder = dest.chunks_exact_mut(4096).into_remainder();
         if remainder.len() != 0 {
-            let mut tb = TrngBuf { data: [0; 1024], len: 0 };
+            let mut tb = TrngBuf { data: [0; 1020], len: 0 };
             tb.len = if remainder.len() % 4 == 0 {
                 (remainder.len() / 4) as u16
             } else {
                 1 + (remainder.len() / 4) as u16
             };
-            let mut buf = Buffer::into_buf(tb).unwrap();
+            let mut buf = tb.into_ipc();
             buf.lend_mut(TRNG_CONN.load(Ordering::SeqCst), 1 /* FillTrng */).unwrap();
-            let rtb = buf.as_flat::<TrngBuf, _>().unwrap();
 
             // transform the whole buffer into a ret_u8 slice (including trailing zeroes)
             let ret_u8 =
-                unsafe { core::slice::from_raw_parts(rtb.data.as_ptr() as *mut u8, rtb.data.len() * 4) };
+                unsafe { core::slice::from_raw_parts(buf.data.as_ptr() as *mut u8, buf.data.len() * 4) };
             // we've allocated an extra remainder word to handle the last word overflow, if anything
             // we'll end up throwing away a couple of unused bytes, but better than copying zeroes!
             remainder.copy_from_slice(slice_as_uninit(&ret_u8[..remainder.len()]));

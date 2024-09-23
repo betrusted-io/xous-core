@@ -252,7 +252,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                         // reset the stats cache, and update subscribers that we're disconnected
                         wifi_stats_cache = WlanStatus::from_ipc(WlanStatusIpc::default());
                         for &sub in status_subscribers.keys() {
-                            let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache))
+                            let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(&wifi_stats_cache))
                                 .or(Err(xous::Error::InternalError))
                                 .unwrap();
                             match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
@@ -277,7 +277,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                 wifi_stats_cache = WlanStatus::from_ipc(WlanStatusIpc::default());
                                 for &sub in status_subscribers.keys() {
                                     let buf =
-                                        Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache))
+                                        Buffer::into_buf(com::WlanStatusIpc::from_status(&wifi_stats_cache))
                                             .or(Err(xous::Error::InternalError))
                                             .unwrap();
                                     match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
@@ -378,7 +378,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                 log::debug!("stats update: {:?}", wifi_stats_cache);
                                 for &sub in status_subscribers.keys() {
                                     let buf =
-                                        Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache))
+                                        Buffer::into_buf(com::WlanStatusIpc::from_status(&wifi_stats_cache))
                                             .or(Err(xous::Error::InternalError))
                                             .unwrap();
                                     match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
@@ -445,9 +445,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             // reset the stats cache, and update subscribers that we're disconnected
                             wifi_stats_cache = WlanStatus::from_ipc(WlanStatusIpc::default());
                             for &sub in status_subscribers.keys() {
-                                let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache))
-                                    .or(Err(xous::Error::InternalError))
-                                    .unwrap();
+                                let buf =
+                                    Buffer::into_buf(com::WlanStatusIpc::from_status(&wifi_stats_cache))
+                                        .or(Err(xous::Error::InternalError))
+                                        .unwrap();
                                 match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
                                     Err(e) => log::warn!("Couldn't update wifi state subscriber: {:?}", e),
                                     _ => (),
@@ -561,7 +562,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                     log::debug!("stats update: {:?}", wifi_stats_cache);
                                     for &sub in status_subscribers.keys() {
                                         let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(
-                                            wifi_stats_cache,
+                                            &wifi_stats_cache,
                                         ))
                                         .or(Err(xous::Error::InternalError))
                                         .unwrap();
@@ -597,9 +598,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             ssid_stats.rssi = rssi_u8;
                             log::debug!("stats update: {:?}", wifi_stats_cache);
                             for &sub in status_subscribers.keys() {
-                                let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache))
-                                    .or(Err(xous::Error::InternalError))
-                                    .unwrap();
+                                let buf =
+                                    Buffer::into_buf(com::WlanStatusIpc::from_status(&wifi_stats_cache))
+                                        .or(Err(xous::Error::InternalError))
+                                        .unwrap();
                                 match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
                                     Err(e) => log::warn!("Couldn't update wifi state subscriber: {:?}", e),
                                     _ => (),
@@ -650,7 +652,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 sorted_ssids.sort_unstable();
                 for (strongest_ssids, ret_list_item) in sorted_ssids.iter().zip(ret_list.list.iter_mut()) {
                     *ret_list_item = Some(SsidRecord {
-                        name: xous_ipc::String::<32>::from_str(&strongest_ssids.ssid),
+                        name: String::from(&strongest_ssids.ssid),
                         rssi: strongest_ssids.rssi,
                     });
                 }
@@ -720,7 +722,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 };
                 log::debug!("stats update: {:?}", wifi_stats_cache);
                 for &sub in status_subscribers.keys() {
-                    let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache))
+                    let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(&wifi_stats_cache))
                         .or(Err(xous::Error::InternalError))
                         .unwrap();
                     match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
@@ -756,7 +758,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 };
                 log::debug!("stats update: {:?}", wifi_stats_cache);
                 for &sub in status_subscribers.keys() {
-                    let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache))
+                    let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(&wifi_stats_cache))
                         .or(Err(xous::Error::InternalError))
                         .unwrap();
                     match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
@@ -795,7 +797,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 };
                 log::debug!("stats update: {:?}", wifi_stats_cache);
                 for &sub in status_subscribers.keys() {
-                    let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache))
+                    let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(&wifi_stats_cache))
                         .or(Err(xous::Error::InternalError))
                         .unwrap();
                     match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {

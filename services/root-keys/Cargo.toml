@@ -7,24 +7,25 @@ description = "Xous root keys server"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.63"
-log-server = { package = "xous-api-log", version = "0.1.59" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.59" }
-xous-names = { package = "xous-api-names", version = "0.9.61" }
+xous = "0.9.64"
+log-server = { package = "xous-api-log", version = "0.1.61" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.61" }
+xous-names = { package = "xous-api-names", version = "0.9.63" }
 log = "0.4.14"
-susres = { package = "xous-api-susres", version = "0.9.59" }
+susres = { package = "xous-api-susres", version = "0.9.61" }
 trng = { path = "../trng" }
 spinor = { path = "../spinor" }
 llio = { path = "../llio" }
 com = { path = "../com" }
 xous-semver = "0.1.2"
-utralib = { version = "0.1.24", optional = true, default-features = false }
+utralib = { version = "0.1.25", optional = true, default-features = false }
 
-xous-ipc = "0.9.63"
+xous-ipc = "0.10.2"
 num-derive = { version = "0.4.1", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-rkyv = { version = "0.4.3", default-features = false, features = [
-    "const_generics",
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
 ] }
 zeroize = { version = "1.7.0", features = ["zeroize_derive"] }
 rand_core = "0.6.4"

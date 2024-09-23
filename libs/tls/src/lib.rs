@@ -3,22 +3,17 @@ mod danger;
 pub mod ota;
 pub mod xtls;
 
-use std::convert::{Into, TryFrom, TryInto};
+use std::convert::{Into, TryInto};
 use std::io::{Error, ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
 
 use locales::t;
 use modals::Modals;
-use ota::OwnedTrustAnchor;
-use rkyv::{
-    de::deserializers::AllocDeserializer,
-    ser::{serializers::WriteSerializer, Serializer},
-    Deserialize,
-};
+use ota::{ArchivedOwnedTrustAnchor, OwnedTrustAnchor};
 use rustls::pki_types::{CertificateDer, TrustAnchor};
 use rustls::{ClientConfig, ClientConnection, RootCertStore};
-use x509_parser::prelude::{parse_x509_certificate, FromDer, X509Certificate};
+use x509_parser::prelude::{FromDer, X509Certificate, parse_x509_certificate};
 use xous_names::XousNames;
 
 /// PDDB Dict for tls trusted certificates keys
@@ -141,20 +136,7 @@ impl Tls {
                     None::<fn()>,
                 ) {
                     Ok(mut pddb_key) => {
-                        let mut buf = Vec::<u8>::new();
-                        // reserve 2 bytes to hold a u16 (see below)
-                        let reserved = 2;
-                        buf.push(0u8);
-                        buf.push(0u8);
-                        // serialize the trust-anchor
-                        let mut serializer = WriteSerializer::with_pos(buf, reserved);
-                        let pos = serializer.serialize_value(ta).unwrap();
-                        let mut bytes = serializer.into_inner();
-                        // copy pop u16 into the first 2 bytes to enable the rkyv archive to be deserialised
-                        let pos: u16 = u16::try_from(pos).expect("data > u16");
-                        let pos_bytes = pos.to_be_bytes();
-                        bytes[0] = pos_bytes[0];
-                        bytes[1] = pos_bytes[1];
+                        let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(ta).unwrap();
                         match pddb_key.write(&bytes) {
                             Ok(len) => {
                                 self.pddb.sync().ok();
@@ -183,13 +165,10 @@ impl Tls {
             Ok(mut pddb_key) => {
                 let mut bytes = [0u8; ota::MAX_OTA_BYTES];
                 match pddb_key.read(&mut bytes) {
-                    Ok(_) => {
-                        // extract pos u16 from the first 2 bytes
-                        let pos: u16 = u16::from_be_bytes([bytes[0], bytes[1]]);
-                        let pos: usize = pos.into();
-                        // deserialize the trust-anchor
-                        let archive = unsafe { rkyv::archived_value::<OwnedTrustAnchor>(&bytes, pos) };
-                        let ta = archive.deserialize(&mut AllocDeserializer {}).ok();
+                    Ok(pos) => {
+                        let ata =
+                            unsafe { rkyv::access_unchecked::<ArchivedOwnedTrustAnchor>(&bytes[..pos]) };
+                        let ta = rkyv::deserialize::<OwnedTrustAnchor, rkyv::rancor::Error>(ata).ok();
                         log::info!("get trust anchor {}", key);
                         log::trace!("get trust anchor'{}' = '{:?}'", key, &ta);
                         ta

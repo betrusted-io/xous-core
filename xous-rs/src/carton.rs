@@ -1,7 +1,7 @@
 //! A Carton is an object that wraps another object for shipping across the kernel
 //! boundary. Structs that are stored in Cartons can be sent as messages.
 
-use crate::{Error, MemoryMessage, MemoryRange, Message, CID};
+use crate::{CID, Error, MemoryMessage, MemoryRange, Message};
 
 #[derive(Debug)]
 pub struct Carton<'a> {

@@ -8,9 +8,9 @@ use utralib::generated::*;
 use xous_kernel::{MemoryFlags, MemoryType};
 
 use crate::{
+    PID,
     io::{SerialRead, SerialWrite},
     mem::MemoryManager,
-    PID,
 };
 
 static UART_CALLBACK_POINTER: AtomicUsize = AtomicUsize::new(0);

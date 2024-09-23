@@ -7,7 +7,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
 use std::thread_local;
 
-use crate::{Result, SysCall, SysCallResult, PID, TID};
+use crate::{PID, Result, SysCall, SysCallResult, TID};
 
 mod mem;
 pub use mem::*;

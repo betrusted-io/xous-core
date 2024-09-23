@@ -2,7 +2,7 @@ use crate::{Error, MemoryAddress, MemoryFlags, MemoryRange};
 const PAGE_SIZE: usize = 4096;
 
 extern crate alloc;
-use alloc::alloc::{alloc, dealloc, Layout};
+use alloc::alloc::{Layout, alloc, dealloc};
 
 pub fn map_memory_pre(
     _phys: &Option<MemoryAddress>,

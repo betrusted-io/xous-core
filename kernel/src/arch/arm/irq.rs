@@ -4,11 +4,11 @@
 use core::arch::asm;
 use core::convert::TryInto;
 
-use xous_kernel::{arch::Arguments, PID, TID};
+use xous_kernel::{PID, TID, arch::Arguments};
 
-use crate::arch::process::{current_pid, EXIT_THREAD, RETURN_FROM_EXCEPTION_HANDLER, RETURN_FROM_ISR};
-use crate::services::{ArchProcess, Thread};
 use crate::SystemServices;
+use crate::arch::process::{EXIT_THREAD, RETURN_FROM_EXCEPTION_HANDLER, RETURN_FROM_ISR, current_pid};
+use crate::services::{ArchProcess, Thread};
 
 extern "Rust" {
     fn _xous_syscall_return_result(context: &Thread) -> !;

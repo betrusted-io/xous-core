@@ -1,7 +1,7 @@
+use String;
 use modals::Modals;
 use utra::mailbox;
 use utralib::generated::*;
-use xous_ipc::String;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -176,16 +176,12 @@ impl<'a> ShellCmdApi<'a> for Mbox {
 
     // inserts boilerplate for command API
 
-    fn process(
-        &mut self,
-        args: String<1024>,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
-        let mut ret = String::<1024>::new();
+        let mut ret = String::new();
         let helpstring = "mbox [knock]";
 
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {

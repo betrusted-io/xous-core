@@ -1,9 +1,9 @@
 use core::fmt::Write;
 
+use String;
 use codec::*;
 use locales::t;
 use xous::{Message, MessageEnvelope};
-use xous_ipc::String;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -60,14 +60,10 @@ fn simple_kilofloat_parse(input: &str) -> core::result::Result<i32, ParseIntErro
 impl<'a> ShellCmdApi<'a> for Audio {
     cmd_api!(audio);
 
-    fn process(
-        &mut self,
-        args: String<1024>,
-        env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
+        let mut ret = String::new();
         let helpstring = t!("replapp.audio.help", locales::LANG);
-        let mut tokens = args.as_str().unwrap().split(' ');
+        let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
@@ -96,7 +92,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
                     env.codec.set_headphone_volume(VolumeOps::RestoreDefault, None).unwrap();
 
                     if self.callback_id.is_none() {
-                        let cb_id = env.register_handler(String::<256>::from_str(self.verb()));
+                        let cb_id = env.register_handler(String::from(self.verb()));
                         log::trace!("hooking frame callback with ID {}", cb_id);
                         env.codec.hook_frame_callback(cb_id, self.callback_conn).unwrap(); // any non-handled IDs get routed to our callback port
                         self.callback_id = Some(cb_id);
@@ -132,7 +128,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
         &mut self,
         msg: &MessageEnvelope,
         env: &mut CommonEnv,
-    ) -> Result<Option<String<1024>>, xous::Error> {
+    ) -> Result<Option<String>, xous::Error> {
         const AMPLITUDE: f32 = 0.8;
 
         match &msg.body {
@@ -172,7 +168,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
                     }
                     env.codec.swap_frames(&mut frames).unwrap();
                 } else if *routing_id == STOP_ID {
-                    let mut ret = String::<1024>::new();
+                    let mut ret = String::new();
                     env.codec.abort().unwrap(); // this should stop callbacks from occurring too.
                     write!(
                         ret,

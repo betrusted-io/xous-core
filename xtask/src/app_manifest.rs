@@ -172,8 +172,7 @@ pub(crate) fn app_menu_items(menu_items: &mut Vec::<MenuItem>, status_conn: u32)
         writeln!(menu, "    menu_items.push(MenuItem {{",).unwrap();
         assert_eq!(manifest.menu_name.len(), 1, "Improper menu name record entry");
         for name in manifest.menu_name.keys() {
-            writeln!(menu, "        name: xous_ipc::String::from_str(t!(\"{}\", locales::LANG)),", name)
-                .unwrap();
+            writeln!(menu, "        name: String::from(t!(\"{}\", locales::LANG)),", name).unwrap();
         }
         writeln!(menu, "        action_conn: Some(status_conn),",).unwrap();
         writeln!(menu, "        action_opcode: StatusOpcode::SwitchToApp.to_u32().unwrap(),",).unwrap();

@@ -10,8 +10,8 @@ use std::collections::HashSet;
 use std::convert::TryInto;
 use std::io::{Error, ErrorKind, Result};
 
-use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt};
-use aes::{Aes256, Block, BLOCK_SIZE};
+use aes::cipher::{BlockDecrypt, BlockEncrypt, generic_array::GenericArray};
+use aes::{Aes256, BLOCK_SIZE, Block};
 use aes_gcm_siv::aead::{Aead, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
 use backend::bcrypt::*;
@@ -2503,16 +2503,13 @@ impl PddbOs {
                 let aad_local = self.data_aad(&name);
                 self.dna_mode = DnaMode::Migration;
                 let aad_incoming = self.data_aad(&name);
-                keymap.insert(
-                    &name,
-                    MigrationCiphers {
-                        pt_ecb,
-                        data_gcm_siv,
-                        aad_incoming,
-                        aad_local,
-                        data_key: basis_keys.data.into(),
-                    },
-                );
+                keymap.insert(&name, MigrationCiphers {
+                    pt_ecb,
+                    data_gcm_siv,
+                    aad_incoming,
+                    aad_local,
+                    data_key: basis_keys.data.into(),
+                });
                 modals.update_progress(index as u32 + 1).ok();
             }
 
@@ -2776,16 +2773,13 @@ impl PddbOs {
             match modals.alert_builder(t!("pddb.freespace.name", locales::LANG)).field(None, None).build() {
                 Ok(bname) => {
                     let name = bname.first().as_str().to_string();
-                    let request = BasisRequestPassword {
-                        db_name: xous_ipc::String::from_str(name.to_string()),
-                        plaintext_pw: None,
-                    };
+                    let request =
+                        BasisRequestPassword { db_name: String::from(name.to_string()), plaintext_pw: None };
                     let mut buf = Buffer::into_buf(request).unwrap();
                     buf.lend_mut(self.pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
                     let retpass = buf.to_original::<BasisRequestPassword, _>().unwrap();
                     // 2. validate the name/password combo
-                    let basis_key =
-                        self.basis_derive_key(&name, retpass.plaintext_pw.unwrap().as_str().unwrap());
+                    let basis_key = self.basis_derive_key(&name, retpass.plaintext_pw.unwrap().as_str());
                     // validate the password by finding the root block of the basis. We rely entirely
                     // upon the AEAD with key commit to ensure the password is correct.
                     let maybe_entry = if let Some(basis_map) =
@@ -2831,14 +2825,11 @@ impl PddbOs {
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
         }
         // done!
-        if self.yes_no_approval(
-            &modals,
-            match self.dna_mode {
-                DnaMode::Normal => t!("pddb.freespace.finished", locales::LANG),
-                DnaMode::Migration => t!("pddb.rekey.finished", locales::LANG),
-                DnaMode::Churn => t!("pddb.churn.finished", locales::LANG),
-            },
-        ) {
+        if self.yes_no_approval(&modals, match self.dna_mode {
+            DnaMode::Normal => t!("pddb.freespace.finished", locales::LANG),
+            DnaMode::Migration => t!("pddb.rekey.finished", locales::LANG),
+            DnaMode::Churn => t!("pddb.churn.finished", locales::LANG),
+        }) {
             Some(ret)
         } else {
             None
@@ -3446,7 +3437,7 @@ impl PddbOs {
                                 {
                                     Ok(bname) => {
                                         let request = BasisRequestPassword {
-                                            db_name: xous_ipc::String::from_str(bname.first().as_str()),
+                                            db_name: String::from(bname.first().as_str()),
                                             plaintext_pw: None,
                                         };
                                         let mut buf = Buffer::into_buf(request).unwrap();
@@ -3460,7 +3451,7 @@ impl PddbOs {
                                             // derive old and new keys
                                             let basis_key_v1 = self.basis_derive_key_v00_00_01_01(
                                                 bname.first().as_str(),
-                                                pw.as_str().unwrap_or("UTF8-error"),
+                                                pw.as_str(),
                                                 &scd,
                                             );
                                             let basis_aad_v1 = data_aad_v1(&self, bname.first().as_str());

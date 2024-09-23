@@ -22,7 +22,7 @@ pub enum NetPingCallback {
 }
 
 //////// Intra-crate Ping structures
-#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
+#[derive(Debug, Archive, Serialize, Deserialize, Clone)]
 pub(crate) struct NetPingPacket {
     /// the address we are pinging
     pub endpoint: NetIpAddr,

@@ -1,61 +1,50 @@
-use core::convert::TryInto;
+use core::mem::MaybeUninit;
+use std::marker::PhantomData;
 
-use rkyv::{ser::Serializer, Fallible};
+use rkyv::{
+    Archive, Deserialize, Place, Portable, Serialize,
+    api::low::LowSerializer,
+    rancor::{Failure, Strategy},
+    ser::{Positional, allocator::SubAllocator, writer::Buffer as RkyvBuffer},
+    with::{ArchiveWith, Identity, SerializeWith},
+};
 use xous::{
-    map_memory, send_message, unmap_memory, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange,
-    MemorySize, Message, Result, CID,
+    CID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize, Message, Result,
+    map_memory, send_message, unmap_memory,
 };
 
 #[derive(Debug)]
-pub struct Buffer<'a> {
-    range: MemoryRange,
-    valid: MemoryRange,
-    offset: Option<MemoryAddress>,
-    slice: &'a mut [u8],
+pub struct Buffer<'buf> {
+    pages: MemoryRange,
+    used: usize,
+    slice: &'buf mut [u8],
     should_drop: bool,
-    memory_message: Option<&'a mut MemoryMessage>,
+    memory_message: Option<&'buf mut MemoryMessage>,
 }
+const PAGE_SIZE: usize = 0x1000;
 
-pub struct XousDeserializer;
+type Serializer<'a, 'b> = LowSerializer<RkyvBuffer<'b>, SubAllocator<'a>, Failure>;
 
-// Unreachable enum pattern, swap out for the never type (!) whenever that gets stabilized
-#[derive(Debug)]
-pub enum XousUnreachable {}
-
-impl rkyv::Fallible for XousDeserializer {
-    type Error = XousUnreachable;
-}
-
-impl<'a> Buffer<'a> {
+impl<'buf> Buffer<'buf> {
     #[allow(dead_code)]
     pub fn new(len: usize) -> Self {
-        let remainder = if ((len & 0xFFF) == 0) && (len > 0) { 0 } else { 0x1000 - (len & 0xFFF) };
-
         let flags = MemoryFlags::R | MemoryFlags::W;
+        let len_to_page = (len + (PAGE_SIZE - 1)) & !(PAGE_SIZE - 1);
 
         // Allocate enough memory to hold the requested data
-        let new_mem = map_memory(
-            None,
-            None,
-            // Ensure our byte size is a multiple of 4096
-            len + remainder,
-            flags,
-        )
-        .expect("Buffer: error in new()/map_memory");
+        let new_mem = map_memory(None, None, len_to_page, flags).expect("xous-ipc: OOM in buffer allocation");
 
-        let valid = unsafe { MemoryRange::new(new_mem.as_mut_ptr() as usize, len + remainder).unwrap() };
         Buffer {
-            range: new_mem,
-            slice: unsafe { core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), len + remainder) },
-            valid,
-            offset: None,
+            pages: new_mem,
+            slice: unsafe { core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), len_to_page) },
+            used: 0,
             should_drop: true,
             memory_message: None,
         }
     }
 
-    // use a volatile write to ensure a clear operation is not optimized out
-    // for ensuring that a buffer is cleared, e.g. at the exit of a function
+    /// use a volatile write to ensure a clear operation is not optimized out
+    /// for ensuring that a buffer is cleared, e.g. at the exit of a function
     pub fn volatile_clear(&mut self) {
         let b = self.slice.as_mut_ptr();
         for i in 0..self.slice.len() {
@@ -69,52 +58,71 @@ impl<'a> Buffer<'a> {
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
 
-    // use to serialize a buffer between process-local threads. mainly for spawning new threads with more
-    // complex argument structures.
+    /// use to serialize a buffer between process-local threads. mainly for spawning new threads with more
+    /// complex argument structures.
     #[allow(dead_code)]
     pub unsafe fn to_raw_parts(&self) -> (usize, usize, usize) {
-        if let Some(offset) = self.offset {
-            (self.valid.as_ptr() as usize, self.valid.len(), usize::from(offset))
-        } else {
-            (self.valid.as_ptr() as usize, self.valid.len(), 0)
-        }
+        (self.pages.as_ptr() as usize, self.pages.len(), self.used)
     }
 
-    // use to serialize a buffer between process-local threads. mainly for spawning new threads with more
-    // complex argument structures.
+    /// use to serialize a buffer between process-local threads. mainly for spawning new threads with more
+    /// complex argument structures.
     #[allow(dead_code)]
     pub unsafe fn from_raw_parts(address: usize, len: usize, offset: usize) -> Self {
         let mem = MemoryRange::new(address, len).expect("invalid memory range args");
-        let off = if offset != 0 { Some(offset.try_into().unwrap()) } else { None };
         Buffer {
-            range: mem,
+            pages: mem,
             slice: core::slice::from_raw_parts_mut(mem.as_mut_ptr(), mem.len()),
-            valid: mem,
-            offset: off,
+            used: offset,
+            should_drop: false,
+            memory_message: None,
+        }
+    }
+
+    /// Consume the buffer and return the underlying storage. Used for situations where we just want to
+    /// serialize into a buffer and then do something manually with the serialized data.
+    ///
+    /// Fails if the buffer was converted from a memory message -- the Drop semantics
+    /// of the memory message would cause problems with this conversion.
+    pub fn into_inner(mut self) -> core::result::Result<(MemoryRange, usize), Error> {
+        if self.memory_message.is_none() {
+            self.should_drop = false;
+            Ok((self.pages, self.used))
+        } else {
+            Err(Error::ShareViolation)
+        }
+    }
+
+    /// Inverse of into_inner(). Used to re-cycle pages back into a Buffer so we don't have
+    /// to re-allocate data. Only safe if the `pages` matches the criteria for mapped memory
+    /// pages in Xous: page-aligned, with lengths that are a multiple of a whole page size.
+    pub unsafe fn from_inner(pages: MemoryRange, used: usize) -> Self {
+        Buffer {
+            pages,
+            slice: core::slice::from_raw_parts_mut(pages.as_mut_ptr(), pages.len()),
+            used,
             should_drop: false,
             memory_message: None,
         }
     }
 
     #[allow(dead_code)]
-    pub unsafe fn from_memory_message(mem: &'a MemoryMessage) -> Self {
+    pub unsafe fn from_memory_message(mem: &'buf MemoryMessage) -> Self {
         Buffer {
-            range: mem.buf,
+            pages: mem.buf,
             slice: core::slice::from_raw_parts_mut(mem.buf.as_mut_ptr(), mem.buf.len()),
-            valid: mem.buf,
-            offset: mem.offset,
+            used: mem.offset.map_or(0, |v| v.get()),
             should_drop: false,
             memory_message: None,
         }
     }
 
     #[allow(dead_code)]
-    pub unsafe fn from_memory_message_mut(mem: &'a mut MemoryMessage) -> Self {
+    pub unsafe fn from_memory_message_mut(mem: &'buf mut MemoryMessage) -> Self {
         Buffer {
-            range: mem.buf,
+            pages: mem.buf,
             slice: core::slice::from_raw_parts_mut(mem.buf.as_mut_ptr(), mem.buf.len()),
-            valid: mem.buf,
-            offset: mem.offset,
+            used: mem.offset.map_or(0, |v| v.get()),
             should_drop: false,
             memory_message: Some(mem),
         }
@@ -125,15 +133,15 @@ impl<'a> Buffer<'a> {
     pub fn lend_mut(&mut self, connection: CID, id: u32) -> core::result::Result<Result, Error> {
         let msg = MemoryMessage {
             id: id as usize,
-            buf: self.valid,
-            offset: self.offset,
-            valid: MemorySize::new(self.slice.len()),
+            buf: self.pages,
+            offset: MemoryAddress::new(self.used),
+            valid: MemorySize::new(self.pages.len()),
         };
 
         // Update the offset pointer if the server modified it.
         let result = send_message(connection, Message::MutableBorrow(msg));
         if let Ok(Result::MemoryReturned(offset, _valid)) = result {
-            self.offset = offset;
+            self.used = offset.map_or(0, |v| v.get());
         }
 
         result
@@ -143,9 +151,9 @@ impl<'a> Buffer<'a> {
     pub fn lend(&self, connection: CID, id: u32) -> core::result::Result<Result, Error> {
         let msg = MemoryMessage {
             id: id as usize,
-            buf: self.valid,
-            offset: self.offset,
-            valid: MemorySize::new(self.slice.len()),
+            buf: self.pages,
+            offset: MemoryAddress::new(self.used),
+            valid: MemorySize::new(self.pages.len()),
         };
         send_message(connection, Message::Borrow(msg))
     }
@@ -154,9 +162,9 @@ impl<'a> Buffer<'a> {
     pub fn send(mut self, connection: CID, id: u32) -> core::result::Result<Result, Error> {
         let msg = MemoryMessage {
             id: id as usize,
-            buf: self.valid,
-            offset: self.offset,
-            valid: MemorySize::new(self.slice.len()),
+            buf: self.pages,
+            offset: MemoryAddress::new(self.used),
+            valid: MemorySize::new(self.pages.len()),
         };
         let result = send_message(connection, Message::Move(msg))?;
 
@@ -165,64 +173,126 @@ impl<'a> Buffer<'a> {
         Ok(result)
     }
 
-    #[allow(dead_code)]
-    pub fn into_buf<S>(src: S) -> core::result::Result<Self, ()>
+    fn into_buf_inner<F, T>(src: &T) -> core::result::Result<Self, ()>
     where
-        S: rkyv::Serialize<rkyv::ser::serializers::BufferSerializer<Buffer<'a>>>,
+        F: for<'a, 'b> SerializeWith<T, Serializer<'a, 'b>>,
     {
-        let buf = Self::new(core::mem::size_of::<S>());
-        let mut ser = rkyv::ser::serializers::BufferSerializer::new(buf);
-        let pos = ser.serialize_value(&src).or(Err(()))?;
-        let mut buf = ser.into_inner();
-        buf.offset = MemoryAddress::new(pos);
-        Ok(buf)
-    }
+        struct Wrap<'a, F, T>(&'a T, PhantomData<F>);
 
-    // erase ourself and re-use our allocated storage
-    #[allow(dead_code)]
-    pub fn rewrite<S>(&mut self, src: S) -> core::result::Result<(), xous::Error>
-    where
-        S: rkyv::Serialize<rkyv::ser::serializers::BufferSerializer<&'a mut [u8]>>,
-    {
-        let copied_slice =
-            unsafe { core::slice::from_raw_parts_mut(self.slice.as_mut_ptr(), self.slice.len()) };
-        // zeroize the slice before using it
-        /*for &mut s in copied_slice {
-            s = 0;
-        }*/
-        let mut ser = rkyv::ser::serializers::BufferSerializer::new(copied_slice);
-        let pos = ser.serialize_value(&src).or(Err(())).unwrap();
-        self.slice = ser.into_inner();
-        self.offset = MemoryAddress::new(pos);
-        Ok(())
-    }
+        impl<F, T> Archive for Wrap<'_, F, T>
+        where
+            F: ArchiveWith<T>,
+        {
+            type Archived = <F as ArchiveWith<T>>::Archived;
+            type Resolver = <F as ArchiveWith<T>>::Resolver;
 
-    #[allow(dead_code)]
-    pub fn replace<S>(&mut self, src: S) -> core::result::Result<(), &'static str>
-    where
-        S: rkyv::Serialize<rkyv::ser::serializers::BufferSerializer<&'a mut [u8]>>,
-    {
-        // We must have a `memory_message` to update in order for this to work.
-        // Otherwise, we risk having the pointer go to somewhere invalid.
-        if self.memory_message.is_none() {
-            // Create this message using `from_memory_message_mut()` instead of
-            // `from_memory_message()`.
-            Err("couldn't serialize because buffer wasn't mutable")?;
+            fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
+                F::resolve_with(self.0, resolver, out)
+            }
         }
-        // Unsafe Warning: Create a copy of the backing slice to hand to the deserializer.
-        // This is required because the deserializer consumes the buffer and returns it
-        // later as part of `.into_inner()`.
-        // The "correct" way to do this would be to implement `rkyv::Serializer` an `rkyv::Fallible`
-        // for ourselves.
-        let copied_slice =
-            unsafe { core::slice::from_raw_parts_mut(self.slice.as_mut_ptr(), self.slice.len()) };
-        let mut ser = rkyv::ser::serializers::BufferSerializer::new(copied_slice);
-        let pos = ser.serialize_value(&src).map_err(|err| err).unwrap();
-        self.offset = MemoryAddress::new(pos);
+
+        impl<'a, 'b, F, T> Serialize<Serializer<'a, 'b>> for Wrap<'_, F, T>
+        where
+            F: SerializeWith<T, Serializer<'a, 'b>>,
+        {
+            fn serialize(
+                &self,
+                serializer: &mut Serializer<'a, 'b>,
+            ) -> core::result::Result<Self::Resolver, Failure> {
+                F::serialize_with(self.0, serializer)
+            }
+        }
+        let mut xous_buf = Self::new(core::mem::size_of::<T>());
+        let mut scratch = [MaybeUninit::<u8>::uninit(); 256];
+
+        let wrap = Wrap(src, PhantomData::<F>);
+        let writer = RkyvBuffer::from(&mut xous_buf.slice[..]);
+        let alloc = SubAllocator::new(&mut scratch);
+
+        let serialized_buf =
+            rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(&wrap, writer, alloc).map_err(|_| ())?;
+        xous_buf.used = serialized_buf.pos();
+        Ok(xous_buf)
+    }
+
+    #[allow(dead_code)]
+    pub fn into_buf<T>(src: T) -> core::result::Result<Self, ()>
+    where
+        T: for<'b, 'a> rkyv::Serialize<
+                rkyv::rancor::Strategy<
+                    rkyv::ser::Serializer<
+                        rkyv::ser::writer::Buffer<'b>,
+                        rkyv::ser::allocator::SubAllocator<'a>,
+                        (),
+                    >,
+                    rkyv::rancor::Failure,
+                >,
+            >,
+    {
+        Buffer::into_buf_inner::<Identity, T>(&src)
+    }
+
+    fn replace_inner<F, T>(&mut self, src: T) -> core::result::Result<(), &'static str>
+    where
+        F: for<'a, 'b> SerializeWith<T, Serializer<'a, 'b>>,
+    {
+        struct Wrap<'a, F, T>(&'a T, PhantomData<F>);
+
+        impl<F, T> Archive for Wrap<'_, F, T>
+        where
+            F: ArchiveWith<T>,
+        {
+            type Archived = <F as ArchiveWith<T>>::Archived;
+            type Resolver = <F as ArchiveWith<T>>::Resolver;
+
+            fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
+                F::resolve_with(self.0, resolver, out)
+            }
+        }
+
+        impl<'a, 'b, F, T> Serialize<Serializer<'a, 'b>> for Wrap<'_, F, T>
+        where
+            F: SerializeWith<T, Serializer<'a, 'b>>,
+        {
+            fn serialize(
+                &self,
+                serializer: &mut Serializer<'a, 'b>,
+            ) -> core::result::Result<Self::Resolver, Failure> {
+                F::serialize_with(self.0, serializer)
+            }
+        }
+
+        let mut scratch = [MaybeUninit::<u8>::uninit(); 256];
+
+        let wrap = Wrap(&src, PhantomData::<F>);
+        let writer = RkyvBuffer::from(&mut self.slice[..]);
+        let alloc = SubAllocator::new(&mut scratch);
+
+        let serialized_buf =
+            rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(&wrap, writer, alloc).unwrap();
+        self.used = serialized_buf.pos();
+
         if let Some(ref mut msg) = self.memory_message.as_mut() {
-            msg.offset = MemoryAddress::new(pos);
+            msg.offset = MemoryAddress::new(self.used);
         }
         Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub fn replace<T>(&mut self, src: T) -> core::result::Result<(), &'static str>
+    where
+        T: for<'b, 'a> rkyv::Serialize<
+                rkyv::rancor::Strategy<
+                    rkyv::ser::Serializer<
+                        rkyv::ser::writer::Buffer<'b>,
+                        rkyv::ser::allocator::SubAllocator<'a>,
+                        (),
+                    >,
+                    rkyv::rancor::Failure,
+                >,
+            >,
+    {
+        self.replace_inner::<Identity, T>(src)
     }
 
     /// Zero-copy representation of the data on the receiving side, wrapped in an "Archived" trait and left in
@@ -231,48 +301,50 @@ impl<'a> Buffer<'a> {
     pub fn as_flat<T, U>(&self) -> core::result::Result<&U, ()>
     where
         T: rkyv::Archive<Archived = U>,
+        U: Portable,
     {
-        let pos = self.offset.map(|o| o.get()).unwrap_or_default();
-        let r = unsafe { rkyv::archived_value::<T>(self.slice, pos) };
+        let r = unsafe { rkyv::access_unchecked::<U>(&self.slice[..self.used]) };
         Ok(r)
     }
 
-    /// A representation identical to the original, but reequires copying to the stack. More expensive so uses
+    /// A representation identical to the original, but requires copying to the stack. More expensive so uses
     /// "to_" prefix.
     #[allow(dead_code)]
-    pub fn to_original<T, U>(&self) -> core::result::Result<T, ()>
+    pub fn to_original<T, U>(&self) -> core::result::Result<T, Error>
     where
         T: rkyv::Archive<Archived = U>,
-        U: rkyv::Deserialize<T, dyn Fallible<Error = XousUnreachable>>,
+        U: Portable,
+        <T as Archive>::Archived: Deserialize<T, Strategy<rkyv::de::Pool, rkyv::rancor::Error>>,
     {
-        let pos = self.offset.map(|o| o.get()).unwrap_or_default();
-        let r = unsafe { rkyv::archived_value::<T>(self.slice, pos) };
-        Ok(r.deserialize(&mut XousDeserializer {}).unwrap())
+        let r = unsafe { rkyv::access_unchecked::<U>(&self.slice[..self.used]) };
+        rkyv::deserialize::<T, rkyv::rancor::Error>(r).map_err(|_| Error::InternalError)
     }
+
+    pub fn used(&self) -> usize { self.used }
 }
 
 impl<'a> core::convert::AsRef<[u8]> for Buffer<'a> {
-    fn as_ref(&self) -> &[u8] { self.slice }
+    fn as_ref(&self) -> &[u8] { &self.slice[..self.used] }
 }
 
 impl<'a> core::convert::AsMut<[u8]> for Buffer<'a> {
-    fn as_mut(&mut self) -> &mut [u8] { self.slice }
+    fn as_mut(&mut self) -> &mut [u8] { &mut self.slice[..self.used] }
 }
 
 impl<'a> core::ops::Deref for Buffer<'a> {
     type Target = [u8];
 
-    fn deref(&self) -> &Self::Target { &*self.slice }
+    fn deref(&self) -> &Self::Target { &*(&self.slice[..self.used]) }
 }
 
 impl<'a> core::ops::DerefMut for Buffer<'a> {
-    fn deref_mut(&mut self) -> &mut Self::Target { &mut *self.slice }
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut *(&mut self.slice[..self.used]) }
 }
 
 impl<'a> Drop for Buffer<'a> {
     fn drop(&mut self) {
         if self.should_drop {
-            unmap_memory(self.range).expect("Buffer: failed to drop memory");
+            unmap_memory(self.pages).expect("Buffer: failed to drop memory");
         }
     }
 }
