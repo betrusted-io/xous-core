@@ -7,7 +7,7 @@ use url::Url;
 use xous::CID;
 use xous_ipc::Buffer;
 
-use crate::{get_username, web, MTX_LONG_TIMEOUT_MS};
+use crate::{MTX_LONG_TIMEOUT_MS, get_username, web};
 
 pub fn listen(
     url: &mut Url,
@@ -37,7 +37,7 @@ pub fn listen(
             let sender = event.sender.unwrap_or("anon".to_string());
             let body = event.body.unwrap_or("...".to_string());
             let post = chat::Post {
-                dialogue_id: String::from(&dialogue_id),
+                dialogue_id: String::from(dialogue_id),
                 author: String::from(&get_username(&sender)),
                 timestamp: event.ts.unwrap_or(0),
                 text: String::from(&body),

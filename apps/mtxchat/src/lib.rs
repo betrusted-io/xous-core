@@ -353,17 +353,12 @@ impl<'a> MtxChat<'a> {
         };
         if let Ok(payloads) = builder.build() {
             self.unset_debug(TOKEN_KEY);
-            if let Ok(content) = payloads.content()[0].content.as_str() {
-                self.set(USER_NAME_KEY, content).expect("failed to save username");
-                self.new_username = content.ne(&old_username);
-            }
-            if let Ok(content) = payloads.content()[1].content.as_str() {
-                self.set(USER_DOMAIN_KEY, content).expect("failed to save server");
-            }
-            if let Ok(content) = payloads.content()[2].content.as_str() {
-                if content.ne(HIDE) {
-                    self.set(PASSWORD_KEY, content).expect("failed to save password");
-                }
+            self.set(USER_NAME_KEY, payloads.content()[0].content.as_str()).expect("failed to save username");
+            self.new_username = payloads.content()[0].content.as_str().ne(&old_username);
+            self.set(USER_DOMAIN_KEY, payloads.content()[1].content.as_str()).expect("failed to save server");
+            if payloads.content()[2].content.as_str().ne(HIDE) {
+                self.set(PASSWORD_KEY, payloads.content()[2].content.as_str())
+                    .expect("failed to save password");
             }
             if let Some(user_name) = &self.user_name {
                 if let Some(user_domain) = &self.user_domain {
@@ -448,13 +443,9 @@ impl<'a> MtxChat<'a> {
             self.unset_debug(ROOM_ID_KEY);
             self.unset_debug(SINCE_KEY);
             self.unset_debug(FILTER_KEY);
-            if let Ok(content) = payloads.content()[0].content.as_str() {
-                self.set(ROOM_NAME_KEY, content).expect("failed to save server");
-                self.new_room = content.ne(&old_room);
-            }
-            if let Ok(content) = payloads.content()[1].content.as_str() {
-                self.set(ROOM_DOMAIN_KEY, content).expect("failed to save server");
-            }
+            self.set(ROOM_NAME_KEY, payloads.content()[0].content.as_str()).expect("failed to save server");
+            self.new_room = payloads.content()[0].content.as_str().ne(&old_room);
+            self.set(ROOM_DOMAIN_KEY, payloads.content()[1].content.as_str()).expect("failed to save server");
         }
         log::info!("# ROOM_NAME_KEY set '{}' => clearing ROOM_ID_KEY, SINCE_KEY, FILTER_KEY", ROOM_NAME_KEY);
     }

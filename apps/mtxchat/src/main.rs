@@ -4,7 +4,7 @@
 mod api;
 
 use api::*;
-use chat::{Chat, Event, POST_TEXT_MAX};
+use chat::{Chat, Event};
 use gam::{MenuItem, MenuPayload};
 use locales::t;
 use mtxchat::MtxChat;
@@ -132,7 +132,7 @@ fn wrapped_main() -> ! {
             }
             Some(MtxchatOp::Post) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.to_original::<String<{ POST_TEXT_MAX }>, _>().unwrap();
+                let s = buffer.to_original::<String, _>().unwrap();
                 if s.len() > 0 {
                     // capture input instead of calling here, so message can drop and calling server is
                     // released
