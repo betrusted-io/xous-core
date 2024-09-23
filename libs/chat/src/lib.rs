@@ -4,7 +4,7 @@ pub mod icontray;
 pub mod ui;
 
 use std::convert::TryInto;
-use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
+use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -13,9 +13,9 @@ use gam::MenuItem;
 use graphics_server::api::GlyphStyle;
 use graphics_server::{Point, Rectangle, TextBounds, TextView};
 use num_traits::FromPrimitive;
-use ui::VisualProperties;
 pub use ui::BUSY_ANIMATION_RATE_MS;
-use xous::{msg_scalar_unpack, Error, CID, SID};
+use ui::VisualProperties;
+use xous::{CID, Error, SID, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
 /// Create a TextView with the default properties common to all text bubbles.
@@ -231,8 +231,8 @@ impl Chat {
                 None => None,
             },
         };
-        post.author.append(author).unwrap();
-        post.text.append(text).unwrap();
+        post.author.push_str(author);
+        post.text.push_str(text);
         match Buffer::into_buf(post) {
             Ok(buf) => buf.send(self.cid, ChatOp::PostAdd as u32).map(|_| ()),
             Err(_) => Err(xous::Error::InternalError),
@@ -261,7 +261,7 @@ impl Chat {
     /// Error if unable to send the msg to the Chat UI server
     pub fn post_find(&self, author: &str, timestamp: u64) -> Result<Option<usize>, Error> {
         let mut find = Find { author: String::new(), timestamp, key: None };
-        find.author.append(author).unwrap();
+        find.author.push_str(author);
         match Buffer::into_buf(find) {
             Ok(mut buf) => match buf.lend_mut(self.cid, ChatOp::PostFind as u32) {
                 Ok(..) => {

@@ -1,20 +1,15 @@
 use std::cmp::min;
-use std::convert::TryFrom;
 use std::fmt::Write as TextWrite;
 use std::io::{Error, ErrorKind, Read, Write};
 
-use dialogue::{post::Post, Dialogue};
-use gam::{menu_matic, MenuMatic, UxRegistration};
+use dialogue::{Dialogue, post::Post};
+use gam::{MenuMatic, UxRegistration, menu_matic};
 use graphics_server::api::GlyphStyle;
 use graphics_server::{DrawStyle, Gid, Line, PixelColor, Point, Rectangle, TextBounds, TextView};
 use locales::t;
 use modals::Modals;
-use rkyv::de::deserializers::AllocDeserializer;
-use rkyv::ser::serializers::WriteSerializer;
-use rkyv::ser::Serializer;
-use rkyv::Deserialize;
 use ticktimer_server::Ticktimer;
-use xous::{MessageEnvelope, CID};
+use xous::{CID, MessageEnvelope};
 use xous_names::XousNames;
 
 use super::*;
@@ -40,7 +35,7 @@ pub struct VisualProperties {
 pub(crate) struct Ui {
     // optional structures that indicate new input to the Chat loop per iteration
     // an input string
-    pub input: Option<String<{ POST_TEXT_MAX }>>,
+    pub input: Option<String>,
     // messages from other servers
     msg: Option<MessageEnvelope>,
 
@@ -193,25 +188,29 @@ impl Ui {
                     Ok(mut pddb_key) => {
                         let mut bytes = [0u8; dialogue::MAX_BYTES + 2];
                         match pddb_key.read(&mut bytes) {
-                            Ok(_) => {
-                                // extract pos u16 from the first 2 bytes
-                                let pos: u16 = u16::from_be_bytes([bytes[0], bytes[1]]);
-                                let pos: usize = pos.into();
-                                // deserialize the Dialogue
-                                let archive = unsafe { rkyv::archived_value::<Dialogue>(&bytes, pos) };
-                                self.dialogue = match archive.deserialize(&mut AllocDeserializer {}) {
-                                    Ok(dialogue) => {
-                                        // show most recent posts onscreen
-                                        self.layout_selected = dialogue.post_last();
-                                        self.layout_range.clear();
-                                        self.layout_topdown = false;
-                                        Some(dialogue)
-                                    }
-                                    Err(e) => {
-                                        log::warn!("failed to deserialize Dialogue {}:{} {}", dict, key, e);
-                                        None
-                                    }
+                            Ok(pos) => {
+                                let archive = unsafe {
+                                    rkyv::access_unchecked::<dialogue::ArchivedDialogue>(&bytes[..pos])
                                 };
+                                self.dialogue =
+                                    match rkyv::deserialize::<Dialogue, rkyv::rancor::Error>(archive) {
+                                        Ok(dialogue) => {
+                                            // show most recent posts onscreen
+                                            self.layout_selected = dialogue.post_last();
+                                            self.layout_range.clear();
+                                            self.layout_topdown = false;
+                                            Some(dialogue)
+                                        }
+                                        Err(e) => {
+                                            log::warn!(
+                                                "failed to deserialize Dialogue {}:{} {}",
+                                                dict,
+                                                key,
+                                                e
+                                            );
+                                            None
+                                        }
+                                    };
                                 log::debug!("get '{}' = '{:?}'", key, self.dialogue);
                             }
                             Err(e) => log::warn!("failed to read {}: {e}", key),
@@ -238,22 +237,7 @@ impl Ui {
                 let hint = Some(dialogue::MAX_BYTES + 2);
                 match self.pddb.get(&dict, &key, None, true, true, hint, None::<fn()>) {
                     Ok(mut pddb_key) => {
-                        let mut buf = Vec::<u8>::new();
-                        // reserve 2 bytes to hold a u16 (see below)
-                        let reserved = 2;
-                        buf.push(0u8);
-                        buf.push(0u8);
-
-                        // serialize the Dialogue
-                        let mut serializer = WriteSerializer::with_pos(buf, reserved);
-                        let pos = serializer.serialize_value(dialogue).unwrap();
-                        let mut bytes = serializer.into_inner();
-
-                        // copy pop u16 into the first 2 bytes to enable the rkyv archive to be deserialised
-                        let pos: u16 = u16::try_from(pos).expect("data > u16");
-                        let pos_bytes = pos.to_be_bytes();
-                        bytes[0] = pos_bytes[0];
-                        bytes[1] = pos_bytes[1];
+                        let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(dialogue).unwrap();
                         match pddb_key.write(&bytes) {
                             Ok(len) => {
                                 self.pddb.sync().ok();
@@ -707,15 +691,11 @@ impl Ui {
             self.gam
                 .draw_rectangle(
                     self.vp.canvas,
-                    Rectangle::new_with_style(
-                        Point::new(0, 0),
-                        self.vp.total_screensize,
-                        DrawStyle {
-                            fill_color: Some(PixelColor::Light),
-                            stroke_color: None,
-                            stroke_width: 0,
-                        },
-                    ),
+                    Rectangle::new_with_style(Point::new(0, 0), self.vp.total_screensize, DrawStyle {
+                        fill_color: Some(PixelColor::Light),
+                        stroke_color: None,
+                        stroke_width: 0,
+                    }),
                 )
                 .expect("can't clear canvas area");
 

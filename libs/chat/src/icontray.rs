@@ -2,7 +2,7 @@ use std::thread;
 
 use ime_plugin_api::*;
 use num_traits::*;
-use xous::{msg_scalar_unpack, CID};
+use xous::{CID, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
 pub(crate) const SERVER_NAME_ICONTRAY: &'static str = "_chat icon tray plugin_";
@@ -83,7 +83,7 @@ pub(crate) fn server(_cid: Option<CID>, icons: [&str; 4]) {
                 // every key press, the four slots get queried
                 prediction.string.clear();
                 if prediction.index < icons.len() as u32 {
-                    prediction.string.append(icons[prediction.index as usize]).ok();
+                    prediction.string.push_str(icons[prediction.index as usize]);
                     prediction.valid = true;
                 } else {
                     prediction.valid = false;

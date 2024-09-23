@@ -85,7 +85,7 @@ pub struct Post {
     pub dialogue_id: String,
     pub author: String,
     pub timestamp: u64,
-    pub text: String<POST_TEXT_MAX>,
+    pub text: String,
     pub attach_url: Option<String>,
 }
 
