@@ -3,7 +3,7 @@
 mod rkyv_enum;
 use num_traits::{FromPrimitive, ToPrimitive};
 pub use rkyv_enum::*;
-use xous::{send_message, Message, CID};
+use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]

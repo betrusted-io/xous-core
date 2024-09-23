@@ -9,7 +9,7 @@ use crate::consts::{
     IRQ_STACK_TOP, KERNEL_LOAD_OFFSET, KERNEL_STACK_PAGE_COUNT, KERNEL_STACK_TOP, PAGE_TABLE_ROOT_OFFSET,
     USER_AREA_END, USER_STACK_TOP,
 };
-use crate::{println, BootConfig, ProgramDescription, XousPid, PAGE_SIZE, STACK_PAGE_COUNT, VDBG};
+use crate::{BootConfig, PAGE_SIZE, ProgramDescription, STACK_PAGE_COUNT, VDBG, XousPid, println};
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

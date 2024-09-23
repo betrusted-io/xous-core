@@ -1,7 +1,7 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use num_traits::*;
-use xous::{send_message, Message};
+use xous::{Message, send_message};
 
 pub const SERVER_NAME_ES: &str = "_EARLY_SETTINGS";
 

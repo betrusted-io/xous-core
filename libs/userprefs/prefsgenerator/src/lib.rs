@@ -1,8 +1,8 @@
 use proc_macro::{self, TokenStream};
-use proc_macro2::Ident;
 use proc_macro_error::{abort, proc_macro_error};
+use proc_macro2::Ident;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, DeriveInput, FieldsNamed};
+use syn::{DeriveInput, FieldsNamed, parse_macro_input};
 
 #[proc_macro_error]
 #[proc_macro_derive(GetterSetter)]

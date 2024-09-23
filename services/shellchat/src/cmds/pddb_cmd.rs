@@ -2,9 +2,9 @@ use core::fmt::Write as FmtWrite;
 #[allow(unused_imports)]
 use std::io::{Read, Seek, SeekFrom, Write};
 
+use String;
 #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
 use pddb::PDDB_A_LEN;
-use String;
 
 use crate::{CommonEnv, ShellCmdApi};
 

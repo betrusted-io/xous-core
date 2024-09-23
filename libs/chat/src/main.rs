@@ -2,13 +2,13 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use api::*;
 use num_traits::FromPrimitive;
-use xous::{Error, CID, SID};
+use xous::{CID, Error, SID};
 
 pub fn main() -> ! {
     let xns = xous_names::XousNames::new().unwrap();

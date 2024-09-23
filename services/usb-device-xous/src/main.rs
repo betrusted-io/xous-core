@@ -97,9 +97,9 @@ mod tests {
     use super::*;
     #[test]
     fn test_alloc() {
+        use rand_chacha::ChaCha8Rng;
         use rand_chacha::rand_core::RngCore;
         use rand_chacha::rand_core::SeedableRng;
-        use rand_chacha::ChaCha8Rng;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut allocs = BTreeMap::<u32, u32>::new();

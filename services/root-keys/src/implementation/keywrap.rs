@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use aes::Aes256;
 /// this code is vendored in from https://github.com/jedisct1/rust-aes-keywrap
 /// From its original README:
 /// AES Key Wrap for Rust
@@ -35,7 +36,6 @@
 /// not compliant, so, we should migrate away from it!
 use aes::cipher::generic_array::GenericArray;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
-use aes::Aes256;
 use byteorder::{BigEndian, ByteOrder};
 
 use crate::api::KeywrapError;

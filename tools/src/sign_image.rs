@@ -2,8 +2,8 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 use ed25519_dalek::{DigestSigner, SigningKey};
-use pkcs8::der::Decodable;
 use pkcs8::PrivateKeyInfo;
+use pkcs8::der::Decodable;
 use ring::signature::Ed25519KeyPair;
 use sha2::{Digest, Sha512};
 

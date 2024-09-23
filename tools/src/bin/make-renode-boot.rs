@@ -90,21 +90,15 @@ fn create_image(init_programs: &[String]) -> std::io::Result<Vec<u8>> {
             } else {
                 ((csr_top - region.base) & !(PAGE_SIZE - 1)) + PAGE_SIZE
             } + PAGE_SIZE;
-            map.insert(
-                region.name.to_lowercase(),
-                tools::utils::CsrMemoryRegion {
-                    start: region.base.try_into().unwrap(),
-                    length: length.try_into().unwrap(),
-                },
-            );
+            map.insert(region.name.to_lowercase(), tools::utils::CsrMemoryRegion {
+                start: region.base.try_into().unwrap(),
+                length: length.try_into().unwrap(),
+            });
         } else {
-            map.insert(
-                region.name.to_lowercase(),
-                tools::utils::CsrMemoryRegion {
-                    start: region.base.try_into().unwrap(),
-                    length: region.size.try_into().unwrap(),
-                },
-            );
+            map.insert(region.name.to_lowercase(), tools::utils::CsrMemoryRegion {
+                start: region.base.try_into().unwrap(),
+                length: region.size.try_into().unwrap(),
+            });
         }
     }
     csr_to_config(tools::utils::CsrConfig { regions: map }, &mut ram_config);

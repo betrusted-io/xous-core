@@ -1,7 +1,7 @@
+use String;
 use gam::*;
 use locales::t;
 use num_traits::*;
-use String;
 
 use crate::StatusOpcode;
 

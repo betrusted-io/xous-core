@@ -1,13 +1,13 @@
 use core::fmt;
 
 use digest::{
+    FixedOutput, HashMarker, InvalidOutputSize, Output, Update,
     block_buffer::Eager,
     core_api::{
         AlgorithmName, Block, BlockSizeUser, Buffer, BufferKindUser, OutputSizeUser, TruncSide, UpdateCore,
         VariableOutputCore,
     },
-    typenum::{U128, U64},
-    FixedOutput, HashMarker, InvalidOutputSize, Output, Update,
+    typenum::{U64, U128},
 };
 
 /// Wrap a pre-hash value in a Digest trait

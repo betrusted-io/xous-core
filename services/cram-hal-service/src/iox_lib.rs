@@ -3,7 +3,7 @@ use core::sync::atomic::Ordering;
 use cramium_hal::iox::{IoxDir, IoxDriveStrength, IoxEnable, IoxFunction, IoxPort, IoxValue};
 use num_traits::*;
 
-use crate::{api::IoxConfigMessage, Opcode, SERVER_NAME_CRAM_HAL};
+use crate::{Opcode, SERVER_NAME_CRAM_HAL, api::IoxConfigMessage};
 
 pub struct IoxHal {
     conn: xous::CID,

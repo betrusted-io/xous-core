@@ -16,7 +16,7 @@ pub type c_float = f32;
 pub type c_double = f64;
 pub type c_void = core::ffi::c_void;
 
-use xous::{send_message, Message};
+use xous::{Message, send_message};
 static mut KBD: Option<keyboard::Keyboard> = None;
 fn get_keys_blocking() -> Vec<char> {
     if unsafe { KBD.is_none() } {

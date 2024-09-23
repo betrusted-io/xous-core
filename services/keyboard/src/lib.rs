@@ -5,7 +5,7 @@ use num_traits::*;
 pub mod api;
 
 pub use api::*;
-use xous::{send_message, Message};
+use xous::{Message, send_message};
 use xous_ipc::Buffer;
 
 #[derive(Debug)]

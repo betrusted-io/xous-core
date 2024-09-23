@@ -3,9 +3,9 @@ mod utils;
 
 use senres::{Senres, SenresMut};
 
+use crate::FileHandle;
 use crate::backend::BasisCache;
 use crate::backend::PddbOs;
-use crate::FileHandle;
 
 #[repr(u8)]
 enum FileType {

@@ -4,8 +4,8 @@
 use super::cliprect::ClipRect;
 #[allow(unused_imports)]
 use super::{FrBuf, LINES, WIDTH, WORDS_PER_LINE};
-use crate::api::Point;
 use crate::GlyphSprite;
+use crate::api::Point;
 
 /// Null glyph to use when everything else fails
 pub const NULL_GLYPH: [u32; 8] = [0, 0x5500AA, 0x5500AA, 0x5500AA, 0x5500AA, 0x5500AA, 0, 0];

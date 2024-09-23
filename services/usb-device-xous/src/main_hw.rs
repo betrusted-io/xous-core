@@ -21,19 +21,19 @@ use usb_device::prelude::*;
 use usb_device_xous::KeyboardLedsReport;
 use usb_device_xous::UsbDeviceType;
 use usbd_serial::SerialPort;
-#[cfg(any(feature = "precursor", feature = "renode"))]
-use utralib::generated::*;
 #[cfg(feature = "cramium-soc")]
 use utralib::AtomicCsr;
+#[cfg(any(feature = "precursor", feature = "renode"))]
+use utralib::generated::*;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 #[cfg(all(not(feature = "minimal"), any(feature = "precursor", feature = "renode")))]
 use xous_semver::SemVer;
+use xous_usb_hid::device::DeviceClass;
 use xous_usb_hid::device::fido::RawFido;
 use xous_usb_hid::device::fido::RawFidoConfig;
 use xous_usb_hid::device::fido::RawFidoReport;
 use xous_usb_hid::device::keyboard::{NKROBootKeyboard, NKROBootKeyboardConfig};
-use xous_usb_hid::device::DeviceClass;
 use xous_usb_hid::page::Keyboard;
 use xous_usb_hid::prelude::*;
 

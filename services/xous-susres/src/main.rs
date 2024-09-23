@@ -8,7 +8,7 @@ use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use num_traits::{FromPrimitive, ToPrimitive};
 use xous::messages::sender::Sender;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message, CID};
+use xous::{CID, Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message};
 use xous_api_susres::*;
 use xous_ipc::Buffer;
 
@@ -31,8 +31,8 @@ mod implementation {
     use num_traits::ToPrimitive;
     use utralib::generated::*;
 
-    use crate::murmur3::murmur3_32;
     use crate::SHOULD_RESUME;
+    use crate::murmur3::murmur3_32;
 
     const SYSTEM_CLOCK_FREQUENCY: u32 = 12_000_000; // timer0 is now in the always-on domain
     const SYSTEM_TICK_INTERVAL_MS: u32 = xous::BASE_QUANTA_MS;

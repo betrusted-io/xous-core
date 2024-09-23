@@ -1,10 +1,10 @@
 mod rkyv_enum;
 // note: many enums in the API are isolated to this file.
+use String;
 #[cfg(feature = "ditherpunk")]
 use graphics_server::api::Tile;
 use graphics_server::api::{Gid, Point};
 pub use rkyv_enum::*;
-use String;
 
 pub(crate) const SERVER_NAME_GAM: &str = "_Graphical Abstraction Manager_";
 

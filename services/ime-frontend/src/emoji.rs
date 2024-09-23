@@ -1,7 +1,7 @@
+use String;
 use gam::*;
 use ime_plugin_api::ImefOpcode;
 use num_traits::*;
-use String;
 
 // imef_conn must come from outside the scope of the macro because of hygeine rules.
 macro_rules! emoji_item {

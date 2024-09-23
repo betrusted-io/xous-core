@@ -12,19 +12,19 @@ mod shell;
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 use std::thread;
 
 use cmds::*;
 use cram_hal_service::keyboard;
-use graphics_server::api::GlyphStyle;
 use graphics_server::Gid;
+use graphics_server::api::GlyphStyle;
 use graphics_server::*;
 use locales::t;
 use num_traits::*;
-use xous::{msg_scalar_unpack, send_message, Message, CID};
+use xous::{CID, Message, msg_scalar_unpack, send_message};
 
 const SERVER_NAME_STATUS_GID: &str = "_Status bar GID receiver_";
 const SERVER_NAME_STATUS: &str = "_Status_";

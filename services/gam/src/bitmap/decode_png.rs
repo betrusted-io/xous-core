@@ -32,7 +32,7 @@
 use std::convert::TryInto;
 use std::io::{Error, ErrorKind::InvalidData, Read, Result};
 
-use miniz_oxide::{inflate::stream::InflateState, DataFormat, MZFlush, MZStatus};
+use miniz_oxide::{DataFormat, MZFlush, MZStatus, inflate::stream::InflateState};
 //use pix::rgb::SRgb8;
 
 mod color_type;

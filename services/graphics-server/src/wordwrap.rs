@@ -1,4 +1,4 @@
-use crate::api::{glyph_to_height_hint, Cursor, GlyphSprite, GlyphStyle, Point, Pt, Rectangle, TypesetWord};
+use crate::api::{Cursor, GlyphSprite, GlyphStyle, Point, Pt, Rectangle, TypesetWord, glyph_to_height_hint};
 #[allow(unused_imports)]
 use crate::backend::{FB_LINES, FB_SIZE, FB_WIDTH_PIXELS};
 /// Wordwrap stratgey

@@ -29,13 +29,13 @@
 /// a `TextResponseValid` message which pumps the work queue.
 mod api;
 use api::*;
-use gam::modal::*;
 #[cfg(feature = "ditherpunk")]
 use gam::Bitmap;
+use gam::modal::*;
 use locales::t;
 #[cfg(feature = "tts")]
 use tts_frontend::TtsFrontend;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
+use xous::{Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 #[cfg(feature = "tts")]
 const TICK_INTERVAL: u64 = 2500;

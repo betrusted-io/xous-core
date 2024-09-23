@@ -1,6 +1,6 @@
 #[cfg(feature = "std")]
 use xous::Result;
-use xous::{send_message, MemoryRange, Message};
+use xous::{MemoryRange, Message, send_message};
 
 pub enum IframBank {
     Bank0,

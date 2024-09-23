@@ -25,7 +25,7 @@ mod wordwrap;
 mod style_macros;
 
 use num_traits::FromPrimitive;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, MemoryRange};
+use xous::{MemoryRange, msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
 mod fontmap;

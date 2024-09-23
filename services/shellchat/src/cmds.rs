@@ -1,10 +1,10 @@
 use core::fmt::Write;
 use std::collections::HashMap;
 
+use String;
 #[cfg(feature = "shellperf")]
 use utralib::generated::*;
 use xous::MessageEnvelope;
-use String;
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
     // user implemented:

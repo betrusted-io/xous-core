@@ -8,8 +8,8 @@ use std::{
 
 use lazy_static::lazy_static;
 
-use crate::{cargo, project_root};
 use crate::{TARGET_TRIPLE_ARM, TARGET_TRIPLE_RISCV32};
+use crate::{cargo, project_root};
 
 const TOOLCHAIN_RELEASE_URL_RISCV32: &str = "https://api.github.com/repos/betrusted-io/rust/releases";
 const TOOLCHAIN_RELEASE_URL_ARM: &str = "https://api.github.com/repos/Foundation-Devices/rust/releases";

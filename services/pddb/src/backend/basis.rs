@@ -8,9 +8,9 @@ use std::convert::TryInto;
 use std::io::{Error, ErrorKind, Result};
 use std::iter::IntoIterator;
 
-use aes::cipher::generic_array::GenericArray;
 use aes::Aes256;
-use aes_gcm_siv::{aead::KeyInit, Aes256GcmSiv};
+use aes::cipher::generic_array::GenericArray;
+use aes_gcm_siv::{Aes256GcmSiv, aead::KeyInit};
 
 use super::*;
 /// # The Organization of Basis Data

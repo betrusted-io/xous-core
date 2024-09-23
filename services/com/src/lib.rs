@@ -11,7 +11,7 @@ pub use api::*;
 pub use com_rs::serdes::Ipv4Conf;
 use com_rs::{DhcpState, LinkState};
 use num_traits::{FromPrimitive, ToPrimitive};
-use xous::{msg_scalar_unpack, send_message, Error, Message, CID};
+use xous::{CID, Error, Message, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 use xous_semver::SemVer;
 

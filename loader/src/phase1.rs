@@ -433,7 +433,7 @@ pub fn copy_args(cfg: &mut BootConfig) {
     // dead-reckoning to the offset
     assert!(merged_arg_slice[2] == xarg.data[0] as usize); // sanity checks the dead-reckoning
     merged_arg_slice[2] = arg_index;
-    use crc::{crc16, Hasher16};
+    use crc::{Hasher16, crc16};
     // compute the new CRC
     let mut digest = crc16::Digest::new(crc16::X25);
     // safe because we know the entire region can map into a u8 slice with no UB

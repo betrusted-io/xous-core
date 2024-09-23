@@ -146,8 +146,8 @@ fn parse_args_bin() {
 
 #[test]
 fn read_initial_config() {
-    use crate::args::KernelArguments;
     use crate::BootConfig;
+    use crate::args::KernelArguments;
 
     let args = get_args_bin(0);
     #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems

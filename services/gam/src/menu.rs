@@ -7,9 +7,9 @@ use num_traits::*;
 use tts_frontend::TtsFrontend;
 use xous_ipc::Buffer;
 
-use crate::api::*;
 use crate::Gam;
-use crate::{forwarding_thread, MsgForwarder};
+use crate::api::*;
+use crate::{MsgForwarder, forwarding_thread};
 #[derive(Debug)]
 pub struct Menu<'a> {
     pub sid: xous::SID,

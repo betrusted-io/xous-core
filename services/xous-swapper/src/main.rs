@@ -55,10 +55,10 @@ use std::collections::BinaryHeap;
 use std::fmt::Debug;
 
 use debug::*;
-use loader::swap::{SwapAlloc, SwapSpec, SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
+use loader::swap::{SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR, SwapAlloc, SwapSpec};
 use num_traits::*;
-use platform::{SwapHal, PAGE_SIZE};
-use xous::{MemoryFlags, MemoryRange, Result, PID};
+use platform::{PAGE_SIZE, SwapHal};
+use xous::{MemoryFlags, MemoryRange, PID, Result};
 use xous_swapper::Opcode;
 
 /// Target of pages to free in case of a Hard OOM. Note that the PAGE_TARGET numbers

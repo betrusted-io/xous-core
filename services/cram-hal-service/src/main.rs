@@ -10,9 +10,9 @@ use cramium_hal::{
 use utralib::utra;
 #[cfg(feature = "quantum-timer")]
 use utralib::*;
-use xous::sender::Sender;
 #[cfg(feature = "swap")]
 use xous::SWAPPER_PID;
+use xous::sender::Sender;
 use xous_pio::*;
 
 struct PreemptionHw {

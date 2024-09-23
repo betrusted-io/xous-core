@@ -4,7 +4,7 @@ use std::ops::AddAssign;
 use std::path::Path;
 use std::process::exit;
 
-use eyre::{bail, Result, WrapErr};
+use eyre::{Result, WrapErr, bail};
 use serde::Deserialize;
 
 #[derive(Deserialize)]

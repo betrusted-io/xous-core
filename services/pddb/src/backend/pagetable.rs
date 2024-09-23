@@ -7,7 +7,7 @@ use std::rc::Rc;
 use aes_gcm_siv::{Nonce, Tag};
 use bitflags::bitflags;
 
-use super::{murmur3_32, TrngPool, VirtAddr, PAGE_SIZE, VPAGE_SIZE};
+use super::{PAGE_SIZE, TrngPool, VPAGE_SIZE, VirtAddr, murmur3_32};
 
 bitflags! {
     /// flags used by the page table

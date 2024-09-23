@@ -1,7 +1,7 @@
 use core::fmt::Write;
 
-use xous::MessageEnvelope;
 use String;
+use xous::MessageEnvelope;
 
 use crate::{CommonEnv, ShellCmdApi};
 

@@ -2,9 +2,9 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use std::collections::{BTreeSet, HashSet};
 use std::io::Result;
 
+use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::RngCore;
 use rand_chacha::rand_core::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 
 use crate::*;
 

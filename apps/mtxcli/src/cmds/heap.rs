@@ -1,6 +1,6 @@
 use core::fmt::Write;
 
-use crate::{heap_usage, CommonEnv, ShellCmdApi};
+use crate::{CommonEnv, ShellCmdApi, heap_usage};
 
 #[derive(Debug)]
 pub struct Heap {}
