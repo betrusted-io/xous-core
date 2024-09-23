@@ -127,8 +127,7 @@ impl Repl {
             if let Some(res) =
                 self.env.dispatch(Some(&mut String::from(&local)), None).expect("command dispatch failed")
             {
-                let output_history =
-                    History { text: String::from(res.as_str().unwrap_or("UTF-8 Error")), is_input: false };
+                let output_history = History { text: String::from(res.as_str()), is_input: false };
                 self.circular_push(output_history);
             } else {
                 dirty = false;
@@ -136,8 +135,7 @@ impl Repl {
         } else if let Some(msg) = &self.msg {
             log::trace!("processing callback msg: {:?}", msg);
             if let Some(res) = self.env.dispatch(None, Some(msg)).expect("callback failed") {
-                let output_history =
-                    History { text: String::from(res.as_str().unwrap_or("UTF-8 Error")), is_input: false };
+                let output_history = History { text: String::from(res.as_str()), is_input: false };
                 self.circular_push(output_history);
             } else {
                 dirty = false;
@@ -164,11 +162,11 @@ impl Repl {
         self.gam
             .draw_rectangle(
                 self.content,
-                Rectangle::new_with_style(
-                    Point::new(0, 0),
-                    self.screensize,
-                    DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 },
-                ),
+                Rectangle::new_with_style(Point::new(0, 0), self.screensize, DrawStyle {
+                    fill_color: Some(PixelColor::Light),
+                    stroke_color: None,
+                    stroke_width: 0,
+                }),
             )
             .expect("can't clear content area");
     }
