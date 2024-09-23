@@ -23,10 +23,10 @@ impl<'a> ShellCmdApi<'a> for TrngCmd {
                 "pump" => {
                     const ROUNDS: usize = 16;
                     for i in 0..ROUNDS {
-                        log::debug!("pump round {}", i);
-                        let mut buf: [u32; 1024] = [0; 1024];
+                        log::info!("pump round {}", i);
+                        let mut buf: [u32; 1020] = [0; 1020];
                         env.trng.fill_buf(&mut buf).unwrap();
-                        log::debug!("pump samples: {:x}, {:x}, {:x}", buf[0], buf[512], buf[1023]);
+                        log::info!("pump samples: {:x}, {:x}, {:x}", buf[0], buf[512], buf[1019]);
                     }
                     write!(ret, "Pumped {}x1k values out of the engine", ROUNDS).unwrap();
                 }
