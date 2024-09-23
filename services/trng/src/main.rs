@@ -698,12 +698,8 @@ fn main() -> ! {
             }
             Some(api::Opcode::FillTrng) => {
                 let mm = msg.body.memory_message_mut().unwrap();
-                // safety: the slice is `u8` and all values are representable
-                let buffer = trng::api::IpcTrngBuf::from_slice_mut(
-                    unsafe { mm.buf.as_slice_mut() },
-                    mm.offset.unwrap().get(),
-                )
-                .expect("couldn't unpack FillTrng buffer");
+                let buffer = trng::api::IpcTrngBuf::from_memory_message_mut(mm)
+                    .expect("couldn't unpack FillTrng buffer");
                 trng.get_buf(buffer);
             }
             Some(api::Opcode::TestSetMode) => xous::msg_blocking_scalar_unpack!(msg, mode_code, _, _, _, {

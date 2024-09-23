@@ -72,9 +72,7 @@ impl Trng {
         if buf.len as usize != data.len() {
             return Err(xous::Error::InternalError);
         }
-        for (&src, dst) in buf.data.iter().zip(data.iter_mut()) {
-            *dst = src;
-        }
+        data.copy_from_slice(&buf.data[..data.len()]);
         Ok(())
     }
 
