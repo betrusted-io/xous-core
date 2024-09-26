@@ -23,6 +23,9 @@ hosted = []
 renode = []
 # may be activated in conjunction with "cramium-soc", "rp2040" targets when not running Xous
 baremetal = []
+std = []
+arty = []
+bio-mul = []
 
 tests = []
 default = ["tests", "cramium-soc"]

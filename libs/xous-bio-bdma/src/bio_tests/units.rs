@@ -1032,8 +1032,9 @@ pub fn aclk_tests() -> usize {
         print!("{}: {} cycles\r", i, r);
     }
     assert!(results[1] - results[0] == 3);
-    assert!(results[2] - results[1] == 3);
-    assert!(results[3] - results[2] == 6);
+    // variability is due to option for REGISTER_MEM or not
+    assert!((results[2] - results[1] == 3) || (results[2] - results[1] == 4));
+    assert!((results[3] - results[2] == 6) || (results[3] - results[2] == 7));
     assert!(results[4] - results[3] == 3);
 
     assert!(results[6] - results[5] == 10); // related to the clock divider
