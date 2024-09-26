@@ -49,11 +49,19 @@ pub fn dma_filter_off() {
 
 pub fn filter_test() -> usize {
     print!("==Filter test==\r");
+    // clear any prior test config state
+    let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
+    test_cfg.wo(utra::csrtest::WTEST, 0);
+
     let mut passing = true;
     use utralib::generated::HW_SRAM_MEM as RAM_BASE;
     use utralib::generated::HW_SRAM_MEM_LEN as RAM_SIZE;
 
     let mut bio_ss = BioSharedState::new();
+    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
+    // reset all the fifos
+    bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0xF);
+
     // enable the filters
     bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM, 0);
     bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI, 0);
@@ -85,6 +93,14 @@ pub fn filter_test() -> usize {
     // *** increments 3 ret values total
     //   - access to the BIO_BDMA registers: try to disable the filters.
     print!("attempt to violate peri filter\r");
+    if bio_ss.bio.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM) != 0 {
+        passing = false;
+        print!("peri range filter pre-condition fail A\r");
+    }
+    if bio_ss.bio.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI) != 0 {
+        passing = false;
+        print!("peri range filter pre-condition fail B\r");
+    }
     cache_flush();
     let naughty_dma_ptr: &mut [u32] = unsafe {
         core::slice::from_raw_parts_mut(
@@ -102,11 +118,11 @@ pub fn filter_test() -> usize {
     // check that the values did not change
     if bio_ss.bio.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM) != 0 {
         passing = false;
-        print!("peri range filter FAIL\r");
+        print!("peri range filter FAIL A\r");
     }
     if bio_ss.bio.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI) != 0 {
         passing = false;
-        print!("peri range filter FAIL\r");
+        print!("peri range filter FAIL B\r");
     }
     // attempt to read the config word
     bio_ss.bio.wo(
@@ -117,9 +133,12 @@ pub fn filter_test() -> usize {
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, 4); // initiate a single transfer
     while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0x1 == 0 {}
     cache_flush();
-    if target[0] != 0x0 {
+    let tval = target[0];
+    if tval == 0x1000_0408 {
         passing = false;
-        print!("peri range read filter FAIL\r")
+        print!("peri range read filter FAIL target[0]->{:x} got a correct value of 0x10000408\r", tval);
+    } else {
+        print!("CFGINFO returned {:x}, != 0x10000408\r", tval);
     }
     print!("peri violation test done\r");
 
