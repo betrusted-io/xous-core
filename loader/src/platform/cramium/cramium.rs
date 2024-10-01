@@ -15,6 +15,51 @@ use utralib::generated::*;
 // This puts the byte-address hex offset at (6 * 256 + 8 * 8) / 8 = 0xC8
 // within the IFR region. Total IFR region size is 0x200.
 
+/*
+  Thoughts on where to put the updating routine.
+
+  As a Xous runtime program:
+    Pros:
+      - Full security of MMU
+      - Updater primitives are available as Xous primitives
+    Cons:
+      - Less RAM available to stage data
+      - ReRAM is XIP; makes kernel update tricky
+  As a loader program:
+    Pros:
+      - Higher performance (no OS overhead)
+      - Faster dev time
+      - Can stage full images in PSRAM before committing
+      - Full overwrite of ReRAM OS possible
+    Cons:
+      - Larger loader image
+      - No MMU security - bugs are more brittle/scary
+      - Loader becomes a primary attack surface due to its size and complexity
+      - Less code re-use with main code base
+      - Loader update needs a special path to hand-off an image to Xous to avoid XIP conflict
+
+   I think the winning argument is that we could stage the full image in PSRAM before
+   committing to either ReRAM or SPI RAM. This allows us to do full signature checking prior
+   to committing any objects.
+
+   We could structure this so that when going into update mode, the secret key lifecycle
+   bits are pushed forward, so we only have derived keys available. This would make any
+   break into the loader updater less able to get at any root keys?
+*/
+
+/*
+    To-do:
+      -[x] Add dummy lifecycle gate call
+      -[ ] New OLED base driver
+      -[ ] I2C driver for AXP2101
+      -[ ] camera base driver (maybe loopback to OLED as demo?)
+      -[ ] USB stack into loader; debugging there. Present as bulk transfer to emulated disk on
+           PSRAM using ghostFS
+      -[ ] bring mbox routine into loader so we can have access to ReRAM write primitive; structure so
+           that we can improve this easily as the chip bugs are fixed
+      -[ ] Image validation & burning routine
+*/
+
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
