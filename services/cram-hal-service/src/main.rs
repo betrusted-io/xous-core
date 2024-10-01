@@ -102,18 +102,23 @@ fn main() {
         ifram_allocs[0].push(None);
         ifram_allocs[1].push(None);
     }
-    // Top page of IFRAM0 is occupied by the log server's Tx buffer. We can't know the
-    // `Sender` of it, so fill it with a value for `Some` that can't map to any PID.
-    ifram_allocs[0][31] = Some(Sender::from_usize(usize::MAX));
+    // mark loader-hardwired pages for IFRAM0
+    for i in
+        cramium_hal::board::IFRAM0_RESERVED_PAGE_RANGE[0]..=cramium_hal::board::IFRAM0_RESERVED_PAGE_RANGE[1]
+    {
+        ifram_allocs[0][i] = Some(Sender::from_usize(usize::MAX));
+    }
+    // mark loader-hardwired pages for IFRAM1
+    for i in
+        cramium_hal::board::IFRAM1_RESERVED_PAGE_RANGE[0]..=cramium_hal::board::IFRAM1_RESERVED_PAGE_RANGE[1]
+    {
+        ifram_allocs[1][i] = Some(Sender::from_usize(usize::MAX));
+    }
     // Second page from top of IFRAM0 is occupied by the swap handler. This was allocated
-    // by the loader, before the kernel even started.
+    // by the loader, before the kernel even started. Mark the PID properly.
     #[cfg(feature = "swap")]
     {
         ifram_allocs[0][30] = Some(Sender::from_usize(SWAPPER_PID as usize));
-    }
-    #[cfg(feature = "app-uart")]
-    {
-        ifram_allocs[0][29] = Some(Sender::from_usize(usize::MAX));
     }
 
     let iox_page = xous::syscall::map_memory(
