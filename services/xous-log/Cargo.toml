@@ -41,6 +41,10 @@ cramium-hal = { path = "../../libs/cramium-hal", optional = true, default-featur
 [features]
 cramium-soc = ["utralib/cramium-soc", "cramium-hal"]
 cramium-fpga = ["utralib/cramium-fpga"]
+board-baosec = ["cramium-hal/board-baosec"]
+board-baosor = ["cramium-hal/board-baosor"]
+board-dabao = ["cramium-hal/board-dabao"]
+
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]

@@ -1,6 +1,7 @@
 use core::fmt::{Error, Write};
 use std::pin::Pin;
 
+use cramium_hal::board::UART_DMA_TX_BUF_PHYS;
 use cramium_hal::udma;
 use utralib::generated::*;
 
@@ -14,9 +15,6 @@ pub static mut UART_IRQ: Option<Pin<Box<cramium_hal::udma::UartIrq>>> = None;
 
 #[cfg(feature = "cramium-soc")]
 pub static mut KBD_CONN: u32 = 0;
-
-#[cfg(feature = "cramium-soc")]
-pub const UART_DMA_TX_BUF_PHYS: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096;
 
 pub fn init() -> Output {
     #[cfg(feature = "cramium-fpga")]
