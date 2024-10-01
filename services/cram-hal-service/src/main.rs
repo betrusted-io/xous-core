@@ -123,7 +123,7 @@ fn main() {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't claim the IOX hardware page");
-    let mut iox = iox::Iox::new(iox_page.as_mut_ptr() as *mut u32);
+    let iox = iox::Iox::new(iox_page.as_ptr() as *mut u32);
 
     let udma_global_csr = xous::syscall::map_memory(
         xous::MemoryAddress::new(utralib::generated::HW_UDMA_CTRL_BASE),
