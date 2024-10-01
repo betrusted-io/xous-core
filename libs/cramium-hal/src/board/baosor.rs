@@ -1,7 +1,6 @@
 // Constants that define pin locations, RAM offsets, etc. for the BaoSec board
 use crate::iox;
 use crate::iox::IoSetup;
-use crate::iox::*;
 
 // console uart buffer
 pub const UART_DMA_TX_BUF_PHYS: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096;
@@ -21,7 +20,7 @@ pub const CRG_IFRAM_PAGES: usize = 22;
 pub const CRG_UDC_MEMBASE: usize =
     utralib::HW_IFRAM1_MEM + utralib::HW_IFRAM1_MEM_LEN - CRG_IFRAM_PAGES * 0x1000;
 
-/// Setup pins for the baosec display
+/// Setup pins for the baosor display (Precursor memory LCD target)
 pub fn setup_display_pins(iox: &dyn IoSetup) -> crate::udma::SpimChannel {
     const SPI_CS_PIN: u8 = 5;
     const SPI_CLK_PIN: u8 = 4;

@@ -26,9 +26,9 @@ bitfield = "0.13.2"
 xous = { version = "0.9.64", features = ["v2p"] }
 
 [features]
-board-baosec = []   # USB form factor token
-board-baoser = []   # Precursor form factor
-board-baoboard = [] # Dev board form factor
+board-baosec = [] # USB form factor token
+board-baosor = [] # Precursor form factor
+board-dabao = []  # Dev board form factor
 
 compress-entropy = []
 magic-manual = []
