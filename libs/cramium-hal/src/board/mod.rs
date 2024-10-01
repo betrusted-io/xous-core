@@ -3,6 +3,6 @@ pub mod baosec;
 #[cfg(feature = "board-baosec")]
 pub use baosec::*;
 #[cfg(feature = "board-baosor")]
-pub mod baoser;
+pub mod baosor;
 #[cfg(feature = "board-baosor")]
-pub use baoser::*;
+pub use baosor::*;
