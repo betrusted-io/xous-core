@@ -1,11 +1,9 @@
 use core::mem::size_of;
 
 use cramium_hal::ifram::IframRange;
-use cramium_hal::iox::Iox;
+use cramium_hal::iox::{IoSetup, Iox};
 use cramium_hal::udma::{GlobalConfig, PeriphId};
 use cramium_hal::{iox, udma};
-
-use crate::platform::cramium::setup_port;
 
 pub const FB_WIDTH_WORDS: usize = 11;
 pub const FB_LINES: usize = 536;
@@ -18,42 +16,39 @@ pub fn show_logo(pclk_freq: u32, udma_global: &mut GlobalConfig, iox: &mut Iox) 
         const SPI_PORT: iox::IoxPort = iox::IoxPort::PD;
 
         // SPIM_CLK_A[0]
-        setup_port(
-            iox,
+        iox.setup_pin(
             SPI_PORT,
             SPI_CLK_PIN,
-            Some(iox::IoxFunction::AF1),
             Some(iox::IoxDir::Output),
-            Some(iox::IoxDriveStrength::Drive2mA),
+            Some(iox::IoxFunction::AF1),
+            None,
+            None,
             Some(iox::IoxEnable::Enable),
-            None,
-            None,
+            Some(iox::IoxDriveStrength::Drive2mA),
         );
         // SPIM_SD0_A[0]
-        setup_port(
-            iox,
+        iox.setup_pin(
             SPI_PORT,
             SPI_DAT_PIN,
-            Some(iox::IoxFunction::AF1),
             Some(iox::IoxDir::Output),
-            Some(iox::IoxDriveStrength::Drive2mA),
+            Some(iox::IoxFunction::AF1),
+            None,
+            None,
             Some(iox::IoxEnable::Enable),
-            None,
-            None,
+            Some(iox::IoxDriveStrength::Drive2mA),
         );
         // SPIM_CSN0_A[0]
         // chip select toggle by UDMA has ~6 cycles setup and 1 cycles hold time, which
         // meets the requirements for the display.
-        setup_port(
-            iox,
+        iox.setup_pin(
             SPI_PORT,
             SPI_CS_PIN,
-            Some(iox::IoxFunction::AF1),
             Some(iox::IoxDir::Output),
-            Some(iox::IoxDriveStrength::Drive2mA),
-            Some(iox::IoxEnable::Enable),
+            Some(iox::IoxFunction::AF1),
             None,
             Some(iox::IoxEnable::Enable),
+            Some(iox::IoxEnable::Enable),
+            Some(iox::IoxDriveStrength::Drive2mA),
         );
         // using bank SPIM_B[1]
         udma_global.clock_on(PeriphId::Spim0);
