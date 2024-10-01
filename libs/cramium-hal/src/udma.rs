@@ -52,6 +52,18 @@ pub enum PeriphId {
 impl Into<u32> for PeriphId {
     fn into(self) -> u32 { self as u32 }
 }
+
+impl From<SpimChannel> for PeriphId {
+    fn from(value: SpimChannel) -> Self {
+        match value {
+            SpimChannel::Channel0 => PeriphId::Spim0,
+            SpimChannel::Channel1 => PeriphId::Spim1,
+            SpimChannel::Channel2 => PeriphId::Spim2,
+            SpimChannel::Channel3 => PeriphId::Spim3,
+        }
+    }
+}
+
 #[repr(u32)]
 #[derive(Copy, Clone)]
 pub enum PeriphEventId {
