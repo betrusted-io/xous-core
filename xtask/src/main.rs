@@ -503,12 +503,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // builder.add_loader_feature("board-bringup");
             // builder.add_loader_feature("spim-test");
             // builder.add_loader_feature("spi-alt-channel"); // this flag, when asserted, uses the J_QSPI
+            //     header. By default, we use JPC7_13 (J_QSPI does not work, for some reason; bit 3 is stuck
+            //     high...)
             // builder.add_loader_feature("irq-test");
             // builder.add_loader_feature("usb-test");
             // builder.add_loader_feature("trng-test");
             // builder.add_loader_feature("dump-trng");
-            // header. By default, we use JPC7_13 (J_QSPI does not work, for some reason; bit 3 is stuck
-            // high...)
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
             builder.add_feature("swap");
