@@ -2,7 +2,6 @@ use core::mem::size_of;
 
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, KeyInit, Nonce, Tag};
 use cramium_hal::ifram::IframRange;
-use cramium_hal::iox::IoSetup;
 use cramium_hal::iox::*;
 use cramium_hal::sce;
 use cramium_hal::udma::*;
@@ -44,110 +43,8 @@ impl SwapHal {
 
             // setup the I/O pins
             let iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
-            #[cfg(feature = "spi-alt-channel")]
-            let channel = {
-                // JQSPI1
-                // SPIM_CLK_A[0]
-                iox.setup_pin(
-                    IoxPort::PD,
-                    4,
-                    Some(IoxDir::Output),
-                    Some(IoxFunction::AF1),
-                    None,
-                    None,
-                    Some(IoxEnable::Enable),
-                    Some(IoxDriveStrength::Drive4mA),
-                );
-                // SPIM_SD[0-3]_A[0]
-                for i in 0..3 {
-                    iox.setup_pin(
-                        IoxPort::PD,
-                        i,
-                        None,
-                        Some(IoxFunction::AF1),
-                        None,
-                        None,
-                        Some(IoxEnable::Enable),
-                        Some(IoxDriveStrength::Drive2mA),
-                    );
-                }
-                // SPIM_CSN0_A[0]
-                iox.setup_pin(
-                    IoxPort::PD,
-                    5,
-                    Some(IoxDir::Output),
-                    Some(IoxFunction::AF1),
-                    None,
-                    None,
-                    Some(IoxEnable::Enable),
-                    Some(IoxDriveStrength::Drive2mA),
-                );
-                // SPIM_CSN0_A[1]
-                iox.setup_pin(
-                    IoxPort::PD,
-                    6,
-                    Some(IoxDir::Output),
-                    Some(IoxFunction::AF1),
-                    None,
-                    None,
-                    Some(IoxEnable::Enable),
-                    Some(IoxDriveStrength::Drive2mA),
-                );
-                udma_global.clock_on(PeriphId::Spim0); // JQSPI1
-                SpimChannel::Channel0
-            };
-            #[cfg(not(feature = "spi-alt-channel"))]
-            let channel = {
-                // JPC7_13
-                // SPIM_CLK_A[1]
-                iox.setup_pin(
-                    IoxPort::PC,
-                    11,
-                    Some(IoxDir::Output),
-                    Some(IoxFunction::AF1),
-                    None,
-                    None,
-                    Some(IoxEnable::Enable),
-                    Some(IoxDriveStrength::Drive4mA),
-                );
-                // SPIM_SD[0-3]_A[1]
-                for i in 7..11 {
-                    iox.setup_pin(
-                        IoxPort::PC,
-                        i,
-                        None,
-                        Some(IoxFunction::AF1),
-                        None,
-                        None,
-                        Some(IoxEnable::Enable),
-                        Some(IoxDriveStrength::Drive2mA),
-                    );
-                }
-                // SPIM_CSN0_A[1]
-                iox.setup_pin(
-                    IoxPort::PC,
-                    12,
-                    Some(IoxDir::Output),
-                    Some(IoxFunction::AF1),
-                    None,
-                    None,
-                    Some(IoxEnable::Enable),
-                    Some(IoxDriveStrength::Drive2mA),
-                );
-                // SPIM_CSN0_A[1]
-                iox.setup_pin(
-                    IoxPort::PC,
-                    13,
-                    Some(IoxDir::Output),
-                    Some(IoxFunction::AF1),
-                    None,
-                    None,
-                    Some(IoxEnable::Enable),
-                    Some(IoxDriveStrength::Drive2mA),
-                );
-                udma_global.clock_on(PeriphId::Spim1); // JPC7_13
-                SpimChannel::Channel1
-            };
+            let channel = cramium_hal::board::setup_memory_pins(&iox);
+            udma_global.clock_off(PeriphId::from(channel));
 
             // safety: this is safe because clocks have been set up
             let mut flash_spim = unsafe {
