@@ -333,11 +333,11 @@ pub fn early_init() {
 
         #[cfg(feature = "spim-test")]
         {
+            use cramium_hal::board::{SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR};
             use cramium_hal::ifram::IframRange;
             use cramium_hal::iox::*;
             use cramium_hal::udma::*;
             use loader::swap::SPIM_FLASH_IFRAM_ADDR;
-            use loader::swap::SPIM_RAM_IFRAM_ADDR;
 
             fn setup_port(
                 iox: &mut Iox,

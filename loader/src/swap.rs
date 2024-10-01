@@ -98,16 +98,6 @@ pub struct SwapSpec {
     pub sram_size: u32,
 }
 
-// RAM needs two buffers of 1k + 16 bytes = 2048 + 16 = 2064 bytes; round up to one page
-#[allow(dead_code)]
-#[cfg(feature = "cramium-soc")]
-pub const SPIM_RAM_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 2 * 4096;
-// Flash will be released after the loader is done: it's only accessed to copy the IniS sectors into swap,
-// then abandoned. It needs 4096 bytes for Rx, and 0 bytes for Tx + 16 bytes for cmd.
-#[allow(dead_code)]
-#[cfg(feature = "cramium-soc")]
-pub const SPIM_FLASH_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 5 * 4096;
-
 /// Function that derives the usable amount of swap space from the total length of swap memory available.
 /// This is used repeatedly in the initialization process to define the boundary between the swap page
 /// storage and the message authentication code (MAC) tables.

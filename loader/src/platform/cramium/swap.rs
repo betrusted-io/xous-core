@@ -1,12 +1,11 @@
 use core::mem::size_of;
 
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, KeyInit, Nonce, Tag};
+use cramium_hal::board::{APP_UART_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR};
 use cramium_hal::ifram::IframRange;
 use cramium_hal::iox::*;
 use cramium_hal::sce;
 use cramium_hal::udma::*;
-use loader::APP_UART_IFRAM_ADDR;
-use loader::swap::SPIM_RAM_IFRAM_ADDR;
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::RngCore;
 use rand_chacha::rand_core::SeedableRng;
@@ -44,7 +43,7 @@ impl SwapHal {
             // setup the I/O pins
             let iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
             let channel = cramium_hal::board::setup_memory_pins(&iox);
-            udma_global.clock_off(PeriphId::from(channel));
+            udma_global.clock_on(PeriphId::from(channel));
 
             // safety: this is safe because clocks have been set up
             let mut flash_spim = unsafe {
