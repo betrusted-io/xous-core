@@ -93,6 +93,9 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     #[cfg(feature = "cramium-soc")]
     crate::platform::early_init(); // sets up PLLs so we're not running at 16MHz...
 
+    #[cfg(feature = "cramium-soc")]
+    crate::platform::process_update();
+
     // initially validate the whole image on disk (including kernel args)
     // kernel args must be validated because tampering with them can change critical assumptions about
     // how data is loaded into memory
