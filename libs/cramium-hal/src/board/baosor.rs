@@ -20,6 +20,11 @@ pub const CRG_IFRAM_PAGES: usize = 22;
 pub const CRG_UDC_MEMBASE: usize =
     utralib::HW_IFRAM1_MEM + utralib::HW_IFRAM1_MEM_LEN - CRG_IFRAM_PAGES * 0x1000;
 
+// MANUALLY SYNCED TO ALLOCATIONS ABOVE
+// inclusive numbering - we allocate pages from the top-down, so the last number should generally be 31
+pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 5, 31];
+pub const IFRAM1_RESERVED_PAGE_RANGE: [usize; 2] = [31 - CRG_IFRAM_PAGES, 31];
+
 /// Setup pins for the baosor display (Precursor memory LCD target)
 pub fn setup_display_pins(iox: &dyn IoSetup) -> crate::udma::SpimChannel {
     const SPI_CS_PIN: u8 = 5;
