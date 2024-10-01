@@ -26,8 +26,12 @@ bitfield = "0.13.2"
 xous = { version = "0.9.64", features = ["v2p"] }
 
 [features]
+board-baosec = []   # USB form factor token
+board-baoser = []   # Precursor form factor
+board-baoboard = [] # Dev board form factor
+
 compress-entropy = []
 magic-manual = []
 std = ["log", "xous-api-names", "usb-device"]
 derive-rkyv = ["rkyv"]
-default = []
+default = ["board-baosec"]
