@@ -523,6 +523,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_kernel_feature("v2p");
             builder.add_feature("mass-storage");
             builder.add_feature("ditherpunk");
+
+            // select the board
+            builder.add_feature("board-baosec");
+            builder.add_loader_feature("board-baosec");
+
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),
                 Some("cramium-soc") => builder.target_cramium_soc(),
