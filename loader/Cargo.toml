@@ -37,6 +37,7 @@ rand_chacha = { version = "0.3.1", optional = true, default-features = false }
 pio-proc = { version = "0.2.2", optional = true }
 pio = { version = "0.2.1", optional = true }
 riscv = { version = "0.5.6", package = "xous-riscv" }
+either = { version = "1.9.0", optional = true, default-features = false }
 
 [dependencies.com_rs]
 git = "https://github.com/betrusted-io/com_rs"
@@ -71,7 +72,11 @@ cramium-soc = [
     "rand_chacha",
     "sram-margin",
     "boot-delay",
+    "either",
 ]
+board-baosec = ["cramium-hal/board-baosec"]
+board-baosor = ["cramium-hal/board-baosor"]
+board-dabao = ["cramium-hal/board-dabao"]
 cramium-fpga = [
     "utralib/cramium-fpga",
     "debug-print",
@@ -96,7 +101,6 @@ boot-delay = []
 simulation-only = []
 quantum-timer-test = ["pio", "pio-proc"]
 spim-test = []
-spi-alt-channel = []
 irq-test = []
 usb-test = []
 trng-test = []
