@@ -1,7 +1,7 @@
 // `Command` vendored from https://github.com/ithinuel/sh1107-rs/tree/main
 use crate::{
     ifram::IframRange,
-    iox::{IoGpio, IoSetup, IoxPort, IoxValue},
+    iox::{IoGpio, IoSetup, IoxPort},
     udma::{PeriphId, Spim, SpimClkPha, SpimClkPol, SpimCs, UdmaGlobalConfig},
 };
 
@@ -150,16 +150,15 @@ pub struct Oled128x128<'a> {
     active_buffer: BufferState,
     cd_port: IoxPort,
     cd_pin: u8,
-    cs_pin: u8,
     iox: &'a dyn IoGpio,
 }
 
 impl<'a> Oled128x128<'a> {
-    pub fn new<T>(iox: &'a T, udma_global: &'a dyn UdmaGlobalConfig) -> Self
+    pub fn new<T>(perclk_freq: u32, iox: &'a T, udma_global: &'a dyn UdmaGlobalConfig) -> Self
     where
         T: IoSetup + IoGpio,
     {
-        let (channel, cd_port, cd_pin, cs_pin) = crate::board::setup_display_pins(iox);
+        let (channel, cd_port, cd_pin, _cs_pin) = crate::board::setup_display_pins(iox);
         udma_global.clock(PeriphId::from(channel), true);
         #[cfg(not(feature = "std"))]
         let ifram_vaddr = crate::board::DISPLAY_IFRAM_ADDR;
@@ -180,7 +179,7 @@ impl<'a> Oled128x128<'a> {
             Spim::new_with_ifram(
                 channel,
                 2_000_000,
-                50_000_000,
+                perclk_freq / 2,
                 SpimClkPol::LeadingEdgeRise,
                 SpimClkPha::CaptureOnLeading,
                 SpimCs::Cs0,
@@ -195,8 +194,9 @@ impl<'a> Oled128x128<'a> {
                 // an IFRAM range large enough to accommodate that. However, because we have
                 // to round up any allocations to a full page length, we end up with extra
                 // unused space.
-                4096 + 256,
-                0, // re-use the Tx buffer for Rx in this implementation
+                4096 + 256, // the 256 is for direct commands
+                // the 2048 is for dummy-Rx so we can properly measure when the transaction is done
+                2048,
                 None,
                 None,
                 // Note: the IFRAM needs to be 16 bytes longer than the data range to accommodate
@@ -219,7 +219,6 @@ impl<'a> Oled128x128<'a> {
             active_buffer: BufferState::A,
             cd_port,
             cd_pin,
-            cs_pin,
             iox,
         }
     }
@@ -236,11 +235,6 @@ impl<'a> Oled128x128<'a> {
 
     pub fn buffer(&self) -> &[u8] { self.buffers[self.active_buffer.as_index()] }
 
-    // This is needed because the UDMA block will tell you the transaction is done the moment its DMA
-    // is finished. There is no way, afaik, to tell if a transaction has physically finished on the pins
-    // without reading back the CS pin.
-    fn cs_active(&self) -> bool { self.iox.get_gpio_pin_value(self.cd_port, self.cs_pin) == IoxValue::Low }
-
     /// Transfers the back buffer
     pub fn draw(&mut self) {
         // this must be opposite of what `buffer` / `buffer_mut` returns
@@ -254,25 +248,24 @@ impl<'a> Oled128x128<'a> {
             // the transaction is done before the data is done transmitting, and we have to
             // toggle set_data() only after the physical transaction is done, not after the
             // the last UDMA action has been queued.
-            while self.cs_active() {}
             self.send_command(Command::SetPageAddress(page as u8).encode());
-            while self.cs_active() {}
             self.send_command(Command::SetColumnAddress(0).encode());
-            while self.cs_active() {}
             // wait for commands to finish before toggling set_data
             // self.spim.tx_data_await(false);
             // crate::println!("Send page {}, offset {:x}", page, buffer_start + page * chunk_size);
             self.set_data();
             // safety: data is already copied into the DMA buffer. size & len are in bounds.
             unsafe {
-                self.spim.tx_data_async_from_parts::<u8>(
-                    buffer_start + page * chunk_size,
-                    chunk_size,
-                    true,
-                    false,
-                );
+                self.spim
+                    .txrx_data_async_from_parts::<u8>(
+                        buffer_start + page * chunk_size,
+                        chunk_size,
+                        true,
+                        false,
+                    )
+                    .expect("Couldn't initiate oled data transfer");
             }
-            self.spim.tx_data_await(false);
+            self.spim.txrx_await(false).unwrap();
         }
     }
 
@@ -294,9 +287,11 @@ impl<'a> Oled128x128<'a> {
         // crate::println!("");
         // safety: data is already copied into the DMA buffer. size & len are in bounds.
         unsafe {
-            self.spim.tx_data_async_from_parts::<u8>(total_buf_len, len, true, false);
+            self.spim
+                .txrx_data_async_from_parts::<u8>(total_buf_len, len, true, false)
+                .expect("Couldn't initiate oled command");
         }
-        self.spim.tx_data_await(false);
+        self.spim.txrx_await(false).unwrap();
     }
 
     pub fn init(&mut self) {
