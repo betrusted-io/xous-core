@@ -137,7 +137,7 @@ fn main() {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't map UDMA global control");
-    let mut udma_global = GlobalConfig::new(udma_global_csr.as_mut_ptr() as *mut u32);
+    let udma_global = GlobalConfig::new(udma_global_csr.as_mut_ptr() as *mut u32);
 
     let mut pio_ss = xous_pio::PioSharedState::new();
     // map and enable the interrupt for the PIO system timer
