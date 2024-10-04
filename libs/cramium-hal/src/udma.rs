@@ -910,8 +910,8 @@ pub enum SpimCmd {
     EndRepeat,
     /// mode, use byte alignment, check type, size of comparison (4 bits), comparison data
     RxCheck(SpimMode, SpimByteAlign, SpimCheckType, u8, u16),
-    /// use byte alignment, size of data
-    FullDuplex(SpimByteAlign, u16),
+    /// words per xfer, bits per word, endianness, number of words to receive; mode is always in 1-bit SPI
+    FullDuplex(SpimWordsPerXfer, u8, SpimEndian, u32),
 }
 impl Into<u32> for SpimCmd {
     fn into(self) -> u32 {
@@ -960,7 +960,13 @@ impl Into<u32> for SpimCmd {
                     | (size as u32 & 0xF) << 16
                     | data as u32
             }
-            SpimCmd::FullDuplex(align, len) => 12 << 28 | (align as u32) << 26 | len as u32,
+            SpimCmd::FullDuplex(words_per_xfer, bits_per_word, endian, len) => {
+                12 << 28
+                    | ((words_per_xfer as u32) & 0x3) << 21
+                    | (bits_per_word as u32 - 1) << 16
+                    | (len as u32 - 1)
+                    | (endian as u32) << 26
+            }
         }
     }
 }
@@ -988,6 +994,8 @@ pub struct Spim {
     pub rx_buf_len_bytes: usize,
     dummy_cycles: u8,
     endianness: SpimEndian,
+    // length of a pending txrx, if any
+    pending_txrx: Option<usize>,
 }
 
 // length of the command buffer
@@ -1069,6 +1077,7 @@ impl Spim {
                 rx_buf_len_bytes: max_rx_len_bytes,
                 dummy_cycles: dummy_cycles.unwrap_or(0),
                 endianness: SpimEndian::MsbFirst,
+                pending_txrx: None,
             };
             // setup the interface using a UDMA command
             spim.send_cmd_list(&[SpimCmd::Config(pol, pha, clk_div as u8)]);
@@ -1147,6 +1156,7 @@ impl Spim {
             rx_buf_len_bytes: max_rx_len_bytes,
             dummy_cycles: dummy_cycles.unwrap_or(0),
             endianness: SpimEndian::MsbFirst,
+            pending_txrx: None,
         };
         // setup the interface using a UDMA command
         spim.send_cmd_list(&[SpimCmd::Config(pol, pha, clk_div as u8)]);
@@ -1188,6 +1198,7 @@ impl Spim {
             rx_buf_len_bytes,
             dummy_cycles,
             endianness: SpimEndian::MsbFirst,
+            pending_txrx: None,
         }
     }
 
@@ -1235,7 +1246,7 @@ impl Spim {
             ..(self.tx_buf_len_bytes + self.rx_buf_len_bytes + SPIM_CMD_BUF_LEN_BYTES) / size_of::<u32>()]
     }
 
-    pub fn rx_buf<T: UdmaWidths>(&mut self) -> &[T] {
+    pub fn rx_buf<T: UdmaWidths>(&self) -> &[T] {
         &self.ifram.as_slice()[(self.tx_buf_len_bytes) / size_of::<T>()
             ..(self.tx_buf_len_bytes + self.rx_buf_len_bytes) / size_of::<T>()]
     }
@@ -1336,7 +1347,7 @@ impl Spim {
         let mut words_sent: usize = 0;
 
         if use_cs {
-            // ensure any previous transaction is completed
+            // ensure that we can clobber the command list storage
             while self.udma_busy(Bank::Custom) || self.udma_busy(Bank::Tx) {}
             if self.sot_wait == 0 {
                 self.send_cmd_list(&[SpimCmd::StartXfer(self.cs)])
@@ -1430,8 +1441,163 @@ impl Spim {
         }
     }
 
+    /// Wait for the pending tx/rx cycle to finish, returns a pointer to the Rx buffer when done.
+    pub fn txrx_await(&mut self, _use_yield: bool) -> Result<&[u8], xous::Error> {
+        if let Some(pending) = self.pending_txrx.take() {
+            while self.udma_busy(Bank::Tx) || self.udma_busy(Bank::Rx) || self.udma_busy(Bank::Custom) {
+                #[cfg(feature = "std")]
+                if _use_yield {
+                    xous::yield_slice();
+                }
+            }
+            Ok(&self.rx_buf()[..pending])
+        } else {
+            Err(xous::Error::UseBeforeInit)
+        }
+    }
+
+    /// `txrx_data_async` will return as soon as all the pending operations are queued. This will error
+    /// out if the slice to be transmitted would not fit into the existing buffer. To read the receive
+    /// data, call `txrx_await` to get a pointer to the rx buffer, which is only granted after the
+    /// transaction has finished running.
+    pub fn txrx_data_async<T: UdmaWidths + Copy>(
+        &mut self,
+        data: &[T],
+        use_cs: bool,
+        eot_event: bool,
+    ) -> Result<(), xous::Error> {
+        unsafe { self.txrx_data_async_inner(Some(data), None, use_cs, eot_event) }
+    }
+
+    /// `txrx_data_async_from_parts` does a similar function as `txrx_data_async`, but it expects that the
+    /// data to send is already copied into the DMA buffer. In this case, no copying is done, and the
+    /// `(start, len)` pair is used to specify the beginning and the length of the data to send that is
+    /// already resident in the DMA buffer.
+    ///
+    /// Safety:
+    ///   - Only safe to use when the data has already been copied into the DMA buffer, and the size and len
+    ///     fields are within bounds.
+    pub unsafe fn txrx_data_async_from_parts<T: UdmaWidths + Copy>(
+        &mut self,
+        start: usize,
+        len: usize,
+        use_cs: bool,
+        eot_event: bool,
+    ) -> Result<(), xous::Error> {
+        self.txrx_data_async_inner(None::<&[T]>, Some((start, len)), use_cs, eot_event)
+    }
+
+    /// This is the inner implementation of the two prior calls. A lot of the boilerplate is the same,
+    /// the main difference is just whether the passed data shall be copied or not.
+    ///
+    /// Panics: Panics if both `data` and `parts` are `None`. If both are `Some`, `data` will take precedence.
+    unsafe fn txrx_data_async_inner<T: UdmaWidths + Copy>(
+        &mut self,
+        data: Option<&[T]>,
+        parts: Option<(usize, usize)>,
+        use_cs: bool,
+        eot_event: bool,
+    ) -> Result<(), xous::Error> {
+        if self.pending_txrx.is_some() {
+            // block until the prior transaction is done
+            self.txrx_await(false).ok();
+        }
+        let bits_per_xfer = size_of::<T>() * 8;
+        let tx_len = if let Some(data) = data {
+            data.len() * size_of::<T>()
+        } else if let Some((_start, len)) = parts {
+            len * size_of::<T>()
+        } else {
+            // I can't figure out how to wrap a... &[T] in an enum? A slice of a type of trait
+            // seems to need some sort of `dyn` keyword plus other stuff that is a bit heavy for
+            // a function that is private (note the visibility on this function). Handling this
+            // instead with a runtime check-to-panic.
+            panic!("Inner function was set up with incorrect arguments");
+        };
+        if tx_len > self.tx_buf_len_bytes || tx_len > self.rx_buf_len_bytes {
+            return Err(xous::Error::OutOfMemory);
+        }
+        self.pending_txrx = Some(tx_len);
+
+        let evt = if eot_event { SpimEventGen::Enabled } else { SpimEventGen::Disabled };
+        if use_cs {
+            if self.sot_wait == 0 {
+                self.send_cmd_list(&[
+                    SpimCmd::StartXfer(self.cs),
+                    SpimCmd::FullDuplex(
+                        SpimWordsPerXfer::Words1,
+                        bits_per_xfer as u8,
+                        self.get_endianness(),
+                        tx_len as u32,
+                    ),
+                    SpimCmd::EndXfer(evt),
+                ])
+            } else {
+                self.send_cmd_list(&[
+                    SpimCmd::StartXfer(self.cs),
+                    SpimCmd::Wait(SpimWaitType::Cycles(self.sot_wait)),
+                    SpimCmd::FullDuplex(
+                        SpimWordsPerXfer::Words1,
+                        bits_per_xfer as u8,
+                        self.get_endianness(),
+                        tx_len as u32,
+                    ),
+                    SpimCmd::EndXfer(evt),
+                ])
+            }
+        } else {
+            if self.sot_wait == 0 {
+                self.send_cmd_list(&[SpimCmd::FullDuplex(
+                    SpimWordsPerXfer::Words1,
+                    bits_per_xfer as u8,
+                    self.get_endianness(),
+                    tx_len as u32,
+                )])
+            } else {
+                self.send_cmd_list(&[
+                    SpimCmd::Wait(SpimWaitType::Cycles(self.sot_wait)),
+                    SpimCmd::FullDuplex(
+                        SpimWordsPerXfer::Words1,
+                        bits_per_xfer as u8,
+                        self.get_endianness(),
+                        tx_len as u32,
+                    ),
+                ])
+            }
+        }
+
+        let cfg_size = match size_of::<T>() {
+            1 => CFG_SIZE_8,
+            2 => CFG_SIZE_16,
+            4 => CFG_SIZE_32,
+            _ => panic!("Illegal size of UdmaWidths: should not be possible"),
+        };
+        if let Some(data) = data {
+            for (src, dst) in data[..tx_len].iter().zip(self.tx_buf_mut().iter_mut()) {
+                *dst = *src;
+            }
+            // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
+            unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<T>()[..tx_len], CFG_EN | cfg_size) };
+            unsafe { self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<T>()[..tx_len], CFG_EN | cfg_size) }
+        } else if let Some((start, _len)) = parts {
+            // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
+            // This will correctly panic if the size of the data to be sent is larger than the physical
+            // tx_buf.
+            unsafe {
+                self.udma_enqueue(
+                    Bank::Tx,
+                    &self.tx_buf_phys::<T>()[start..(start + tx_len)],
+                    CFG_EN | cfg_size,
+                );
+                self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<T>()[..tx_len], CFG_EN | cfg_size)
+            }
+        }
+        Ok(())
+    }
+
+    /// This is waiting for a test target to test against.
     pub fn rx_data<T: UdmaWidths + Copy>(&mut self, _rx_data: &mut [T], _cs: Option<SpimCs>) {
-        todo!("Not yet done...template off of tx_data, but we need a test target before we can do this");
+        todo!("Not yet done...can template off of txrx data, eliminating the Tx requirement");
     }
 
     /// Activate is the logical sense, not the physical sense. To be clear: `true` causes CS to go low.
