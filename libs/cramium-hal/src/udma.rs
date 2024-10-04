@@ -1,7 +1,8 @@
 use core::mem::size_of;
 
-use utralib::generated::*;
+use utralib::*;
 
+use crate::SharedCsr;
 use crate::ifram::{IframRange, UdmaWidths};
 
 /// UDMA has a structure that Rust hates. The concept of UDMA is to take a bunch of
@@ -214,6 +215,17 @@ impl Into<u32> for PeriphEventType {
     }
 }
 
+/// Use a trait that will allow us to share code between both `std` and `no-std` implementations
+pub trait UdmaGlobalConfig {
+    fn clock(&self, peripheral: PeriphId, enable: bool);
+    unsafe fn udma_event_map(
+        &self,
+        peripheral: PeriphId,
+        event_type: PeriphEventType,
+        to_channel: EventChannel,
+    );
+}
+
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, num_derive::FromPrimitive)]
 pub enum EventChannel {
@@ -223,12 +235,12 @@ pub enum EventChannel {
     Channel3 = 24,
 }
 pub struct GlobalConfig {
-    csr: CSR<u32>,
+    csr: SharedCsr<u32>,
 }
 impl GlobalConfig {
-    pub fn new(base_addr: *mut u32) -> Self { GlobalConfig { csr: CSR::new(base_addr) } }
+    pub fn new(base_addr: *mut u32) -> Self { GlobalConfig { csr: SharedCsr::new(base_addr) } }
 
-    pub fn clock_on(&mut self, peripheral: PeriphId) {
+    pub fn clock_on(&self, peripheral: PeriphId) {
         // Safety: only safe when used in the context of UDMA registers.
         unsafe {
             self.csr.base().add(GlobalReg::ClockGate.into()).write_volatile(
@@ -237,7 +249,7 @@ impl GlobalConfig {
         }
     }
 
-    pub fn clock_off(&mut self, peripheral: PeriphId) {
+    pub fn clock_off(&self, peripheral: PeriphId) {
         // Safety: only safe when used in the context of UDMA registers.
         unsafe {
             self.csr.base().add(GlobalReg::ClockGate.into()).write_volatile(
@@ -258,7 +270,7 @@ impl GlobalConfig {
         }
     }
 
-    pub fn map_event(&mut self, peripheral: PeriphId, event_type: PeriphEventType, to_channel: EventChannel) {
+    pub fn map_event(&self, peripheral: PeriphId, event_type: PeriphEventType, to_channel: EventChannel) {
         let event_type: u32 = event_type.into();
         let id: u32 = PeriphEventId::from(peripheral) as u32 + event_type;
         // Safety: only safe when used in the context of UDMA registers.
@@ -274,12 +286,7 @@ impl GlobalConfig {
     /// Same as map_event(), but for cases where the offset is known. This would typically be the case
     /// where a remote function transformed a PeriphEventType into a primitive `u32` and passed
     /// it through an IPC interface.
-    pub fn map_event_with_offset(
-        &mut self,
-        peripheral: PeriphId,
-        event_offset: u32,
-        to_channel: EventChannel,
-    ) {
+    pub fn map_event_with_offset(&self, peripheral: PeriphId, event_offset: u32, to_channel: EventChannel) {
         let id: u32 = PeriphEventId::from(peripheral) as u32 + event_offset;
         // Safety: only safe when used in the context of UDMA registers.
         unsafe {
@@ -297,6 +304,24 @@ impl GlobalConfig {
     }
 }
 
+impl UdmaGlobalConfig for GlobalConfig {
+    fn clock(&self, peripheral: PeriphId, enable: bool) {
+        if enable {
+            self.clock_on(peripheral);
+        } else {
+            self.clock_off(peripheral);
+        }
+    }
+
+    unsafe fn udma_event_map(
+        &self,
+        peripheral: PeriphId,
+        event_type: PeriphEventType,
+        to_channel: EventChannel,
+    ) {
+        self.map_event(peripheral, event_type, to_channel);
+    }
+}
 // --------------------------------- DMA channel ------------------------------------
 const CFG_EN: u32 = 0b01_0000; // start a transfer
 #[allow(dead_code)]
@@ -309,6 +334,8 @@ const CFG_SIZE_16: u32 = 0b00_0010; // 16-bit transfer
 const CFG_SIZE_32: u32 = 0b00_0100; // 32-bit transfer
 #[allow(dead_code)]
 const CFG_CLEAR: u32 = 0b10_0000; // stop and clear all pending transfers
+#[allow(dead_code)]
+const CFG_PENDING: u32 = 0b10_0000; // on read, indicates a transfer pending
 const CFG_SHADOW: u32 = 0b10_0000; // indicates a shadow transfer
 
 #[repr(usize)]
@@ -371,9 +398,7 @@ pub trait Udma {
     }
     fn udma_busy(&self, bank: Bank) -> bool {
         // Safety: only safe when used in the context of UDMA registers.
-        unsafe {
-            (self.csr().base().add(bank as usize).add(DmaReg::Cfg.into()).read_volatile() & CFG_EN) != 0
-        }
+        unsafe { self.csr().base().add(bank as usize).add(DmaReg::Saddr.into()).read_volatile() != 0 }
     }
 }
 
@@ -851,7 +876,7 @@ pub enum SpimWordsPerXfer {
     Words4 = 2,
 }
 #[repr(u32)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum SpimEndian {
     MsbFirst = 0,
     LsbFirst = 1,
@@ -962,6 +987,7 @@ pub struct Spim {
     // immediately after the tx buf len
     pub rx_buf_len_bytes: usize,
     dummy_cycles: u8,
+    endianness: SpimEndian,
 }
 
 // length of the command buffer
@@ -1042,6 +1068,7 @@ impl Spim {
                 tx_buf_len_bytes: max_tx_len_bytes,
                 rx_buf_len_bytes: max_rx_len_bytes,
                 dummy_cycles: dummy_cycles.unwrap_or(0),
+                endianness: SpimEndian::MsbFirst,
             };
             // setup the interface using a UDMA command
             spim.send_cmd_list(&[SpimCmd::Config(pol, pha, clk_div as u8)]);
@@ -1119,6 +1146,7 @@ impl Spim {
             tx_buf_len_bytes: max_tx_len_bytes,
             rx_buf_len_bytes: max_rx_len_bytes,
             dummy_cycles: dummy_cycles.unwrap_or(0),
+            endianness: SpimEndian::MsbFirst,
         };
         // setup the interface using a UDMA command
         spim.send_cmd_list(&[SpimCmd::Config(pol, pha, clk_div as u8)]);
@@ -1132,6 +1160,8 @@ impl Spim {
     /// to prevent races/contention for the underlying device. The main reason this is introduced is
     /// to facilitate a panic handler for the graphics frame buffer, where we're about to kill the OS
     /// anyways: we don't care about soundness guarantees after this point.
+    ///
+    /// Note that the endianness is set to MSB first by default.
     pub unsafe fn from_raw_parts(
         csr: usize,
         cs: SpimCs,
@@ -1157,6 +1187,7 @@ impl Spim {
             tx_buf_len_bytes,
             rx_buf_len_bytes,
             dummy_cycles,
+            endianness: SpimEndian::MsbFirst,
         }
     }
 
@@ -1186,6 +1217,12 @@ impl Spim {
             self.dummy_cycles,
         )
     }
+
+    /// Note that endianness is disregarded in the case that the channel is being used to talk to
+    /// a memory device, because the endianness is always MsbFirst.
+    pub fn set_endianness(&mut self, endianness: SpimEndian) { self.endianness = endianness; }
+
+    pub fn get_endianness(&self) -> SpimEndian { self.endianness }
 
     /// The command buf is *always* a `u32`; so tie the type down here.
     fn cmd_buf_mut(&mut self) -> &mut [u32] {
@@ -1233,7 +1270,16 @@ impl Spim {
         }
     }
 
-    pub fn is_tx_busy(&self) -> bool { self.udma_busy(Bank::Tx) }
+    pub fn is_tx_busy(&self) -> bool { self.udma_busy(Bank::Tx) || self.udma_busy(Bank::Custom) }
+
+    pub fn tx_data_await(&self, _use_yield: bool) {
+        while self.is_tx_busy() {
+            #[cfg(feature = "std")]
+            if _use_yield {
+                xous::yield_slice();
+            }
+        }
+    }
 
     /// `tx_data_async` will queue a data buffer into the SPIM interface and return as soon as the enqueue
     /// is completed (which can be before the transmission is actually done). The function may partially
@@ -1290,6 +1336,8 @@ impl Spim {
         let mut words_sent: usize = 0;
 
         if use_cs {
+            // ensure any previous transaction is completed
+            while self.udma_busy(Bank::Custom) || self.udma_busy(Bank::Tx) {}
             if self.sot_wait == 0 {
                 self.send_cmd_list(&[SpimCmd::StartXfer(self.cs)])
             } else {
@@ -1298,19 +1346,38 @@ impl Spim {
                     SpimCmd::Wait(SpimWaitType::Cycles(self.sot_wait)),
                 ])
             }
+            // wait for CS to assert
+            while self.udma_busy(Bank::Custom) {}
         }
+        let mut one_shot = false;
+        let evt = if eot_event { SpimEventGen::Enabled } else { SpimEventGen::Disabled };
         while words_sent < total_words {
             // determine the valid length of data we could send
             let tx_len = (total_words - words_sent).min(self.tx_buf_len_bytes);
             // setup the command list for data to send
-            let cmd_list = [SpimCmd::TxData(
+            let cmd_list_oneshot = [
+                SpimCmd::TxData(
+                    self.mode,
+                    SpimWordsPerXfer::Words1,
+                    bits_per_xfer as u8,
+                    self.get_endianness(),
+                    tx_len as u32,
+                ),
+                SpimCmd::EndXfer(evt),
+            ];
+            let cmd_list_repeated = [SpimCmd::TxData(
                 self.mode,
                 SpimWordsPerXfer::Words1,
                 bits_per_xfer as u8,
-                SpimEndian::LsbFirst,
+                self.get_endianness(),
                 tx_len as u32,
             )];
-            self.send_cmd_list(&cmd_list);
+            if tx_len == total_words && use_cs {
+                one_shot = true;
+                self.send_cmd_list(&cmd_list_oneshot);
+            } else {
+                self.send_cmd_list(&cmd_list_repeated);
+            }
             let cfg_size = match size_of::<T>() {
                 1 => CFG_SIZE_8,
                 2 => CFG_SIZE_16,
@@ -1348,8 +1415,9 @@ impl Spim {
                 }
             }
         }
-        if use_cs {
-            let evt = if eot_event { SpimEventGen::Enabled } else { SpimEventGen::Disabled };
+        if use_cs && !one_shot {
+            // wait for all data to transmit before de-asserting CS
+            while self.udma_busy(Bank::Tx) {}
             if self.eot_wait == 0 {
                 self.send_cmd_list(&[SpimCmd::EndXfer(evt)])
             } else {
@@ -1358,11 +1426,12 @@ impl Spim {
                     SpimCmd::EndXfer(evt),
                 ])
             }
+            while self.udma_busy(Bank::Custom) {}
         }
     }
 
     pub fn rx_data<T: UdmaWidths + Copy>(&mut self, _rx_data: &mut [T], _cs: Option<SpimCs>) {
-        todo!("Not yet done...let's see if tx_data works first before templating");
+        todo!("Not yet done...template off of tx_data, but we need a test target before we can do this");
     }
 
     /// Activate is the logical sense, not the physical sense. To be clear: `true` causes CS to go low.
