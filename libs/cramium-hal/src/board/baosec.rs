@@ -30,49 +30,60 @@ pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 7, 31];
 pub const IFRAM1_RESERVED_PAGE_RANGE: [usize; 2] = [31 - CRG_IFRAM_PAGES, 31];
 
 /// Setup pins for the baosec display
-pub fn setup_display_pins(iox: &dyn IoSetup) -> crate::udma::SpimChannel {
-    const SPI_CS_PIN: u8 = 5;
-    const SPI_CLK_PIN: u8 = 4;
-    const SPI_DAT_PIN: u8 = 0;
-    const SPI_PORT: iox::IoxPort = iox::IoxPort::PD;
+/// Returns a spi channel object and descriptor for the C/D + CS pins as a (port, c/d pin, cs pin) tuple
+pub fn setup_display_pins(iox: &dyn IoSetup) -> (crate::udma::SpimChannel, iox::IoxPort, u8, u8) {
+    const SPI_CS_PIN: u8 = 3;
+    const SPI_CLK_PIN: u8 = 0;
+    const SPI_DAT_PIN: u8 = 1;
+    const SPI_CD_PIN: u8 = 2;
+    const SPI_PORT: iox::IoxPort = iox::IoxPort::PC;
 
-    // SPIM_CLK_A[0]
+    // SPIM_CLK_B[2]
     iox.setup_pin(
         SPI_PORT,
         SPI_CLK_PIN,
         Some(iox::IoxDir::Output),
-        Some(iox::IoxFunction::AF1),
+        Some(iox::IoxFunction::AF2),
         None,
         None,
         Some(iox::IoxEnable::Enable),
         Some(iox::IoxDriveStrength::Drive2mA),
     );
-    // SPIM_SD0_A[0]
+    // SPIM_SD0_B[2]
     iox.setup_pin(
         SPI_PORT,
         SPI_DAT_PIN,
         Some(iox::IoxDir::Output),
-        Some(iox::IoxFunction::AF1),
+        Some(iox::IoxFunction::AF2),
         None,
         None,
         Some(iox::IoxEnable::Enable),
         Some(iox::IoxDriveStrength::Drive2mA),
     );
-    // SPIM_CSN0_A[0]
-    // chip select toggle by UDMA has ~6 cycles setup and 1 cycles hold time, which
-    // meets the requirements for the display.
+    // SPIM_CSN0_B[2]
     iox.setup_pin(
         SPI_PORT,
         SPI_CS_PIN,
         Some(iox::IoxDir::Output),
-        Some(iox::IoxFunction::AF1),
+        Some(iox::IoxFunction::AF2),
         None,
         Some(iox::IoxEnable::Enable),
         Some(iox::IoxEnable::Enable),
         Some(iox::IoxDriveStrength::Drive2mA),
     );
-    // using bank SPIM_B[1]
-    crate::udma::SpimChannel::Channel0
+    // C/D pin is a gpio direct-drive
+    iox.setup_pin(
+        SPI_PORT,
+        SPI_CD_PIN,
+        Some(iox::IoxDir::Output),
+        Some(IoxFunction::Gpio),
+        None,
+        None,
+        Some(IoxEnable::Enable),
+        Some(iox::IoxDriveStrength::Drive2mA),
+    );
+    // using bank SPIM_B[2]
+    (crate::udma::SpimChannel::Channel2, SPI_PORT, SPI_CD_PIN, SPI_CS_PIN)
 }
 
 pub fn setup_memory_pins(iox: &dyn IoSetup) -> crate::udma::SpimChannel {
