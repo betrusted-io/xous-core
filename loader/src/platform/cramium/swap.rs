@@ -36,7 +36,7 @@ pub struct SwapHal {
 }
 
 impl SwapHal {
-    pub fn new(cfg: &BootConfig) -> Option<SwapHal> {
+    pub fn new(cfg: &BootConfig, perclk_freq: u32) -> Option<SwapHal> {
         if let Some(swap) = cfg.swap {
             let udma_global = GlobalConfig::new(utralib::generated::HW_UDMA_CTRL_BASE as *mut u32);
 
@@ -49,8 +49,10 @@ impl SwapHal {
             let mut flash_spim = unsafe {
                 Spim::new_with_ifram(
                     channel,
-                    25_000_000,
-                    50_000_000,
+                    // has to be half the clock frequency reaching the block, but run it as fast
+                    // as we can run perclk
+                    perclk_freq / 4,
+                    perclk_freq / 2,
                     SpimClkPol::LeadingEdgeRise,
                     SpimClkPha::CaptureOnLeading,
                     SpimCs::Cs0,
@@ -68,8 +70,8 @@ impl SwapHal {
             let mut ram_spim = unsafe {
                 Spim::new_with_ifram(
                     channel,
-                    25_000_000,
-                    50_000_000,
+                    perclk_freq / 4,
+                    perclk_freq / 2,
                     SpimClkPol::LeadingEdgeRise,
                     SpimClkPha::CaptureOnLeading,
                     SpimCs::Cs1,

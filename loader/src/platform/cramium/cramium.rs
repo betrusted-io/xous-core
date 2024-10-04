@@ -69,7 +69,7 @@ pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 pub const KERNEL_OFFSET: usize = 0x4_0000;
 
 #[cfg(feature = "cramium-soc")]
-pub fn early_init() {
+pub fn early_init() -> u32 {
     // Set up the initial clocks. This is done as a "poke array" into a table of addresses.
     // Why? because this is actually how it's done for the chip verification code. We can
     // make this nicer and more abstract with register meanings down the road, if necessary,
@@ -740,6 +740,8 @@ pub fn early_init() {
     udma_uart.write("Press any key to continue...".as_bytes());
     getc();
     udma_uart.write(b"\n\rBooting!\n\r");
+
+    perclk
 }
 
 #[cfg(feature = "clock-tests")]

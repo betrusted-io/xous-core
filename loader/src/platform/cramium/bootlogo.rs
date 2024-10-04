@@ -1,13 +1,13 @@
 use cramium_hal::iox::{IoGpio, IoSetup};
 use cramium_hal::udma::UdmaGlobalConfig;
 
-pub fn show_logo<T>(pclk_freq: u32, udma_global: &dyn UdmaGlobalConfig, iox: &T)
+pub fn show_logo<T>(perclk_freq: u32, udma_global: &dyn UdmaGlobalConfig, iox: &T)
 where
     T: IoSetup + IoGpio,
 {
     // test the display SPI interface
     // safety: this is called exactly once on boot
-    let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(iox, udma_global);
+    let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(perclk_freq, iox, udma_global);
     sh1107.init();
     {
         /* // pattern test for debugging pixel orientations - done with this now, I think?
