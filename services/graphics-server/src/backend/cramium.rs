@@ -105,7 +105,7 @@ impl XousDisplay {
 
         // setup the I/O pins
         let iox = IoxHal::new();
-        let channel = setup_display_pins(&iox);
+        let (channel, _, _, _) = setup_display_pins(&iox);
         udma_global.udma_clock_config(PeriphId::from(channel), true);
 
         log::info!("gfx using spi channel {:?}", channel);
