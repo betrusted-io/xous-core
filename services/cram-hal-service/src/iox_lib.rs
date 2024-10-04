@@ -1,6 +1,8 @@
 use core::sync::atomic::Ordering;
 
-use cramium_hal::iox::{IoSetup, IoxDir, IoxDriveStrength, IoxEnable, IoxFunction, IoxPort, IoxValue};
+use cramium_hal::iox::{
+    IoGpio, IoSetup, IoxDir, IoxDriveStrength, IoxEnable, IoxFunction, IoxPort, IoxValue,
+};
 use num_traits::*;
 
 use crate::{Opcode, SERVER_NAME_CRAM_HAL, api::IoxConfigMessage};
@@ -137,6 +139,29 @@ impl IoSetup for IoxHal {
             IoxConfigMessage { port, pin, direction, function, schmitt_trigger, pullup, slow_slew, strength };
         let buf = xous_ipc::Buffer::into_buf(msg).unwrap();
         buf.lend(self.conn, Opcode::ConfigureIox.to_u32().unwrap()).expect("Couldn't set up IO");
+    }
+}
+
+impl IoGpio for IoxHal {
+    fn get_gpio_pin_value(&self, port: IoxPort, pin: u8) -> IoxValue { self.get_gpio_pin_value(port, pin) }
+
+    fn set_gpio_pin_dir(&self, port: IoxPort, pin: u8, dir: IoxDir) {
+        let msg = IoxConfigMessage {
+            port,
+            pin,
+            direction: Some(dir),
+            function: None,
+            schmitt_trigger: None,
+            pullup: None,
+            slow_slew: None,
+            strength: None,
+        };
+        let buf = xous_ipc::Buffer::into_buf(msg).unwrap();
+        buf.lend(self.conn, Opcode::ConfigureIox.to_u32().unwrap()).expect("Couldn't set up IO");
+    }
+
+    fn set_gpio_pin_value(&self, port: IoxPort, pin: u8, value: IoxValue) {
+        self.set_gpio_pin_value(port, pin, value);
     }
 }
 
