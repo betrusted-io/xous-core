@@ -9,5 +9,4 @@ mod poweron_bt;
 
 mod update;
 pub use update::*;
-mod sh1107;
 mod verifier;
