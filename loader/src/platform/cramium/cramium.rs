@@ -1,5 +1,7 @@
 use cramium_hal::iox::{Iox, IoxDir, IoxEnable, IoxFunction, IoxPort};
 use cramium_hal::udma;
+use cramium_hal::udma::PeriphId;
+use cramium_hal::udma::UdmaGlobalConfig;
 use utralib::generated::*;
 
 // Notes about the reset vector location
@@ -50,8 +52,8 @@ use utralib::generated::*;
 /*
     To-do:
       -[x] Add dummy lifecycle gate call
-      -[ ] New OLED base driver
-      -[ ] I2C driver for AXP2101
+      -[x] New OLED base driver
+      -[x] I2C driver (axp2101 default setting as first item of use)
       -[ ] camera base driver (maybe loopback to OLED as demo?)
       -[ ] USB stack into loader; debugging there. Present as bulk transfer to emulated disk on
            PSRAM using ghostFS
@@ -248,6 +250,23 @@ pub fn early_init() -> u32 {
     glbl_csr.wo(utra::sce_glbsfr::SFR_FFEN, 0x30);
     glbl_csr.wo(utra::sce_glbsfr::SFR_FFCLR, 0xff05);
 
+    // configure LDO voltages that aren't correct by default.
+    let i2c_channel = cramium_hal::board::setup_i2c_pins(&iox);
+    udma_global.clock(PeriphId::from(i2c_channel), true);
+    let i2c_ifram = unsafe {
+        cramium_hal::ifram::IframRange::from_raw_parts(
+            cramium_hal::board::I2C_IFRAM_ADDR,
+            cramium_hal::board::I2C_IFRAM_ADDR,
+            4096,
+        )
+    };
+    let mut i2c = unsafe { cramium_hal::udma::I2c::new_with_ifram(i2c_channel, 100_000, perclk, i2c_ifram) };
+    let ldo_adjusted = [0x57, 0x00, 0x0d, 0x14, 0x1c, 0x18, 0x0d, 0x17, 0x08, 0x00, 0x0e];
+    i2c.i2c_write_async(cramium_hal::board::I2C_AXP2101_ADR, 0x90, &ldo_adjusted).unwrap();
+    i2c.i2c_await(None, false).unwrap();
+    crate::println!("AXP2101 LDOs configured");
+
+    // show the boot logo
     crate::platform::cramium::bootlogo::show_logo(freq, &mut udma_global, &mut iox);
 
     // Board bring-up: send characters to confirm the UART is configured & ready to go for the logging crate!
@@ -255,6 +274,43 @@ pub fn early_init() -> u32 {
     // makes things a little bit cleaner for JTAG ops, it seems.
     #[cfg(feature = "board-bringup")]
     {
+        // test I2C
+        crate::println!("i2c test");
+        let mut id = [0u8; 8];
+        crate::println!("read USB ID");
+        i2c.i2c_read_async(0x47, 0, id.len(), false).expect("couldn't initiate read");
+        // this let is necessary to get `id` to go out of scope
+        i2c.i2c_await(Some(&mut id), false).unwrap();
+        crate::println!("ID result: {:x?}", id);
+
+        let mut ldo = [0u8; 11];
+        crate::println!("AXP2101 LDO");
+        i2c.i2c_read_async(0x34, 0x90, ldo.len(), false).expect("couldn't initiate read");
+        i2c.i2c_await(Some(&mut ldo), false).unwrap();
+        crate::println!("LDO result: {:x?}", ldo);
+
+        crate::println!("write1");
+        ldo[10] = 0xd;
+        i2c.i2c_write_async(0x34, 0x90, &ldo).expect("couldn't initiate write");
+        i2c.i2c_await(None, false).unwrap();
+        ldo.fill(0);
+
+        crate::println!("AXP2101 LDO - last value should be 0xd");
+        i2c.i2c_read_async(0x34, 0x90, ldo.len(), false).expect("couldn't initiate read");
+        i2c.i2c_await(Some(&mut ldo), false).unwrap();
+        crate::println!("LDO result - last value should be 0xd: {:x?}", ldo);
+
+        crate::println!("write2");
+        ldo[10] = 0xe;
+        i2c.i2c_write_async(0x34, 0x90, &ldo).expect("couldn't initiate write");
+        i2c.i2c_await(None, false).unwrap();
+        ldo.fill(0);
+
+        crate::println!("AXP2101 LDO - last value should be 0xe");
+        i2c.i2c_read_async(0x34, 0x90, ldo.len(), false).expect("couldn't initiate read");
+        i2c.i2c_await(Some(&mut ldo), false).unwrap();
+        crate::println!("LDO result - last value should be 0xe: {:x?}", ldo);
+
         // configure the SCE clocks to enable the TRNG
         let mut sce = CSR::new(HW_SCE_GLBSFR_BASE as *mut u32);
         sce.wo(utra::sce_glbsfr::SFR_SUBEN, 0xFF);
