@@ -241,7 +241,7 @@ impl Spim {
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
-        .expect("couldn't map serial port");
+        .expect("couldn't map spim port");
         let csr = CSR::new(csr_range.as_mut_ptr() as *mut u32);
 
         let clk_div = sys_clk_freq / (2 * spi_clk_freq);

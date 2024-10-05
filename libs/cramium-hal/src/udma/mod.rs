@@ -71,6 +71,17 @@ impl From<SpimChannel> for PeriphId {
     }
 }
 
+impl From<I2cChannel> for PeriphId {
+    fn from(value: I2cChannel) -> Self {
+        match value {
+            I2cChannel::Channel0 => PeriphId::I2c0,
+            I2cChannel::Channel1 => PeriphId::I2c1,
+            I2cChannel::Channel2 => PeriphId::I2c2,
+            I2cChannel::Channel3 => PeriphId::I2c3,
+        }
+    }
+}
+
 #[repr(u32)]
 #[derive(Copy, Clone)]
 pub enum PeriphEventId {
