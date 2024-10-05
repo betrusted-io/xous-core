@@ -26,10 +26,10 @@ pub const FLG_SWAP_USED: u32 = 0x8000_0000;
 // Locate the hard-wired IFRAM allocations for UDMA
 #[allow(dead_code)]
 #[cfg(feature = "cramium-soc")]
-pub const UART_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096;
+pub const UART_IFRAM_ADDR: usize = cramium_hal::board::UART_DMA_TX_BUF_PHYS;
 #[allow(dead_code)]
 #[cfg(feature = "cramium-soc")]
-pub const APP_UART_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 3 * 4096;
+pub const APP_UART_IFRAM_ADDR: usize = cramium_hal::board::APP_UART_IFRAM_ADDR;
 
 /// This is the amount of space that the loader stack will occupy as it runs, assuming no swap and giving one
 /// page for the clean suspend marker

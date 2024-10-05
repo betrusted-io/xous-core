@@ -481,6 +481,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // ------ Cramium hardware image configs ------
         Some("cramium-fpga") | Some("cramium-soc") => {
+            let board = "board-baosec";
+            // select the board
+            builder.add_feature(board);
+            builder.add_loader_feature(board);
+            builder.add_kernel_feature(board);
+
             // placement in flash is a tension between dev convenience and RAM usage. Things in flash
             // are resident, non-swapable, but end up making the slow kernel burn process take longer.
             let cramium_flash_pkgs = [
@@ -500,15 +506,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if !builder.is_swap_set() {
                 builder.set_swap(0, 4 * 1024 * 1024);
             }
-            // builder.add_loader_feature("board-bringup");
+            builder.add_loader_feature("board-bringup");
             // builder.add_loader_feature("spim-test");
             // builder.add_loader_feature("spi-alt-channel"); // this flag, when asserted, uses the J_QSPI
+            //     header. By default, we use JPC7_13 (J_QSPI does not work, for some reason; bit 3 is stuck
+            //     high...)
             // builder.add_loader_feature("irq-test");
             // builder.add_loader_feature("usb-test");
             // builder.add_loader_feature("trng-test");
             // builder.add_loader_feature("dump-trng");
-            // header. By default, we use JPC7_13 (J_QSPI does not work, for some reason; bit 3 is stuck
-            // high...)
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
             builder.add_feature("swap");
@@ -523,6 +529,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_kernel_feature("v2p");
             builder.add_feature("mass-storage");
             builder.add_feature("ditherpunk");
+
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),
                 Some("cramium-soc") => builder.target_cramium_soc(),

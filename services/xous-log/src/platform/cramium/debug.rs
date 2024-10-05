@@ -57,7 +57,7 @@ impl Uart {
         let mut uart = unsafe {
             udma::Uart::get_handle(
                 crate::platform::debug::DEFAULT_UART_ADDR as usize,
-                crate::implementation::UART_DMA_TX_BUF_PHYS,
+                cramium_hal::board::UART_DMA_TX_BUF_PHYS,
                 crate::implementation::UART_DMA_TX_BUF_VIRT as usize,
             )
         };

@@ -1,6 +1,8 @@
 use core::sync::atomic::Ordering;
 
-use cramium_hal::iox::{IoxDir, IoxDriveStrength, IoxEnable, IoxFunction, IoxPort, IoxValue};
+use cramium_hal::iox::{
+    IoGpio, IoSetup, IoxDir, IoxDriveStrength, IoxEnable, IoxFunction, IoxPort, IoxValue,
+};
 use num_traits::*;
 
 use crate::{Opcode, SERVER_NAME_CRAM_HAL, api::IoxConfigMessage};
@@ -16,23 +18,6 @@ impl IoxHal {
         let conn =
             xns.request_connection(SERVER_NAME_CRAM_HAL).expect("Couldn't connect to Cramium HAL server");
         IoxHal { conn }
-    }
-
-    pub fn setup_io_pin(
-        &self,
-        port: IoxPort,
-        pin: u8,
-        direction: Option<IoxDir>,
-        function: Option<IoxFunction>,
-        schmitt_trigger: Option<IoxEnable>,
-        pullup: Option<IoxEnable>,
-        slow_slew: Option<IoxEnable>,
-        strength: Option<IoxDriveStrength>,
-    ) {
-        let msg =
-            IoxConfigMessage { port, pin, direction, function, schmitt_trigger, pullup, slow_slew, strength };
-        let buf = xous_ipc::Buffer::into_buf(msg).unwrap();
-        buf.lend(self.conn, Opcode::ConfigureIox.to_u32().unwrap()).expect("Couldn't set up IO");
     }
 
     pub fn set_gpio_pin_value(&self, port: IoxPort, pin: u8, value: IoxValue) {
@@ -135,6 +120,48 @@ impl IoxHal {
     /// simply disables the bit in the PIO mux register.
     pub fn unset_pio_bit_from_port_and_pin(&self, _port: IoxPort, _pin: u8) -> Option<u8> {
         todo!("Do this when we get around to filling in the PIO drivers")
+    }
+}
+
+impl IoSetup for IoxHal {
+    fn setup_pin(
+        &self,
+        port: IoxPort,
+        pin: u8,
+        direction: Option<IoxDir>,
+        function: Option<IoxFunction>,
+        schmitt_trigger: Option<IoxEnable>,
+        pullup: Option<IoxEnable>,
+        slow_slew: Option<IoxEnable>,
+        strength: Option<IoxDriveStrength>,
+    ) {
+        let msg =
+            IoxConfigMessage { port, pin, direction, function, schmitt_trigger, pullup, slow_slew, strength };
+        let buf = xous_ipc::Buffer::into_buf(msg).unwrap();
+        buf.lend(self.conn, Opcode::ConfigureIox.to_u32().unwrap()).expect("Couldn't set up IO");
+    }
+}
+
+impl IoGpio for IoxHal {
+    fn get_gpio_pin_value(&self, port: IoxPort, pin: u8) -> IoxValue { self.get_gpio_pin_value(port, pin) }
+
+    fn set_gpio_pin_dir(&self, port: IoxPort, pin: u8, dir: IoxDir) {
+        let msg = IoxConfigMessage {
+            port,
+            pin,
+            direction: Some(dir),
+            function: None,
+            schmitt_trigger: None,
+            pullup: None,
+            slow_slew: None,
+            strength: None,
+        };
+        let buf = xous_ipc::Buffer::into_buf(msg).unwrap();
+        buf.lend(self.conn, Opcode::ConfigureIox.to_u32().unwrap()).expect("Couldn't set up IO");
+    }
+
+    fn set_gpio_pin_value(&self, port: IoxPort, pin: u8, value: IoxValue) {
+        self.set_gpio_pin_value(port, pin, value);
     }
 }
 

@@ -43,10 +43,13 @@ cramium-soc = [
     "cramium-hal",
     "cramium-hal/std",
 ]
+board-baosec = ["cramium-hal/board-baosec"]
+board-baosor = ["cramium-hal/board-baosor"]
+board-dabao = ["cramium-hal/board-dabao"]
+
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
-spi-alt-channel = []
 debugprint = []
 braille = []
 gfx-testing = []

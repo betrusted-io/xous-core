@@ -4,7 +4,7 @@ pub mod keyboard;
 pub mod trng;
 
 use api::Opcode;
-use cramium_hal::udma::{EventChannel, PeriphEventType, PeriphId};
+use cramium_hal::udma::{EventChannel, PeriphEventType, PeriphId, UdmaGlobalConfig};
 pub use iox_lib::*;
 use num_traits::*;
 
@@ -62,5 +62,18 @@ impl UdmaGlobal {
             ),
         )
         .expect("Couldn't setup UDMA event mapping");
+    }
+}
+
+impl UdmaGlobalConfig for UdmaGlobal {
+    fn clock(&self, peripheral: PeriphId, enable: bool) { self.udma_clock_config(peripheral, enable); }
+
+    unsafe fn udma_event_map(
+        &self,
+        peripheral: PeriphId,
+        event_type: PeriphEventType,
+        to_channel: EventChannel,
+    ) {
+        self.udma_event_map(peripheral, event_type, to_channel);
     }
 }

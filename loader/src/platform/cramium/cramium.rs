@@ -1,5 +1,7 @@
 use cramium_hal::iox::{Iox, IoxDir, IoxEnable, IoxFunction, IoxPort};
 use cramium_hal::udma;
+use cramium_hal::udma::PeriphId;
+use cramium_hal::udma::UdmaGlobalConfig;
 use utralib::generated::*;
 
 // Notes about the reset vector location
@@ -15,6 +17,51 @@ use utralib::generated::*;
 // This puts the byte-address hex offset at (6 * 256 + 8 * 8) / 8 = 0xC8
 // within the IFR region. Total IFR region size is 0x200.
 
+/*
+  Thoughts on where to put the updating routine.
+
+  As a Xous runtime program:
+    Pros:
+      - Full security of MMU
+      - Updater primitives are available as Xous primitives
+    Cons:
+      - Less RAM available to stage data
+      - ReRAM is XIP; makes kernel update tricky
+  As a loader program:
+    Pros:
+      - Higher performance (no OS overhead)
+      - Faster dev time
+      - Can stage full images in PSRAM before committing
+      - Full overwrite of ReRAM OS possible
+    Cons:
+      - Larger loader image
+      - No MMU security - bugs are more brittle/scary
+      - Loader becomes a primary attack surface due to its size and complexity
+      - Less code re-use with main code base
+      - Loader update needs a special path to hand-off an image to Xous to avoid XIP conflict
+
+   I think the winning argument is that we could stage the full image in PSRAM before
+   committing to either ReRAM or SPI RAM. This allows us to do full signature checking prior
+   to committing any objects.
+
+   We could structure this so that when going into update mode, the secret key lifecycle
+   bits are pushed forward, so we only have derived keys available. This would make any
+   break into the loader updater less able to get at any root keys?
+*/
+
+/*
+    To-do:
+      -[x] Add dummy lifecycle gate call
+      -[x] New OLED base driver
+      -[x] I2C driver (axp2101 default setting as first item of use)
+      -[ ] camera base driver (maybe loopback to OLED as demo?)
+      -[ ] USB stack into loader; debugging there. Present as bulk transfer to emulated disk on
+           PSRAM using ghostFS
+      -[ ] bring mbox routine into loader so we can have access to ReRAM write primitive; structure so
+           that we can improve this easily as the chip bugs are fixed
+      -[ ] Image validation & burning routine
+*/
+
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
@@ -24,7 +71,7 @@ pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 pub const KERNEL_OFFSET: usize = 0x4_0000;
 
 #[cfg(feature = "cramium-soc")]
-pub fn early_init() {
+pub fn early_init() -> u32 {
     // Set up the initial clocks. This is done as a "poke array" into a table of addresses.
     // Why? because this is actually how it's done for the chip verification code. We can
     // make this nicer and more abstract with register meanings down the road, if necessary,
@@ -140,6 +187,7 @@ pub fn early_init() {
     // Now setup the clocks for real
     // Safety: this can only be called in the early_init boot context
     let perclk = unsafe { init_clock_asic(800_000_000) };
+    // let perclk = unsafe { init_clock_asic_c(800_000_000, 0) };
     crate::println!("Perclk is {} Hz", perclk);
 
     // Configure the UDMA UART. This UART's settings will be used as the initial console UART.
@@ -147,10 +195,10 @@ pub fn early_init() {
     // on the cramium-hal crate to be functional.
 
     // Set up the IO mux to map UART_A0:
-    //  UART_RX_A[0] = PA3
-    //  UART_TX_A[0] = PA4
-    //  UART_RX_A[1] = PD13
-    //  UART_RX_A[1] = PD14
+    //  UART_RX_A[0] = PA3   app
+    //  UART_TX_A[0] = PA4   app
+    //  UART_RX_A[1] = PD13  console
+    //  UART_RX_A[1] = PD14  console
     let mut iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
     iox.set_alternate_function(IoxPort::PD, 13, IoxFunction::AF1);
     iox.set_alternate_function(IoxPort::PD, 14, IoxFunction::AF1);
@@ -202,6 +250,23 @@ pub fn early_init() {
     glbl_csr.wo(utra::sce_glbsfr::SFR_FFEN, 0x30);
     glbl_csr.wo(utra::sce_glbsfr::SFR_FFCLR, 0xff05);
 
+    // configure LDO voltages that aren't correct by default.
+    let i2c_channel = cramium_hal::board::setup_i2c_pins(&iox);
+    udma_global.clock(PeriphId::from(i2c_channel), true);
+    let i2c_ifram = unsafe {
+        cramium_hal::ifram::IframRange::from_raw_parts(
+            cramium_hal::board::I2C_IFRAM_ADDR,
+            cramium_hal::board::I2C_IFRAM_ADDR,
+            4096,
+        )
+    };
+    let mut i2c = unsafe { cramium_hal::udma::I2c::new_with_ifram(i2c_channel, 100_000, perclk, i2c_ifram) };
+    let ldo_adjusted = [0x57, 0x00, 0x0d, 0x14, 0x1c, 0x18, 0x0d, 0x17, 0x08, 0x00, 0x0e];
+    i2c.i2c_write_async(cramium_hal::board::I2C_AXP2101_ADR, 0x90, &ldo_adjusted).unwrap();
+    i2c.i2c_await(None, false).unwrap();
+    crate::println!("AXP2101 LDOs configured");
+
+    // show the boot logo
     crate::platform::cramium::bootlogo::show_logo(freq, &mut udma_global, &mut iox);
 
     // Board bring-up: send characters to confirm the UART is configured & ready to go for the logging crate!
@@ -209,6 +274,43 @@ pub fn early_init() {
     // makes things a little bit cleaner for JTAG ops, it seems.
     #[cfg(feature = "board-bringup")]
     {
+        // test I2C
+        crate::println!("i2c test");
+        let mut id = [0u8; 8];
+        crate::println!("read USB ID");
+        i2c.i2c_read_async(0x47, 0, id.len(), false).expect("couldn't initiate read");
+        // this let is necessary to get `id` to go out of scope
+        i2c.i2c_await(Some(&mut id), false).unwrap();
+        crate::println!("ID result: {:x?}", id);
+
+        let mut ldo = [0u8; 11];
+        crate::println!("AXP2101 LDO");
+        i2c.i2c_read_async(0x34, 0x90, ldo.len(), false).expect("couldn't initiate read");
+        i2c.i2c_await(Some(&mut ldo), false).unwrap();
+        crate::println!("LDO result: {:x?}", ldo);
+
+        crate::println!("write1");
+        ldo[10] = 0xd;
+        i2c.i2c_write_async(0x34, 0x90, &ldo).expect("couldn't initiate write");
+        i2c.i2c_await(None, false).unwrap();
+        ldo.fill(0);
+
+        crate::println!("AXP2101 LDO - last value should be 0xd");
+        i2c.i2c_read_async(0x34, 0x90, ldo.len(), false).expect("couldn't initiate read");
+        i2c.i2c_await(Some(&mut ldo), false).unwrap();
+        crate::println!("LDO result - last value should be 0xd: {:x?}", ldo);
+
+        crate::println!("write2");
+        ldo[10] = 0xe;
+        i2c.i2c_write_async(0x34, 0x90, &ldo).expect("couldn't initiate write");
+        i2c.i2c_await(None, false).unwrap();
+        ldo.fill(0);
+
+        crate::println!("AXP2101 LDO - last value should be 0xe");
+        i2c.i2c_read_async(0x34, 0x90, ldo.len(), false).expect("couldn't initiate read");
+        i2c.i2c_await(Some(&mut ldo), false).unwrap();
+        crate::println!("LDO result - last value should be 0xe: {:x?}", ldo);
+
         // configure the SCE clocks to enable the TRNG
         let mut sce = CSR::new(HW_SCE_GLBSFR_BASE as *mut u32);
         sce.wo(utra::sce_glbsfr::SFR_SUBEN, 0xFF);
@@ -287,11 +389,11 @@ pub fn early_init() {
 
         #[cfg(feature = "spim-test")]
         {
+            use cramium_hal::board::{SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR};
             use cramium_hal::ifram::IframRange;
             use cramium_hal::iox::*;
             use cramium_hal::udma::*;
             use loader::swap::SPIM_FLASH_IFRAM_ADDR;
-            use loader::swap::SPIM_RAM_IFRAM_ADDR;
 
             fn setup_port(
                 iox: &mut Iox,
@@ -327,118 +429,9 @@ pub fn early_init() {
             // setup the I/O pins
             let mut iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
             let mut udma_global = GlobalConfig::new(utralib::generated::HW_UDMA_CTRL_BASE as *mut u32);
-            #[cfg(feature = "spi-alt-channel")]
-            let channel = {
-                // JQSPI1
-                // SPIM_CLK_A[0]
-                setup_port(
-                    &mut iox,
-                    IoxPort::PD,
-                    4,
-                    Some(IoxFunction::AF1),
-                    Some(IoxDir::Output),
-                    Some(IoxDriveStrength::Drive4mA),
-                    Some(IoxEnable::Enable),
-                    None,
-                    None,
-                );
-                // SPIM_SD[0-3]_A[0]
-                for i in 0..3 {
-                    setup_port(
-                        &mut iox,
-                        IoxPort::PD,
-                        i,
-                        Some(IoxFunction::AF1),
-                        None,
-                        Some(IoxDriveStrength::Drive2mA),
-                        Some(IoxEnable::Enable),
-                        None,
-                        None,
-                    );
-                }
-                // SPIM_CSN0_A[0]
-                setup_port(
-                    &mut iox,
-                    IoxPort::PD,
-                    5,
-                    Some(IoxFunction::AF1),
-                    Some(IoxDir::Output),
-                    Some(IoxDriveStrength::Drive2mA),
-                    Some(IoxEnable::Enable),
-                    None,
-                    None,
-                );
-                // SPIM_CSN0_A[1]
-                setup_port(
-                    &mut iox,
-                    IoxPort::PD,
-                    6,
-                    Some(IoxFunction::AF1),
-                    Some(IoxDir::Output),
-                    Some(IoxDriveStrength::Drive2mA),
-                    Some(IoxEnable::Enable),
-                    None,
-                    None,
-                );
-                udma_global.clock_on(PeriphId::Spim0); // JQSPI1
-                SpimChannel::Channel0
-            };
-            #[cfg(not(feature = "spi-alt-channel"))]
-            let channel = {
-                // JPC7_13
-                // SPIM_CLK_A[1]
-                setup_port(
-                    &mut iox,
-                    IoxPort::PC,
-                    11,
-                    Some(IoxFunction::AF1),
-                    Some(IoxDir::Output),
-                    Some(IoxDriveStrength::Drive4mA),
-                    Some(IoxEnable::Enable),
-                    None,
-                    None,
-                );
-                // SPIM_SD[0-3]_A[1]
-                for i in 7..11 {
-                    setup_port(
-                        &mut iox,
-                        IoxPort::PC,
-                        i,
-                        Some(IoxFunction::AF1),
-                        None,
-                        Some(IoxDriveStrength::Drive2mA),
-                        Some(IoxEnable::Enable),
-                        None,
-                        None,
-                    );
-                }
-                // SPIM_CSN0_A[1]
-                setup_port(
-                    &mut iox,
-                    IoxPort::PC,
-                    12,
-                    Some(IoxFunction::AF1),
-                    Some(IoxDir::Output),
-                    Some(IoxDriveStrength::Drive2mA),
-                    Some(IoxEnable::Enable),
-                    None,
-                    None,
-                );
-                // SPIM_CSN0_A[1]
-                setup_port(
-                    &mut iox,
-                    IoxPort::PC,
-                    13,
-                    Some(IoxFunction::AF1),
-                    Some(IoxDir::Output),
-                    Some(IoxDriveStrength::Drive2mA),
-                    Some(IoxEnable::Enable),
-                    None,
-                    None,
-                );
-                udma_global.clock_on(PeriphId::Spim1); // JPC7_13
-                SpimChannel::Channel1
-            };
+            let channel = cramium_hal::board::setup_memory_pins(&iox);
+            udma_global.clock_off(PeriphId::from(channel));
+
             crate::println!("Configuring SPI channel: {:?}", channel);
             // safety: this is safe because clocks have been set up
             let mut flash_spim = unsafe {
@@ -507,7 +500,8 @@ pub fn early_init() {
             crate::println!("flash ID: {:x}", flash_id);
             crate::println!("ram ID: {:x}", ram_id);
             // density 18, memory type 20, mfg ID C2 ==> MX25L128833F
-            assert!(flash_id & 0xFF_FF_FF == 0x1820C2);
+            // density 38, memory type 25, mfg ID C2 ==> MX25U12832F
+            assert!(flash_id & 0xFF_FF_FF == 0x1820C2 || flash_id & 0xFF_FF_FF == 0x38_25_C2);
             // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
             assert!(ram_id & 0xFF_FF == 0x5D9D);
 
@@ -534,7 +528,8 @@ pub fn early_init() {
             crate::println!("QPI flash ID: {:x}", flash_id);
             crate::println!("QPI ram ID: {:x}", ram_id);
             // density 18, memory type 20, mfg ID C2 ==> MX25L128833F
-            assert!(flash_id & 0xFF_FF_FF == 0x1820C2);
+            // density 38, memory type 25, mfg ID C2 ==> MX25U12832F
+            assert!(flash_id & 0xFF_FF_FF == 0x1820C2 || flash_id & 0xFF_FF_FF == 0x38_25_C2);
             // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
             assert!(ram_id & 0xFF_FF == 0x5D9D);
 
@@ -786,6 +781,7 @@ pub fn early_init() {
         }
     }
 
+    /*
     let aoc_base = utralib::CSR::new(0x4006_0000 as *mut u32);
     unsafe {
         for i in 0..0x50 / 4 {
@@ -796,9 +792,12 @@ pub fn early_init() {
         aoc_base.base().add(4).write_volatile(pmu_cr & !1);
         crate::println!("pmu_cr upd: {:x}", aoc_base.base().add(4).read_volatile());
     }
+    */
     udma_uart.write("Press any key to continue...".as_bytes());
     getc();
     udma_uart.write(b"\n\rBooting!\n\r");
+
+    perclk
 }
 
 #[cfg(feature = "clock-tests")]
@@ -1360,4 +1359,169 @@ pub extern "C" fn trap_handler(
     }
     unsafe { mie::set_mext() };
     unsafe { _resume_context(0x61008000u32) }; // this is the scratch page used in the assembly routine above
+}
+
+#[allow(dead_code)]
+pub fn log_2(mut value: u32) -> u32 {
+    let mut result = 0;
+
+    // Shift right until we find the position of the highest set bit
+    while value > 1 {
+        value >>= 1;
+        result += 1;
+    }
+
+    result
+}
+
+#[allow(dead_code)]
+/// Direct translation of the C code
+pub unsafe fn init_clock_asic_c(freq_hz: u32, duty_sram: u32) -> u32 {
+    use utra::sysctrl;
+    let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
+
+    const UNIT_MHZ: u32 = 1000u32 * 1000u32;
+    const PFD_F_MHZ: u32 = 16;
+    const FREQ_0: u32 = 16u32 * UNIT_MHZ;
+    const FREQ_OSC_MHZ: u32 = 48; // Actually 48MHz
+    const M: u32 = FREQ_OSC_MHZ / PFD_F_MHZ; //  - 1;  // OSC input was 24, replace with 48
+
+    const TBL_Q: [u16; 7] = [
+        // keep later DIV even number as possible
+        0x7777, // 16-32 MHz
+        0x7737, // 32-64
+        0x3733, // 64-128
+        0x3313, // 128-256
+        0x3311, // 256-512 // keep ~ 100MHz
+        0x3301, // 512-1024
+        0x3301, // 1024-1600
+    ];
+    const TBL_MUL: [u32; 7] = [
+        64, // 16-32 MHz
+        32, // 32-64
+        16, // 64-128
+        8,  // 128-256
+        4,  // 256-512
+        2,  // 512-1024
+        2,  // 1024-1600
+    ];
+
+    if (0 == (daric_cgu.add(sysctrl::SFR_IPCPLLMN.offset()).read_volatile() & 0x0001F000))
+        || (0 == (daric_cgu.add(sysctrl::SFR_IPCPLLMN.offset()).read_volatile() & 0x00000fff))
+    {
+        // for SIM, avoid div by 0 if unconfigurated
+        // , default VCO 48MHz / 48 * 1200 = 1.2GHz
+        // TODO magic numbers
+        daric_cgu
+            .add(sysctrl::SFR_IPCPLLMN.offset())
+            .write_volatile(((M << 12) & 0x0001F000) | ((1200) & 0x00000fff));
+        daric_cgu.add(sysctrl::SFR_IPCPLLF.offset()).write_volatile(0); // ??
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        daric_cgu.add(sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x32); // commit
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+
+    // TODO select int/ext osc/xtal
+    daric_cgu.add(sysctrl::SFR_CGUSEL1.offset()).write_volatile(1); // 0: RC, 1: XTAL
+    daric_cgu.add(sysctrl::SFR_CGUFSCR.offset()).write_volatile(FREQ_OSC_MHZ); // external crystal is 48MHz
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    daric_cgu.add(sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+    if freq_hz < 1000000 {
+        daric_cgu.add(sysctrl::SFR_IPCOSC.offset()).write_volatile(freq_hz);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        daric_cgu.add(sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x32); // commit, must write 32
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+    // switch to OSC
+    daric_cgu.add(sysctrl::SFR_CGUSEL0.offset()).write_volatile(0); // clktop sel, 0:clksys, 1:clkpll0
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    daric_cgu.add(sysctrl::SFR_CGUSET.offset()).write_volatile(0x32); // commit
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+    if freq_hz < 1000000 {
+    } else {
+        let f16_mhz_log2: usize = log_2(freq_hz / FREQ_0) as usize;
+
+        // PD PLL
+        daric_cgu
+            .add(sysctrl::SFR_IPCLPEN.offset())
+            .write_volatile(daric_cgu.add(sysctrl::SFR_IPCLPEN.offset()).read_volatile() | 0x02);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        daric_cgu.add(sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x32); // commit, must write 32
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+        // delay
+        for _ in 0..1024 {
+            unsafe { core::arch::asm!("nop") };
+        }
+
+        let n_fxp24: u64 = (((freq_hz as u64) << 24u64) * TBL_MUL[f16_mhz_log2] as u64
+            + PFD_F_MHZ as u64 * UNIT_MHZ as u64 / 2u64)
+            / (PFD_F_MHZ as u64 * UNIT_MHZ as u64); // rounded
+        let n_frac: u32 = (n_fxp24 & 0x00ffffff) as u32;
+
+        daric_cgu
+            .add(sysctrl::SFR_IPCPLLMN.offset())
+            .write_volatile(((M << 12) & 0x0001F000) | ((n_fxp24 >> 24) & 0x00000fff) as u32); // 0x1F598; // ??
+        daric_cgu
+            .add(sysctrl::SFR_IPCPLLF.offset())
+            .write_volatile(n_frac | if 0 == n_frac { 0 } else { 1 << 24 }); // ??
+        daric_cgu.add(sysctrl::SFR_IPCPLLQ.offset()).write_volatile(TBL_Q[f16_mhz_log2] as u32); // ?? TODO select DIV for VCO freq
+
+        //               VCO bias   CPP bias   CPI bias
+        //                1          2          3
+        //DARIC_IPC->ipc = (3 << 6) | (5 << 3) | (5);
+        daric_cgu.add(sysctrl::SFR_IPCCR.offset()).write_volatile((1 << 6) | (2 << 3) | (3));
+        // daric_cgu.add(sysctrl::SFR_IPCCR.offset()).write_volatile((3 << 6) | (5 << 3) | (5));
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        daric_cgu.add(sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x32); // commit, must write 32
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+        daric_cgu
+            .add(sysctrl::SFR_IPCLPEN.offset())
+            .write_volatile(daric_cgu.add(sysctrl::SFR_IPCLPEN.offset()).read_volatile() & !0x02);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        daric_cgu.add(sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x32); // commit, must write 32
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+        // delay
+        for _ in 0..1024 {
+            unsafe { core::arch::asm!("nop") };
+        }
+        //printf("read reg a0 : %08" PRIx32"\n", *((volatile uint32_t* )0x400400a0));
+        //printf("read reg a4 : %04" PRIx16"\n", *((volatile uint16_t* )0x400400a4));
+        //printf("read reg a8 : %04" PRIx16"\n", *((volatile uint16_t* )0x400400a8));
+        crate::println!("PLL switchover");
+        // TODO wait/poll lock status?
+        daric_cgu.add(sysctrl::SFR_CGUSEL0.offset()).write_volatile(1); // clktop sel, 0:clksys, 1:clkpll0
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        daric_cgu.add(sysctrl::SFR_CGUSET.offset()).write_volatile(0x32); // commit
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        crate::println!("PLL switchover done");
+
+        // printf ("    MN: 0x%05x, F: 0x%06x, Q: 0x%04x\n",
+        //     DARIC_IPC->pll_mn, DARIC_IPC->pll_f, DARIC_IPC->pll_q);
+        // printf ("    LPEN: 0x%01x, OSC: 0x%04x, BIAS: 0x%04x,\n",
+        //     DARIC_IPC->lpen, DARIC_IPC->osc, DARIC_IPC->ipc);
+    }
+
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x7fff); // CPU
+    if 0 == duty_sram {
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x3f7f); // aclk
+    } else {
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(duty_sram);
+    }
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x1f3f); // hclk
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x0f1f); // iclk
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x070f); // pclk
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32); // commit
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+    // UDMACORE->CFG_CG = 0xffffffff; //everything on
+    // core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+    100_000_000 // bodge for now
 }

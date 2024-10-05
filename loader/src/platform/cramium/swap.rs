@@ -1,12 +1,11 @@
 use core::mem::size_of;
 
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, KeyInit, Nonce, Tag};
+use cramium_hal::board::{APP_UART_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR};
 use cramium_hal::ifram::IframRange;
 use cramium_hal::iox::*;
 use cramium_hal::sce;
 use cramium_hal::udma::*;
-use loader::APP_UART_IFRAM_ADDR;
-use loader::swap::SPIM_RAM_IFRAM_ADDR;
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::RngCore;
 use rand_chacha::rand_core::SeedableRng;
@@ -36,163 +35,24 @@ pub struct SwapHal {
     buf: RawPage,
 }
 
-pub fn setup_port(
-    iox: &mut Iox,
-    port: IoxPort,
-    pin: u8,
-    function: Option<IoxFunction>,
-    direction: Option<IoxDir>,
-    drive: Option<IoxDriveStrength>,
-    slow_slew: Option<IoxEnable>,
-    schmitt: Option<IoxEnable>,
-    pullup: Option<IoxEnable>,
-) {
-    if let Some(f) = function {
-        iox.set_alternate_function(port, pin, f);
-    }
-    if let Some(d) = direction {
-        iox.set_gpio_dir(port, pin, d);
-    }
-    if let Some(t) = schmitt {
-        iox.set_gpio_schmitt_trigger(port, pin, t);
-    }
-    if let Some(p) = pullup {
-        iox.set_gpio_pullup(port, pin, p);
-    }
-    if let Some(s) = slow_slew {
-        iox.set_slow_slew_rate(port, pin, s);
-    }
-    if let Some(s) = drive {
-        iox.set_drive_strength(port, pin, s);
-    }
-}
-
 impl SwapHal {
-    pub fn new(cfg: &BootConfig) -> Option<SwapHal> {
+    pub fn new(cfg: &BootConfig, perclk_freq: u32) -> Option<SwapHal> {
         if let Some(swap) = cfg.swap {
-            let mut udma_global = GlobalConfig::new(utralib::generated::HW_UDMA_CTRL_BASE as *mut u32);
+            let udma_global = GlobalConfig::new(utralib::generated::HW_UDMA_CTRL_BASE as *mut u32);
 
             // setup the I/O pins
-            let mut iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
-            #[cfg(feature = "spi-alt-channel")]
-            let channel = {
-                // JQSPI1
-                // SPIM_CLK_A[0]
-                setup_port(
-                    &mut iox,
-                    IoxPort::PD,
-                    4,
-                    Some(IoxFunction::AF1),
-                    Some(IoxDir::Output),
-                    Some(IoxDriveStrength::Drive4mA),
-                    Some(IoxEnable::Enable),
-                    None,
-                    None,
-                );
-                // SPIM_SD[0-3]_A[0]
-                for i in 0..3 {
-                    setup_port(
-                        &mut iox,
-                        IoxPort::PD,
-                        i,
-                        Some(IoxFunction::AF1),
-                        None,
-                        Some(IoxDriveStrength::Drive2mA),
-                        Some(IoxEnable::Enable),
-                        None,
-                        None,
-                    );
-                }
-                // SPIM_CSN0_A[0]
-                setup_port(
-                    &mut iox,
-                    IoxPort::PD,
-                    5,
-                    Some(IoxFunction::AF1),
-                    Some(IoxDir::Output),
-                    Some(IoxDriveStrength::Drive2mA),
-                    Some(IoxEnable::Enable),
-                    None,
-                    None,
-                );
-                // SPIM_CSN0_A[1]
-                setup_port(
-                    &mut iox,
-                    IoxPort::PD,
-                    6,
-                    Some(IoxFunction::AF1),
-                    Some(IoxDir::Output),
-                    Some(IoxDriveStrength::Drive2mA),
-                    Some(IoxEnable::Enable),
-                    None,
-                    None,
-                );
-                udma_global.clock_on(PeriphId::Spim0); // JQSPI1
-                SpimChannel::Channel0
-            };
-            #[cfg(not(feature = "spi-alt-channel"))]
-            let channel = {
-                // JPC7_13
-                // SPIM_CLK_A[1]
-                setup_port(
-                    &mut iox,
-                    IoxPort::PC,
-                    11,
-                    Some(IoxFunction::AF1),
-                    Some(IoxDir::Output),
-                    Some(IoxDriveStrength::Drive4mA),
-                    Some(IoxEnable::Enable),
-                    None,
-                    None,
-                );
-                // SPIM_SD[0-3]_A[1]
-                for i in 7..11 {
-                    setup_port(
-                        &mut iox,
-                        IoxPort::PC,
-                        i,
-                        Some(IoxFunction::AF1),
-                        None,
-                        Some(IoxDriveStrength::Drive2mA),
-                        Some(IoxEnable::Enable),
-                        None,
-                        None,
-                    );
-                }
-                // SPIM_CSN0_A[1]
-                setup_port(
-                    &mut iox,
-                    IoxPort::PC,
-                    12,
-                    Some(IoxFunction::AF1),
-                    Some(IoxDir::Output),
-                    Some(IoxDriveStrength::Drive2mA),
-                    Some(IoxEnable::Enable),
-                    None,
-                    None,
-                );
-                // SPIM_CSN0_A[1]
-                setup_port(
-                    &mut iox,
-                    IoxPort::PC,
-                    13,
-                    Some(IoxFunction::AF1),
-                    Some(IoxDir::Output),
-                    Some(IoxDriveStrength::Drive2mA),
-                    Some(IoxEnable::Enable),
-                    None,
-                    None,
-                );
-                udma_global.clock_on(PeriphId::Spim1); // JPC7_13
-                SpimChannel::Channel1
-            };
+            let iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
+            let channel = cramium_hal::board::setup_memory_pins(&iox);
+            udma_global.clock_on(PeriphId::from(channel));
 
             // safety: this is safe because clocks have been set up
             let mut flash_spim = unsafe {
                 Spim::new_with_ifram(
                     channel,
-                    25_000_000,
-                    50_000_000,
+                    // has to be half the clock frequency reaching the block, but run it as fast
+                    // as we can run perclk
+                    perclk_freq / 4,
+                    perclk_freq / 2,
                     SpimClkPol::LeadingEdgeRise,
                     SpimClkPha::CaptureOnLeading,
                     SpimCs::Cs0,
@@ -210,8 +70,8 @@ impl SwapHal {
             let mut ram_spim = unsafe {
                 Spim::new_with_ifram(
                     channel,
-                    25_000_000,
-                    50_000_000,
+                    perclk_freq / 4,
+                    perclk_freq / 2,
                     SpimClkPol::LeadingEdgeRise,
                     SpimClkPha::CaptureOnLeading,
                     SpimCs::Cs1,
@@ -235,7 +95,8 @@ impl SwapHal {
             crate::println!("flash ID: {:x}", flash_id);
             crate::println!("ram ID: {:x}", ram_id);
             // density 18, memory type 20, mfg ID C2 ==> MX25L128833F
-            assert!(flash_id & 0xFF_FF_FF == 0x1820C2);
+            // density 38, memory type 25, mfg ID C2 ==> MX25U12832F
+            assert!(flash_id & 0xFF_FF_FF == 0x1820C2 || flash_id & 0xFF_FF_FF == 0x38_25_C2);
             // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
             assert!(ram_id & 0xFF_FF == 0x5D9D);
 
@@ -260,7 +121,8 @@ impl SwapHal {
             crate::println!("QPI flash ID: {:x}", flash_id);
             crate::println!("QPI ram ID: {:x}", ram_id);
             // density 18, memory type 20, mfg ID C2 ==> MX25L128833F
-            assert!(flash_id & 0xFF_FF_FF == 0x1820C2);
+            // density 38, memory type 25, mfg ID C2 ==> MX25U12832F
+            assert!(flash_id & 0xFF_FF_FF == 0x1820C2 || flash_id & 0xFF_FF_FF == 0x38_25_C2);
             // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
             assert!(ram_id & 0xFF_FF == 0x5D9D);
 
@@ -522,7 +384,7 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
         SWAPPER_PID,
     );
 
-    let mut iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
+    let iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
     iox.set_alternate_function(IoxPort::PD, 2, IoxFunction::AF2);
     iox.set_alternate_function(IoxPort::PD, 3, IoxFunction::AF2);
     // rx as input, with pull-up
@@ -532,7 +394,7 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
     iox.set_gpio_dir(IoxPort::PD, 3, IoxDir::Output);
 
     // Set up the UDMA_UART block to the correct baud rate and enable status
-    let mut udma_global =
+    let udma_global =
         cramium_hal::udma::GlobalConfig::new(utralib::utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
     udma_global.clock_on(cramium_hal::udma::PeriphId::Uart0);
     udma_global.map_event(

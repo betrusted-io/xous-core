@@ -2,9 +2,10 @@ use core::fmt::Write;
 use core::mem::size_of;
 
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, Error, KeyInit, Nonce, Tag};
+use cramium_hal::board::SPIM_RAM_IFRAM_ADDR;
 use cramium_hal::ifram::IframRange;
 use cramium_hal::udma::*;
-use loader::swap::{SPIM_RAM_IFRAM_ADDR, SWAP_HAL_VADDR, SwapSpec};
+use loader::swap::{SWAP_HAL_VADDR, SwapSpec};
 
 use crate::debug::*;
 
@@ -26,9 +27,6 @@ impl SwapHal {
         // because once we remove the MAC area, we need even less storage, but it's a small error.
         let ram_size_actual = loader::swap::derive_usable_swap(spec.swap_len as usize);
 
-        #[cfg(feature = "spi-alt-channel")]
-        let channel = SpimChannel::Channel0;
-        #[cfg(not(feature = "spi-alt-channel"))]
         let channel = SpimChannel::Channel1;
         Self {
             swap_mac_start: ram_size_actual,

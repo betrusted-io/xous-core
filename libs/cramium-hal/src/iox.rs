@@ -1,5 +1,6 @@
 use utralib::generated::utra::iox;
-use utralib::generated::*;
+
+use crate::SharedCsr;
 
 macro_rules! set_pin_in_bank {
     ($self:expr, $register:expr, $port:expr, $pin:expr, $val:expr) => {{
@@ -67,7 +68,7 @@ pub enum IoxEnable {
 }
 
 #[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u32)]
 pub enum IoxValue {
     Low = 0,
@@ -78,26 +79,48 @@ impl From<u32> for IoxValue {
     fn from(value: u32) -> Self { if value == 0 { IoxValue::Low } else { IoxValue::High } }
 }
 
+/// Use a trait that will allow us to share code between both `std` and `no-std` implementations
+pub trait IoSetup {
+    fn setup_pin(
+        &self,
+        port: IoxPort,
+        pin: u8,
+        direction: Option<IoxDir>,
+        function: Option<IoxFunction>,
+        schmitt_trigger: Option<IoxEnable>,
+        pullup: Option<IoxEnable>,
+        slow_slew: Option<IoxEnable>,
+        strength: Option<IoxDriveStrength>,
+    );
+}
+
+/// Traits for accessing GPIOs after the port has been set up.
+pub trait IoGpio {
+    fn set_gpio_pin_value(&self, port: IoxPort, pin: u8, value: IoxValue);
+    fn get_gpio_pin_value(&self, port: IoxPort, pin: u8) -> IoxValue;
+    fn set_gpio_pin_dir(&self, port: IoxPort, pin: u8, dir: IoxDir);
+}
+
 pub struct Iox {
-    pub csr: CSR<u32>,
+    pub csr: SharedCsr<u32>,
 }
 
 impl Iox {
-    pub fn new(base_address: *mut u32) -> Self { Iox { csr: CSR::new(base_address) } }
+    pub fn new(base_address: *mut u32) -> Self { Iox { csr: SharedCsr::new(base_address) } }
 
-    pub fn set_gpio_dir(&mut self, port: IoxPort, pin: u8, direction: IoxDir) {
+    pub fn set_gpio_dir(&self, port: IoxPort, pin: u8, direction: IoxDir) {
         set_pin_in_bank!(self, iox::SFR_GPIOOE_CRGOE0, port, pin, direction)
     }
 
-    pub fn set_gpio_pullup(&mut self, port: IoxPort, pin: u8, enable: IoxEnable) {
+    pub fn set_gpio_pullup(&self, port: IoxPort, pin: u8, enable: IoxEnable) {
         set_pin_in_bank!(self, iox::SFR_GPIOPU_CRGPU0, port, pin, enable)
     }
 
-    pub fn set_gpio_pin(&mut self, port: IoxPort, pin: u8, value: IoxValue) {
+    pub fn set_gpio_pin(&self, port: IoxPort, pin: u8, value: IoxValue) {
         set_pin_in_bank!(self, iox::SFR_GPIOOUT_CRGO0, port, pin, value)
     }
 
-    pub fn set_gpio_bank(&mut self, port: IoxPort, value: u16, mask: u16) {
+    pub fn set_gpio_bank(&self, port: IoxPort, value: u16, mask: u16) {
         // safety: it is safe to manipulate a raw pointer because IoxPort constrains
         // the offset to be within range.
         unsafe {
@@ -109,11 +132,11 @@ impl Iox {
         }
     }
 
-    pub fn set_gpio_schmitt_trigger(&mut self, port: IoxPort, pin: u8, enable: IoxEnable) {
+    pub fn set_gpio_schmitt_trigger(&self, port: IoxPort, pin: u8, enable: IoxEnable) {
         set_pin_in_bank!(self, iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL0, port, pin, enable)
     }
 
-    pub fn set_slow_slew_rate(&mut self, port: IoxPort, pin: u8, enable: IoxEnable) {
+    pub fn set_slow_slew_rate(&self, port: IoxPort, pin: u8, enable: IoxEnable) {
         set_pin_in_bank!(self, iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW0, port, pin, enable)
     }
 
@@ -141,7 +164,7 @@ impl Iox {
         }
     }
 
-    pub fn set_alternate_function(&mut self, port: IoxPort, pin: u8, function: IoxFunction) {
+    pub fn set_alternate_function(&self, port: IoxPort, pin: u8, function: IoxFunction) {
         assert!(pin < 16, "pin must be in range of 0-15");
         match port {
             IoxPort::PA => {
@@ -248,7 +271,7 @@ impl Iox {
     /// by the mapping request. The index of the array corresponds to the bit position in
     /// the bitmask. You may use this to pass as arguments to further functions
     /// that do things like control slew rate or apply pull-ups.
-    pub fn set_ports_from_pio_bitmask(&mut self, enable_bitmask: u32) -> [Option<(IoxPort, u8)>; 32] {
+    pub fn set_ports_from_pio_bitmask(&self, enable_bitmask: u32) -> [Option<(IoxPort, u8)>; 32] {
         let mut mapping: [Option<(IoxPort, u8)>; 32] = [None; 32];
 
         for i in 0..32 {
@@ -310,7 +333,7 @@ impl Iox {
 
     /// Returns the PIO bit that was enabled based on the port and pin specifier given;
     /// returns `None` if the proposed mapping is invalid.
-    pub fn set_pio_bit_from_port_and_pin(&mut self, port: IoxPort, pin: u8) -> Option<u8> {
+    pub fn set_pio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8> {
         match port {
             IoxPort::PA => None,
             IoxPort::PB => {
@@ -340,7 +363,7 @@ impl Iox {
     /// Returns the PIO bit that was disabled based on the port and pin specifier given;
     /// returns `None` if the proposed mapping is invalid. Does not change the AF mapping,
     /// simply disables the bit in the PIO mux register.
-    pub fn unset_pio_bit_from_port_and_pin(&mut self, port: IoxPort, pin: u8) -> Option<u8> {
+    pub fn unset_pio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8> {
         match port {
             IoxPort::PA => None,
             IoxPort::PB => {
@@ -365,7 +388,7 @@ impl Iox {
         }
     }
 
-    pub fn set_drive_strength(&mut self, port: IoxPort, pin: u8, strength: IoxDriveStrength) {
+    pub fn set_drive_strength(&self, port: IoxPort, pin: u8, strength: IoxDriveStrength) {
         assert!(pin < 16, "pin must be in range of 0-15");
         match port {
             IoxPort::PA => self.csr.wo(
@@ -400,4 +423,47 @@ impl Iox {
             ),
         }
     }
+}
+
+impl IoSetup for Iox {
+    fn setup_pin(
+        &self,
+        port: IoxPort,
+        pin: u8,
+        direction: Option<IoxDir>,
+        function: Option<IoxFunction>,
+        schmitt_trigger: Option<IoxEnable>,
+        pullup: Option<IoxEnable>,
+        slow_slew: Option<IoxEnable>,
+        strength: Option<IoxDriveStrength>,
+    ) {
+        if let Some(f) = function {
+            self.set_alternate_function(port, pin, f);
+        }
+        if let Some(d) = direction {
+            self.set_gpio_dir(port, pin, d);
+        }
+        if let Some(t) = schmitt_trigger {
+            self.set_gpio_schmitt_trigger(port, pin, t);
+        }
+        if let Some(p) = pullup {
+            self.set_gpio_pullup(port, pin, p);
+        }
+        if let Some(s) = slow_slew {
+            self.set_slow_slew_rate(port, pin, s);
+        }
+        if let Some(s) = strength {
+            self.set_drive_strength(port, pin, s);
+        }
+    }
+}
+
+impl IoGpio for Iox {
+    fn get_gpio_pin_value(&self, port: IoxPort, pin: u8) -> IoxValue { self.get_gpio_pin(port, pin) }
+
+    fn set_gpio_pin_value(&self, port: IoxPort, pin: u8, value: IoxValue) {
+        self.set_gpio_pin(port, pin, value);
+    }
+
+    fn set_gpio_pin_dir(&self, port: IoxPort, pin: u8, dir: IoxDir) { self.set_gpio_dir(port, pin, dir); }
 }

@@ -137,7 +137,7 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
     report_api("id2", pl230.csr.r(utra::pl230::PERIPH_ID_2));
 
     // Configure PB15 -> PIO0 for test (although the code is capable of toggling all pins, only map one).
-    let mut iox = iox::Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
+    let iox = iox::Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
     let pin = iox.set_pio_bit_from_port_and_pin(iox::IoxPort::PB, 15).unwrap();
     report_api("Configured PIO pin: ", pin as u32);
 

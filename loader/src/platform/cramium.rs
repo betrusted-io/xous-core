@@ -6,3 +6,7 @@ pub mod swap;
 pub use swap::*;
 mod bootlogo;
 mod poweron_bt;
+
+mod update;
+pub use update::*;
+mod verifier;

@@ -72,6 +72,9 @@ cramium-soc = [
     "sram-margin",
     "boot-delay",
 ]
+board-baosec = ["cramium-hal/board-baosec"]
+board-baosor = ["cramium-hal/board-baosor"]
+board-dabao = ["cramium-hal/board-dabao"]
 cramium-fpga = [
     "utralib/cramium-fpga",
     "debug-print",
@@ -96,7 +99,6 @@ boot-delay = []
 simulation-only = []
 quantum-timer-test = ["pio", "pio-proc"]
 spim-test = []
-spi-alt-channel = []
 irq-test = []
 usb-test = []
 trng-test = []

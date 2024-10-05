@@ -2,8 +2,12 @@
 
 #[macro_use]
 pub mod debug;
+pub mod board;
 pub mod ifram;
 pub mod iox;
 pub mod sce;
+pub mod sh1107;
+pub mod shared_csr;
 pub mod udma;
 pub mod usb;
+pub use shared_csr::*;

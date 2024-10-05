@@ -12,6 +12,8 @@ const TX_FIFO_DEPTH: u32 = 128;
 
 const CLIFFORD_SIZE: usize = 128;
 
+const FLASH_TEST_PAGE: usize = 0x602F_0000;
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 #[allow(dead_code)]
 pub enum MboxError {
@@ -32,6 +34,7 @@ pub enum ToRvOp {
     RetKnock = 128,
     RetDct8x8 = 129,
     RetClifford = 130,
+    RetFlashWrite = 131,
 }
 impl TryFrom<u16> for ToRvOp {
     type Error = MboxError;
@@ -42,6 +45,7 @@ impl TryFrom<u16> for ToRvOp {
             128 => Ok(ToRvOp::RetKnock),
             129 => Ok(ToRvOp::RetDct8x8),
             130 => Ok(ToRvOp::RetClifford),
+            131 => Ok(ToRvOp::RetFlashWrite),
             _ => Err(MboxError::InvalidOpcode),
         }
     }
@@ -56,6 +60,7 @@ pub enum ToCm7Op {
     Knock = 1,
     Dct8x8 = 2,
     Clifford = 3,
+    FlashWrite = 4,
 }
 
 pub struct MboxToCm7Pkt<'a> {
@@ -74,6 +79,7 @@ pub struct Mbox {
     csr: CSR<u32>,
     phys_mem: xous::MemoryRange,
     modals: Modals,
+    flash_window: xous::MemoryRange,
 }
 impl Mbox {
     pub fn new() -> Mbox {
@@ -119,9 +125,17 @@ impl Mbox {
         // generate available events - not hooked up to IRQ, but we'll poll for now
         csr.wfo(mailbox::EV_ENABLE_AVAILABLE, 1);
 
+        let flash_mem = xous::syscall::map_memory(
+            xous::MemoryAddress::new(FLASH_TEST_PAGE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map flash test window");
+
         let xns = xous_names::XousNames::new().unwrap();
 
-        Self { csr, phys_mem: phys_mem.unwrap(), modals: Modals::new(&xns).unwrap() }
+        Self { csr, phys_mem: phys_mem.unwrap(), modals: Modals::new(&xns).unwrap(), flash_window: flash_mem }
     }
 
     fn expect_tx(&mut self, val: u32) -> Result<(), MboxError> {
@@ -256,6 +270,94 @@ impl<'a> ShellCmdApi<'a> for Mbox {
                             write!(ret, "Packet send error: {:?}\n", e).ok();
                         }
                     };
+                }
+                "flashtest" => {
+                    let mut test_data = [FLASH_TEST_PAGE as u32, 0x8, 0xace0_ba55, 0xfeed_face];
+                    log::info!("Flash write of {:x?}", test_data);
+
+                    let orig_data = {
+                        let flash_slice: &[u8] = unsafe { self.flash_window.as_slice() };
+                        flash_slice.to_vec()
+                    };
+                    let test_word = u32::from_le_bytes(orig_data[..4].try_into().unwrap());
+                    log::info!("Data values before writing: {:x} {:x?}", test_word, &orig_data[..8]);
+                    if test_word == test_data[2] {
+                        log::info!("inverting test data");
+                        // invert the bit sense for the test
+                        test_data[2] = !test_data[2];
+                        test_data[3] = !test_data[3];
+                        log::info!("Test data: {:x?}", &test_data);
+                    }
+                    let write_pkt = MboxToCm7Pkt {
+                        version: MBOX_PROTOCOL_REV,
+                        opcode: ToCm7Op::FlashWrite,
+                        data: &test_data,
+                    };
+                    match self.try_send(write_pkt) {
+                        Ok(_) => {
+                            write!(ret, "Packet send Ok\n").ok();
+                            log::info!("flash write sent OK");
+                            let start = env.ticktimer.elapsed_ms();
+                            while self.poll_not_ready() {
+                                xous::yield_slice();
+                                if env.ticktimer.elapsed_ms() - start > 1000 {
+                                    write!(ret, "Response timeout!\n").ok();
+                                    log::info!("flash write timeout");
+                                    return Ok(Some(ret));
+                                }
+                            }
+                            // now receive the packet
+                            match self.try_rx() {
+                                Ok(rx_pkt) => {
+                                    log::info!("Knock result: {:x}", rx_pkt.data[0]);
+                                    if rx_pkt.version != MBOX_PROTOCOL_REV {
+                                        write!(
+                                            ret,
+                                            "Version mismatch {} != {}",
+                                            rx_pkt.version, MBOX_PROTOCOL_REV
+                                        )
+                                        .ok();
+                                    }
+                                    if rx_pkt.opcode != ToRvOp::RetFlashWrite {
+                                        write!(
+                                            ret,
+                                            "Opcode mismatch {} != {}",
+                                            rx_pkt.opcode as u16,
+                                            ToRvOp::RetFlashWrite as u16
+                                        )
+                                        .ok();
+                                    }
+                                    if rx_pkt.data.len() != 1 {
+                                        write!(
+                                            ret,
+                                            "Expected length mismatch {} != {}",
+                                            rx_pkt.data.len(),
+                                            1
+                                        )
+                                        .ok();
+                                    } else {
+                                        log::info!("Wrote {} bytes", rx_pkt.data[0]);
+                                        cache_flush();
+                                        let flash_slice: &[u8] = unsafe { self.flash_window.as_slice() };
+                                        log::info!("Data values before writing: {:x?}", &orig_data[..16]);
+                                        log::info!("Data values after writing: {:x?}", &flash_slice[..16]);
+                                        if flash_slice.eq(&orig_data) {
+                                            log::info!("Fail: flash data did not change");
+                                        } else {
+                                            log::info!("Pass: flash data updated");
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    write!(ret, "Error while deserializing: {:?}\n", e).ok();
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            write!(ret, "Packet send error: {:?}\n", e).ok();
+                            log::info!("Flash write send error: {:?}", e);
+                        }
+                    }
                 }
                 // Time trial results
                 //   - on Precursor (100MHz): 27.60 seconds
@@ -408,5 +510,20 @@ impl<'a> ShellCmdApi<'a> for Mbox {
             write!(ret, "{}", helpstring).unwrap();
         }
         Ok(Some(ret))
+    }
+}
+
+#[inline(always)]
+fn cache_flush() {
+    unsafe {
+        #[rustfmt::skip]
+        core::arch::asm!(
+        ".word 0x500F",
+        "nop",
+        "nop",
+        "nop",
+        "nop",
+        "nop",
+    );
     }
 }

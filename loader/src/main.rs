@@ -91,7 +91,12 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // but it is just a handy tool  to use when it *does* work.
     //
     #[cfg(feature = "cramium-soc")]
-    crate::platform::early_init(); // sets up PLLs so we're not running at 16MHz...
+    let perclk_freq = crate::platform::early_init(); // sets up PLLs so we're not running at 16MHz...
+    #[cfg(not(feature = "cramium-soc"))]
+    let perclk_freq = 0;
+
+    #[cfg(feature = "cramium-soc")]
+    crate::platform::process_update();
 
     // initially validate the whole image on disk (including kernel args)
     // kernel args must be validated because tampering with them can change critical assumptions about
@@ -113,10 +118,10 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // But for now, the basic "validate everything as a blob" is perhaps good enough to
     // armor code-at-rest against front-line patching attacks.
     let kab = KernelArguments::new(arg_buffer);
-    boot_sequence(kab, signature, fs_prehash);
+    boot_sequence(kab, signature, fs_prehash, perclk_freq);
 }
 
-fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -> ! {
+fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _perclk_freq: u32) -> ! {
     // Store the initial boot config on the stack.  We don't know
     // where in heap this memory will go.
     #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
@@ -130,7 +135,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
 
     #[cfg(feature = "swap")]
     {
-        cfg.swap_hal = SwapHal::new(&cfg);
+        cfg.swap_hal = SwapHal::new(&cfg, _perclk_freq);
         read_swap_config(&mut cfg);
     }
 
