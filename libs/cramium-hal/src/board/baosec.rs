@@ -3,6 +3,10 @@ use crate::iox;
 use crate::iox::IoSetup;
 use crate::iox::*;
 
+pub const I2C_AXP2101_ADR: u8 = 0x34;
+pub const I2C_TUSB320_ADR: u8 = 0x47;
+pub const I2C_BQ27427_ADR: u8 = 0x55;
+
 // console uart buffer
 pub const UART_DMA_TX_BUF_PHYS: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096;
 
@@ -19,6 +23,9 @@ pub const DISPLAY_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM
 // after boot.
 pub const SPIM_FLASH_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 7 * 4096;
 
+// one page for the I2C driver
+pub const I2C_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 8 * 4096;
+
 // USB pages - USB subsystem is a hog, needs a lot of pages
 pub const CRG_IFRAM_PAGES: usize = 22;
 pub const CRG_UDC_MEMBASE: usize =
@@ -26,7 +33,7 @@ pub const CRG_UDC_MEMBASE: usize =
 
 // MANUALLY SYNCED TO ALLOCATIONS ABOVE
 // inclusive numbering - we allocate pages from the top-down, so the last number should generally be 31
-pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 7, 31];
+pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 8, 31];
 pub const IFRAM1_RESERVED_PAGE_RANGE: [usize; 2] = [31 - CRG_IFRAM_PAGES, 31];
 
 /// Setup pins for the baosec display
@@ -135,4 +142,30 @@ pub fn setup_memory_pins(iox: &dyn IoSetup) -> crate::udma::SpimChannel {
         Some(IoxDriveStrength::Drive2mA),
     );
     crate::udma::SpimChannel::Channel1
+}
+
+pub fn setup_i2c_pins(iox: &dyn IoSetup) -> crate::udma::I2cChannel {
+    // I2C_SCL_B[0]
+    iox.setup_pin(
+        IoxPort::PB,
+        11,
+        Some(IoxDir::Output),
+        Some(IoxFunction::AF1),
+        None,
+        None,
+        Some(IoxEnable::Enable),
+        Some(IoxDriveStrength::Drive2mA),
+    );
+    // I2C_SDA_B[0]
+    iox.setup_pin(
+        IoxPort::PB,
+        12,
+        Some(IoxDir::Output),
+        Some(IoxFunction::AF1),
+        Some(IoxEnable::Enable),
+        None,
+        Some(IoxEnable::Enable),
+        Some(IoxDriveStrength::Drive2mA),
+    );
+    crate::udma::I2cChannel::Channel0
 }
