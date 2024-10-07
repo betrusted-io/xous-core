@@ -261,10 +261,14 @@ pub fn early_init() -> u32 {
         )
     };
     let mut i2c = unsafe { cramium_hal::udma::I2c::new_with_ifram(i2c_channel, 100_000, perclk, i2c_ifram) };
-    let ldo_adjusted = [0x57, 0x00, 0x0d, 0x14, 0x1c, 0x18, 0x0d, 0x17, 0x08, 0x00, 0x0e];
-    i2c.i2c_write_async(cramium_hal::board::I2C_AXP2101_ADR, 0x90, &ldo_adjusted).unwrap();
-    i2c.i2c_await(None, false).unwrap();
-    crate::println!("AXP2101 LDOs configured");
+    let mut pmic = cramium_hal::axp2101::Axp2101::new(&mut i2c);
+    pmic.set_ldo(&mut i2c, Some(2.5), cramium_hal::axp2101::WhichLdo::Aldo2).unwrap();
+    pmic.set_dcdc(&mut i2c, Some((1.2, false)), cramium_hal::axp2101::WhichDcDc::Dcdc4).unwrap();
+
+    // let ldo_adjusted = [0x57, 0x00, 0x0d, 0x14, 0x1c, 0x18, 0x0d, 0x17, 0x08, 0x00, 0x0e];
+    // i2c.i2c_write_async(cramium_hal::board::I2C_AXP2101_ADR, 0x90, &ldo_adjusted).unwrap();
+    //i2c.i2c_await(None, false).unwrap();
+    crate::println!("AXP2101 configure: {:?}", pmic);
 
     // show the boot logo
     crate::platform::cramium::bootlogo::show_logo(freq, &mut udma_global, &mut iox);
