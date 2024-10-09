@@ -72,6 +72,7 @@ pub const KERNEL_OFFSET: usize = 0x4_0000;
 
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() -> u32 {
+    use cramium_hal::{iox::IoxValue, udma::Udma};
     // Set up the initial clocks. This is done as a "poke array" into a table of addresses.
     // Why? because this is actually how it's done for the chip verification code. We can
     // make this nicer and more abstract with register meanings down the road, if necessary,
@@ -260,25 +261,42 @@ pub fn early_init() -> u32 {
             4096,
         )
     };
-    let mut i2c = unsafe { cramium_hal::udma::I2c::new_with_ifram(i2c_channel, 100_000, perclk, i2c_ifram) };
+    let mut i2c = unsafe { cramium_hal::udma::I2c::new_with_ifram(i2c_channel, 400_000, perclk, i2c_ifram) };
+    // setup PMIC
     let mut pmic = cramium_hal::axp2101::Axp2101::new(&mut i2c);
     pmic.set_ldo(&mut i2c, Some(2.5), cramium_hal::axp2101::WhichLdo::Aldo2).unwrap();
     pmic.set_dcdc(&mut i2c, Some((1.2, false)), cramium_hal::axp2101::WhichDcDc::Dcdc4).unwrap();
-
-    // let ldo_adjusted = [0x57, 0x00, 0x0d, 0x14, 0x1c, 0x18, 0x0d, 0x17, 0x08, 0x00, 0x0e];
-    // i2c.i2c_write_async(cramium_hal::board::I2C_AXP2101_ADR, 0x90, &ldo_adjusted).unwrap();
-    //i2c.i2c_await(None, false).unwrap();
     crate::println!("AXP2101 configure: {:?}", pmic);
 
+    // setup camera pins
+    let (cam_pdwn_bnk, cam_pdwn_pin) = cramium_hal::board::setup_ov2640_pins(&iox);
+    // disable camera powerdown
+    iox.set_gpio_pin(cam_pdwn_bnk, cam_pdwn_pin, cramium_hal::iox::IoxValue::Low);
+    udma_global.clock_on(PeriphId::Cam);
+    let cam_ifram = unsafe {
+        cramium_hal::ifram::IframRange::from_raw_parts(
+            cramium_hal::board::CAM_IFRAM_ADDR,
+            cramium_hal::board::CAM_IFRAM_ADDR,
+            cramium_hal::board::CAM_IFRAM_LEN_PAGES * 4096,
+        )
+    };
+    // this is safe because we turned on the clocks before calling it
+    let mut cam = unsafe { cramium_hal::ov2640::Ov2640::new_with_ifram(cam_ifram) };
+    let iox_loop = iox.clone();
+
     // show the boot logo
-    crate::platform::cramium::bootlogo::show_logo(freq, &mut udma_global, &mut iox);
+    let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(perclk, &mut iox, &mut udma_global);
+    sh1107.init();
+    crate::platform::cramium::bootlogo::show_logo(&mut sh1107);
+    sh1107.buffer_swap();
+    sh1107.draw();
 
     // Board bring-up: send characters to confirm the UART is configured & ready to go for the logging crate!
     // The "boot gutter" also has a role to pause the system in "real mode" before VM is mapped in Xous
     // makes things a little bit cleaner for JTAG ops, it seems.
     #[cfg(feature = "board-bringup")]
     {
-        // test I2C
+        //------------- test I2C ------------
         crate::println!("i2c test");
         let mut id = [0u8; 8];
         crate::println!("read USB ID");
@@ -315,6 +333,115 @@ pub fn early_init() -> u32 {
         i2c.i2c_await(Some(&mut ldo), false).unwrap();
         crate::println!("LDO result - last value should be 0xe: {:x?}", ldo);
 
+        //------------- test OV2640 ------------
+        let (pid, mid) = cam.read_id(&mut i2c);
+        crate::println!("Camera pid {:x}, mid {:x}", pid, mid);
+        cam.init(&mut i2c, cramium_hal::ov2640::Resolution::Res160x120);
+        cam.poke(&mut i2c, 0xFF, 0x00);
+        cam.poke(&mut i2c, 0xDA, 0x01); // YUV LE
+        cam.delay(1);
+
+        cam.poke(&mut i2c, 0x5A, 0x28);
+        cam.delay(1);
+        cam.poke(&mut i2c, 0x5B, 0x1E);
+        cam.delay(1);
+        crate::println!("160x120 resolution setup");
+
+        let mut csr_tt = CSR::new(utra::ticktimer::HW_TICKTIMER_BASE as *mut u32);
+        csr_tt.wfo(utra::ticktimer::CLOCKS_PER_TICK_CLOCKS_PER_TICK, 200_000);
+        csr_tt.wfo(utra::ticktimer::CONTROL_RESET, 1);
+
+        let (cols, _rows) = cam.resolution();
+        let mut frames = 0;
+        let mut frame = [0u8; 160 * 120];
+        while iox_loop.get_gpio_pin(IoxPort::PB, 9) == IoxValue::High {}
+        udma_uart.setup_async_read();
+        let mut c = 0u8;
+        loop {
+            cam.capture_async();
+
+            // blit fb to sh1107
+            for (y, row) in frame.chunks(cols).enumerate() {
+                for (x, &pixval) in row.iter().enumerate() {
+                    if x < 128 && y < 128 {
+                        let luminance = pixval & 0xff;
+                        if luminance > 0b1000_0000 {
+                            sh1107.put_pixel(x as u8, y as u8, true);
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            }
+            if udma_uart.read_async(&mut c) != 0 {
+                if c == ' ' as u32 as u8 {
+                    crate::println!("frame {}", frames);
+                    udma_uart.write("------------------ divider ------------------\n\r".as_bytes());
+                    let hex_to_ascii = [
+                        '0' as u32 as u8,
+                        '1' as u32 as u8,
+                        '2' as u32 as u8,
+                        '3' as u32 as u8,
+                        '4' as u32 as u8,
+                        '5' as u32 as u8,
+                        '6' as u32 as u8,
+                        '7' as u32 as u8,
+                        '8' as u32 as u8,
+                        '9' as u32 as u8,
+                        'A' as u32 as u8,
+                        'B' as u32 as u8,
+                        'C' as u32 as u8,
+                        'D' as u32 as u8,
+                        'E' as u32 as u8,
+                        'F' as u32 as u8,
+                    ];
+                    for line in frame.chunks(32) {
+                        let mut output = [0u8; 3 * 32 + 3];
+                        for (i, &b) in line.iter().enumerate() {
+                            output[i * 3 + 0] = hex_to_ascii[(b >> 4) as usize];
+                            output[i * 3 + 1] = hex_to_ascii[(b & 0xF) as usize];
+                            output[i * 3 + 2] = ',' as u32 as u8;
+                        }
+                        output[3 * 32] = '\\' as u32 as u8;
+                        output[3 * 32 + 1] = '\n' as u32 as u8;
+                        output[3 * 32 + 2] = '\r' as u32 as u8;
+                        udma_uart.write(&output);
+                    }
+                    // continue with boot
+                    break;
+                }
+            }
+            // crate::println!("frame {}", frames);
+            sh1107.buffer_swap();
+            sh1107.draw();
+
+            // clear the front buffer
+            sh1107.clear();
+
+            // inspect camera values
+            if false {
+                crate::println!("RX_SADDR {:x}", cam.csr().r(utra::udma_camera::REG_RX_SADDR));
+                crate::println!("RX_SIZE {:x}", cam.csr().r(utra::udma_camera::REG_RX_SIZE));
+                crate::println!("RX_CFG {:x}", cam.csr().r(utra::udma_camera::REG_RX_CFG));
+                crate::println!("CAM_GLOB {:x}", cam.csr().r(utra::udma_camera::REG_CAM_CFG_GLOB));
+                crate::println!("CAM_LL {:x}", cam.csr().r(utra::udma_camera::REG_CAM_CFG_LL));
+                crate::println!("CAM_UR {:x}", cam.csr().r(utra::udma_camera::REG_CAM_CFG_UR));
+                crate::println!("CAM_CFG_SIZE {:x}", cam.csr().r(utra::udma_camera::REG_CAM_CFG_SIZE));
+                crate::println!("CAM_CFG_FILTER {:x}", cam.csr().r(utra::udma_camera::REG_CAM_CFG_FILTER));
+                crate::println!("CAM_SYNC {:x}", cam.csr().r(utra::udma_camera::REG_CAM_VSYNC_POLARITY));
+            }
+
+            // wait for the transfer to finish
+            cam.capture_await(false);
+            let fb: &[u16] = cam.rx_buf();
+
+            for (&u16src, u8dest) in fb.iter().zip(frame.iter_mut()) {
+                *u8dest = (u16src & 0xff) as u8;
+            }
+            frames += 1;
+        }
+
+        // ---------------- test TRNG -------------------
         // configure the SCE clocks to enable the TRNG
         let mut sce = CSR::new(HW_SCE_GLBSFR_BASE as *mut u32);
         sce.wo(utra::sce_glbsfr::SFR_SUBEN, 0xFF);
