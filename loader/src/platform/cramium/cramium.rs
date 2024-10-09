@@ -54,7 +54,7 @@ use utralib::generated::*;
       -[x] Add dummy lifecycle gate call
       -[x] New OLED base driver
       -[x] I2C driver (axp2101 default setting as first item of use)
-      -[ ] camera base driver (maybe loopback to OLED as demo?)
+      -[x] camera base driver (maybe loopback to OLED as demo?)
       -[ ] USB stack into loader; debugging there. Present as bulk transfer to emulated disk on
            PSRAM using ghostFS
       -[ ] bring mbox routine into loader so we can have access to ReRAM write primitive; structure so
