@@ -321,6 +321,8 @@ impl<'a> Oled128x128<'a> {
         }
     }
 
+    pub fn clear(&mut self) { self.buffer_mut().fill(0); }
+
     pub fn put_pixel(&mut self, x: u8, y: u8, on: bool) {
         if x > COLUMN || y > ROW {
             return;
