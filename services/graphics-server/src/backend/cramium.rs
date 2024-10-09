@@ -126,6 +126,7 @@ impl XousDisplay {
                 (FB_LINES + 1) * FB_WIDTH_WORDS * size_of::<u32>(),
                 0,
                 None,
+                None,
             )
             .expect("Couldn't allocate SPI channel for LCD")
         };
