@@ -340,20 +340,20 @@ impl UdmaGlobalConfig for GlobalConfig {
     }
 }
 // --------------------------------- DMA channel ------------------------------------
-const CFG_EN: u32 = 0b01_0000; // start a transfer
+pub(crate) const CFG_EN: u32 = 0b01_0000; // start a transfer
 #[allow(dead_code)]
-const CFG_CONT: u32 = 0b00_0001; // continuous mode
+pub(crate) const CFG_CONT: u32 = 0b00_0001; // continuous mode
 #[allow(dead_code)]
-const CFG_SIZE_8: u32 = 0b00_0000; // 8-bit transfer
+pub(crate) const CFG_SIZE_8: u32 = 0b00_0000; // 8-bit transfer
 #[allow(dead_code)]
-const CFG_SIZE_16: u32 = 0b00_0010; // 16-bit transfer
+pub(crate) const CFG_SIZE_16: u32 = 0b00_0010; // 16-bit transfer
 #[allow(dead_code)]
-const CFG_SIZE_32: u32 = 0b00_0100; // 32-bit transfer
+pub(crate) const CFG_SIZE_32: u32 = 0b00_0100; // 32-bit transfer
 #[allow(dead_code)]
-const CFG_CLEAR: u32 = 0b10_0000; // stop and clear all pending transfers
+pub(crate) const CFG_CLEAR: u32 = 0b10_0000; // stop and clear all pending transfers
 #[allow(dead_code)]
-const CFG_PENDING: u32 = 0b10_0000; // on read, indicates a transfer pending
-const CFG_SHADOW: u32 = 0b10_0000; // indicates a shadow transfer
+pub(crate) const CFG_PENDING: u32 = 0b10_0000; // on read, indicates a transfer pending
+pub(crate) const CFG_SHADOW: u32 = 0b10_0000; // indicates a shadow transfer
 
 #[repr(usize)]
 pub enum Bank {
