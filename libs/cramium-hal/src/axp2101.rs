@@ -101,7 +101,7 @@ pub struct Axp2101 {
 }
 
 impl Axp2101 {
-    pub fn new(i2c: &mut dyn i2c::I2cApi) -> Axp2101 {
+    pub fn new(i2c: &mut dyn i2c::I2cApi) -> Result<Axp2101, xous::Error> {
         let mut s = Axp2101 {
             dcdc_ena: [false; 4],
             fast_ramp: false,
@@ -110,13 +110,13 @@ impl Axp2101 {
             ldo_ena: [false; 9],
             ldo_v: [0.0; 9],
         };
-        s.update(i2c);
-        s
+        s.update(i2c)?;
+        Ok(s)
     }
 
-    pub fn update(&mut self, i2c: &mut dyn i2c::I2cApi) {
+    pub fn update(&mut self, i2c: &mut dyn i2c::I2cApi) -> Result<(), xous::Error> {
         let mut buf = [0u8; 0xb0];
-        i2c.i2c_read(AXP2101_DEV, 0x0, &mut buf, false).expect("couldn't access AXP2101");
+        i2c.i2c_read(AXP2101_DEV, 0x0, &mut buf, false)?;
 
         (self.dcdc_ena, self.fast_ramp, self.force_ccm) = parse_dcdc_ena(buf[REG_DCDC_ENA]);
         self.dcdc_v_dvm = [
@@ -135,6 +135,7 @@ impl Axp2101 {
         for (i, v) in self.ldo_v.iter_mut().enumerate() {
             *v = parse_ldo(buf[REG_ALDO1_V + i], WhichLdo::from(i));
         }
+        Ok(())
     }
 
     pub fn set_dcdc(
