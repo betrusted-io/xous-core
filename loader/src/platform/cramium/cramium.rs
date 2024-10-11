@@ -72,7 +72,7 @@ pub const KERNEL_OFFSET: usize = 0x4_0000;
 
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() -> u32 {
-    use cramium_hal::{iox::IoxValue, udma::Udma};
+    use cramium_hal::{axp2101::WhichLdo, iox::IoxValue, udma::Udma};
     // Set up the initial clocks. This is done as a "poke array" into a table of addresses.
     // Why? because this is actually how it's done for the chip verification code. We can
     // make this nicer and more abstract with register meanings down the road, if necessary,
@@ -263,7 +263,15 @@ pub fn early_init() -> u32 {
     };
     let mut i2c = unsafe { cramium_hal::udma::I2c::new_with_ifram(i2c_channel, 400_000, perclk, i2c_ifram) };
     // setup PMIC
-    let mut pmic = cramium_hal::axp2101::Axp2101::new(&mut i2c);
+    let mut pmic = match cramium_hal::axp2101::Axp2101::new(&mut i2c) {
+        Ok(p) => p,
+        Err(_e) => {
+            crate::println!("Couldn't init AXP2101, rebooting");
+            let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+            rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
+            panic!("System should have reset");
+        }
+    };
     pmic.set_ldo(&mut i2c, Some(2.5), cramium_hal::axp2101::WhichLdo::Aldo2).unwrap();
     pmic.set_dcdc(&mut i2c, Some((1.2, false)), cramium_hal::axp2101::WhichDcDc::Dcdc4).unwrap();
     crate::println!("AXP2101 configure: {:?}", pmic);
@@ -282,6 +290,9 @@ pub fn early_init() -> u32 {
     };
     // this is safe because we turned on the clocks before calling it
     let mut cam = unsafe { cramium_hal::ov2640::Ov2640::new_with_ifram(cam_ifram) };
+
+    // TEMPORARY: turn off SE0 on USB
+    let _se0 = cramium_hal::board::baosec::setup_usb_pins(&iox);
     let iox_loop = iox.clone();
 
     // show the boot logo
@@ -439,6 +450,14 @@ pub fn early_init() -> u32 {
                 *u8dest = (u16src & 0xff) as u8;
             }
             frames += 1;
+        }
+
+        // Make this true to have the system shut down by disconnecting its own battery while on battery power
+        // Note this does nothing if you have USB power plugged in.
+        if false {
+            crate::println!("shutting down...");
+            pmic.set_ldo(&mut i2c, Some(0.9), WhichLdo::Aldo3).ok();
+            crate::println!("system should be off");
         }
 
         // ---------------- test TRNG -------------------
