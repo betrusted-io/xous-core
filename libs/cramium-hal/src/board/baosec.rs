@@ -175,6 +175,7 @@ pub fn setup_i2c_pins(iox: &dyn IoSetup) -> crate::udma::I2cChannel {
     crate::udma::I2cChannel::Channel0
 }
 
+/// returns the power-down port and pin number
 pub fn setup_ov2640_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     // power-down pin - default to powered down
     iox.set_gpio_pin_value(IoxPort::PC, 14, IoxValue::High);
@@ -202,4 +203,20 @@ pub fn setup_ov2640_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         );
     }
     (IoxPort::PC, 14)
+}
+
+/// returns the USB SE0 port and pin number
+pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    iox.setup_pin(
+        IoxPort::PB,
+        1,
+        Some(IoxDir::Output),
+        Some(IoxFunction::Gpio),
+        None,
+        None,
+        Some(IoxEnable::Enable),
+        Some(IoxDriveStrength::Drive2mA),
+    );
+    iox.set_gpio_pin_value(IoxPort::PB, 1, IoxValue::Low);
+    (IoxPort::PB, 1)
 }
