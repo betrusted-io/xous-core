@@ -530,6 +530,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_feature("mass-storage");
             builder.add_feature("ditherpunk");
 
+            builder.add_loader_feature("sram-margin");
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),
                 Some("cramium-soc") => builder.target_cramium_soc(),

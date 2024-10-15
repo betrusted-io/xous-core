@@ -4,6 +4,8 @@ use crate::ifram::IframRange;
 use crate::udma::*;
 use crate::udma::{Bank, Udma};
 
+const TIMEOUT_ITERS: usize = 1_000_000;
+
 #[derive(Copy, Clone)]
 #[repr(u8)]
 pub enum I2cCmd {
@@ -56,6 +58,19 @@ impl I2cPending {
     fn take(&mut self) -> I2cPending { core::mem::replace(self, I2cPending::Idle) }
 }
 
+pub trait I2cApi {
+    fn i2c_write(&mut self, dev: u8, adr: u8, data: &[u8]) -> Result<usize, xous::Error>;
+
+    /// initiate an i2c read. The read buffer is passed during the await.
+    fn i2c_read(
+        &mut self,
+        dev: u8,
+        adr: u8,
+        buf: &mut [u8],
+        repeated_start: bool,
+    ) -> Result<usize, xous::Error>;
+}
+
 const MAX_I2C_TXLEN: usize = 512;
 const MAX_I2C_RXLEN: usize = 512;
 const MAX_I2C_CMDLEN: usize = 512;
@@ -64,6 +79,7 @@ pub struct I2c {
     csr: CSR<u32>,
     _channel: I2cChannel,
     divider: u16,
+    perclk_freq: u32,
     pub ifram: IframRange,
     tx_buf: &'static mut [u8],
     tx_buf_phys: &'static mut [u8],
@@ -86,70 +102,9 @@ impl I2c {
     /// It is also unsafe to `Drop` because you have to cleanup the clock manually.
     #[cfg(feature = "std")]
     pub unsafe fn new(channel: I2cChannel, i2c_freq: u32, perclk_freq: u32) -> Option<Self> {
-        // divide-by-4 is an empirical observation
-        let divider: u16 = ((((perclk_freq / 2) / i2c_freq) / 4).min(u16::MAX as u32)) as u16;
-        // now setup the channel
-        let base_addr = match channel {
-            I2cChannel::Channel0 => utra::udma_i2c_0::HW_UDMA_I2C_0_BASE,
-            I2cChannel::Channel1 => utra::udma_i2c_1::HW_UDMA_I2C_1_BASE,
-            I2cChannel::Channel2 => utra::udma_i2c_2::HW_UDMA_I2C_2_BASE,
-            I2cChannel::Channel3 => utra::udma_i2c_3::HW_UDMA_I2C_3_BASE,
-        };
-        let csr_range = xous::syscall::map_memory(
-            xous::MemoryAddress::new(base_addr),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map i2c port");
-        let mut csr = CSR::new(csr_range.as_mut_ptr() as *mut u32);
-        // reset the block
-        csr.wfo(utra::udma_i2c_0::REG_SETUP_R_DO_RST, 1);
-        csr.wo(utra::udma_i2c_0::REG_SETUP, 0);
         // one page is the minimum size we can request
         if let Some(ifram) = IframRange::request(4096, None) {
-            let ifram_base = ifram.virt_range.as_ptr() as usize;
-            let ifram_base_phys = ifram.phys_range.as_ptr() as usize;
-            let mut i2c = I2c {
-                csr,
-                _channel: channel,
-                ifram,
-                divider,
-                cmd_buf: unsafe { core::slice::from_raw_parts_mut(ifram_base as *mut u32, MAX_I2C_CMDLEN) },
-                cmd_buf_phys: unsafe {
-                    core::slice::from_raw_parts_mut(ifram_base_phys as *mut u32, MAX_I2C_CMDLEN)
-                },
-                tx_buf: unsafe {
-                    core::slice::from_raw_parts_mut(
-                        (ifram_base + MAX_I2C_CMDLEN * core::mem::size_of::<u32>()) as *mut u8,
-                        MAX_I2C_TXLEN,
-                    )
-                },
-                tx_buf_phys: unsafe {
-                    core::slice::from_raw_parts_mut(
-                        (ifram_base_phys + MAX_I2C_CMDLEN * core::mem::size_of::<u32>()) as *mut u8,
-                        MAX_I2C_TXLEN,
-                    )
-                },
-                rx_buf: unsafe {
-                    core::slice::from_raw_parts_mut(
-                        (ifram_base + MAX_I2C_TXLEN + MAX_I2C_CMDLEN * core::mem::size_of::<u32>())
-                            as *mut u8,
-                        MAX_I2C_RXLEN,
-                    )
-                },
-                rx_buf_phys: unsafe {
-                    core::slice::from_raw_parts_mut(
-                        (ifram_base_phys + MAX_I2C_TXLEN + MAX_I2C_CMDLEN * core::mem::size_of::<u32>())
-                            as *mut u8,
-                        MAX_I2C_RXLEN,
-                    )
-                },
-                seq_len: 0,
-                pending: I2cPending::Idle,
-            };
-            i2c.send_cmd_list(&[I2cCmd::Config(divider)]);
-            Some(i2c)
+            Some(I2c::new_with_ifram(channel, i2c_freq, perclk_freq, ifram))
         } else {
             None
         }
@@ -224,10 +179,15 @@ impl I2c {
             },
             seq_len: 0,
             pending: I2cPending::Idle,
+            perclk_freq,
         };
         crate::println!("Set divider to {}", divider,);
         i2c.send_cmd_list(&[I2cCmd::Config(divider)]);
         i2c
+    }
+
+    pub fn set_freq(&mut self, freq_hz: u32) {
+        self.divider = ((((self.perclk_freq / 2) / freq_hz) / 4).min(u16::MAX as u32)) as u16;
     }
 
     // always blocks
@@ -253,7 +213,15 @@ impl I2c {
 
     /// Returns a ShareViolation if the pending operation is a read, but `rx_buf` is `None`.
     pub fn i2c_await(&mut self, rx_buf: Option<&mut [u8]>, _use_yield: bool) -> Result<usize, xous::Error> {
+        let mut timeout = 0;
         while self.busy() {
+            timeout += 1;
+            if timeout > TIMEOUT_ITERS {
+                // reset the block
+                self.csr.wfo(utra::udma_i2c_0::REG_SETUP_R_DO_RST, 1);
+                self.csr.wo(utra::udma_i2c_0::REG_SETUP, 0);
+                return Err(xous::Error::Timeout);
+            }
             #[cfg(feature = "std")]
             if _use_yield {
                 xous::yield_slice();
@@ -351,5 +319,23 @@ impl I2c {
         }
         self.pending = I2cPending::Read(len);
         Ok(len)
+    }
+}
+
+impl I2cApi for I2c {
+    fn i2c_read(
+        &mut self,
+        dev: u8,
+        adr: u8,
+        buf: &mut [u8],
+        repeated_start: bool,
+    ) -> Result<usize, xous::Error> {
+        self.i2c_read_async(dev, adr, buf.len(), repeated_start)?;
+        self.i2c_await(Some(buf), true)
+    }
+
+    fn i2c_write(&mut self, dev: u8, adr: u8, data: &[u8]) -> Result<usize, xous::Error> {
+        self.i2c_write_async(dev, adr, data)?;
+        self.i2c_await(None, true)
     }
 }

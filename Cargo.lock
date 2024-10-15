@@ -945,6 +945,7 @@ dependencies = [
  "utralib 0.1.25",
  "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
+ "xous-api-ticktimer",
  "xous-riscv",
 ]
 

@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 xous-api-names = { version = "0.9.63", optional = true }
+xous-api-ticktimer = { version = "0.9.61", optional = true }
 log = { version = "0.4.14", optional = true }
 utralib = { version = "0.1.25", default-features = false, features = [
     "cramium-soc",
@@ -33,6 +34,6 @@ board-dabao = []  # Dev board form factor
 
 compress-entropy = []
 magic-manual = []
-std = ["log", "xous-api-names", "usb-device"]
+std = ["log", "xous-api-names", "usb-device", "xous-api-ticktimer"]
 derive-rkyv = ["rkyv"]
 default = ["board-baosec"]

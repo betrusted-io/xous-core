@@ -4,6 +4,7 @@ use crate::platform;
 // Assembly stubs for entering into the loader, and exiting it.
 
 // Note: inline constants are not yet stable in Rust: https://github.com/rust-lang/rust/pull/104087
+#[cfg(not(feature = "reset-debug"))]
 #[link_section = ".text.init"]
 #[export_name = "_start"]
 pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
@@ -47,6 +48,142 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
             ram_top = in(reg) (platform::RAM_BASE + platform::RAM_SIZE),
             // On Precursor - 0x40FFE01C: currently allowed stack extent - 8k - (7 words). 7 words are for kernel backup args - see bootloader in betrusted-soc
             stack_limit = in(reg) (platform::RAM_BASE + platform::RAM_SIZE - 8192 + 7 * core::mem::size_of::<usize>()),
+            options(noreturn)
+        );
+    }
+}
+
+// This is code for debugging RV32 core reset on the cramium target.
+#[cfg(feature = "reset-debug")]
+#[link_section = ".text.init"]
+#[export_name = "_start"]
+pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
+    #[cfg(any(feature = "precursor", feature = "renode"))]
+    let _kernel_args = _kernel_args;
+    #[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
+    let _kernel_args = platform::FLASH_BASE + platform::KERNEL_OFFSET;
+    unsafe {
+        #[rustfmt::skip]
+        asm! (
+            /*
+            "li          t0, 0x40040000",
+            "li          t1, 0x7f7f",
+            "sw          t1, 0x14(t0)",
+            "sw          t1, 0x18(t0)",
+            "li          t1, 0x3f7f",
+            "sw          t1, 0x1c(t0)",
+            "li          t1, 0x1f3f",
+            "sw          t1, 0x20(t0)",
+            "li          t1, 0x0f1f",
+            "sw          t1, 0x24(t0)",
+            "li          t1, 0xFF",
+            "sw          t1, 0x60(t0)",
+            "sw          t1, 0x64(t0)",
+            "sw          t1, 0x68(t0)",
+            "sw          t1, 0x6c(t0)",
+            "li          t2, 0x32",
+            "sw          t2, 0x2c(t0)",
+            */
+
+            // GPIO twiddle
+            /*
+            "li          t0, 0x5012f000",
+            "sw          x0, 0x8(t0)", // AFSEL
+            "li          t2, 0x1803",
+            "sw          t1, 0x14c(t0)", // OESEL
+            "sw          x0, 0x134(t0)", // DAT
+            "sw          t2, 0x134(t0)", // DAT
+            "sw          x0, 0x134(t0)", // DAT
+            "sw          t2, 0x134(t0)", // DAT
+            "sw          x0, 0x134(t0)", // DAT
+            "sw          t2, 0x134(t0)", // DAT
+            */
+
+            "add         x1, x0, x0",
+            "li          x2, 0xF000",
+            "20:",
+            "addi        x1, x1, 1",
+            "bne         x1, x2, 20b",
+
+            /*
+            // this, surprisingly, seems to have some effect..?
+            // twiddle duart
+            "li          t0, 0x40042000",
+            "li          t1, 24",
+            "sw          t1, 0xc(t0)",
+            "li          t1, 0x1",
+            "sw          x0, 0x4(t0)",
+            "sw          t1, 0x4(t0)",
+            "li          t1, 0x5A",
+            "sw          t1, 0x0(t0)",
+            */
+
+            // ema adjust
+            /*
+            "li          t0, 0x40014000",
+            "li          t1, 0x3",
+            "sw          t1, 0xC(t0)",
+            "sw          t1, 0x10(t0)",
+            "sw          t1, 0x14(t0)",
+            */
+
+            // the RAM clearing code does not have an effect
+            /*
+            // clear ifram
+            "li          t0, 0x50000000",
+            "li          t1, 0x50040000",
+            "30:",
+            "sw          x0, 0(t0)",
+            "addi        t0, t0, 4",
+            "bltu        t0, t1, 30b",
+            // clear main ram
+            "li          t0, 0x61000000",
+            "li          t1, 0x61200000",
+            "20:",
+            "sw          x0, 0(t0)",
+            "addi        t0, t0, 4",
+            "bltu        t0, t1, 20b",
+
+            ".word       0x500f",
+            */
+
+            "li          t0, 0xffffffff",
+            "csrw        mideleg, t0",
+            "csrw        medeleg, t0",
+
+            // decorate our stack area with a canary pattern
+            /*
+            "li          t1, 0xACE0BACE",
+            "mv          t0, {stack_limit}",
+            "mv          t2, {ram_top}",
+        "100:", // fillstack
+            "sw          t1, 0(t0)",
+            "addi        t0, t0, 4",
+            "bltu        t0, t2, 100b",
+            */
+
+            // Place the stack pointer at the end of RAM
+            // "mv          sp, {ram_top}",
+            "li          sp, 0x61200000",
+            // subtract four from sp to make room for a DMA "gutter"
+            "addi        sp, sp, -4",
+
+            // Install a machine mode trap handler
+            "la          t0, abort",
+            "csrw        mtvec, t0",
+
+            // this forces a0/a1 to be "used" and thus not allocated for other parameters passed in
+            // "mv          a0, {kernel_args}",
+            "li          a0, 0x60040000",
+            "mv          a1, {loader_sig}",
+            // Start Rust
+            "j   rust_entry",
+
+            // kernel_args = in(reg) _kernel_args,
+            loader_sig = in(reg) loader_sig,
+            // ram_top = in(reg) (platform::RAM_BASE + platform::RAM_SIZE),
+            // On Precursor - 0x40FFE01C: currently allowed stack extent - 8k - (7 words). 7 words are for kernel backup args - see bootloader in betrusted-soc
+            // stack_limit = in(reg) (platform::RAM_BASE + platform::RAM_SIZE - 8192 + 7 * core::mem::size_of::<usize>()),
             options(noreturn)
         );
     }

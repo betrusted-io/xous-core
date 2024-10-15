@@ -26,6 +26,11 @@ pub const SPIM_FLASH_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IF
 // one page for the I2C driver
 pub const I2C_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 8 * 4096;
 
+// memory for camera driver
+pub const CAM_IFRAM_LEN_PAGES: usize = 10;
+pub const CAM_IFRAM_ADDR: usize =
+    utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - (9 + CAM_IFRAM_LEN_PAGES) * 4096;
+
 // USB pages - USB subsystem is a hog, needs a lot of pages
 pub const CRG_IFRAM_PAGES: usize = 22;
 pub const CRG_UDC_MEMBASE: usize =
@@ -33,7 +38,7 @@ pub const CRG_UDC_MEMBASE: usize =
 
 // MANUALLY SYNCED TO ALLOCATIONS ABOVE
 // inclusive numbering - we allocate pages from the top-down, so the last number should generally be 31
-pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 8, 31];
+pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - (9 + CAM_IFRAM_LEN_PAGES), 31];
 pub const IFRAM1_RESERVED_PAGE_RANGE: [usize; 2] = [31 - CRG_IFRAM_PAGES, 31];
 
 /// Setup pins for the baosec display
@@ -168,4 +173,50 @@ pub fn setup_i2c_pins(iox: &dyn IoSetup) -> crate::udma::I2cChannel {
         Some(IoxDriveStrength::Drive2mA),
     );
     crate::udma::I2cChannel::Channel0
+}
+
+/// returns the power-down port and pin number
+pub fn setup_ov2640_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    // power-down pin - default to powered down
+    iox.set_gpio_pin_value(IoxPort::PC, 14, IoxValue::High);
+    iox.setup_pin(
+        IoxPort::PC,
+        14,
+        Some(IoxDir::Output),
+        Some(IoxFunction::Gpio),
+        None,
+        None,
+        Some(IoxEnable::Enable),
+        Some(IoxDriveStrength::Drive2mA),
+    );
+    // camera interface proper
+    for pin in 2..11 {
+        iox.setup_pin(
+            IoxPort::PB,
+            pin,
+            Some(IoxDir::Input),
+            Some(IoxFunction::AF1),
+            None,
+            None,
+            Some(IoxEnable::Enable),
+            Some(IoxDriveStrength::Drive2mA),
+        );
+    }
+    (IoxPort::PC, 14)
+}
+
+/// returns the USB SE0 port and pin number
+pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    iox.setup_pin(
+        IoxPort::PB,
+        1,
+        Some(IoxDir::Output),
+        Some(IoxFunction::Gpio),
+        None,
+        None,
+        Some(IoxEnable::Enable),
+        Some(IoxDriveStrength::Drive2mA),
+    );
+    iox.set_gpio_pin_value(IoxPort::PB, 1, IoxValue::Low);
+    (IoxPort::PB, 1)
 }

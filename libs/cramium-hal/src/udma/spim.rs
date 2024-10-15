@@ -224,56 +224,30 @@ impl Spim {
         max_tx_len_bytes: usize,
         max_rx_len_bytes: usize,
         dummy_cycles: Option<u8>,
+        mode: Option<SpimMode>,
     ) -> Option<Self> {
-        // this is a hardware limit - the DMA pointer is only this long!
-        assert!(max_tx_len_bytes < 65536);
-        assert!(max_rx_len_bytes < 65536);
-        // now setup the channel
-        let base_addr = match channel {
-            SpimChannel::Channel0 => utra::udma_spim_0::HW_UDMA_SPIM_0_BASE,
-            SpimChannel::Channel1 => utra::udma_spim_1::HW_UDMA_SPIM_1_BASE,
-            SpimChannel::Channel2 => utra::udma_spim_2::HW_UDMA_SPIM_2_BASE,
-            SpimChannel::Channel3 => utra::udma_spim_3::HW_UDMA_SPIM_3_BASE,
-        };
-        let csr_range = xous::syscall::map_memory(
-            xous::MemoryAddress::new(base_addr),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map spim port");
-        let csr = CSR::new(csr_range.as_mut_ptr() as *mut u32);
-
-        let clk_div = sys_clk_freq / (2 * spi_clk_freq);
-        // make this a hard panic -- you'll find out at runtime that you f'd up
-        // but at least you find out.
-        assert!(clk_div < 256, "SPI clock divider is out of range");
-
         let mut reqlen = max_tx_len_bytes + max_rx_len_bytes + SPIM_CMD_BUF_LEN_BYTES;
         if reqlen % 4096 != 0 {
             // round up to the nearest page size
             reqlen = (reqlen + 4096) & !4095;
         }
         if let Some(ifram) = IframRange::request(reqlen, None) {
-            let mut spim = Spim {
-                csr,
-                cs: chip_select,
+            Some(Spim::new_with_ifram(
+                channel,
+                spi_clk_freq,
+                sys_clk_freq,
+                pol,
+                pha,
+                chip_select,
                 sot_wait,
                 eot_wait,
                 event_channel,
-                _align: SpimByteAlign::Disable,
-                mode: SpimMode::Standard,
+                max_tx_len_bytes,
+                max_rx_len_bytes,
+                dummy_cycles,
+                mode,
                 ifram,
-                tx_buf_len_bytes: max_tx_len_bytes,
-                rx_buf_len_bytes: max_rx_len_bytes,
-                dummy_cycles: dummy_cycles.unwrap_or(0),
-                endianness: SpimEndian::MsbFirst,
-                pending_txrx: None,
-            };
-            // setup the interface using a UDMA command
-            spim.send_cmd_list(&[SpimCmd::Config(pol, pha, clk_div as u8)]);
-
-            Some(spim)
+            ))
         } else {
             None
         }

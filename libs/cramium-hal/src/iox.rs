@@ -108,6 +108,8 @@ pub struct Iox {
 impl Iox {
     pub fn new(base_address: *mut u32) -> Self { Iox { csr: SharedCsr::new(base_address) } }
 
+    pub fn clone(&self) -> Self { Iox { csr: SharedCsr::new(self.csr.base) } }
+
     pub fn set_gpio_dir(&self, port: IoxPort, pin: u8, direction: IoxDir) {
         set_pin_in_bank!(self, iox::SFR_GPIOOE_CRGOE0, port, pin, direction)
     }
