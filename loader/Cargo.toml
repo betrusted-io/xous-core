@@ -70,7 +70,7 @@ cramium-soc = [
     "xous-pl230",
     "rand_chacha",
     "sram-margin",
-    "boot-delay",
+    # "boot-delay",
 ]
 board-baosec = ["cramium-hal/board-baosec"]
 board-baosor = ["cramium-hal/board-baosor"]
@@ -105,6 +105,7 @@ trng-test = []
 dump-trng = []
 fast-fclk = []
 clock-tests = []
+reset-debug = []
 
 # general flags
 debug-print = []
