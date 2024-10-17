@@ -10,3 +10,5 @@ mod poweron_bt;
 mod update;
 pub use update::*;
 mod verifier;
+
+mod usb;
