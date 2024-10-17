@@ -68,7 +68,7 @@ pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 
 // location of kernel, as offset from the base of ReRAM. This needs to match up with what is in link.x.
 // exclusive of the signature block offset
-pub const KERNEL_OFFSET: usize = 0x4_0000;
+pub const KERNEL_OFFSET: usize = 0x5_0000;
 
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() -> u32 {
@@ -343,6 +343,13 @@ pub fn early_init() -> u32 {
         i2c.i2c_read_async(0x34, 0x90, ldo.len(), false).expect("couldn't initiate read");
         i2c.i2c_await(Some(&mut ldo), false).unwrap();
         crate::println!("LDO result - last value should be 0xe: {:x?}", ldo);
+
+        //------------- test USB ---------------
+        crate::platform::cramium::usb::init_usb();
+        // this does not return if USB is initialized correctly...
+        unsafe {
+            crate::platform::cramium::usb::test_usb();
+        }
 
         //------------- test OV2640 ------------
         let (pid, mid) = cam.read_id(&mut i2c);
