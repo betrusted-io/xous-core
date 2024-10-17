@@ -88,9 +88,10 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
             // GPIO twiddle
             /*
             "li          t0, 0x5012f000",
-            "sw          x0, 0x8(t0)", // AFSEL
+            "li          t1, 0x5550",
+            "sw          t1, 0x8(t0)", // AFSEL
             "li          t2, 0x1803",
-            "sw          t1, 0x14c(t0)", // OESEL
+            "sw          t2, 0x14c(t0)", // OESEL
             "sw          x0, 0x134(t0)", // DAT
             "sw          t2, 0x134(t0)", // DAT
             "sw          x0, 0x134(t0)", // DAT
