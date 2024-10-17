@@ -1,8 +1,8 @@
 MEMORY
 {
   /* we are using an unsigned loader, so the offset is not 1k offset */
-  FONTS : ORIGIN = 0x60020000, LENGTH = 128k
-  FLASH : ORIGIN = 0x60001000, LENGTH = 124k
+  FONTS : ORIGIN = 0x60030000, LENGTH = 128k
+  FLASH : ORIGIN = 0x60001000, LENGTH = 188k
   RAM : ORIGIN = 0x61000000, LENGTH = 2M
 }
 
