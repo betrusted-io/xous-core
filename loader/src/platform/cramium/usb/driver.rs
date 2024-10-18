@@ -9,8 +9,6 @@ use cramium_hal::usb::utra::*;
 use super::*;
 
 pub(crate) static mut USB: Option<CorigineUsb> = None;
-// todo: figure out how to make this less gross
-pub(crate) static mut UMS_STATE: UmsState = UmsState::Idle;
 
 pub fn init_usb() {
     let mut usb = unsafe {
@@ -25,7 +23,7 @@ pub fn init_usb() {
     usb.assign_handler(handle_event);
 
     // initialize the "disk" area
-    let disk = unsafe { core::slice::from_raw_parts_mut(RAMDISK_ADDRESS as *mut u8, RAMDISK_LEN) };
+    let disk = mass_storage::conjure_disk();
     disk.fill(0);
     disk[..MBR_TEMPLATE.len()].copy_from_slice(&MBR_TEMPLATE);
     //set block size
@@ -38,9 +36,9 @@ pub fn init_usb() {
     irq_setup();
     enable_irq(utralib::utra::irqarray1::IRQARRAY1_IRQ);
     // for testing
-    // enable_irq(utralib::utra::irqarray19::IRQARRAY19_IRQ);
-    // let mut irqarray19 = utralib::CSR::new(utralib::utra::irqarray19::HW_IRQARRAY19_BASE as *mut u32);
-    // irqarray19.wo(utralib::utra::irqarray19::EV_ENABLE, 0x80);
+    enable_irq(utralib::utra::irqarray19::IRQARRAY19_IRQ);
+    let mut irqarray19 = utralib::CSR::new(utralib::utra::irqarray19::HW_IRQARRAY19_BASE as *mut u32);
+    irqarray19.wo(utralib::utra::irqarray19::EV_ENABLE, 0x80);
 
     unsafe {
         USB = Some(usb);
@@ -107,8 +105,8 @@ pub unsafe fn test_usb() {
             i += 1;
             delay(10_000);
             // for testing interrupt handler
-            // let mut irqarray19 = utralib::CSR::new(utralib::utra::irqarray19::HW_IRQARRAY19_BASE as *mut
-            // u32); irqarray19.wfo(utralib::utra::irqarray19::EV_SOFT_TRIGGER, 0x80);
+            let mut irqarray19 = utralib::CSR::new(utralib::utra::irqarray19::HW_IRQARRAY19_BASE as *mut u32);
+            irqarray19.wfo(utralib::utra::irqarray19::EV_SOFT_TRIGGER, 0x80);
         }
     } else {
         crate::println!("USB core not allocated, skipping USB test");
@@ -171,7 +169,7 @@ fn get_status_request(this: &mut CorigineUsb, request_type: u8, index: u16) {
 }
 
 fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
-    crate::println!("handle_event: {:x?}", event_trb);
+    // crate::println!("handle_event: {:x?}", event_trb);
     let pei = event_trb.get_endpoint_id();
     let ep_num = pei >> 1;
     let udc_ep = &mut this.udc_ep[pei as usize];
@@ -201,7 +199,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                 CompletionCode::try_from(event_trb.dw2.compl_code()).expect("Invalid completion code");
 
             // update the dequeue pointer
-            crate::println!("event_transfer {:x?}", event_trb);
+            // crate::println!("event_transfer {:x?}", event_trb);
             let deq_pt =
                 unsafe { (event_trb.dw0 as *mut TransferTrbS).add(1).as_mut().expect("Couldn't deref ptr") };
             if deq_pt.get_trb_type() == TrbType::Link {
@@ -246,7 +244,6 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
             setup_storage.copy_from_slice(&event_trb.get_raw_setup());
             this.setup = Some(setup_storage);
             this.setup_tag = event_trb.get_setup_tag();
-            crate::println!("  handle_setup_pkt {:x?}, {:x}", setup_storage, this.setup_tag);
 
             let mut setup_pkt = CtrlRequest::default();
             setup_pkt.as_mut().copy_from_slice(&setup_storage);
@@ -256,7 +253,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
             let w_length = setup_pkt.w_length;
 
             crate::println!(
-                "   b_request={:x}, b_request_type={:x}, w_value={:04x}, w_index=0x{:x}, w_length={}",
+                "  b_request={:x}, b_request_type={:x}, w_value={:04x}, w_index=0x{:x}, w_length={}",
                 setup_pkt.b_request,
                 setup_pkt.b_request_type,
                 w_value,
@@ -271,8 +268,9 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         get_status_request(this, setup_pkt.b_request_type, w_index);
                     }
                     USB_REQ_SET_ADDRESS => {
-                        crate::println!("USB_REQ_SET_ADDRESS: {}", w_value);
+                        crate::println!("USB_REQ_SET_ADDRESS: {}, tag: {}", w_value, this.setup_tag);
                         this.set_addr(w_value as u8, CRG_INT_TARGET);
+                        // crate::println!(" ******* set address done {}", w_value & 0xff);
                     }
                     USB_REQ_SET_SEL => {
                         crate::println!("USB_REQ_SET_SEL");
@@ -327,11 +325,10 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                             this.assign_completion_handler(usb_ep1_bulk_in_complete, 1, USB_SEND);
                             this.assign_completion_handler(usb_ep1_bulk_out_complete, 1, USB_RECV);
 
-                            this.ep_enable(1, USB_SEND, 64, EpType::BulkOutbound);
-                            this.ep_enable(1, USB_RECV, 64, EpType::BulkInbound);
+                            enable_mass_storage_eps(this, 1);
 
                             this.bulk_xfer(1, USB_RECV, this.cbw_ptr(), 31, 0, 0);
-                            unsafe { UMS_STATE = UmsState::CommandPhase };
+                            this.ms_state = UmsState::CommandPhase;
                             this.ep0_send(0, 0, 0);
                         }
                     }
@@ -391,10 +388,8 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         {
                             this.ep_unhalt(1, USB_SEND);
                             this.ep_unhalt(1, USB_RECV);
-                            this.ep_enable(1, USB_SEND, 64, EpType::BulkOutbound);
-                            this.ep_enable(1, USB_RECV, 64, EpType::BulkInbound);
-
-                            unsafe { UMS_STATE = UmsState::CommandPhase };
+                            enable_mass_storage_eps(this, ep_num);
+                            this.ms_state = UmsState::CommandPhase;
                             this.bulk_xfer(1, USB_RECV, this.cbw_ptr(), 31, 0, 0);
                             //crg_udc_ep0_status(false,0);
                             this.ep0_send(0, 0, 0);
