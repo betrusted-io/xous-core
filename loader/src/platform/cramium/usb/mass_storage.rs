@@ -48,11 +48,6 @@ pub(crate) const MASS_STORAGE_EPADDR_IN: u8 = 0x81;
 pub(crate) const MASS_STORAGE_EPADDR_OUT: u8 = 0x01;
 
 pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize, length: usize) {
-    crate::println!(
-        "ifram: {:x}, ep0_ptr: {:x}",
-        this.ifram_base_ptr,
-        this.ep0_buf.load(Ordering::SeqCst) as usize
-    );
     let ep0_buf = unsafe {
         core::slice::from_raw_parts_mut(
             this.ep0_buf.load(Ordering::SeqCst) as *mut u8,
