@@ -6,19 +6,6 @@ pub use driver::*;
 pub use irq::*;
 pub use mass_storage::*;
 
-// Locate the "disk"
-// Memory layout is something like this:
-//   0x6200_0000  regular stack grows down from here
-//    (fair bit of empty space - could grow RAM disk more)
-//   0x6112_0000  RAM disk + 1MiB
-//   0x6102_0000  RAM disk
-//   0x6101_F000  scratch page (goes up one page from here)
-//   0x6101_F000  exception stack (grows down)
-//   0x6101_X000  "heap" would go here, except we don't have one
-//   0x6100_0000  rw data for rust is at base of RAM
-const RAMDISK_ADDRESS: usize = utralib::HW_SRAM_MEM + 128 * 1024;
-const RAMDISK_LEN: usize = 1024 * 1024; // 1MiB of RAM allocated to "disk"
-const SECTOR_SIZE: u16 = 512;
 // Note that the trap handler is just placed one page below this, and it
 // needs to be manually updated in the assembly because we can't refer to
 // consts in that snippet of assembly. That handler also needs a default
@@ -94,25 +81,10 @@ const USB_DT_SS_ENDPOINT_COMP: u8 = 0x30;
 #[allow(dead_code)]
 const USB_DT_SSP_ISOC_ENDPOINT_COMP: u8 = 0x31;
 
-#[allow(dead_code)]
-#[repr(i32)]
-pub(crate) enum UmsState {
-    // Thesea ren't used
-    CommandPhase = -10,
-    DataPhase,
-    StatusPhase,
-    Idle = 0,
-    AbortBulkOut,
-    Reset,
-    InterfaceChange,
-    ConfigChange,
-    Disconnect,
-    Exit,
-    Terminated,
-}
+const USB_CAP_TYPE_EXT: u8 = 0x2;
 
 #[allow(dead_code)]
-#[repr(packed)]
+#[repr(C, packed)]
 struct DeviceDescriptor {
     pub b_length: u8,
     pub b_descriptor_type: u8,
@@ -169,7 +141,7 @@ impl AsRef<[u8]> for DeviceDescriptor {
 
 /* USB_DT_DEVICE_QUALIFIER: Device Qualifier descriptor */
 #[allow(dead_code)]
-#[repr(packed)]
+#[repr(C, packed)]
 struct QualifierDescriptor {
     pub b_length: u8,
     pub b_descriptor_type: u8,
@@ -208,7 +180,7 @@ impl AsRef<[u8]> for QualifierDescriptor {
 }
 
 #[allow(dead_code)]
-#[repr(packed)]
+#[repr(C, packed)]
 struct ConfigDescriptor {
     pub b_length: u8,
     pub b_descriptor_type: u8,
@@ -245,7 +217,7 @@ impl AsRef<[u8]> for ConfigDescriptor {
 }
 
 #[allow(dead_code)]
-#[repr(packed)]
+#[repr(C, packed)]
 struct InterfaceDescriptor {
     pub b_length: u8,
     pub b_descriptor_type: u8,
@@ -261,7 +233,7 @@ impl InterfaceDescriptor {
     pub fn default_mass_storage() -> Self {
         InterfaceDescriptor {
             b_length: core::mem::size_of::<Self>() as u8,
-            b_descriptor_type: USB_DT_CONFIG,
+            b_descriptor_type: USB_DT_INTERFACE,
             b_interface_number: 0,
             b_alternate_setting: 0,
             b_num_endpoints: 2,
@@ -283,7 +255,7 @@ impl AsRef<[u8]> for InterfaceDescriptor {
     }
 }
 #[allow(dead_code)]
-#[repr(packed)]
+#[repr(C, packed)]
 struct EndpointDescriptor {
     b_length: u8,
     b_descriptor_type: u8,
@@ -316,7 +288,7 @@ impl AsRef<[u8]> for EndpointDescriptor {
     }
 }
 
-#[repr(C, align(8))]
+#[repr(C, packed)]
 #[derive(Default)]
 struct CtrlRequest {
     b_request_type: u8,
@@ -332,6 +304,179 @@ impl AsMut<[u8]> for CtrlRequest {
                 self as *const CtrlRequest as *mut u8,
                 core::mem::size_of::<CtrlRequest>(),
             ) as &mut [u8]
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[repr(C, packed)]
+struct BosDescriptor {
+    pub b_length: u8,
+    pub b_descriptor_type: u8,
+    pub w_total_length: u16,
+    pub b_num_device_caps: u8,
+}
+impl BosDescriptor {
+    pub fn default_mass_storage(total_length: u16, num_caps: u8) -> Self {
+        BosDescriptor {
+            b_length: core::mem::size_of::<Self>() as u8,
+            b_descriptor_type: USB_DT_BOS,
+            w_total_length: total_length,
+            b_num_device_caps: num_caps,
+        }
+    }
+}
+
+impl AsRef<[u8]> for BosDescriptor {
+    fn as_ref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(
+                self as *const BosDescriptor as *const u8,
+                core::mem::size_of::<BosDescriptor>(),
+            ) as &[u8]
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[repr(C, packed)]
+struct ExtCapDescriptor {
+    pub b_length: u8,
+    pub b_descriptor_type: u8,
+    pub b_dev_capability_type: u8,
+    pub b_mattributes: u32,
+}
+impl ExtCapDescriptor {
+    pub fn default_mass_storage(attributes: u32) -> Self {
+        ExtCapDescriptor {
+            b_length: core::mem::size_of::<Self>() as u8,
+            b_descriptor_type: USB_DT_DEVICE_CAPABILITY,
+            b_dev_capability_type: USB_CAP_TYPE_EXT,
+            b_mattributes: attributes,
+        }
+    }
+}
+
+impl AsRef<[u8]> for ExtCapDescriptor {
+    fn as_ref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(
+                self as *const ExtCapDescriptor as *const u8,
+                core::mem::size_of::<ExtCapDescriptor>(),
+            ) as &[u8]
+        }
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) const USB_LPM_SUPPORT: u8 = 1 << 1; /* supports LPM */
+#[allow(dead_code)]
+pub(crate) const USB_BESL_SUPPORT: u8 = 1 << 2; /* supports BESL */
+#[allow(dead_code)]
+pub(crate) const USB_BESL_BASELINE_VALID: u8 = 1 << 3; /* Baseline BESL valid*/
+#[allow(dead_code)]
+pub(crate) const USB_BESL_DEEP_VALID: u8 = 1 << 4; /* Deep BESL valid */
+
+#[repr(C, packed)]
+#[derive(Default, Debug)]
+struct Cbw {
+    signature: u32,            // Contains 'USBC'
+    tag: u32,                  // Unique per command id
+    data_transfer_length: u32, // Size of the data
+    flags: u8,                 // Direction in bit 7
+    lun: u8,                   // LUN (normally 0)
+    length: u8,                // Of the CDB, <= MAX_COMMAND_SIZE
+    cdb: [u8; 16],             // Command Data Block
+}
+impl AsMut<[u8]> for Cbw {
+    fn as_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(self as *mut Cbw as *mut u8, core::mem::size_of::<Cbw>())
+                as &mut [u8]
+        }
+    }
+}
+impl AsRef<[u8]> for Cbw {
+    fn as_ref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(self as *const Cbw as *const u8, core::mem::size_of::<Cbw>())
+                as &[u8]
+        }
+    }
+}
+
+const BULK_CBW_SIG: u32 = 0x43425355; /* Spells out USBC */
+
+#[repr(C, packed)]
+#[derive(Default)]
+struct Csw {
+    pub signature: u32, // Should = 'USBS'
+    pub tag: u32,       // Same as original command
+    pub residue: u32,   // Amount not transferred
+    pub status: u8,     // See below
+}
+impl Csw {
+    fn derive() -> Csw {
+        let mut csw = Csw::default();
+        csw.as_mut().copy_from_slice(unsafe {
+            core::slice::from_raw_parts(mass_storage::CSW_ADDR as *mut u8, size_of::<Csw>())
+        });
+        csw
+    }
+
+    fn update_hw(&self) {
+        let csw_buf = unsafe { core::slice::from_raw_parts_mut(CSW_ADDR as *mut u8, size_of::<Csw>()) };
+        csw_buf.copy_from_slice(self.as_ref());
+    }
+
+    fn send(&self, usb: &mut cramium_hal::usb::driver::CorigineUsb) {
+        let csw_buf = unsafe { core::slice::from_raw_parts_mut(CSW_ADDR as *mut u8, size_of::<Csw>()) };
+        csw_buf.copy_from_slice(self.as_ref());
+        usb.bulk_xfer(1, cramium_hal::usb::driver::USB_SEND, CSW_ADDR, size_of::<Csw>(), 0, 0);
+        usb.ms_state = cramium_hal::usb::driver::UmsState::StatusPhase;
+    }
+}
+const BULK_CSW_SIG: u32 = 0x53425355; /* Spells out 'USBS' */
+
+impl AsRef<[u8]> for Csw {
+    fn as_ref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(self as *const Csw as *const u8, core::mem::size_of::<Csw>())
+                as &[u8]
+        }
+    }
+}
+
+impl AsMut<[u8]> for Csw {
+    fn as_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(self as *mut Csw as *mut u8, core::mem::size_of::<Csw>())
+                as &mut [u8]
+        }
+    }
+}
+
+#[repr(C, packed)]
+struct InquiryResponse {
+    pub peripheral_device_type: u8,       // Byte 0: Peripheral Device Type (PDT)
+    pub rmb: u8,                          // Byte 1: Removable Media Bit (RMB) and Device Type Modifier
+    pub version: u8,                      // Byte 2: ISO/ECMA/ANSI Version
+    pub response_data_format: u8,         // Byte 3: Response Data Format (RDF) and capabilities
+    pub additional_length: u8,            // Byte 4: Additional Length (number of bytes after byte 7)
+    pub reserved1: u8,                    // Byte 5: Reserved
+    pub reserved2: u8,                    // Byte 6: Reserved
+    pub reserved3: u8,                    // Byte 7: Reserved
+    pub vendor_identification: [u8; 8],   // Byte 8-15: Vendor Identification (ASCII)
+    pub product_identification: [u8; 16], // Byte 16-31: Product Identification (ASCII)
+    pub product_revision_level: [u8; 4],  // Byte 32-35: Product Revision Level (ASCII)
+}
+impl AsRef<[u8]> for InquiryResponse {
+    fn as_ref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(
+                self as *const InquiryResponse as *const u8,
+                core::mem::size_of::<InquiryResponse>(),
+            ) as &[u8]
         }
     }
 }
