@@ -5,6 +5,20 @@ use cramium_hal::usb::driver::*;
 
 use super::*;
 
+// Locate the "disk"
+// Memory layout is something like this:
+//   0x6200_0000  regular stack grows down from here
+//    (fair bit of empty space - could grow RAM disk more)
+//   0x6112_0000  RAM disk + 1MiB
+//   0x6102_0000  RAM disk
+//   0x6101_F000  scratch page (goes up one page from here)
+//   0x6101_F000  exception stack (grows down)
+//   0x6101_X000  "heap" would go here, except we don't have one
+//   0x6100_0000  rw data for rust is at base of RAM
+pub(crate) const RAMDISK_ADDRESS: usize = utralib::HW_SRAM_MEM + 128 * 1024;
+pub(crate) const RAMDISK_LEN: usize = 1024 * 1024; // 1MiB of RAM allocated to "disk"
+pub(crate) const SECTOR_SIZE: u16 = 512;
+
 // MBR template
 // 0x0b~0x0C 2 bytes means block size, default 0x200 bytes
 // 0x20~0x23 4 bytes means block number, default 0x400 block
@@ -44,8 +58,20 @@ pub(crate) const MBR_TEMPLATE: [u8; 512] = [
     0x72, 0x74, 0x0D, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAC, 0xCB, 0xD8, 0x55, 0xAA
 ];
 
+pub(crate) const CSW_ADDR: usize = CRG_UDC_MEMBASE + CRG_UDC_APP_BUFOFFSET + CRG_UDC_APP_BUF_LEN;
+pub(crate) const CBW_ADDR: usize = CRG_UDC_MEMBASE + CRG_UDC_APP_BUFOFFSET;
+pub(crate) const EP1_IN_BUF: usize = CRG_UDC_MEMBASE + CRG_UDC_APP_BUFOFFSET + 1024;
+pub(crate) const EP1_IN_BUF_LEN: usize = 1024;
+pub(crate) const EP1_OUT_BUF: usize = CRG_UDC_MEMBASE + CRG_UDC_APP_BUFOFFSET + 2048;
+pub(crate) const EP1_OUT_BUF_LEN: usize = 1024;
+
 pub(crate) const MASS_STORAGE_EPADDR_IN: u8 = 0x81;
 pub(crate) const MASS_STORAGE_EPADDR_OUT: u8 = 0x01;
+
+pub(crate) fn enable_mass_storage_eps(this: &mut CorigineUsb, ep_num: u8) {
+    this.ep_enable(ep_num, USB_RECV, 64, EpType::BulkOutbound);
+    this.ep_enable(ep_num, USB_SEND, 64, EpType::BulkInbound);
+}
 
 pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize, length: usize) {
     let ep0_buf = unsafe {
@@ -83,7 +109,7 @@ pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize,
             crate::println!("*** UNHANDLED ***");
         }
         USB_DT_CONFIG => {
-            crate::println!("USB_DT_CONFIG\r\n");
+            crate::println!("USB_DT_CONFIG");
             let total_length = size_of::<ConfigDescriptor>()
                 + size_of::<InterfaceDescriptor>()
                 + size_of::<EndpointDescriptor>() * 2;
@@ -100,8 +126,8 @@ pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize,
             this.ep0_send(this.ep0_buf.load(Ordering::SeqCst) as usize, buffsize, 0);
         }
         USB_DT_STRING => {
-            crate::println!("USB_DT_STRING\r\n");
             let id = (value & 0xFF) as u8;
+            crate::println!("USB_DT_STRING {}", id);
             let len = if id == 0 {
                 // index 0 is the language type. This is the hard-coded response for "English".
                 ep0_buf[..4].copy_from_slice(&[4, USB_DT_STRING, 9, 4]);
@@ -129,8 +155,16 @@ pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize,
         }
         USB_DT_BOS => {
             crate::println!("USB_DT_BOS");
-            crate::println!("Not supported, repsonding with stall");
-            this.ep_halt(0, USB_RECV);
+            let total_length = size_of::<BosDescriptor>() + size_of::<ExtCapDescriptor>();
+            let bos = BosDescriptor::default_mass_storage(total_length as u16, 1);
+            let ext = ExtCapDescriptor::default_mass_storage((0xfa << 8) | (0x3 << 3));
+            let response: [&[u8]; 2] = [bos.as_ref(), ext.as_ref()];
+            let flattened = response.iter().flat_map(|slice| slice.iter().copied());
+            for (dst, src) in ep0_buf.iter_mut().zip(flattened) {
+                *dst = src
+            }
+            let buffsize = total_length.min(length);
+            this.ep0_send(this.ep0_buf.load(Ordering::SeqCst) as usize, buffsize, 0);
         }
         _ => {
             crate::println!("UNHANDLED SETUP: 0x{:x}", value >> 8);
@@ -139,57 +173,424 @@ pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize,
     }
 }
 
-pub fn usb_ep1_bulk_out_complete(_this: &mut CorigineUsb, _buf_addr: usize, _info: u32, _error: u8) {
-    crate::println!("bulk_out_complete callback TODO");
-    /*
-        let length = info & 0xFFFF;
-        let buf = unsafe {core::slice::from_raw_parts(buf_addr as *const u8, info as usize & 0xFFFF)};
-        let cbw = unsafe { core::slice::from_raw_parts_mut(this.cbw_ptr() as *mut u8, CRG_UDC_APP_BUF_LEN) };
+pub fn usb_ep1_bulk_out_complete(this: &mut CorigineUsb, buf_addr: usize, info: u32, _error: u8) {
+    let length = info & 0xFFFF;
+    let buf = unsafe { core::slice::from_raw_parts(buf_addr as *const u8, info as usize & 0xFFFF) };
+    let mut cbw = Cbw::default();
+    cbw.as_mut().copy_from_slice(&buf[..size_of::<Cbw>()]);
+    let mut csw = Csw::derive();
 
-        if unsafe{UmsState::CommandPhase == UMS_STATE} && (length == 31) { //CBW
+    if UmsState::CommandPhase == this.ms_state && (length == 31) {
+        // CBW
+        if cbw.signature == BULK_CBW_SIG {
+            csw.signature = BULK_CSW_SIG;
+            csw.tag = cbw.tag;
+            csw.update_hw();
+            process_mass_storage_command(this, cbw);
+            // invalid_cbw = 0;
+        } else {
+            crate::println!("Invalid CBW, HALT");
+            this.ep_halt(1, USB_SEND);
+            this.ep_halt(1, USB_RECV);
+            // invalid_cbw = 1;
+        }
+    } else if UmsState::CommandPhase == this.ms_state && (length != 31) {
+        crate::println!("invalid command");
+        this.ep_halt(1, USB_SEND);
+        this.ep_halt(1, USB_RECV);
+        // invalid_cbw = 1;
+    } else if UmsState::DataPhase == this.ms_state {
+        crate::println!("data");
+        //DATA
+        if let Some((addr, len)) = this.ms_addr_len.take() {
+            let app_buf = conjure_app_buf();
+            let disk = conjure_disk();
+            // update the received data to the disk
+            disk[addr..addr + len].copy_from_slice(&app_buf[..len]);
+        } else {
+            crate::println!("Data completion reached without destination for data copy! data dropped.");
+        }
 
-            memcpy(cbw, buf, 31);
-            if(cbw->Signature == BULK_CBW_SIG) {
-                csw->Signature = BULK_CSW_SIG;
-                csw->Tag = cbw->Tag;
-                _process_mass_storage_command(cbw);
-                invalid_cbw = 0;
-            }
-            else {
-                crg_udc_ep_halt(1, USB_SEND);
-                crg_udc_ep_halt(1, USB_RECV);
-                invalid_cbw = 1;
-            }
-        }
-        else if ((UMS_STATE_COMMAND_PHASE == ums_state) && (length != 31)) {
-            crg_udc_ep_halt(1, USB_SEND);
-            crg_udc_ep_halt(1, USB_RECV);
-            invalid_cbw = 1;
-        }
-        else if(UMS_STATE_DATA_PHASE == ums_state) {  //DATA
-            csw->Residue = 0;
-            csw->Status = 0;
-
-            crg_udc_bulk_xfer(1, USB_SEND, (uint8_t *)csw, 13, 0, 0);
-            ums_state = UMS_STATE_STATUS_PHASE;
-        }
-    */
+        csw.residue = 0;
+        csw.status = 0;
+        csw.send(this);
+    } else {
+        crate::println!("uhhh wtf");
+    }
 }
 
-pub fn usb_ep1_bulk_in_complete(_this: &mut CorigineUsb, _buf_addr: usize, _info: u32, _error: u8) {
-    crate::println!("bulk_in_complete callback TODO");
-    /*
-    uint32_t length = info & 0xFFFF;
-
-    if(UMS_STATE_DATA_PHASE == ums_state) {  //DATA
-
-        crg_udc_bulk_xfer(1, USB_SEND, (uint8_t *)csw, 13, 0, 0);
-        ums_state = UMS_STATE_STATUS_PHASE;
+pub fn usb_ep1_bulk_in_complete(this: &mut CorigineUsb, _buf_addr: usize, info: u32, _error: u8) {
+    crate::println!("bulk IN handler");
+    let length = info & 0xFFFF;
+    if UmsState::DataPhase == this.ms_state {
+        //DATA
+        this.bulk_xfer(1, USB_SEND, CSW_ADDR, 13, 0, 0);
+        this.ms_state = UmsState::StatusPhase;
+    } else if UmsState::StatusPhase == this.ms_state && length == 13 {
+        //CSW
+        this.bulk_xfer(1, USB_RECV, CBW_ADDR, 31, 0, 0);
+        this.ms_state = UmsState::CommandPhase;
     }
-    else if(UMS_STATE_STATUS_PHASE == ums_state && length == 13)  //CSW
-    {
-        crg_udc_bulk_xfer(1, USB_RECV, (uint8_t *)cbw, 31, 0, 0);
-        ums_state = UMS_STATE_COMMAND_PHASE;
+}
+
+fn process_mass_storage_command(this: &mut CorigineUsb, cbw: Cbw) {
+    match cbw.cdb[0] {
+      0x00 => { /* Request the device to report if it is ready */
+        process_test_unit_ready(this, cbw);
+      }
+      0x03 => { /* Transfer status sense data to the host */
+        process_request_sense(this, cbw);
+      }
+      0x12 => { /* Inquity command. Get device information */
+
+        process_inquiry_command(this, cbw);
+      }
+      0x1E => { /* Prevent or allow the removal of media from a removable
+                 ** media device
+                 */
+        process_prevent_allow_medium_removal(this, cbw);
+      }
+      0x25 => { /* Report current media capacity */
+        process_report_capacity(this, cbw);
+      }
+      0x9e => {
+        process_read_capacity_16(this, cbw);
+      }
+      0x28 => { /* Read (10) Transfer binary data from media to the host */
+        process_read_command(this, cbw);
+      }
+      0x2A => { /* Write (10) Transfer binary data from the host to the
+                 ** media
+                 */
+        process_write_command(this, cbw);
+      }
+      0xAA => { /* Write (12) Transfer binary data from the host to the
+                 ** media
+                 */
+         process_write12_command(this, cbw);
+      }
+      0x01 | /* Position a head of the drive to zero track */
+      0x04 | /* Format unformatted media */
+      0x1A |
+      0x1B | /* Request a request a removable-media device to load or
+                 ** unload its media
+                 */
+      0x1D | /* Perform a hard reset and execute diagnostics */
+      0x23 | /* Read Format Capacities. Report current media capacity and
+                 ** formattable capacities supported by media
+                 */
+      0x2B | /* Seek the device to a specified address */
+      0x2E | /* Transfer binary data from the host to the media and
+                 ** verify data
+                 */
+      0x2F | /* Verify data on the media */
+      0x55 | /* Allow the host to set parameters in a peripheral */
+      0x5A | /* Report parameters to the host */
+      0xA8 /* Read (12) Transfer binary data from the media to the host */ => {
+        process_unsupported_command(this, cbw);
+      }
+      _ => {
+        process_unsupported_command(this, cbw);
+     }
     }
-    */
+}
+
+fn process_test_unit_ready(this: &mut CorigineUsb, _cbw: Cbw) {
+    let mut csw = Csw::derive();
+    csw.residue = 0;
+    csw.status = 0;
+
+    csw.send(this);
+}
+
+fn process_request_sense(this: &mut CorigineUsb, cbw: Cbw) {
+    let mut csw = Csw::derive();
+    if cbw.data_transfer_length == 0 {
+        csw.residue = 0;
+        csw.status = 0;
+        csw.send(this);
+        crate::println!("UMS_STATE_STATUS_PHASE\r\n");
+    } else if cbw.flags & 0x80 != 0 {
+        if cbw.data_transfer_length < 18 {
+            let ep1_in = unsafe { core::slice::from_raw_parts_mut(EP1_IN_BUF as *mut u8, EP1_IN_BUF_LEN) };
+            ep1_in[..18].fill(0);
+            this.bulk_xfer(1, USB_SEND, EP1_IN_BUF, cbw.data_transfer_length as usize, 0, 0);
+            this.ms_state = UmsState::DataPhase;
+            csw.residue = 0;
+            csw.status = 0;
+        } else if cbw.data_transfer_length >= 18 {
+            let ep1_in = unsafe { core::slice::from_raw_parts_mut(EP1_IN_BUF as *mut u8, EP1_IN_BUF_LEN) };
+            ep1_in[..18].fill(0);
+            this.bulk_xfer(1, USB_SEND, EP1_IN_BUF, 18, 0, 0);
+            this.ms_state = UmsState::DataPhase;
+            csw.residue = cbw.data_transfer_length - 18;
+            csw.status = 0;
+        }
+    }
+    csw.update_hw();
+}
+
+fn process_inquiry_command(this: &mut CorigineUsb, cbw: Cbw) {
+    let mut csw = Csw::derive();
+    let inquiry_data = InquiryResponse {
+        peripheral_device_type: 0,
+        rmb: 0,
+        version: 0,
+        response_data_format: 1,
+        additional_length: 31,
+        reserved1: 0,
+        reserved2: 0,
+        reserved3: 0,
+        vendor_identification: *b"Bao Semi",
+        product_identification: *b"USB update vdisk",
+        product_revision_level: *b"demo",
+    };
+
+    if cbw.data_transfer_length == 0 {
+        csw.residue = 0;
+        csw.status = 0;
+        csw.send(this);
+    } else if cbw.flags & 0x80 != 0 {
+        if cbw.data_transfer_length < 36 {
+            let ep1_in = unsafe { core::slice::from_raw_parts_mut(EP1_IN_BUF as *mut u8, EP1_IN_BUF_LEN) };
+            ep1_in[..36].fill(0);
+            this.bulk_xfer(1, USB_SEND, EP1_IN_BUF, cbw.data_transfer_length as usize, 0, 0);
+            this.ms_state = UmsState::DataPhase;
+            csw.residue = 0;
+            csw.status = 0;
+        } else if cbw.data_transfer_length as usize >= size_of::<InquiryResponse>() {
+            let ep1_in = unsafe { core::slice::from_raw_parts_mut(EP1_IN_BUF as *mut u8, EP1_IN_BUF_LEN) };
+            ep1_in[..size_of::<InquiryResponse>()].copy_from_slice(inquiry_data.as_ref());
+
+            this.bulk_xfer(1, USB_SEND, EP1_IN_BUF, size_of::<InquiryResponse>(), 0, 0);
+            this.ms_state = UmsState::DataPhase;
+            csw.residue = cbw.data_transfer_length - size_of::<InquiryResponse>() as u32;
+            csw.status = 0;
+        }
+    }
+    csw.update_hw();
+}
+
+fn process_prevent_allow_medium_removal(this: &mut CorigineUsb, _cbw: Cbw) {
+    let mut csw = Csw::derive();
+    csw.residue = 0;
+    csw.status = 0;
+    csw.send(this);
+}
+
+fn process_report_capacity(this: &mut CorigineUsb, cbw: Cbw) {
+    crate::println!("REPORT CAPACITY");
+    let mut csw = Csw::derive();
+    let rc_lba = RAMDISK_LEN / SECTOR_SIZE as usize - 1;
+    let rc_bl: u32 = SECTOR_SIZE as u32;
+    let mut capacity = [0u8; 8];
+
+    capacity[..4].copy_from_slice(&rc_lba.to_be_bytes());
+    capacity[4..].copy_from_slice(&rc_bl.to_be_bytes());
+
+    if cbw.flags & 0x80 != 0 {
+        let ep1_in = unsafe { core::slice::from_raw_parts_mut(EP1_IN_BUF as *mut u8, EP1_IN_BUF_LEN) };
+        ep1_in[..8].fill(0);
+        ep1_in[..8].copy_from_slice(&capacity);
+        this.bulk_xfer(1, USB_SEND, EP1_IN_BUF, 8, 0, 0);
+        this.ms_state = UmsState::DataPhase;
+    } else {
+        csw.send(this);
+    }
+    csw.residue = 0;
+    csw.status = 0;
+    csw.update_hw();
+}
+
+fn process_read_capacity_16(this: &mut CorigineUsb, _cbw: Cbw) {
+    let rc_lba = (RAMDISK_LEN / SECTOR_SIZE as usize - 1) as u64;
+    let rc_bl: u32 = SECTOR_SIZE as u32;
+
+    let mut response = [0u8; 32];
+    response[..8].copy_from_slice(&rc_lba.to_be_bytes());
+    response[8..12].copy_from_slice(&rc_bl.to_be_bytes());
+    let ep1_in = unsafe { core::slice::from_raw_parts_mut(EP1_IN_BUF as *mut u8, EP1_IN_BUF_LEN) };
+    ep1_in[..32].copy_from_slice(&response);
+    this.bulk_xfer(1, USB_SEND, EP1_IN_BUF, 32, 0, 0);
+    this.ms_state = UmsState::DataPhase;
+}
+
+fn process_unsupported_command(this: &mut CorigineUsb, cbw: Cbw) {
+    let mut csw = Csw::derive();
+    csw.residue = 0;
+    csw.status = 0;
+
+    if cbw.flags & 0x80 != 0 {
+        this.bulk_xfer(1, USB_SEND, EP1_IN_BUF, 0, 0, 0);
+        this.ms_state = UmsState::DataPhase;
+    } else {
+        csw.send(this);
+    }
+    csw.update_hw();
+}
+
+fn process_read_command(this: &mut CorigineUsb, cbw: Cbw) {
+    let mut csw = Csw::derive();
+    let mut lba;
+    let mut length;
+
+    lba = (cbw.cdb[4] as u32) << 8;
+    lba |= cbw.cdb[5] as u32;
+    length = (cbw.cdb[7] as u32) << 8;
+    length |= cbw.cdb[8] as u32;
+
+    length *= SECTOR_SIZE as u32;
+
+    if cbw.flags & 0x80 == 0 {
+        csw.residue = cbw.data_transfer_length;
+        csw.status = 2;
+        this.bulk_xfer(1, USB_RECV, app_buf_addr(), length as usize, 0, 0);
+        this.ms_addr_len = Some((RAMDISK_ADDRESS + lba as usize * 512, length as usize));
+        this.ms_state = UmsState::DataPhase;
+        return;
+    }
+    crate::println!(
+        "DISK READ address = 0x{:x}, length = 0x{:x}",
+        RAMDISK_ADDRESS + lba as usize * 512,
+        length
+    );
+    if cbw.data_transfer_length == 0 {
+        csw.residue = 0;
+        csw.status = 2;
+
+        csw.send(this);
+    } else {
+        csw.residue = 0;
+        csw.status = 0;
+        if cbw.data_transfer_length < length {
+            length = cbw.data_transfer_length;
+            csw.residue = cbw.data_transfer_length;
+            csw.status = 1;
+        } else if cbw.data_transfer_length > length {
+            csw.residue = cbw.data_transfer_length - length;
+            csw.status = 1;
+        }
+        let app_buf = conjure_app_buf();
+        let disk = conjure_disk();
+        app_buf[..length as usize]
+            .copy_from_slice(&disk[lba as usize * 512..lba as usize * 512 + length as usize]);
+        this.bulk_xfer(1, USB_SEND, app_buf.as_ptr() as usize, length as usize, 0, 0);
+        this.ms_state = UmsState::DataPhase;
+    }
+}
+
+fn process_write_command(this: &mut CorigineUsb, cbw: Cbw) {
+    let mut csw = Csw::derive();
+
+    let mut lba: u32;
+    let mut length: u32;
+
+    lba = (cbw.cdb[4] as u32) << 8;
+    lba |= cbw.cdb[5] as u32;
+    length = (cbw.cdb[7] as u32) << 8;
+    length |= cbw.cdb[8] as u32;
+
+    length *= SECTOR_SIZE as u32;
+
+    if cbw.flags & 0x80 != 0 {
+        csw.residue = cbw.data_transfer_length;
+        csw.status = 2;
+        let app_buf = conjure_app_buf();
+        let disk = conjure_disk();
+        app_buf[..length as usize]
+            .copy_from_slice(&disk[lba as usize * 512..lba as usize * 512 + length as usize]);
+        this.bulk_xfer(1, USB_SEND, app_buf.as_ptr() as usize, length as usize, 0, 0);
+        this.ms_state = UmsState::DataPhase;
+        csw.update_hw();
+        return;
+    }
+
+    crate::println!("Write address = 0x{:x}, length = 0x{:x}", RAMDISK_ADDRESS + lba as usize * 512, length);
+
+    if cbw.data_transfer_length == 0 {
+        csw.residue = 0;
+        csw.status = 2;
+        csw.send(this);
+    } else {
+        csw.residue = 0;
+        csw.status = 0;
+        if cbw.data_transfer_length > length {
+            csw.residue = cbw.data_transfer_length - length;
+            length = cbw.data_transfer_length;
+            csw.status = 1;
+        } else if cbw.data_transfer_length < length {
+            csw.residue = cbw.data_transfer_length;
+            csw.status = 1;
+            length = cbw.data_transfer_length;
+        }
+        this.bulk_xfer(1, USB_RECV, app_buf_addr(), length as usize, 0, 0);
+        this.ms_addr_len = Some((RAMDISK_ADDRESS + lba as usize * 512, length as usize));
+        this.ms_state = UmsState::DataPhase;
+    }
+    csw.update_hw();
+}
+
+fn process_write12_command(this: &mut CorigineUsb, cbw: Cbw) {
+    let mut csw = Csw::derive();
+
+    let mut lba;
+    let mut length;
+
+    lba = (cbw.cdb[2] as u32) << 24;
+    lba |= (cbw.cdb[3] as u32) << 16;
+    lba |= (cbw.cdb[4] as u32) << 8;
+    lba |= (cbw.cdb[5] as u32) << 0;
+    length = (cbw.cdb[6] as u32) << 24;
+    length |= (cbw.cdb[7] as u32) << 16;
+    length |= (cbw.cdb[8] as u32) << 8;
+    length |= (cbw.cdb[9] as u32) << 0;
+
+    length *= 512;
+
+    if cbw.flags & 0x80 != 0 {
+        csw.residue = cbw.data_transfer_length;
+        csw.status = 2;
+        // note: zero-length transfer but we still update the buffer because that's what the reference driver
+        // does
+        let app_buf = conjure_app_buf();
+        let disk = conjure_disk();
+        app_buf[..length as usize]
+            .copy_from_slice(&disk[lba as usize * 512..lba as usize * 512 + length as usize]);
+        this.bulk_xfer(1, USB_SEND, app_buf.as_ptr() as usize, 0, 0, 0);
+
+        this.ms_state = UmsState::DataPhase;
+        csw.update_hw();
+        return;
+    }
+
+    if cbw.data_transfer_length == 0 {
+        csw.residue = 0;
+        csw.status = 2;
+        csw.send(this);
+        return;
+    } else {
+        csw.residue = 0;
+        csw.status = 0;
+        if cbw.data_transfer_length > length {
+            csw.residue = cbw.data_transfer_length - length;
+            length = cbw.data_transfer_length;
+        } else if cbw.data_transfer_length < length {
+            csw.residue = cbw.data_transfer_length;
+            csw.status = 2;
+            length = cbw.data_transfer_length;
+        }
+        this.bulk_xfer(1, USB_RECV, app_buf_addr(), length as usize, 0, 0);
+        this.ms_addr_len = Some((RAMDISK_ADDRESS + lba as usize * 512, length as usize));
+        this.ms_state = UmsState::DataPhase;
+    }
+    csw.update_hw();
+}
+
+pub(crate) fn app_buf_addr() -> usize { CRG_UDC_APP_BUFOFFSET + 1024 }
+pub(crate) fn conjure_app_buf() -> &'static mut [u8] {
+    unsafe { core::slice::from_raw_parts_mut(app_buf_addr() as *mut u8, CRG_UDC_APP_BUFSIZE - 1024 + 4096) } // added +1 page in CRG_UDC_MEMBASE
+}
+
+pub(crate) fn conjure_disk() -> &'static mut [u8] {
+    unsafe { core::slice::from_raw_parts_mut(RAMDISK_ADDRESS as *mut u8, RAMDISK_LEN) }
 }
