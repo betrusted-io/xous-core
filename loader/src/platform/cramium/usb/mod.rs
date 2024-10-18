@@ -6,10 +6,18 @@ pub use driver::*;
 pub use irq::*;
 pub use mass_storage::*;
 
-// locate the "disk" at 1MiB -- middle of the SRAM region. This can be
-// fine-tuned later.
-const RAMDISK_ADDRESS: usize = utralib::HW_SRAM_MEM + 1024 * 1024;
-const RAMDISK_LEN: usize = 512 * 1024; // 512k of RAM allocated to "disk"
+// Locate the "disk"
+// Memory layout is something like this:
+//   0x6200_0000  regular stack grows down from here
+//    (fair bit of empty space - could grow RAM disk more)
+//   0x6112_0000  RAM disk + 1MiB
+//   0x6102_0000  RAM disk
+//   0x6101_F000  scratch page (goes up one page from here)
+//   0x6101_F000  exception stack (grows down)
+//   0x6101_X000  "heap" would go here, except we don't have one
+//   0x6100_0000  rw data for rust is at base of RAM
+const RAMDISK_ADDRESS: usize = utralib::HW_SRAM_MEM + 128 * 1024;
+const RAMDISK_LEN: usize = 1024 * 1024; // 1MiB of RAM allocated to "disk"
 const SECTOR_SIZE: u16 = 512;
 // Note that the trap handler is just placed one page below this, and it
 // needs to be manually updated in the assembly because we can't refer to
