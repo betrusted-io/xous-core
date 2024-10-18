@@ -43,7 +43,7 @@ pub unsafe extern "C" fn _start_trap() -> ! {
             #[rustfmt::skip]
             core::arch::asm!(
                 "csrw        mscratch, sp",
-                "li          sp, 0x610FF000", // scratch page: one page below the disk start
+                "li          sp, 0x6101F000", // scratch page: one page below the disk start
                 "sw       x1, 0*4(sp)",
                 // Skip SP for now
                 "sw       x3, 2*4(sp)",
@@ -83,7 +83,7 @@ pub unsafe extern "C" fn _start_trap() -> ! {
                 "csrr        t0, mscratch",
                 "sw          t0, 1*4(sp)",
                 // Restore a default stack pointer
-                "li          sp, 0x610FF000", /* builds down from scratch page */
+                "li          sp, 0x6101F000", /* builds down from scratch page */
                 // Note that registers $a0-$a7 still contain the arguments
                 "j           _start_trap_rust",
                 // Note to self: trying to assign the scratch and default pages using in(reg) syntax
@@ -169,10 +169,17 @@ pub extern "C" fn trap_handler(
             unsafe {
                 if let Some(ref mut usb_ref) = USB {
                     let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
+
+                    // immediately clear the interrupt and re-enable it so we can catch an interrupt
+                    // that is generated while we are handling the interrupt.
                     let pending = usb.irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
+                    // clear pending
+                    usb.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, pending);
+                    // re-enable interrupts
+                    usb.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
 
                     let status = usb.csr.r(USBSTS);
-                    // self.print_status(status);
+                    // usb.print_status(status);
                     if (status & usb.csr.ms(USBSTS_SYSTEM_ERR, 1)) != 0 {
                         crate::println!("System error");
                         usb.csr.wfo(USBSTS_SYSTEM_ERR, 1);
@@ -199,13 +206,9 @@ pub extern "C" fn trap_handler(
                             crate::println!("Result: {:?}", result);
                         }
                         if usb.csr.rf(IMAN_IE) != 0 {
-                            usb.csr.rmwf(IMAN_IE, 1);
+                            usb.csr.wo(IMAN, usb.csr.ms(IMAN_IE, 1) | usb.csr.ms(IMAN_IP, 1));
                         }
                     }
-                    // clear pending
-                    usb.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, pending);
-                    // re-enable interrupts
-                    usb.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
                 }
             }
         }
@@ -213,7 +216,6 @@ pub extern "C" fn trap_handler(
             // handle irq19 sw trigger test
             let mut irqarray19 = utralib::CSR::new(utralib::utra::irqarray19::HW_IRQARRAY19_BASE as *mut u32);
             let pending = irqarray19.r(utralib::utra::irqarray19::EV_PENDING);
-            crate::println!("pending {:x}", (pending << 16 | 19)); // encode the irq bank number and bit number as [bit | bank]
             irqarray19.wo(utralib::utra::irqarray19::EV_PENDING, pending);
             // software interrupt should not require a 0-write to reset it
         }
