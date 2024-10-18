@@ -57,7 +57,7 @@ const CRG_UDC_EP_TRSIZE: usize = CRG_TD_RING_SIZE * CRG_EP_NUM * 2 * size_of::<T
 /// allocate 0x400 bytes for EP0 Buffer, Normally EP0 TRB transfer length will not greater than 1K
 pub const CRG_UDC_EP0_REQBUFSIZE: usize = 0x400;
 pub const CRG_UDC_APP_BUF_LEN: usize = 512;
-const CRG_UDC_APP_BUFSIZE: usize = CRG_EP_NUM * 2 * CRG_UDC_APP_BUF_LEN;
+pub const CRG_UDC_APP_BUFSIZE: usize = CRG_EP_NUM * 2 * CRG_UDC_APP_BUF_LEN;
 
 pub const CRG_IFRAM_PAGES: usize = 22;
 pub const CRG_UDC_MEMBASE: usize =
@@ -70,7 +70,7 @@ const CRG_UDC_EPCX_OFFSET: usize = CRG_UDC_EVENTRING_OFFSET + CRG_UDC_EVENTRINGS
 const CRG_UDC_EP0_TR_OFFSET: usize = CRG_UDC_EPCX_OFFSET + CRG_UDC_EPCXSIZE;
 const CRG_UDC_EP_TR_OFFSET: usize = CRG_UDC_EP0_TR_OFFSET + CRG_UDC_EP0_TRSIZE;
 pub const CRG_UDC_EP0_BUF_OFFSET: usize = CRG_UDC_EP_TR_OFFSET + CRG_UDC_EP_TRSIZE;
-const CRG_UDC_APP_BUFOFFSET: usize = CRG_UDC_EP0_BUF_OFFSET + CRG_UDC_EP0_REQBUFSIZE;
+pub const CRG_UDC_APP_BUFOFFSET: usize = CRG_UDC_EP0_BUF_OFFSET + CRG_UDC_EP0_REQBUFSIZE;
 pub const CRG_UDC_TOTAL_MEM_LEN: usize = CRG_UDC_APP_BUFOFFSET + CRG_UDC_APP_BUFSIZE;
 
 const MAX_TRB_XFER_LEN: usize = 64 * 1024;
@@ -805,8 +805,24 @@ pub enum UsbDeviceState {
     Suspended,
 }
 
+#[allow(dead_code)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy)]
+pub enum UmsState {
+    CommandPhase,
+    DataPhase,
+    StatusPhase,
+    Idle,
+    AbortBulkOut,
+    Reset,
+    InterfaceChange,
+    ConfigChange,
+    Disconnect,
+    Exit,
+    Terminated,
+}
+
 pub struct CorigineUsb {
-    ifram_base_ptr: usize,
+    pub ifram_base_ptr: usize,
     pub csr: AtomicCsr<u32>,
     pub irq_csr: AtomicCsr<u32>,
     #[cfg(feature = "std")]
@@ -846,6 +862,12 @@ pub struct CorigineUsb {
 
     pub state: UsbDeviceState,
     pub cur_interface_num: u8,
+
+    // used by USB mass storage stacks to track connection state. Maybe we
+    // can find a better place for it, but we need a spot that is accessible
+    // via the interrupt handler.
+    pub ms_state: UmsState,
+    pub ms_addr_len: Option<(usize, usize)>,
 }
 impl CorigineUsb {
     /// Safety: this function is generally pretty unsafe because the underlying hardware needs raw pointers,
@@ -902,6 +924,8 @@ impl CorigineUsb {
             handler: None,
             state: UsbDeviceState::NotAttached,
             cur_interface_num: 0,
+            ms_state: UmsState::Idle,
+            ms_addr_len: None,
         }
     }
 
@@ -1306,13 +1330,10 @@ impl CorigineUsb {
     }
 
     pub fn issue_command(&mut self, cmd: CmdType, p0: u32, p1: u32) -> core::result::Result<(), Error> {
-        let check_complete = self.csr.rf(USBCMD_RUN_STOP) != 0;
-        if check_complete {
-            if self.csr.rf(CMDCTRL_ACTIVE) != 0 {
-                // println!("issue_command(): prev command is not complete!");
-                #[cfg(feature = "std")]
-                log::error!("issue_command: core busy");
-                return Err(Error::CoreBusy);
+        // don't allow overlapping commands. This can hang the system if the USB core is wedged.
+        loop {
+            if self.csr.rf(CMDCTRL_ACTIVE) == 0 {
+                break;
             }
         }
         self.csr.wo(CMDPARA0, p0);
@@ -1320,25 +1341,22 @@ impl CorigineUsb {
         self.csr.wo(CMDCTRL, self.csr.ms(CMDCTRL_ACTIVE, 1) | self.csr.ms(CMDCTRL_TYPE, cmd as u32));
         #[cfg(feature = "std")]
         log::debug!(
-            "issue_command: {:?} <- {:x}, {:x} check={:?}",
+            "issue_command: {:?} <- {:x}, {:x}",
             CmdType::try_from(self.csr.rf(CMDCTRL_TYPE)),
             self.csr.r(CMDPARA0),
             self.csr.r(CMDPARA1),
-            check_complete
         );
         compiler_fence(Ordering::SeqCst);
-        if check_complete {
-            loop {
-                if self.csr.rf(CMDCTRL_ACTIVE) == 0 {
-                    break;
-                }
+        loop {
+            if self.csr.rf(CMDCTRL_ACTIVE) == 0 {
+                break;
             }
-            if self.csr.rf(CMDCTRL_STATUS) != 0 {
-                // println!("...issue_command(): fail");
-                return Err(Error::CmdFailure);
-            }
-            // println!("issue_command(): success");
         }
+        if self.csr.rf(CMDCTRL_STATUS) != 0 {
+            // println!("...issue_command(): fail");
+            return Err(Error::CmdFailure);
+        }
+        // println!("issue_command(): success");
         Ok(())
     }
 
@@ -1494,11 +1512,11 @@ impl CorigineUsb {
         let enq_pt =
             unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
         enq_pt.control_status_trb(udc_ep.pcs, true, false, self.setup_tag, target, USB_SEND);
-
-        // TODO: fix raw pointer manips with something more sane?
+        // crate::println!("enq_pt {:x}: {:x?}", enq_pt as *const TransferTrbS as usize, enq_pt);
         let (_enq_pt, _pcs) = udc_ep.increment_enq_pt();
         if addr != 0 {
-            self.suppress_ep0_send_set_addr = true; // signal to the usb_device stack that the HW has already ack'd this with a 0-length write
+            // signal to the usb_device stack that the HW has already ack'd this with a 0-length write
+            self.suppress_ep0_send_set_addr = true;
         }
         compiler_fence(Ordering::SeqCst);
         self.knock_doorbell(0);
