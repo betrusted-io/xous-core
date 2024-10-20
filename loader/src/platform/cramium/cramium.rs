@@ -4,6 +4,8 @@ use cramium_hal::udma::PeriphId;
 use cramium_hal::udma::UdmaGlobalConfig;
 use utralib::generated::*;
 
+use crate::platform::cramium::qr;
+
 // Notes about the reset vector location
 // This can be set using fuses in the IFR (also called 'info') region
 // The offset is an 8-bit value, which is shifted into a final location
@@ -60,6 +62,7 @@ use utralib::generated::*;
       -[ ] bring mbox routine into loader so we can have access to ReRAM write primitive; structure so
            that we can improve this easily as the chip bugs are fixed
       -[ ] Image validation & burning routine
+      -[ ] Loop back and fix USB in the Xous OS mode
 */
 
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
@@ -345,25 +348,30 @@ pub fn early_init() -> u32 {
         crate::println!("LDO result - last value should be 0xe: {:x?}", ldo);
 
         //------------- test USB ---------------
+        /*
         crate::platform::cramium::usb::init_usb();
         // this does not return if USB is initialized correctly...
         unsafe {
             crate::platform::cramium::usb::test_usb();
         }
+        */
 
         //------------- test OV2640 ------------
         let (pid, mid) = cam.read_id(&mut i2c);
         crate::println!("Camera pid {:x}, mid {:x}", pid, mid);
-        cam.init(&mut i2c, cramium_hal::ov2640::Resolution::Res160x120);
+        cam.init(&mut i2c, cramium_hal::ov2640::Resolution::Res320x240);
         cam.poke(&mut i2c, 0xFF, 0x00);
         cam.poke(&mut i2c, 0xDA, 0x01); // YUV LE
         cam.delay(1);
 
-        cam.poke(&mut i2c, 0x5A, 0x28);
-        cam.delay(1);
-        cam.poke(&mut i2c, 0x5B, 0x1E);
-        cam.delay(1);
-        crate::println!("160x120 resolution setup");
+        // muck with ZMOW: only works in 160x120 mode
+        // cam.poke(&mut i2c, 0x5A, 0x28);
+        // cam.delay(1);
+        // cam.poke(&mut i2c, 0x5B, 0x1E);
+        // cam.delay(1);
+        let border = (320 - 256) / 2;
+        cam.set_slicing((border, 0), (320 - border, 240));
+        crate::println!("320x240 resolution setup with 256x240 slicing");
 
         let mut csr_tt = CSR::new(utra::ticktimer::HW_TICKTIMER_BASE as *mut u32);
         csr_tt.wfo(utra::ticktimer::CLOCKS_PER_TICK_CLOCKS_PER_TICK, 200_000);
@@ -371,23 +379,35 @@ pub fn early_init() -> u32 {
 
         let (cols, _rows) = cam.resolution();
         let mut frames = 0;
-        let mut frame = [0u8; 160 * 120];
+        let mut frame = [0u8; 256 * 240];
         while iox_loop.get_gpio_pin(IoxPort::PB, 9) == IoxValue::High {}
         udma_uart.setup_async_read();
         let mut c = 0u8;
+        const BW_THRESH: u8 = 128;
         loop {
+            // toggling this off can improve performance by wasting less time "waiting" for the next frame...
+            // however, you will get "frame rolling" if the capture isn't initiated at exactly the right time.
+            // things could be improved by making this interrupt-driven.
+            // maybe the same effect could also be achieved with frame dropping? not sure. to be researched.
+            while iox_loop.get_gpio_pin(IoxPort::PB, 9) == IoxValue::High {}
+
             cam.capture_async();
 
             // blit fb to sh1107
             for (y, row) in frame.chunks(cols).enumerate() {
-                for (x, &pixval) in row.iter().enumerate() {
-                    if x < 128 && y < 128 {
-                        let luminance = pixval & 0xff;
-                        if luminance > 0b1000_0000 {
-                            sh1107.put_pixel(x as u8, y as u8, true);
+                if y & 1 == 0 {
+                    for (x, &pixval) in row.iter().enumerate() {
+                        if x & 1 == 0 {
+                            if x < 256 && y < 256 {
+                                let luminance = pixval & 0xff;
+                                if luminance > BW_THRESH {
+                                    // flip on y to adjust for sensor orientation
+                                    sh1107.put_pixel((x / 2) as u8, 127 - (y / 2) as u8, true);
+                                }
+                            } else {
+                                break;
+                            }
                         }
-                    } else {
-                        break;
                     }
                 }
             }
@@ -451,12 +471,26 @@ pub fn early_init() -> u32 {
 
             // wait for the transfer to finish
             cam.capture_await(false);
-            let fb: &[u16] = cam.rx_buf();
+            let fb: &[u32] = cam.rx_buf();
 
-            for (&u16src, u8dest) in fb.iter().zip(frame.iter_mut()) {
-                *u8dest = (u16src & 0xff) as u8;
+            // fb is non-cacheable, slow memory. If we stride through it in u16 chunks, we end
+            // up fetching each location *twice*, because the native width of the bus is a u32
+            // Stride through the slice as a u32, allowing us to make the most out of each slow
+            // read from IFRAM, and unpack the values into fast SRAM.
+            for (&u32src, u8dest) in fb.iter().zip(frame.chunks_mut(2)) {
+                u8dest[0] = (u32src & 0xff) as u8;
+                u8dest[1] = ((u32src >> 16) & 0xff) as u8;
             }
             frames += 1;
+
+            let mut candidates: [Option<qr::Point>; 64] = [None; 64];
+            crate::println!("\n\r------------- SEARCH -----------");
+            qr::find_finders(&mut candidates, &frame, BW_THRESH, cols);
+            for candidate in candidates.iter() {
+                if let Some(c) = candidate {
+                    crate::println!("******    candidate: {}, {}    ******", c.x, c.y);
+                }
+            }
         }
 
         // Make this true to have the system shut down by disconnecting its own battery while on battery power
