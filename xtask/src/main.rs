@@ -515,6 +515,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // builder.add_loader_feature("usb-test");
             // builder.add_loader_feature("trng-test");
             // builder.add_loader_feature("dump-trng");
+            // builder.add_loader_feature("usb");
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
             builder.add_feature("swap");
