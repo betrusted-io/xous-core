@@ -273,14 +273,14 @@ impl Ov2640 {
             use utralib::{CSR, utra};
             // abuse the d11ctime timer to create some time-out like thing
             let mut d11c = CSR::new(utra::d11ctime::HW_D11CTIME_BASE as *mut u32);
-            d11c.wfo(utra::d11ctime::CONTROL_COUNT, 33 / 2); // 0.5ms per interval
+            d11c.wfo(utra::d11ctime::CONTROL_COUNT, 333_333); // 1.0ms per interval
             let mut polarity = d11c.rf(utra::d11ctime::HEARTBEAT_BEAT);
             for _ in 0..quantum {
                 while polarity == d11c.rf(utra::d11ctime::HEARTBEAT_BEAT) {}
+                polarity = d11c.rf(utra::d11ctime::HEARTBEAT_BEAT);
             }
             // we have to split this because we don't know where we caught the previous interval
-            polarity = d11c.rf(utra::d11ctime::HEARTBEAT_BEAT);
-            for _ in 0..quantum {
+            if quantum == 1 {
                 while polarity == d11c.rf(utra::d11ctime::HEARTBEAT_BEAT) {}
             }
         }
