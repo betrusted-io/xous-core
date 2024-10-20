@@ -1,4 +1,5 @@
-use cramium_hal::sh1107::Oled128x128;
+use cramium_hal::minigfx::{FrameBuffer, Point};
+use cramium_hal::sh1107::{Mono, Oled128x128};
 
 pub fn show_logo(sh1107: &mut Oled128x128) {
     /* // pattern test for debugging pixel orientations - done with this now, I think?
@@ -20,7 +21,8 @@ pub fn show_logo(sh1107: &mut Oled128x128) {
     for (i, b) in crate::platform::cramium::poweron_bt::LOGO_MAP.iter().enumerate() {
         for bit in 0..8 {
             if (b & (1 << (7 - bit))) != 0 {
-                sh1107.put_pixel(((i % 16) * 8 + bit) as u8, (i / 16) as u8, true);
+                sh1107
+                    .put_pixel(Point::new((i as isize % 16) * 8 + bit, i as isize / 16), Mono::White.into());
             }
         }
     }
