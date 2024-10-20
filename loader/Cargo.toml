@@ -37,6 +37,7 @@ rand_chacha = { version = "0.3.1", optional = true, default-features = false }
 pio-proc = { version = "0.2.2", optional = true }
 pio = { version = "0.2.1", optional = true }
 riscv = { version = "0.5.6", package = "xous-riscv" }
+libm = { version = "0.2.8", optional = true }
 
 [dependencies.com_rs]
 git = "https://github.com/betrusted-io/com_rs"
@@ -70,6 +71,7 @@ cramium-soc = [
     "xous-pl230",
     "rand_chacha",
     "sram-margin",
+    "libm",
     # "boot-delay",
 ]
 board-baosec = ["cramium-hal/board-baosec"]
@@ -106,6 +108,7 @@ dump-trng = []
 fast-fclk = []
 clock-tests = []
 reset-debug = []
+usb = []
 
 # general flags
 debug-print = []
