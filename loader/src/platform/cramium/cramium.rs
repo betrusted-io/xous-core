@@ -75,7 +75,7 @@ pub const KERNEL_OFFSET: usize = 0x5_0000;
 
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() -> u32 {
-    use cramium_hal::{axp2101::WhichLdo, iox::IoxValue, udma::Udma};
+    use cramium_hal::{axp2101::WhichLdo, iox::IoxValue, sh1107::Mono, udma::Udma};
     // Set up the initial clocks. This is done as a "poke array" into a table of addresses.
     // Why? because this is actually how it's done for the chip verification code. We can
     // make this nicer and more abstract with register meanings down the road, if necessary,
@@ -299,6 +299,9 @@ pub fn early_init() -> u32 {
     let iox_loop = iox.clone();
 
     // show the boot logo
+    use cramium_hal::minigfx::{FrameBuffer, Line, Point};
+
+    use crate::platform::cramium::gfx;
     let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(perclk, &mut iox, &mut udma_global);
     sh1107.init();
     crate::platform::cramium::bootlogo::show_logo(&mut sh1107);
@@ -348,15 +351,17 @@ pub fn early_init() -> u32 {
         crate::println!("LDO result - last value should be 0xe: {:x?}", ldo);
 
         //------------- test USB ---------------
-        /*
-        crate::platform::cramium::usb::init_usb();
-        // this does not return if USB is initialized correctly...
-        unsafe {
-            crate::platform::cramium::usb::test_usb();
+        #[cfg(feature = "usb")]
+        {
+            crate::platform::cramium::usb::init_usb();
+            // this does not return if USB is initialized correctly...
+            unsafe {
+                crate::platform::cramium::usb::test_usb();
+            }
         }
-        */
 
         //------------- test OV2640 ------------
+        cam.delay(100);
         let (pid, mid) = cam.read_id(&mut i2c);
         crate::println!("Camera pid {:x}, mid {:x}", pid, mid);
         cam.init(&mut i2c, cramium_hal::ov2640::Resolution::Res320x240);
@@ -369,17 +374,19 @@ pub fn early_init() -> u32 {
         // cam.delay(1);
         // cam.poke(&mut i2c, 0x5B, 0x1E);
         // cam.delay(1);
-        let border = (320 - 256) / 2;
-        cam.set_slicing((border, 0), (320 - border, 240));
+        let (cols, _rows) = cam.resolution();
+        const QR_WIDTH: usize = 256;
+        const QR_HEIGHT: usize = 240;
+        let border = (cols - QR_WIDTH) / 2;
+        cam.set_slicing((border, 0), (cols - border, QR_HEIGHT));
         crate::println!("320x240 resolution setup with 256x240 slicing");
 
         let mut csr_tt = CSR::new(utra::ticktimer::HW_TICKTIMER_BASE as *mut u32);
         csr_tt.wfo(utra::ticktimer::CLOCKS_PER_TICK_CLOCKS_PER_TICK, 200_000);
         csr_tt.wfo(utra::ticktimer::CONTROL_RESET, 1);
 
-        let (cols, _rows) = cam.resolution();
         let mut frames = 0;
-        let mut frame = [0u8; 256 * 240];
+        let mut frame = [0u8; QR_WIDTH * QR_HEIGHT];
         while iox_loop.get_gpio_pin(IoxPort::PB, 9) == IoxValue::High {}
         udma_uart.setup_async_read();
         let mut c = 0u8;
@@ -394,15 +401,25 @@ pub fn early_init() -> u32 {
             cam.capture_async();
 
             // blit fb to sh1107
-            for (y, row) in frame.chunks(cols).enumerate() {
+            for (y, row) in frame.chunks(QR_WIDTH).enumerate() {
                 if y & 1 == 0 {
                     for (x, &pixval) in row.iter().enumerate() {
                         if x & 1 == 0 {
-                            if x < 256 && y < 256 {
+                            if x < sh1107.resolution().x as usize * 2
+                                && y < sh1107.resolution().y as usize * 2
+                                    - (gfx::CHAR_HEIGHT as usize + 1) * 2
+                            {
                                 let luminance = pixval & 0xff;
                                 if luminance > BW_THRESH {
-                                    // flip on y to adjust for sensor orientation
-                                    sh1107.put_pixel((x / 2) as u8, 127 - (y / 2) as u8, true);
+                                    // flip on y to adjust for sensor orientation. Lower left is (0, 0)
+                                    // on the display.
+                                    sh1107.put_pixel(
+                                        Point::new(
+                                            x as isize / 2,
+                                            (sh1107.resolution().y - 1) - (y as isize / 2),
+                                        ),
+                                        Mono::White.into(),
+                                    );
                                 }
                             } else {
                                 break;
@@ -411,44 +428,158 @@ pub fn early_init() -> u32 {
                     }
                 }
             }
-            if udma_uart.read_async(&mut c) != 0 {
-                if c == ' ' as u32 as u8 {
-                    crate::println!("frame {}", frames);
-                    udma_uart.write("------------------ divider ------------------\n\r".as_bytes());
-                    let hex_to_ascii = [
-                        '0' as u32 as u8,
-                        '1' as u32 as u8,
-                        '2' as u32 as u8,
-                        '3' as u32 as u8,
-                        '4' as u32 as u8,
-                        '5' as u32 as u8,
-                        '6' as u32 as u8,
-                        '7' as u32 as u8,
-                        '8' as u32 as u8,
-                        '9' as u32 as u8,
-                        'A' as u32 as u8,
-                        'B' as u32 as u8,
-                        'C' as u32 as u8,
-                        'D' as u32 as u8,
-                        'E' as u32 as u8,
-                        'F' as u32 as u8,
-                    ];
-                    for line in frame.chunks(32) {
-                        let mut output = [0u8; 3 * 32 + 3];
-                        for (i, &b) in line.iter().enumerate() {
-                            output[i * 3 + 0] = hex_to_ascii[(b >> 4) as usize];
-                            output[i * 3 + 1] = hex_to_ascii[(b & 0xF) as usize];
-                            output[i * 3 + 2] = ',' as u32 as u8;
-                        }
-                        output[3 * 32] = '\\' as u32 as u8;
-                        output[3 * 32 + 1] = '\n' as u32 as u8;
-                        output[3 * 32 + 2] = '\r' as u32 as u8;
-                        udma_uart.write(&output);
-                    }
-                    // continue with boot
-                    break;
+
+            let mut candidates: [Option<Point>; 64] = [None; 64];
+            crate::println!("\n\r------------- SEARCH -----------");
+            qr::find_finders(&mut candidates, &frame, BW_THRESH, QR_WIDTH);
+            const CROSSHAIR_LEN: isize = 3;
+            let mut candidates_found = 0;
+            for candidate in candidates.iter() {
+                if let Some(c) = candidate {
+                    candidates_found += 1;
+                    crate::println!("******    candidate: {}, {}    ******", c.x, c.y);
+                    // remap image to screen coordinates (it's 2:1)
+                    let mut c_screen = *c / 2;
+                    // flip coordinates to match the camera data
+                    c_screen = Point::new(c_screen.x, sh1107.resolution().y - 1 - c_screen.y);
+                    // vertical cross hair
+                    gfx::line(
+                        &mut sh1107,
+                        Line::new(
+                            c_screen + Point::new(0, CROSSHAIR_LEN),
+                            c_screen - Point::new(0, CROSSHAIR_LEN),
+                        ),
+                        None,
+                        true,
+                    );
+                    // horizontal cross hair
+                    gfx::line(
+                        &mut sh1107,
+                        Line::new(
+                            c_screen + Point::new(CROSSHAIR_LEN, 0),
+                            c_screen - Point::new(CROSSHAIR_LEN, 0),
+                        ),
+                        None,
+                        true,
+                    );
                 }
             }
+            if candidates_found == 3 {
+                let mut tl: Option<Point> = None;
+                let mut tr: Option<Point> = None;
+                for candidate in candidates.iter() {
+                    if let Some(c) = candidate {
+                        if c.x < QR_WIDTH as isize / 2 && c.y < QR_HEIGHT as isize / 2 {
+                            tl = Some(Point::new(c.x, c.y));
+                        }
+                        if c.x > QR_WIDTH as isize / 2 && c.y < QR_HEIGHT as isize / 2 {
+                            tr = Some(Point::new(c.x, c.y));
+                        }
+                    }
+                }
+                if tl.is_some() && tr.is_some() {
+                    let at =
+                        qr::AffineTransform::from_coordinates(tl.unwrap(), tr.unwrap(), QR_WIDTH, QR_HEIGHT);
+                    let mut rotated_uninit: [core::mem::MaybeUninit<u8>; QR_WIDTH * QR_HEIGHT] =
+                        unsafe { core::mem::MaybeUninit::uninit().assume_init() };
+                    at.transform(&frame, &mut rotated_uninit);
+                    let rotated: [u8; QR_WIDTH * QR_HEIGHT] = unsafe { core::mem::transmute(rotated_uninit) };
+
+                    for (y, row) in rotated.chunks(QR_WIDTH).enumerate() {
+                        if y & 1 == 0 {
+                            for (x, &pixval) in row.iter().enumerate() {
+                                if x & 1 == 0 {
+                                    if x < sh1107.resolution().x as usize * 2
+                                        && y < sh1107.resolution().y as usize * 2
+                                            - (gfx::CHAR_HEIGHT as usize + 1) * 2
+                                    {
+                                        let luminance = pixval & 0xff;
+                                        if luminance > BW_THRESH {
+                                            // flip on y to adjust for sensor orientation. Lower left is (0,
+                                            // 0) on the display.
+                                            sh1107.put_pixel(
+                                                Point::new(
+                                                    x as isize / 2,
+                                                    (sh1107.resolution().y - 1) - (y as isize / 2),
+                                                ),
+                                                Mono::White.into(),
+                                            );
+                                        } else {
+                                            sh1107.put_pixel(
+                                                Point::new(
+                                                    x as isize / 2,
+                                                    (sh1107.resolution().y - 1) - (y as isize / 2),
+                                                ),
+                                                Mono::Black.into(),
+                                            );
+                                        }
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    gfx::msg(
+                        &mut sh1107,
+                        "Aligning...",
+                        Point::new(0, 0),
+                        Mono::White.into(),
+                        Mono::Black.into(),
+                    );
+
+                    if udma_uart.read_async(&mut c) != 0 {
+                        if c == ' ' as u32 as u8 {
+                            crate::println!("Dumping...");
+
+                            crate::println!("frame {}", frames);
+                            udma_uart.write("------------------ divider ------------------\n\r".as_bytes());
+                            let hex_to_ascii = [
+                                '0' as u32 as u8,
+                                '1' as u32 as u8,
+                                '2' as u32 as u8,
+                                '3' as u32 as u8,
+                                '4' as u32 as u8,
+                                '5' as u32 as u8,
+                                '6' as u32 as u8,
+                                '7' as u32 as u8,
+                                '8' as u32 as u8,
+                                '9' as u32 as u8,
+                                'A' as u32 as u8,
+                                'B' as u32 as u8,
+                                'C' as u32 as u8,
+                                'D' as u32 as u8,
+                                'E' as u32 as u8,
+                                'F' as u32 as u8,
+                            ];
+                            for line in frame.chunks(32) {
+                                let mut output = [0u8; 3 * 32 + 3];
+                                for (i, &b) in line.iter().enumerate() {
+                                    output[i * 3 + 0] = hex_to_ascii[(b >> 4) as usize];
+                                    output[i * 3 + 1] = hex_to_ascii[(b & 0xF) as usize];
+                                    output[i * 3 + 2] = ',' as u32 as u8;
+                                }
+                                output[3 * 32] = '\\' as u32 as u8;
+                                output[3 * 32 + 1] = '\n' as u32 as u8;
+                                output[3 * 32 + 2] = '\r' as u32 as u8;
+                                udma_uart.write(&output);
+                            }
+                            // continue with boot
+                            break;
+                        }
+                    }
+                }
+            } else {
+                gfx::msg(
+                    &mut sh1107,
+                    "Searching...",
+                    Point::new(0, 0),
+                    Mono::White.into(),
+                    Mono::Black.into(),
+                );
+            }
+
             // crate::println!("frame {}", frames);
             sh1107.buffer_swap();
             sh1107.draw();
@@ -482,15 +613,6 @@ pub fn early_init() -> u32 {
                 u8dest[1] = ((u32src >> 16) & 0xff) as u8;
             }
             frames += 1;
-
-            let mut candidates: [Option<qr::Point>; 64] = [None; 64];
-            crate::println!("\n\r------------- SEARCH -----------");
-            qr::find_finders(&mut candidates, &frame, BW_THRESH, cols);
-            for candidate in candidates.iter() {
-                if let Some(c) = candidate {
-                    crate::println!("******    candidate: {}, {}    ******", c.x, c.y);
-                }
-            }
         }
 
         // Make this true to have the system shut down by disconnecting its own battery while on battery power
