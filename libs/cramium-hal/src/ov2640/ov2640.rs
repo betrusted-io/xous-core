@@ -54,6 +54,7 @@ pub struct Ov2640 {
     brightness: Brightness,
     color_mode: ColorMode,
     resolution: Resolution,
+    slicing: Option<(usize, usize)>,
 }
 
 impl Udma for Ov2640 {
@@ -94,6 +95,7 @@ impl Ov2640 {
             brightness: Brightness::Level2,
             // bogus value
             resolution: Resolution::Res160x120,
+            slicing: None,
         }
     }
 
@@ -148,7 +150,10 @@ impl Ov2640 {
 
         // set sync polarity
         let vsync_pol = 0;
-        let hsync_pol = 0;
+        let hsync_pol = match resolution {
+            Resolution::Res320x240 => 0,
+            _ => 0,
+        };
         self.csr.wo(
             utra::udma_camera::REG_CAM_VSYNC_POLARITY,
             self.csr.ms(utra::udma_camera::REG_CAM_VSYNC_POLARITY_R_CAM_VSYNC_POLARITY, vsync_pol)
@@ -158,8 +163,8 @@ impl Ov2640 {
         // multiply by 1
         self.csr.wo(utra::udma_camera::REG_CAM_CFG_FILTER, 0x01_01_01);
 
-        let (row, _col) = resolution.into();
-        self.csr.wo(utra::udma_camera::REG_CAM_CFG_SIZE, row as u32 - 1);
+        let (x, _y) = resolution.into();
+        self.csr.wo(utra::udma_camera::REG_CAM_CFG_SIZE, (x as u32 - 1) << 16);
 
         let global = self.csr.ms(CFG_FRAMEDROP_EN, 0)
             | self.csr.ms(CFG_FORMAT, Format::BypassLe as u32)
@@ -175,7 +180,8 @@ impl Ov2640 {
     pub unsafe fn rx_buf_phys<T: UdmaWidths>(&self) -> &[T] { &self.ifram.as_phys_slice() }
 
     pub fn capture_async(&mut self) {
-        let (rows, cols) = self.resolution.into();
+        // we want the sliced resolution so resolve resolution through the method call wrapper
+        let (cols, rows) = self.resolution();
         let total_len = rows * cols;
         self.csr.rmwf(CFG_GLOB_EN, 1);
         unsafe { self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u16>()[..total_len], CFG_EN | CFG_SIZE_16) }
@@ -190,7 +196,26 @@ impl Ov2640 {
         }
     }
 
-    pub fn resolution(&self) -> (usize, usize) { self.resolution.into() }
+    pub fn resolution(&self) -> (usize, usize) {
+        if let Some((x, y)) = self.slicing { (x, y) } else { self.resolution.into() }
+    }
+
+    pub fn set_slicing(&mut self, ll: (usize, usize), ur: (usize, usize)) {
+        let (llx, lly) = ll;
+        let (urxx, uryy) = ur;
+        let urx = urxx.saturating_sub(1);
+        let ury = uryy.saturating_sub(1);
+        self.csr.wo(utra::udma_camera::REG_CAM_CFG_LL, llx as u32 & 0xFFFF | ((lly as u32 & 0xFFFF) << 16));
+        self.csr.wo(utra::udma_camera::REG_CAM_CFG_UR, urx as u32 & 0xFFFF | ((ury as u32 & 0xFFFF) << 16));
+        self.csr.rmwf(CFG_FRAMESLICE_EN, 1);
+        self.slicing = Some((urxx - llx, uryy - lly));
+        // self.csr.wo(utra::udma_camera::REG_CAM_CFG_SIZE, (urx - llx) as u32 - 1);
+    }
+
+    pub fn disable_slicing(&mut self) {
+        self.csr.rmwf(CFG_FRAMESLICE_EN, 0);
+        self.slicing = None;
+    }
 
     pub fn color_mode(&mut self, i2c: &mut dyn I2cApi, mode: ColorMode) {
         self.poke(i2c, 0xff, 0x00);
