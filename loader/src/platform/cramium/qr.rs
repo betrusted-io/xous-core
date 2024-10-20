@@ -1,4 +1,5 @@
 // dev code for QR code algorithms
+use cramium_hal::minigfx::Point;
 
 const SEQ_LEN: usize = 5;
 
@@ -23,15 +24,6 @@ struct FinderSeq {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct Point {
-    pub x: usize,
-    pub y: usize,
-}
-impl Point {
-    pub fn new(x: usize, y: usize) -> Self { Point { x, y } }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Color {
     Black,
     White,
@@ -43,6 +35,53 @@ impl Color {
 }
 impl Default for Color {
     fn default() -> Self { Color::Black }
+}
+
+const AFF_FP_SHIFT: isize = 16;
+const AFF_FP_ONE: f32 = (1 << AFF_FP_SHIFT) as f32;
+pub struct AffineTransform {
+    pub a: isize,
+    pub b: isize,
+    pub c: isize,
+    pub d: isize,
+    pub tx: isize,
+    pub ty: isize,
+    pub rows: isize,
+    pub cols: isize,
+}
+
+impl AffineTransform {
+    pub fn from_coordinates(tl: Point, tr: Point, cols: usize, rows: usize) -> Self {
+        // crate::println!("{}/{}", tr.y - tl.y, tr.x - tl.x);
+        let angle: f32 = libm::atan2f(tr.y as f32 - tl.y as f32, tr.x as f32 - tl.x as f32);
+        // crate::println!("angle: {}", angle);
+        Self {
+            a: (libm::cosf(angle) * AFF_FP_ONE) as isize,
+            b: (-libm::sinf(angle) * AFF_FP_ONE) as isize,
+            c: (libm::sinf(angle) * AFF_FP_ONE) as isize,
+            d: (libm::cosf(angle) * AFF_FP_ONE) as isize,
+            tx: 0,
+            ty: 0,
+            cols: cols as isize,
+            rows: rows as isize,
+        }
+    }
+
+    pub fn transform(&self, src: &[u8], dst: &mut [core::mem::MaybeUninit<u8>]) {
+        for y in 0..self.rows as usize {
+            for x in 0..self.cols as usize {
+                let x_src = (self.a * x as isize + self.b * y as isize + self.tx) >> AFF_FP_SHIFT;
+                let y_src = (self.c * x as isize + self.d * y as isize + self.ty) >> AFF_FP_SHIFT;
+                dst[y * self.cols as usize + x] = core::mem::MaybeUninit::new(
+                    if x_src >= 0 && x_src < self.cols && y_src >= 0 && y_src < self.rows {
+                        src[x_src as usize + y_src as usize * self.cols as usize]
+                    } else {
+                        0
+                    },
+                );
+            }
+        }
+    }
 }
 
 struct SeqBuffer {
@@ -158,7 +197,7 @@ pub fn find_finders(candidates: &mut [Option<Point>], image: &[u8], thresh: u8, 
                 // manage the sequence index
                 if let Some(pos) = seq_buffer.search() {
                     // crate::println!("row candidate {}, {}", pos, y);
-                    row_candidates[row_candidate_index] = Some(Point::new(pos, y));
+                    row_candidates[row_candidate_index] = Some(Point::new(pos as _, y as _));
                     row_candidate_index += 1;
                     if row_candidate_index == row_candidates.len() {
                         // just abort the search if we run out of space to store results
@@ -189,7 +228,7 @@ pub fn find_finders(candidates: &mut [Option<Point>], image: &[u8], thresh: u8, 
                 last_color = pix;
                 run_length = 1;
                 if let Some(pos) = seq_buffer.search() {
-                    let search_point = Point::new(x, pos);
+                    let search_point = Point::new(x as _, pos as _);
                     // crate::println!("col candidate {}, {}", x, pos);
 
                     // now cross the candidate against row candidates; only report those that match
