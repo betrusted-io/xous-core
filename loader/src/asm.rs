@@ -15,9 +15,14 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
     unsafe {
         #[rustfmt::skip]
         asm! (
-            "li          t0, 0xffffffff",
-            "csrw        mideleg, t0",
-            "csrw        medeleg, t0",
+            "mv          t0, {ram_base}",
+            "li          t1, 0x10000",
+            "add         t2, t0, t1",
+
+        "900:", // clear 64k base data for statics
+            "sw          x0, 0(t0)",
+            "addi        t0, t0, 4",
+            "bltu        t0, t2, 900b",
 
             // decorate our stack area with a canary pattern
             "li          t1, 0xACE0BACE",
@@ -32,6 +37,10 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
             "mv          sp, {ram_top}",
             // subtract four from sp to make room for a DMA "gutter"
             "addi        sp, sp, -4",
+
+            "li          t0, 0xffffffff",
+            "csrw        mideleg, t0",
+            "csrw        medeleg, t0",
 
             // Install a machine mode trap handler
             "la          t0, abort",
@@ -48,6 +57,7 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
             ram_top = in(reg) (platform::RAM_BASE + platform::RAM_SIZE),
             // On Precursor - 0x40FFE01C: currently allowed stack extent - 8k - (7 words). 7 words are for kernel backup args - see bootloader in betrusted-soc
             stack_limit = in(reg) (platform::RAM_BASE + platform::RAM_SIZE - 8192 + 7 * core::mem::size_of::<usize>()),
+            ram_base = in(reg) (platform::RAM_BASE),
             options(noreturn)
         );
     }
@@ -88,9 +98,10 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
             // GPIO twiddle
             /*
             "li          t0, 0x5012f000",
-            "sw          x0, 0x8(t0)", // AFSEL
+            "li          t1, 0x5550",
+            "sw          t1, 0x8(t0)", // AFSEL
             "li          t2, 0x1803",
-            "sw          t1, 0x14c(t0)", // OESEL
+            "sw          t2, 0x14c(t0)", // OESEL
             "sw          x0, 0x134(t0)", // DAT
             "sw          t2, 0x134(t0)", // DAT
             "sw          x0, 0x134(t0)", // DAT

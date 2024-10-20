@@ -2,12 +2,37 @@
 use crate::{
     ifram::IframRange,
     iox::{IoGpio, IoSetup, IoxPort},
+    minigfx::{ColorNative, FrameBuffer, Point},
     udma::{PeriphId, Spim, SpimClkPha, SpimClkPol, SpimCs, UdmaGlobalConfig},
 };
 
-pub const COLUMN: u8 = 128;
-pub const ROW: u8 = 128;
-pub const PAGE: u8 = ROW / 8;
+pub const COLUMN: isize = 128;
+pub const ROW: isize = 128;
+pub const PAGE: u8 = ROW as u8 / 8;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct MonoColor(ColorNative);
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Mono {
+    Black,
+    White,
+}
+impl From<ColorNative> for Mono {
+    fn from(value: ColorNative) -> Self {
+        match value.0 {
+            0 => Mono::Black,
+            _ => Mono::White,
+        }
+    }
+}
+impl Into<ColorNative> for Mono {
+    fn into(self) -> ColorNative {
+        match self {
+            Mono::Black => ColorNative::from(0),
+            Mono::White => ColorNative::from(1),
+        }
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DisplayState {
@@ -235,40 +260,6 @@ impl<'a> Oled128x128<'a> {
 
     pub fn buffer(&self) -> &[u8] { self.buffers[self.active_buffer.as_index()] }
 
-    /// Transfers the back buffer
-    pub fn draw(&mut self) {
-        // this must be opposite of what `buffer` / `buffer_mut` returns
-        let buffer_start = self.active_buffer.swap() as usize;
-        let chunk_size = 128;
-        let chunks = self.buffer().len() / chunk_size;
-        // we don't do this with an iterator because it involves an immutable borrow of
-        // `buffer`, which prevents us from doing anything with the interface inside the loop.
-        for page in 0..chunks {
-            // The cs_active() waits are necessary because the UDMA block will eagerly report
-            // the transaction is done before the data is done transmitting, and we have to
-            // toggle set_data() only after the physical transaction is done, not after the
-            // the last UDMA action has been queued.
-            self.send_command(Command::SetPageAddress(page as u8).encode());
-            self.send_command(Command::SetColumnAddress(0).encode());
-            // wait for commands to finish before toggling set_data
-            // self.spim.tx_data_await(false);
-            // crate::println!("Send page {}, offset {:x}", page, buffer_start + page * chunk_size);
-            self.set_data();
-            // safety: data is already copied into the DMA buffer. size & len are in bounds.
-            unsafe {
-                self.spim
-                    .txrx_data_async_from_parts::<u8>(
-                        buffer_start + page * chunk_size,
-                        chunk_size,
-                        true,
-                        false,
-                    )
-                    .expect("Couldn't initiate oled data transfer");
-            }
-            self.spim.txrx_await(false).unwrap();
-        }
-    }
-
     pub fn send_command<'b, U>(&'b mut self, cmd: U)
     where
         U: IntoIterator<Item = u8> + 'b,
@@ -320,18 +311,68 @@ impl<'a> Oled128x128<'a> {
             self.send_command(bytes);
         }
     }
+}
 
-    pub fn clear(&mut self) { self.buffer_mut().fill(0); }
+impl<'a> FrameBuffer for Oled128x128<'a> {
+    /// Transfers the back buffer
+    fn draw(&mut self) {
+        // this must be opposite of what `buffer` / `buffer_mut` returns
+        let buffer_start = self.active_buffer.swap() as usize;
+        let chunk_size = 128;
+        let chunks = self.buffer().len() / chunk_size;
+        // we don't do this with an iterator because it involves an immutable borrow of
+        // `buffer`, which prevents us from doing anything with the interface inside the loop.
+        for page in 0..chunks {
+            // The cs_active() waits are necessary because the UDMA block will eagerly report
+            // the transaction is done before the data is done transmitting, and we have to
+            // toggle set_data() only after the physical transaction is done, not after the
+            // the last UDMA action has been queued.
+            self.send_command(Command::SetPageAddress(page as u8).encode());
+            self.send_command(Command::SetColumnAddress(0).encode());
+            // wait for commands to finish before toggling set_data
+            // self.spim.tx_data_await(false);
+            // crate::println!("Send page {}, offset {:x}", page, buffer_start + page * chunk_size);
+            self.set_data();
+            // safety: data is already copied into the DMA buffer. size & len are in bounds.
+            unsafe {
+                self.spim
+                    .txrx_data_async_from_parts::<u8>(
+                        buffer_start + page * chunk_size,
+                        chunk_size,
+                        true,
+                        false,
+                    )
+                    .expect("Couldn't initiate oled data transfer");
+            }
+            self.spim.txrx_await(false).unwrap();
+        }
+    }
 
-    pub fn put_pixel(&mut self, x: u8, y: u8, on: bool) {
-        if x > COLUMN || y > ROW {
+    fn clear(&mut self) { self.buffer_mut().fill(0); }
+
+    fn put_pixel(&mut self, p: Point, on: ColorNative) {
+        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
             return;
         }
         let buffer = self.buffer_mut();
-        if on {
-            buffer[x as usize + (y as usize / 8) * COLUMN as usize] |= 1 << (y % 8);
+        if on.0 != 0 {
+            buffer[p.x as usize + (p.y as usize / 8) * COLUMN as usize] |= 1 << (p.y % 8);
         } else {
-            buffer[x as usize + (y as usize / 8) * COLUMN as usize] &= !(1 << (y % 8));
+            buffer[p.x as usize + (p.y as usize / 8) * COLUMN as usize] &= !(1 << (p.y % 8));
+        }
+    }
+
+    fn resolution(&self) -> Point { Point::new(COLUMN, ROW) }
+
+    fn get_pixel(&mut self, p: Point) -> Option<ColorNative> {
+        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+            return None;
+        }
+        let buffer = self.buffer_mut();
+        if buffer[p.x as usize + (p.y as usize / 8) * COLUMN as usize] & (1 << (p.y % 8)) != 0 {
+            Some(Mono::White.into())
+        } else {
+            Some(Mono::Black.into())
         }
     }
 }

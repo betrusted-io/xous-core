@@ -10,3 +10,8 @@ mod poweron_bt;
 mod update;
 pub use update::*;
 mod verifier;
+
+mod gfx;
+mod qr;
+#[cfg(feature = "usb")]
+mod usb;
