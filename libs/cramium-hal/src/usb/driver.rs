@@ -944,13 +944,15 @@ impl CorigineUsb {
         );
         let actual_len = length.min(app_buf.len());
         let remaining_len = if length <= app_buf.len() { 0 } else { length - actual_len };
-        if remaining_len > 0 {
+        let chain = if remaining_len > 0 {
             self.remaining_rd = Some((offset + actual_len, remaining_len));
+            CRG_XFER_SET_CHAIN
         } else {
             self.remaining_rd = None;
-        }
+            0
+        };
         app_buf[..actual_len].copy_from_slice(&disk[offset..offset + actual_len as usize]);
-        self.bulk_xfer(1, USB_SEND, app_buf.as_ptr() as usize, actual_len, 0, 0);
+        self.bulk_xfer(1, USB_SEND, app_buf.as_ptr() as usize, actual_len, 0, chain);
     }
 
     pub fn setup_big_write(
@@ -969,13 +971,15 @@ impl CorigineUsb {
         );
         let actual_len = total_length.min(app_buf_len);
         let remaining_len = if total_length <= app_buf_len { 0 } else { total_length - actual_len };
-        if remaining_len > 0 {
+        let chain = if remaining_len > 0 {
             self.remaining_wr = Some((to_offset + actual_len, remaining_len));
+            CRG_XFER_SET_CHAIN
         } else {
             self.remaining_wr = None;
-        }
+            0
+        };
 
-        self.bulk_xfer(1, USB_RECV, app_buf_addr, actual_len, 0, 0);
+        self.bulk_xfer(1, USB_RECV, app_buf_addr, actual_len, 0, chain);
         self.callback_wr = Some((to_offset, actual_len));
     }
 
