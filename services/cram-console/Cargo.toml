@@ -23,7 +23,7 @@ graphics-server = { path = "../graphics-server" }
 modals = { path = "../modals", features = ["cramium-soc"] }
 gam = { path = "../gam" }
 locales = { path = "../../locales" }
-usb-device-xous = { path = "../usb-device-xous", default-features = false }
+usb-device-xous = { path = "../usb-device-xous", default-features = false, optional = true }
 cramium-hal = { path = "../../libs/cramium-hal", features = ["std"] }
 cram-hal-service = { path = "../cram-hal-service" }
 ime-plugin-shell = { path = "../ime-plugin-shell" }
@@ -42,4 +42,6 @@ xous-swapper = { path = "../xous-swapper" }
 "pl230-test" = ["xous-pl230"]
 "hwtest" = []
 "pddb" = []
+"gam" = []
+"usb" = ["usb-device-xous"]
 default = []
