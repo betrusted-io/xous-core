@@ -362,7 +362,7 @@ impl<'a> FrameBuffer for Oled128x128<'a> {
         }
     }
 
-    fn resolution(&self) -> Point { Point::new(COLUMN, ROW) }
+    fn dimensions(&self) -> Point { Point::new(COLUMN, ROW) }
 
     fn get_pixel(&mut self, p: Point) -> Option<ColorNative> {
         if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
