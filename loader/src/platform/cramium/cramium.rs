@@ -4,6 +4,7 @@ use cramium_hal::udma::PeriphId;
 use cramium_hal::udma::UdmaGlobalConfig;
 use utralib::generated::*;
 
+#[cfg(feature = "qr")]
 use crate::platform::cramium::qr;
 
 // Notes about the reset vector location
@@ -391,6 +392,7 @@ pub fn early_init() -> u32 {
         udma_uart.setup_async_read();
         let mut c = 0u8;
         const BW_THRESH: u8 = 128;
+        #[cfg(feature = "qr")]
         loop {
             // toggling this off can improve performance by wasting less time "waiting" for the next frame...
             // however, you will get "frame rolling" if the capture isn't initiated at exactly the right time.
@@ -405,8 +407,8 @@ pub fn early_init() -> u32 {
                 if y & 1 == 0 {
                     for (x, &pixval) in row.iter().enumerate() {
                         if x & 1 == 0 {
-                            if x < sh1107.resolution().x as usize * 2
-                                && y < sh1107.resolution().y as usize * 2
+                            if x < sh1107.dimensions().x as usize * 2
+                                && y < sh1107.dimensions().y as usize * 2
                                     - (gfx::CHAR_HEIGHT as usize + 1) * 2
                             {
                                 let luminance = pixval & 0xff;
@@ -416,7 +418,7 @@ pub fn early_init() -> u32 {
                                     sh1107.put_pixel(
                                         Point::new(
                                             x as isize / 2,
-                                            (sh1107.resolution().y - 1) - (y as isize / 2),
+                                            (sh1107.dimensions().y - 1) - (y as isize / 2),
                                         ),
                                         Mono::White.into(),
                                     );
@@ -441,7 +443,7 @@ pub fn early_init() -> u32 {
                     // remap image to screen coordinates (it's 2:1)
                     let mut c_screen = *c / 2;
                     // flip coordinates to match the camera data
-                    c_screen = Point::new(c_screen.x, sh1107.resolution().y - 1 - c_screen.y);
+                    c_screen = Point::new(c_screen.x, sh1107.dimensions().y - 1 - c_screen.y);
                     // vertical cross hair
                     gfx::line(
                         &mut sh1107,
@@ -489,8 +491,8 @@ pub fn early_init() -> u32 {
                         if y & 1 == 0 {
                             for (x, &pixval) in row.iter().enumerate() {
                                 if x & 1 == 0 {
-                                    if x < sh1107.resolution().x as usize * 2
-                                        && y < sh1107.resolution().y as usize * 2
+                                    if x < sh1107.dimensions().x as usize * 2
+                                        && y < sh1107.dimensions().y as usize * 2
                                             - (gfx::CHAR_HEIGHT as usize + 1) * 2
                                     {
                                         let luminance = pixval & 0xff;
@@ -500,7 +502,7 @@ pub fn early_init() -> u32 {
                                             sh1107.put_pixel(
                                                 Point::new(
                                                     x as isize / 2,
-                                                    (sh1107.resolution().y - 1) - (y as isize / 2),
+                                                    (sh1107.dimensions().y - 1) - (y as isize / 2),
                                                 ),
                                                 Mono::White.into(),
                                             );
@@ -508,7 +510,7 @@ pub fn early_init() -> u32 {
                                             sh1107.put_pixel(
                                                 Point::new(
                                                     x as isize / 2,
-                                                    (sh1107.resolution().y - 1) - (y as isize / 2),
+                                                    (sh1107.dimensions().y - 1) - (y as isize / 2),
                                                 ),
                                                 Mono::Black.into(),
                                             );
@@ -816,7 +818,7 @@ pub fn early_init() -> u32 {
             // density 38, memory type 25, mfg ID C2 ==> MX25U12832F
             assert!(flash_id & 0xFF_FF_FF == 0x1820C2 || flash_id & 0xFF_FF_FF == 0x38_25_C2);
             // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
-            assert!(ram_id & 0xFF_FF == 0x5D9D);
+            assert!((ram_id & 0xFF_FF == 0x5D9D) || (ram_id & 0xFF_FF == 0x559d));
 
             // setup FLASH
             //  - QE enable
@@ -844,7 +846,7 @@ pub fn early_init() -> u32 {
             // density 38, memory type 25, mfg ID C2 ==> MX25U12832F
             assert!(flash_id & 0xFF_FF_FF == 0x1820C2 || flash_id & 0xFF_FF_FF == 0x38_25_C2);
             // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
-            assert!(ram_id & 0xFF_FF == 0x5D9D);
+            assert!((ram_id & 0xFF_FF == 0x5D9D) || (ram_id & 0xFF_FF == 0x559d));
 
             let mut chk_buf = [0u8; 32];
             crate::println!("first read...");
