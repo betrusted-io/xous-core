@@ -363,6 +363,7 @@ impl<'a> ShellCmdApi<'a> for Mbox {
                 //   - on Precursor (100MHz): 27.60 seconds
                 //   - RV32 Daric (400MHz): 10.11 seconds (2.72x over Precursor)
                 //   - CM7 Daric (400MHz): 3.66 seconds (2.76x over RV32; 7.54x over Precursor)
+                #[cfg(feature = "gam")]
                 "clifford" => {
                     log::info!("prefill");
                     let prefill = unsafe { self.phys_mem.as_slice_mut() };
