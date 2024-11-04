@@ -110,7 +110,7 @@ pub fn line(fb: &mut dyn FrameBuffer, l: Line, clip: Option<Rectangle>, xor: boo
     let sy = if y0 < y1 { 1 } else { -1 };
     let mut err = dx + dy; // error value e_xy
     loop {
-        if x0 >= 0 && y0 >= 0 && x0 < (fb.resolution().x as _) && y0 < (fb.resolution().y as _) {
+        if x0 >= 0 && y0 >= 0 && x0 < (fb.dimensions().x as _) && y0 < (fb.dimensions().y as _) {
             if clip.is_none() || (clip.unwrap().intersects_point(Point::new(x0, y0))) {
                 if !xor {
                     fb.put_pixel(Point::new(x0 as _, y0 as _), color);

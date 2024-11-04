@@ -867,7 +867,10 @@ pub struct CorigineUsb {
     // can find a better place for it, but we need a spot that is accessible
     // via the interrupt handler.
     pub ms_state: UmsState,
-    pub ms_addr_len: Option<(usize, usize)>,
+    // addres, length tuples
+    pub callback_wr: Option<(usize, usize)>,
+    pub remaining_rd: Option<(usize, usize)>,
+    pub remaining_wr: Option<(usize, usize)>,
 }
 impl CorigineUsb {
     /// Safety: this function is generally pretty unsafe because the underlying hardware needs raw pointers,
@@ -925,8 +928,59 @@ impl CorigineUsb {
             state: UsbDeviceState::NotAttached,
             cur_interface_num: 0,
             ms_state: UmsState::Idle,
-            ms_addr_len: None,
+            remaining_rd: None,
+            callback_wr: None,
+            remaining_wr: None,
         }
+    }
+
+    pub fn setup_big_read(&mut self, app_buf: &mut [u8], disk: &[u8], offset: usize, length: usize) {
+        crate::println!(
+            "BIG READ offset {:x} len {:x} app_buf: {:x} disk: {:x?}",
+            offset,
+            length,
+            app_buf.as_ptr() as usize,
+            &disk[..length.min(8)]
+        );
+        let actual_len = length.min(app_buf.len());
+        let remaining_len = if length <= app_buf.len() { 0 } else { length - actual_len };
+        let chain = if remaining_len > 0 {
+            self.remaining_rd = Some((offset + actual_len, remaining_len));
+            CRG_XFER_SET_CHAIN
+        } else {
+            self.remaining_rd = None;
+            0
+        };
+        app_buf[..actual_len].copy_from_slice(&disk[offset..offset + actual_len as usize]);
+        self.bulk_xfer(1, USB_SEND, app_buf.as_ptr() as usize, actual_len, 0, chain);
+    }
+
+    pub fn setup_big_write(
+        &mut self,
+        app_buf_addr: usize,
+        app_buf_len: usize,
+        to_offset: usize,
+        total_length: usize,
+    ) {
+        crate::println!(
+            "BIG WRITE offset {:x} len {:x} app_buf: {:x} app_len: {:x}",
+            to_offset,
+            total_length,
+            app_buf_addr,
+            app_buf_len
+        );
+        let actual_len = total_length.min(app_buf_len);
+        let remaining_len = if total_length <= app_buf_len { 0 } else { total_length - actual_len };
+        let chain = if remaining_len > 0 {
+            self.remaining_wr = Some((to_offset + actual_len, remaining_len));
+            CRG_XFER_SET_CHAIN
+        } else {
+            self.remaining_wr = None;
+            0
+        };
+
+        self.bulk_xfer(1, USB_RECV, app_buf_addr, actual_len, 0, chain);
+        self.callback_wr = Some((to_offset, actual_len));
     }
 
     pub fn set_device_state(&mut self, state: UsbDeviceState) { self.state = state; }
@@ -1987,12 +2041,12 @@ impl CorigineUsb {
         let mut pcs = udc_ep.pcs;
 
         crate::println!(
-            "PEI = {}, enq_pt = 0x{:x?}, bufaddr = 0x{:x} pcs = {} length = 0x{:x}",
+            "PEI = {} bufaddr = 0x{:x} pcs = {} length = 0x{:x}, enq_pt = 0x{:x?}",
             pei,
-            enq_pt,
             addr,
             udc_ep.pcs,
-            len
+            len,
+            enq_pt,
         );
         for i in 0..num_trb {
             if num_trb == 1 {

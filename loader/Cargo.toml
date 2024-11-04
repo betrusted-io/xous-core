@@ -109,9 +109,10 @@ fast-fclk = []
 clock-tests = []
 reset-debug = []
 usb = []
+qr = []
 
 # general flags
 debug-print = []
 earlyprintk = []
-resume = []                              # suspend/resume pathway code
-default = ["board-bringup", "dump-trng"]
+resume = []                                     # suspend/resume pathway code
+default = ["board-bringup", "dump-trng", "usb"]

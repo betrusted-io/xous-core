@@ -12,6 +12,61 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
     let _kernel_args = _kernel_args;
     #[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
     let _kernel_args = platform::FLASH_BASE + platform::KERNEL_OFFSET;
+
+    // Stub for clearing IFRAM & RAM on Cramium target. This is required
+    // to clear the parity check bits, which are randomly set on boot. System will
+    // eventually hang if these bits aren't cleared.
+    #[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
+    unsafe {
+        #[rustfmt::skip]
+        asm! (
+            // test if ifram is cleared
+            "li          t0, 0x50000000",
+            "li          t1, 0x50040000",
+        "60:",
+            "lw          t2, 0(t0)",
+            // if not 0, jump to clearing routine
+            "bne         x0, t2, 30f",
+            "addi        t0, t0, 4",
+            // loop if we haven't checked all of ifram
+            "bltu        t0, t1, 60b",
+            // if we got here, all of ifram was 0, continue with boot
+            "j           50f",
+
+            // clear ifram
+        "30:",
+            "sw          x0, 0(t0)",
+            "addi        t0, t0, 4",
+            "bltu        t0, t1, 30b",
+
+            // clear main ram
+            "li          t0, 0x61000000",
+            "li          t1, 0x61200000",
+        "20:",
+            "sw          x0, 0(t0)",
+            "addi        t0, t0, 4",
+            "bltu        t0, t1, 20b",
+
+            ".word       0x500f",
+            // reset the system
+            "li          t0, 0x40040080",
+            "li          t1, 0x55aa",
+        "70:",
+            "sw          t1, 0(t0)",
+            "j           70b", // loop forever trying to trigger the reset
+            // Note that BMX access is unstable at this point in time due to the
+            // high number of parity errors that were flooding the system. Thus,
+            // the system has to go through a reset cycle before any further progress
+            // can be made.
+            // --------------------------------
+            // system should be rebooting at this point, code after this
+            // is unreachabale
+            // --------------------------------
+
+            // continue on boot
+        "50:",
+        );
+    }
     unsafe {
         #[rustfmt::skip]
         asm! (

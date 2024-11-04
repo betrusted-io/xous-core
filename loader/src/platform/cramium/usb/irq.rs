@@ -156,7 +156,7 @@ pub extern "C" fn trap_handler(
     _a7: usize,
 ) -> ! {
     let mc: mcause::Mcause = mcause::read();
-    crate::println!("it's a trap! 0x{:x}", mc.bits());
+    // crate::println!("it's a trap! 0x{:x}", mc.bits());
     // 2 is illegal instruction
     if mc.bits() == 2 {
         crate::abort();

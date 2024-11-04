@@ -12,6 +12,7 @@ pub use update::*;
 mod verifier;
 
 mod gfx;
+#[cfg(feature = "qr")]
 mod qr;
 #[cfg(feature = "usb")]
 mod usb;

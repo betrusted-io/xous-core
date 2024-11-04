@@ -29,7 +29,7 @@ pub fn init_usb() {
     //set block size
     disk[0xb..0xd].copy_from_slice(&SECTOR_SIZE.to_le_bytes());
     //set storage size
-    disk[0x20..0x24].copy_from_slice(&(RAMDISK_LEN as u32).to_le_bytes());
+    disk[0x20..0x24].copy_from_slice(&(RAMDISK_LEN as u32 / SECTOR_SIZE as u32).to_le_bytes());
 
     // install the interrupt handler
     // setup the stack & controller

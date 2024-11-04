@@ -489,22 +489,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // placement in flash is a tension between dev convenience and RAM usage. Things in flash
             // are resident, non-swapable, but end up making the slow kernel burn process take longer.
-            let cramium_flash_pkgs = [
-                "xous-ticktimer",
-                "xous-log",
-                "cram-hal-service",
-                "xous-names",
-                "graphics-server",
-                "gam",
-                "ime-plugin-shell",
-                "ime-frontend",
-            ]
-            .to_vec();
-            let cramium_swap_pkgs = ["modals", "cram-console", "usb-device-xous"].to_vec();
+            let cramium_flash_pkgs =
+                ["xous-ticktimer", "xous-log", "xous-names" /* , "usb-device-xous" */].to_vec();
+            let cramium_swap_pkgs = ["cram-console", "cram-hal-service"].to_vec();
             // minimal config for USB debugging
             // let cramium_swap_pkgs = ["usb-device-xous"].to_vec(); // , "cram-console"
             if !builder.is_swap_set() {
-                builder.set_swap(0, 4 * 1024 * 1024);
+                builder.set_swap(0, 8 * 1024 * 1024);
             }
             builder.add_loader_feature("board-bringup");
             // builder.add_loader_feature("spim-test");
@@ -516,6 +507,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // builder.add_loader_feature("trng-test");
             // builder.add_loader_feature("dump-trng");
             // builder.add_loader_feature("usb");
+            // builder.add_feature("usb"); // needed if usb-device-xous is selected
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
             builder.add_feature("swap");
@@ -528,8 +520,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_feature("quantum-timer");
             // builder.add_feature("auto-trng"); // automatically initialize TRNG tester inside USB stack
             builder.add_kernel_feature("v2p");
-            builder.add_feature("mass-storage");
-            builder.add_feature("ditherpunk");
+            // builder.add_feature("mass-storage");
+            // builder.add_feature("ditherpunk");
 
             builder.add_loader_feature("sram-margin");
             match task.as_deref() {

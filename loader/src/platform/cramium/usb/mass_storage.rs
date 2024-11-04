@@ -23,7 +23,7 @@ pub(crate) const SECTOR_SIZE: u16 = 512;
 // 0x0b~0x0C 2 bytes means block size, default 0x200 bytes
 // 0x20~0x23 4 bytes means block number, default 0x400 block
 #[rustfmt::skip] // keep this in 16-byte width
-pub(crate) const MBR_TEMPLATE: [u8; 512] = [
+pub(crate) const MBR_TEMPLATE: [u8; SECTOR_SIZE as usize] = [
     0xEB, 0x3C, 0x90, 0x4D, 0x53, 0x44, 0x4F, 0x53, 0x35, 0x2E, 0x30, 0x00, 0x02, 0x20, 0x01, 0x00,
     0x02, 0x00, 0x02, 0x00, 0x00, 0xF8, 0x00, 0x01, 0x3f, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x04, 0x00, 0x00, 0x80, 0x00, 0x29, 0x72, 0x1a, 0x65, 0xA4, 0x4E, 0x4F, 0x20, 0x4E, 0x41,
@@ -90,9 +90,9 @@ pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize,
 
             let len = length.min(core::mem::size_of::<DeviceDescriptor>());
             ep0_buf[..len].copy_from_slice(&device_descriptor.as_ref()[..len]);
-            crate::println!("ptr: {:x}, len: {}", this.ep0_buf.load(Ordering::SeqCst) as usize, len);
-            crate::println!("dd: {:x?}", device_descriptor.as_ref());
-            crate::println!("buf: {:x?}", &ep0_buf[..len]);
+            // crate::println!("ptr: {:x}, len: {}", this.ep0_buf.load(Ordering::SeqCst) as usize, len);
+            // crate::println!("dd: {:x?}", device_descriptor.as_ref());
+            // crate::println!("buf: {:x?}", &ep0_buf[..len]);
             this.ep0_send(this.ep0_buf.load(Ordering::SeqCst) as usize, len, 0);
         }
         USB_DT_DEVICE_QUALIFIER => {
@@ -202,18 +202,23 @@ pub fn usb_ep1_bulk_out_complete(this: &mut CorigineUsb, buf_addr: usize, info: 
     } else if UmsState::DataPhase == this.ms_state {
         crate::println!("data");
         //DATA
-        if let Some((addr, len)) = this.ms_addr_len.take() {
+        if let Some((write_offset, len)) = this.callback_wr.take() {
             let app_buf = conjure_app_buf();
             let disk = conjure_disk();
             // update the received data to the disk
-            disk[addr..addr + len].copy_from_slice(&app_buf[..len]);
+            disk[write_offset..write_offset + len].copy_from_slice(&app_buf[..len]);
+            if let Some((offset, remaining_len)) = this.remaining_wr.take() {
+                this.setup_big_write(app_buf_addr(), app_buf_len(), offset, remaining_len);
+                this.ms_state = UmsState::DataPhase;
+                csw.update_hw();
+            } else {
+                csw.residue = 0;
+                csw.status = 0;
+                csw.send(this);
+            }
         } else {
             crate::println!("Data completion reached without destination for data copy! data dropped.");
         }
-
-        csw.residue = 0;
-        csw.status = 0;
-        csw.send(this);
     } else {
         crate::println!("uhhh wtf");
     }
@@ -224,8 +229,15 @@ pub fn usb_ep1_bulk_in_complete(this: &mut CorigineUsb, _buf_addr: usize, info: 
     let length = info & 0xFFFF;
     if UmsState::DataPhase == this.ms_state {
         //DATA
-        this.bulk_xfer(1, USB_SEND, CSW_ADDR, 13, 0, 0);
-        this.ms_state = UmsState::StatusPhase;
+        if let Some((offset, len)) = this.remaining_rd.take() {
+            let app_buf = conjure_app_buf();
+            let disk = conjure_disk();
+            this.setup_big_read(app_buf, disk, offset, len);
+            this.ms_state = UmsState::DataPhase;
+        } else {
+            this.bulk_xfer(1, USB_SEND, CSW_ADDR, 13, 0, 0);
+            this.ms_state = UmsState::StatusPhase;
+        }
     } else if UmsState::StatusPhase == this.ms_state && length == 13 {
         //CSW
         this.bulk_xfer(1, USB_RECV, CBW_ADDR, 31, 0, 0);
@@ -444,14 +456,18 @@ fn process_read_command(this: &mut CorigineUsb, cbw: Cbw) {
     if cbw.flags & 0x80 == 0 {
         csw.residue = cbw.data_transfer_length;
         csw.status = 2;
-        this.bulk_xfer(1, USB_RECV, app_buf_addr(), length as usize, 0, 0);
-        this.ms_addr_len = Some((RAMDISK_ADDRESS + lba as usize * 512, length as usize));
+        this.setup_big_write(
+            app_buf_addr(),
+            app_buf_len(),
+            lba as usize * SECTOR_SIZE as usize,
+            length as usize,
+        );
         this.ms_state = UmsState::DataPhase;
         return;
     }
     crate::println!(
         "DISK READ address = 0x{:x}, length = 0x{:x}",
-        RAMDISK_ADDRESS + lba as usize * 512,
+        RAMDISK_ADDRESS + lba as usize * SECTOR_SIZE as usize,
         length
     );
     if cbw.data_transfer_length == 0 {
@@ -472,9 +488,7 @@ fn process_read_command(this: &mut CorigineUsb, cbw: Cbw) {
         }
         let app_buf = conjure_app_buf();
         let disk = conjure_disk();
-        app_buf[..length as usize]
-            .copy_from_slice(&disk[lba as usize * 512..lba as usize * 512 + length as usize]);
-        this.bulk_xfer(1, USB_SEND, app_buf.as_ptr() as usize, length as usize, 0, 0);
+        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize);
         this.ms_state = UmsState::DataPhase;
     }
 }
@@ -491,21 +505,24 @@ fn process_write_command(this: &mut CorigineUsb, cbw: Cbw) {
     length |= cbw.cdb[8] as u32;
 
     length *= SECTOR_SIZE as u32;
+    crate::println!("write of {} bytes", length);
 
     if cbw.flags & 0x80 != 0 {
         csw.residue = cbw.data_transfer_length;
         csw.status = 2;
         let app_buf = conjure_app_buf();
         let disk = conjure_disk();
-        app_buf[..length as usize]
-            .copy_from_slice(&disk[lba as usize * 512..lba as usize * 512 + length as usize]);
-        this.bulk_xfer(1, USB_SEND, app_buf.as_ptr() as usize, length as usize, 0, 0);
+        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize);
         this.ms_state = UmsState::DataPhase;
         csw.update_hw();
         return;
     }
 
-    crate::println!("Write address = 0x{:x}, length = 0x{:x}", RAMDISK_ADDRESS + lba as usize * 512, length);
+    crate::println!(
+        "Write address = 0x{:x}, length = 0x{:x}",
+        RAMDISK_ADDRESS + lba as usize * SECTOR_SIZE as usize,
+        length
+    );
 
     if cbw.data_transfer_length == 0 {
         csw.residue = 0;
@@ -523,8 +540,12 @@ fn process_write_command(this: &mut CorigineUsb, cbw: Cbw) {
             csw.status = 1;
             length = cbw.data_transfer_length;
         }
-        this.bulk_xfer(1, USB_RECV, app_buf_addr(), length as usize, 0, 0);
-        this.ms_addr_len = Some((RAMDISK_ADDRESS + lba as usize * 512, length as usize));
+        this.setup_big_write(
+            app_buf_addr(),
+            app_buf_len(),
+            lba as usize * SECTOR_SIZE as usize,
+            length as usize,
+        );
         this.ms_state = UmsState::DataPhase;
     }
     csw.update_hw();
@@ -545,7 +566,8 @@ fn process_write12_command(this: &mut CorigineUsb, cbw: Cbw) {
     length |= (cbw.cdb[8] as u32) << 8;
     length |= (cbw.cdb[9] as u32) << 0;
 
-    length *= 512;
+    length *= SECTOR_SIZE as u32;
+    crate::println!("write12 of {} bytes", length);
 
     if cbw.flags & 0x80 != 0 {
         csw.residue = cbw.data_transfer_length;
@@ -554,10 +576,7 @@ fn process_write12_command(this: &mut CorigineUsb, cbw: Cbw) {
         // does
         let app_buf = conjure_app_buf();
         let disk = conjure_disk();
-        app_buf[..length as usize]
-            .copy_from_slice(&disk[lba as usize * 512..lba as usize * 512 + length as usize]);
-        this.bulk_xfer(1, USB_SEND, app_buf.as_ptr() as usize, 0, 0, 0);
-
+        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize);
         this.ms_state = UmsState::DataPhase;
         csw.update_hw();
         return;
@@ -579,16 +598,23 @@ fn process_write12_command(this: &mut CorigineUsb, cbw: Cbw) {
             csw.status = 2;
             length = cbw.data_transfer_length;
         }
-        this.bulk_xfer(1, USB_RECV, app_buf_addr(), length as usize, 0, 0);
-        this.ms_addr_len = Some((RAMDISK_ADDRESS + lba as usize * 512, length as usize));
+        this.setup_big_write(
+            app_buf_addr(),
+            app_buf_len(),
+            lba as usize * SECTOR_SIZE as usize,
+            length as usize,
+        );
         this.ms_state = UmsState::DataPhase;
     }
     csw.update_hw();
 }
 
-pub(crate) fn app_buf_addr() -> usize { CRG_UDC_APP_BUFOFFSET + 1024 }
+// the 1024 is reserved for the CSW/CBW records
+pub(crate) fn app_buf_addr() -> usize { CRG_UDC_MEMBASE + CRG_UDC_APP_BUFOFFSET + 1024 }
+// the length subtracts the reserved 1024, and adds one page as a hack for testing - TODO: fix that
+pub(crate) fn app_buf_len() -> usize { CRG_UDC_APP_BUFSIZE - 1024 + 4096 }
 pub(crate) fn conjure_app_buf() -> &'static mut [u8] {
-    unsafe { core::slice::from_raw_parts_mut(app_buf_addr() as *mut u8, CRG_UDC_APP_BUFSIZE - 1024 + 4096) } // added +1 page in CRG_UDC_MEMBASE
+    unsafe { core::slice::from_raw_parts_mut(app_buf_addr() as *mut u8, app_buf_len()) } // added +1 page in CRG_UDC_MEMBASE
 }
 
 pub(crate) fn conjure_disk() -> &'static mut [u8] {

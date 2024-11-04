@@ -23,7 +23,7 @@ pub trait FrameBuffer {
     /// Clears the drawable buffer
     fn clear(&mut self);
     /// Returns the size of the frame buffer as a Point
-    fn resolution(&self) -> Point;
+    fn dimensions(&self) -> Point;
 }
 
 /// Style properties for an object
