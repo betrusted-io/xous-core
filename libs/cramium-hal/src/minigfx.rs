@@ -63,6 +63,12 @@ pub struct Point {
 }
 impl Point {
     pub fn new(x: isize, y: isize) -> Self { Point { x, y } }
+
+    pub fn to_f32(&self) -> (f32, f32) { (self.x as f32, self.y as f32) }
+}
+
+impl Default for Point {
+    fn default() -> Self { Point::new(0, 0) }
 }
 
 impl Add for Point {
