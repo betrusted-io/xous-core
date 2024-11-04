@@ -795,7 +795,13 @@ pub fn dmareq_test() -> usize {
     };
 
     let dmareq_bit = (BIO_IRQ_BASE - BIO_IRQ_OFFSET) / 8;
-    print!("bank: {} bit: {} dmareq_bit {}\r", bank, bit, dmareq_bit);
+    print!(
+        "bank: {} bit: {} dmareq_bit {}, expected: {}\r",
+        bank,
+        bit,
+        dmareq_bit,
+        (BIO_IRQ_BASE - BIO_IRQ_OFFSET + 4) / 8
+    );
 
     // check that our whole range maps to just one dmareq bit
     assert!(dmareq_bit == (BIO_IRQ_BASE - BIO_IRQ_OFFSET + 4) / 8);
@@ -805,10 +811,12 @@ pub fn dmareq_test() -> usize {
         // send the register to check for the bit mask
         bio_ss.bio.base().add(utra::bio_bdma::SFR_DMAREQ_STAT_SR_EVSTAT5.offset() - bank)
     } as u32);
+    print!("send offset {}\r", bit);
     // send the bit offset to look for
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, bit as u32);
-
+    print!("starting search \r");
     for i in 1..15 {
+        print!("search iter {} \r", i);
         // send the bit pattern into the event-set via core 0
         bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, i);
 
@@ -816,7 +824,7 @@ pub fn dmareq_test() -> usize {
         while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL2) == 0 {
             timeout += 1;
             if timeout > 200 {
-                print!("Timeout hit on {}", i);
+                print!("Timeout hit on {}\r", i);
                 passing = 0;
                 break;
             }
