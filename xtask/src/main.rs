@@ -507,6 +507,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // builder.add_loader_feature("trng-test");
             // builder.add_loader_feature("dump-trng");
             // builder.add_loader_feature("usb");
+            builder.add_loader_feature("qr");
             // builder.add_feature("usb"); // needed if usb-device-xous is selected
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
