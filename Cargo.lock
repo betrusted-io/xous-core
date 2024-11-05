@@ -325,6 +325,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "bao-console"
+version = "0.1.0"
+dependencies = [
+ "cram-hal-service",
+ "cramium-hal",
+ "log",
+ "num-derive 0.3.3",
+ "num-traits",
+ "utralib 0.1.25",
+ "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+]
+
+[[package]]
+name = "bao-video"
+version = "0.1.0"
+dependencies = [
+ "cram-hal-service",
+ "cramium-hal",
+ "libm 0.2.8",
+ "locales",
+ "log",
+ "nalgebra",
+ "num-derive 0.3.3",
+ "num-traits",
+ "utralib 0.1.25",
+ "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+]
+
+[[package]]
 name = "bare-metal"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5612,6 +5647,25 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
+]
+
+[[package]]
+name = "usb-cramium"
+version = "0.1.0"
+dependencies = [
+ "cram-hal-service",
+ "cramium-hal",
+ "ghostfat",
+ "locales",
+ "log",
+ "num-derive 0.3.3",
+ "num-traits",
+ "utralib 0.1.25",
+ "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+ "xous-usb-hid",
 ]
 
 [[package]]
