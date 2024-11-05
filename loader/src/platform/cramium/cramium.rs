@@ -76,7 +76,6 @@ pub const KERNEL_OFFSET: usize = 0x5_0000;
 
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() -> u32 {
-    use cramium_hal::{axp2101::WhichLdo, iox::IoxValue, minigfx::ColorNative, sh1107::Mono, udma::Udma};
     // Set up the initial clocks. This is done as a "poke array" into a table of addresses.
     // Why? because this is actually how it's done for the chip verification code. We can
     // make this nicer and more abstract with register meanings down the road, if necessary,
@@ -280,29 +279,14 @@ pub fn early_init() -> u32 {
     pmic.set_dcdc(&mut i2c, Some((1.2, false)), cramium_hal::axp2101::WhichDcDc::Dcdc4).unwrap();
     crate::println!("AXP2101 configure: {:?}", pmic);
 
-    // setup camera pins
-    let (cam_pdwn_bnk, cam_pdwn_pin) = cramium_hal::board::setup_ov2640_pins(&iox);
-    // disable camera powerdown
-    iox.set_gpio_pin(cam_pdwn_bnk, cam_pdwn_pin, cramium_hal::iox::IoxValue::Low);
-    udma_global.clock_on(PeriphId::Cam);
-    let cam_ifram = unsafe {
-        cramium_hal::ifram::IframRange::from_raw_parts(
-            cramium_hal::board::CAM_IFRAM_ADDR,
-            cramium_hal::board::CAM_IFRAM_ADDR,
-            cramium_hal::board::CAM_IFRAM_LEN_PAGES * 4096,
-        )
-    };
-    // this is safe because we turned on the clocks before calling it
-    let mut cam = unsafe { cramium_hal::ov2640::Ov2640::new_with_ifram(cam_ifram) };
-
     // TEMPORARY: turn off SE0 on USB
     let _se0 = cramium_hal::board::baosec::setup_usb_pins(&iox);
+    #[cfg(feature = "board-bringup")]
     let iox_loop = iox.clone();
 
     // show the boot logo
-    use cramium_hal::minigfx::{FrameBuffer, Line, Point};
+    use cramium_hal::minigfx::FrameBuffer;
 
-    use crate::platform::cramium::gfx;
     let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(perclk, &mut iox, &mut udma_global);
     sh1107.init();
     crate::platform::cramium::bootlogo::show_logo(&mut sh1107);
@@ -314,6 +298,10 @@ pub fn early_init() -> u32 {
     // makes things a little bit cleaner for JTAG ops, it seems.
     #[cfg(feature = "board-bringup")]
     {
+        use cramium_hal::minigfx::{Line, Point};
+        use cramium_hal::{axp2101::WhichLdo, iox::IoxValue, minigfx::ColorNative, sh1107::Mono, udma::Udma};
+
+        use crate::platform::cramium::gfx;
         //------------- test I2C ------------
         crate::println!("i2c test");
         let mut id = [0u8; 8];
@@ -362,6 +350,21 @@ pub fn early_init() -> u32 {
         }
 
         //------------- test OV2640 ------------
+        // setup camera pins
+        let (cam_pdwn_bnk, cam_pdwn_pin) = cramium_hal::board::setup_ov2640_pins(&iox);
+        // disable camera powerdown
+        iox.set_gpio_pin(cam_pdwn_bnk, cam_pdwn_pin, cramium_hal::iox::IoxValue::Low);
+        udma_global.clock_on(PeriphId::Cam);
+        let cam_ifram = unsafe {
+            cramium_hal::ifram::IframRange::from_raw_parts(
+                cramium_hal::board::CAM_IFRAM_ADDR,
+                cramium_hal::board::CAM_IFRAM_ADDR,
+                cramium_hal::board::CAM_IFRAM_LEN_PAGES * 4096,
+            )
+        };
+        // this is safe because we turned on the clocks before calling it
+        let mut cam = unsafe { cramium_hal::ov2640::Ov2640::new_with_ifram(cam_ifram) };
+
         cam.delay(100);
         let (pid, mid) = cam.read_id(&mut i2c);
         crate::println!("Camera pid {:x}, mid {:x}", pid, mid);
