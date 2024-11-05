@@ -219,8 +219,17 @@ fn esc_match(esc_chars: &[u8]) -> Result<Option<char>, ()> {
                 }
             }
             1 => {
-                if c != 0x5b {
-                    return Err(());
+                match c {
+                    0x41 => return Ok(Some('↑')),
+                    0x42 => return Ok(Some('↓')),
+                    0x43 => return Ok(Some('→')),
+                    0x44 => return Ok(Some('←')),
+                    0x7e => return Err(()), // premature end
+                    _ => {
+                        if c != 0x5b {
+                            return Err(());
+                        }
+                    }
                 }
             }
             2 => match c {
