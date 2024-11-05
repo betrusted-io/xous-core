@@ -11,6 +11,7 @@ mod update;
 pub use update::*;
 mod verifier;
 
+#[cfg(feature = "board-bringup")]
 mod gfx;
 #[cfg(feature = "qr")]
 mod homography;
