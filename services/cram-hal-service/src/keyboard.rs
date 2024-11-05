@@ -16,6 +16,7 @@ impl Keyboard {
         Ok(Keyboard { conn })
     }
 
+    /// Listeners get passed the full content of the key press on each key hit.
     pub fn register_listener(&self, server_name: &str, action_opcode: usize) {
         let kr =
             KeyboardRegistration { server_name: String::from(server_name), listener_op_id: action_opcode };
@@ -24,6 +25,9 @@ impl Keyboard {
             .expect("couldn't register listener");
     }
 
+    /// Observers get notified if a key is hit, but the actual keypress is always null.
+    /// This is useful for hardware services that need to do e.g. screen wakeup on key hit
+    /// but has no need to know the user's actually keystroke contents.
     pub fn register_observer(&self, server_name: &str, action_opcode: usize) {
         let kr =
             KeyboardRegistration { server_name: String::from(server_name), listener_op_id: action_opcode };

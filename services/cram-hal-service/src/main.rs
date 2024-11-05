@@ -139,6 +139,8 @@ fn main() {
     .expect("couldn't map UDMA global control");
     let udma_global = GlobalConfig::new(udma_global_csr.as_mut_ptr() as *mut u32);
 
+    // -------------------- begin timer workaround code
+    // This code should go away with NTO as we have a proper, private ticktimer unit.
     let mut pio_ss = xous_pio::PioSharedState::new();
     // map and enable the interrupt for the PIO system timer
     let irq18_page = xous::syscall::map_memory(
@@ -185,6 +187,7 @@ fn main() {
         ptimer.irq_csr.wfo(utra::irqarray18::EV_ENABLE_PIOIRQ0_DUPE, 1);
         log::info!("Quantum timer setup!");
     }
+    // -------------------- end timer workaround code
 
     // start keyboard emulator service
     hw::keyboard::start_keyboard_service();
