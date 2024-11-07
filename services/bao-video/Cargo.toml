@@ -24,4 +24,5 @@ locales = { path = "../../locales" }
 
 [features]
 cramium-soc = ["utralib/cramium-soc"]
-default = []
+decongest-udma = []
+default = ["decongest-udma"]

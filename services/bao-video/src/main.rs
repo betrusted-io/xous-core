@@ -94,10 +94,14 @@ fn wrapped_main() -> ! {
     cam.set_slicing((border, 0), (cols - border, QR_HEIGHT));
     log::info!("320x240 resolution setup with 256x240 slicing");
 
+    #[cfg(feature = "decongest-udma")]
+    log::info!("Decongest udma option enabled.");
+
     let mut frames = 0;
     let mut frame = [0u8; QR_WIDTH * QR_HEIGHT];
     // while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High {}
     loop {
+        #[cfg(not(feature = "decongest-udma"))]
         cam.capture_async();
 
         let mut candidates = Vec::<Point>::new();
@@ -189,16 +193,23 @@ fn wrapped_main() -> ! {
                                 });
                             let grids = search_img.detect_grids();
                             log::info!("grids len {}", grids.len());
-                            let rawdata = grids[0].get_raw_data();
-                            match rawdata {
-                                Ok((md, rd)) => {
-                                    log::info!("{:?}, {}:{:x?}", md, rd.len, &rd.data[..(rd.len / 8) + 1]);
+                            if grids.len() > 0 {
+                                let rawdata = grids[0].get_raw_data();
+                                match rawdata {
+                                    Ok((md, rd)) => {
+                                        log::info!(
+                                            "{:?}, {}:{:x?}",
+                                            md,
+                                            rd.len,
+                                            &rd.data[..(rd.len / 8) + 1]
+                                        );
+                                    }
+                                    Err(e) => {
+                                        log::info!("Error: {:?}", e);
+                                    }
                                 }
-                                Err(e) => {
-                                    log::info!("Error: {:?}", e);
-                                }
+                                log::info!("{:?}", grids[0].decode());
                             }
-                            log::info!("{:?}", grids[0].decode());
                         }
                     }
                 }
@@ -215,6 +226,14 @@ fn wrapped_main() -> ! {
 
         // clear the front buffer
         sh1107.clear();
+
+        #[cfg(feature = "decongest-udma")]
+        {
+            // don't parallelize the camera capture to avoid triggering a hardware bug
+            // in the SPIM block.
+            while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High {}
+            cam.capture_async();
+        }
 
         // wait for the transfer to finish
         cam.capture_await(true);
