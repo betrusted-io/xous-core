@@ -109,6 +109,9 @@ members = [
   "services/xous-swapper",
   "services/test-swapper",
   "services/cram-console",
+  "services/bao-video",
+  "services/usb-cramium",
+  "services/bao-console",
 ]
 resolver = "2"
 

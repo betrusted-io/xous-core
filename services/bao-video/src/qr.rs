@@ -1,11 +1,10 @@
-// dev code for QR code algorithms
 use core::cell::RefCell;
 use core::convert::TryFrom;
 use core::ops::{BitXor, Not};
 
 use cramium_hal::minigfx::{ColorNative, FrameBuffer, Point};
 
-use super::gfx;
+use crate::gfx;
 
 const SEQ_LEN: usize = 5;
 
@@ -158,7 +157,7 @@ fn least_squares_fit(points: &[Point], axis: Axis) -> (f32, f32) {
 fn point_from_hv_lines(hline: &LineDerivation, vline: &LineDerivation) -> Option<Point> {
     if let Some((m1, b1)) = hline.equation {
         if let Some((m2v, b2v)) = vline.equation {
-            crate::println!("h: {}, {} | v: {}, {}", m1, b1, m2v, b2v);
+            log::info!("h: {}, {} | v: {}, {}", m1, b1, m2v, b2v);
             if m2v != 0.0 {
                 let m2 = 1.0 / m2v;
                 let b2 = -b2v / m2v;
@@ -253,7 +252,7 @@ impl LineDerivation {
                 points[..count].copy_from_slice(&filtered_points[..count]);
             }
         }
-        crate::println!("Solver converged in {} iterations", converged_in);
+        log::info!("Solver converged in {} iterations", converged_in);
         self.equation = Some((m_guess, b_guess))
     }
 }
@@ -746,8 +745,8 @@ impl SeqBuffer {
                     && ratios[4] >= LOWER_1
                     && ratios[4] <= UPPER_1
                 {
-                    // crate::println!("  seq {:?}", &seq);
-                    // crate::println!("  ratios {:?}", &ratios);
+                    // log::info!("  seq {:?}", &seq);
+                    // log::info!("  ratios {:?}", &ratios);
                     Some((seq[2].pos - seq[2].run / 2 - 1, seq.iter().map(|s| s.run).sum()))
                 } else {
                     None
@@ -761,18 +760,13 @@ impl SeqBuffer {
     }
 }
 
-const ROW_LIMIT: usize = 128;
 /// Returns the average width of the finder regions found.
-pub fn find_finders(candidates: &mut [Option<Point>], image: &[u8], thresh: u8, stride: usize) -> usize {
-    let mut row_candidates: [Option<Point>; ROW_LIMIT] = [None; ROW_LIMIT];
-
-    // ideally, the candidates would be a Vec, but we want this to work without allocations
-    // so we're going to insert them manually into a list.
-    let mut row_candidate_index = 0;
+pub fn find_finders(candidates: &mut Vec<Point>, image: &[u8], thresh: u8, stride: usize) -> usize {
+    let mut row_candidates = Vec::<Point>::new();
 
     let mut seq_buffer = SeqBuffer::new();
 
-    // crate::println!("ROWSROWSROWSROWS");
+    // log::info!("ROWSROWSROWSROWS");
     for (y, line) in image.chunks(stride).enumerate() {
         seq_buffer.clear();
         let mut last_color = Color::from(line[0], thresh);
@@ -789,24 +783,14 @@ pub fn find_finders(candidates: &mut [Option<Point>], image: &[u8], thresh: u8, 
 
                 // manage the sequence index
                 if let Some((pos, _width)) = seq_buffer.search() {
-                    // crate::println!("row candidate {}, {}", pos, y);
-                    row_candidates[row_candidate_index] = Some(Point::new(pos as _, y as _));
-                    row_candidate_index += 1;
-                    if row_candidate_index == row_candidates.len() {
-                        // just abort the search if we run out of space to store results
-                        break;
-                    }
+                    // log::info!("row candidate {}, {}", pos, y);
+                    row_candidates.push(Point::new(pos as _, y as _));
                 }
             }
         }
-        if row_candidate_index == row_candidates.len() {
-            crate::println!("ran out of space for row candidates");
-            break;
-        }
     }
 
-    // crate::println!("CCCCCCCCCCCCCCCC");
-    let mut candidate_index = 0;
+    // log::info!("CCCCCCCCCCCCCCCC");
     let mut candidate_width = 0;
     for x in 0..stride {
         seq_buffer.clear();
@@ -825,30 +809,16 @@ pub fn find_finders(candidates: &mut [Option<Point>], image: &[u8], thresh: u8, 
                 run_length = 1;
                 if let Some((pos, width)) = seq_buffer.search() {
                     let search_point = Point::new(x as _, pos as _);
-                    // crate::println!("col candidate {}, {}", x, pos);
+                    // log::info!("col candidate {}, {}", x, pos);
 
                     // now cross the candidate against row candidates; only report those that match
-                    for &rc in row_candidates
-                        .iter()
-                        .filter(|&&x| if let Some(p) = x { p == search_point } else { false })
-                    {
-                        if candidate_index < candidates.len() {
-                            candidates[candidate_index] = rc;
-                            candidate_index += 1;
-                            candidate_width += width;
-                        } else {
-                            // just abort the search if we run out of space to store results
-                            break;
-                        }
+                    for &rc in row_candidates.iter().filter(|&&p| p == search_point) {
+                        candidates.push(rc);
+                        candidate_width += width;
                     }
                 }
             }
-            if candidate_index == candidates.len() {
-                // just abort the search if we run out of space to store results
-                crate::println!("ran out of space for processed candidates");
-                break;
-            }
         }
     }
-    if candidate_index != 0 { candidate_width / candidate_index } else { 0 }
+    if candidates.len() != 0 { candidate_width / candidates.len() } else { 0 }
 }

@@ -190,17 +190,18 @@ pub extern "C" fn trap_handler(
     let epc = sepc::read();
 
     let ex = RiscvException::from_regs(sc.bits(), epc, stval::read());
-    #[cfg(feature = "debug-print")]
+    #[cfg(any(feature = "debug-print"))] // , feature = "debug-swap-verbose"
     {
         let pid = current_pid();
         let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
         let tid = ArchProcess::with_current(|p| p.current_tid());
         println!(
-            "IRQ ({}.{}): {} sepc {:x}", //  reg {:08x?}
+            "IRQ ({}.{}): {} sepc {:x} sim {:x}", //  reg {:08x?}
             pid,
             tid,
             ex,
             sepc::read(),
+            sim_read(),
             // ArchProcess::with_current(|p| p.current_thread().registers)
         );
     }

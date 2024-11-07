@@ -280,7 +280,7 @@ impl MemoryManager {
             // First, we build a &[u8]...
             let name_bytes = self.ram_name.to_le_bytes();
             // ... and then convert that slice into a string slice
-            let _ram_name = str::from_utf8_unchecked(&name_bytes);
+            let _ram_name = core::str::from_utf8_unchecked(&name_bytes);
             println!(
                 "    Region {} ({:08x}) {:08x} - {:08x} {} bytes:",
                 _ram_name,
@@ -292,9 +292,11 @@ impl MemoryManager {
         };
         for o in 0..self.ram_size / PAGE_SIZE {
             unsafe {
-                if MEMORY_ALLOCATIONS[offset + o].is_some() {
-                    println!("        {:08x} => {}", self.ram_size + o * PAGE_SIZE, _allocation.get());
-                }
+                println!(
+                    "        {:08x} => {:?}",
+                    self.ram_size + o * PAGE_SIZE,
+                    MEMORY_ALLOCATIONS[offset + o].get_pid()
+                );
             }
         }
 
@@ -306,11 +308,11 @@ impl MemoryManager {
             for region in EXTRA_REGIONS {
                 println!("    Region {}:", region);
                 for o in 0..(region.mem_size as usize) / PAGE_SIZE {
-                    if EXTRA_ALLOCATIONS[offset + o].is_some() {
+                    if let Some(allocation) = EXTRA_ALLOCATIONS[offset + o] {
                         println!(
                             "        {:08x} => {}",
                             (region.mem_start as usize) + o * PAGE_SIZE,
-                            _allocation.get()
+                            allocation.get()
                         )
                     }
                 }

@@ -1,0 +1,28 @@
+[package]
+name = "bao-video"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+utralib = { version = "0.1.25", optional = true, default-features = false }
+xous-names = { package = "xous-api-names", version = "0.9.63" }
+ticktimer = { package = "xous-api-ticktimer", version = "0.9.61" }
+xous = "0.9.64"
+log-server = { package = "xous-api-log", version = "0.1.61" }
+log = "0.4.14"
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+cramium-hal = { path = "../../libs/cramium-hal", features = ["std"] }
+cram-hal-service = { path = "../cram-hal-service" }
+
+# QR decoding
+libm = { version = "0.2.8" }
+nalgebra = { version = "0.33", default-features = false, features = ["libm"] }
+rqrr = "0.8.0"
+
+locales = { path = "../../locales" }
+
+[features]
+cramium-soc = ["utralib/cramium-soc"]
+decongest-udma = []
+default = ["decongest-udma"]

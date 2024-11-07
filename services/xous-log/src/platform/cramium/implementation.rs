@@ -96,10 +96,10 @@ fn uart_handler(_irq_no: usize, _arg: *mut usize) {
         }
         if unsafe { KBD_CONN != 0 } {
             let c = char::from_u32(c as u32).unwrap_or('.');
-            print!("{}", c); // local echo
-            // naked carriage return
             if c == '\r' {
-                println!(" "); // line feed with carriage return
+                println!(""); // add line feed to carriage return
+            } else {
+                print!("{}", c); // local echo
             }
             xous::try_send_message(unsafe { KBD_CONN }, xous::Message::new_scalar(0, c as usize, 0, 0, 0))
                 .ok();

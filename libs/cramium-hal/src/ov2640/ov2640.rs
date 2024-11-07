@@ -49,7 +49,7 @@ impl Into<(usize, usize)> for Resolution {
 
 pub struct Ov2640 {
     csr: CSR<u32>,
-    ifram: IframRange,
+    ifram: Option<IframRange>,
     contrast: Contrast,
     brightness: Brightness,
     color_mode: ColorMode,
@@ -65,12 +65,20 @@ impl Udma for Ov2640 {
 
 impl Ov2640 {
     #[cfg(feature = "std")]
-    pub unsafe fn new() -> Option<Self> {
-        if let Some(ifram) = IframRange::request(4096, None) {
-            Some(Ov2640::new_with_ifram(ifram))
-        } else {
-            None
-        }
+    /// Safety: clocks must be turned on before this is called
+    pub unsafe fn new() -> Result<Self, xous::Error> {
+        let ifram_virt = xous::syscall::map_memory(
+            xous::MemoryAddress::new(crate::board::CAM_IFRAM_ADDR),
+            None,
+            crate::board::CAM_IFRAM_LEN_PAGES * 4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )?;
+        let ifram = IframRange::from_raw_parts(
+            crate::board::CAM_IFRAM_ADDR,
+            ifram_virt.as_ptr() as usize,
+            ifram_virt.len(),
+        );
+        Ok(Ov2640::new_with_ifram(ifram))
     }
 
     pub unsafe fn new_with_ifram(ifram: IframRange) -> Self {
@@ -89,7 +97,7 @@ impl Ov2640 {
 
         Self {
             csr,
-            ifram,
+            ifram: Some(ifram),
             color_mode: ColorMode::Normal,
             contrast: Contrast::Level2,
             brightness: Brightness::Level2,
@@ -98,6 +106,34 @@ impl Ov2640 {
             slicing: None,
         }
     }
+
+    pub fn release_ifram(&mut self) {
+        if let Some(ifram) = self.ifram.take() {
+            xous::syscall::unmap_memory(ifram.virt_range).unwrap();
+        }
+    }
+
+    pub fn claim_ifram(&mut self) -> Result<(), xous::Error> {
+        if self.ifram.is_none() {
+            let ifram = xous::syscall::map_memory(
+                xous::MemoryAddress::new(crate::board::CAM_IFRAM_ADDR),
+                None,
+                crate::board::CAM_IFRAM_LEN_PAGES * 4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )?;
+            let cam_ifram = unsafe {
+                crate::ifram::IframRange::from_raw_parts(
+                    crate::board::CAM_IFRAM_ADDR,
+                    ifram.as_ptr() as usize,
+                    ifram.len(),
+                )
+            };
+            self.ifram = Some(cam_ifram);
+        }
+        Ok(())
+    }
+
+    pub fn has_ifram(&self) -> bool { self.ifram.is_some() }
 
     pub fn poke(&self, i2c: &mut dyn I2cApi, adr: u8, dat: u8) {
         i2c.i2c_write(OV2640_DEV, adr, &[dat]).expect("write failed");
@@ -174,10 +210,10 @@ impl Ov2640 {
     }
 
     /// TODO: figure out how to length-bound this to...the frame slice size? line size? idk...
-    pub fn rx_buf<T: UdmaWidths>(&self) -> &[T] { &self.ifram.as_slice() }
+    pub fn rx_buf<T: UdmaWidths>(&self) -> &[T] { &self.ifram.as_ref().unwrap().as_slice() }
 
     /// TODO: figure out how to length-bound this to...the frame slice size? line size? idk...
-    pub unsafe fn rx_buf_phys<T: UdmaWidths>(&self) -> &[T] { &self.ifram.as_phys_slice() }
+    pub unsafe fn rx_buf_phys<T: UdmaWidths>(&self) -> &[T] { &self.ifram.as_ref().unwrap().as_phys_slice() }
 
     pub fn capture_async(&mut self) {
         // we want the sliced resolution so resolve resolution through the method call wrapper

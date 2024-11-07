@@ -4,7 +4,7 @@ mod hw;
 use api::*;
 use cramium_hal::{
     iox,
-    udma::{EventChannel, GlobalConfig, PeriphId},
+    udma::{EventChannel, GlobalConfig, I2cApi, PeriphId},
 };
 #[cfg(feature = "quantum-timer")]
 use utralib::utra;
@@ -139,6 +139,36 @@ fn main() {
     .expect("couldn't map UDMA global control");
     let udma_global = GlobalConfig::new(udma_global_csr.as_mut_ptr() as *mut u32);
 
+    // Note: the I2C handler can be put into a separate thread if we need the main
+    // HAL server to not block while a large I2C transaction is being handled. For
+    // now this is all placed into a single thread. However, if we ever had a situation
+    // where, for example, you had to do a compound I2C transaction and flip a GPIO pin
+    // in the middle of that transaction in order for the set of I2C transactions to
+    // complete, this implementation would deadlock as it would block on the I2C transaction
+    // before handling the GPIO request.
+    let i2c_channel = cramium_hal::board::setup_i2c_pins(&iox);
+    udma_global.clock_on(PeriphId::from(i2c_channel));
+    let i2c_pages = xous::syscall::map_memory(
+        xous::MemoryAddress::new(cramium_hal::board::I2C_IFRAM_ADDR),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't claim I2C IFRAM page");
+
+    let i2c_ifram = unsafe {
+        cramium_hal::ifram::IframRange::from_raw_parts(
+            cramium_hal::board::I2C_IFRAM_ADDR,
+            i2c_pages.as_ptr() as usize,
+            i2c_pages.len(),
+        )
+    };
+    let mut i2c = unsafe {
+        cramium_hal::udma::I2c::new_with_ifram(i2c_channel, 400_000, cram_hal_service::PERCLK, i2c_ifram)
+    };
+
+    // -------------------- begin timer workaround code
+    // This code should go away with NTO as we have a proper, private ticktimer unit.
     let mut pio_ss = xous_pio::PioSharedState::new();
     // map and enable the interrupt for the PIO system timer
     let irq18_page = xous::syscall::map_memory(
@@ -185,6 +215,7 @@ fn main() {
         ptimer.irq_csr.wfo(utra::irqarray18::EV_ENABLE_PIOIRQ0_DUPE, 1);
         log::info!("Quantum timer setup!");
     }
+    // -------------------- end timer workaround code
 
     // start keyboard emulator service
     hw::keyboard::start_keyboard_service();
@@ -334,6 +365,34 @@ fn main() {
                     // as bare iron.
                     udma_global.map_event_with_offset(periph, event_offset, to_channel);
                 }
+            }
+            Opcode::I2c => {
+                let mut buf = unsafe {
+                    xous_ipc::Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                };
+                let mut list = buf.to_original::<I2cTransactions, _>().expect("I2c message format error");
+                for transaction in list.transactions.iter_mut() {
+                    match transaction.i2c_type {
+                        I2cTransactionType::Write => {
+                            match i2c.i2c_write(transaction.device, transaction.address, &transaction.data) {
+                                Ok(b) => transaction.result = I2cResult::Ack(b),
+                                _ => transaction.result = I2cResult::Nack,
+                            }
+                        }
+                        I2cTransactionType::Read | I2cTransactionType::ReadRepeatedStart => {
+                            match i2c.i2c_read(
+                                transaction.device,
+                                transaction.address,
+                                &mut transaction.data,
+                                transaction.i2c_type == I2cTransactionType::ReadRepeatedStart,
+                            ) {
+                                Ok(b) => transaction.result = I2cResult::Ack(b),
+                                _ => transaction.result = I2cResult::Nack,
+                            }
+                        }
+                    }
+                }
+                buf.replace(list).expect("I2c message format error");
             }
             Opcode::InvalidCall => {
                 log::error!("Invalid opcode received: {:?}", msg);

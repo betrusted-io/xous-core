@@ -507,6 +507,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // builder.add_loader_feature("trng-test");
             // builder.add_loader_feature("dump-trng");
             // builder.add_loader_feature("usb");
+            // builder.add_loader_feature("qr");
             // builder.add_feature("usb"); // needed if usb-device-xous is selected
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
@@ -539,6 +540,62 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             builder.add_services(&get_cratespecs());
             for service in cramium_swap_pkgs {
+                builder.add_service(service, LoaderRegion::Swap);
+            }
+        }
+
+        Some("baosec") => {
+            let board = "board-baosec";
+            // select the board
+            builder.add_feature(board);
+            builder.add_loader_feature(board);
+            builder.add_kernel_feature(board);
+
+            // placement in flash is a tension between dev convenience and RAM usage. Things in flash
+            // are resident, non-swapable, but end up making the slow kernel burn process take longer.
+            // Layout:
+            //   - kernel, ticktimer, log, names, swapper are essential services and stay resident. Must be <1
+            //     MiB total.
+            //   - usb-cramium is latency-sensitive and runs a handler in a non-swappable IRQ context, and
+            //     thus cannot be swapped out. It contains the USB stack and API layer. It needs to maintain a
+            //     mutex with bao-video as the camera cannot run simultaneously with the USB stack due to
+            //     sharing of the IFRAM space.
+            //   - cram-hal-service contains all the non-latency sensitive hardware APIs
+            //   - bao-video pulls camera + display + qr decoding into a single package single memory space to
+            //     optimize performance. Must maintain a mutex with usb-cramium on the camera IFRAM space.
+            //   - bao-console is the serial debug console handler
+            //   - [planned] pddb server
+            //   - [planned] vault application
+            let bao_rram_pkgs = ["xous-ticktimer", "xous-log", "xous-names", "usb-cramium"].to_vec();
+            let bao_swap_pkgs = ["cram-hal-service", "bao-console", "bao-video"].to_vec();
+            if !builder.is_swap_set() {
+                builder.set_swap(0, 8 * 1024 * 1024);
+            }
+            builder.add_loader_feature("swap");
+            builder.add_kernel_feature("swap");
+            builder.add_feature("swap");
+
+            builder.add_loader_feature("debug-print");
+            builder.add_kernel_feature("debug-swap");
+            // builder.add_kernel_feature("debug-print");
+            // builder.add_kernel_feature("debug-swap-verbose");
+            builder.add_feature("quantum-timer");
+            builder.add_kernel_feature("v2p");
+            builder.add_loader_feature("sram-margin");
+            match task.as_deref() {
+                Some("baosec") => builder.target_cramium_soc(),
+                _ => panic!("should be unreachable"),
+            };
+            broken_aes_cleanup = true;
+
+            // It is important that this is the first service added, because the swapper *must* be in PID 2
+            builder.add_service("xous-swapper", LoaderRegion::Flash);
+
+            for service in bao_rram_pkgs {
+                builder.add_service(service, LoaderRegion::Flash);
+            }
+            builder.add_services(&get_cratespecs());
+            for service in bao_swap_pkgs {
                 builder.add_service(service, LoaderRegion::Swap);
             }
         }
@@ -677,6 +734,8 @@ Hardware images:
  ro-test                 automation framework for TRNG testing (RO directly, no CPRNG). [cratespecs] ignored.
  av-test                 automation framework for TRNG testing (AV directly, no CPRNG). [cratespecs] ignored.
  tiny                    Precursor tiny image. For testing with services built out-of-tree.
+ cramium-soc             BSP validation image for Cramium. Contains a superset of features, in various states of testing.
+ baosec                  Baosec application target image.
 
 Hosted emulation:
  run                     Run user image in hosted mode with release flags. [cratespecs] are apps

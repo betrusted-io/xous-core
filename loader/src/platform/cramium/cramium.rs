@@ -5,7 +5,7 @@ use cramium_hal::udma::UdmaGlobalConfig;
 use utralib::generated::*;
 
 #[cfg(feature = "qr")]
-use crate::platform::cramium::qr;
+use crate::platform::cramium::{homography, qr};
 
 // Notes about the reset vector location
 // This can be set using fuses in the IFR (also called 'info') region
@@ -76,7 +76,6 @@ pub const KERNEL_OFFSET: usize = 0x5_0000;
 
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() -> u32 {
-    use cramium_hal::{axp2101::WhichLdo, iox::IoxValue, sh1107::Mono, udma::Udma};
     // Set up the initial clocks. This is done as a "poke array" into a table of addresses.
     // Why? because this is actually how it's done for the chip verification code. We can
     // make this nicer and more abstract with register meanings down the road, if necessary,
@@ -280,29 +279,14 @@ pub fn early_init() -> u32 {
     pmic.set_dcdc(&mut i2c, Some((1.2, false)), cramium_hal::axp2101::WhichDcDc::Dcdc4).unwrap();
     crate::println!("AXP2101 configure: {:?}", pmic);
 
-    // setup camera pins
-    let (cam_pdwn_bnk, cam_pdwn_pin) = cramium_hal::board::setup_ov2640_pins(&iox);
-    // disable camera powerdown
-    iox.set_gpio_pin(cam_pdwn_bnk, cam_pdwn_pin, cramium_hal::iox::IoxValue::Low);
-    udma_global.clock_on(PeriphId::Cam);
-    let cam_ifram = unsafe {
-        cramium_hal::ifram::IframRange::from_raw_parts(
-            cramium_hal::board::CAM_IFRAM_ADDR,
-            cramium_hal::board::CAM_IFRAM_ADDR,
-            cramium_hal::board::CAM_IFRAM_LEN_PAGES * 4096,
-        )
-    };
-    // this is safe because we turned on the clocks before calling it
-    let mut cam = unsafe { cramium_hal::ov2640::Ov2640::new_with_ifram(cam_ifram) };
-
     // TEMPORARY: turn off SE0 on USB
     let _se0 = cramium_hal::board::baosec::setup_usb_pins(&iox);
+    #[cfg(feature = "board-bringup")]
     let iox_loop = iox.clone();
 
     // show the boot logo
-    use cramium_hal::minigfx::{FrameBuffer, Line, Point};
+    use cramium_hal::minigfx::FrameBuffer;
 
-    use crate::platform::cramium::gfx;
     let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(perclk, &mut iox, &mut udma_global);
     sh1107.init();
     crate::platform::cramium::bootlogo::show_logo(&mut sh1107);
@@ -314,6 +298,10 @@ pub fn early_init() -> u32 {
     // makes things a little bit cleaner for JTAG ops, it seems.
     #[cfg(feature = "board-bringup")]
     {
+        use cramium_hal::minigfx::{Line, Point};
+        use cramium_hal::{axp2101::WhichLdo, iox::IoxValue, minigfx::ColorNative, sh1107::Mono, udma::Udma};
+
+        use crate::platform::cramium::gfx;
         //------------- test I2C ------------
         crate::println!("i2c test");
         let mut id = [0u8; 8];
@@ -362,6 +350,21 @@ pub fn early_init() -> u32 {
         }
 
         //------------- test OV2640 ------------
+        // setup camera pins
+        let (cam_pdwn_bnk, cam_pdwn_pin) = cramium_hal::board::setup_ov2640_pins(&iox);
+        // disable camera powerdown
+        iox.set_gpio_pin(cam_pdwn_bnk, cam_pdwn_pin, cramium_hal::iox::IoxValue::Low);
+        udma_global.clock_on(PeriphId::Cam);
+        let cam_ifram = unsafe {
+            cramium_hal::ifram::IframRange::from_raw_parts(
+                cramium_hal::board::CAM_IFRAM_ADDR,
+                cramium_hal::board::CAM_IFRAM_ADDR,
+                cramium_hal::board::CAM_IFRAM_LEN_PAGES * 4096,
+            )
+        };
+        // this is safe because we turned on the clocks before calling it
+        let mut cam = unsafe { cramium_hal::ov2640::Ov2640::new_with_ifram(cam_ifram) };
+
         cam.delay(100);
         let (pid, mid) = cam.read_id(&mut i2c);
         crate::println!("Camera pid {:x}, mid {:x}", pid, mid);
@@ -433,142 +436,191 @@ pub fn early_init() -> u32 {
 
             let mut candidates: [Option<Point>; 64] = [None; 64];
             crate::println!("\n\r------------- SEARCH -----------");
-            qr::find_finders(&mut candidates, &frame, BW_THRESH, QR_WIDTH);
+            let finder_width = qr::find_finders(&mut candidates, &frame, BW_THRESH, QR_WIDTH) as isize;
             const CROSSHAIR_LEN: isize = 3;
             let mut candidates_found = 0;
+            let mut candidate3 = [Point::new(0, 0); 3];
             for candidate in candidates.iter() {
                 if let Some(c) = candidate {
+                    if candidates_found < candidate3.len() {
+                        candidate3[candidates_found] = *c;
+                    }
                     candidates_found += 1;
                     crate::println!("******    candidate: {}, {}    ******", c.x, c.y);
                     // remap image to screen coordinates (it's 2:1)
                     let mut c_screen = *c / 2;
                     // flip coordinates to match the camera data
                     c_screen = Point::new(c_screen.x, sh1107.dimensions().y - 1 - c_screen.y);
-                    // vertical cross hair
-                    gfx::line(
-                        &mut sh1107,
-                        Line::new(
-                            c_screen + Point::new(0, CROSSHAIR_LEN),
-                            c_screen - Point::new(0, CROSSHAIR_LEN),
-                        ),
-                        None,
-                        true,
-                    );
-                    // horizontal cross hair
-                    gfx::line(
-                        &mut sh1107,
-                        Line::new(
-                            c_screen + Point::new(CROSSHAIR_LEN, 0),
-                            c_screen - Point::new(CROSSHAIR_LEN, 0),
-                        ),
-                        None,
-                        true,
-                    );
+                    draw_crosshair(&mut sh1107, c_screen);
                 }
             }
+            use crate::platform::cramium::qr::*;
             if candidates_found == 3 {
-                let mut tl: Option<Point> = None;
-                let mut tr: Option<Point> = None;
-                for candidate in candidates.iter() {
-                    if let Some(c) = candidate {
-                        if c.x < QR_WIDTH as isize / 2 && c.y < QR_HEIGHT as isize / 2 {
-                            tl = Some(Point::new(c.x, c.y));
-                        }
-                        if c.x > QR_WIDTH as isize / 2 && c.y < QR_HEIGHT as isize / 2 {
-                            tr = Some(Point::new(c.x, c.y));
-                        }
+                let maybe_qr_corners = QrCorners::from_finders(
+                    &candidate3,
+                    Point::new(QR_WIDTH as isize, QR_HEIGHT as isize),
+                    // add a search margin on the finder width
+                    (finder_width
+                        + (crate::platform::cramium::qr::FINDER_SEARCH_MARGIN * finder_width)
+                            / (1 + 1 + 3 + 1 + 1)) as usize,
+                );
+                // just doing this to avoid nesting another if level out in the test code; make this better!
+                if maybe_qr_corners.is_none() {
+                    continue;
+                }
+                let mut qr_corners = maybe_qr_corners.unwrap();
+
+                let dims = Point::new(QR_WIDTH as isize, QR_HEIGHT as isize);
+                let mut il = ImageRoi::new(&mut frame, dims, BW_THRESH);
+                let (src, dst) = qr_corners.mapping(&mut il, crate::platform::cramium::qr::HOMOGRAPHY_MARGIN);
+                for s in src.iter() {
+                    if let Some(p) = s {
+                        crate::println!("src {:?}", p);
+                        draw_crosshair(&mut sh1107, *p / 2);
                     }
                 }
-                if tl.is_some() && tr.is_some() {
-                    let at =
-                        qr::AffineTransform::from_coordinates(tl.unwrap(), tr.unwrap(), QR_WIDTH, QR_HEIGHT);
-                    let mut rotated_uninit: [core::mem::MaybeUninit<u8>; QR_WIDTH * QR_HEIGHT] =
-                        unsafe { core::mem::MaybeUninit::uninit().assume_init() };
-                    at.transform(&frame, &mut rotated_uninit);
-                    let rotated: [u8; QR_WIDTH * QR_HEIGHT] = unsafe { core::mem::transmute(rotated_uninit) };
+                for d in dst.iter() {
+                    if let Some(p) = d {
+                        crate::println!("dst {:?}", p);
+                        draw_crosshair(&mut sh1107, *p / 2);
+                    }
+                }
 
-                    for (y, row) in rotated.chunks(QR_WIDTH).enumerate() {
-                        if y & 1 == 0 {
-                            for (x, &pixval) in row.iter().enumerate() {
-                                if x & 1 == 0 {
-                                    if x < sh1107.dimensions().x as usize * 2
-                                        && y < sh1107.dimensions().y as usize * 2
-                                            - (gfx::CHAR_HEIGHT as usize + 1) * 2
+                let mut src_f: [(f32, f32); 4] = [(0.0, 0.0); 4];
+                let mut dst_f: [(f32, f32); 4] = [(0.0, 0.0); 4];
+                let mut all_found = true;
+                for (s, s_f32) in src.iter().zip(src_f.iter_mut()) {
+                    if let Some(p) = s {
+                        *s_f32 = p.to_f32();
+                    } else {
+                        all_found = false;
+                    }
+                }
+                for (d, d_f32) in dst.iter().zip(dst_f.iter_mut()) {
+                    if let Some(p) = d {
+                        *d_f32 = p.to_f32();
+                    } else {
+                        all_found = false;
+                    }
+                }
+
+                if all_found {
+                    use crate::platform::cramium::homography::*;
+                    if let Some(h) = find_homography(src_f, dst_f) {
+                        if let Some(h_inv) = h.try_inverse() {
+                            crate::println!("{:?}", h_inv);
+                            let h_inv_fp = matrix3_to_fixp(h_inv);
+                            crate::println!("{:?}", h_inv_fp);
+
+                            // apply homography to generate a new buffer for processing
+                            let mut aligned = [0u8; QR_WIDTH * QR_HEIGHT];
+                            // iterate through pixels and apply homography
+                            for y in 0..dims.y {
+                                for x in 0..dims.x {
+                                    let (x_src, y_src) =
+                                        apply_fixp_homography(&h_inv_fp, (x as i32, y as i32));
+                                    if (x_src as i32 >= 0)
+                                        && ((x_src as i32) < dims.x as i32)
+                                        && (y_src as i32 >= 0)
+                                        && ((y_src as i32) < dims.y as i32)
                                     {
-                                        let luminance = pixval & 0xff;
-                                        if luminance > BW_THRESH {
-                                            // flip on y to adjust for sensor orientation. Lower left is (0,
-                                            // 0) on the display.
-                                            sh1107.put_pixel(
-                                                Point::new(
-                                                    x as isize / 2,
-                                                    (sh1107.dimensions().y - 1) - (y as isize / 2),
-                                                ),
-                                                Mono::White.into(),
-                                            );
-                                        } else {
-                                            sh1107.put_pixel(
-                                                Point::new(
-                                                    x as isize / 2,
-                                                    (sh1107.dimensions().y - 1) - (y as isize / 2),
-                                                ),
-                                                Mono::Black.into(),
-                                            );
-                                        }
+                                        // println!("{},{} -> {},{}", x_src as i32, y_src as i32, x, y);
+                                        aligned[QR_WIDTH * y as usize + x as usize] =
+                                            frame[QR_WIDTH * y_src as usize + x_src as usize];
                                     } else {
-                                        break;
+                                        aligned[QR_WIDTH * y as usize + x as usize] = 255;
                                     }
                                 }
                             }
-                        }
-                    }
 
-                    gfx::msg(
-                        &mut sh1107,
-                        "Aligning...",
-                        Point::new(0, 0),
-                        Mono::White.into(),
-                        Mono::Black.into(),
-                    );
-
-                    if udma_uart.read_async(&mut c) != 0 {
-                        if c == ' ' as u32 as u8 {
-                            crate::println!("Dumping...");
-
-                            crate::println!("frame {}", frames);
-                            udma_uart.write("------------------ divider ------------------\n\r".as_bytes());
-                            let hex_to_ascii = [
-                                '0' as u32 as u8,
-                                '1' as u32 as u8,
-                                '2' as u32 as u8,
-                                '3' as u32 as u8,
-                                '4' as u32 as u8,
-                                '5' as u32 as u8,
-                                '6' as u32 as u8,
-                                '7' as u32 as u8,
-                                '8' as u32 as u8,
-                                '9' as u32 as u8,
-                                'A' as u32 as u8,
-                                'B' as u32 as u8,
-                                'C' as u32 as u8,
-                                'D' as u32 as u8,
-                                'E' as u32 as u8,
-                                'F' as u32 as u8,
-                            ];
-                            for line in frame.chunks(32) {
-                                let mut output = [0u8; 3 * 32 + 3];
-                                for (i, &b) in line.iter().enumerate() {
-                                    output[i * 3 + 0] = hex_to_ascii[(b >> 4) as usize];
-                                    output[i * 3 + 1] = hex_to_ascii[(b & 0xF) as usize];
-                                    output[i * 3 + 2] = ',' as u32 as u8;
+                            // blit aligned to sh1107
+                            for (y, row) in aligned.chunks(QR_WIDTH).enumerate() {
+                                if y & 1 == 0 {
+                                    for (x, &pixval) in row.iter().enumerate() {
+                                        if x & 1 == 0 {
+                                            if x < sh1107.dimensions().x as usize * 2
+                                                && y < sh1107.dimensions().y as usize * 2
+                                                    - (gfx::CHAR_HEIGHT as usize + 1) * 2
+                                            {
+                                                let luminance = pixval & 0xff;
+                                                if luminance > BW_THRESH {
+                                                    // flip on y to adjust for sensor orientation. Lower left
+                                                    // is (0, 0)
+                                                    // on the display.
+                                                    sh1107.put_pixel(
+                                                        Point::new(
+                                                            x as isize / 2,
+                                                            (sh1107.dimensions().y - 1) - (y as isize / 2),
+                                                        ),
+                                                        Mono::White.into(),
+                                                    );
+                                                } else {
+                                                    sh1107.put_pixel(
+                                                        Point::new(
+                                                            x as isize / 2,
+                                                            (sh1107.dimensions().y - 1) - (y as isize / 2),
+                                                        ),
+                                                        Mono::Black.into(),
+                                                    );
+                                                }
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                    }
                                 }
-                                output[3 * 32] = '\\' as u32 as u8;
-                                output[3 * 32 + 1] = '\n' as u32 as u8;
-                                output[3 * 32 + 2] = '\r' as u32 as u8;
-                                udma_uart.write(&output);
                             }
-                            // continue with boot
-                            break;
+
+                            gfx::msg(
+                                &mut sh1107,
+                                "Aligning...",
+                                Point::new(0, 0),
+                                Mono::White.into(),
+                                Mono::Black.into(),
+                            );
+
+                            if udma_uart.read_async(&mut c) != 0 {
+                                if c == ' ' as u32 as u8 {
+                                    crate::println!("Dumping...");
+
+                                    crate::println!("frame {}", frames);
+                                    udma_uart.write(
+                                        "------------------ divider ------------------\n\r".as_bytes(),
+                                    );
+                                    let hex_to_ascii = [
+                                        '0' as u32 as u8,
+                                        '1' as u32 as u8,
+                                        '2' as u32 as u8,
+                                        '3' as u32 as u8,
+                                        '4' as u32 as u8,
+                                        '5' as u32 as u8,
+                                        '6' as u32 as u8,
+                                        '7' as u32 as u8,
+                                        '8' as u32 as u8,
+                                        '9' as u32 as u8,
+                                        'A' as u32 as u8,
+                                        'B' as u32 as u8,
+                                        'C' as u32 as u8,
+                                        'D' as u32 as u8,
+                                        'E' as u32 as u8,
+                                        'F' as u32 as u8,
+                                    ];
+                                    for line in frame.chunks(32) {
+                                        let mut output = [0u8; 3 * 32 + 3];
+                                        for (i, &b) in line.iter().enumerate() {
+                                            output[i * 3 + 0] = hex_to_ascii[(b >> 4) as usize];
+                                            output[i * 3 + 1] = hex_to_ascii[(b & 0xF) as usize];
+                                            output[i * 3 + 2] = ',' as u32 as u8;
+                                        }
+                                        output[3 * 32] = '\\' as u32 as u8;
+                                        output[3 * 32 + 1] = '\n' as u32 as u8;
+                                        output[3 * 32 + 2] = '\r' as u32 as u8;
+                                        udma_uart.write(&output);
+                                    }
+                                    // continue with boot
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
