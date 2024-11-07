@@ -139,6 +139,13 @@ fn main() {
     .expect("couldn't map UDMA global control");
     let udma_global = GlobalConfig::new(udma_global_csr.as_mut_ptr() as *mut u32);
 
+    // Note: the I2C handler can be put into a separate thread if we need the main
+    // HAL server to not block while a large I2C transaction is being handled. For
+    // now this is all placed into a single thread. However, if we ever had a situation
+    // where, for example, you had to do a compound I2C transaction and flip a GPIO pin
+    // in the middle of that transaction in order for the set of I2C transactions to
+    // complete, this implementation would deadlock as it would block on the I2C transaction
+    // before handling the GPIO request.
     let i2c_channel = cramium_hal::board::setup_i2c_pins(&iox);
     udma_global.clock_on(PeriphId::from(i2c_channel));
     let i2c_pages = xous::syscall::map_memory(
