@@ -955,6 +955,33 @@ impl Spim {
                 timeout += 1;
                 if (self.mode == SpimMode::Quad) && (timeout > chunk.len() * 10_000) {
                     success = false;
+                    /*
+                    // unsuccessful attempt to clear the pending transfer manually
+                    // the root cause of this is when the UDMA RX FIFO fills up and
+                    // RX packets get dropped. The Rx counter becomes "desynced" from the
+                    // data stream, and thus it never hits 0 (it wraps around and goes negative).
+                    // The code below does not recover the PHY into a usable state.
+                    unsafe {
+                        self.csr()
+                            .base()
+                            .add(Bank::Rx as usize)
+                            .add(DmaReg::Cfg.into())
+                            .write_volatile(CFG_SIZE_8 | CFG_CLEAR);
+                        self.csr().base().add(Bank::Rx as usize).add(DmaReg::Saddr.into()).write_volatile(0);
+                    };
+                    // send an EOT
+                    let cmd_list = [SpimCmd::EndXfer(SpimEventGen::Disabled)];
+                    self.send_cmd_list(&cmd_list);
+                    crate::println!(
+                        "udma timeout: cfg {:x}, saddr {:x}",
+                        unsafe {
+                            self.csr().base().add(Bank::Rx as usize).add(DmaReg::Cfg.into()).read_volatile()
+                        },
+                        unsafe {
+                            self.csr().base().add(Bank::Rx as usize).add(DmaReg::Saddr.into()).read_volatile()
+                        }
+                    );
+                    */
                     break;
                 }
                 #[cfg(feature = "std")]
@@ -1016,5 +1043,26 @@ impl Spim {
             self.mem_cs(false);
             offset += chunk.len();
         }
+    }
+}
+
+// Stub retained because it is helpful for debugging some bus contention issues.
+#[allow(dead_code)]
+fn cache_flush() {
+    unsafe {
+        // let the write go through before continuing
+        #[rustfmt::skip]
+        core::arch::asm!(
+            ".word 0x500F",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+            "fence",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+        );
     }
 }
