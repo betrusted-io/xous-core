@@ -108,13 +108,14 @@ impl SwapAlloc {
             if let Some(pid) = pid {
                 s.track_alloc(true);
                 if let Some(va) = vaddr {
+                    // ensure swapper pages are always hard wired
+                    let hard_wired = if pid.get() == 2 { SWAP_FLG_WIRED } else { 0 };
                     #[cfg(feature = "debug-swap-verbose")]
                     println!(
-                        "-- update {}/{:x} <- {}/{:x} @ {:x} (in pid{})",
+                        "-- update {}/{:x} <- {:x} @ {:x} (in pid{})",
                         pid.get(),
                         va,
-                        va as u8,
-                        va & !0xfff,
+                        (va as u32) & !0xFFF | pid.get() as u32 | self.vpn & SWAP_FLG_WIRED | hard_wired,
                         ((self as *const Self as usize
                             - crate::mem::MemoryManager::with(|mm| mm.rpt_base()))
                             / core::mem::size_of::<SwapAlloc>())
@@ -122,7 +123,8 @@ impl SwapAlloc {
                         crate::arch::process::Process::with_current(|p| p.pid().get()),
                     );
                     // preserve the wired flag if it was set previously by the loader
-                    self.vpn = (va as u32) & !0xFFF | pid.get() as u32 | self.vpn & SWAP_FLG_WIRED;
+                    self.vpn =
+                        (va as u32) & !0xFFF | pid.get() as u32 | self.vpn & SWAP_FLG_WIRED | hard_wired;
                 } else {
                     self.vpn = SWAP_FLG_WIRED | pid.get() as u32;
                 }
