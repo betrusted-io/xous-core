@@ -566,8 +566,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             //   - bao-console is the serial debug console handler
             //   - [planned] pddb server
             //   - [planned] vault application
-            let bao_rram_pkgs = ["xous-ticktimer", "xous-log", "xous-names", "usb-cramium"].to_vec();
-            let bao_swap_pkgs = ["bao-video", "cram-hal-service", "bao-console"].to_vec();
+            let bao_rram_pkgs =
+                ["xous-ticktimer", "xous-log", "xous-names", "usb-cramium", "bao-video"].to_vec();
+            let bao_swap_pkgs = ["cram-hal-service", "bao-console"].to_vec();
             if !builder.is_swap_set() {
                 builder.set_swap(0, 8 * 1024 * 1024);
             }
@@ -577,6 +578,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             builder.add_loader_feature("debug-print");
             builder.add_kernel_feature("debug-swap");
+            // builder.add_kernel_feature("debug-print");
+            // builder.add_kernel_feature("debug-swap-verbose");
             builder.add_feature("quantum-timer");
             builder.add_kernel_feature("v2p");
             builder.add_loader_feature("sram-margin");
