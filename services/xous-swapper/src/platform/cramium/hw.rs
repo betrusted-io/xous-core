@@ -121,16 +121,25 @@ impl SwapHal {
             )
             .ok();
         }
-        if !self.ram_spim.mem_read(src_offset as u32, buf, false) {
+        // Retry code added mostly as a diagnostic. Currently, if the SPIM interface
+        // fails due to hardware contention, the problem seems to be unrecoverable. We
+        // need a way inside mem_read() to reset the PHY entirely, but the hardware interface
+        // does not have an obvious way to do it.
+        let mut retries = 0;
+        while !self.ram_spim.mem_read(src_offset as u32, buf, false) {
             writeln!(
                 DebugUart {},
                 "Read timeout of data at offset {:x}; data result: {:x?} .. {:x?}",
-                (self.swap_mac_start + (src_offset / PAGE_SIZE) * size_of::<Tag>()) as u32,
+                src_offset,
                 &buf[..16],
                 &buf[buf.len() - 16..]
             )
             .ok();
-        };
+            retries += 1;
+            if retries > 2 {
+                break;
+            }
+        }
         self.cipher.decrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf, (&tag).into())
     }
 }
