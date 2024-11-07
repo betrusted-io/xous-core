@@ -301,6 +301,9 @@ impl MemoryMapping {
             println!("Process isn't allocated!");
             return;
         }
+        #[cfg(feature = "dump-kernel-pages")]
+        // stash the current process space so we know where to return to after dumping kernel pages
+        let pid = self.get_pid().map(|v| v.get()).unwrap_or(0);
         println!("Memory Maps for PID {}:", self.get_pid().map(|v| v.get()).unwrap_or(0));
         let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
         for (i, l1_entry) in l1_pt.entries.iter().enumerate() {
@@ -324,8 +327,16 @@ impl MemoryMapping {
 
             // Page 1023 is only available to PID1
             if i == 1023 && !self.is_kernel() {
-                println!("        <unavailable>");
-                continue;
+                // switch to kernel space if kernel dumps are requested
+                #[cfg(feature = "dump-kernel-pages")]
+                crate::services::SystemServices::with(|ss| {
+                    ss.get_process(PID::new(1).unwrap()).unwrap().mapping.activate().unwrap();
+                });
+                #[cfg(not(feature = "dump-kernel-pages"))]
+                {
+                    println!("        <unavailable>");
+                    continue;
+                }
             }
             // let l0_pt_addr = ((l1_entry >> 10) << 12) as *const u32;
             let l0_pt = unsafe { &mut (*((PAGE_TABLE_OFFSET + i * 4096) as *mut LeafPageTable)) };
@@ -341,6 +352,13 @@ impl MemoryMapping {
                     (*l0_entry >> 10) << 12,
                     MMUFlags::from_bits(l0_entry & 0x3ff).unwrap()
                 );
+            }
+            // return to the original process space from kernel space
+            #[cfg(feature = "dump-kernel-pages")]
+            if i == 1023 && pid != 1 {
+                crate::services::SystemServices::with(|ss| {
+                    ss.get_process(PID::new(pid).unwrap()).unwrap().mapping.activate().unwrap();
+                });
             }
         }
         println!("End of map");
