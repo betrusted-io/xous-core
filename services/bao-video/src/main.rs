@@ -9,12 +9,12 @@ mod gfx;
 mod homography;
 mod qr;
 
-const QR_WIDTH: usize = 256;
-const QR_HEIGHT: usize = 240;
+const IMAGE_WIDTH: usize = 256;
+const IMAGE_HEIGHT: usize = 240;
 const BW_THRESH: u8 = 128;
 
 pub fn blit_to_display(sh1107: &mut Oled128x128, frame: &[u8], display_cleared: bool) {
-    for (y, row) in frame.chunks(QR_WIDTH).enumerate() {
+    for (y, row) in frame.chunks(IMAGE_WIDTH).enumerate() {
         if y & 1 == 0 {
             for (x, &pixval) in row.iter().enumerate() {
                 if x & 1 == 0 {
@@ -23,21 +23,13 @@ pub fn blit_to_display(sh1107: &mut Oled128x128, frame: &[u8], display_cleared: 
                     {
                         let luminance = pixval & 0xff;
                         if luminance > BW_THRESH {
-                            // flip on y to adjust for sensor orientation. Lower left is (0, 0)
-                            // on the display.
-                            sh1107.put_pixel(
-                                Point::new(x as isize / 2, (sh1107.dimensions().y - 1) - (y as isize / 2)),
-                                Mono::White.into(),
-                            );
+                            sh1107.put_pixel(Point::new(x as isize / 2, y as isize / 2), Mono::White.into());
                         } else {
                             // optimization to avoid some computation if we're blitting to an already-black
                             // buffer
                             if !display_cleared {
                                 sh1107.put_pixel(
-                                    Point::new(
-                                        x as isize / 2,
-                                        (sh1107.dimensions().y - 1) - (y as isize / 2),
-                                    ),
+                                    Point::new(x as isize / 2, y as isize / 2),
                                     Mono::Black.into(),
                                 );
                             }
@@ -90,15 +82,15 @@ fn wrapped_main() -> ! {
     tt.sleep_ms(1).ok();
 
     let (cols, _rows) = cam.resolution();
-    let border = (cols - QR_WIDTH) / 2;
-    cam.set_slicing((border, 0), (cols - border, QR_HEIGHT));
+    let border = (cols - IMAGE_WIDTH) / 2;
+    cam.set_slicing((border, 0), (cols - border, IMAGE_HEIGHT));
     log::info!("320x240 resolution setup with 256x240 slicing");
 
     #[cfg(feature = "decongest-udma")]
     log::info!("Decongest udma option enabled.");
 
     let mut frames = 0;
-    let mut frame = [0u8; QR_WIDTH * QR_HEIGHT];
+    let mut frame = [0u8; IMAGE_WIDTH * IMAGE_HEIGHT];
     // while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High {}
     loop {
         #[cfg(not(feature = "decongest-udma"))]
@@ -106,7 +98,7 @@ fn wrapped_main() -> ! {
 
         let mut candidates = Vec::<Point>::new();
         log::info!("------------- SEARCH -----------");
-        let finder_width = qr::find_finders(&mut candidates, &frame, BW_THRESH, QR_WIDTH) as isize;
+        let finder_width = qr::find_finders(&mut candidates, &frame, BW_THRESH, IMAGE_WIDTH) as isize;
         const CROSSHAIR_LEN: isize = 3;
         if candidates.len() == 3 {
             gfx::msg(&mut sh1107, "Aligning...", Point::new(0, 0), Mono::White.into(), Mono::Black.into());
@@ -121,11 +113,11 @@ fn wrapped_main() -> ! {
 
             if let Some(mut qr_corners) = qr::QrCorners::from_finders(
                 &candidates.try_into().unwrap(),
-                Point::new(QR_WIDTH as isize, QR_HEIGHT as isize),
+                Point::new(IMAGE_WIDTH as isize, IMAGE_HEIGHT as isize),
                 // add a search margin on the finder width
                 (finder_width + (qr::FINDER_SEARCH_MARGIN * finder_width) / (1 + 1 + 3 + 1 + 1)) as usize,
             ) {
-                let dims = Point::new(QR_WIDTH as isize, QR_HEIGHT as isize);
+                let dims = Point::new(IMAGE_WIDTH as isize, IMAGE_HEIGHT as isize);
                 let mut il = qr::ImageRoi::new(&mut frame, dims, BW_THRESH);
                 let (src, dst) = qr_corners.mapping(&mut il, qr::HOMOGRAPHY_MARGIN);
                 for s in src.iter() {
@@ -166,7 +158,7 @@ fn wrapped_main() -> ! {
                             log::info!("{:?}", h_inv_fp);
 
                             // apply homography to generate a new buffer for processing
-                            let mut aligned = [0u8; QR_WIDTH * QR_HEIGHT];
+                            let mut aligned = [0u8; IMAGE_WIDTH * IMAGE_HEIGHT];
                             // iterate through pixels and apply homography
                             for y in 0..dims.y {
                                 for x in 0..dims.x {
@@ -178,19 +170,20 @@ fn wrapped_main() -> ! {
                                         && ((y_src as i32) < dims.y as i32)
                                     {
                                         // println!("{},{} -> {},{}", x_src as i32, y_src as i32, x, y);
-                                        aligned[QR_WIDTH * y as usize + x as usize] =
-                                            frame[QR_WIDTH * y_src as usize + x_src as usize];
+                                        aligned[IMAGE_WIDTH * y as usize + x as usize] =
+                                            frame[IMAGE_WIDTH * y_src as usize + x_src as usize];
                                     } else {
-                                        aligned[QR_WIDTH * y as usize + x as usize] = 255;
+                                        aligned[IMAGE_WIDTH * y as usize + x as usize] = 255;
                                     }
                                 }
                             }
                             blit_to_display(&mut sh1107, &aligned, true);
 
-                            let mut search_img =
-                                rqrr::PreparedImage::prepare_from_greyscale(QR_WIDTH, QR_HEIGHT, |x, y| {
-                                    aligned[y * QR_WIDTH + x]
-                                });
+                            let mut search_img = rqrr::PreparedImage::prepare_from_greyscale(
+                                IMAGE_WIDTH,
+                                IMAGE_HEIGHT,
+                                |x, y| aligned[y * IMAGE_WIDTH + x],
+                            );
                             let grids = search_img.detect_grids();
                             log::info!("grids len {}", grids.len());
                             if grids.len() > 0 {
@@ -239,14 +232,24 @@ fn wrapped_main() -> ! {
         cam.capture_await(true);
         let fb: &[u32] = cam.rx_buf();
 
-        // fb is non-cacheable, slow memory. If we stride through it in u16 chunks, we end
-        // up fetching each location *twice*, because the native width of the bus is a u32
-        // Stride through the slice as a u32, allowing us to make the most out of each slow
-        // read from IFRAM, and unpack the values into fast SRAM.
-        for (&u32src, u8dest) in fb.iter().zip(frame.chunks_mut(2)) {
-            u8dest[0] = (u32src & 0xff) as u8;
-            u8dest[1] = ((u32src >> 16) & 0xff) as u8;
+        // fb is an array of IMAGE_WIDTH x IMAGE_HEIGHT x u16
+        // frame is an array of IMAGE_WIDTH x IMAGE_HEIGHT x u8
+        // Take only the "Y" channel out of the fb array and write it to frame, but do it
+        // such that we are fetching a u32 each read from fb as this matches the native
+        // width of the bus (because fb is non-cacheable reading u16 ends up fetching the
+        // same word twice, then masking it at the CPU side in hardware). Also, the fb
+        // is slow to access relative to main memory.
+        //
+        // Also, commit the data to `frame` in inverse line order, e.g. flip the image
+        // vertically.
+        for (y_src, line) in fb.chunks(IMAGE_WIDTH / 2).enumerate() {
+            for (x_src, &u32src) in line.iter().enumerate() {
+                frame[(IMAGE_HEIGHT - y_src - 1) * IMAGE_WIDTH + 2 * x_src] = (u32src & 0xff) as u8;
+                frame[(IMAGE_HEIGHT - y_src - 1) * IMAGE_WIDTH + 2 * x_src + 1] =
+                    ((u32src >> 16) & 0xff) as u8;
+            }
         }
+
         frames += 1;
     }
 }
