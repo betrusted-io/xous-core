@@ -183,73 +183,49 @@ const OUTLIER_ITERS: usize = 5;
 pub struct LineDerivation {
     pub equation: Option<(f32, f32)>,
     pub independent_axis: Axis,
-    pub data_points: [Point; STORAGE],
-    pub data_index: usize,
+    pub data_points: Vec<Point>,
 }
 impl LineDerivation {
     pub fn new(axis: Axis) -> Self {
-        LineDerivation {
-            equation: None,
-            independent_axis: axis,
-            data_points: [Point::new(0, 0); STORAGE],
-            data_index: 0,
-        }
+        LineDerivation { equation: None, independent_axis: axis, data_points: Vec::new() }
     }
 
-    pub fn push(&mut self, p: Point) {
-        if self.data_index < STORAGE {
-            self.data_points[self.data_index] = p;
-            self.data_index += 1;
-        } else {
-            assert!(false, "Static storage exceeded");
-        }
-    }
+    pub fn push(&mut self, p: Point) { self.data_points.push(p); }
 
     /// This implementation heavily relies on f32, so it is slow on an embedded processor; however,
     /// we need the precision and the solving should be done only rarely.
     pub fn solve(&mut self) {
-        let mut points = [Point::default(); STORAGE];
-        let mut filtered_points = [Point::default(); STORAGE];
-        let mut residuals = [0.0f32; STORAGE];
-        let mut sorted_residuals = [0.0f32; STORAGE];
-        let mut filtered_index;
-        let mut count = self.data_index;
         let mut m_guess: f32 = 0.0;
         let mut b_guess: f32 = 0.0;
-
         let mut converged_in = 0;
-        points[..count].copy_from_slice(&self.data_points[..count]);
+        let mut points = self.data_points.clone();
         for guesses in 0..OUTLIER_ITERS {
+            let mut filtered_points = Vec::<Point>::new();
+            let mut residuals = Vec::<f32>::new();
             converged_in = guesses;
             // guess a best-fit line
-            (m_guess, b_guess) = least_squares_fit(&points[..count], self.independent_axis);
+            (m_guess, b_guess) = least_squares_fit(&points, self.independent_axis);
             // compute the residuals of the points to the guessed line
-            for (&p, residual) in points[..count].iter().zip(residuals.iter_mut()) {
+            for &p in points.iter() {
                 let (x, y) = adjust_axis(p, self.independent_axis);
                 let predicted_y = m_guess * x + b_guess;
-                *residual = y - predicted_y;
-                if *residual < 0.0 {
-                    *residual = -*residual;
-                }
+                residuals.push((y - predicted_y).abs());
             }
             // extract the median residual
-            sorted_residuals[..count].copy_from_slice(&residuals[..count]);
-            sorted_residuals[..count]
+            let mut sorted_residuals = residuals.clone();
+            sorted_residuals
                 .sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Greater));
-            let threshold = (sorted_residuals[count / 2] * 1.5).max(OUTLIER_THRESHOLD);
+            let threshold = (sorted_residuals[points.len() / 2] * 1.5).max(OUTLIER_THRESHOLD);
 
-            filtered_index = 0;
-            for (i, &p) in points[..count].iter().enumerate() {
+            for (i, &p) in points.iter().enumerate() {
                 if residuals[i] <= threshold {
-                    filtered_points[filtered_index] = p;
-                    filtered_index += 1;
+                    filtered_points.push(p);
                 }
             }
-            if filtered_index == count {
+            if filtered_points.len() == points.len() {
                 break;
             } else {
-                count = filtered_index;
-                points[..count].copy_from_slice(&filtered_points[..count]);
+                points = filtered_points;
             }
         }
         log::info!("Solver converged in {} iterations", converged_in);
