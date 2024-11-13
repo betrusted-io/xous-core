@@ -1,7 +1,7 @@
 use cramium_hal::iox::IoGpio;
 use cramium_hal::iox::{IoxPort, IoxValue};
 use cramium_hal::sh1107::{Mono, Oled128x128};
-use cramium_hal::udma::PeriphId;
+use cramium_hal::udma::{PeriphId, Udma};
 use cramium_hal::{minigfx::*, sh1107};
 
 mod gfx;
@@ -317,16 +317,25 @@ fn wrapped_main() -> ! {
         // clear the front buffer
         sh1107.clear();
 
+        let mut now = tt.elapsed_ms();
+        const TIMEOUT_MS: u64 = 100;
         #[cfg(feature = "decongest-udma")]
         {
             // don't parallelize the camera capture to avoid triggering a hardware bug
             // in the SPIM block.
-            while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High {}
+            while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High
+                && ((tt.elapsed_ms() - now) < TIMEOUT_MS)
+            {}
             cam.capture_async();
         }
 
         // wait for the transfer to finish
-        cam.capture_await(false);
+        // cam.capture_await(false);
+        now = tt.elapsed_ms();
+        while cam.udma_busy(cramium_hal::udma::Bank::Rx) && ((tt.elapsed_ms() - now) < TIMEOUT_MS) {
+            // busy-wait to get better time resolution on when the frame ends
+            // xous::yield_slice();
+        }
         let fb: &[u32] = cam.rx_buf();
 
         // fb is an array of IMAGE_WIDTH x IMAGE_HEIGHT x u16
