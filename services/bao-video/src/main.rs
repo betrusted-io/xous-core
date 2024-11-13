@@ -179,7 +179,12 @@ fn wrapped_main() -> ! {
                 // show the transformed/aligned frame
                 frame.fill(255);
                 for (dst_line, src_line) in frame.chunks_mut(IMAGE_WIDTH).zip(aligned.chunks(qr_width)) {
-                    for (dst, &src) in dst_line.iter_mut().zip(src_line.iter()) {
+                    // "center up" the QR in the middle by the estimated margin
+                    // this is just a perceptual trick to prevent users from shifting the position of the
+                    // camera
+                    for (dst, &src) in
+                        dst_line[qr::HOMOGRAPHY_MARGIN.abs() as usize..].iter_mut().zip(src_line.iter())
+                    {
                         *dst = src;
                     }
                 }
@@ -304,7 +309,13 @@ fn wrapped_main() -> ! {
         } else {
             // blit raw camera fb to sh1107
             blit_to_display(&mut sh1107, &frame, true);
-            gfx::msg(&mut sh1107, "Searching...", Point::new(0, 0), Mono::White.into(), Mono::Black.into());
+            gfx::msg(
+                &mut sh1107,
+                "Scan QR code...",
+                Point::new(0, 0),
+                Mono::White.into(),
+                Mono::Black.into(),
+            );
         }
 
         // swap the double buffer and update to the display
@@ -330,11 +341,9 @@ fn wrapped_main() -> ! {
         }
 
         // wait for the transfer to finish
-        // cam.capture_await(false);
         now = tt.elapsed_ms();
         while cam.udma_busy(cramium_hal::udma::Bank::Rx) && ((tt.elapsed_ms() - now) < TIMEOUT_MS) {
             // busy-wait to get better time resolution on when the frame ends
-            // xous::yield_slice();
         }
         let fb: &[u32] = cam.rx_buf();
 
