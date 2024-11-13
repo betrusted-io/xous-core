@@ -119,6 +119,7 @@ pub fn stream_to_grid(
         const FUDGE_Y: usize = 0;
         while let Some(x) = x_frac.next() {
             if true {
+                // seems to work better with the simple threshold?
                 if image.data[(y + margin - FUDGE_Y) * image.width + (x + margin + FUDGE_X)]
                     < crate::BW_THRESH
                 {
