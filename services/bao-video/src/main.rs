@@ -3,10 +3,10 @@ use cramium_hal::iox::{IoxPort, IoxValue};
 use cramium_hal::sh1107::{Mono, Oled128x128};
 use cramium_hal::udma::PeriphId;
 use cramium_hal::{minigfx::*, sh1107};
-use nalgebra::QR;
 
 mod gfx;
 mod homography;
+mod modules;
 mod qr;
 
 const IMAGE_WIDTH: usize = 256;
@@ -91,26 +91,23 @@ fn wrapped_main() -> ! {
 
     let mut frames = 0;
     let mut frame = [0u8; IMAGE_WIDTH * IMAGE_HEIGHT];
+    let mut decode_success = false;
     // while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High {}
     loop {
         #[cfg(not(feature = "decongest-udma"))]
         cam.capture_async();
 
         let mut candidates = Vec::<Point>::new();
+        decode_success = false;
         log::info!("------------- SEARCH -----------");
         let finder_width = qr::find_finders(&mut candidates, &frame, BW_THRESH, IMAGE_WIDTH) as isize;
         const CROSSHAIR_LEN: isize = 3;
         if candidates.len() == 3 {
-            gfx::msg(&mut sh1107, "Aligning...", Point::new(0, 0), Mono::White.into(), Mono::Black.into());
-            for c in candidates.iter() {
-                log::info!("******    candidate: {}, {}    ******", c.x, c.y);
-                // remap image to screen coordinates (it's 2:1)
-                let mut c_screen = *c / 2;
-                // flip coordinates to match the camera data
-                c_screen = Point::new(c_screen.x, sh1107.dimensions().y - 1 - c_screen.y);
-                qr::draw_crosshair(&mut sh1107, c_screen);
-            }
-
+            let candidates_orig = candidates.clone();
+            let mut x_candidates: [Point; 3] = [Point::new(0, 0); 3];
+            // apply homography to generate a new buffer for processing
+            let mut aligned = Vec::new();
+            let mut qr_pixels: Option<usize> = None;
             if let Some(mut qr_corners) = qr::QrCorners::from_finders(
                 &candidates.try_into().unwrap(),
                 Point::new(IMAGE_WIDTH as isize, IMAGE_HEIGHT as isize),
@@ -120,19 +117,6 @@ fn wrapped_main() -> ! {
                 let dims = Point::new(IMAGE_WIDTH as isize, IMAGE_HEIGHT as isize);
                 let mut il = qr::ImageRoi::new(&mut frame, dims, BW_THRESH);
                 let (src, dst) = qr_corners.mapping(&mut il, qr::HOMOGRAPHY_MARGIN);
-                for s in src.iter() {
-                    if let Some(p) = s {
-                        log::info!("src {:?}", p);
-                        qr::draw_crosshair(&mut sh1107, *p / 2);
-                    }
-                }
-                for d in dst.iter() {
-                    if let Some(p) = d {
-                        log::info!("dst {:?}", p);
-                        qr::draw_crosshair(&mut sh1107, *p / 2);
-                    }
-                }
-
                 let mut src_f: [(f32, f32); 4] = [(0.0, 0.0); 4];
                 let mut dst_f: [(f32, f32); 4] = [(0.0, 0.0); 4];
                 let mut all_found = true;
@@ -150,6 +134,7 @@ fn wrapped_main() -> ! {
                         all_found = false;
                     }
                 }
+
                 if all_found {
                     if let Some(h) = homography::find_homography(src_f, dst_f) {
                         if let Some(h_inv) = h.try_inverse() {
@@ -157,11 +142,10 @@ fn wrapped_main() -> ! {
                             let h_inv_fp = homography::matrix3_to_fixp(h_inv);
                             log::info!("{:?}", h_inv_fp);
 
-                            // apply homography to generate a new buffer for processing
-                            let mut aligned = [0u8; IMAGE_WIDTH * IMAGE_HEIGHT];
+                            aligned = vec![0u8; qr_corners.qr_pixels() * qr_corners.qr_pixels()];
                             // iterate through pixels and apply homography
-                            for y in 0..dims.y {
-                                for x in 0..dims.x {
+                            for y in 0..qr_corners.qr_pixels() {
+                                for x in 0..qr_corners.qr_pixels() {
                                     let (x_src, y_src) =
                                         homography::apply_fixp_homography(&h_inv_fp, (x as i32, y as i32));
                                     if (x_src as i32 >= 0)
@@ -170,45 +154,155 @@ fn wrapped_main() -> ! {
                                         && ((y_src as i32) < dims.y as i32)
                                     {
                                         // println!("{},{} -> {},{}", x_src as i32, y_src as i32, x, y);
-                                        aligned[IMAGE_WIDTH * y as usize + x as usize] =
+                                        aligned[qr_corners.qr_pixels() * y as usize + x as usize] =
                                             frame[IMAGE_WIDTH * y_src as usize + x_src as usize];
                                     } else {
-                                        aligned[IMAGE_WIDTH * y as usize + x as usize] = 255;
+                                        aligned[qr_corners.qr_pixels() * y as usize + x as usize] = 255;
                                     }
                                 }
                             }
-                            blit_to_display(&mut sh1107, &aligned, true);
 
-                            let mut search_img = rqrr::PreparedImage::prepare_from_greyscale(
-                                IMAGE_WIDTH,
-                                IMAGE_HEIGHT,
-                                |x, y| aligned[y * IMAGE_WIDTH + x],
-                            );
-                            let grids = search_img.detect_grids();
-                            log::info!("grids len {}", grids.len());
-                            if grids.len() > 0 {
-                                let rawdata = grids[0].get_raw_data();
-                                match rawdata {
-                                    Ok((md, rd)) => {
-                                        log::info!(
-                                            "{:?}, {}:{:x?}",
-                                            md,
-                                            rd.len,
-                                            &rd.data[..(rd.len / 8) + 1]
-                                        );
-                                    }
-                                    Err(e) => {
-                                        log::info!("Error: {:?}", e);
-                                    }
-                                }
-                                log::info!("{:?}", grids[0].decode());
+                            // we can also know the location of the finders by transforming them
+                            let h_fp = homography::matrix3_to_fixp(h);
+                            for (i, &c) in candidates_orig.iter().enumerate() {
+                                let (x, y) =
+                                    homography::apply_fixp_homography(&h_fp, (c.x as i32, c.y as i32));
+                                x_candidates[i] = Point::new(x as isize, y as isize);
                             }
+                            qr_pixels = Some(qr_corners.qr_pixels());
                         }
                     }
                 }
             }
+
+            if let Some(qr_width) = qr_pixels {
+                // show the transformed/aligned frame
+                frame.fill(255);
+                for (dst_line, src_line) in frame.chunks_mut(IMAGE_WIDTH).zip(aligned.chunks(qr_width)) {
+                    for (dst, &src) in dst_line.iter_mut().zip(src_line.iter()) {
+                        *dst = src;
+                    }
+                }
+                blit_to_display(&mut sh1107, &frame, true);
+
+                // we now have a QR code in "canonical" orientation, with a
+                // known width in pixels
+                for &x in x_candidates.iter() {
+                    log::info!("transformed finder location {:?}", x);
+                }
+
+                // Confirm that the finders coordinates are valid
+                let mut checked_candidates = Vec::<Point>::new();
+                let x_finder_width =
+                    qr::find_finders(&mut checked_candidates, &aligned, BW_THRESH, qr_width as _) as isize;
+                log::info!("x_finder width: {}", x_finder_width);
+
+                // check that the new coordinates are within delta pixels of the original
+                const XFORM_DELTA: isize = 2;
+                let mut deltas = Vec::<Point>::new();
+                for c in checked_candidates {
+                    log::info!("x_point: {:?}", c);
+                    for &xformed in x_candidates.iter() {
+                        let delta = xformed - c;
+                        log::info!("delta: {:?}", delta);
+                        if delta.x.abs() <= XFORM_DELTA && delta.y.abs() <= XFORM_DELTA {
+                            deltas.push(delta);
+                        }
+                    }
+                }
+                if deltas.len() == 3 {
+                    let (version, modules) = qr::guess_code_version(
+                        x_finder_width as usize,
+                        (qr_width as isize + qr::HOMOGRAPHY_MARGIN * 2) as usize,
+                    );
+
+                    log::info!("image dims: {}", qr_width);
+                    log::info!("guessed version: {}, modules: {}", version, modules);
+                    log::info!(
+                        "QR symbol width in pixels: {}",
+                        qr_width - 2 * (qr::HOMOGRAPHY_MARGIN.abs() as usize)
+                    );
+
+                    let qr =
+                        qr::ImageRoi::new(&mut aligned, Point::new(qr_width as _, qr_width as _), BW_THRESH);
+                    let grid =
+                        modules::stream_to_grid(&qr, qr_width, modules, qr::HOMOGRAPHY_MARGIN.abs() as usize);
+
+                    println!("grid len {}", grid.len());
+                    for y in 0..modules {
+                        for x in 0..modules {
+                            if grid[y * modules + x] {
+                                print!("X");
+                            } else {
+                                print!(" ");
+                            }
+                        }
+                        println!(" {:2}", y);
+                    }
+                    let simple =
+                        rqrr::SimpleGrid::from_func(modules, |x, y| grid[(modules - 1) - x + y * modules]);
+                    let grid = rqrr::Grid::new(simple);
+                    match grid.decode() {
+                        Ok((meta, content)) => {
+                            log::info!("meta: {:?}", meta);
+                            log::info!("************ {} ***********", content);
+                            decode_success = true;
+                            gfx::msg(
+                                &mut sh1107,
+                                &format!("{:?}", meta),
+                                Point::new(0, 0),
+                                Mono::White.into(),
+                                Mono::Black.into(),
+                            );
+                            gfx::msg(
+                                &mut sh1107,
+                                &format!("{:?}", content),
+                                Point::new(0, 64),
+                                Mono::White.into(),
+                                Mono::Black.into(),
+                            );
+                        }
+                        Err(e) => {
+                            log::info!("{:?}", e);
+                            gfx::msg(
+                                &mut sh1107,
+                                &format!("{:?}", e),
+                                Point::new(0, 0),
+                                Mono::White.into(),
+                                Mono::Black.into(),
+                            );
+                        }
+                    }
+                } else {
+                    log::info!("Transformed image did not survive sanity check!");
+                    gfx::msg(
+                        &mut sh1107,
+                        "Hold device steady...",
+                        Point::new(0, 0),
+                        Mono::White.into(),
+                        Mono::Black.into(),
+                    );
+                }
+            } else {
+                blit_to_display(&mut sh1107, &frame, true);
+                for c in candidates_orig.iter() {
+                    log::debug!("******    candidate: {}, {}    ******", c.x, c.y);
+                    // remap image to screen coordinates (it's 2:1)
+                    let mut c_screen = *c / 2;
+                    // flip coordinates to match the camera data
+                    // c_screen = Point::new(c_screen.x, sh1107.dimensions().y - 1 - c_screen.y);
+                    qr::draw_crosshair(&mut sh1107, c_screen);
+                }
+                gfx::msg(
+                    &mut sh1107,
+                    "Align the QR code...",
+                    Point::new(0, 0),
+                    Mono::White.into(),
+                    Mono::Black.into(),
+                );
+            }
         } else {
-            // blit fb to sh1107
+            // blit raw camera fb to sh1107
             blit_to_display(&mut sh1107, &frame, true);
             gfx::msg(&mut sh1107, "Searching...", Point::new(0, 0), Mono::White.into(), Mono::Black.into());
         }
@@ -216,6 +310,9 @@ fn wrapped_main() -> ! {
         // swap the double buffer and update to the display
         sh1107.buffer_swap();
         sh1107.draw();
+        if decode_success {
+            tt.sleep_ms(2000).ok();
+        }
 
         // clear the front buffer
         sh1107.clear();
@@ -229,7 +326,7 @@ fn wrapped_main() -> ! {
         }
 
         // wait for the transfer to finish
-        cam.capture_await(true);
+        cam.capture_await(false);
         let fb: &[u32] = cam.rx_buf();
 
         // fb is an array of IMAGE_WIDTH x IMAGE_HEIGHT x u16
