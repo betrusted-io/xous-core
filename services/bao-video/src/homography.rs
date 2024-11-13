@@ -52,7 +52,7 @@ pub fn find_homography(src_points: [(f32, f32); 4], dst_points: [(f32, f32); 4])
     }
 }
 
-const HOM_FP_SHIFT: i32 = 16;
+const HOM_FP_SHIFT: i32 = 18;
 const HOM_FP_SCALE: i32 = 1 << HOM_FP_SHIFT;
 
 pub fn matrix3_to_fixp(h: Matrix3<f32>) -> Matrix3<i32> {
@@ -78,8 +78,22 @@ pub fn apply_fixp_homography(homography: &Matrix3<i32>, point: (i32, i32)) -> (i
     let tw = homography[(2, 0)] * x + homography[(2, 1)] * y + homography[(2, 2)];
 
     // Normalize by w to get the final coordinates
-    let x_transformed = tx / tw;
-    let y_transformed = ty / tw;
+    if tw != 0 {
+        let x_transformed = tx / tw;
+        let y_transformed = ty / tw;
 
-    (x_transformed, y_transformed)
+        (x_transformed, y_transformed)
+    } else {
+        log::info!(
+            "Homography transformation would divide by 0: possible fixed-point underflow!\n\r  {}, {}\n\r  {} * {} + {} * {} + {}",
+            tx,
+            ty,
+            homography[(2, 0)],
+            x,
+            homography[(2, 1)],
+            y,
+            homography[(2, 2)]
+        );
+        (0, 0)
+    }
 }
