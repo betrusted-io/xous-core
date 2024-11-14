@@ -18,9 +18,6 @@ const UPPER_1: usize = 2 << SEQ_FP_SHIFT;
 const LOWER_3: usize = 2 << SEQ_FP_SHIFT;
 const UPPER_3: usize = 4 << SEQ_FP_SHIFT;
 
-pub const STORAGE: usize = 92;
-
-pub const BW_THRESH: u8 = 128;
 /// Finder search margin, as defined by expected QR code code widths (so this scales with the effective
 /// resolution of the code)
 pub const FINDER_SEARCH_MARGIN: isize = 2;
@@ -44,6 +41,8 @@ pub fn draw_crosshair(image: &mut dyn FrameBuffer, p: Point) {
     );
 }
 
+#[allow(dead_code)]
+/// Used for debugging QR code algorithms
 pub fn draw_line(image: &mut dyn FrameBuffer, l: &LineDerivation, color: ColorNative) {
     let axis = l.independent_axis;
     let (m, b) = l.equation.unwrap();
@@ -292,8 +291,10 @@ impl QrCorners {
         }
     }
 
+    #[allow(dead_code)]
     pub fn derived_corner(&self) -> Direction { self.derived_corner }
 
+    #[allow(dead_code)]
     pub fn center_point(&self, dir: Direction) -> Option<Point> { self.corners[dir as usize].finder_ref }
 
     fn outline_search(&mut self, ir: &mut ImageRoi) {
@@ -689,6 +690,7 @@ impl<'a> ImageRoi<'a> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn absolute_to_roi(&self, point: Point) -> Option<Point> {
         let x = point.x - self.x0 as isize;
         let y = point.y - self.y0 as isize;

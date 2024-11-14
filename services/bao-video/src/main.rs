@@ -1,8 +1,7 @@
-use cramium_hal::iox::IoGpio;
 use cramium_hal::iox::{IoxPort, IoxValue};
+use cramium_hal::minigfx::*;
 use cramium_hal::sh1107::{Mono, Oled128x128};
 use cramium_hal::udma::{PeriphId, Udma};
-use cramium_hal::{minigfx::*, sh1107};
 
 mod gfx;
 mod homography;
@@ -53,7 +52,6 @@ fn wrapped_main() -> ! {
     log::set_max_level(log::LevelFilter::Info);
 
     let tt = ticktimer::Ticktimer::new().unwrap();
-    let xns = xous_names::XousNames::new().unwrap();
 
     let iox = cram_hal_service::IoxHal::new();
     let udma_global = cram_hal_service::UdmaGlobal::new();
@@ -91,7 +89,7 @@ fn wrapped_main() -> ! {
 
     let mut frames = 0;
     let mut frame = [0u8; IMAGE_WIDTH * IMAGE_HEIGHT];
-    let mut decode_success = false;
+    let mut decode_success;
     // while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High {}
     loop {
         #[cfg(not(feature = "decongest-udma"))]
@@ -99,9 +97,8 @@ fn wrapped_main() -> ! {
 
         let mut candidates = Vec::<Point>::new();
         decode_success = false;
-        log::info!("------------- SEARCH -----------");
+        log::info!("------------- SEARCH {} -----------", frames);
         let finder_width = qr::find_finders(&mut candidates, &frame, BW_THRESH, IMAGE_WIDTH) as isize;
-        const CROSSHAIR_LEN: isize = 3;
         if candidates.len() == 3 {
             let candidates_orig = candidates.clone();
             let mut x_candidates: [Point; 3] = [Point::new(0, 0); 3];
@@ -293,7 +290,7 @@ fn wrapped_main() -> ! {
                 for c in candidates_orig.iter() {
                     log::debug!("******    candidate: {}, {}    ******", c.x, c.y);
                     // remap image to screen coordinates (it's 2:1)
-                    let mut c_screen = *c / 2;
+                    let c_screen = *c / 2;
                     // flip coordinates to match the camera data
                     // c_screen = Point::new(c_screen.x, sh1107.dimensions().y - 1 - c_screen.y);
                     qr::draw_crosshair(&mut sh1107, c_screen);
@@ -328,22 +325,31 @@ fn wrapped_main() -> ! {
         // clear the front buffer
         sh1107.clear();
 
+        let mut start = tt.elapsed_ms();
         let mut now = tt.elapsed_ms();
         const TIMEOUT_MS: u64 = 100;
         #[cfg(feature = "decongest-udma")]
         {
             // don't parallelize the camera capture to avoid triggering a hardware bug
             // in the SPIM block.
-            while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High
-                && ((tt.elapsed_ms() - now) < TIMEOUT_MS)
-            {}
+            while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High && ((now - start) < TIMEOUT_MS) {
+                now = tt.elapsed_ms();
+            }
+            if now - start >= TIMEOUT_MS {
+                log::info!("Timeout before capture_async()!");
+            }
             cam.capture_async();
         }
 
         // wait for the transfer to finish
+        start = tt.elapsed_ms();
         now = tt.elapsed_ms();
-        while cam.udma_busy(cramium_hal::udma::Bank::Rx) && ((tt.elapsed_ms() - now) < TIMEOUT_MS) {
+        while cam.udma_busy(cramium_hal::udma::Bank::Rx) && ((now - start) < TIMEOUT_MS) {
+            now = tt.elapsed_ms();
             // busy-wait to get better time resolution on when the frame ends
+        }
+        if now - start >= TIMEOUT_MS {
+            log::info!("Timeout before rx_buf()!");
         }
         let fb: &[u32] = cam.rx_buf();
 

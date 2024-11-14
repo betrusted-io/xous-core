@@ -72,6 +72,9 @@ impl FracIter {
         self.count = 0;
     }
 
+    #[allow(dead_code)]
+    /// Untested, but reserved API for adjusting grid streaming if we need better performance on
+    /// higher resolution QR codes
     pub fn error(&self) -> isize {
         if (self.current & (FIXED_POINT - 1)) == 0 {
             0
@@ -82,6 +85,10 @@ impl FracIter {
         }
     }
 
+    #[allow(dead_code)]
+    /// Untested, but reserved API for adjusting grid streaming if we need better performance on
+    /// higher resolution QR codes
+    ///
     /// The sign on m applies to n, but n is represented as a sign-less quantity
     pub fn nudge(&mut self, m: isize, n: usize) {
         assert!(n < FIXED_POINT);
