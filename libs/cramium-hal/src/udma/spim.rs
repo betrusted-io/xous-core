@@ -640,6 +640,19 @@ impl Spim {
                             self.csr().base().add(Bank::Rx as usize).add(DmaReg::Cfg.into()).read_volatile()
                         },
                     );
+                    unsafe {
+                        self.csr()
+                            .base()
+                            .add(Bank::Rx as usize)
+                            .add(DmaReg::Cfg.into())
+                            .write_volatile(CFG_CLEAR);
+                        log::info!(
+                            "Rx Cfg: {:x}",
+                            self.csr().base().add(Bank::Rx as usize).add(DmaReg::Cfg.into()).read_volatile()
+                        );
+                        self.csr().base().add(Bank::Rx as usize).add(DmaReg::Saddr.into()).write_volatile(0);
+                        self.csr().base().add(Bank::Rx as usize).add(DmaReg::Cfg.into()).write_volatile(0); // clear bit is not self-clearing
+                    };
                 }
                 Ok(&self.rx_buf()[..pending])
             } else {
@@ -770,7 +783,13 @@ impl Spim {
             }
             // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
             unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<T>()[..tx_len], CFG_EN | cfg_size) };
-            unsafe { self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<T>()[..tx_len], CFG_EN | cfg_size) }
+            unsafe {
+                self.udma_enqueue(
+                    Bank::Rx,
+                    &self.rx_buf_phys::<T>()[..tx_len],
+                    CFG_EN | cfg_size | CFG_BACKPRESSURE,
+                )
+            }
         } else if let Some((start, _len)) = parts {
             // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
             // This will correctly panic if the size of the data to be sent is larger than the physical
@@ -781,7 +800,11 @@ impl Spim {
                     &self.tx_buf_phys::<T>()[start..(start + tx_len)],
                     CFG_EN | cfg_size,
                 );
-                self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<T>()[..tx_len], CFG_EN | cfg_size)
+                self.udma_enqueue(
+                    Bank::Rx,
+                    &self.rx_buf_phys::<T>()[..tx_len],
+                    CFG_EN | cfg_size | CFG_BACKPRESSURE,
+                )
             }
         }
         Ok(())
@@ -838,7 +861,13 @@ impl Spim {
         // read back the ID result
         let cmd_list = [SpimCmd::RxData(self.mode, SpimWordsPerXfer::Words1, 8, SpimEndian::MsbFirst, 3)];
         // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
-        unsafe { self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u8>()[..3], CFG_EN | CFG_SIZE_8) };
+        unsafe {
+            self.udma_enqueue(
+                Bank::Rx,
+                &self.rx_buf_phys::<u8>()[..3],
+                CFG_EN | CFG_SIZE_8 | CFG_BACKPRESSURE,
+            )
+        };
         self.send_cmd_list(&cmd_list);
         while self.udma_busy(Bank::Rx) {
             #[cfg(feature = "std")]
@@ -863,7 +892,13 @@ impl Spim {
         // 48 bits of unique ID -- we only retrieve the top 16 of that here.
         let cmd_list = [SpimCmd::RxData(self.mode, SpimWordsPerXfer::Words1, 8, SpimEndian::MsbFirst, 7)];
         // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
-        unsafe { self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u8>()[..7], CFG_EN | CFG_SIZE_8) };
+        unsafe {
+            self.udma_enqueue(
+                Bank::Rx,
+                &self.rx_buf_phys::<u8>()[..7],
+                CFG_EN | CFG_SIZE_8 | CFG_BACKPRESSURE,
+            )
+        };
         self.send_cmd_list(&cmd_list);
         while self.udma_busy(Bank::Rx) {
             #[cfg(feature = "std")]
@@ -970,7 +1005,11 @@ impl Spim {
             }
             // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
             unsafe {
-                self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u8>()[..chunk.len()], CFG_EN | CFG_SIZE_8)
+                self.udma_enqueue(
+                    Bank::Rx,
+                    &self.rx_buf_phys::<u8>()[..chunk.len()],
+                    CFG_EN | CFG_SIZE_8 | CFG_BACKPRESSURE,
+                )
             };
             self.send_cmd_list(&rd_cmd);
             while self.udma_busy(Bank::Rx) {
@@ -982,7 +1021,6 @@ impl Spim {
                 timeout += 1;
                 if (self.mode == SpimMode::Quad) && (timeout > chunk.len() * 10_000) {
                     success = false;
-                    /*
                     // unsuccessful attempt to clear the pending transfer manually
                     // the root cause of this is when the UDMA RX FIFO fills up and
                     // RX packets get dropped. The Rx counter becomes "desynced" from the
@@ -995,7 +1033,13 @@ impl Spim {
                             .add(DmaReg::Cfg.into())
                             .write_volatile(CFG_SIZE_8 | CFG_CLEAR);
                         self.csr().base().add(Bank::Rx as usize).add(DmaReg::Saddr.into()).write_volatile(0);
+                        self.csr()
+                            .base()
+                            .add(Bank::Rx as usize)
+                            .add(DmaReg::Cfg.into())
+                            .write_volatile(CFG_SIZE_8); // clear bit is not self-clearing
                     };
+                    /*
                     // send an EOT
                     let cmd_list = [SpimCmd::EndXfer(SpimEventGen::Disabled)];
                     self.send_cmd_list(&cmd_list);
