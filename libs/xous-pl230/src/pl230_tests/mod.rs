@@ -5,7 +5,7 @@ pub fn report_api(desc: &str, d: u32) {
     {
         use core::fmt::Write;
         let mut uart = crate::debug::Uart {};
-        writeln!(uart, "pl230: [{}] 0x{:x}", desc, d).ok();
+        writeln!(uart, "pl230: [{}] 0x{:x}\r", desc, d).ok();
     }
     #[cfg(not(feature = "baremetal"))]
     log::info!("pl230: [{}] 0x{:x}", desc, d);

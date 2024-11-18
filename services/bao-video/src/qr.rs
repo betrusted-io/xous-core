@@ -18,9 +18,6 @@ const UPPER_1: usize = 2 << SEQ_FP_SHIFT;
 const LOWER_3: usize = 2 << SEQ_FP_SHIFT;
 const UPPER_3: usize = 4 << SEQ_FP_SHIFT;
 
-pub const STORAGE: usize = 92;
-
-pub const BW_THRESH: u8 = 128;
 /// Finder search margin, as defined by expected QR code code widths (so this scales with the effective
 /// resolution of the code)
 pub const FINDER_SEARCH_MARGIN: isize = 2;
@@ -44,6 +41,8 @@ pub fn draw_crosshair(image: &mut dyn FrameBuffer, p: Point) {
     );
 }
 
+#[allow(dead_code)]
+/// Used for debugging QR code algorithms
 pub fn draw_line(image: &mut dyn FrameBuffer, l: &LineDerivation, color: ColorNative) {
     let axis = l.independent_axis;
     let (m, b) = l.equation.unwrap();
@@ -177,79 +176,55 @@ fn point_from_hv_lines(hline: &LineDerivation, vline: &LineDerivation) -> Option
 }
 
 // Threshold to reject points if they don't fit on the best-fit line
-const OUTLIER_THRESHOLD: f32 = 1.0;
+const OUTLIER_THRESHOLD: f32 = 0.5;
 const OUTLIER_ITERS: usize = 5;
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct LineDerivation {
     pub equation: Option<(f32, f32)>,
     pub independent_axis: Axis,
-    pub data_points: [Point; STORAGE],
-    pub data_index: usize,
+    pub data_points: Vec<Point>,
 }
 impl LineDerivation {
     pub fn new(axis: Axis) -> Self {
-        LineDerivation {
-            equation: None,
-            independent_axis: axis,
-            data_points: [Point::new(0, 0); STORAGE],
-            data_index: 0,
-        }
+        LineDerivation { equation: None, independent_axis: axis, data_points: Vec::new() }
     }
 
-    pub fn push(&mut self, p: Point) {
-        if self.data_index < STORAGE {
-            self.data_points[self.data_index] = p;
-            self.data_index += 1;
-        } else {
-            assert!(false, "Static storage exceeded");
-        }
-    }
+    pub fn push(&mut self, p: Point) { self.data_points.push(p); }
 
     /// This implementation heavily relies on f32, so it is slow on an embedded processor; however,
     /// we need the precision and the solving should be done only rarely.
     pub fn solve(&mut self) {
-        let mut points = [Point::default(); STORAGE];
-        let mut filtered_points = [Point::default(); STORAGE];
-        let mut residuals = [0.0f32; STORAGE];
-        let mut sorted_residuals = [0.0f32; STORAGE];
-        let mut filtered_index;
-        let mut count = self.data_index;
         let mut m_guess: f32 = 0.0;
         let mut b_guess: f32 = 0.0;
-
         let mut converged_in = 0;
-        points[..count].copy_from_slice(&self.data_points[..count]);
+        let mut points = self.data_points.clone();
         for guesses in 0..OUTLIER_ITERS {
+            let mut filtered_points = Vec::<Point>::new();
+            let mut residuals = Vec::<f32>::new();
             converged_in = guesses;
             // guess a best-fit line
-            (m_guess, b_guess) = least_squares_fit(&points[..count], self.independent_axis);
+            (m_guess, b_guess) = least_squares_fit(&points, self.independent_axis);
             // compute the residuals of the points to the guessed line
-            for (&p, residual) in points[..count].iter().zip(residuals.iter_mut()) {
+            for &p in points.iter() {
                 let (x, y) = adjust_axis(p, self.independent_axis);
                 let predicted_y = m_guess * x + b_guess;
-                *residual = y - predicted_y;
-                if *residual < 0.0 {
-                    *residual = -*residual;
-                }
+                residuals.push((y - predicted_y).abs());
             }
             // extract the median residual
-            sorted_residuals[..count].copy_from_slice(&residuals[..count]);
-            sorted_residuals[..count]
+            let mut sorted_residuals = residuals.clone();
+            sorted_residuals
                 .sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Greater));
-            let threshold = (sorted_residuals[count / 2] * 1.5).max(OUTLIER_THRESHOLD);
+            let threshold = (sorted_residuals[points.len() / 2] * 1.5).max(OUTLIER_THRESHOLD);
 
-            filtered_index = 0;
-            for (i, &p) in points[..count].iter().enumerate() {
+            for (i, &p) in points.iter().enumerate() {
                 if residuals[i] <= threshold {
-                    filtered_points[filtered_index] = p;
-                    filtered_index += 1;
+                    filtered_points.push(p);
                 }
             }
-            if filtered_index == count {
+            if filtered_points.len() == points.len() {
                 break;
             } else {
-                count = filtered_index;
-                points[..count].copy_from_slice(&filtered_points[..count]);
+                points = filtered_points;
             }
         }
         log::info!("Solver converged in {} iterations", converged_in);
@@ -277,6 +252,8 @@ pub struct QrCorners {
     height: isize,
     derived_corner: Direction,
     finder_width: usize,
+    // destination QR image in pixels per side (as a perfect square)
+    dst_pixels: usize,
 }
 impl QrCorners {
     pub fn from_finders(points: &[Point; 3], dimensions: Point, finder_width: usize) -> Option<Self> {
@@ -287,6 +264,7 @@ impl QrCorners {
         qrc.width = dimensions.x;
         qrc.height = dimensions.y;
         qrc.finder_width = finder_width;
+        qrc.dst_pixels = dimensions.x.min(dimensions.y) as usize;
 
         for &p in points {
             if p.x < x_half && p.y < y_half {
@@ -313,8 +291,10 @@ impl QrCorners {
         }
     }
 
+    #[allow(dead_code)]
     pub fn derived_corner(&self) -> Direction { self.derived_corner }
 
+    #[allow(dead_code)]
     pub fn center_point(&self, dir: Direction) -> Option<Point> { self.corners[dir as usize].finder_ref }
 
     fn outline_search(&mut self, ir: &mut ImageRoi) {
@@ -402,12 +382,26 @@ impl QrCorners {
     /// was made, with a margin added.
     ///
     /// The margin should be negative for the corners to go in toward the center.
+    ///
+    /// Canonical orientation for QR code should be like this:
+    ///   +------+
+    ///   |O    .|
+    ///   |      |
+    /// ^ |O    O|
+    /// | +______+
+    /// (0,0) ->
+    ///
+    /// Thus we want to orient so the discovered corner is in the NorthEast direction.
     pub fn mapping(&mut self, ir: &mut ImageRoi, margin: isize) -> ([Option<Point>; 4], [Option<Point>; 4]) {
+        // adjust the final target image size by the specified margin
+        self.dst_pixels = (self.dst_pixels as isize + 2 * margin) as usize;
+
         // first, search for the lines that define the outline of the QR code
         self.outline_search(ir);
 
         let mut src = [None; 4];
         let mut dst = [None; 4];
+        let mut uk_direction: Option<Direction> = None;
 
         for (i, corner) in self.corners.iter().enumerate() {
             if let Some(_p) = corner.finder_ref {
@@ -415,6 +409,7 @@ impl QrCorners {
                 // derive the corner from the extracted h and v lines along the finder pattern
                 src[i] = point_from_hv_lines(&corner.h_line, &corner.v_line);
             } else {
+                uk_direction = Direction::try_from(i).ok();
                 // This is the unknown corner:
                 // derive the corner from the h and v lines from the nearest finders' lines
                 let h_line = match Direction::try_from(i) {
@@ -431,19 +426,39 @@ impl QrCorners {
                     Ok(Direction::SouthEast) => &self.corners[Direction::NorthEast as usize].v_line,
                     _ => panic!("Bad index"),
                 };
+                // draw_line(debug, &h_line, [255, 255, 0]);
+                // draw_line(debug, &v_line, [255, 255, 0]);
                 src[i] = point_from_hv_lines(h_line, v_line);
             }
+            let min = -margin;
+            let max = self.dst_pixels as isize + margin;
             dst[i] = match Direction::try_from(i) {
-                Ok(Direction::NorthWest) => Some(Point::new(-margin, self.height + margin)),
-                Ok(Direction::NorthEast) => Some(Point::new(self.width + margin, self.height + margin)),
-                Ok(Direction::SouthWest) => Some(Point::new(-margin, -margin)),
-                Ok(Direction::SouthEast) => Some(Point::new(self.width + margin, -margin)),
+                Ok(Direction::NorthWest) => Some(Point::new(min, max)),
+                Ok(Direction::NorthEast) => Some(Point::new(max, max)),
+                Ok(Direction::SouthWest) => Some(Point::new(min, min)),
+                Ok(Direction::SouthEast) => Some(Point::new(max, min)),
                 _ => None,
             };
         }
 
-        (src, dst)
+        // now shuffle the dst points such that the unknown corner is in the
+        // NorthEast direction
+        let mut shuffle: [Option<Point>; 4] = [None; 4];
+        shuffle.copy_from_slice(&dst);
+        if let Some(uk_corner) = uk_direction {
+            let corner_index: usize = uk_corner.into();
+            if corner_index != 0 {
+                for _ in 0..corner_index {
+                    shuffle[1..].copy_from_slice(&dst[..3]);
+                    shuffle[0] = dst[3];
+                    dst.copy_from_slice(&shuffle);
+                }
+            }
+        }
+        (src, shuffle)
     }
+
+    pub fn qr_pixels(&self) -> usize { self.dst_pixels }
 }
 
 #[derive(Copy, Clone, Default, Debug)]
@@ -569,10 +584,36 @@ impl TryFrom<usize> for Direction {
         }
     }
 }
+impl Direction {
+    pub fn eight_way_iter() -> EightConnectedIter { EightConnectedIter { index: 0 } }
+}
+pub struct EightConnectedIter {
+    index: usize,
+}
+
+impl Iterator for EightConnectedIter {
+    type Item = Direction;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let direction = match self.index {
+            0 => Some(Direction::NorthWest),
+            1 => Some(Direction::NorthEast),
+            2 => Some(Direction::SouthWest),
+            3 => Some(Direction::SouthEast),
+            4 => Some(Direction::North),
+            5 => Some(Direction::West),
+            6 => Some(Direction::East),
+            7 => Some(Direction::South),
+            _ => None,
+        };
+        self.index += 1;
+        direction
+    }
+}
 
 /// (0, 0) is at the lower left corner
 pub struct ImageRoi<'a> {
-    data: &'a mut [u8],
+    pub data: &'a mut [u8],
     pub width: usize,
     pub height: usize,
     thresh: u8,
@@ -649,6 +690,7 @@ impl<'a> ImageRoi<'a> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn absolute_to_roi(&self, point: Point) -> Option<Point> {
         let x = point.x - self.x0 as isize;
         let y = point.y - self.y0 as isize;
@@ -657,6 +699,22 @@ impl<'a> ImageRoi<'a> {
         } else {
             None
         }
+    }
+
+    pub fn neighbor_luma(&self, point: Point) -> Option<u8> {
+        let x = point.x;
+        let y = point.y;
+        let mut accumulated_luma = 0;
+        let mut total_counted = 0;
+        if x >= 0 && x < self.width as isize && y >= 0 && y < self.height as isize {
+            for direction in Direction::eight_way_iter() {
+                total_counted += 1;
+                let d: Point = direction.into();
+                let p: Point = d + point;
+                accumulated_luma += self.data[(p.y * (self.width as isize) + p.x).max(0) as usize] as usize;
+            }
+        }
+        if total_counted > 0 { Some((accumulated_luma / total_counted) as u8) } else { None }
     }
 }
 
@@ -821,4 +879,34 @@ pub fn find_finders(candidates: &mut Vec<Point>, image: &[u8], thresh: u8, strid
         }
     }
     if candidates.len() != 0 { candidate_width / candidates.len() } else { 0 }
+}
+
+const MODULES_BY_VERSION: [usize; 40] = [
+    21, 25, 29, 33, 37, 41, 45, 49, 53, 57, 61, 65, 69, 73, 77, 81, 85, 89, 93, 97, 101, 105, 109, 113, 117,
+    121, 125, 129, 133, 137, 141, 145, 149, 153, 157, 161, 165, 169, 173, 177,
+];
+const FP_SHIFT: usize = 1 << 16;
+/// Returns tuple of (version, expected_modules)
+pub fn guess_code_version(finder_width_pix: usize, qr_width_pix: usize) -> (usize, usize) {
+    let incoming_ratio = ((qr_width_pix * FP_SHIFT) / finder_width_pix) as isize;
+    let mut candidate_ratio = usize::MAX;
+    let mut candidate = 0;
+    let mut returned_modules = 0;
+    for (i, &modules) in MODULES_BY_VERSION.iter().enumerate() {
+        let version_ratio = ((modules * FP_SHIFT) / 7) as isize;
+        log::debug!(
+            "{}: version_ratio {} incoming_ratio {} diff {}",
+            i + 1,
+            version_ratio,
+            incoming_ratio,
+            version_ratio - incoming_ratio
+        );
+        let prev_candidate = candidate_ratio;
+        candidate_ratio = candidate_ratio.min((version_ratio - incoming_ratio).abs() as usize);
+        if prev_candidate != candidate_ratio {
+            candidate = i + 1;
+            returned_modules = modules;
+        }
+    }
+    (candidate, returned_modules)
 }

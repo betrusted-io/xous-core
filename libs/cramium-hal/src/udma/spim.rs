@@ -608,16 +608,43 @@ impl Spim {
 
     /// Wait for the pending tx/rx cycle to finish, returns a pointer to the Rx buffer when done.
     pub fn txrx_await(&mut self, _use_yield: bool) -> Result<&[u8], xous::Error> {
+        #[cfg(not(target_os = "xous"))]
         if let Some(pending) = self.pending_txrx.take() {
-            while self.udma_busy(Bank::Tx) || self.udma_busy(Bank::Rx) || self.udma_busy(Bank::Custom) {
-                #[cfg(feature = "std")]
-                if _use_yield {
-                    xous::yield_slice();
-                }
-            }
+            while self.udma_busy(Bank::Tx) || self.udma_busy(Bank::Rx) || self.udma_busy(Bank::Custom) {}
             Ok(&self.rx_buf()[..pending])
         } else {
             Err(xous::Error::UseBeforeInit)
+        }
+        #[cfg(target_os = "xous")]
+        {
+            if let Some(pending) = self.pending_txrx.take() {
+                let tt = xous_api_ticktimer::Ticktimer::new().unwrap();
+                let start = tt.elapsed_ms();
+                let mut now = tt.elapsed_ms();
+                const TIMEOUT_MS: u64 = 500;
+                while (self.udma_busy(Bank::Tx) || self.udma_busy(Bank::Rx) || self.udma_busy(Bank::Custom))
+                    && ((now - start) < TIMEOUT_MS)
+                {
+                    now = tt.elapsed_ms();
+                }
+                if now - start >= TIMEOUT_MS {
+                    log::warn!(
+                        "Timeout in txrx_await(): Tx {:?} Rx {:?} Custom {:?}, Rx SA: {:x}, Rx Cfg: {:x}",
+                        self.udma_busy(Bank::Tx),
+                        self.udma_busy(Bank::Rx),
+                        self.udma_busy(Bank::Custom),
+                        unsafe {
+                            self.csr().base().add(Bank::Rx as usize).add(DmaReg::Saddr.into()).read_volatile()
+                        },
+                        unsafe {
+                            self.csr().base().add(Bank::Rx as usize).add(DmaReg::Cfg.into()).read_volatile()
+                        },
+                    );
+                }
+                Ok(&self.rx_buf()[..pending])
+            } else {
+                Err(xous::Error::UseBeforeInit)
+            }
         }
     }
 
@@ -810,9 +837,9 @@ impl Spim {
 
         // read back the ID result
         let cmd_list = [SpimCmd::RxData(self.mode, SpimWordsPerXfer::Words1, 8, SpimEndian::MsbFirst, 3)];
-        self.send_cmd_list(&cmd_list);
         // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
         unsafe { self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u8>()[..3], CFG_EN | CFG_SIZE_8) };
+        self.send_cmd_list(&cmd_list);
         while self.udma_busy(Bank::Rx) {
             #[cfg(feature = "std")]
             xous::yield_slice();
@@ -835,9 +862,9 @@ impl Spim {
         // The ID requires 24 bits "dummy" address field, then followed by 2 bytes ID + KGD, and then
         // 48 bits of unique ID -- we only retrieve the top 16 of that here.
         let cmd_list = [SpimCmd::RxData(self.mode, SpimWordsPerXfer::Words1, 8, SpimEndian::MsbFirst, 7)];
-        self.send_cmd_list(&cmd_list);
         // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
         unsafe { self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u8>()[..7], CFG_EN | CFG_SIZE_8) };
+        self.send_cmd_list(&cmd_list);
         while self.udma_busy(Bank::Rx) {
             #[cfg(feature = "std")]
             xous::yield_slice();
@@ -881,10 +908,10 @@ impl Spim {
         // setup the command list for data to send
         let cmd_list =
             [SpimCmd::TxData(self.mode, SpimWordsPerXfer::Words1, 8 as u8, SpimEndian::MsbFirst, 2 as u32)];
-        self.send_cmd_list(&cmd_list);
         self.tx_buf_mut()[..2].copy_from_slice(&[status, config]);
         // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
         unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..2], CFG_EN | CFG_SIZE_8) }
+        self.send_cmd_list(&cmd_list);
 
         while self.udma_busy(Bank::Tx) {
             #[cfg(feature = "std")]
@@ -919,7 +946,6 @@ impl Spim {
             // the remaining bytes are junk
             self.tx_buf_mut()[3..6].copy_from_slice(&[0xFFu8, 0xFFu8, 0xFFu8]);
             self.mem_cs(true);
-            self.send_cmd_list(&cmd_list);
             // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
             unsafe {
                 self.udma_enqueue(
@@ -928,6 +954,7 @@ impl Spim {
                     CFG_EN | CFG_SIZE_8,
                 )
             }
+            self.send_cmd_list(&cmd_list);
             let rd_cmd = [SpimCmd::RxData(
                 self.mode,
                 SpimWordsPerXfer::Words1,
@@ -941,11 +968,11 @@ impl Spim {
                     xous::yield_slice();
                 }
             }
-            self.send_cmd_list(&rd_cmd);
             // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
             unsafe {
                 self.udma_enqueue(Bank::Rx, &self.rx_buf_phys::<u8>()[..chunk.len()], CFG_EN | CFG_SIZE_8)
             };
+            self.send_cmd_list(&rd_cmd);
             while self.udma_busy(Bank::Rx) {
                 // TODO: figure out why this timeout detection code is necessary.
                 // It seems that some traffic during the UDMA access can cause the UDMA
@@ -1012,9 +1039,9 @@ impl Spim {
             let a = chunk_addr.to_be_bytes();
             self.tx_buf_mut()[..3].copy_from_slice(&[a[1], a[2], a[3]]);
             self.mem_cs(true);
-            self.send_cmd_list(&cmd_list);
             // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
             unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..3], CFG_EN | CFG_SIZE_8) }
+            self.send_cmd_list(&cmd_list);
             let wr_cmd = [SpimCmd::TxData(
                 self.mode,
                 SpimWordsPerXfer::Words1,
@@ -1028,12 +1055,12 @@ impl Spim {
                     xous::yield_slice();
                 }
             }
-            self.send_cmd_list(&wr_cmd);
             self.tx_buf_mut()[..chunk.len()].copy_from_slice(chunk);
             // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
             unsafe {
                 self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..chunk.len()], CFG_EN | CFG_SIZE_8)
             };
+            self.send_cmd_list(&wr_cmd);
             while self.udma_busy(Bank::Tx) {
                 #[cfg(feature = "std")]
                 if _use_yield {

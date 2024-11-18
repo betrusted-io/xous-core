@@ -69,12 +69,18 @@ pub fn basic_tests(pl230: &mut Pl230) -> bool {
     // report_api("dma_len", DMA_LEN as u32);
     report_api("baseptr", cc_struct.channels.as_ptr() as u32);
     report_api("src start", region_a.as_ptr() as u32);
-    // report_api("baseptr[0]", unsafe{cc_struct.channels.as_ptr().read()}.src_end_ptr);
+    report_api("baseptr[0]", unsafe { cc_struct.channels.as_ptr().read() }.src_end_ptr);
     report_api("dst start", region_b.as_ptr() as u32);
-    // report_api("baseptr[1]", unsafe{cc_struct.channels.as_ptr().read()}.dst_end_ptr);
-    // report_api("baseptr[2]", unsafe{cc_struct.channels.as_ptr().read()}.control);
-    // report_api("baseptr[3]", unsafe{cc_struct.channels.as_ptr().read()}.reserved);
-    // report_api("baseptr reg", pl230.csr.r(utra::pl230::CTRLBASEPTR));
+    report_api("baseptr[1]", unsafe { cc_struct.channels.as_ptr().read() }.dst_end_ptr);
+    report_api("baseptr[2]", unsafe { cc_struct.channels.as_ptr().read() }.control);
+    report_api("baseptr[3]", unsafe { cc_struct.channels.as_ptr().read() }.reserved);
+    report_api("baseptr reg", pl230.csr.r(utra::pl230::CTRLBASEPTR));
+
+    unsafe {
+        for i in 0..16 {
+            report_api("pl230 reg ", pl230.csr.base().add(i as usize).read_volatile());
+        }
+    }
 
     // this should kick off the DMA
     pl230.csr.wo(utra::pl230::CHNLSWREQUEST, 1);
@@ -123,6 +129,22 @@ pub fn basic_tests(pl230: &mut Pl230) -> bool {
     }
     report_api("basic dma result (1=pass)", if passing { 1 } else { 0 });
     report_api("errs: ", errs);
+
+    report_api("baseptr", cc_struct.channels.as_ptr() as u32);
+    report_api("src start", region_a.as_ptr() as u32);
+    report_api("baseptr[0]", unsafe { cc_struct.channels.as_ptr().read() }.src_end_ptr);
+    report_api("dst start", region_b.as_ptr() as u32);
+    report_api("baseptr[1]", unsafe { cc_struct.channels.as_ptr().read() }.dst_end_ptr);
+    report_api("baseptr[2]", unsafe { cc_struct.channels.as_ptr().read() }.control);
+    report_api("baseptr[3]", unsafe { cc_struct.channels.as_ptr().read() }.reserved);
+    report_api("baseptr reg", pl230.csr.r(utra::pl230::CTRLBASEPTR));
+
+    unsafe {
+        for i in 0..16 {
+            report_api("pl230 reg ", pl230.csr.base().add(i as usize).read_volatile());
+        }
+    }
+
     passing
 }
 

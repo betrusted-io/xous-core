@@ -246,6 +246,11 @@ pub fn early_init() -> u32 {
         clock_tests(&mut udma_uart);
     }
 
+    // do a PL230/PIO test. Toggles PB15 (PIO0) with an LFSR sequence.
+    // let mut pl230 = xous_pl230::Pl230::new();
+    // xous_pl230::pl230_tests::units::basic_tests(&mut pl230);
+    // xous_pl230::pl230_tests::units::pio_test(&mut pl230);
+
     // Setup some global control registers that will allow the TRNG to operate once the kernel is
     // booted. This is done so the kernel doesn't have to exclusively have rights to the SCE global
     // registers just for this purpose.
@@ -691,11 +696,6 @@ pub fn early_init() -> u32 {
         }
         let trng_csr = CSR::new(HW_TRNG_BASE as *mut u32);
         crate::println!("trng status: {:x}", trng_csr.r(utra::trng::SFR_SR));
-
-        // do a PL230/PIO test. Toggles PB15 (PIO0) with an LFSR sequence.
-        // let mut pl230 = xous_pl230::Pl230::new();
-        // xous_pl230::pl230_tests::units::basic_tests(&mut pl230);
-        // xous_pl230::pl230_tests::units::pio_test(&mut pl230);
 
         const BANNER: &'static str = "\n\rKeep pressing keys to continue boot...\r\n";
         udma_uart.write(BANNER.as_bytes());
