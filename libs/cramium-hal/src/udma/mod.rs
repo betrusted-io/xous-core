@@ -415,6 +415,10 @@ pub trait Udma {
     }
     fn udma_busy(&self, bank: Bank) -> bool {
         // Safety: only safe when used in the context of UDMA registers.
-        unsafe { self.csr().base().add(bank as usize).add(DmaReg::Saddr.into()).read_volatile() != 0 }
+        unsafe {
+            let saddr = self.csr().base().add(bank as usize).add(DmaReg::Saddr.into()).read_volatile();
+            // crate::println!("brx: {:x}", saddr);
+            saddr != 0
+        }
     }
 }
