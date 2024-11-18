@@ -23,6 +23,7 @@ xous-pl230 = { path = "../libs/xous-pl230", optional = true, features = [
     "pio",
     "cramium-soc",
     "baremetal",
+    # "dma-mainram",  # PL-230 option - this fails on MPW
 ] }
 xous-pio = { path = "../libs/xous-pio", optional = true, features = [
     "tests",
