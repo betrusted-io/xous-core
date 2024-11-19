@@ -42,4 +42,4 @@ oom-doom = []
 
 debug-print = []
 debug-verbose = []
-default = []
+default = ["debug-print"]

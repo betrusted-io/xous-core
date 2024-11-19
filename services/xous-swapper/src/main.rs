@@ -521,22 +521,37 @@ fn swap_handler(
             // safety: this is only safe because the pointer we're passed from the kernel is guaranteed to be
             // a valid u8-page in memory
             let buf = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
-            match ss.hal.decrypt_swap_from(
-                buf,
-                ss.sct.counts[paddr_in_swap / PAGE_SIZE],
-                paddr_in_swap,
-                vaddr_in_pid,
-                pid,
-            ) {
-                Ok(_) => {}
-                Err(e) => {
-                    writeln!(
-                        DebugUart {},
-                        "Decryption error: swap image corrupted, the tag does not match the data! {:?}",
-                        e
-                    )
-                    .ok();
-                    panic!("Decryption error: swap image corrupted, the tag does not match the data!");
+            // this is in a retry loop because the SPIM interface can timeout during high bus congestion
+            // periods.
+            const TIMEOUT_RETRIES: usize = 3;
+            let mut retries = 0;
+            while retries < TIMEOUT_RETRIES {
+                match ss.hal.decrypt_swap_from(
+                    buf,
+                    ss.sct.counts[paddr_in_swap / PAGE_SIZE],
+                    paddr_in_swap,
+                    vaddr_in_pid,
+                    pid,
+                ) {
+                    Ok(_) => {
+                        break;
+                    }
+                    Err(e) => {
+                        retries += 1;
+                        writeln!(
+                            DebugUart {},
+                            "Decryption error: swap image corrupted, the tag does not match the data! {:?} (try {}/{})",
+                            e,
+                            retries,
+                            TIMEOUT_RETRIES
+                        )
+                        .ok();
+                        if retries >= TIMEOUT_RETRIES {
+                            panic!(
+                                "Decryption error: swap image corrupted, the tag does not match the data; retry count exceeded!"
+                            );
+                        }
+                    }
                 }
             }
             // at this point, the `buf` has our desired data, we're done, modulo updating the count.

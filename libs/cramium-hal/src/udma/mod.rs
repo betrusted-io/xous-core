@@ -350,10 +350,16 @@ pub(crate) const CFG_SIZE_16: u32 = 0b00_0010; // 16-bit transfer
 #[allow(dead_code)]
 pub(crate) const CFG_SIZE_32: u32 = 0b00_0100; // 32-bit transfer
 #[allow(dead_code)]
-pub(crate) const CFG_CLEAR: u32 = 0b10_0000; // stop and clear all pending transfers
+/// NOTE NOTE NOTE: The position of this bit is different in the RTL from the documentation
+/// Bit 6 is what is in the RTL, so we are using this instead of bit 5, which is the docus
+pub(crate) const CFG_CLEAR: u32 = 0b100_0000; // stop and clear all pending transfers
 #[allow(dead_code)]
-pub(crate) const CFG_PENDING: u32 = 0b10_0000; // on read, indicates a transfer pending
+/// NOTE NOTE NOTE: the transfer pending bit *is* in the correct place
+pub(crate) const CFG_PENDING: u32 = 0b10_0000; // indicates a transfer pending
 pub(crate) const CFG_SHADOW: u32 = 0b10_0000; // indicates a shadow transfer
+
+#[allow(dead_code)]
+pub(crate) const CFG_BACKPRESSURE: u32 = 0b1000_0000; // use RX backpressure to stall interface (found on SPIM in NTO)
 
 #[repr(usize)]
 pub enum Bank {

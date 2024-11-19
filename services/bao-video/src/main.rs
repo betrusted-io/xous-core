@@ -12,6 +12,15 @@ const IMAGE_WIDTH: usize = 256;
 const IMAGE_HEIGHT: usize = 240;
 const BW_THRESH: u8 = 128;
 
+// Next steps for performance improvement:
+//
+// Improve qr::mapping -> point_from_hv_lines such that we're not just deriving the HV
+// lines from the the edges of the finder regions, we're also using the very edge of
+// the whole QR code itself to guide the line. This will improve the intersection point
+// so that we can accurately hit the "fourth corner". At the moment it's sort of a
+// luck of the draw if the interpolation hits exactly right, or if we're roughly a module
+// off from ideal, which causes the data around that point to be interpreted incorrectly.
+
 pub fn blit_to_display(sh1107: &mut Oled128x128, frame: &[u8], display_cleared: bool) {
     for (y, row) in frame.chunks(IMAGE_WIDTH).enumerate() {
         if y & 1 == 0 {
@@ -90,7 +99,7 @@ fn wrapped_main() -> ! {
     let mut frames = 0;
     let mut frame = [0u8; IMAGE_WIDTH * IMAGE_HEIGHT];
     let mut decode_success;
-    // while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High {}
+    while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High {}
     loop {
         #[cfg(not(feature = "decongest-udma"))]
         cam.capture_async();
@@ -325,11 +334,11 @@ fn wrapped_main() -> ! {
         // clear the front buffer
         sh1107.clear();
 
-        let mut start = tt.elapsed_ms();
-        let mut now = tt.elapsed_ms();
         const TIMEOUT_MS: u64 = 100;
         #[cfg(feature = "decongest-udma")]
         {
+            let start = tt.elapsed_ms();
+            let mut now = tt.elapsed_ms();
             // don't parallelize the camera capture to avoid triggering a hardware bug
             // in the SPIM block.
             while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High && ((now - start) < TIMEOUT_MS) {
@@ -342,8 +351,8 @@ fn wrapped_main() -> ! {
         }
 
         // wait for the transfer to finish
-        start = tt.elapsed_ms();
-        now = tt.elapsed_ms();
+        let start = tt.elapsed_ms();
+        let mut now = tt.elapsed_ms();
         while cam.udma_busy(cramium_hal::udma::Bank::Rx) && ((now - start) < TIMEOUT_MS) {
             now = tt.elapsed_ms();
             // busy-wait to get better time resolution on when the frame ends

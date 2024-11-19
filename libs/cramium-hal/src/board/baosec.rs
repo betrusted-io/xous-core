@@ -136,7 +136,7 @@ pub fn setup_memory_pins(iox: &dyn IoSetup) -> crate::udma::SpimChannel {
         Some(IoxEnable::Enable),
         Some(IoxDriveStrength::Drive2mA),
     );
-    // SPIM_CSN0_A[1]
+    // SPIM_CSN1_A[1]
     iox.setup_pin(
         IoxPort::PC,
         13,
