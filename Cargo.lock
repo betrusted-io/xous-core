@@ -2985,6 +2985,7 @@ dependencies = [
  "crc 1.8.1",
  "curve25519-dalek-loader",
  "ed25519-dalek-loader",
+ "ghostfat",
  "lazy_static",
  "libm 0.2.8",
  "nalgebra",
@@ -5750,16 +5751,18 @@ version = "0.1.0"
 dependencies = [
  "cram-hal-service",
  "cramium-hal",
- "ghostfat",
- "locales",
  "log",
  "num-derive 0.3.3",
  "num-traits",
+ "packed_struct",
+ "rkyv 0.8.8",
+ "usb-device",
  "utralib 0.1.25",
  "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
+ "xous-ipc 0.10.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-usb-hid",
 ]
 
