@@ -582,6 +582,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_feature("quantum-timer");
             builder.add_kernel_feature("v2p");
             builder.add_loader_feature("sram-margin");
+            builder.add_loader_feature("usb");
             match task.as_deref() {
                 Some("baosec") => builder.target_cramium_soc(),
                 _ => panic!("should be unreachable"),
