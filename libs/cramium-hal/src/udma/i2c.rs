@@ -218,8 +218,14 @@ impl I2c {
             timeout += 1;
             if timeout > TIMEOUT_ITERS {
                 // reset the block
+                self.udma_reset(Bank::Custom);
+                self.udma_reset(Bank::Tx);
+                self.udma_reset(Bank::Rx);
                 self.csr.wfo(utra::udma_i2c_0::REG_SETUP_R_DO_RST, 1);
                 self.csr.wo(utra::udma_i2c_0::REG_SETUP, 0);
+
+                self.send_cmd_list(&[I2cCmd::Config(self.divider)]);
+                self.pending.take();
                 return Err(xous::Error::Timeout);
             }
             #[cfg(feature = "std")]
