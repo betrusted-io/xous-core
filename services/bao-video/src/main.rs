@@ -90,7 +90,7 @@ fn wrapped_main() -> ! {
     let mut frames = 0;
     let mut frame = [0u8; IMAGE_WIDTH * IMAGE_HEIGHT];
     let mut decode_success;
-    // while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High {}
+    while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High {}
     loop {
         #[cfg(not(feature = "decongest-udma"))]
         cam.capture_async();
@@ -325,11 +325,11 @@ fn wrapped_main() -> ! {
         // clear the front buffer
         sh1107.clear();
 
-        let mut start = tt.elapsed_ms();
-        let mut now = tt.elapsed_ms();
         const TIMEOUT_MS: u64 = 100;
         #[cfg(feature = "decongest-udma")]
         {
+            let start = tt.elapsed_ms();
+            let mut now = tt.elapsed_ms();
             // don't parallelize the camera capture to avoid triggering a hardware bug
             // in the SPIM block.
             while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High && ((now - start) < TIMEOUT_MS) {
@@ -342,8 +342,8 @@ fn wrapped_main() -> ! {
         }
 
         // wait for the transfer to finish
-        start = tt.elapsed_ms();
-        now = tt.elapsed_ms();
+        let start = tt.elapsed_ms();
+        let mut now = tt.elapsed_ms();
         while cam.udma_busy(cramium_hal::udma::Bank::Rx) && ((now - start) < TIMEOUT_MS) {
             now = tt.elapsed_ms();
             // busy-wait to get better time resolution on when the frame ends
