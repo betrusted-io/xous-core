@@ -73,7 +73,7 @@ pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 
 // location of kernel, as offset from the base of ReRAM. This needs to match up with what is in link.x.
 // exclusive of the signature block offset
-pub const KERNEL_OFFSET: usize = 0x5_0000;
+pub const KERNEL_OFFSET: usize = 0x6_0000;
 
 pub(crate) fn delay(quantum: usize) {
     use utralib::{CSR, utra};
