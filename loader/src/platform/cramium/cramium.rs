@@ -75,7 +75,7 @@ pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 // exclusive of the signature block offset
 pub const KERNEL_OFFSET: usize = 0x5_0000;
 
-fn delay(quantum: usize) {
+pub(crate) fn delay(quantum: usize) {
     use utralib::{CSR, utra};
     // abuse the d11ctime timer to create some time-out like thing
     let mut d11c = CSR::new(utra::d11ctime::HW_D11CTIME_BASE as *mut u32);
@@ -348,7 +348,7 @@ pub fn early_init() -> u32 {
     let iox_loop = iox.clone();
 
     // show the boot logo
-    use cramium_hal::{ifram, minigfx::FrameBuffer};
+    use cramium_hal::minigfx::FrameBuffer;
 
     let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(perclk, &mut iox, &mut udma_global);
     sh1107.init();
