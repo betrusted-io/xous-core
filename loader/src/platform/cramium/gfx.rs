@@ -92,6 +92,7 @@ pub fn msg<'a>(fb: &mut dyn FrameBuffer, text: &'a str, ll_pos: Point, fg: Color
     ll_pos.x += x_update;
 }
 
+#[allow(dead_code)]
 pub fn line(fb: &mut dyn FrameBuffer, l: Line, clip: Option<Rectangle>, xor: bool) {
     let color: ColorNative;
     if l.style.stroke_color.is_some() {
