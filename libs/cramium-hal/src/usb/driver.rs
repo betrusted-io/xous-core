@@ -1553,6 +1553,8 @@ impl CorigineUsb {
 
     pub fn pp(&self) -> bool { self.csr.rf(PORTSC_PP) != 0 }
 
+    pub fn portsc_val(&self) -> u32 { self.csr.r(PORTSC) }
+
     pub fn stop(&mut self) {
         self.csr.rmwf(USBCMD_INT_ENABLE, 0);
         self.csr.rmwf(USBCMD_RUN_STOP, 0);
@@ -2040,6 +2042,7 @@ impl CorigineUsb {
             unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
         let mut pcs = udc_ep.pcs;
 
+        /*
         crate::println!(
             "PEI = {} bufaddr = 0x{:x} pcs = {} length = 0x{:x}, enq_pt = 0x{:x?}",
             pei,
@@ -2048,6 +2051,7 @@ impl CorigineUsb {
             len,
             enq_pt,
         );
+        */
         for i in 0..num_trb {
             if num_trb == 1 {
                 //only 1 trb
