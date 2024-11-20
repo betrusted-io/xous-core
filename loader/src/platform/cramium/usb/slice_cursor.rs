@@ -57,8 +57,8 @@ impl IOBase for SliceCursor<'_> {
     type Error = IOErrorFatfs;
 }
 pub struct SliceCursor<'a> {
-    slice: &'a mut [u8],
-    pos: u64,
+    pub slice: &'a mut [u8],
+    pub pos: u64,
 }
 
 impl<'a> SliceCursor<'a> {
