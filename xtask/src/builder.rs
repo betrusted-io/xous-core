@@ -332,6 +332,26 @@ impl Builder {
         self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
         search_and_replace_in_file("services/aes/Cargo.toml", "default = []", "default = [\"cramium-soc\"]")
             .expect("couldn't patch AES");
+
+        // this is needed because we don't have an ed25519 accelerator on cramium targets
+        search_and_replace_in_file(
+            "Cargo.toml",
+            "[patch.crates-io.curve25519-dalek]",
+            "# [patch.crates-io.curve25519-dalek]",
+        )
+        .expect("couldn't patch curve25519");
+        search_and_replace_in_file(
+            "Cargo.toml",
+            "git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
+            "# git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
+        )
+        .expect("couldn't patch curve25519");
+        search_and_replace_in_file(
+            "Cargo.toml",
+            "branch = \"main\" # c25519",
+            "# branch = \"main\" # c25519",
+        )
+        .expect("couldn't patch curve25519");
         self
     }
 

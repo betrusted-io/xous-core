@@ -201,6 +201,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
             .expect("couldn't patch AES");
 
+            // revert these just in case - but don't throw an error if the strings aren't found
+            builder::search_and_replace_in_file(
+                "Cargo.toml",
+                "# [patch.crates-io.curve25519-dalek]",
+                "[patch.crates-io.curve25519-dalek]",
+            )
+            .ok();
+            builder::search_and_replace_in_file(
+                "Cargo.toml",
+                "# git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
+                "git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
+            )
+            .ok();
+            builder::search_and_replace_in_file(
+                "Cargo.toml",
+                "# branch = \"main\" # c25519",
+                "branch = \"main\" # c25519",
+            )
+            .ok();
+
             match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
                 Ok(false) => {
                     return Err(
@@ -635,6 +655,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "default = []",
         )
         .expect("couldn't patch AES");
+        builder::search_and_replace_in_file(
+            "Cargo.toml",
+            "# [patch.crates-io.curve25519-dalek]",
+            "[patch.crates-io.curve25519-dalek]",
+        )
+        .expect("couldn't patch curve25519");
+        builder::search_and_replace_in_file(
+            "Cargo.toml",
+            "# git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
+            "git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
+        )
+        .expect("couldn't patch curve25519");
+        builder::search_and_replace_in_file(
+            "Cargo.toml",
+            "# branch = \"main\" # c25519",
+            "branch = \"main\" # c25519",
+        )
+        .expect("couldn't patch curve25519");
     }
     match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
         Ok(false) => {
