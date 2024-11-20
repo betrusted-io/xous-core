@@ -220,6 +220,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "branch = \"main\" # c25519",
             )
             .ok();
+            builder::search_and_replace_in_file(
+                "services/root-keys/Cargo.toml",
+                "# features = [\"auto-release\", \"warn-fallback\"]",
+                "features = [\"auto-release\", \"warn-fallback\"]",
+            )
+            .ok();
+            builder::search_and_replace_in_file(
+                "services/shellchat/Cargo.toml",
+                "# features = [\"auto-release\", \"warn-fallback\"]",
+                "features = [\"auto-release\", \"warn-fallback\"]",
+            )
+            .ok();
 
             match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
                 Ok(false) => {
@@ -673,6 +685,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "branch = \"main\" # c25519",
         )
         .expect("couldn't patch curve25519");
+        builder::search_and_replace_in_file(
+            "services/root-keys/Cargo.toml",
+            "# features = [\"auto-release\", \"warn-fallback\"]",
+            "features = [\"auto-release\", \"warn-fallback\"]",
+        )
+        .expect("couldn't patch rootkeys");
+        builder::search_and_replace_in_file(
+            "services/shellchat/Cargo.toml",
+            "# features = [\"auto-release\", \"warn-fallback\"]",
+            "features = [\"auto-release\", \"warn-fallback\"]",
+        )
+        .expect("couldn't patch shellchat");
     }
     match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
         Ok(false) => {

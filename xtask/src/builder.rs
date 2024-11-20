@@ -352,6 +352,19 @@ impl Builder {
             "# branch = \"main\" # c25519",
         )
         .expect("couldn't patch curve25519");
+        search_and_replace_in_file(
+            "services/root-keys/Cargo.toml",
+            "features = [\"auto-release\", \"warn-fallback\"]",
+            "# features = [\"auto-release\", \"warn-fallback\"]",
+        )
+        .expect("couldn't patch rootkeys");
+        search_and_replace_in_file(
+            "services/shellchat/Cargo.toml",
+            "features = [\"auto-release\", \"warn-fallback\"]",
+            "# features = [\"auto-release\", \"warn-fallback\"]",
+        )
+        .expect("couldn't patch shellchat");
+
         self
     }
 
