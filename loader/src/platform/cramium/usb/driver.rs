@@ -248,7 +248,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                 }
             } else if pei >= 2 {
                 if comp_code == CompletionCode::Success || comp_code == CompletionCode::ShortPacket {
-                    crate::println!("EP{} xfer event, dir {}", ep_num, if dir { "OUT" } else { "IN" });
+                    // crate::println!("EP{} xfer event, dir {}", ep_num, if dir { "OUT" } else { "IN" });
                     // xfer_complete
                     if let Some(f) = this.udc_ep[pei as usize].completion_handler {
                         // so unsafe. so unsafe. We're counting on the hardware to hand us a raw pointer
