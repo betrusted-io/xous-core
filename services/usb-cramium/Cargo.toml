@@ -21,13 +21,12 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "alloc",
 ] }
 packed_struct = { version = "0.10", default-features = false } # used by the xous-usb-hid crate
+locales = { path = "../../locales" }
 
 [dependencies.usb-device]
 # see top level Cargo.toml for patch.crates-io directive to help with dev work
 version = "0.2.8"
 features = ["log"]
-
-locales = { path = "../../locales" }
 
 [features]
 cramium-soc = ["utralib/cramium-soc", "utralib/std"]
