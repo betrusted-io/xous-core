@@ -153,7 +153,8 @@ path = "services/aes"
 
 [patch.crates-io.curve25519-dalek]
 git = "https://github.com/betrusted-io/curve25519-dalek.git"
-branch = "main"
+
+branch = "main" # c25519
 # path = "../curve25519-dalek/curve25519-dalek" # when doing local dev work
 # feature overrides are specified at the crate level
 
