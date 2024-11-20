@@ -18,3 +18,5 @@ mod homography;
 mod qr;
 #[cfg(feature = "usb")]
 mod usb;
+
+mod sha512_digest;
