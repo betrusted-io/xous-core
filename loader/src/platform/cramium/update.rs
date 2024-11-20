@@ -1,12 +1,18 @@
+use core::convert::TryInto;
+
 use cramium_hal::iox::{IoGpio, IoSetup, Iox, IoxPort, IoxValue};
 use cramium_hal::minigfx::{FrameBuffer, Point};
 use cramium_hal::sh1107::Mono;
 use cramium_hal::udma;
 use cramium_hal::usb::driver::UsbDeviceState;
+use ed25519_dalek::{Digest, Signature, VerifyingKey};
+use sha2::Sha512;
 use simple_fatfs::PathBuf;
 use utralib::generated::*;
 
+use crate::SIGBLOCK_SIZE;
 use crate::platform::cramium::gfx;
+use crate::platform::cramium::sha512_digest::Sha512Prehash;
 use crate::platform::cramium::usb;
 use crate::platform::cramium::usb::SliceCursor;
 
@@ -17,6 +23,20 @@ use crate::platform::cramium::usb::SliceCursor;
 // Empirically measured PORTSC when the port is unplugged. This might be a brittle way
 // to detect if the device is unplugged.
 const DISCONNECT_STATE: u32 = 0x40b;
+
+// loader is not updateable here because we're XIP. But we can update these other images:
+const SWAP_NAME: &'static str = "SWAP.IMG";
+const KERNEL_NAME: &'static str = "XOUS.IMG";
+const DEV_PUBKEY: [u8; 32] = [
+    0x1c, 0x9b, 0xea, 0xe3, 0x2a, 0xea, 0xc8, 0x75, 0x07, 0xc1, 0x80, 0x94, 0x38, 0x7e, 0xff, 0x1c, 0x74,
+    0x61, 0x42, 0x82, 0xaf, 0xfd, 0x81, 0x52, 0xd8, 0x71, 0x35, 0x2e, 0xdf, 0x3f, 0x58, 0xbb,
+];
+#[repr(C)]
+struct SignatureInFlash {
+    pub version: u32,
+    pub signed_len: u32,
+    pub signature: [u8; 64],
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum KeyPress {
@@ -193,7 +213,62 @@ pub fn process_update(perclk: u32) {
                 match fs.read_dir(PathBuf::from("/")) {
                     Ok(dir) => {
                         for entry in dir {
-                            crate::println!("file: {:?}", entry);
+                            crate::println!("{:?}", entry);
+                            if let Some(file_name) = entry.path().file_name() {
+                                if file_name.to_ascii_uppercase() == KERNEL_NAME {
+                                    match fs.get_file(entry.path().clone()) {
+                                        Ok(f) => {
+                                            let sector_offset = f.sector_offset();
+                                            crate::println!("sector offset: {}", sector_offset);
+                                            let disk_access = usb::conjure_disk();
+                                            crate::println!(
+                                                "{:x?}",
+                                                &disk_access[sector_offset as usize * 512
+                                                    ..sector_offset as usize * 512 + 32]
+                                            );
+                                            let pubkey = VerifyingKey::from_bytes(&DEV_PUBKEY)
+                                                .expect("public key was not valid");
+                                            crate::println!("pubkey as reconstituted: {:x?}", pubkey);
+
+                                            let k_start = sector_offset as usize * 512;
+                                            let sig_region = &disk_access
+                                                [k_start..k_start + core::mem::size_of::<SignatureInFlash>()];
+                                            let sig_rec: &SignatureInFlash = (sig_region.as_ptr()
+                                                as *const SignatureInFlash)
+                                                .as_ref()
+                                                .unwrap(); // this pointer better not be null, we just created it!
+                                            let sig = Signature::from_bytes(&sig_rec.signature);
+
+                                            let kern_len = sig_rec.signed_len as usize;
+                                            crate::println!("recorded kernel len: {} bytes", kern_len);
+                                            crate::println!(
+                                                "verifying with signature {:x?}",
+                                                sig_rec.signature
+                                            );
+                                            crate::println!("verifying with pubkey {:x?}", pubkey.to_bytes());
+
+                                            let mut h: Sha512 = Sha512::new();
+                                            let image = &disk_access[k_start + SIGBLOCK_SIZE
+                                                ..k_start + SIGBLOCK_SIZE + sig_rec.signed_len as usize];
+                                            h.update(&image);
+                                            let hash = h.finalize();
+                                            let mut ph = Sha512Prehash::new();
+                                            ph.set_prehash(hash.as_slice().try_into().unwrap());
+                                            match pubkey.verify_prehashed(ph, None, &sig) {
+                                                Ok(()) => crate::println!("Kernel image is good!"),
+                                                Err(e) => {
+                                                    crate::println!("error verifying signature: {:?}", e);
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            crate::println!("Couldn't access image: {:?}", e);
+                                        }
+                                    }
+                                } else if file_name.to_ascii_lowercase() == SWAP_NAME {
+                                    crate::println!("Found swap image");
+                                }
+                            }
                         }
                     }
                     Err(e) => {
