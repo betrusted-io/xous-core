@@ -1,10 +1,12 @@
 mod driver;
 mod irq;
 mod mass_storage;
+mod slice_cursor;
 
 pub use driver::*;
 pub use irq::*;
 pub use mass_storage::*;
+pub use slice_cursor::*;
 
 // Note that the trap handler is just placed one page below this, and it
 // needs to be manually updated in the assembly because we can't refer to
