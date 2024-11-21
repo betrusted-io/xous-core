@@ -13,4 +13,5 @@ pub mod shared_csr;
 pub mod udma;
 pub mod usb;
 pub use shared_csr::*;
+pub mod mbox;
 pub mod minigfx;
