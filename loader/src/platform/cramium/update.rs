@@ -1,6 +1,10 @@
 use core::convert::TryInto;
 
 use cramium_hal::iox::{IoGpio, IoSetup, Iox, IoxPort, IoxValue};
+use cramium_hal::mbox::{
+    MBOX_PROTOCOL_REV, Mbox, MboxError, MboxToCm7Pkt, PAYLOAD_LEN_WORDS, RERAM_PAGE_SIZE_BYTES, ToCm7Op,
+    ToRvOp,
+};
 use cramium_hal::minigfx::{FrameBuffer, Point};
 use cramium_hal::sh1107::Mono;
 use cramium_hal::udma;
@@ -15,6 +19,7 @@ use crate::platform::cramium::gfx;
 use crate::platform::cramium::sha512_digest::Sha512Prehash;
 use crate::platform::cramium::usb;
 use crate::platform::cramium::usb::SliceCursor;
+use crate::platform::delay;
 
 // TODO:
 //   - Port unicode font drawing into loader
@@ -26,7 +31,10 @@ const DISCONNECT_STATE: u32 = 0x40b;
 
 // loader is not updateable here because we're XIP. But we can update these other images:
 const SWAP_NAME: &'static str = "SWAP.IMG";
-const KERNEL_NAME: &'static str = "XOUS.IMG";
+const KERNEL_NAME: &'static str = "XOUS.BIN";
+#[allow(dead_code)]
+const SWAP_BASE_ADDR: usize = 0;
+const KERNEL_BASE_ADDR: usize = crate::platform::KERNEL_OFFSET;
 const DEV_PUBKEY: [u8; 32] = [
     0x1c, 0x9b, 0xea, 0xe3, 0x2a, 0xea, 0xc8, 0x75, 0x07, 0xc1, 0x80, 0x94, 0x38, 0x7e, 0xff, 0x1c, 0x74,
     0x61, 0x42, 0x82, 0xaf, 0xfd, 0x81, 0x52, 0xd8, 0x71, 0x35, 0x2e, 0xdf, 0x3f, 0x58, 0xbb,
@@ -216,55 +224,113 @@ pub fn process_update(perclk: u32) {
                             crate::println!("{:?}", entry);
                             if let Some(file_name) = entry.path().file_name() {
                                 if file_name.to_ascii_uppercase() == KERNEL_NAME {
-                                    match fs.get_file(entry.path().clone()) {
-                                        Ok(f) => {
-                                            let sector_offset = f.sector_offset();
-                                            crate::println!("sector offset: {}", sector_offset);
-                                            let disk_access = usb::conjure_disk();
-                                            crate::println!(
-                                                "{:x?}",
-                                                &disk_access[sector_offset as usize * 512
-                                                    ..sector_offset as usize * 512 + 32]
-                                            );
-                                            let pubkey = VerifyingKey::from_bytes(&DEV_PUBKEY)
-                                                .expect("public key was not valid");
-                                            crate::println!("pubkey as reconstituted: {:x?}", pubkey);
+                                    let f = fs.get_file(entry.path().clone()).expect("file error");
+                                    let sector_offset = f.sector_offset();
+                                    crate::println!("sector offset: {}", sector_offset);
+                                    let disk_access = usb::conjure_disk();
+                                    crate::println!(
+                                        "{:x?}",
+                                        &disk_access
+                                            [sector_offset as usize * 512..sector_offset as usize * 512 + 32]
+                                    );
+                                    let pubkey = VerifyingKey::from_bytes(&DEV_PUBKEY)
+                                        .expect("public key was not valid");
+                                    crate::println!("pubkey as reconstituted: {:x?}", pubkey);
 
-                                            let k_start = sector_offset as usize * 512;
-                                            let sig_region = &disk_access
-                                                [k_start..k_start + core::mem::size_of::<SignatureInFlash>()];
-                                            let sig_rec: &SignatureInFlash = (sig_region.as_ptr()
-                                                as *const SignatureInFlash)
-                                                .as_ref()
-                                                .unwrap(); // this pointer better not be null, we just created it!
-                                            let sig = Signature::from_bytes(&sig_rec.signature);
+                                    let k_start = sector_offset as usize * 512;
+                                    let sig_region = &disk_access
+                                        [k_start..k_start + core::mem::size_of::<SignatureInFlash>()];
+                                    let sig_rec: &SignatureInFlash =
+                                        (sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap(); // this pointer better not be null, we just created it!
+                                    let sig = Signature::from_bytes(&sig_rec.signature);
 
-                                            let kern_len = sig_rec.signed_len as usize;
-                                            crate::println!("recorded kernel len: {} bytes", kern_len);
-                                            crate::println!(
-                                                "verifying with signature {:x?}",
-                                                sig_rec.signature
-                                            );
-                                            crate::println!("verifying with pubkey {:x?}", pubkey.to_bytes());
+                                    let kern_len = sig_rec.signed_len as usize;
+                                    crate::println!("recorded kernel len: {} bytes", kern_len);
+                                    crate::println!("verifying with signature {:x?}", sig_rec.signature);
+                                    crate::println!("verifying with pubkey {:x?}", pubkey.to_bytes());
 
-                                            let mut h: Sha512 = Sha512::new();
-                                            let image = &disk_access[k_start + SIGBLOCK_SIZE
-                                                ..k_start + SIGBLOCK_SIZE + sig_rec.signed_len as usize];
-                                            h.update(&image);
-                                            let hash = h.finalize();
-                                            let mut ph = Sha512Prehash::new();
-                                            ph.set_prehash(hash.as_slice().try_into().unwrap());
-                                            match pubkey.verify_prehashed(ph, None, &sig) {
-                                                Ok(()) => crate::println!("Kernel image is good!"),
-                                                Err(e) => {
-                                                    crate::println!("error verifying signature: {:?}", e);
+                                    let mut h: Sha512 = Sha512::new();
+                                    let image = &disk_access[k_start + SIGBLOCK_SIZE
+                                        ..k_start + SIGBLOCK_SIZE + sig_rec.signed_len as usize];
+                                    crate::println!("image bytes: {:x?}", &image[..16]);
+                                    h.update(&image);
+                                    let hash = h.finalize();
+                                    let mut ph = Sha512Prehash::new();
+                                    ph.set_prehash(hash.as_slice().try_into().unwrap());
+                                    let v_result = pubkey.verify_prehashed(ph, None, &sig);
+                                    if let Err(e) = v_result {
+                                        crate::println!("error verifying signature: {:?}", e);
+                                        gfx::msg(
+                                            &mut sh1107,
+                                            "Image corrupt!",
+                                            Point::new(10, 64),
+                                            Mono::White.into(),
+                                            Mono::Black.into(),
+                                        );
+                                        sh1107.buffer_swap();
+                                        sh1107.draw();
+                                        sh1107.clear();
+                                        return;
+                                    }
+                                    crate::println!("Kernel image is good!");
+                                    let mut mbox = cramium_hal::mbox::Mbox::new();
+                                    // concatenate this with e.g. .min(0x2000) to shorten the run, if needed
+                                    let test_len = sig_rec.signed_len as usize;
+                                    let check_slice = core::slice::from_raw_parts(
+                                        (KERNEL_BASE_ADDR + utralib::HW_RERAM_MEM) as *const u8,
+                                        0x3000,
+                                    );
+                                    crate::println!(
+                                        "data before: {:x?} .. {:x?}",
+                                        &check_slice[..32],
+                                        &check_slice[0x1000..0x1000 + 32]
+                                    );
+                                    // nearest event multiple of RERAM_PAGE_SIZE_BYTES that fits into
+                                    // our available payload length
+                                    const BLOCKLEN_BYTES: usize = (PAYLOAD_LEN_WORDS * size_of::<u32>()
+                                        / RERAM_PAGE_SIZE_BYTES)
+                                        * RERAM_PAGE_SIZE_BYTES;
+                                    for (i, byte_chunk) in disk_access
+                                        [k_start..k_start + SIGBLOCK_SIZE + test_len as usize]
+                                        .chunks(BLOCKLEN_BYTES)
+                                        .enumerate()
+                                    {
+                                        // +2 words are for the address / length fields required by the
+                                        // protocol
+                                        let mut buffer = [0u32; BLOCKLEN_BYTES / size_of::<u32>() + 2];
+                                        for (src, dst) in byte_chunk.chunks(4).zip(buffer[2..].iter_mut()) {
+                                            *dst = u32::from_le_bytes(src.try_into().unwrap());
+                                        }
+                                        // now fill in the metadata for the protocol
+                                        buffer[0] =
+                                            (KERNEL_BASE_ADDR + i * BLOCKLEN_BYTES + utralib::HW_RERAM_MEM)
+                                                as u32;
+                                        buffer[1] = BLOCKLEN_BYTES as u32;
+                                        if i % 8 == 0 {
+                                            crate::println!("{:x}: {:x?}", buffer[0], &buffer[2..6]);
+                                        }
+                                        match write_rram(&mut mbox, &buffer) {
+                                            Ok(len) => {
+                                                if len != BLOCKLEN_BYTES {
+                                                    crate::println!(
+                                                        "write length mismatch, got {} expected {} words",
+                                                        len,
+                                                        BLOCKLEN_BYTES
+                                                    );
                                                 }
                                             }
-                                        }
-                                        Err(e) => {
-                                            crate::println!("Couldn't access image: {:?}", e);
-                                        }
+                                            Err(e) => {
+                                                crate::println!("Write failed with {:?}", e);
+                                                break;
+                                            }
+                                        };
                                     }
+                                    cache_flush();
+                                    crate::println!(
+                                        "data after: {:x?} .. {:x?}",
+                                        &check_slice[..32],
+                                        &check_slice[0x1000..0x1000 + 32]
+                                    );
                                 } else if file_name.to_ascii_lowercase() == SWAP_NAME {
                                     crate::println!("Found swap image");
                                 }
@@ -285,4 +351,80 @@ pub fn process_update(perclk: u32) {
     sh1107.buffer_swap();
     sh1107.draw();
     sh1107.clear();
+}
+
+pub fn write_rram(mbox: &mut Mbox, data: &[u32]) -> Result<usize, MboxError> {
+    let write_pkt = MboxToCm7Pkt { version: MBOX_PROTOCOL_REV, opcode: ToCm7Op::FlashWrite, data };
+    match mbox.try_send(write_pkt) {
+        Ok(_) => {
+            crate::platform::delay(10);
+            // crate::println!("flash write sent OK");
+            let mut timeout = 0;
+            while mbox.poll_not_ready() {
+                timeout += 1;
+                if timeout > 1000 {
+                    crate::println!("flash write timeout");
+                    return Err(MboxError::NotReady);
+                }
+                crate::platform::delay(2);
+            }
+            // now receive the packet
+            let mut rx_data = [0u32; 16];
+            timeout = 0;
+            while !mbox.poll_rx_available() {
+                timeout += 1;
+                if timeout > 1000 {
+                    crate::println!("flash handshake timeout");
+                    return Err(MboxError::NotReady);
+                }
+                crate::platform::delay(2);
+            }
+            match mbox.try_rx(&mut rx_data) {
+                Ok(rx_pkt) => {
+                    crate::platform::delay(10);
+                    if rx_pkt.version != MBOX_PROTOCOL_REV {
+                        crate::println!("Version mismatch {} != {}", rx_pkt.version, MBOX_PROTOCOL_REV);
+                    }
+                    if rx_pkt.opcode != ToRvOp::RetFlashWrite {
+                        crate::println!(
+                            "Opcode mismatch {} != {}",
+                            rx_pkt.opcode as u16,
+                            ToRvOp::RetFlashWrite as u16
+                        );
+                    }
+                    if rx_pkt.len != 1 {
+                        crate::println!("Expected length mismatch {} != {}", rx_pkt.len, 1);
+                    } else {
+                        // crate::println!("Wrote {} bytes", rx_data[0]);
+                    }
+                    Ok(rx_data[0] as usize)
+                }
+                Err(e) => {
+                    crate::platform::delay(10);
+                    crate::println!("Error while deserializing: {:?}\n", e);
+                    Err(e)
+                }
+            }
+        }
+        Err(e) => {
+            delay(10);
+            crate::println!("Flash write send error: {:?}", e);
+            Err(e)
+        }
+    }
+}
+
+#[inline(always)]
+fn cache_flush() {
+    unsafe {
+        #[rustfmt::skip]
+        core::arch::asm!(
+        ".word 0x500F",
+        "nop",
+        "nop",
+        "nop",
+        "nop",
+        "nop",
+    );
+    }
 }
