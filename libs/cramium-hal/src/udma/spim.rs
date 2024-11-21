@@ -3,6 +3,9 @@ use utralib::*;
 use crate::ifram::{IframRange, UdmaWidths};
 use crate::udma::*;
 
+pub const FLASH_PAGE_LEN: usize = 256;
+pub const FLASH_SECTOR_LEN: usize = 4096;
+
 // ----------------------------------- SPIM ------------------------------------
 
 /// The SPIM implementation for UDMA does reg-ception, in that they bury
@@ -1114,6 +1117,181 @@ impl Spim {
             self.mem_cs(false);
             offset += chunk.len();
         }
+    }
+
+    fn flash_wren(&mut self) {
+        self.mem_cs(true);
+        self.mem_send_cmd(0x06);
+        self.mem_cs(false);
+    }
+
+    fn flash_wrdi(&mut self) {
+        self.mem_cs(true);
+        self.mem_send_cmd(0x04);
+        self.mem_cs(false);
+    }
+
+    fn flash_rdsr(&mut self) -> u8 {
+        self.mem_cs(true);
+        self.mem_send_cmd(0x05);
+        let cmd_list = [SpimCmd::RxData(self.mode, SpimWordsPerXfer::Words1, 8, SpimEndian::MsbFirst, 1)];
+        // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
+        unsafe {
+            self.udma_enqueue(
+                Bank::Rx,
+                &self.rx_buf_phys::<u8>()[..1],
+                CFG_EN | CFG_SIZE_8 | CFG_BACKPRESSURE,
+            )
+        };
+        self.send_cmd_list(&cmd_list);
+        while self.udma_busy(Bank::Rx) {
+            #[cfg(feature = "std")]
+            xous::yield_slice();
+        }
+        let ret = self.rx_buf()[0];
+
+        self.mem_cs(false);
+        ret
+    }
+
+    fn flash_rdscur(&mut self) -> u8 {
+        self.mem_cs(true);
+        self.mem_send_cmd(0x2b);
+        let cmd_list = [SpimCmd::RxData(self.mode, SpimWordsPerXfer::Words1, 8, SpimEndian::MsbFirst, 1)];
+        // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
+        unsafe {
+            self.udma_enqueue(
+                Bank::Rx,
+                &self.rx_buf_phys::<u8>()[0..1],
+                CFG_EN | CFG_SIZE_8 | CFG_BACKPRESSURE,
+            )
+        };
+        self.send_cmd_list(&cmd_list);
+        while self.udma_busy(Bank::Rx) {
+            #[cfg(feature = "std")]
+            xous::yield_slice();
+        }
+        let ret = self.rx_buf()[0];
+
+        self.mem_cs(false);
+        ret
+    }
+
+    fn flash_se(&mut self, sector_address: u32) {
+        self.mem_cs(true);
+        self.mem_send_cmd(0x20);
+        let cmd_list =
+            [SpimCmd::TxData(self.mode, SpimWordsPerXfer::Words1, 8 as u8, SpimEndian::MsbFirst, 3 as u32)];
+        self.tx_buf_mut()[..3].copy_from_slice(&sector_address.to_be_bytes()[1..]);
+        // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
+        unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..3], CFG_EN | CFG_SIZE_8) }
+        self.send_cmd_list(&cmd_list);
+
+        while self.udma_busy(Bank::Tx) {
+            #[cfg(feature = "std")]
+            xous::yield_slice();
+        }
+        self.mem_cs(false);
+    }
+
+    pub fn flash_erase_sector(&mut self, sector_address: u32) -> u8 {
+        // enable writes: set wren mode
+        // crate::println!("flash_erase_sector: {:x}", sector_address);
+        loop {
+            self.flash_wren();
+            let status = self.flash_rdsr();
+            // crate::println!("wren status: {:x}", status);
+            if status & 0x02 != 0 {
+                break;
+            }
+        }
+        // issue erase command
+        self.flash_se(sector_address);
+        // wait for WIP bit to drop
+        loop {
+            let status = self.flash_rdsr();
+            // crate::println!("WIP status: {:x}", status);
+            if status & 0x01 == 0 {
+                break;
+            }
+        }
+        // get the success code for return
+        let result = self.flash_rdscur();
+        // disable writes: send wrdi
+        if self.flash_rdsr() & 0x02 != 0 {
+            loop {
+                self.flash_wrdi();
+                let status = self.flash_rdsr();
+                // crate::println!("WRDI status: {:x}", status);
+                if status & 0x02 == 0 {
+                    break;
+                }
+            }
+        }
+        result
+    }
+
+    /// This routine can data that is strictly a multiple of a page length (256 bytes)
+    pub fn mem_flash_write_page(&mut self, addr: u32, buf: &[u8; FLASH_PAGE_LEN]) -> bool {
+        // crate::println!("write_page: {:x}, {:x?}", addr, &buf[..8]);
+        // enable writes: set wren mode
+        loop {
+            self.flash_wren();
+            let status = self.flash_rdsr();
+            // crate::println!("wren status: {:x}", status);
+            if status & 0x02 != 0 {
+                break;
+            }
+        }
+
+        self.mem_cs(true);
+        self.mem_send_cmd(0x02); // PP
+        let cmd_list = [SpimCmd::TxData(
+            self.mode,
+            SpimWordsPerXfer::Words1,
+            8 as u8,
+            SpimEndian::MsbFirst,
+            3 + FLASH_PAGE_LEN as u32,
+        )];
+        self.tx_buf_mut()[..3].copy_from_slice(&addr.to_be_bytes()[1..]);
+        self.tx_buf_mut()[3..3 + FLASH_PAGE_LEN].copy_from_slice(buf);
+        // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
+        unsafe {
+            self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..3 + FLASH_PAGE_LEN], CFG_EN | CFG_SIZE_8)
+        }
+        self.send_cmd_list(&cmd_list);
+
+        while self.udma_busy(Bank::Tx) {
+            #[cfg(feature = "std")]
+            xous::yield_slice();
+        }
+        self.mem_cs(false);
+
+        loop {
+            // wait while WIP is set
+            let status = self.flash_rdsr();
+            // crate::println!("WIP status: {:x}", status);
+            if (status & 0x01) == 0 {
+                break;
+            }
+        }
+        // get the success code for return
+        let result = self.flash_rdscur();
+        if result & 0x20 != 0 {
+            return false;
+        }
+        // disable writes: send wrdi
+        if self.flash_rdsr() & 0x02 != 0 {
+            loop {
+                self.flash_wrdi();
+                let status = self.flash_rdsr();
+                // crate::println!("WRDI status: {:x}", status);
+                if status & 0x02 == 0 {
+                    break;
+                }
+            }
+        }
+        true
     }
 }
 
