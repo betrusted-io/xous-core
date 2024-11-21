@@ -96,7 +96,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     let perclk_freq = 0;
 
     #[cfg(feature = "cramium-soc")]
-    crate::platform::process_update();
+    crate::platform::process_update(perclk_freq);
 
     // initially validate the whole image on disk (including kernel args)
     // kernel args must be validated because tampering with them can change critical assumptions about

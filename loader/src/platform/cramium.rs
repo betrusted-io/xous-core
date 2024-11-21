@@ -11,7 +11,6 @@ mod update;
 pub use update::*;
 mod verifier;
 
-#[cfg(feature = "board-bringup")]
 mod gfx;
 #[cfg(feature = "qr")]
 mod homography;
@@ -19,3 +18,5 @@ mod homography;
 mod qr;
 #[cfg(feature = "usb")]
 mod usb;
+
+mod sha512_digest;

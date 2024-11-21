@@ -207,10 +207,11 @@ pub fn setup_ov2640_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
 }
 
 /// returns the USB SE0 port and pin number
+const SE0_PIN: u8 = 14;
 pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     iox.setup_pin(
         IoxPort::PB,
-        1,
+        SE0_PIN,
         Some(IoxDir::Output),
         Some(IoxFunction::Gpio),
         None,
@@ -218,6 +219,44 @@ pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         Some(IoxEnable::Enable),
         Some(IoxDriveStrength::Drive2mA),
     );
-    iox.set_gpio_pin_value(IoxPort::PB, 1, IoxValue::Low);
-    (IoxPort::PB, 1)
+    iox.set_gpio_pin_value(IoxPort::PB, SE0_PIN, IoxValue::Low);
+    (IoxPort::PB, SE0_PIN)
+}
+
+// These constants definitely change for NTO. These will only work on NTO.
+const KB_PORT: IoxPort = IoxPort::PD;
+const R_PINS: [u8; 3] = [0, 1, 4];
+const C_PINS: [u8; 3] = [5, 6, 7];
+pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 3], [(IoxPort, u8); 3]) {
+    for r in R_PINS {
+        iox.setup_pin(
+            KB_PORT,
+            r,
+            Some(IoxDir::Output),
+            Some(IoxFunction::Gpio),
+            None,
+            None,
+            Some(IoxEnable::Enable),
+            Some(IoxDriveStrength::Drive2mA),
+        );
+        iox.set_gpio_pin_value(KB_PORT, r, IoxValue::High);
+    }
+
+    for c in C_PINS {
+        iox.setup_pin(
+            KB_PORT,
+            c,
+            Some(IoxDir::Input),
+            Some(IoxFunction::Gpio),
+            Some(IoxEnable::Enable),
+            None,
+            Some(IoxEnable::Enable),
+            Some(IoxDriveStrength::Drive2mA),
+        );
+    }
+    ([(KB_PORT, R_PINS[0]), (KB_PORT, R_PINS[1]), (KB_PORT, R_PINS[2])], [
+        (KB_PORT, C_PINS[0]),
+        (KB_PORT, C_PINS[1]),
+        (KB_PORT, C_PINS[2]),
+    ])
 }

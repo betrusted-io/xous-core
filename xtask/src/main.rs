@@ -201,6 +201,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
             .expect("couldn't patch AES");
 
+            // revert these just in case - but don't throw an error if the strings aren't found
+            builder::search_and_replace_in_file(
+                "Cargo.toml",
+                "# [patch.crates-io.curve25519-dalek]",
+                "[patch.crates-io.curve25519-dalek]",
+            )
+            .ok();
+            builder::search_and_replace_in_file(
+                "Cargo.toml",
+                "# git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
+                "git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
+            )
+            .ok();
+            builder::search_and_replace_in_file(
+                "Cargo.toml",
+                "# branch = \"main\" # c25519",
+                "branch = \"main\" # c25519",
+            )
+            .ok();
+            builder::search_and_replace_in_file(
+                "services/root-keys/Cargo.toml",
+                "# features = [\"auto-release\", \"warn-fallback\"]",
+                "features = [\"auto-release\", \"warn-fallback\"]",
+            )
+            .ok();
+            builder::search_and_replace_in_file(
+                "services/shellchat/Cargo.toml",
+                "# features = [\"auto-release\", \"warn-fallback\"]",
+                "features = [\"auto-release\", \"warn-fallback\"]",
+            )
+            .ok();
+
             match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
                 Ok(false) => {
                     return Err(
@@ -582,6 +614,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_feature("quantum-timer");
             builder.add_kernel_feature("v2p");
             builder.add_loader_feature("sram-margin");
+            builder.add_loader_feature("usb");
             match task.as_deref() {
                 Some("baosec") => builder.target_cramium_soc(),
                 _ => panic!("should be unreachable"),
@@ -634,6 +667,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "default = []",
         )
         .expect("couldn't patch AES");
+        builder::search_and_replace_in_file(
+            "Cargo.toml",
+            "# [patch.crates-io.curve25519-dalek]",
+            "[patch.crates-io.curve25519-dalek]",
+        )
+        .expect("couldn't patch curve25519");
+        builder::search_and_replace_in_file(
+            "Cargo.toml",
+            "# git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
+            "git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
+        )
+        .expect("couldn't patch curve25519");
+        builder::search_and_replace_in_file(
+            "Cargo.toml",
+            "# branch = \"main\" # c25519",
+            "branch = \"main\" # c25519",
+        )
+        .expect("couldn't patch curve25519");
+        builder::search_and_replace_in_file(
+            "services/root-keys/Cargo.toml",
+            "# features = [\"auto-release\", \"warn-fallback\"]",
+            "features = [\"auto-release\", \"warn-fallback\"]",
+        )
+        .expect("couldn't patch rootkeys");
+        builder::search_and_replace_in_file(
+            "services/shellchat/Cargo.toml",
+            "# features = [\"auto-release\", \"warn-fallback\"]",
+            "features = [\"auto-release\", \"warn-fallback\"]",
+        )
+        .expect("couldn't patch shellchat");
     }
     match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
         Ok(false) => {

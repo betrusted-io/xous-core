@@ -190,7 +190,7 @@ pub extern "C" fn trap_handler(
                             let mut ret = cramium_hal::usb::driver::CrgEvent::None;
                             let status = usb.csr.r(USBSTS);
                             // self.print_status(status);
-                            let result = if (status & usb.csr.ms(USBSTS_SYSTEM_ERR, 1)) != 0 {
+                            let _result = if (status & usb.csr.ms(USBSTS_SYSTEM_ERR, 1)) != 0 {
                                 crate::println!("System error");
                                 usb.csr.wfo(USBSTS_SYSTEM_ERR, 1);
                                 crate::println!("USBCMD: {:x}", usb.csr.r(USBCMD));
@@ -203,7 +203,7 @@ pub extern "C" fn trap_handler(
                                 }
                                 ret
                             };
-                            crate::println!("Result: {:?}", result);
+                            // crate::println!("Result: {:?}", _result);
                         }
                         if usb.csr.rf(IMAN_IE) != 0 {
                             usb.csr.wo(IMAN, usb.csr.ms(IMAN_IE, 1) | usb.csr.ms(IMAN_IP, 1));

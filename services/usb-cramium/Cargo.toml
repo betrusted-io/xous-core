@@ -8,6 +8,7 @@ utralib = { version = "0.1.25", optional = true, default-features = false }
 xous-names = { package = "xous-api-names", version = "0.9.63" }
 ticktimer = { package = "xous-api-ticktimer", version = "0.9.61" }
 xous = "0.9.64"
+xous-ipc = "0.10.2"
 log-server = { package = "xous-api-log", version = "0.1.61" }
 log = "0.4.14"
 num-derive = { version = "0.3.3", default-features = false }
@@ -15,10 +16,24 @@ num-traits = { version = "0.2.14", default-features = false }
 cramium-hal = { path = "../../libs/cramium-hal", features = ["std"] }
 cram-hal-service = { path = "../cram-hal-service" }
 xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main" }
-ghostfat = "0.5.0"
-
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+] }
+packed_struct = { version = "0.10", default-features = false } # used by the xous-usb-hid crate
 locales = { path = "../../locales" }
 
+[dependencies.usb-device]
+# see top level Cargo.toml for patch.crates-io directive to help with dev work
+version = "0.2.8"
+features = ["log"]
+
 [features]
-cramium-soc = ["utralib/cramium-soc"]
-default = []
+cramium-soc = ["utralib/cramium-soc", "utralib/std"]
+# none of these other modes are actually supported, but are listed here
+# to allow direct re-use of API code
+precursor = ["utralib/precursor", "utralib/std"]
+hosted = ["utralib/hosted", "utralib/std"]
+renode = ["utralib/renode", "utralib/std"]
+mass-storage = []
+default = ["mass-storage"]

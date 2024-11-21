@@ -1,3 +1,4 @@
+use cramium_hal::axp2101::Axp2101;
 use cramium_hal::iox::{Iox, IoxDir, IoxEnable, IoxFunction, IoxPort};
 use cramium_hal::udma;
 use cramium_hal::udma::PeriphId;
@@ -72,7 +73,23 @@ pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 
 // location of kernel, as offset from the base of ReRAM. This needs to match up with what is in link.x.
 // exclusive of the signature block offset
-pub const KERNEL_OFFSET: usize = 0x5_0000;
+pub const KERNEL_OFFSET: usize = 0x6_0000;
+
+pub(crate) fn delay(quantum: usize) {
+    use utralib::{CSR, utra};
+    // abuse the d11ctime timer to create some time-out like thing
+    let mut d11c = CSR::new(utra::d11ctime::HW_D11CTIME_BASE as *mut u32);
+    d11c.wfo(utra::d11ctime::CONTROL_COUNT, 333_333); // 1.0ms per interval
+    let mut polarity = d11c.rf(utra::d11ctime::HEARTBEAT_BEAT);
+    for _ in 0..quantum {
+        while polarity == d11c.rf(utra::d11ctime::HEARTBEAT_BEAT) {}
+        polarity = d11c.rf(utra::d11ctime::HEARTBEAT_BEAT);
+    }
+    // we have to split this because we don't know where we caught the previous interval
+    if quantum == 1 {
+        while polarity == d11c.rf(utra::d11ctime::HEARTBEAT_BEAT) {}
+    }
+}
 
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() -> u32 {
@@ -271,20 +288,61 @@ pub fn early_init() -> u32 {
     };
     let mut i2c = unsafe { cramium_hal::udma::I2c::new_with_ifram(i2c_channel, 400_000, perclk, i2c_ifram) };
     // setup PMIC
-    let mut pmic = match cramium_hal::axp2101::Axp2101::new(&mut i2c) {
-        Ok(p) => p,
-        Err(_e) => {
-            crate::println!("Couldn't init AXP2101, rebooting");
-            let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
-            rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
-            panic!("System should have reset");
-        }
-    };
-    pmic.set_ldo(&mut i2c, Some(2.5), cramium_hal::axp2101::WhichLdo::Aldo2).unwrap();
-    pmic.set_dcdc(&mut i2c, Some((1.2, false)), cramium_hal::axp2101::WhichDcDc::Dcdc4).unwrap();
-    crate::println!("AXP2101 configure: {:?}", pmic);
+    let mut pmic: Option<Axp2101> = None;
 
-    // TEMPORARY: turn off SE0 on USB
+    for _ in 0..3 {
+        match cramium_hal::axp2101::Axp2101::new(&mut i2c) {
+            Ok(p) => {
+                pmic = Some(p);
+                break;
+            }
+            Err(e) => {
+                crate::println!("Error initializing pmic: {:?}, retrying", e);
+
+                // we have to reboot it appears if the I2C is unstable - a "soft recovery"
+                // just leads to CPU lock-up on exit from the init routine? what is going on??
+                // maybe some IFRAM instability? Maybe the I2C unit is locking up?
+                let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+                rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
+                rcurst.wo(utra::sysctrl::SFR_RCURST1, 0x55AA);
+
+                /*
+                unsafe {
+                    let ifram0 = HW_IFRAM0_MEM as *mut u32;
+                    for i in 0..HW_IFRAM0_MEM_LEN / size_of::<u32>() {
+                        ifram0.add(i).write_volatile(0);
+                    }
+                    let ifram1 = HW_IFRAM1_MEM as *mut u32;
+                    for i in 0..HW_IFRAM1_MEM_LEN / size_of::<u32>() {
+                        ifram1.add(i).write_volatile(0);
+                    }
+                }*/
+
+                delay(500);
+            }
+        };
+    }
+    if let Some(mut pmic) = pmic {
+        pmic.set_ldo(&mut i2c, Some(2.5), cramium_hal::axp2101::WhichLdo::Aldo2).unwrap();
+        pmic.set_dcdc(&mut i2c, Some((1.2, false)), cramium_hal::axp2101::WhichDcDc::Dcdc4).unwrap();
+        crate::println!("AXP2101 configure: {:?}", pmic);
+
+        // Make this true to have the system shut down by disconnecting its own battery while on battery power
+        // Note this does nothing if you have USB power plugged in.
+        if false {
+            crate::println!("shutting down...");
+            pmic.set_ldo(&mut i2c, Some(0.9), cramium_hal::axp2101::WhichLdo::Aldo3).ok();
+            crate::println!("system should be off");
+        }
+    } else {
+        crate::println!("Couldn't init AXP2101, rebooting");
+        let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+        rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
+        rcurst.wo(utra::sysctrl::SFR_RCURST1, 0x55AA);
+        panic!("System should have reset");
+    }
+
+    // Turn off SE0 on USB
     let _se0 = cramium_hal::board::baosec::setup_usb_pins(&iox);
     #[cfg(feature = "board-bringup")]
     let iox_loop = iox.clone();
@@ -304,7 +362,7 @@ pub fn early_init() -> u32 {
     #[cfg(feature = "board-bringup")]
     {
         use cramium_hal::minigfx::{Line, Point};
-        use cramium_hal::{axp2101::WhichLdo, iox::IoxValue, minigfx::ColorNative, sh1107::Mono, udma::Udma};
+        use cramium_hal::{iox::IoxValue, minigfx::ColorNative, sh1107::Mono, udma::Udma};
 
         use crate::platform::cramium::gfx;
         //------------- test I2C ------------
@@ -345,7 +403,7 @@ pub fn early_init() -> u32 {
         crate::println!("LDO result - last value should be 0xe: {:x?}", ldo);
 
         //------------- test USB ---------------
-        #[cfg(feature = "usb")]
+        #[cfg(feature = "usb-test")]
         {
             crate::platform::cramium::usb::init_usb();
             // this does not return if USB is initialized correctly...
@@ -672,14 +730,6 @@ pub fn early_init() -> u32 {
                 u8dest[1] = ((u32src >> 16) & 0xff) as u8;
             }
             frames += 1;
-        }
-
-        // Make this true to have the system shut down by disconnecting its own battery while on battery power
-        // Note this does nothing if you have USB power plugged in.
-        if false {
-            crate::println!("shutting down...");
-            pmic.set_ldo(&mut i2c, Some(0.9), WhichLdo::Aldo3).ok();
-            crate::println!("system should be off");
         }
 
         // ---------------- test TRNG -------------------
@@ -1160,8 +1210,8 @@ pub fn early_init() -> u32 {
         crate::println!("pmu_cr upd: {:x}", aoc_base.base().add(4).read_volatile());
     }
     */
-    udma_uart.write("Press any key to continue...".as_bytes());
-    getc();
+    // udma_uart.write("Press any key to continue...".as_bytes());
+    // getc();
     udma_uart.write(b"\n\rBooting!\n\r");
 
     perclk

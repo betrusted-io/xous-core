@@ -413,6 +413,12 @@ pub trait Udma {
         bank_addr.add(DmaReg::Size.into()).write_volatile((buf.len() * size_of::<T>()) as u32);
         bank_addr.add(DmaReg::Cfg.into()).write_volatile(config | CFG_EN)
     }
+    fn udma_reset(&self, bank: Bank) {
+        unsafe {
+            let bank_addr = self.csr().base().add(bank as usize);
+            bank_addr.add(DmaReg::Cfg.into()).write_volatile(CFG_CLEAR);
+        }
+    }
     fn udma_can_enqueue(&self, bank: Bank) -> bool {
         // Safety: only safe when used in the context of UDMA registers.
         unsafe {
