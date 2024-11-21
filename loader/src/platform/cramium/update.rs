@@ -1,4 +1,5 @@
 use core::convert::TryInto;
+use core::fmt::Write;
 
 use cramium_hal::iox::{IoGpio, IoSetup, Iox, IoxPort, IoxValue};
 use cramium_hal::mbox::{
@@ -6,7 +7,7 @@ use cramium_hal::mbox::{
     ToRvOp,
 };
 use cramium_hal::minigfx::{FrameBuffer, Point};
-use cramium_hal::sh1107::Mono;
+use cramium_hal::sh1107::{Mono, Oled128x128};
 use cramium_hal::udma;
 use cramium_hal::usb::driver::UsbDeviceState;
 use ed25519_dalek::{Digest, Signature, VerifyingKey};
@@ -285,11 +286,15 @@ pub fn process_update(perclk: u32) {
                                         &check_slice[..32],
                                         &check_slice[0x1000..0x1000 + 32]
                                     );
+
+                                    progress_bar(&mut sh1107, 0);
+
                                     // nearest event multiple of RERAM_PAGE_SIZE_BYTES that fits into
                                     // our available payload length
                                     const BLOCKLEN_BYTES: usize = (PAYLOAD_LEN_WORDS * size_of::<u32>()
                                         / RERAM_PAGE_SIZE_BYTES)
                                         * RERAM_PAGE_SIZE_BYTES;
+                                    let total_len = SIGBLOCK_SIZE + test_len;
                                     for (i, byte_chunk) in disk_access
                                         [k_start..k_start + SIGBLOCK_SIZE + test_len as usize]
                                         .chunks(BLOCKLEN_BYTES)
@@ -308,6 +313,7 @@ pub fn process_update(perclk: u32) {
                                         buffer[1] = BLOCKLEN_BYTES as u32;
                                         if i % 8 == 0 {
                                             crate::println!("{:x}: {:x?}", buffer[0], &buffer[2..6]);
+                                            progress_bar(&mut sh1107, i * BLOCKLEN_BYTES * 100 / total_len);
                                         }
                                         match write_rram(&mut mbox, &buffer) {
                                             Ok(len) => {
@@ -325,6 +331,7 @@ pub fn process_update(perclk: u32) {
                                             }
                                         };
                                     }
+                                    progress_bar(&mut sh1107, 100);
                                     cache_flush();
                                     crate::println!(
                                         "data after: {:x?} .. {:x?}",
@@ -333,6 +340,7 @@ pub fn process_update(perclk: u32) {
                                     );
                                 } else if file_name.to_ascii_lowercase() == SWAP_NAME {
                                     crate::println!("Found swap image");
+                                    // This has a totally different method, as it's writing to SPI FLASH
                                 }
                             }
                         }
@@ -348,6 +356,41 @@ pub fn process_update(perclk: u32) {
     }
 
     gfx::msg(&mut sh1107, "   Booting Xous...", Point::new(0, 64), Mono::White.into(), Mono::Black.into());
+    sh1107.buffer_swap();
+    sh1107.draw();
+    sh1107.clear();
+}
+
+struct UsizeToString {
+    buf: [u8; 16], // Enough space for a u32 decimal string
+    pos: usize,
+}
+
+impl UsizeToString {
+    pub const fn new() -> Self { Self { buf: [0; 16], pos: 0 } }
+
+    pub fn as_str(&self) -> &str { core::str::from_utf8(&self.buf[..self.pos]).unwrap_or("") }
+}
+
+impl Write for UsizeToString {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        let bytes = s.as_bytes();
+        if self.pos + bytes.len() > self.buf.len() {
+            return Err(core::fmt::Error);
+        }
+        self.buf[self.pos..self.pos + bytes.len()].copy_from_slice(bytes);
+        self.pos += bytes.len();
+        Ok(())
+    }
+}
+
+fn progress_bar(sh1107: &mut Oled128x128<'_>, percentage: usize) {
+    gfx::msg(sh1107, "Writing, do not", Point::new(8, 64), Mono::White.into(), Mono::Black.into());
+    gfx::msg(sh1107, "reset or turn off!", Point::new(4, 50), Mono::White.into(), Mono::Black.into());
+
+    let mut usizestr = UsizeToString::new();
+    write!(usizestr, "{}%", percentage).ok();
+    gfx::msg(sh1107, usizestr.as_str(), Point::new(55, 32), Mono::Black.into(), Mono::White.into());
     sh1107.buffer_swap();
     sh1107.draw();
     sh1107.clear();
