@@ -1,6 +1,8 @@
 use core::convert::TryInto;
 use core::fmt::Write;
 
+use cramium_hal::board::SPIM_FLASH_IFRAM_ADDR;
+use cramium_hal::ifram::IframRange;
 use cramium_hal::iox::{IoGpio, IoSetup, Iox, IoxPort, IoxValue};
 use cramium_hal::mbox::{
     MBOX_PROTOCOL_REV, Mbox, MboxError, MboxToCm7Pkt, PAYLOAD_LEN_WORDS, RERAM_PAGE_SIZE_BYTES, ToCm7Op,
@@ -9,6 +11,7 @@ use cramium_hal::mbox::{
 use cramium_hal::minigfx::{FrameBuffer, Point};
 use cramium_hal::sh1107::{Mono, Oled128x128};
 use cramium_hal::udma;
+use cramium_hal::udma::*;
 use cramium_hal::usb::driver::UsbDeviceState;
 use ed25519_dalek::{Digest, Signature, VerifyingKey};
 use sha2::Sha512;
@@ -263,7 +266,7 @@ pub fn process_update(perclk: u32) {
                                         crate::println!("error verifying signature: {:?}", e);
                                         gfx::msg(
                                             &mut sh1107,
-                                            "Image corrupt!",
+                                            "Kernel invalid!",
                                             Point::new(10, 64),
                                             Mono::White.into(),
                                             Mono::Black.into(),
@@ -338,9 +341,129 @@ pub fn process_update(perclk: u32) {
                                         &check_slice[..32],
                                         &check_slice[0x1000..0x1000 + 32]
                                     );
-                                } else if file_name.to_ascii_lowercase() == SWAP_NAME {
-                                    crate::println!("Found swap image");
+                                } else if file_name.to_ascii_uppercase() == SWAP_NAME {
                                     // This has a totally different method, as it's writing to SPI FLASH
+                                    crate::println!("Found swap image");
+                                    let f = fs.get_file(entry.path().clone()).expect("file error");
+                                    let flen = f.file_size();
+                                    let swap_offset = f.sector_offset() as usize * 512;
+                                    crate::println!("swap offset: {:x}", swap_offset);
+                                    let swap_image =
+                                        &usb::conjure_disk()[swap_offset..swap_offset + flen as usize];
+
+                                    let ssh: &crate::swap::SwapSourceHeader = (swap_image.as_ptr()
+                                        as *const crate::swap::SwapSourceHeader)
+                                        .as_ref()
+                                        .unwrap();
+                                    // minimal image validation - just check that the version number and magic
+                                    // number is correct.
+                                    if ssh.version == 0x01_01_0000
+                                        && u32::from_be_bytes(swap_image[0x14..0x18].try_into().unwrap())
+                                            == 0x73776170
+                                    {
+                                        crate::println!(
+                                            "Burning swap image starting at 0x{:x} of len {} bytes",
+                                            swap_offset,
+                                            flen
+                                        );
+                                        progress_bar(&mut sh1107, 0);
+
+                                        let udma_global = GlobalConfig::new(
+                                            utralib::generated::HW_UDMA_CTRL_BASE as *mut u32,
+                                        );
+
+                                        // setup the I/O pins
+                                        let iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
+                                        let channel = cramium_hal::board::setup_memory_pins(&iox);
+                                        udma_global.clock_on(PeriphId::from(channel));
+                                        // safety: this is safe because clocks have been set up
+                                        let mut flash_spim = Spim::new_with_ifram(
+                                            channel,
+                                            // has to be half the clock frequency reaching the block, but
+                                            // run it as fast
+                                            // as we can run perclk
+                                            perclk / 4,
+                                            perclk / 2,
+                                            SpimClkPol::LeadingEdgeRise,
+                                            SpimClkPha::CaptureOnLeading,
+                                            SpimCs::Cs0,
+                                            0,
+                                            0,
+                                            None,
+                                            256 + 16, /* just enough space to send commands + programming
+                                                       * page */
+                                            4096,
+                                            Some(6),
+                                            None,
+                                            IframRange::from_raw_parts(
+                                                SPIM_FLASH_IFRAM_ADDR,
+                                                SPIM_FLASH_IFRAM_ADDR,
+                                                4096 * 2,
+                                            ),
+                                        );
+
+                                        flash_spim.mem_qpi_mode(true);
+
+                                        // NOTE: this programming routine only works for write destinations
+                                        // that start aligned to an erase page. In this case, `page_no``
+                                        // starts at 0 and increments monatomically, so, this condition is
+                                        // satisfied.
+                                        for (page_no, chunk) in swap_image.chunks(FLASH_PAGE_LEN).enumerate()
+                                        {
+                                            // copy chunk to a full-page sized buffer: the last chunk may not
+                                            // be exactly a page in length, so this pads it out!
+                                            let mut buf = [0u8; 256];
+                                            buf[..chunk.len()].copy_from_slice(chunk);
+
+                                            // Erase the page if we're touching it the first time
+                                            if ((page_no * FLASH_PAGE_LEN) % 0x1000) == 0 {
+                                                flash_spim
+                                                    .flash_erase_sector((page_no * FLASH_PAGE_LEN) as u32);
+                                            }
+
+                                            flash_spim.mem_flash_write_page(
+                                                (page_no * FLASH_PAGE_LEN) as u32,
+                                                &buf,
+                                            );
+
+                                            if page_no % 32 == 0 {
+                                                progress_bar(
+                                                    &mut sh1107,
+                                                    page_no * FLASH_PAGE_LEN * 100 / flen as usize,
+                                                );
+                                                crate::println!(
+                                                    "{:x}: write {:x?}",
+                                                    page_no * FLASH_PAGE_LEN,
+                                                    &buf[..16]
+                                                );
+                                                let mut rbk = [0u8; 16];
+                                                flash_spim.mem_read(
+                                                    (page_no * FLASH_PAGE_LEN) as u32,
+                                                    &mut rbk,
+                                                    false,
+                                                );
+                                                crate::println!("rbk: {:x?}", &rbk);
+                                            }
+                                        }
+                                        progress_bar(&mut sh1107, 100);
+                                    } else {
+                                        crate::println!(
+                                            "Invalid swap image: ver {:x} magic: {:x}",
+                                            ssh.version,
+                                            u32::from_be_bytes(swap_image[0x14..0x18].try_into().unwrap())
+                                        );
+                                        gfx::msg(
+                                            &mut sh1107,
+                                            "Swap invalid!",
+                                            Point::new(6, 64),
+                                            Mono::White.into(),
+                                            Mono::Black.into(),
+                                        );
+                                        sh1107.buffer_swap();
+                                        sh1107.draw();
+                                        sh1107.clear();
+                                        return;
+                                    }
                                 }
                             }
                         }
@@ -390,7 +513,7 @@ fn progress_bar(sh1107: &mut Oled128x128<'_>, percentage: usize) {
 
     let mut usizestr = UsizeToString::new();
     write!(usizestr, "{}%", percentage).ok();
-    gfx::msg(sh1107, usizestr.as_str(), Point::new(55, 32), Mono::Black.into(), Mono::White.into());
+    gfx::msg(sh1107, usizestr.as_str(), Point::new(55, 26), Mono::Black.into(), Mono::White.into());
     sh1107.buffer_swap();
     sh1107.draw();
     sh1107.clear();
