@@ -318,10 +318,11 @@ pub fn host_fifo_tests() -> usize {
         //
         // finally, we're pegged at 15, because, backpressure caused us to miss the rest of
         // the entries, and we are stuck at the final written value of the output test
+        print!("rbk: {:x}\r", rbk);
         if i <= 9 {
-            assert!(rbk == !(0xF1F0_0000 + i));
+            assert!(rbk == (0xF1F0_0000 + i));
         } else {
-            assert!(rbk == !(0xF1F0_0000 + 15));
+            assert!(rbk == (0xF1F0_0000 + 15));
         }
         print!("backpressure {:x}\r", rbk);
     }
