@@ -32,6 +32,9 @@ board-baosec = [] # USB form factor token
 board-baosor = [] # Precursor form factor
 board-dabao = []  # Dev board form factor
 
+udma-stress-test = [
+] # For RTL simulation testing - aggravates a key corner case
+
 compress-entropy = []
 magic-manual = []
 std = ["log", "xous-api-names", "usb-device", "xous-api-ticktimer"]

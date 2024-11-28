@@ -426,6 +426,15 @@ pub trait Udma {
         }
     }
     fn udma_busy(&self, bank: Bank) -> bool {
+        // create dummy traffic on IFRAM that causes stall conditions on the bus
+        // the write is totally bogus and
+        #[cfg(feature = "udma-stress-test")]
+        for i in 0..12 {
+            unsafe {
+                let ifram_tickle = 0x5000_0000 as *mut u32;
+                ifram_tickle.add(i).write_volatile(i as u32);
+            }
+        }
         // Safety: only safe when used in the context of UDMA registers.
         unsafe {
             let saddr = self.csr().base().add(bank as usize).add(DmaReg::Saddr.into()).read_volatile();
