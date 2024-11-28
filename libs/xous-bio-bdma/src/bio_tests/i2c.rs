@@ -22,7 +22,7 @@ pub fn i2c_test() -> usize {
     // configure & run the 0th machine
     // 400kHz clock -> 100kHz toggle rate = 0x7D0_0000 @ 800MHz rate FCLK
     // 1600kHz clock -> 400kHz toggle rate = 0x1F4_0000 @ 800MHz rate FCLK
-    bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x7D0_0000);
+    bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x1F4_0000);
 
     // clear all events
     bio_ss.bio.wfo(utra::bio_bdma::SFR_EVENT_CLR_SFR_EVENT_CLR, 0xFFFF_FF);
