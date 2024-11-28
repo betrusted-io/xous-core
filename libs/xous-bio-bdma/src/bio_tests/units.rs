@@ -318,10 +318,11 @@ pub fn host_fifo_tests() -> usize {
         //
         // finally, we're pegged at 15, because, backpressure caused us to miss the rest of
         // the entries, and we are stuck at the final written value of the output test
+        print!("rbk: {:x}\r", rbk);
         if i <= 9 {
-            assert!(rbk == !(0xF1F0_0000 + i));
+            assert!(rbk == (0xF1F0_0000 + i));
         } else {
-            assert!(rbk == !(0xF1F0_0000 + 15));
+            assert!(rbk == (0xF1F0_0000 + 15));
         }
         print!("backpressure {:x}\r", rbk);
     }
@@ -402,7 +403,7 @@ pub fn host_fifo_tests() -> usize {
 bio_code!(fifo_host0_bitbang, FIFO_HOST0_BITBANG_START, FIFO_HOST0_BITBANG_END,
     "li    t0, 0xFFFFFFFF",
     "mv    x26, t0",         // ensure mask is disabled
-    "mv    x25, t0",         // set all pins to inputs
+    "mv    x24, t0",         // set all pins to outputs
     "90:",
     "mv x21, x16",
     "mv x20, zero",

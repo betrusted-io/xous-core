@@ -1415,14 +1415,6 @@ unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
 
     crate::println!("pllq: 0x{:x}, pllmn: 0x{:x}, n_frac: 0x{:x}", pllq, pllmn, n_frac);
 
-    daric_cgu.add(sysctrl::SFR_CGUSEL1.offset()).write_volatile(1); // 0: RC, 1: XTAL
-    daric_cgu.add(sysctrl::SFR_CGUFSCR.offset()).write_volatile(48); // external crystal is 48MHz
-    daric_cgu.add(sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
-
-    if freq_hz < 1_000_000 {
-        daric_cgu.add(sysctrl::SFR_IPCOSC.offset()).write_volatile(freq_hz);
-        daric_cgu.add(sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x32); // commit, must write 32
-    }
     // switch to OSC
     daric_cgu.add(sysctrl::SFR_CGUSEL0.offset()).write_volatile(0); // clktop sel, 0:clksys, 1:clkpll0
     daric_cgu.add(sysctrl::SFR_CGUSET.offset()).write_volatile(0x32); // commit
@@ -1430,7 +1422,7 @@ unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     if 0 == freq_hz {
         // do nothing
     } else {
-        // PD PLL
+        // powerdown PLL
         daric_cgu
             .add(sysctrl::SFR_IPCLPEN.offset())
             .write_volatile(daric_cgu.add(sysctrl::SFR_IPCLPEN.offset()).read_volatile() | 0x02);
@@ -1452,6 +1444,17 @@ unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         daric_cgu.add(sysctrl::SFR_IPCCR.offset()).write_volatile((1 << 6) | (2 << 3) | (3));
         // daric_cgu.add(sysctrl::SFR_IPCCR.offset()).write_volatile((3 << 6) | (5 << 3) | (5));
         daric_cgu.add(sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x32); // commit, must write 32
+
+        // ensure the correct oscillator is selected here. It's put after the PLL is configured
+        // to ensure the PLL doesn't get edges while in an invalid configuration.
+        daric_cgu.add(sysctrl::SFR_CGUSEL1.offset()).write_volatile(1); // 0: RC, 1: XTAL
+        daric_cgu.add(sysctrl::SFR_CGUFSCR.offset()).write_volatile(48); // external crystal is 48MHz
+        daric_cgu.add(sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
+
+        if freq_hz < 1_000_000 {
+            daric_cgu.add(sysctrl::SFR_IPCOSC.offset()).write_volatile(freq_hz);
+            daric_cgu.add(sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x32); // commit, must write 32
+        }
 
         daric_cgu
             .add(sysctrl::SFR_IPCLPEN.offset())
