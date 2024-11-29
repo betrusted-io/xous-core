@@ -16,7 +16,7 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
     // Stub for clearing IFRAM & RAM on Cramium target. This is required
     // to clear the parity check bits, which are randomly set on boot. System will
     // eventually hang if these bits aren't cleared.
-    #[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
+    #[cfg(all(any(feature = "cramium-soc", feature = "cramium-fpga"), not(feature = "simulation-only")))]
     unsafe {
         #[rustfmt::skip]
         asm! (
