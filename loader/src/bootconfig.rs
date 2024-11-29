@@ -130,10 +130,15 @@ impl BootConfig {
                 (self.sram_size - self.init_size - self.extra_pages * PAGE_SIZE) / mem::size_of::<usize>(),
             )
         };
-        assert!((val as usize) >= (self.sram_start as usize));
+        assert!(
+            (val as usize) >= (self.sram_start as usize),
+            "val {:x} ! >= sram_start {:x}",
+            val as usize,
+            self.sram_start as usize
+        );
         assert!(
             (val as usize) < (self.sram_start as usize) + self.sram_size,
-            "top address {:08x} > (start + size) {:08x} + {:08x} = {:08x}",
+            "top address {:08x} ! < (start + size) {:08x} + {:08x} = {:08x}",
             val as usize,
             self.sram_start as usize,
             self.sram_size,
