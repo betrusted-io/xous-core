@@ -79,29 +79,25 @@ renode = [
 cramium-soc = [
     "utralib/cramium-soc",
     "debug-print",
-    "simulation-only",
     "cramium-hal",
-    "xous-pio",
-    "xous-pl230",
     "rand_chacha",
     "sram-margin",
+    # "boot-delay",
+]
+board-baosec = [
+    "cramium-hal/board-baosec",
+    "updates",
+    "usb",
     "libm",
     "simple-fatfs",
     "linked_list_allocator",
     "ed25519-dalek",
     "sha2",
     "digest",
-    # "boot-delay",
 ]
-board-baosec = ["cramium-hal/board-baosec"]
 board-baosor = ["cramium-hal/board-baosor"]
 board-dabao = ["cramium-hal/board-dabao"]
-cramium-fpga = [
-    "utralib/cramium-fpga",
-    "debug-print",
-    "simulation-only",
-    "cramium-hal",
-]
+cramium-fpga = ["utralib/cramium-fpga", "debug-print", "cramium-hal"]
 atsama5d27 = ["utralib/atsama5d27", "armv7", "dep:atsama5d27"]
 
 # precursor flags
@@ -118,6 +114,7 @@ board-bringup = []
 sram-margin = []
 boot-delay = []
 simulation-only = []
+verilator-only = []
 quantum-timer-test = ["pio", "pio-proc"]
 spim-test = []
 irq-test = []
@@ -129,10 +126,11 @@ clock-tests = []
 reset-debug = []
 usb = []
 qr = ["nalgebra"]
+updates = []
 
 # general flags
 debug-print = []
 earlyprintk = []
 resume = []      # suspend/resume pathway code
 
-default = ["board-bringup", "dump-trng", "usb"]
+default = []
