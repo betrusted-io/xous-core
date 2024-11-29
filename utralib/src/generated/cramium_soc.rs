@@ -346,7 +346,6 @@ pub const HW_BIO_FIFO3_MEM_LEN: usize = 4096;
 // Physical base addresses of registers
 pub const HW_D11CTIME_BASE :   usize = 0xe0000000;
 pub const HW_SUSRES_BASE :   usize = 0xe0001000;
-pub const HW_COREUSER_BASE :   usize = 0xe0002000;
 pub const HW_CSRTEST_BASE :   usize = 0xe0003000;
 pub const HW_IRQARRAY0_BASE :   usize = 0xe0004000;
 pub const HW_IRQARRAY1_BASE :   usize = 0xe0005000;
@@ -478,47 +477,6 @@ pub mod utra {
 
         pub const SUSRES_IRQ: usize = 21;
         pub const HW_SUSRES_BASE: usize = 0xe0001000;
-    }
-
-    pub mod coreuser {
-        pub const COREUSER_NUMREGS: usize = 10;
-
-        pub const SET_ASID: crate::Register = crate::Register::new(0, 0x3ff);
-        pub const SET_ASID_ASID: crate::Field = crate::Field::new(9, 0, SET_ASID);
-        pub const SET_ASID_TRUSTED: crate::Field = crate::Field::new(1, 9, SET_ASID);
-
-        pub const GET_ASID_ADDR: crate::Register = crate::Register::new(1, 0x1ff);
-        pub const GET_ASID_ADDR_ASID: crate::Field = crate::Field::new(9, 0, GET_ASID_ADDR);
-
-        pub const GET_ASID_VALUE: crate::Register = crate::Register::new(2, 0x1);
-        pub const GET_ASID_VALUE_VALUE: crate::Field = crate::Field::new(1, 0, GET_ASID_VALUE);
-
-        pub const SET_PRIVILEGE: crate::Register = crate::Register::new(3, 0x3);
-        pub const SET_PRIVILEGE_MPP: crate::Field = crate::Field::new(2, 0, SET_PRIVILEGE);
-
-        pub const CONTROL: crate::Register = crate::Register::new(4, 0x1f);
-        pub const CONTROL_ENABLE: crate::Field = crate::Field::new(1, 0, CONTROL);
-        pub const CONTROL_ASID: crate::Field = crate::Field::new(1, 1, CONTROL);
-        pub const CONTROL_PPN_A: crate::Field = crate::Field::new(1, 2, CONTROL);
-        pub const CONTROL_PPN_B: crate::Field = crate::Field::new(1, 3, CONTROL);
-        pub const CONTROL_PRIVILEGE: crate::Field = crate::Field::new(1, 4, CONTROL);
-
-        pub const PROTECT: crate::Register = crate::Register::new(5, 0x1);
-        pub const PROTECT_PROTECT: crate::Field = crate::Field::new(1, 0, PROTECT);
-
-        pub const WINDOW_AL: crate::Register = crate::Register::new(6, 0x3fffff);
-        pub const WINDOW_AL_PPN: crate::Field = crate::Field::new(22, 0, WINDOW_AL);
-
-        pub const WINDOW_AH: crate::Register = crate::Register::new(7, 0x3fffff);
-        pub const WINDOW_AH_PPN: crate::Field = crate::Field::new(22, 0, WINDOW_AH);
-
-        pub const WINDOW_BL: crate::Register = crate::Register::new(8, 0x3fffff);
-        pub const WINDOW_BL_PPN: crate::Field = crate::Field::new(22, 0, WINDOW_BL);
-
-        pub const WINDOW_BH: crate::Register = crate::Register::new(9, 0x3fffff);
-        pub const WINDOW_BH_PPN: crate::Field = crate::Field::new(22, 0, WINDOW_BH);
-
-        pub const HW_COREUSER_BASE: usize = 0xe0002000;
     }
 
     pub mod csrtest {
@@ -5525,118 +5483,6 @@ mod tests {
         let mut baz = susres_csr.zf(utra::susres::EV_ENABLE_SOFT_INT, bar);
         baz |= susres_csr.ms(utra::susres::EV_ENABLE_SOFT_INT, 1);
         susres_csr.wfo(utra::susres::EV_ENABLE_SOFT_INT, baz);
-  }
-
-    #[test]
-    #[ignore]
-    fn compile_check_coreuser_csr() {
-        use super::*;
-        let mut coreuser_csr = CSR::new(HW_COREUSER_BASE as *mut u32);
-
-        let foo = coreuser_csr.r(utra::coreuser::SET_ASID);
-        coreuser_csr.wo(utra::coreuser::SET_ASID, foo);
-        let bar = coreuser_csr.rf(utra::coreuser::SET_ASID_ASID);
-        coreuser_csr.rmwf(utra::coreuser::SET_ASID_ASID, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::SET_ASID_ASID, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::SET_ASID_ASID, 1);
-        coreuser_csr.wfo(utra::coreuser::SET_ASID_ASID, baz);
-        let bar = coreuser_csr.rf(utra::coreuser::SET_ASID_TRUSTED);
-        coreuser_csr.rmwf(utra::coreuser::SET_ASID_TRUSTED, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::SET_ASID_TRUSTED, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::SET_ASID_TRUSTED, 1);
-        coreuser_csr.wfo(utra::coreuser::SET_ASID_TRUSTED, baz);
-
-        let foo = coreuser_csr.r(utra::coreuser::GET_ASID_ADDR);
-        coreuser_csr.wo(utra::coreuser::GET_ASID_ADDR, foo);
-        let bar = coreuser_csr.rf(utra::coreuser::GET_ASID_ADDR_ASID);
-        coreuser_csr.rmwf(utra::coreuser::GET_ASID_ADDR_ASID, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::GET_ASID_ADDR_ASID, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::GET_ASID_ADDR_ASID, 1);
-        coreuser_csr.wfo(utra::coreuser::GET_ASID_ADDR_ASID, baz);
-
-        let foo = coreuser_csr.r(utra::coreuser::GET_ASID_VALUE);
-        coreuser_csr.wo(utra::coreuser::GET_ASID_VALUE, foo);
-        let bar = coreuser_csr.rf(utra::coreuser::GET_ASID_VALUE_VALUE);
-        coreuser_csr.rmwf(utra::coreuser::GET_ASID_VALUE_VALUE, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::GET_ASID_VALUE_VALUE, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::GET_ASID_VALUE_VALUE, 1);
-        coreuser_csr.wfo(utra::coreuser::GET_ASID_VALUE_VALUE, baz);
-
-        let foo = coreuser_csr.r(utra::coreuser::SET_PRIVILEGE);
-        coreuser_csr.wo(utra::coreuser::SET_PRIVILEGE, foo);
-        let bar = coreuser_csr.rf(utra::coreuser::SET_PRIVILEGE_MPP);
-        coreuser_csr.rmwf(utra::coreuser::SET_PRIVILEGE_MPP, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::SET_PRIVILEGE_MPP, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::SET_PRIVILEGE_MPP, 1);
-        coreuser_csr.wfo(utra::coreuser::SET_PRIVILEGE_MPP, baz);
-
-        let foo = coreuser_csr.r(utra::coreuser::CONTROL);
-        coreuser_csr.wo(utra::coreuser::CONTROL, foo);
-        let bar = coreuser_csr.rf(utra::coreuser::CONTROL_ENABLE);
-        coreuser_csr.rmwf(utra::coreuser::CONTROL_ENABLE, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::CONTROL_ENABLE, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::CONTROL_ENABLE, 1);
-        coreuser_csr.wfo(utra::coreuser::CONTROL_ENABLE, baz);
-        let bar = coreuser_csr.rf(utra::coreuser::CONTROL_ASID);
-        coreuser_csr.rmwf(utra::coreuser::CONTROL_ASID, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::CONTROL_ASID, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::CONTROL_ASID, 1);
-        coreuser_csr.wfo(utra::coreuser::CONTROL_ASID, baz);
-        let bar = coreuser_csr.rf(utra::coreuser::CONTROL_PPN_A);
-        coreuser_csr.rmwf(utra::coreuser::CONTROL_PPN_A, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::CONTROL_PPN_A, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::CONTROL_PPN_A, 1);
-        coreuser_csr.wfo(utra::coreuser::CONTROL_PPN_A, baz);
-        let bar = coreuser_csr.rf(utra::coreuser::CONTROL_PPN_B);
-        coreuser_csr.rmwf(utra::coreuser::CONTROL_PPN_B, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::CONTROL_PPN_B, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::CONTROL_PPN_B, 1);
-        coreuser_csr.wfo(utra::coreuser::CONTROL_PPN_B, baz);
-        let bar = coreuser_csr.rf(utra::coreuser::CONTROL_PRIVILEGE);
-        coreuser_csr.rmwf(utra::coreuser::CONTROL_PRIVILEGE, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::CONTROL_PRIVILEGE, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::CONTROL_PRIVILEGE, 1);
-        coreuser_csr.wfo(utra::coreuser::CONTROL_PRIVILEGE, baz);
-
-        let foo = coreuser_csr.r(utra::coreuser::PROTECT);
-        coreuser_csr.wo(utra::coreuser::PROTECT, foo);
-        let bar = coreuser_csr.rf(utra::coreuser::PROTECT_PROTECT);
-        coreuser_csr.rmwf(utra::coreuser::PROTECT_PROTECT, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::PROTECT_PROTECT, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::PROTECT_PROTECT, 1);
-        coreuser_csr.wfo(utra::coreuser::PROTECT_PROTECT, baz);
-
-        let foo = coreuser_csr.r(utra::coreuser::WINDOW_AL);
-        coreuser_csr.wo(utra::coreuser::WINDOW_AL, foo);
-        let bar = coreuser_csr.rf(utra::coreuser::WINDOW_AL_PPN);
-        coreuser_csr.rmwf(utra::coreuser::WINDOW_AL_PPN, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::WINDOW_AL_PPN, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::WINDOW_AL_PPN, 1);
-        coreuser_csr.wfo(utra::coreuser::WINDOW_AL_PPN, baz);
-
-        let foo = coreuser_csr.r(utra::coreuser::WINDOW_AH);
-        coreuser_csr.wo(utra::coreuser::WINDOW_AH, foo);
-        let bar = coreuser_csr.rf(utra::coreuser::WINDOW_AH_PPN);
-        coreuser_csr.rmwf(utra::coreuser::WINDOW_AH_PPN, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::WINDOW_AH_PPN, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::WINDOW_AH_PPN, 1);
-        coreuser_csr.wfo(utra::coreuser::WINDOW_AH_PPN, baz);
-
-        let foo = coreuser_csr.r(utra::coreuser::WINDOW_BL);
-        coreuser_csr.wo(utra::coreuser::WINDOW_BL, foo);
-        let bar = coreuser_csr.rf(utra::coreuser::WINDOW_BL_PPN);
-        coreuser_csr.rmwf(utra::coreuser::WINDOW_BL_PPN, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::WINDOW_BL_PPN, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::WINDOW_BL_PPN, 1);
-        coreuser_csr.wfo(utra::coreuser::WINDOW_BL_PPN, baz);
-
-        let foo = coreuser_csr.r(utra::coreuser::WINDOW_BH);
-        coreuser_csr.wo(utra::coreuser::WINDOW_BH, foo);
-        let bar = coreuser_csr.rf(utra::coreuser::WINDOW_BH_PPN);
-        coreuser_csr.rmwf(utra::coreuser::WINDOW_BH_PPN, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::WINDOW_BH_PPN, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::WINDOW_BH_PPN, 1);
-        coreuser_csr.wfo(utra::coreuser::WINDOW_BH_PPN, baz);
   }
 
     #[test]
