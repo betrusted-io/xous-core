@@ -172,6 +172,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for feature in kern_features {
         builder.add_kernel_feature(&feature);
     }
+    let loader_features = get_flag("--loader-feature")?;
+    for feature in loader_features {
+        builder.add_loader_feature(&feature);
+    }
 
     if !language_set {
         // the default language is english
@@ -513,7 +517,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // ------ Cramium hardware image configs ------
         Some("cramium-fpga") | Some("cramium-soc") => {
-            let board = "board-baosec";
+            let board = "board-dabao";
             // select the board
             builder.add_feature(board);
             builder.add_loader_feature(board);
@@ -522,35 +526,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // placement in flash is a tension between dev convenience and RAM usage. Things in flash
             // are resident, non-swapable, but end up making the slow kernel burn process take longer.
             let cramium_flash_pkgs =
-                ["xous-ticktimer", "xous-log", "xous-names" /* , "usb-device-xous" */].to_vec();
-            let cramium_swap_pkgs = ["cram-console", "cram-hal-service"].to_vec();
-            // minimal config for USB debugging
-            // let cramium_swap_pkgs = ["usb-device-xous"].to_vec(); // , "cram-console"
-            if !builder.is_swap_set() {
-                builder.set_swap(0, 8 * 1024 * 1024);
-            }
-            builder.add_loader_feature("board-bringup");
-            // builder.add_loader_feature("spim-test");
-            // builder.add_loader_feature("spi-alt-channel"); // this flag, when asserted, uses the J_QSPI
-            //     header. By default, we use JPC7_13 (J_QSPI does not work, for some reason; bit 3 is stuck
-            //     high...)
-            // builder.add_loader_feature("irq-test");
-            // builder.add_loader_feature("usb-test");
-            // builder.add_loader_feature("trng-test");
-            // builder.add_loader_feature("dump-trng");
-            // builder.add_loader_feature("usb");
-            // builder.add_loader_feature("qr");
-            // builder.add_feature("usb"); // needed if usb-device-xous is selected
-            builder.add_loader_feature("swap");
-            builder.add_kernel_feature("swap");
-            builder.add_feature("swap");
+                ["xous-ticktimer", "xous-log", "xous-names" /* "cram-hal-service" */].to_vec();
+            let cramium_swap_pkgs = [].to_vec();
 
             builder.add_loader_feature("debug-print");
-            builder.add_kernel_feature("debug-swap");
             // builder.add_kernel_feature("debug-print");
             // builder.add_kernel_feature("debug-swap-verbose");
 
-            builder.add_feature("quantum-timer");
+            // builder.add_feature("quantum-timer");
             // builder.add_feature("auto-trng"); // automatically initialize TRNG tester inside USB stack
             builder.add_kernel_feature("v2p");
             // builder.add_feature("mass-storage");
@@ -563,9 +546,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 _ => panic!("should be unreachable"),
             };
             broken_aes_cleanup = true;
-
-            // It is important that this is the first service added, because the swapper *must* be in PID 2
-            builder.add_service("xous-swapper", LoaderRegion::Flash);
 
             for service in cramium_flash_pkgs {
                 builder.add_service(service, LoaderRegion::Flash);
@@ -615,6 +595,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_kernel_feature("v2p");
             builder.add_loader_feature("sram-margin");
             builder.add_loader_feature("usb");
+            builder.add_loader_feature("updates");
             match task.as_deref() {
                 Some("baosec") => builder.target_cramium_soc(),
                 _ => panic!("should be unreachable"),
