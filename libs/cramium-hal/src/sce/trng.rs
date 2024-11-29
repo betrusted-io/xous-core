@@ -84,6 +84,7 @@ const RAW_ENTRIES: usize = 16;
 /// for at least this many cycles before the next sample is taken, thus
 /// making it more difficult for any adversary to reason about the current
 /// state of the TRNG given the QC samples.
+#[allow(dead_code)]
 const RAW_GUARDBAND: usize = 32;
 
 pub struct Trng {
@@ -92,6 +93,9 @@ pub struct Trng {
     mode: Mode,
     /// Buffer some raw entropy inside the kernel, so we can "burst out" entropy
     /// for reseed operations without having to wait for the TRNG to regenerate data.
+    ///
+    /// This generates an unused warning when `verilator-only` is selected. We leave this
+    /// warning in place to remind ourselves that the TRNG is not real.
     raw: [Option<u32>; RAW_ENTRIES],
     #[cfg(feature = "compress-entropy")]
     rng_var: u8,
@@ -110,6 +114,7 @@ impl Trng {
         }
     }
 
+    #[cfg(not(feature = "verilator-only"))]
     pub fn setup_raw_generation(&mut self, count: u16) {
         self._count = count;
         self.mode = Mode::Raw;
@@ -137,6 +142,10 @@ impl Trng {
         self.csr.wo(utra::trng::SFR_OPT, 0);
     }
 
+    #[cfg(feature = "verilator-only")]
+    pub fn setup_raw_generation(&mut self, _count: u16) { self.mode = Mode::Raw; }
+
+    #[cfg(not(feature = "verilator-only"))]
     pub fn get_raw(&mut self) -> u32 {
         // Pull from the buffered entropy pool, until it's empty.
         for d in self.raw.iter_mut() {
@@ -215,6 +224,13 @@ impl Trng {
 
         // return the first element of the generated array
         self.raw[0].take().unwrap()
+    }
+
+    #[cfg(feature = "verilator-only")]
+    pub fn get_raw(&mut self) -> u32 {
+        // guaranteed random by fair dice roll
+        // (in all seriousness, this is intentional in verilator because there is no TRNG in the RTL model)
+        4
     }
 
     pub fn get_u32(&mut self) -> Option<u32> {

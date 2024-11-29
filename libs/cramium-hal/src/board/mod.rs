@@ -6,3 +6,7 @@ pub use baosec::*;
 pub mod baosor;
 #[cfg(feature = "board-baosor")]
 pub use baosor::*;
+#[cfg(feature = "board-dabao")]
+pub mod dabao;
+#[cfg(feature = "board-dabao")]
+pub use dabao::*;
