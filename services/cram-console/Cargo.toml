@@ -16,7 +16,7 @@ log = "0.4.14"
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 
-xous-pio = { path = "../../libs/xous-pio", optional = true }
+# xous-pio = { path = "../../libs/xous-pio", optional = true }
 xous-pl230 = { path = "../../libs/xous-pl230", optional = true }
 # this is temporary, until we get GAM/modals pulled in
 graphics-server = { path = "../graphics-server" }
@@ -38,7 +38,7 @@ xous-swapper = { path = "../xous-swapper" }
 "clifford-poll" = []
 "tts" = []
 "early-ball" = []
-"pio-test" = ["xous-pio"]
+# "pio-test" = ["xous-pio"]
 "pl230-test" = ["xous-pl230"]
 "hwtest" = []
 "pddb" = []

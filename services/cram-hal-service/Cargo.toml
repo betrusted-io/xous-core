@@ -20,9 +20,9 @@ cramium-hal = { path = "../../libs/cramium-hal", features = [
     "std",
 ] }
 xous-pl230 = { path = "../../libs/xous-pl230", features = ["cramium-soc"] }
-xous-pio = { path = "../../libs/xous-pio", default-features = false, features = [
-    "cramium-soc",
-] }
+# xous-pio = { path = "../../libs/xous-pio", default-features = false, features = [
+#     "cramium-soc",
+# ] }
 pio-proc = "0.2.2"
 pio = "0.2.1"
 rand_core = "0.6.4"
@@ -43,5 +43,5 @@ rawserial = []
 pinger = []
 swap = []
 # add this feature to enable pre-emption
-quantum-timer = ["utralib"]
-default = ["quantum-timer", "app-uart"]
+quantum-timer = ["utralib", "pio"]
+default = ["app-uart"]
