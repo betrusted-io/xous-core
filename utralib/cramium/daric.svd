@@ -4846,6 +4846,70 @@ respective bit position to clear the flag]]></description>
                     </fields>
                 </register>
                 <register>
+                    <name>SFR_AFSEL_CRAFSEL8</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x0020</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>crafsel8</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[crafsel read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_AFSEL_CRAFSEL9</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x0024</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>crafsel9</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[crafsel read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_AFSEL_CRAFSEL10</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x0028</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>crafsel10</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[crafsel read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_AFSEL_CRAFSEL11</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x002c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>crafsel11</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[crafsel read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>SFR_INTCR_CRINT0</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
                     <addressOffset>0x0100</addressOffset>
@@ -5055,9 +5119,41 @@ position to clear the flag]]></description>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_GPIOOE_CRGOE0</name>
+                    <name>SFR_GPIOOUT_CRGO4</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
                     <addressOffset>0x0140</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>crgo4</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[crgo read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_GPIOOUT_CRGO5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x0144</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>crgo5</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[crgo read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_GPIOOE_CRGOE0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x0148</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5073,7 +5169,7 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_GPIOOE_CRGOE1</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x0144</addressOffset>
+                    <addressOffset>0x014c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5089,7 +5185,7 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_GPIOOE_CRGOE2</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x0148</addressOffset>
+                    <addressOffset>0x0150</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5105,7 +5201,7 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_GPIOOE_CRGOE3</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x014c</addressOffset>
+                    <addressOffset>0x0154</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5119,9 +5215,41 @@ position to clear the flag]]></description>
                     </fields>
                 </register>
                 <register>
+                    <name>SFR_GPIOOE_CRGOE4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x0158</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>crgoe4</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[crgoe read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_GPIOOE_CRGOE5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x015c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>crgoe5</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[crgoe read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>SFR_GPIOPU_CRGPU0</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x0150</addressOffset>
+                    <addressOffset>0x0160</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5137,7 +5265,7 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_GPIOPU_CRGPU1</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x0154</addressOffset>
+                    <addressOffset>0x0164</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5153,7 +5281,7 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_GPIOPU_CRGPU2</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x0158</addressOffset>
+                    <addressOffset>0x0168</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5169,7 +5297,7 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_GPIOPU_CRGPU3</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x015c</addressOffset>
+                    <addressOffset>0x016c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5183,9 +5311,41 @@ position to clear the flag]]></description>
                     </fields>
                 </register>
                 <register>
+                    <name>SFR_GPIOPU_CRGPU4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x0170</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>crgpu4</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[crgpu read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_GPIOPU_CRGPU5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x0174</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>crgpu5</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[crgpu read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>SFR_GPIOIN_SRGI0</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x0160</addressOffset>
+                    <addressOffset>0x0178</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5201,7 +5361,7 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_GPIOIN_SRGI1</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x0164</addressOffset>
+                    <addressOffset>0x017c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5217,7 +5377,7 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_GPIOIN_SRGI2</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x0168</addressOffset>
+                    <addressOffset>0x0180</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5233,12 +5393,44 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_GPIOIN_SRGI3</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x016c</addressOffset>
+                    <addressOffset>0x0184</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
                             <name>srgi3</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[srgi read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_GPIOIN_SRGI4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x0188</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>srgi4</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[srgi read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_GPIOIN_SRGI5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x018c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>srgi5</name>
                             <msb>15</msb>
                             <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
@@ -5327,9 +5519,41 @@ position to clear the flag]]></description>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_CFG_SLEW_CR_CFG_SLEWSLOW0</name>
+                    <name>SFR_CFG_SCHM_CR_CFG_SCHMSEL4</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
                     <addressOffset>0x0240</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_cfg_schmsel4</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_cfg_schmsel read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_CFG_SCHM_CR_CFG_SCHMSEL5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x0244</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_cfg_schmsel5</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_cfg_schmsel read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_CFG_SLEW_CR_CFG_SLEWSLOW0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x0248</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5345,7 +5569,7 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_CFG_SLEW_CR_CFG_SLEWSLOW1</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x0244</addressOffset>
+                    <addressOffset>0x024c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5361,7 +5585,7 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_CFG_SLEW_CR_CFG_SLEWSLOW2</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x0248</addressOffset>
+                    <addressOffset>0x0250</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5377,7 +5601,7 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_CFG_SLEW_CR_CFG_SLEWSLOW3</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x024c</addressOffset>
+                    <addressOffset>0x0254</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5391,9 +5615,41 @@ position to clear the flag]]></description>
                     </fields>
                 </register>
                 <register>
+                    <name>SFR_CFG_SLEW_CR_CFG_SLEWSLOW4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x0258</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_cfg_slewslow4</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_cfg_slewslow read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_CFG_SLEW_CR_CFG_SLEWSLOW5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x025c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_cfg_slewslow5</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_cfg_slewslow read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>SFR_CFG_DRVSEL_CR_CFG_DRVSEL0</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x0250</addressOffset>
+                    <addressOffset>0x0260</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5409,7 +5665,7 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_CFG_DRVSEL_CR_CFG_DRVSEL1</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x0254</addressOffset>
+                    <addressOffset>0x0264</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5425,7 +5681,7 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_CFG_DRVSEL_CR_CFG_DRVSEL2</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x0258</addressOffset>
+                    <addressOffset>0x0268</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5441,7 +5697,7 @@ position to clear the flag]]></description>
                 <register>
                     <name>SFR_CFG_DRVSEL_CR_CFG_DRVSEL3</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
-                    <addressOffset>0x025c</addressOffset>
+                    <addressOffset>0x026c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5454,10 +5710,42 @@ position to clear the flag]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>SFR_CFG_DRVSEL_CR_CFG_DRVSEL4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x0270</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_cfg_drvsel4</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_cfg_drvsel read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_CFG_DRVSEL_CR_CFG_DRVSEL5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/iox.sv]]></description>
+                    <addressOffset>0x0274</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_cfg_drvsel5</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_cfg_drvsel read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x260</size>
+                <size>0x278</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
