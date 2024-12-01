@@ -25,11 +25,11 @@ xous-pl230 = { path = "../libs/xous-pl230", optional = true, features = [
     "baremetal",
     # "dma-mainram",  # PL-230 option - this fails on MPW
 ] }
-xous-pio = { path = "../libs/xous-pio", optional = true, features = [
-    "tests",
-    "cramium-soc",
-    "baremetal",
-] }
+# xous-pio = { path = "../libs/xous-pio", optional = true, features = [
+#     "tests",
+#     "cramium-soc",
+#     "baremetal",
+# ] }
 aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
     "aes",
 ], optional = true }
