@@ -591,7 +591,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_kernel_feature("debug-swap");
             // builder.add_kernel_feature("debug-print");
             // builder.add_kernel_feature("debug-swap-verbose");
-            builder.add_feature("quantum-timer");
+            // builder.add_feature("quantum-timer"); // this isn't in NTO..
             builder.add_kernel_feature("v2p");
             builder.add_loader_feature("sram-margin");
             builder.add_loader_feature("usb");
