@@ -290,6 +290,7 @@ impl MemoryManager {
                 self.ram_size
             );
         };
+        #[cfg(feature = "swap")]
         for o in 0..self.ram_size / PAGE_SIZE {
             unsafe {
                 println!(

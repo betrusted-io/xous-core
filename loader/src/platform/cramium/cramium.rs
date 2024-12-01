@@ -1,7 +1,11 @@
+#[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
 use cramium_hal::axp2101::Axp2101;
+#[cfg(not(feature = "verilator-only"))]
 use cramium_hal::iox::{Iox, IoxDir, IoxEnable, IoxFunction, IoxPort};
 use cramium_hal::udma;
+#[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
 use cramium_hal::udma::PeriphId;
+#[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
 use cramium_hal::udma::UdmaGlobalConfig;
 use utralib::generated::*;
 
@@ -75,6 +79,7 @@ pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 // exclusive of the signature block offset
 pub const KERNEL_OFFSET: usize = 0x6_0000;
 
+#[allow(dead_code)]
 pub(crate) fn delay(quantum: usize) {
     use utralib::{CSR, utra};
     // abuse the d11ctime timer to create some time-out like thing
@@ -91,7 +96,7 @@ pub(crate) fn delay(quantum: usize) {
     }
 }
 
-#[cfg(feature = "cramium-soc")]
+#[cfg(all(feature = "cramium-soc", not(feature = "verilator-only")))]
 pub fn early_init() -> u32 {
     // Set up the initial clocks. This is done as a "poke array" into a table of addresses.
     // Why? because this is actually how it's done for the chip verification code. We can
@@ -207,8 +212,10 @@ pub fn early_init() -> u32 {
 
     // Now setup the clocks for real
     // Safety: this can only be called in the early_init boot context
+    #[cfg(not(feature = "simulation-only"))]
     let perclk = unsafe { init_clock_asic(800_000_000) };
-    // let perclk = unsafe { init_clock_asic_c(800_000_000, 0) };
+    #[cfg(feature = "simulation-only")]
+    let perclk = 100_000_000;
     crate::println!("Perclk is {} Hz", perclk);
 
     // Configure the UDMA UART. This UART's settings will be used as the initial console UART.
@@ -220,6 +227,7 @@ pub fn early_init() -> u32 {
     //  UART_TX_A[0] = PA4   app
     //  UART_RX_A[1] = PD13  console
     //  UART_RX_A[1] = PD14  console
+    #[allow(unused_mut)] // some configs require mut
     let mut iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
     iox.set_alternate_function(IoxPort::PD, 13, IoxFunction::AF1);
     iox.set_alternate_function(IoxPort::PD, 14, IoxFunction::AF1);
@@ -230,6 +238,7 @@ pub fn early_init() -> u32 {
     iox.set_gpio_dir(IoxPort::PD, 14, IoxDir::Output);
 
     // Set up the UDMA_UART block to the correct baud rate and enable status
+    #[allow(unused_mut)] // some configs require mut
     let mut udma_global = udma::GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
     udma_global.clock_on(udma::PeriphId::Uart1);
     udma_global.map_event(
@@ -277,8 +286,11 @@ pub fn early_init() -> u32 {
     glbl_csr.wo(utra::sce_glbsfr::SFR_FFCLR, 0xff05);
 
     // configure LDO voltages that aren't correct by default.
+    #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
     let i2c_channel = cramium_hal::board::setup_i2c_pins(&iox);
+    #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
     udma_global.clock(PeriphId::from(i2c_channel), true);
+    #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
     let i2c_ifram = unsafe {
         cramium_hal::ifram::IframRange::from_raw_parts(
             cramium_hal::board::I2C_IFRAM_ADDR,
@@ -286,75 +298,83 @@ pub fn early_init() -> u32 {
             4096,
         )
     };
+
+    #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
     let mut i2c = unsafe { cramium_hal::udma::I2c::new_with_ifram(i2c_channel, 400_000, perclk, i2c_ifram) };
     // setup PMIC
-    let mut pmic: Option<Axp2101> = None;
+    #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
+    {
+        let mut pmic: Option<Axp2101> = None;
 
-    for _ in 0..3 {
-        match cramium_hal::axp2101::Axp2101::new(&mut i2c) {
-            Ok(p) => {
-                pmic = Some(p);
-                break;
-            }
-            Err(e) => {
-                crate::println!("Error initializing pmic: {:?}, retrying", e);
+        for _ in 0..3 {
+            match cramium_hal::axp2101::Axp2101::new(&mut i2c) {
+                Ok(p) => {
+                    pmic = Some(p);
+                    break;
+                }
+                Err(e) => {
+                    crate::println!("Error initializing pmic: {:?}, retrying", e);
 
-                // we have to reboot it appears if the I2C is unstable - a "soft recovery"
-                // just leads to CPU lock-up on exit from the init routine? what is going on??
-                // maybe some IFRAM instability? Maybe the I2C unit is locking up?
-                let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
-                rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
-                rcurst.wo(utra::sysctrl::SFR_RCURST1, 0x55AA);
+                    // we have to reboot it appears if the I2C is unstable - a "soft recovery"
+                    // just leads to CPU lock-up on exit from the init routine? what is going on??
+                    // maybe some IFRAM instability? Maybe the I2C unit is locking up?
+                    let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+                    rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
+                    rcurst.wo(utra::sysctrl::SFR_RCURST1, 0x55AA);
 
-                /*
-                unsafe {
-                    let ifram0 = HW_IFRAM0_MEM as *mut u32;
-                    for i in 0..HW_IFRAM0_MEM_LEN / size_of::<u32>() {
-                        ifram0.add(i).write_volatile(0);
-                    }
-                    let ifram1 = HW_IFRAM1_MEM as *mut u32;
-                    for i in 0..HW_IFRAM1_MEM_LEN / size_of::<u32>() {
-                        ifram1.add(i).write_volatile(0);
-                    }
-                }*/
+                    /*
+                    unsafe {
+                        let ifram0 = HW_IFRAM0_MEM as *mut u32;
+                        for i in 0..HW_IFRAM0_MEM_LEN / size_of::<u32>() {
+                            ifram0.add(i).write_volatile(0);
+                        }
+                        let ifram1 = HW_IFRAM1_MEM as *mut u32;
+                        for i in 0..HW_IFRAM1_MEM_LEN / size_of::<u32>() {
+                            ifram1.add(i).write_volatile(0);
+                        }
+                    }*/
 
-                delay(500);
-            }
-        };
-    }
-    if let Some(mut pmic) = pmic {
-        pmic.set_ldo(&mut i2c, Some(2.5), cramium_hal::axp2101::WhichLdo::Aldo2).unwrap();
-        pmic.set_dcdc(&mut i2c, Some((1.2, false)), cramium_hal::axp2101::WhichDcDc::Dcdc4).unwrap();
-        crate::println!("AXP2101 configure: {:?}", pmic);
-
-        // Make this true to have the system shut down by disconnecting its own battery while on battery power
-        // Note this does nothing if you have USB power plugged in.
-        if false {
-            crate::println!("shutting down...");
-            pmic.set_ldo(&mut i2c, Some(0.9), cramium_hal::axp2101::WhichLdo::Aldo3).ok();
-            crate::println!("system should be off");
+                    delay(500);
+                }
+            };
         }
-    } else {
-        crate::println!("Couldn't init AXP2101, rebooting");
-        let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
-        rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
-        rcurst.wo(utra::sysctrl::SFR_RCURST1, 0x55AA);
-        panic!("System should have reset");
+        if let Some(mut pmic) = pmic {
+            pmic.set_ldo(&mut i2c, Some(2.5), cramium_hal::axp2101::WhichLdo::Aldo2).unwrap();
+            pmic.set_dcdc(&mut i2c, Some((1.2, false)), cramium_hal::axp2101::WhichDcDc::Dcdc4).unwrap();
+            crate::println!("AXP2101 configure: {:?}", pmic);
+
+            // Make this true to have the system shut down by disconnecting its own battery while on battery
+            // power Note this does nothing if you have USB power plugged in.
+            if false {
+                crate::println!("shutting down...");
+                pmic.set_ldo(&mut i2c, Some(0.9), cramium_hal::axp2101::WhichLdo::Aldo3).ok();
+                crate::println!("system should be off");
+            }
+        } else {
+            crate::println!("Couldn't init AXP2101, rebooting");
+            let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+            rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
+            rcurst.wo(utra::sysctrl::SFR_RCURST1, 0x55AA);
+            panic!("System should have reset");
+        }
     }
 
     // Turn off SE0 on USB
-    let _se0 = cramium_hal::board::baosec::setup_usb_pins(&iox);
+    let _se0 = cramium_hal::board::setup_usb_pins(&iox);
     #[cfg(feature = "board-bringup")]
     let iox_loop = iox.clone();
 
-    // show the boot logo
-    use cramium_hal::minigfx::FrameBuffer;
+    #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
+    {
+        // show the boot logo
+        use cramium_hal::minigfx::FrameBuffer;
 
-    let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(perclk, &mut iox, &mut udma_global);
-    sh1107.init();
-    crate::platform::cramium::bootlogo::show_logo(&mut sh1107);
-    sh1107.buffer_swap();
-    sh1107.draw();
+        let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(perclk, &mut iox, &mut udma_global);
+        sh1107.init();
+        crate::platform::cramium::bootlogo::show_logo(&mut sh1107);
+        sh1107.buffer_swap();
+        sh1107.draw();
+    }
 
     // Board bring-up: send characters to confirm the UART is configured & ready to go for the logging crate!
     // The "boot gutter" also has a role to pause the system in "real mode" before VM is mapped in Xous
@@ -1337,6 +1357,7 @@ fn test_duart() {
 pub fn platform_tests() { test_duart(); }
 
 // returns the actual per_clk
+#[cfg(not(feature = "simulation-only"))]
 unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     use utra::sysctrl;
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;

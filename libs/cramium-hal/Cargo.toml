@@ -28,9 +28,17 @@ either = { version = "1.9.0", default-features = false }
 xous = { version = "0.9.64", features = ["v2p"] }
 
 [features]
-board-baosec = [] # USB form factor token
-board-baosor = [] # Precursor form factor
-board-dabao = []  # Dev board form factor
+camera-ov2640 = []
+display-sh1107 = []
+axp2101 = []
+board-baosec = [
+    "camera-ov2640",
+    "display-sh1107",
+    "axp2101",
+] # USB form factor token
+board-baosor = ["camera-ov2640", "axp2101"] # Precursor form factor
+board-dabao = [] # Dev board form factor
+verilator-only = []
 
 udma-stress-test = [
 ] # For RTL simulation testing - aggravates a key corner case
@@ -39,4 +47,4 @@ compress-entropy = []
 magic-manual = []
 std = ["log", "xous-api-names", "usb-device", "xous-api-ticktimer"]
 derive-rkyv = ["rkyv"]
-default = ["board-baosec"]
+default = []

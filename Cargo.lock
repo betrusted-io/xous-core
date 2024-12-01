@@ -948,7 +948,6 @@ dependencies = [
  "xous-api-names",
  "xous-api-ticktimer",
  "xous-ipc 0.10.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-pio",
  "xous-pl230",
  "xous-swapper",
 ]
@@ -972,7 +971,6 @@ dependencies = [
  "xous-api-names",
  "xous-api-ticktimer",
  "xous-ipc 0.10.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-pio",
  "xous-pl230",
 ]
 
@@ -3018,7 +3016,6 @@ dependencies = [
  "sha2-loader",
  "simple-fatfs",
  "utralib 0.1.25",
- "xous-pio",
  "xous-pl230",
  "xous-riscv",
 ]
@@ -6796,18 +6793,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "xous-pio"
-version = "0.1.0"
-dependencies = [
- "defmt",
- "log",
- "pio",
- "pio-proc",
- "utralib 0.1.25",
- "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "xous-pl230"
 version = "0.1.0"
 dependencies = [
@@ -6818,7 +6803,6 @@ dependencies = [
  "pio-proc",
  "utralib 0.1.25",
  "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-pio",
 ]
 
 [[package]]

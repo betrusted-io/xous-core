@@ -9,7 +9,7 @@ edition = "2021"
 log = "0.4.14"
 utralib = { version = "0.1.25", optional = true, default-features = false }
 bitfield = "0.13.2"
-xous-pio = { path = "../xous-pio", optional = true, default-features = false }
+# xous-pio = { path = "../xous-pio", optional = true, default-features = false }
 pio-proc = "0.2.2"
 pio = "0.2.1"
 cramium-hal = { path = "../cramium-hal", optional = true, default-features = false }
@@ -23,10 +23,10 @@ cramium-fpga = ["utralib/cramium-fpga"]
 precursor = []
 hosted = []
 renode = []
-pio = ["xous-pio"]
+pio = []
 dma-mainram = []
 baremetal = []
 debug-print = []
 
-tests = ["pio", "cramium-hal"]
-default = ["tests", "pio"]
+tests = ["cramium-hal"]
+default = ["tests"]

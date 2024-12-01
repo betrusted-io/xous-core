@@ -83,19 +83,12 @@ pub enum IniType {
 /// This function is safe to call exactly once.
 #[export_name = "rust_entry"]
 pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32) -> ! {
-    //
-    // YOU WILL FORGET THIS -- but I haven't figured out a good way to describe this scenario
-    // when cross-building a SoC image (for s32 sim) to run on the FPGA variant,
-    // you need to comment this out. or else, the simulation will hang. But really, the SoC
-    // should be the SoC, the FPGA should be the FPGA...the cross-sim is not really guaranteed to work
-    // but it is just a handy tool  to use when it *does* work.
-    //
-    #[cfg(feature = "cramium-soc")]
+    #[cfg(all(feature = "cramium-soc", not(feature = "verilator-only")))]
     let perclk_freq = crate::platform::early_init(); // sets up PLLs so we're not running at 16MHz...
-    #[cfg(not(feature = "cramium-soc"))]
+    #[cfg(not(all(feature = "cramium-soc", not(feature = "verilator-only"))))]
     let perclk_freq = 0;
 
-    #[cfg(feature = "cramium-soc")]
+    #[cfg(all(feature = "cramium-soc", feature = "updates"))]
     crate::platform::process_update(perclk_freq);
 
     // initially validate the whole image on disk (including kernel args)
@@ -148,7 +141,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
         println!("No suspend marker found, doing a cold boot!");
         #[cfg(feature = "simulation-only")]
         println!("Configured for simulation. Skipping RAM clear!");
-        #[cfg(not(feature = "simulation-only"))]
+        #[cfg(not(feature = "cramium-soc"))] // cramium-soc target clears RAM with assembly routine on boot
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg, &fs_prehash);
@@ -506,7 +499,7 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
 /// Clears all of RAM. This is a must for systems that have suspend-to-RAM for security.
 /// It is configured to be skipped in simulation only, to accelerate the simulation times
 /// since we can initialize the RAM to zero in simulation.
-#[cfg(not(feature = "simulation-only"))]
+#[cfg(all(not(feature = "simulation-only"), not(feature = "cramium-soc")))]
 fn clear_ram(cfg: &mut BootConfig) {
     // clear RAM on a cold boot.
     // RAM is persistent and battery-backed. This means secret material could potentially

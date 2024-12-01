@@ -45,6 +45,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(ci)', 'cfg(baremetal)'] }
 
 [features]
 cramium-soc = ["utralib/cramium-soc", "cramium-hal", "rand_chacha", "raw-trng"]
+verilator-only = ["cramium-hal/verilator-only"]
 cramium-fpga = ["utralib/cramium-fpga"]
 board-baosec = ["cramium-hal/board-baosec"]
 board-baosor = ["cramium-hal/board-baosor"]
