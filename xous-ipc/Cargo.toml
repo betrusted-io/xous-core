@@ -4,7 +4,7 @@ description = "System call interface for Xous"
 edition = "2018"
 license = "MIT OR Apache-2.0"
 name = "xous-ipc"
-version = "0.10.2"
+version = "0.10.3"
 repository = "https://github.com/betrusted-io/xous-core/"
 homepage = "https://betrusted.io/"
 

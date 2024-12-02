@@ -13,5 +13,5 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "alloc",
 ] }
 graphics-server = { path = "../graphics-server" } # this is used by the IMEF portion of the API
-xous-names = { package = "xous-api-names", version = "0.9.63" } # used by the IMEF for registering listeners
+xous-names = { package = "xous-api-names", version = "0.9.64" } # used by the IMEF for registering listeners
 log = "0.4.14"
