@@ -57,9 +57,9 @@ fn flashmem() -> &'static mut FlashSingleton {
             }
 
             let flashmem = FlashSingleton { memory, disk };
-            SINGLETON.write(flashmem);
+            (&mut *(&raw mut SINGLETON)).write(flashmem);
         });
-        SINGLETON.assume_init_mut()
+        (&mut *(&raw mut SINGLETON)).assume_init_mut()
     }
 }
 
