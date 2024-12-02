@@ -45,7 +45,7 @@ enum ExecutionType {
 }
 
 #[cfg(baremetal)]
-pub fn reset_switchto_caller() { unsafe { SWITCHTO_CALLER = None }; }
+pub fn reset_switchto_caller() { unsafe { *(&mut *(&raw mut SWITCHTO_CALLER)) = None }; }
 
 fn retry_syscall(pid: PID, tid: TID) -> SysCallResult {
     if cfg!(baremetal) {
@@ -62,8 +62,9 @@ fn do_yield(_pid: PID, tid: TID) -> SysCallResult {
         return Ok(xous_kernel::Result::Ok);
     }
 
-    let (parent_pid, parent_ctx) =
-        unsafe { SWITCHTO_CALLER.take().expect("yielded when no parent context was present") };
+    let (parent_pid, parent_ctx) = unsafe {
+        (&mut *(&raw mut SWITCHTO_CALLER)).take().expect("yielded when no parent context was present")
+    };
     //println!("\n\r ***YIELD CALLED***");
     SystemServices::with_mut(|ss| {
         // TODO: Advance thread
@@ -190,7 +191,7 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
             return if blocking && cfg!(baremetal) {
                 if !runnable {
                     // If it's not runnable (e.g. it's being debugged), switch to the parent.
-                    let (ppid, ptid) = unsafe { SWITCHTO_CALLER.take().unwrap() };
+                    let (ppid, ptid) = unsafe { (&mut *(&raw mut SWITCHTO_CALLER)).take().unwrap() };
                     klog!(
                         "Activating Server parent process (server is blocked) and switching away from Client"
                     );
@@ -812,11 +813,11 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::SwitchTo(new_pid, new_tid) => SystemServices::with_mut(|ss| {
             unsafe {
                 assert!(
-                    SWITCHTO_CALLER.is_none(),
+                    (&mut *(&raw mut SWITCHTO_CALLER)).is_none(),
                     "SWITCHTO_CALLER was {:?} and not None, indicating SwitchTo was called twice",
-                    SWITCHTO_CALLER,
+                    (&mut *(&raw mut SWITCHTO_CALLER)),
                 );
-                SWITCHTO_CALLER = Some((pid, tid));
+                *(&mut *(&raw mut SWITCHTO_CALLER)) = Some((pid, tid));
             }
             // println!(
             //     "Activating process thread {} in pid {} coming from pid {} thread {}",
@@ -836,7 +837,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::Yield => do_yield(pid, tid),
         SysCall::ReturnToParent(_pid, _cpuid) => {
             unsafe {
-                if let Some((parent_pid, parent_ctx)) = SWITCHTO_CALLER.take() {
+                if let Some((parent_pid, parent_ctx)) = (&mut *(&raw mut SWITCHTO_CALLER)).take() {
                     crate::arch::irq::set_isr_return_pair(parent_pid, parent_ctx)
                 }
             };
@@ -847,7 +848,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::WaitEvent => SystemServices::with_mut(|ss| {
             let process = ss.get_process(pid).expect("Can't get current process");
             let ppid = process.ppid;
-            unsafe { SWITCHTO_CALLER = None };
+            unsafe { *(&mut *(&raw mut SWITCHTO_CALLER)) = None };
             // TODO: Advance thread
             if cfg!(baremetal) {
                 let result = ss

@@ -10,17 +10,17 @@ version = "0.1.0"
 com = { path = "../com" }
 content-plugin-api = { path = "../content-plugin-api" }
 log = "0.4.14"
-log-server = { package = "xous-api-log", version = "0.1.61" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.61" }
+log-server = { package = "xous-api-log", version = "0.1.62" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.62" }
 trng = { path = "../trng" }
 llio = { path = "../llio" }
 xous = "0.9.64"
-xous-ipc = "0.10.2"
-xous-names = { package = "xous-api-names", version = "0.9.63" }
+xous-ipc = "0.10.3"
+xous-names = { package = "xous-api-names", version = "0.9.64" }
 graphics-server = { path = "../graphics-server" }
 gam = { path = "../gam" }
 locales = { path = "../../locales" }
-susres = { package = "xous-api-susres", version = "0.9.61" }
+susres = { package = "xous-api-susres", version = "0.9.62" }
 root-keys = { path = "../root-keys" }
 modals = { path = "../modals" }
 pddb = { path = "../pddb" }
@@ -33,7 +33,7 @@ dns = { path = "../dns" }
 early_settings = { path = "../early_settings" }
 
 
-num-derive = { version = "0.3.3", default-features = false }
+num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",

@@ -5,16 +5,16 @@ edition = "2018"
 
 [dependencies]
 log = "0.4.14"
-num-derive = { version = "0.3.3", default-features = false }
+num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 xous = "0.9.64"
-xous-ipc = "0.10.2"
+xous-ipc = "0.10.3"
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
 ] }
-log-server = { package = "xous-api-log", version = "0.1.61" }
-xous-names = { package = "xous-api-names", version = "0.9.63" }
+log-server = { package = "xous-api-log", version = "0.1.62" }
+xous-names = { package = "xous-api-names", version = "0.9.64" }
 gam = { path = "../../services/gam" }
 graphics-server = { path = "../../services/graphics-server" }
 locales = { path = "../../locales" }
@@ -24,7 +24,7 @@ xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branc
 pddb = { path = "../../services/pddb" }
 modals = { path = "../../services/modals" }
 trng = { path = "../../services/trng" }
-susres = { package = "xous-api-susres", version = "0.9.61" }
+susres = { package = "xous-api-susres", version = "0.9.62" }
 ime-plugin-api = { path = "../../services/ime-plugin-api" }
 content-plugin-api = { path = "../../services/content-plugin-api" } # all content canvas providers must provide this API
 backup = { path = "libraries/backup" }
@@ -32,7 +32,7 @@ byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
 subtle = { version = "2.5.0", features = ["core_hint_black_box"] }
 rand_core = "0.6.3"
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.61" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.62" }
 userprefs = { path = "../../libs/userprefs" }
 
 # opensk

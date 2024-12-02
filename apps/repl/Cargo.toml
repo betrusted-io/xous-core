@@ -8,13 +8,13 @@ description = "REPL demo app"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 log = "0.4.14"
-num-derive = { version = "0.3.3", default-features = false }
+num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 xous = "0.9.64"
-xous-ipc = "0.10.2"
-log-server = { package = "xous-api-log", version = "0.1.61" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.61" }
-xous-names = { package = "xous-api-names", version = "0.9.63" }
+xous-ipc = "0.10.3"
+log-server = { package = "xous-api-log", version = "0.1.62" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.62" }
+xous-names = { package = "xous-api-names", version = "0.9.64" }
 gam = { path = "../../services/gam" }
 graphics-server = { path = "../../services/graphics-server" }
 trng = { path = "../../services/trng" }

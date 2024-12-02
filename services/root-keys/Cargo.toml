@@ -8,11 +8,11 @@ description = "Xous root keys server"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 xous = "0.9.64"
-log-server = { package = "xous-api-log", version = "0.1.61" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.61" }
-xous-names = { package = "xous-api-names", version = "0.9.63" }
+log-server = { package = "xous-api-log", version = "0.1.62" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.62" }
+xous-names = { package = "xous-api-names", version = "0.9.64" }
 log = "0.4.14"
-susres = { package = "xous-api-susres", version = "0.9.61" }
+susres = { package = "xous-api-susres", version = "0.9.62" }
 trng = { path = "../trng" }
 spinor = { path = "../spinor" }
 llio = { path = "../llio" }
@@ -20,7 +20,7 @@ com = { path = "../com" }
 xous-semver = "0.1.2"
 utralib = { version = "0.1.25", optional = true, default-features = false }
 
-xous-ipc = "0.10.2"
+xous-ipc = "0.10.3"
 num-derive = { version = "0.4.1", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [

@@ -55,7 +55,7 @@ const THRESHOLD: i16 = u8::MAX as i16 / 2;
 
 impl<'a, I: Iterator<Item = u8>> Dither<'a, I> {
     //    const THRESHOLD: i16 = u8::MAX as i16 / 2; results in:  cannot satisfy `<_ as Iterator>::Item == u8`
-    fn new(iter: I, diffusion: &'a Vec<(isize, isize, i16)>, width: usize) -> Dither<I> {
+    fn new(iter: I, diffusion: &'a Vec<(isize, isize, i16)>, width: usize) -> Dither<'a, I> {
         let mut denominator: i16 = 0;
         for (_, _, mul) in diffusion {
             denominator += mul;

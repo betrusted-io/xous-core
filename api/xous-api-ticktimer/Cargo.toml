@@ -3,7 +3,7 @@ authors = ["bunnie <bunnie@kosagi.com>", "Sean Cross <sean@xobs.io>"]
 description = "Provide high-resolution, non-rollover system time"
 edition = "2018"
 name = "xous-api-ticktimer"
-version = "0.9.61"
+version = "0.9.62"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/betrusted-io/xous-core/"
 homepage = "https://betrusted.io/xous-book/"
@@ -11,16 +11,16 @@ homepage = "https://betrusted.io/xous-book/"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 xous = "0.9.64"
-xous-ipc = "0.10.2"
-log-server = { package = "xous-api-log", version = "0.1.61" }
-susres = { package = "xous-api-susres", version = "0.9.61" }
-xous-names = { package = "xous-api-names", version = "0.9.63" }
+xous-ipc = "0.10.3"
+log-server = { package = "xous-api-log", version = "0.1.62" }
+susres = { package = "xous-api-susres", version = "0.9.62" }
+xous-names = { package = "xous-api-names", version = "0.9.64" }
 log = "0.4.14"
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
 ] }
-num-derive = { version = "0.3.3", default-features = false }
+num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 xous-semver = "0.1.2"
 

@@ -8,14 +8,14 @@ description = "Xous DNS resolver"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 xous = "0.9.64"
-log-server = { package = "xous-api-log", version = "0.1.61" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.61" }
-xous-names = { package = "xous-api-names", version = "0.9.63" }
+log-server = { package = "xous-api-log", version = "0.1.62" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.62" }
+xous-names = { package = "xous-api-names", version = "0.9.64" }
 log = "0.4.14"
-num-derive = { version = "0.3.3", default-features = false }
+num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 net = { path = "../net" }
-xous-ipc = "0.10.2"
+xous-ipc = "0.10.3"
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
@@ -31,7 +31,7 @@ chrono = { version = "0.4.33", default-features = false, features = ["std"] }
 sntpc = { version = "0.3.1" }                                                 #, features = ["log"]
 locales = { path = "../../locales" }
 gam = { path = "../gam" }
-susres = { package = "xous-api-susres", version = "0.9.61" }
+susres = { package = "xous-api-susres", version = "0.9.62" }
 userprefs = { path = "../../libs/userprefs" }
 modals = { path = "../modals" }
 
