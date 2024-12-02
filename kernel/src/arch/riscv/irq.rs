@@ -92,7 +92,7 @@ static mut PREVIOUS_PAIR: Option<(PID, TID)> = None;
 pub unsafe fn set_isr_return_pair(pid: PID, tid: TID) { PREVIOUS_PAIR = Some((pid, tid)); }
 
 #[cfg(feature = "gdb-stub")]
-pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> { PREVIOUS_PAIR.take() }
+pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> { (&mut *(&raw mut PREVIOUS_PAIR)).take() }
 
 /// Finish a pending ISR. Return `false` if there was none.
 fn finish_isr() -> bool {
@@ -104,7 +104,7 @@ fn finish_isr() -> bool {
     // we're in an interrupt context, it is safe to access this
     // global variable.
     let (previous_pid, previous_context) =
-        unsafe { PREVIOUS_PAIR.take().expect("got RETURN_FROM_ISR with no previous PID") };
+        unsafe { (&mut *(&raw mut PREVIOUS_PAIR)).take().expect("got RETURN_FROM_ISR with no previous PID") };
     // println!(
     //     "ISR: Resuming previous pair of ({}, {})",
     //     previous_pid, previous_context
@@ -227,8 +227,9 @@ pub extern "C" fn trap_handler(
                 })
             });
 
-            let response = crate::syscall::handle(pid, tid, unsafe { PREVIOUS_PAIR.is_some() }, call)
-                .unwrap_or_else(xous_kernel::Result::Error);
+            let response =
+                crate::syscall::handle(pid, tid, unsafe { (&mut *(&raw mut PREVIOUS_PAIR)).is_some() }, call)
+                    .unwrap_or_else(xous_kernel::Result::Error);
 
             // println!("Syscall Result: {:?}", response);
             ArchProcess::with_current_mut(|p| {
@@ -251,7 +252,7 @@ pub extern "C" fn trap_handler(
             // Safe to access globals since interrupts are disabled
             // when this function runs.
             unsafe {
-                if PREVIOUS_PAIR.is_none() {
+                if (&mut *(&raw mut PREVIOUS_PAIR)).is_none() {
                     let tid = crate::arch::process::current_tid();
                     // This is pretty verbose, so leave it commented out unless we're debugging a process
                     // transition
@@ -259,7 +260,7 @@ pub extern "C" fn trap_handler(
                     // if pid.get() != 1 {
                     //    println!("Hardware IRQ set PID{:?}, TID{:?}", pid, tid);
                     // }
-                    PREVIOUS_PAIR = Some((pid, tid));
+                    *(&mut *(&raw mut PREVIOUS_PAIR)) = Some((pid, tid));
                 }
             }
             HANDLING_IRQ.store(true, Ordering::Relaxed);
