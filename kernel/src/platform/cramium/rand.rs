@@ -149,7 +149,7 @@ pub fn get_u32() -> u32 {
 /// This returns a raw, unwhitened, unprocessed TRNG value.
 pub fn get_raw_u32() -> u32 {
     unsafe {
-        TRNG_KERNEL
+        (&mut *(&raw mut TRNG_KERNEL))
             .as_mut()
             .expect("TRNG_KERNEL driver not initialized")
             .get_u32()

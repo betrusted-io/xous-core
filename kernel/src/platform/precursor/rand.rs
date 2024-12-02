@@ -91,5 +91,7 @@ pub fn init() {
 
 /// Retrieve random `u32`.
 pub fn get_u32() -> u32 {
-    unsafe { TRNG_KERNEL.as_mut().expect("TRNG_KERNEL driver not initialized").get_u32() }
+    unsafe {
+        ((&mut *(&raw mut TRNG_KERNEL)).as_mut().expect("TRNG_KERNEL driver not initialized")).get_u32()
+    }
 }
