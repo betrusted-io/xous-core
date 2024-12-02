@@ -28,7 +28,7 @@ pio = "0.2.1"
 rand_core = "0.6.4"
 rand_chacha = "0.3.1"
 
-num-derive = { version = "0.3.3", default-features = false }
+num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",

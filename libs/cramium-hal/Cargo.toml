@@ -17,7 +17,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
 ], optional = true }
-num-derive = { version = "0.3.3", default-features = false }
+num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 riscv = { version = "0.5.6", package = "xous-riscv" }
 usb-device = { version = "0.2.8", features = ["log"], optional = true }

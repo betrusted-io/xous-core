@@ -14,7 +14,7 @@ ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.61" }
 xous-names = { package = "xous-api-names", version = "0.9.63" }
 log = "0.4.14"
 llio = { path = "../llio" }
-num-derive = { version = "0.3.3", default-features = false }
+num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",

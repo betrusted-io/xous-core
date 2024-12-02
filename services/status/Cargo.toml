@@ -33,7 +33,7 @@ dns = { path = "../dns" }
 early_settings = { path = "../early_settings" }
 
 
-num-derive = { version = "0.3.3", default-features = false }
+num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",

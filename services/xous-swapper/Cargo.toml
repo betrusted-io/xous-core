@@ -14,7 +14,7 @@ xous-api-names = "0.9.63"
 log-server = { package = "xous-api-log", version = "0.1.61" }
 xous = { version = "0.9.64", features = ["swap"] }
 xous-ipc = "0.10.2"
-num-derive = { version = "0.3.3", default-features = false }
+num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 log = "0.4.14"
 loader = { path = "../../loader", features = ["swap"] }

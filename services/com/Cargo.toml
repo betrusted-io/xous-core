@@ -19,7 +19,7 @@ xous-names = { package = "xous-api-names", version = "0.9.63" }
 trng = { path = "../trng" }
 llio = { path = "../llio" }
 
-num-derive = { version = "0.3.3", default-features = false }
+num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",

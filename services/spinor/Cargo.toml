@@ -22,7 +22,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "alloc",
 ] }
 xous-ipc = "0.10.2"
-num-derive = { version = "0.3.3", default-features = false }
+num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 
 utralib = { version = "0.1.25", optional = true, default-features = false }

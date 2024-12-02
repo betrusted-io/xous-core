@@ -20,7 +20,7 @@ llio = { path = "../llio" }
 susres = { package = "xous-api-susres", version = "0.9.61" }
 spinor = { path = "../spinor" }
 
-num-derive = { version = "0.3.3", default-features = false }
+num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
