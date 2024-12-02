@@ -5,7 +5,6 @@ import json
 import sys
 import os
 import os.path
-import pwd
 import re
 
 
@@ -71,9 +70,9 @@ class Main(object):
         self.args.xousdir = os.path.normpath(os.path.dirname(self.args.pdir))
         self.args.program = os.path.basename(self.args.program)
         self.errfile = sys.stderr
-        # if end of string matches ' *EN*' (or some other lang)
-        self.temp_regex = re.compile("^.* \*[a-zA-Z]{2}\*$")
-        self.mt_regex = re.compile("^.* \*MT\*$")
+        # Regex to match strings ending with ' *EN*' or any other language code (e.g., ' *FR*')
+        self.temp_regex = re.compile(r"^.* \*[a-zA-Z]{2}\*$")
+        self.mt_regex = re.compile(r"^.* \*MT\*$")
 
     def out(self, *objects):
         print(*objects)
@@ -96,15 +95,19 @@ class Main(object):
             return 1
         # read keys in "rootkeys.backup_key":
         essential = "rootkeys.backup_key"
-        f = open(
-            root_keys,
-        )
-        obj = json.load(f)
-        self.languages = []
-        if essential in obj:
-            for key in obj[essential].keys():
-                self.languages.append(key)
-        f.close()
+        try:
+            with open(root_keys, encoding='utf-8') as f:
+                obj = json.load(f)
+                self.languages = []
+                if essential in obj:
+                    for key in obj[essential].keys():
+                        self.languages.append(key)
+        except UnicodeDecodeError as e:
+            self.err(f"UnicodeDecodeError: {e}")
+            return 1
+        except Exception as e:
+            self.err(f"Error: {e}")
+            return 1
         return 0
 
     def list_languages(self):
@@ -150,11 +153,16 @@ class Main(object):
     #   other    TAG
     def show_missing(self, i18n, is_manifest):
         i18n_path = os.path.join(self.args.xousdir, i18n)
-        f = open(
-            i18n_path,
-        )
-        obj = json.load(f)
-        f.close()
+        try:
+            with open(i18n_path, encoding='utf-8') as f:
+                obj = json.load(f)
+        except UnicodeDecodeError as e:
+            self.err(f"UnicodeDecodeError: {e}")
+            return 1
+        except Exception as e:
+            self.err(f"Error: {e}")
+            return 1
+
         jqpath = None
         translation = None
         for tag in obj.keys():
@@ -186,13 +194,20 @@ class Main(object):
 
     def stub_missing(self, i18n, is_manifest):
         i18n_path = os.path.join(self.args.xousdir, i18n)
-        f = open(
-            i18n_path,
-        )
-        obj = json.load(f)
-        f.close()
+        try:
+            with open(i18n_path, encoding='utf-8') as f:
+                obj = json.load(f)
+        except UnicodeDecodeError as e:
+            self.err(f"UnicodeDecodeError: {e}")
+            return 1
+        except Exception as e:
+            self.err(f"Error: {e}")
+            return 1
+
         jqpath = None
         translation = None
+        modified = False
+
         for tag in obj.keys():
             if is_manifest:
                 appmenu = "appmenu." + tag
@@ -205,21 +220,23 @@ class Main(object):
                 lang_path = jqpath + "." + lang
                 if not lang in translation:
                     if lang == "en-tts":
-                        stub = translation['en']}
+                        stub = translation['en']
                     else:
                         stub = f"{translation['en']} *EN*"
                     print(f"In {i18n}, at {lang_path} with en stub: {stub}")
                     translation[lang] = stub
-        # blow 'em away. That's what git is for after all.
-        with open(i18n_path, "w") as f:
-            json.dump(
-                obj,
-                f,
-                ensure_ascii=False,
-                check_circular=False,
-                sort_keys=True,
-                indent=4,
-            )
+                    modified = True
+        if modified:
+            try:
+                with open(i18n_path, 'w', encoding='utf-8') as f:
+                    json.dump(obj, f, ensure_ascii=False, check_circular=False, sort_keys=True, indent=4)
+            except UnicodeEncodeError as e:
+                self.err(f"UnicodeEncodeError: {e}")
+                return 1
+            except Exception as e:
+                self.err(f"Error: {e}")
+                return 1
+
         return 0
 
     def fill_missing_with_en_stub(self):
@@ -255,12 +272,17 @@ class Main(object):
         if not os.path.exists(i18n_path_orig):
             os.rename(i18n_path, i18n_path_orig)
         self.verr('adding "%s" to %s' % (self.args.new_lang, i18n))
-        orig_file = open(
-            i18n_path_orig,
-        )
-        obj = json.load(orig_file)
-        orig_file.close()
-        new_file = open(i18n_path, "w")
+
+        try:
+            with open(i18n_path_orig, encoding='utf-8') as orig_file:
+                obj = json.load(orig_file)
+        except UnicodeDecodeError as e:
+            self.err(f"UnicodeDecodeError: {e}")
+            return 1
+        except Exception as e:
+            self.err(f"Error: {e}")
+            return 1
+
         translation = None
         for tag in obj.keys():
             if is_manifest:
@@ -273,15 +295,24 @@ class Main(object):
             if t_from != "🔇":
                 t_new += self.from_hint
             translation[self.args.new_lang] = t_new
-        json.dump(
-            obj,
-            new_file,
-            ensure_ascii=False,
-            check_circular=False,
-            sort_keys=True,
-            indent=4,
-        )
-        new_file.close()
+
+        try:
+            with open(i18n_path, 'w', encoding='utf-8') as new_file:
+                json.dump(
+                    obj,
+                    new_file,
+                    ensure_ascii=False,
+                    check_circular=False,
+                    sort_keys=True,
+                    indent=4,
+                )
+        except UnicodeEncodeError as e:
+            self.err(f"UnicodeEncodeError: {e}")
+            return 1
+        except Exception as e:
+            self.err(f"Error: {e}")
+            return 1
+
         return 0
 
     def new_lang(self):
@@ -316,7 +347,7 @@ class Main(object):
             rc = self.fill_missing_with_en_stub()
         elif self.args.new_lang:
             if not self.args.from_lang:
-                self.err("error: you must specify both --from-lang en --to-lang fr")
+                self.err("error: you must specify both --from-lang en --new-lang fr")
                 rc = 1
             else:
                 self.get_languages()
