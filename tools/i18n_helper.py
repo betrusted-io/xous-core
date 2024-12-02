@@ -102,9 +102,6 @@ class Main(object):
                 if essential in obj:
                     for key in obj[essential].keys():
                         self.languages.append(key)
-        except UnicodeDecodeError as e:
-            self.err(f"UnicodeDecodeError: {e}")
-            return 1
         except Exception as e:
             self.err(f"Error: {e}")
             return 1
@@ -156,9 +153,6 @@ class Main(object):
         try:
             with open(i18n_path, encoding='utf-8') as f:
                 obj = json.load(f)
-        except UnicodeDecodeError as e:
-            self.err(f"UnicodeDecodeError: {e}")
-            return 1
         except Exception as e:
             self.err(f"Error: {e}")
             return 1
@@ -197,9 +191,6 @@ class Main(object):
         try:
             with open(i18n_path, encoding='utf-8') as f:
                 obj = json.load(f)
-        except UnicodeDecodeError as e:
-            self.err(f"UnicodeDecodeError: {e}")
-            return 1
         except Exception as e:
             self.err(f"Error: {e}")
             return 1
@@ -231,9 +222,6 @@ class Main(object):
             try:
                 with open(i18n_path, 'w', encoding='utf-8') as f:
                     json.dump(obj, f, ensure_ascii=False, check_circular=False, sort_keys=True, indent=4)
-            except UnicodeEncodeError as e:
-                self.err(f"UnicodeEncodeError: {e}")
-                return 1
             except Exception as e:
                 self.err(f"Error: {e}")
                 return 1
@@ -277,9 +265,6 @@ class Main(object):
         try:
             with open(i18n_path_orig, encoding='utf-8') as orig_file:
                 obj = json.load(orig_file)
-        except UnicodeDecodeError as e:
-            self.err(f"UnicodeDecodeError: {e}")
-            return 1
         except Exception as e:
             self.err(f"Error: {e}")
             return 1
@@ -307,9 +292,6 @@ class Main(object):
                     sort_keys=True,
                     indent=4,
                 )
-        except UnicodeEncodeError as e:
-            self.err(f"UnicodeEncodeError: {e}")
-            return 1
         except Exception as e:
             self.err(f"Error: {e}")
             return 1
