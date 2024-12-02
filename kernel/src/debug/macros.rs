@@ -10,7 +10,7 @@ macro_rules! print {
         #[allow(unused_unsafe)]
         unsafe {
 			use core::fmt::Write;
-            if let Some(stream) = crate::debug::shell::OUTPUT.as_mut() {
+            if let Some(stream) = &mut *(&raw mut crate::debug::shell::OUTPUT) {
                 write!(stream, $($args)+).unwrap();
             }
         }

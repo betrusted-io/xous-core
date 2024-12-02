@@ -86,14 +86,14 @@ pub fn init() {
 
     unsafe {
         UART = Some(uart);
-        crate::debug::shell::init(UART.as_mut().unwrap());
+        crate::debug::shell::init((&mut *(&raw mut UART)).as_mut().unwrap());
 
         // Claim UART interrupt.
         println!("Claiming IRQ {} via syscall...", utra::uart::UART_IRQ);
         xous_kernel::claim_interrupt(
             utra::uart::UART_IRQ,
             Uart::irq,
-            (UART.as_mut().unwrap() as *mut Uart) as *mut usize,
+            ((&mut *(&raw mut UART)).as_mut().unwrap() as *mut Uart) as *mut usize,
         )
         .expect("Couldn't claim debug interrupt");
     }
