@@ -353,7 +353,7 @@ impl<'a, Backing: SenresMut> Writer<'a, Backing> {
 impl<'a, Backing: Senres> Reader<'a, Backing> {
     pub fn try_get_from<T: RecDes<Backing>>(&self) -> Result<T, ()> { T::try_get_from(self) }
 
-    pub fn try_get_ref_from<T: RecDesRef<'a, Backing> + ?Sized>(&'a self) -> Result<&T, ()> {
+    pub fn try_get_ref_from<T: RecDesRef<'a, Backing> + ?Sized>(&'a self) -> Result<&'a T, ()> {
         T::try_get_ref_from(self)
     }
 
