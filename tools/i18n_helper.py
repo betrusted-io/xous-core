@@ -227,6 +227,7 @@ class Main(object):
                     translation[lang] = stub
                     modified = True
         if modified:
+            # blow 'em away. That's what git is for after all.
             try:
                 with open(i18n_path, 'w', encoding='utf-8') as f:
                     json.dump(obj, f, ensure_ascii=False, check_circular=False, sort_keys=True, indent=4)
