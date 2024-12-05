@@ -44,6 +44,9 @@ pub enum Opcode {
     /// I2C operations
     I2c = 9,
 
+    /// Peripheral reset
+    PeriphReset = 10,
+
     /// Exit server
     Quit = 255,
 
