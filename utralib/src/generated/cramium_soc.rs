@@ -4618,7 +4618,7 @@ pub mod utra {
     }
 
     pub mod udma_i2c_0 {
-        pub const UDMA_I2C_0_NUMREGS: usize = 12;
+        pub const UDMA_I2C_0_NUMREGS: usize = 11;
 
         pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
         pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
@@ -4626,10 +4626,9 @@ pub mod utra {
         pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
         pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
 
-        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x11);
         pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
         pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
-        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
 
         pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
         pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
@@ -4637,10 +4636,9 @@ pub mod utra {
         pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
         pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
 
-        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x11);
         pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
         pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
-        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
 
         pub const REG_CMD_SADDR: crate::Register = crate::Register::new(8, 0xfff);
         pub const REG_CMD_SADDR_R_CMD_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_CMD_SADDR);
@@ -4648,17 +4646,13 @@ pub mod utra {
         pub const REG_CMD_SIZE: crate::Register = crate::Register::new(9, 0xffff);
         pub const REG_CMD_SIZE_R_CMD_SIZE: crate::Field = crate::Field::new(16, 0, REG_CMD_SIZE);
 
-        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x51);
+        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x11);
         pub const REG_CMD_CFG_R_CMD_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_CMD_CFG);
         pub const REG_CMD_CFG_R_CMD_EN: crate::Field = crate::Field::new(1, 4, REG_CMD_CFG);
-        pub const REG_CMD_CFG_R_CMD_CLR: crate::Field = crate::Field::new(1, 6, REG_CMD_CFG);
 
         pub const REG_STATUS: crate::Register = crate::Register::new(12, 0x3);
         pub const REG_STATUS_R_BUSY: crate::Field = crate::Field::new(1, 0, REG_STATUS);
         pub const REG_STATUS_R_AL: crate::Field = crate::Field::new(1, 1, REG_STATUS);
-
-        pub const REG_SETUP: crate::Register = crate::Register::new(13, 0x1);
-        pub const REG_SETUP_R_DO_RST: crate::Field = crate::Field::new(1, 0, REG_SETUP);
 
         pub const REG_ACK: crate::Register = crate::Register::new(14, 0x1);
         pub const REG_ACK_R_NACK: crate::Field = crate::Field::new(1, 0, REG_ACK);
@@ -4667,7 +4661,7 @@ pub mod utra {
     }
 
     pub mod udma_i2c_1 {
-        pub const UDMA_I2C_1_NUMREGS: usize = 12;
+        pub const UDMA_I2C_1_NUMREGS: usize = 11;
 
         pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
         pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
@@ -4675,10 +4669,9 @@ pub mod utra {
         pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
         pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
 
-        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x11);
         pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
         pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
-        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
 
         pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
         pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
@@ -4686,10 +4679,9 @@ pub mod utra {
         pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
         pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
 
-        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x11);
         pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
         pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
-        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
 
         pub const REG_CMD_SADDR: crate::Register = crate::Register::new(8, 0xfff);
         pub const REG_CMD_SADDR_R_CMD_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_CMD_SADDR);
@@ -4697,17 +4689,13 @@ pub mod utra {
         pub const REG_CMD_SIZE: crate::Register = crate::Register::new(9, 0xffff);
         pub const REG_CMD_SIZE_R_CMD_SIZE: crate::Field = crate::Field::new(16, 0, REG_CMD_SIZE);
 
-        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x51);
+        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x11);
         pub const REG_CMD_CFG_R_CMD_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_CMD_CFG);
         pub const REG_CMD_CFG_R_CMD_EN: crate::Field = crate::Field::new(1, 4, REG_CMD_CFG);
-        pub const REG_CMD_CFG_R_CMD_CLR: crate::Field = crate::Field::new(1, 6, REG_CMD_CFG);
 
         pub const REG_STATUS: crate::Register = crate::Register::new(12, 0x3);
         pub const REG_STATUS_R_BUSY: crate::Field = crate::Field::new(1, 0, REG_STATUS);
         pub const REG_STATUS_R_AL: crate::Field = crate::Field::new(1, 1, REG_STATUS);
-
-        pub const REG_SETUP: crate::Register = crate::Register::new(13, 0x1);
-        pub const REG_SETUP_R_DO_RST: crate::Field = crate::Field::new(1, 0, REG_SETUP);
 
         pub const REG_ACK: crate::Register = crate::Register::new(14, 0x1);
         pub const REG_ACK_R_NACK: crate::Field = crate::Field::new(1, 0, REG_ACK);
@@ -4716,7 +4704,7 @@ pub mod utra {
     }
 
     pub mod udma_i2c_2 {
-        pub const UDMA_I2C_2_NUMREGS: usize = 12;
+        pub const UDMA_I2C_2_NUMREGS: usize = 11;
 
         pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
         pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
@@ -4724,10 +4712,9 @@ pub mod utra {
         pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
         pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
 
-        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x11);
         pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
         pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
-        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
 
         pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
         pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
@@ -4735,10 +4722,9 @@ pub mod utra {
         pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
         pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
 
-        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x11);
         pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
         pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
-        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
 
         pub const REG_CMD_SADDR: crate::Register = crate::Register::new(8, 0xfff);
         pub const REG_CMD_SADDR_R_CMD_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_CMD_SADDR);
@@ -4746,17 +4732,13 @@ pub mod utra {
         pub const REG_CMD_SIZE: crate::Register = crate::Register::new(9, 0xffff);
         pub const REG_CMD_SIZE_R_CMD_SIZE: crate::Field = crate::Field::new(16, 0, REG_CMD_SIZE);
 
-        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x51);
+        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x11);
         pub const REG_CMD_CFG_R_CMD_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_CMD_CFG);
         pub const REG_CMD_CFG_R_CMD_EN: crate::Field = crate::Field::new(1, 4, REG_CMD_CFG);
-        pub const REG_CMD_CFG_R_CMD_CLR: crate::Field = crate::Field::new(1, 6, REG_CMD_CFG);
 
         pub const REG_STATUS: crate::Register = crate::Register::new(12, 0x3);
         pub const REG_STATUS_R_BUSY: crate::Field = crate::Field::new(1, 0, REG_STATUS);
         pub const REG_STATUS_R_AL: crate::Field = crate::Field::new(1, 1, REG_STATUS);
-
-        pub const REG_SETUP: crate::Register = crate::Register::new(13, 0x1);
-        pub const REG_SETUP_R_DO_RST: crate::Field = crate::Field::new(1, 0, REG_SETUP);
 
         pub const REG_ACK: crate::Register = crate::Register::new(14, 0x1);
         pub const REG_ACK_R_NACK: crate::Field = crate::Field::new(1, 0, REG_ACK);
@@ -4765,7 +4747,7 @@ pub mod utra {
     }
 
     pub mod udma_i2c_3 {
-        pub const UDMA_I2C_3_NUMREGS: usize = 12;
+        pub const UDMA_I2C_3_NUMREGS: usize = 11;
 
         pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
         pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
@@ -4773,10 +4755,9 @@ pub mod utra {
         pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
         pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
 
-        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x11);
         pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
         pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
-        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
 
         pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
         pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
@@ -4784,10 +4765,9 @@ pub mod utra {
         pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
         pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
 
-        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x11);
         pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
         pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
-        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
 
         pub const REG_CMD_SADDR: crate::Register = crate::Register::new(8, 0xfff);
         pub const REG_CMD_SADDR_R_CMD_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_CMD_SADDR);
@@ -4795,17 +4775,13 @@ pub mod utra {
         pub const REG_CMD_SIZE: crate::Register = crate::Register::new(9, 0xffff);
         pub const REG_CMD_SIZE_R_CMD_SIZE: crate::Field = crate::Field::new(16, 0, REG_CMD_SIZE);
 
-        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x51);
+        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x11);
         pub const REG_CMD_CFG_R_CMD_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_CMD_CFG);
         pub const REG_CMD_CFG_R_CMD_EN: crate::Field = crate::Field::new(1, 4, REG_CMD_CFG);
-        pub const REG_CMD_CFG_R_CMD_CLR: crate::Field = crate::Field::new(1, 6, REG_CMD_CFG);
 
         pub const REG_STATUS: crate::Register = crate::Register::new(12, 0x3);
         pub const REG_STATUS_R_BUSY: crate::Field = crate::Field::new(1, 0, REG_STATUS);
         pub const REG_STATUS_R_AL: crate::Field = crate::Field::new(1, 1, REG_STATUS);
-
-        pub const REG_SETUP: crate::Register = crate::Register::new(13, 0x1);
-        pub const REG_SETUP_R_DO_RST: crate::Field = crate::Field::new(1, 0, REG_SETUP);
 
         pub const REG_ACK: crate::Register = crate::Register::new(14, 0x1);
         pub const REG_ACK_R_NACK: crate::Field = crate::Field::new(1, 0, REG_ACK);
@@ -18770,11 +18746,6 @@ mod tests {
         let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_RX_CFG_R_RX_EN, bar);
         baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_RX_CFG_R_RX_EN, 1);
         udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_RX_CFG_R_RX_EN, baz);
-        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_RX_CFG_R_RX_CLR);
-        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_RX_CFG_R_RX_CLR, bar);
-        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_RX_CFG_R_RX_CLR, bar);
-        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_RX_CFG_R_RX_CLR, 1);
-        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_RX_CFG_R_RX_CLR, baz);
 
         let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_TX_SADDR);
         udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_TX_SADDR, foo);
@@ -18804,11 +18775,6 @@ mod tests {
         let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_TX_CFG_R_TX_EN, bar);
         baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_TX_CFG_R_TX_EN, 1);
         udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_TX_CFG_R_TX_EN, baz);
-        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_TX_CFG_R_TX_CLR);
-        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_TX_CFG_R_TX_CLR, bar);
-        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_TX_CFG_R_TX_CLR, bar);
-        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_TX_CFG_R_TX_CLR, 1);
-        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_TX_CFG_R_TX_CLR, baz);
 
         let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_CMD_SADDR);
         udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_CMD_SADDR, foo);
@@ -18838,11 +18804,6 @@ mod tests {
         let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_EN, bar);
         baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_EN, 1);
         udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_EN, baz);
-        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CLR);
-        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CLR, bar);
-        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CLR, bar);
-        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CLR, 1);
-        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CLR, baz);
 
         let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_STATUS);
         udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_STATUS, foo);
@@ -18856,14 +18817,6 @@ mod tests {
         let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_STATUS_R_AL, bar);
         baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_STATUS_R_AL, 1);
         udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_STATUS_R_AL, baz);
-
-        let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_SETUP);
-        udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_SETUP, foo);
-        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_SETUP_R_DO_RST);
-        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_SETUP_R_DO_RST, bar);
-        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_SETUP_R_DO_RST, bar);
-        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_SETUP_R_DO_RST, 1);
-        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_SETUP_R_DO_RST, baz);
 
         let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_ACK);
         udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_ACK, foo);
@@ -18908,11 +18861,6 @@ mod tests {
         let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_RX_CFG_R_RX_EN, bar);
         baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_RX_CFG_R_RX_EN, 1);
         udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_RX_CFG_R_RX_EN, baz);
-        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_RX_CFG_R_RX_CLR);
-        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_RX_CFG_R_RX_CLR, bar);
-        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_RX_CFG_R_RX_CLR, bar);
-        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_RX_CFG_R_RX_CLR, 1);
-        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_RX_CFG_R_RX_CLR, baz);
 
         let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_TX_SADDR);
         udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_TX_SADDR, foo);
@@ -18942,11 +18890,6 @@ mod tests {
         let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_TX_CFG_R_TX_EN, bar);
         baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_TX_CFG_R_TX_EN, 1);
         udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_TX_CFG_R_TX_EN, baz);
-        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_TX_CFG_R_TX_CLR);
-        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_TX_CFG_R_TX_CLR, bar);
-        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_TX_CFG_R_TX_CLR, bar);
-        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_TX_CFG_R_TX_CLR, 1);
-        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_TX_CFG_R_TX_CLR, baz);
 
         let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_CMD_SADDR);
         udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_CMD_SADDR, foo);
@@ -18976,11 +18919,6 @@ mod tests {
         let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_EN, bar);
         baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_EN, 1);
         udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_EN, baz);
-        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CLR);
-        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CLR, bar);
-        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CLR, bar);
-        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CLR, 1);
-        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CLR, baz);
 
         let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_STATUS);
         udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_STATUS, foo);
@@ -18994,14 +18932,6 @@ mod tests {
         let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_STATUS_R_AL, bar);
         baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_STATUS_R_AL, 1);
         udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_STATUS_R_AL, baz);
-
-        let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_SETUP);
-        udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_SETUP, foo);
-        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_SETUP_R_DO_RST);
-        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_SETUP_R_DO_RST, bar);
-        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_SETUP_R_DO_RST, bar);
-        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_SETUP_R_DO_RST, 1);
-        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_SETUP_R_DO_RST, baz);
 
         let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_ACK);
         udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_ACK, foo);
@@ -19046,11 +18976,6 @@ mod tests {
         let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_RX_CFG_R_RX_EN, bar);
         baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_RX_CFG_R_RX_EN, 1);
         udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_RX_CFG_R_RX_EN, baz);
-        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_RX_CFG_R_RX_CLR);
-        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_RX_CFG_R_RX_CLR, bar);
-        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_RX_CFG_R_RX_CLR, bar);
-        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_RX_CFG_R_RX_CLR, 1);
-        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_RX_CFG_R_RX_CLR, baz);
 
         let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_TX_SADDR);
         udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_TX_SADDR, foo);
@@ -19080,11 +19005,6 @@ mod tests {
         let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_TX_CFG_R_TX_EN, bar);
         baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_TX_CFG_R_TX_EN, 1);
         udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_TX_CFG_R_TX_EN, baz);
-        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_TX_CFG_R_TX_CLR);
-        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_TX_CFG_R_TX_CLR, bar);
-        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_TX_CFG_R_TX_CLR, bar);
-        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_TX_CFG_R_TX_CLR, 1);
-        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_TX_CFG_R_TX_CLR, baz);
 
         let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_CMD_SADDR);
         udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_CMD_SADDR, foo);
@@ -19114,11 +19034,6 @@ mod tests {
         let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_EN, bar);
         baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_EN, 1);
         udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_EN, baz);
-        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CLR);
-        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CLR, bar);
-        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CLR, bar);
-        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CLR, 1);
-        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CLR, baz);
 
         let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_STATUS);
         udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_STATUS, foo);
@@ -19132,14 +19047,6 @@ mod tests {
         let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_STATUS_R_AL, bar);
         baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_STATUS_R_AL, 1);
         udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_STATUS_R_AL, baz);
-
-        let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_SETUP);
-        udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_SETUP, foo);
-        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_SETUP_R_DO_RST);
-        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_SETUP_R_DO_RST, bar);
-        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_SETUP_R_DO_RST, bar);
-        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_SETUP_R_DO_RST, 1);
-        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_SETUP_R_DO_RST, baz);
 
         let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_ACK);
         udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_ACK, foo);
@@ -19184,11 +19091,6 @@ mod tests {
         let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_RX_CFG_R_RX_EN, bar);
         baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_RX_CFG_R_RX_EN, 1);
         udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_RX_CFG_R_RX_EN, baz);
-        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_RX_CFG_R_RX_CLR);
-        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_RX_CFG_R_RX_CLR, bar);
-        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_RX_CFG_R_RX_CLR, bar);
-        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_RX_CFG_R_RX_CLR, 1);
-        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_RX_CFG_R_RX_CLR, baz);
 
         let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_TX_SADDR);
         udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_TX_SADDR, foo);
@@ -19218,11 +19120,6 @@ mod tests {
         let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_TX_CFG_R_TX_EN, bar);
         baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_TX_CFG_R_TX_EN, 1);
         udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_TX_CFG_R_TX_EN, baz);
-        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_TX_CFG_R_TX_CLR);
-        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_TX_CFG_R_TX_CLR, bar);
-        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_TX_CFG_R_TX_CLR, bar);
-        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_TX_CFG_R_TX_CLR, 1);
-        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_TX_CFG_R_TX_CLR, baz);
 
         let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_CMD_SADDR);
         udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_CMD_SADDR, foo);
@@ -19252,11 +19149,6 @@ mod tests {
         let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_EN, bar);
         baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_EN, 1);
         udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_EN, baz);
-        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CLR);
-        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CLR, bar);
-        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CLR, bar);
-        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CLR, 1);
-        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CLR, baz);
 
         let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_STATUS);
         udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_STATUS, foo);
@@ -19270,14 +19162,6 @@ mod tests {
         let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_STATUS_R_AL, bar);
         baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_STATUS_R_AL, 1);
         udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_STATUS_R_AL, baz);
-
-        let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_SETUP);
-        udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_SETUP, foo);
-        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_SETUP_R_DO_RST);
-        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_SETUP_R_DO_RST, bar);
-        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_SETUP_R_DO_RST, bar);
-        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_SETUP_R_DO_RST, 1);
-        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_SETUP_R_DO_RST, baz);
 
         let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_ACK);
         udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_ACK, foo);
