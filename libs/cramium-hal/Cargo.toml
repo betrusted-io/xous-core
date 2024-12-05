@@ -39,6 +39,7 @@ board-baosec = [
 board-baosor = ["camera-ov2640", "axp2101"] # Precursor form factor
 board-dabao = [] # Dev board form factor
 verilator-only = []
+mpw = []
 
 udma-stress-test = [
 ] # For RTL simulation testing - aggravates a key corner case

@@ -28,6 +28,7 @@ use crate::SharedCsr;
 enum GlobalReg {
     ClockGate = 0,
     EventIn = 1,
+    Reset = 2,
 }
 impl Into<usize> for GlobalReg {
     fn into(self) -> usize { self as usize }
@@ -241,6 +242,7 @@ pub trait UdmaGlobalConfig {
         event_type: PeriphEventType,
         to_channel: EventChannel,
     );
+    fn reset(&self, peripheral: PeriphId);
 }
 
 #[repr(u32)]
@@ -319,6 +321,20 @@ impl GlobalConfig {
         // Safety: only safe when used in the context of UDMA registers.
         unsafe { self.csr.base().add(GlobalReg::EventIn.into()).read_volatile() }
     }
+
+    pub fn reset(&self, peripheral: PeriphId) {
+        unsafe {
+            // assert reset
+            self.csr.base().add(GlobalReg::Reset.into()).write_volatile(peripheral.into());
+            // a few nops for the reset to propagate
+            core::arch::asm!(
+                "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+                "nop", "nop", "nop",
+            );
+            // de-assert reset
+            self.csr.base().add(GlobalReg::Reset.into()).write_volatile(0);
+        }
+    }
 }
 
 impl UdmaGlobalConfig for GlobalConfig {
@@ -338,6 +354,8 @@ impl UdmaGlobalConfig for GlobalConfig {
     ) {
         self.map_event(peripheral, event_type, to_channel);
     }
+
+    fn reset(&self, peripheral: PeriphId) { self.reset(peripheral); }
 }
 // --------------------------------- DMA channel ------------------------------------
 pub(crate) const CFG_EN: u32 = 0b01_0000; // start a transfer
