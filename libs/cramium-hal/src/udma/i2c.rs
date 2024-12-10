@@ -305,7 +305,6 @@ impl<'a> I2c<'a> {
 
     fn busy(&self) -> bool {
         self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) != 0
-            || self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) != 0
             || self.udma_busy(Bank::Custom)
             || self.udma_busy(Bank::Tx)
             || self.udma_busy(Bank::Rx)
@@ -361,7 +360,7 @@ impl<'a> I2c<'a> {
             self.udma_enqueue(Bank::Custom, &self.cmd_buf_phys[..self.seq_len], CFG_EN);
         }
         // wait for the commands to propagate before returning
-        while !self.busy() {}
+        while !self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) != 0 {}
         self.pending = I2cPending::Write(data.len());
         Ok(data.len())
     }
@@ -421,7 +420,7 @@ impl<'a> I2c<'a> {
             self.udma_enqueue(Bank::Custom, &self.cmd_buf_phys[..self.seq_len], CFG_EN);
         }
         // wait for the commands to propagate before returning
-        while !self.busy() {}
+        while !self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) != 0 {}
         self.pending = I2cPending::Read(len);
         Ok(len)
     }
