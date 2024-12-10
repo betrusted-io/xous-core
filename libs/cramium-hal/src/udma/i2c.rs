@@ -305,6 +305,29 @@ impl<'a> I2c<'a> {
             || self.udma_busy(Bank::Rx)
     }
 
+    /// This is a custom I2C routine that implements a protocol used for the HDL test suite.
+    #[cfg(feature = "hdl-test")]
+    pub fn i2c_hdl_test(&mut self, byte: u8) -> Result<u8, xous::Error> {
+        self.new_tranaction();
+        self.push_cmd(I2cCmd::Config(self.divider));
+        self.push_cmd(I2cCmd::Start);
+        self.push_cmd(I2cCmd::WriteByte(byte << 1));
+        self.push_cmd(I2cCmd::RdNack);
+        self.push_cmd(I2cCmd::Stop);
+
+        // safety: this is safe because the cmd_buf_phys() slice is passed to a function that only
+        // uses it as a base/bounds reference and it will not actually access the data.
+        unsafe {
+            self.udma_enqueue(Bank::Rx, &self.rx_buf_phys[..1], CFG_EN);
+            self.udma_enqueue(Bank::Custom, &self.cmd_buf_phys[..self.seq_len], CFG_EN);
+        }
+        self.pending = I2cPending::Read(1);
+
+        let mut rx = [0u8];
+        self.i2c_await(Some(&mut rx), false)?;
+        Ok(rx[0])
+    }
+
     pub fn i2c_write_async(&mut self, dev: u8, adr: u8, data: &[u8]) -> Result<usize, xous::Error> {
         // The implementation of this is gross because we have to stuff the command list
         assert!(data.len() < 256); // is is a conservative bound, the limit is due to the cmd buf length limit

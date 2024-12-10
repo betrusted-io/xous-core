@@ -40,6 +40,7 @@ board-baosor = ["camera-ov2640", "axp2101"] # Precursor form factor
 board-dabao = [] # Dev board form factor
 verilator-only = []
 mpw = []
+hdl-test = []
 
 udma-stress-test = [
 ] # For RTL simulation testing - aggravates a key corner case
@@ -48,4 +49,4 @@ compress-entropy = []
 magic-manual = []
 std = ["log", "xous-api-names", "usb-device", "xous-api-ticktimer"]
 derive-rkyv = ["rkyv"]
-default = []
+default = ["hdl-test"]
