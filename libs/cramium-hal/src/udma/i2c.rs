@@ -286,7 +286,10 @@ impl<'a> I2c<'a> {
         let ret = match self.pending.take() {
             I2cPending::Read(len) => {
                 if let Some(buf) = rx_buf {
+                    #[cfg(feature = "mpw")]
                     buf[..len].copy_from_slice(&self.rx_buf[3..3 + len]);
+                    #[cfg(not(feature = "mpw"))]
+                    buf[..len].copy_from_slice(&self.rx_buf[..len]);
                     Ok(len)
                 } else {
                     // the pending transaction was a read, but the user did not call us
@@ -408,8 +411,11 @@ impl<'a> I2c<'a> {
         // safety: this is safe because the cmd_buf_phys() slice is passed to a function that only
         // uses it as a base/bounds reference and it will not actually access the data.
         unsafe {
-            // the extra 3 are dummy bytes that were received while the address was being set up
+            // the extra 3 are dummy bytes that were received while the address was being set up - MPW bug
+            #[cfg(feature = "mpw")]
             self.udma_enqueue(Bank::Rx, &self.rx_buf_phys[..len + 3], CFG_EN);
+            #[cfg(not(feature = "mpw"))]
+            self.udma_enqueue(Bank::Rx, &self.rx_buf_phys[..len], CFG_EN);
             self.udma_enqueue(Bank::Custom, &self.cmd_buf_phys[..self.seq_len], CFG_EN);
         }
         self.pending = I2cPending::Read(len);
