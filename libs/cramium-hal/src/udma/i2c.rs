@@ -4,7 +4,10 @@ use crate::ifram::IframRange;
 use crate::udma::*;
 use crate::udma::{Bank, Udma};
 
+#[cfg(not(feature = "hdl-test"))]
 const TIMEOUT_ITERS: usize = 1_000_000;
+#[cfg(feature = "hdl-test")]
+const TIMEOUT_ITERS: usize = 5000;
 
 // MPW had this register:
 //        pub const REG_SETUP: crate::Register = crate::Register::new(13, 0x1);
@@ -307,6 +310,7 @@ impl<'a> I2c<'a> {
 
     /// This is a custom I2C routine that implements a protocol used for the HDL test suite.
     #[cfg(feature = "hdl-test")]
+    #[allow(dead_code)]
     pub fn i2c_hdl_test(&mut self, byte: u8) -> Result<u8, xous::Error> {
         self.new_tranaction();
         self.push_cmd(I2cCmd::Config(self.divider));
