@@ -303,6 +303,32 @@ impl<'a> I2c<'a> {
         ret
     }
 
+    pub fn reset(&mut self) {
+        // reset the block
+        self.udma_reset(Bank::Custom);
+        self.udma_reset(Bank::Tx);
+        self.udma_reset(Bank::Rx);
+        // reset the block, if MPW. If NTO, this needs to be handled by the upper level code with a
+        // reset to udma_global
+        #[cfg(feature = "mpw")]
+        unsafe {
+            self.csr.base().add(SETUP_OFFSET).write_volatile(DO_RST_MASK as u32);
+            self.csr.base().add(SETUP_OFFSET).write_volatile(0);
+        }
+        #[cfg(not(feature = "mpw"))]
+        {
+            self.udma_global.reset(match self.channel {
+                I2cChannel::Channel0 => PeriphId::I2c0,
+                I2cChannel::Channel1 => PeriphId::I2c1,
+                I2cChannel::Channel2 => PeriphId::I2c2,
+                I2cChannel::Channel3 => PeriphId::I2c3,
+            });
+        }
+
+        self.send_cmd_list(&[I2cCmd::Config(self.divider)]);
+        self.pending.take();
+    }
+
     fn busy(&self) -> bool {
         self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) != 0
             || self.udma_busy(Bank::Custom)
@@ -360,7 +386,12 @@ impl<'a> I2c<'a> {
             self.udma_enqueue(Bank::Custom, &self.cmd_buf_phys[..self.seq_len], CFG_EN);
         }
         // wait for the commands to propagate before returning
-        while !self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) != 0 {}
+        #[cfg(not(feature = "mpw"))]
+        while self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) == 0
+            || self.csr.rf(utra::udma_i2c_0::REG_CMD_SIZE_R_CMD_SIZE) != 0
+        {}
+        #[cfg(feature = "mpw")]
+        while self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) == 0 {}
         self.pending = I2cPending::Write(data.len());
         Ok(data.len())
     }
@@ -420,7 +451,12 @@ impl<'a> I2c<'a> {
             self.udma_enqueue(Bank::Custom, &self.cmd_buf_phys[..self.seq_len], CFG_EN);
         }
         // wait for the commands to propagate before returning
-        while !self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) != 0 {}
+        #[cfg(not(feature = "mpw"))]
+        while self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) == 0
+            || self.csr.rf(utra::udma_i2c_0::REG_CMD_SIZE_R_CMD_SIZE) != 0
+        {}
+        #[cfg(feature = "mpw")]
+        while self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) == 0 {}
         self.pending = I2cPending::Read(len);
         Ok(len)
     }
