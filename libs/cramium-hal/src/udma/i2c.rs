@@ -360,6 +360,8 @@ impl<'a> I2c<'a> {
             self.udma_enqueue(Bank::Tx, &self.tx_buf_phys[..data.len()], CFG_EN);
             self.udma_enqueue(Bank::Custom, &self.cmd_buf_phys[..self.seq_len], CFG_EN);
         }
+        // wait for the commands to propagate before returning
+        while !self.busy() {}
         self.pending = I2cPending::Write(data.len());
         Ok(data.len())
     }
@@ -418,6 +420,8 @@ impl<'a> I2c<'a> {
             self.udma_enqueue(Bank::Rx, &self.rx_buf_phys[..len], CFG_EN);
             self.udma_enqueue(Bank::Custom, &self.cmd_buf_phys[..self.seq_len], CFG_EN);
         }
+        // wait for the commands to propagate before returning
+        while !self.busy() {}
         self.pending = I2cPending::Read(len);
         Ok(len)
     }
