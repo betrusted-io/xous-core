@@ -308,14 +308,17 @@ impl<'a> I2c<'a> {
             || self.udma_busy(Bank::Rx)
     }
 
-    /// This is a custom I2C routine that implements a protocol used for the HDL test suite.
+    /// Basically, does a read from an I2C address without specifying a register. The protocol
+    /// would not make sense for any real-world application, but it is an MVP than exercises
+    /// both a write (to specify the device address) and a read (the response data) form of
+    /// the I2C PHY protocol.
     #[cfg(feature = "hdl-test")]
     #[allow(dead_code)]
     pub fn i2c_hdl_test(&mut self, byte: u8) -> Result<u8, xous::Error> {
         self.new_tranaction();
         self.push_cmd(I2cCmd::Config(self.divider));
         self.push_cmd(I2cCmd::Start);
-        self.push_cmd(I2cCmd::WriteByte(byte << 1));
+        self.push_cmd(I2cCmd::WriteByte(byte << 1 | 0x1)); // issue a read
         self.push_cmd(I2cCmd::RdNack);
         self.push_cmd(I2cCmd::Stop);
 
