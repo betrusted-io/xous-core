@@ -127,6 +127,7 @@ reset-debug = []
 usb = []
 qr = ["nalgebra"]
 updates = []
+cramium-mpw = ["cramium-hal/mpw"]
 
 # general flags
 debug-print = []

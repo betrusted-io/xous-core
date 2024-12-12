@@ -2104,18 +2104,18 @@ position to clear the flag]]></description>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_AHBS</name>
+                    <name>SFR_APBS</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/crypto_top/rtl/sce_glbsfra.sv]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>cr_ahbsopt</name>
+                            <name>cr_apbsopt</name>
                             <msb>4</msb>
                             <bitRange>[4:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[cr_ahbsopt read/write control register]]></description>
+                            <description><![CDATA[cr_apbsopt read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -6974,6 +6974,1831 @@ position to clear the flag]]></description>
             </addressBlock>
         </peripheral>
         <peripheral>
+            <name>SDDC</name>
+            <baseAddress>0x50121000</baseAddress>
+            <groupName>SDDC</groupName>
+            <registers>
+                <register>
+                    <name>SFR_IO</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_io</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_io read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_AR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_ar</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_ar performs action on write of value: 0x5a]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_OCR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_ocr</name>
+                            <msb>23</msb>
+                            <bitRange>[23:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_ocr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_RDFFTHRES</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_rdffthres</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_rdffthres read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REV</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_spec_revision</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_sd_spec_revision read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>cfg_reg_cccr_sdio_revision</name>
+                            <msb>15</msb>
+                            <bitRange>[15:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[cfg_reg_cccr_sdio_revision read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BACSA</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_csa</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_csa read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BAIOFN_CFG_BASE_ADDR_IO_FUNC0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0020</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_io_func0</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_io_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BAIOFN_CFG_BASE_ADDR_IO_FUNC1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0024</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_io_func1</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_io_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BAIOFN_CFG_BASE_ADDR_IO_FUNC2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0028</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_io_func2</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_io_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BAIOFN_CFG_BASE_ADDR_IO_FUNC3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x002c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_io_func3</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_io_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BAIOFN_CFG_BASE_ADDR_IO_FUNC4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0030</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_io_func4</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_io_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BAIOFN_CFG_BASE_ADDR_IO_FUNC5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0034</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_io_func5</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_io_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BAIOFN_CFG_BASE_ADDR_IO_FUNC6</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0038</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_io_func6</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_io_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BAIOFN_CFG_BASE_ADDR_IO_FUNC7</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x003c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_io_func7</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_io_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNCISPTR_CFG_REG_FUNC_CIS_PTR0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0040</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_cis_ptr0</name>
+                            <msb>16</msb>
+                            <bitRange>[16:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_cis_ptr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNCISPTR_CFG_REG_FUNC_CIS_PTR1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0044</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_cis_ptr1</name>
+                            <msb>16</msb>
+                            <bitRange>[16:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_cis_ptr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNCISPTR_CFG_REG_FUNC_CIS_PTR2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0048</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_cis_ptr2</name>
+                            <msb>16</msb>
+                            <bitRange>[16:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_cis_ptr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNCISPTR_CFG_REG_FUNC_CIS_PTR3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x004c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_cis_ptr3</name>
+                            <msb>16</msb>
+                            <bitRange>[16:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_cis_ptr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNCISPTR_CFG_REG_FUNC_CIS_PTR4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0050</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_cis_ptr4</name>
+                            <msb>16</msb>
+                            <bitRange>[16:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_cis_ptr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNCISPTR_CFG_REG_FUNC_CIS_PTR5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0054</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_cis_ptr5</name>
+                            <msb>16</msb>
+                            <bitRange>[16:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_cis_ptr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNCISPTR_CFG_REG_FUNC_CIS_PTR6</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0058</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_cis_ptr6</name>
+                            <msb>16</msb>
+                            <bitRange>[16:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_cis_ptr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNCISPTR_CFG_REG_FUNC_CIS_PTR7</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x005c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_cis_ptr7</name>
+                            <msb>16</msb>
+                            <bitRange>[16:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_cis_ptr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNEXTSTDCODE_CFG_REG_FUNC_EXT_STD_CODE0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0060</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_ext_std_code0</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_ext_std_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNEXTSTDCODE_CFG_REG_FUNC_EXT_STD_CODE1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0064</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_ext_std_code1</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_ext_std_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNEXTSTDCODE_CFG_REG_FUNC_EXT_STD_CODE2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0068</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_ext_std_code2</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_ext_std_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNEXTSTDCODE_CFG_REG_FUNC_EXT_STD_CODE3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x006c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_ext_std_code3</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_ext_std_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNEXTSTDCODE_CFG_REG_FUNC_EXT_STD_CODE4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0070</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_ext_std_code4</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_ext_std_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNEXTSTDCODE_CFG_REG_FUNC_EXT_STD_CODE5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0074</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_ext_std_code5</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_ext_std_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNEXTSTDCODE_CFG_REG_FUNC_EXT_STD_CODE6</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0078</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_ext_std_code6</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_ext_std_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_FNEXTSTDCODE_CFG_REG_FUNC_EXT_STD_CODE7</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x007c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_ext_std_code7</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_ext_std_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_WRITE_PROTECT</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0080</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_write_protect</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_write_protect read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_DSR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0084</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_reg_dsr</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_dsr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_CID_CFG_REG_CID0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0088</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_cid0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_cid read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_CID_CFG_REG_CID1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x008c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_cid1</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_cid read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_CID_CFG_REG_CID2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0090</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_cid2</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_cid read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_CID_CFG_REG_CID3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0094</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_cid3</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_cid read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_CSD_CFG_REG_CSD0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0098</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_csd0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_csd read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_CSD_CFG_REG_CSD1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x009c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_csd1</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_csd read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_CSD_CFG_REG_CSD2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00a0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_csd2</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_csd read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_CSD_CFG_REG_CSD3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00a4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_csd3</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_csd read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SCR_CFG_REG_SCR0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00a8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_scr0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_scr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SCR_CFG_REG_SCR1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00ac</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_scr1</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_scr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00b0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00b4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status1</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00b8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status2</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00bc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status3</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00c0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status4</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00c4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status5</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS6</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00c8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status6</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS7</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00cc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status7</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS8</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00d0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status8</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS9</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00d4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status9</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS10</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00d8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status10</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS11</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00dc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status11</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS12</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00e0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status12</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS13</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00e4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status13</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS14</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00e8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status14</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_SD_STATUS_CFG_REG_SD_STATUS15</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x00ec</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_sd_status15</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_reg_sd_status read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0100</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func0</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0104</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func1</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0108</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func2</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x010c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func3</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0110</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func4</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0114</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func5</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC6</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0118</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func6</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC7</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x011c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func7</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC8</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0120</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func8</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC9</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0124</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func9</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC10</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0128</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func10</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC11</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x012c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func11</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC12</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0130</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func12</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC13</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0134</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func13</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC14</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0138</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func14</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC15</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x013c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func15</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC16</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0140</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func16</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_BASE_ADDR_MEM_FUNC_CFG_BASE_ADDR_MEM_FUNC17</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0144</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_base_addr_mem_func17</name>
+                            <msb>17</msb>
+                            <bitRange>[17:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_base_addr_mem_func read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_ISDIO_INTERFACE_CODE_CFG_REG_FUNC_ISDIO_INTERFACE_CODE0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0148</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_isdio_interface_code0</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_isdio_interface_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_ISDIO_INTERFACE_CODE_CFG_REG_FUNC_ISDIO_INTERFACE_CODE1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x014c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_isdio_interface_code1</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_isdio_interface_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_ISDIO_INTERFACE_CODE_CFG_REG_FUNC_ISDIO_INTERFACE_CODE2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0150</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_isdio_interface_code2</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_isdio_interface_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_ISDIO_INTERFACE_CODE_CFG_REG_FUNC_ISDIO_INTERFACE_CODE3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0154</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_isdio_interface_code3</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_isdio_interface_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_ISDIO_INTERFACE_CODE_CFG_REG_FUNC_ISDIO_INTERFACE_CODE4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0158</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_isdio_interface_code4</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_isdio_interface_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_ISDIO_INTERFACE_CODE_CFG_REG_FUNC_ISDIO_INTERFACE_CODE5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x015c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_isdio_interface_code5</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_isdio_interface_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_ISDIO_INTERFACE_CODE_CFG_REG_FUNC_ISDIO_INTERFACE_CODE6</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0160</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_isdio_interface_code6</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_isdio_interface_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_MANUFACT_CODE_CFG_REG_FUNC_MANUFACT_CODE0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0168</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_manufact_code0</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_manufact_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_MANUFACT_CODE_CFG_REG_FUNC_MANUFACT_CODE1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x016c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_manufact_code1</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_manufact_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_MANUFACT_CODE_CFG_REG_FUNC_MANUFACT_CODE2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0170</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_manufact_code2</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_manufact_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_MANUFACT_CODE_CFG_REG_FUNC_MANUFACT_CODE3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0174</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_manufact_code3</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_manufact_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_MANUFACT_CODE_CFG_REG_FUNC_MANUFACT_CODE4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0178</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_manufact_code4</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_manufact_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_MANUFACT_CODE_CFG_REG_FUNC_MANUFACT_CODE5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x017c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_manufact_code5</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_manufact_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_MANUFACT_CODE_CFG_REG_FUNC_MANUFACT_CODE6</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0180</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_manufact_code6</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_manufact_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_MANUFACT_INFO_CFG_REG_FUNC_MANUFACT_INFO0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0188</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_manufact_info0</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_manufact_info read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_MANUFACT_INFO_CFG_REG_FUNC_MANUFACT_INFO1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x018c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_manufact_info1</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_manufact_info read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_MANUFACT_INFO_CFG_REG_FUNC_MANUFACT_INFO2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0190</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_manufact_info2</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_manufact_info read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_MANUFACT_INFO_CFG_REG_FUNC_MANUFACT_INFO3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0194</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_manufact_info3</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_manufact_info read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_MANUFACT_INFO_CFG_REG_FUNC_MANUFACT_INFO4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x0198</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_manufact_info4</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_manufact_info read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_MANUFACT_INFO_CFG_REG_FUNC_MANUFACT_INFO5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x019c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_manufact_info5</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_manufact_info read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_MANUFACT_INFO_CFG_REG_FUNC_MANUFACT_INFO6</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01a0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_manufact_info6</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_manufact_info read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_ISDIO_TYPE_SUP_CODE_CFG_REG_FUNC_ISDIO_TYPE_SUP_CODE0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01a8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_isdio_type_sup_code0</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_isdio_type_sup_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_ISDIO_TYPE_SUP_CODE_CFG_REG_FUNC_ISDIO_TYPE_SUP_CODE1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01ac</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_isdio_type_sup_code1</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_isdio_type_sup_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_ISDIO_TYPE_SUP_CODE_CFG_REG_FUNC_ISDIO_TYPE_SUP_CODE2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01b0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_isdio_type_sup_code2</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_isdio_type_sup_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_ISDIO_TYPE_SUP_CODE_CFG_REG_FUNC_ISDIO_TYPE_SUP_CODE3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01b4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_isdio_type_sup_code3</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_isdio_type_sup_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_ISDIO_TYPE_SUP_CODE_CFG_REG_FUNC_ISDIO_TYPE_SUP_CODE4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01b8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_isdio_type_sup_code4</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_isdio_type_sup_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_ISDIO_TYPE_SUP_CODE_CFG_REG_FUNC_ISDIO_TYPE_SUP_CODE5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01bc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_isdio_type_sup_code5</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_isdio_type_sup_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_ISDIO_TYPE_SUP_CODE_CFG_REG_FUNC_ISDIO_TYPE_SUP_CODE6</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01c0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_isdio_type_sup_code6</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_isdio_type_sup_code read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_INFO_CFG_REG_FUNC_INFO0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01c8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_info0</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_info read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_INFO_CFG_REG_FUNC_INFO1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01cc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_info1</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_info read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_INFO_CFG_REG_FUNC_INFO2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01d0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_info2</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_info read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_INFO_CFG_REG_FUNC_INFO3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01d4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_info3</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_info read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_INFO_CFG_REG_FUNC_INFO4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01d8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_info4</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_info read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_INFO_CFG_REG_FUNC_INFO5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01dc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_info5</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_info read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_FUNC_INFO_CFG_REG_FUNC_INFO6</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01e0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_func_info6</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_func_info read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_REG_UHS_1_SUPPORT</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ifsub/rtl/sddc.sv]]></description>
+                    <addressOffset>0x01f0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_reg_max_current</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_reg_max_current read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>cfg_reg_data_strc_version</name>
+                            <msb>23</msb>
+                            <bitRange>[23:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[cfg_reg_data_strc_version read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>cfg_reg_uhs_1_support</name>
+                            <msb>31</msb>
+                            <bitRange>[31:24]</bitRange>
+                            <lsb>24</lsb>
+                            <description><![CDATA[cfg_reg_uhs_1_support read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x1f4</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
             <name>CORESUB_SRAMTRM</name>
             <baseAddress>0x40014000</baseAddress>
             <groupName>CORESUB_SRAMTRM</groupName>
@@ -7858,6 +9683,195 @@ respective bit position to clear the flag]]></description>
             </addressBlock>
         </peripheral>
         <peripheral>
+            <name>RRC</name>
+            <baseAddress>0x40000000</baseAddress>
+            <groupName>RRC</groupName>
+            <registers>
+                <register>
+                    <name>SFR_RRCCR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/rrc/rtl/rrc.sv]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_rrccr</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_rrccr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCFD</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/rrc/rtl/rrc.sv]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_rrcfd</name>
+                            <msb>4</msb>
+                            <bitRange>[4:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_rrcfd read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCSR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/rrc/rtl/rrc.sv]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_rrcsr</name>
+                            <msb>9</msb>
+                            <bitRange>[9:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_rrcsr read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCFR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/rrc/rtl/rrc.sv]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_rrcfr</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_rrcfr flag register. `1` means event happened, write back `1` in respective
+bit position to clear the flag]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCAR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/rrc/rtl/rrc.sv]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_rrcar</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_rrcar performs action on write of value: PM_RRAM_SUICIDE]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCSR_SET0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/rrc/rtl/rrc.sv]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>trc_set_failure</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[trc_set_failure read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCSR_SET1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/rrc/rtl/rrc.sv]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>trc_set_failure</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[trc_set_failure read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCSR_RST0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/rrc/rtl/rrc.sv]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>trc_reset_failure</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[trc_reset_failure read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCSR_RST1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/rrc/rtl/rrc.sv]]></description>
+                    <addressOffset>0x0020</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>trc_reset_failure</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[trc_reset_failure read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCSR_RD0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/rrc/rtl/rrc.sv]]></description>
+                    <addressOffset>0x0024</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>trc_fourth_read_failure</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[trc_fourth_read_failure read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCSR_RD1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/rrc/rtl/rrc.sv]]></description>
+                    <addressOffset>0x0028</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>trc_fourth_read_failure</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[trc_fourth_read_failure read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x2c</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
             <name>GLUECHAIN</name>
             <baseAddress>0x40054000</baseAddress>
             <groupName>GLUECHAIN</groupName>
@@ -7930,6 +9944,1189 @@ respective bit position to clear the flag]]></description>
             <addressBlock>
                 <offset>0</offset>
                 <size>0x10</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>MESH</name>
+            <baseAddress>0x40052000</baseAddress>
+            <groupName>MESH</groupName>
+            <registers>
+                <register>
+                    <name>SFR_MLDRV_CR_MLDRV0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/mesh.sv]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_mldrv0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_mldrv read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_MLIE_CR_MLIE0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/mesh.sv]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_mlie0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_mlie read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_MLSR_SR_MLSR0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/mesh.sv]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_mlsr0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_mlsr read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_MLSR_SR_MLSR1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/mesh.sv]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_mlsr1</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_mlsr read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_MLSR_SR_MLSR2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/mesh.sv]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_mlsr2</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_mlsr read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_MLSR_SR_MLSR3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/mesh.sv]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_mlsr3</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_mlsr read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_MLSR_SR_MLSR4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/mesh.sv]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_mlsr4</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_mlsr read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_MLSR_SR_MLSR5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/mesh.sv]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_mlsr5</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_mlsr read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_MLSR_SR_MLSR6</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/mesh.sv]]></description>
+                    <addressOffset>0x0020</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_mlsr6</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_mlsr read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_MLSR_SR_MLSR7</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/mesh.sv]]></description>
+                    <addressOffset>0x0024</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_mlsr7</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_mlsr read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x28</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>SENSORC</name>
+            <baseAddress>0x40053000</baseAddress>
+            <groupName>SENSORC</groupName>
+            <registers>
+                <register>
+                    <name>SFR_VDMASK0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_vdmask0</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_vdmask0 read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_VDMASK1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_vdmask1</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_vdmask1 read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_VDSR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>vdflag</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[vdflag read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_VDFR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>vdflag</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[vdflag flag register. `1` means event happened, write back `1` in respective bit
+position to clear the flag]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_LDMASK</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_ldmask</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_ldmask read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_LDSR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_ldsr</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_ldsr read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_LDCFG</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_ldcfg</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_ldcfg read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_VDCFG_CR_VDCFG0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0020</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_vdcfg0</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_vdcfg read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_VDCFG_CR_VDCFG1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0024</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_vdcfg1</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_vdcfg read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_VDCFG_CR_VDCFG2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0028</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_vdcfg2</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_vdcfg read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_VDCFG_CR_VDCFG3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x002c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_vdcfg3</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_vdcfg read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_VDCFG_CR_VDCFG4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0030</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_vdcfg4</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_vdcfg read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_VDCFG_CR_VDCFG5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0034</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_vdcfg5</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_vdcfg read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_VDCFG_CR_VDCFG6</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0038</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_vdcfg6</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_vdcfg read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_VDCFG_CR_VDCFG7</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x003c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_vdcfg7</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_vdcfg read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_VDIP_ENA</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0040</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>vdena</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[vdena read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_VDIP_TEST</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0044</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>vdtst</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[vdtst read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_LDIP_TEST</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x0048</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>ldtst</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[ldtst read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_LDIP_FD</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/sensorc.sv]]></description>
+                    <addressOffset>0x004c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_ldip_fd</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_ldip_fd read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x50</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>AOBUREG</name>
+            <baseAddress>0x40065000</baseAddress>
+            <groupName>AOBUREG</groupName>
+            <registers>
+                <register>
+                    <name>SFR_BUREG_CR_BUREGS0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/aobureg.sv]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_buregs0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_buregs read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_BUREG_CR_BUREGS1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/aobureg.sv]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_buregs1</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_buregs read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_BUREG_CR_BUREGS2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/aobureg.sv]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_buregs2</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_buregs read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_BUREG_CR_BUREGS3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/aobureg.sv]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_buregs3</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_buregs read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_BUREG_CR_BUREGS4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/aobureg.sv]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_buregs4</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_buregs read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_BUREG_CR_BUREGS5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/aobureg.sv]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_buregs5</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_buregs read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_BUREG_CR_BUREGS6</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/aobureg.sv]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_buregs6</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_buregs read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_BUREG_CR_BUREGS7</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/aobureg.sv]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_buregs7</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_buregs read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x20</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>AO_SYSCTRL</name>
+            <baseAddress>0x40060000</baseAddress>
+            <groupName>AO_SYSCTRL</groupName>
+            <registers>
+                <register>
+                    <name>CR_CLK32KSEL</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_clk32ksel</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_clk32ksel read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_CLK1HZFD</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_clk1hzfd</name>
+                            <msb>13</msb>
+                            <bitRange>[13:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_clk1hzfd read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_WKUPMASK</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_wkupmask</name>
+                            <msb>9</msb>
+                            <bitRange>[9:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_wkupmask read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CR_RSTCRMASK</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_rstcrmask</name>
+                            <msb>4</msb>
+                            <bitRange>[4:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_rstcrmask read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_PMUCR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfrpmucr</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfrpmucr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_PMUCRLP</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfrpmucrlp</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfrpmucrlp read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_PMUCRPD</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfrpmucrpd</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfrpmucrpd read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_PMUDFT</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfrpmudft</name>
+                            <msb>5</msb>
+                            <bitRange>[5:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfrpmudft read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_PMUTRM0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0020</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfrpmutrm</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfrpmutrm read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_PMUTRM1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0024</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfrpmutrm</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfrpmutrm read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_PMUTRMLP0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0028</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfrpmutrmlp</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfrpmutrmlp read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_PMUTRMLP1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x002c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfrpmutrmlp</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfrpmutrmlp read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_OSCCR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0034</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfrosccr</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfrosccr read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>sfrosctrm</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[sfrosctrm read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>sfrosccrlp</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[sfrosccrlp read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>sfrosctrmlp</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[sfrosctrmlp read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>sfrosccrpd</name>
+                            <msb>4</msb>
+                            <bitRange>[4:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[sfrosccrpd read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_PMUSR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0038</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_pmusr</name>
+                            <msb>4</msb>
+                            <bitRange>[4:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_pmusr read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_PMUFR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x003c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_pmufr</name>
+                            <msb>4</msb>
+                            <bitRange>[4:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_pmufr flag register. `1` means event happened, write back `1` in respective
+bit position to clear the flag]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_AOFR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0040</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_aofr</name>
+                            <msb>9</msb>
+                            <bitRange>[9:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_aofr flag register. `1` means event happened, write back `1` in respective
+bit position to clear the flag]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_PMUPDAR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0044</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_pmupdar</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_pmupdar performs action on write of value: 0x5a]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>AR_AOPERI_CLRINT</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0050</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>ar_aoperi_clrint</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[ar_aoperi_clrint performs action on write of value: 0xaa]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IOX</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0060</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_iox</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_iox read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x64</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>DKPC</name>
+            <baseAddress>0x40064000</baseAddress>
+            <groupName>DKPC</groupName>
+            <registers>
+                <register>
+                    <name>SFR_CFG0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/dkpc.sv]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>KPOPO0</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[KPOPO0 read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>KPOPO1</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[KPOPO1 read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>KPOOE0</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[KPOOE0 read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>KPOOE1</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[KPOOE1 read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>dkpcen</name>
+                            <msb>4</msb>
+                            <bitRange>[4:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[dkpcen read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>autosleepen</name>
+                            <msb>5</msb>
+                            <bitRange>[5:5]</bitRange>
+                            <lsb>5</lsb>
+                            <description><![CDATA[autosleepen read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_CFG1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/dkpc.sv]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_step</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_step read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>cfg_filter</name>
+                            <msb>15</msb>
+                            <bitRange>[15:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[cfg_filter read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>cfg_cnt1ms</name>
+                            <msb>23</msb>
+                            <bitRange>[23:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[cfg_cnt1ms read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_CFG2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/dkpc.sv]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cfg_cnt</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cfg_cnt read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_CFG3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/dkpc.sv]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>kpnoderiseen</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[kpnoderiseen read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>kpnodefallen</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[kpnodefallen read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_SR0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/dkpc.sv]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>kpnodereg</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[kpnodereg read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>kpi0_pi</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[kpi[0].pi read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>kpi1_pi</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[kpi[1].pi read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>kpi2_pi</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[kpi[2].pi read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>kpi3_pi</name>
+                            <msb>4</msb>
+                            <bitRange>[4:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[kpi[3].pi read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_SR1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/dkpc.sv]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_sr1</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_sr1 read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_CFG4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/dkpc.sv]]></description>
+                    <addressOffset>0x0030</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_cfg4</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_cfg4 read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x34</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -10192,13 +13389,6 @@ respective bit position to clear the flag]]></description>
                             <lsb>4</lsb>
                             <description><![CDATA[r_rx_en]]></description>
                         </field>
-                        <field>
-                            <name>r_rx_clr</name>
-                            <msb>6</msb>
-                            <bitRange>[6:6]</bitRange>
-                            <lsb>6</lsb>
-                            <description><![CDATA[r_rx_clr]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
@@ -10253,13 +13443,6 @@ respective bit position to clear the flag]]></description>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
                             <description><![CDATA[r_tx_en]]></description>
-                        </field>
-                        <field>
-                            <name>r_tx_clr</name>
-                            <msb>6</msb>
-                            <bitRange>[6:6]</bitRange>
-                            <lsb>6</lsb>
-                            <description><![CDATA[r_tx_clr]]></description>
                         </field>
                     </fields>
                 </register>
@@ -10316,13 +13499,6 @@ respective bit position to clear the flag]]></description>
                             <lsb>4</lsb>
                             <description><![CDATA[r_cmd_en]]></description>
                         </field>
-                        <field>
-                            <name>r_cmd_clr</name>
-                            <msb>6</msb>
-                            <bitRange>[6:6]</bitRange>
-                            <lsb>6</lsb>
-                            <description><![CDATA[r_cmd_clr]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
@@ -10345,22 +13521,6 @@ respective bit position to clear the flag]]></description>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
                             <description><![CDATA[r_al]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>REG_SETUP</name>
-                    <description><![CDATA[See file:///F:/code/cram-nto/ips/udma/udma_i2c/rtl/udma_i2c_reg_if.sv]]></description>
-                    <addressOffset>0x0034</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>r_do_rst</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[r_do_rst]]></description>
                         </field>
                     </fields>
                 </register>
@@ -10445,13 +13605,6 @@ respective bit position to clear the flag]]></description>
                             <lsb>4</lsb>
                             <description><![CDATA[r_rx_en]]></description>
                         </field>
-                        <field>
-                            <name>r_rx_clr</name>
-                            <msb>6</msb>
-                            <bitRange>[6:6]</bitRange>
-                            <lsb>6</lsb>
-                            <description><![CDATA[r_rx_clr]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
@@ -10506,13 +13659,6 @@ respective bit position to clear the flag]]></description>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
                             <description><![CDATA[r_tx_en]]></description>
-                        </field>
-                        <field>
-                            <name>r_tx_clr</name>
-                            <msb>6</msb>
-                            <bitRange>[6:6]</bitRange>
-                            <lsb>6</lsb>
-                            <description><![CDATA[r_tx_clr]]></description>
                         </field>
                     </fields>
                 </register>
@@ -10569,13 +13715,6 @@ respective bit position to clear the flag]]></description>
                             <lsb>4</lsb>
                             <description><![CDATA[r_cmd_en]]></description>
                         </field>
-                        <field>
-                            <name>r_cmd_clr</name>
-                            <msb>6</msb>
-                            <bitRange>[6:6]</bitRange>
-                            <lsb>6</lsb>
-                            <description><![CDATA[r_cmd_clr]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
@@ -10598,22 +13737,6 @@ respective bit position to clear the flag]]></description>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
                             <description><![CDATA[r_al]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>REG_SETUP</name>
-                    <description><![CDATA[See file:///F:/code/cram-nto/ips/udma/udma_i2c/rtl/udma_i2c_reg_if.sv]]></description>
-                    <addressOffset>0x0034</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>r_do_rst</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[r_do_rst]]></description>
                         </field>
                     </fields>
                 </register>
@@ -10698,13 +13821,6 @@ respective bit position to clear the flag]]></description>
                             <lsb>4</lsb>
                             <description><![CDATA[r_rx_en]]></description>
                         </field>
-                        <field>
-                            <name>r_rx_clr</name>
-                            <msb>6</msb>
-                            <bitRange>[6:6]</bitRange>
-                            <lsb>6</lsb>
-                            <description><![CDATA[r_rx_clr]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
@@ -10759,13 +13875,6 @@ respective bit position to clear the flag]]></description>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
                             <description><![CDATA[r_tx_en]]></description>
-                        </field>
-                        <field>
-                            <name>r_tx_clr</name>
-                            <msb>6</msb>
-                            <bitRange>[6:6]</bitRange>
-                            <lsb>6</lsb>
-                            <description><![CDATA[r_tx_clr]]></description>
                         </field>
                     </fields>
                 </register>
@@ -10822,13 +13931,6 @@ respective bit position to clear the flag]]></description>
                             <lsb>4</lsb>
                             <description><![CDATA[r_cmd_en]]></description>
                         </field>
-                        <field>
-                            <name>r_cmd_clr</name>
-                            <msb>6</msb>
-                            <bitRange>[6:6]</bitRange>
-                            <lsb>6</lsb>
-                            <description><![CDATA[r_cmd_clr]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
@@ -10851,22 +13953,6 @@ respective bit position to clear the flag]]></description>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
                             <description><![CDATA[r_al]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>REG_SETUP</name>
-                    <description><![CDATA[See file:///F:/code/cram-nto/ips/udma/udma_i2c/rtl/udma_i2c_reg_if.sv]]></description>
-                    <addressOffset>0x0034</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>r_do_rst</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[r_do_rst]]></description>
                         </field>
                     </fields>
                 </register>
@@ -10951,13 +14037,6 @@ respective bit position to clear the flag]]></description>
                             <lsb>4</lsb>
                             <description><![CDATA[r_rx_en]]></description>
                         </field>
-                        <field>
-                            <name>r_rx_clr</name>
-                            <msb>6</msb>
-                            <bitRange>[6:6]</bitRange>
-                            <lsb>6</lsb>
-                            <description><![CDATA[r_rx_clr]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
@@ -11012,13 +14091,6 @@ respective bit position to clear the flag]]></description>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
                             <description><![CDATA[r_tx_en]]></description>
-                        </field>
-                        <field>
-                            <name>r_tx_clr</name>
-                            <msb>6</msb>
-                            <bitRange>[6:6]</bitRange>
-                            <lsb>6</lsb>
-                            <description><![CDATA[r_tx_clr]]></description>
                         </field>
                     </fields>
                 </register>
@@ -11075,13 +14147,6 @@ respective bit position to clear the flag]]></description>
                             <lsb>4</lsb>
                             <description><![CDATA[r_cmd_en]]></description>
                         </field>
-                        <field>
-                            <name>r_cmd_clr</name>
-                            <msb>6</msb>
-                            <bitRange>[6:6]</bitRange>
-                            <lsb>6</lsb>
-                            <description><![CDATA[r_cmd_clr]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
@@ -11104,22 +14169,6 @@ respective bit position to clear the flag]]></description>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
                             <description><![CDATA[r_al]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>REG_SETUP</name>
-                    <description><![CDATA[See file:///F:/code/cram-nto/ips/udma/udma_i2c/rtl/udma_i2c_reg_if.sv]]></description>
-                    <addressOffset>0x0034</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>r_do_rst</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[r_do_rst]]></description>
                         </field>
                     </fields>
                 </register>
@@ -14346,6 +17395,11 @@ respective bit position to clear the flag]]></description>
                 <size>0x00010000</size>
             </memoryRegion>
             <memoryRegion>
+                <name>RRC</name>
+                <baseAddress>0x40000000</baseAddress>
+                <size>0x00010000</size>
+            </memoryRegion>
+            <memoryRegion>
                 <name>SECSUB</name>
                 <baseAddress>0x40050000</baseAddress>
                 <size>0x00010000</size>
@@ -14359,6 +17413,16 @@ respective bit position to clear the flag]]></description>
                 <name>BIO_BDMA</name>
                 <baseAddress>0x50124000</baseAddress>
                 <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>AO</name>
+                <baseAddress>0x40060000</baseAddress>
+                <size>0x00010000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>AOPERI</name>
+                <baseAddress>0x40061000</baseAddress>
+                <size>0x00003000</size>
             </memoryRegion>
             <memoryRegion>
                 <name>SEG_LKEY</name>
@@ -14518,11 +17582,6 @@ respective bit position to clear the flag]]></description>
             <memoryRegion>
                 <name>IOX</name>
                 <baseAddress>0x5012F000</baseAddress>
-                <size>0x00001000</size>
-            </memoryRegion>
-            <memoryRegion>
-                <name>AOC</name>
-                <baseAddress>0x40060000</baseAddress>
                 <size>0x00001000</size>
             </memoryRegion>
             <memoryRegion>

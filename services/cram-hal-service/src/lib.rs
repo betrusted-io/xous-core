@@ -66,6 +66,20 @@ impl UdmaGlobal {
         )
         .expect("Couldn't setup UDMA event mapping");
     }
+
+    pub fn reset(&self, peripheral: PeriphId) {
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::PeriphReset.to_usize().unwrap(),
+                peripheral as u32 as usize,
+                0,
+                0,
+                0,
+            ),
+        )
+        .expect("Couldn't setup UDMA clock");
+    }
 }
 
 impl UdmaGlobalConfig for UdmaGlobal {
@@ -79,4 +93,6 @@ impl UdmaGlobalConfig for UdmaGlobal {
     ) {
         self.udma_event_map(peripheral, event_type, to_channel);
     }
+
+    fn reset(&self, peripheral: PeriphId) { self.reset(peripheral); }
 }

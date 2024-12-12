@@ -300,7 +300,9 @@ pub fn early_init() -> u32 {
     };
 
     #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
-    let mut i2c = unsafe { cramium_hal::udma::I2c::new_with_ifram(i2c_channel, 400_000, perclk, i2c_ifram) };
+    let mut i2c = unsafe {
+        cramium_hal::udma::I2c::new_with_ifram(i2c_channel, 400_000, perclk, i2c_ifram, &udma_global)
+    };
     // setup PMIC
     #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
     {

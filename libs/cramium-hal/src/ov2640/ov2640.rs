@@ -215,6 +215,8 @@ impl Ov2640 {
     /// TODO: figure out how to length-bound this to...the frame slice size? line size? idk...
     pub unsafe fn rx_buf_phys<T: UdmaWidths>(&self) -> &[T] { &self.ifram.as_ref().unwrap().as_phys_slice() }
 
+    /// TODO: Rework this to use the frame sync + automatic re-initiation on capture_await() for frames
+    /// TODO: Also make an interrupt driven version of this.
     pub fn capture_async(&mut self) {
         // we want the sliced resolution so resolve resolution through the method call wrapper
         let (cols, rows) = self.resolution();

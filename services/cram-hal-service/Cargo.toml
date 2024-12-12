@@ -42,6 +42,7 @@ pio-memlcd = []
 rawserial = []
 pinger = []
 swap = []
+mpw = ["cramium-hal/mpw"]
 # add this feature to enable pre-emption
 quantum-timer = ["utralib", "pio"]
 default = ["app-uart"]

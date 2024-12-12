@@ -4,7 +4,19 @@ use crate::ifram::IframRange;
 use crate::udma::*;
 use crate::udma::{Bank, Udma};
 
+#[cfg(not(feature = "hdl-test"))]
 const TIMEOUT_ITERS: usize = 1_000_000;
+#[cfg(feature = "hdl-test")]
+const TIMEOUT_ITERS: usize = 5000;
+
+// MPW had this register:
+//        pub const REG_SETUP: crate::Register = crate::Register::new(13, 0x1);
+//        pub const REG_SETUP_R_DO_RST: crate::Field = crate::Field::new(1, 0, REG_SETUP);
+// It is gone in NTO and we use the UDMA system reset instead
+#[cfg(feature = "mpw")]
+const SETUP_OFFSET: usize = 13;
+#[cfg(feature = "mpw")]
+const DO_RST_MASK: usize = 1;
 
 #[derive(Copy, Clone)]
 #[repr(u8)]
@@ -75,9 +87,12 @@ const MAX_I2C_TXLEN: usize = 512;
 const MAX_I2C_RXLEN: usize = 512;
 const MAX_I2C_CMDLEN: usize = 512;
 
-pub struct I2c {
+pub struct I2c<'a> {
     csr: CSR<u32>,
-    _channel: I2cChannel,
+    #[allow(dead_code)] // used in NTO
+    udma_global: &'a dyn UdmaGlobalConfig,
+    #[allow(dead_code)] // used in NTO
+    channel: I2cChannel,
     divider: u16,
     perclk_freq: u32,
     pub ifram: IframRange,
@@ -91,20 +106,25 @@ pub struct I2c {
     pending: I2cPending,
 }
 
-impl Udma for I2c {
+impl Udma for I2c<'_> {
     fn csr_mut(&mut self) -> &mut CSR<u32> { &mut self.csr }
 
     fn csr(&self) -> &CSR<u32> { &self.csr }
 }
 
-impl I2c {
+impl<'a> I2c<'a> {
     /// Safety: called only after global clock for I2C channel is enabled.
     /// It is also unsafe to `Drop` because you have to cleanup the clock manually.
     #[cfg(feature = "std")]
-    pub unsafe fn new(channel: I2cChannel, i2c_freq: u32, perclk_freq: u32) -> Option<Self> {
+    pub unsafe fn new(
+        channel: I2cChannel,
+        i2c_freq: u32,
+        perclk_freq: u32,
+        udma_global: &'a dyn UdmaGlobalConfig,
+    ) -> Option<Self> {
         // one page is the minimum size we can request
         if let Some(ifram) = IframRange::request(4096, None) {
-            Some(I2c::new_with_ifram(channel, i2c_freq, perclk_freq, ifram))
+            Some(I2c::new_with_ifram(channel, i2c_freq, perclk_freq, ifram, udma_global))
         } else {
             None
         }
@@ -115,6 +135,7 @@ impl I2c {
         i2c_freq: u32,
         perclk_freq: u32,
         ifram: IframRange,
+        udma_global: &'a dyn UdmaGlobalConfig,
     ) -> Self {
         // divide-by-4 is an empirical observation
         let divider: u16 = ((((perclk_freq / 2) / i2c_freq) / 4).min(u16::MAX as u32)) as u16;
@@ -134,18 +155,33 @@ impl I2c {
         )
         .expect("couldn't map i2c port");
         #[cfg(target_os = "xous")]
+        #[allow(unused_mut)] // because it is used when `mpw` feature is selected
         let mut csr = CSR::new(csr_range.as_mut_ptr() as *mut u32);
         #[cfg(not(target_os = "xous"))]
+        #[allow(unused_mut)] // because it is used when `mpw` feature is selected
         let mut csr = CSR::new(base_addr as *mut u32);
-        // reset the block
-        csr.wfo(utra::udma_i2c_0::REG_SETUP_R_DO_RST, 1);
-        csr.wo(utra::udma_i2c_0::REG_SETUP, 0);
+        // reset the block, if MPW. If NTO, this is handled by udma global
+        #[cfg(feature = "mpw")]
+        unsafe {
+            csr.base().add(SETUP_OFFSET).write_volatile(DO_RST_MASK as u32);
+            csr.base().add(SETUP_OFFSET).write_volatile(0);
+        }
+        #[cfg(not(feature = "mpw"))]
+        {
+            udma_global.reset(match channel {
+                I2cChannel::Channel0 => PeriphId::I2c0,
+                I2cChannel::Channel1 => PeriphId::I2c1,
+                I2cChannel::Channel2 => PeriphId::I2c2,
+                I2cChannel::Channel3 => PeriphId::I2c3,
+            });
+        }
         // one page is the minimum size we can request
         let ifram_base = ifram.virt_range.as_ptr() as usize;
         let ifram_base_phys = ifram.phys_range.as_ptr() as usize;
         let mut i2c = I2c {
             csr,
-            _channel: channel,
+            udma_global,
+            channel,
             ifram,
             divider,
             cmd_buf: unsafe { core::slice::from_raw_parts_mut(ifram_base as *mut u32, MAX_I2C_CMDLEN) },
@@ -221,8 +257,22 @@ impl I2c {
                 self.udma_reset(Bank::Custom);
                 self.udma_reset(Bank::Tx);
                 self.udma_reset(Bank::Rx);
-                self.csr.wfo(utra::udma_i2c_0::REG_SETUP_R_DO_RST, 1);
-                self.csr.wo(utra::udma_i2c_0::REG_SETUP, 0);
+                // reset the block, if MPW. If NTO, this needs to be handled by the upper level code with a
+                // reset to udma_global
+                #[cfg(feature = "mpw")]
+                unsafe {
+                    self.csr.base().add(SETUP_OFFSET).write_volatile(DO_RST_MASK as u32);
+                    self.csr.base().add(SETUP_OFFSET).write_volatile(0);
+                }
+                #[cfg(not(feature = "mpw"))]
+                {
+                    self.udma_global.reset(match self.channel {
+                        I2cChannel::Channel0 => PeriphId::I2c0,
+                        I2cChannel::Channel1 => PeriphId::I2c1,
+                        I2cChannel::Channel2 => PeriphId::I2c2,
+                        I2cChannel::Channel3 => PeriphId::I2c3,
+                    });
+                }
 
                 self.send_cmd_list(&[I2cCmd::Config(self.divider)]);
                 self.pending.take();
@@ -236,7 +286,10 @@ impl I2c {
         let ret = match self.pending.take() {
             I2cPending::Read(len) => {
                 if let Some(buf) = rx_buf {
+                    #[cfg(feature = "mpw")]
                     buf[..len].copy_from_slice(&self.rx_buf[3..3 + len]);
+                    #[cfg(not(feature = "mpw"))]
+                    buf[..len].copy_from_slice(&self.rx_buf[..len]);
                     Ok(len)
                 } else {
                     // the pending transaction was a read, but the user did not call us
@@ -250,12 +303,64 @@ impl I2c {
         ret
     }
 
+    pub fn reset(&mut self) {
+        // reset the block
+        self.udma_reset(Bank::Custom);
+        self.udma_reset(Bank::Tx);
+        self.udma_reset(Bank::Rx);
+        // reset the block, if MPW. If NTO, this needs to be handled by the upper level code with a
+        // reset to udma_global
+        #[cfg(feature = "mpw")]
+        unsafe {
+            self.csr.base().add(SETUP_OFFSET).write_volatile(DO_RST_MASK as u32);
+            self.csr.base().add(SETUP_OFFSET).write_volatile(0);
+        }
+        #[cfg(not(feature = "mpw"))]
+        {
+            self.udma_global.reset(match self.channel {
+                I2cChannel::Channel0 => PeriphId::I2c0,
+                I2cChannel::Channel1 => PeriphId::I2c1,
+                I2cChannel::Channel2 => PeriphId::I2c2,
+                I2cChannel::Channel3 => PeriphId::I2c3,
+            });
+        }
+
+        self.send_cmd_list(&[I2cCmd::Config(self.divider)]);
+        self.pending.take();
+    }
+
     fn busy(&self) -> bool {
         self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) != 0
-            || self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) != 0
             || self.udma_busy(Bank::Custom)
             || self.udma_busy(Bank::Tx)
             || self.udma_busy(Bank::Rx)
+    }
+
+    /// Basically, does a read from an I2C address without specifying a register. The protocol
+    /// would not make sense for any real-world application, but it is an MVP than exercises
+    /// both a write (to specify the device address) and a read (the response data) form of
+    /// the I2C PHY protocol.
+    #[cfg(feature = "hdl-test")]
+    #[allow(dead_code)]
+    pub fn i2c_hdl_test(&mut self, byte: u8) -> Result<u8, xous::Error> {
+        self.new_tranaction();
+        self.push_cmd(I2cCmd::Config(self.divider));
+        self.push_cmd(I2cCmd::Start);
+        self.push_cmd(I2cCmd::WriteByte(byte << 1 | 0x1)); // issue a read
+        self.push_cmd(I2cCmd::RdNack);
+        self.push_cmd(I2cCmd::Stop);
+
+        // safety: this is safe because the cmd_buf_phys() slice is passed to a function that only
+        // uses it as a base/bounds reference and it will not actually access the data.
+        unsafe {
+            self.udma_enqueue(Bank::Rx, &self.rx_buf_phys[..1], CFG_EN);
+            self.udma_enqueue(Bank::Custom, &self.cmd_buf_phys[..self.seq_len], CFG_EN);
+        }
+        self.pending = I2cPending::Read(1);
+
+        let mut rx = [0u8];
+        self.i2c_await(Some(&mut rx), false)?;
+        Ok(rx[0])
     }
 
     pub fn i2c_write_async(&mut self, dev: u8, adr: u8, data: &[u8]) -> Result<usize, xous::Error> {
@@ -280,6 +385,13 @@ impl I2c {
             self.udma_enqueue(Bank::Tx, &self.tx_buf_phys[..data.len()], CFG_EN);
             self.udma_enqueue(Bank::Custom, &self.cmd_buf_phys[..self.seq_len], CFG_EN);
         }
+        // wait for the commands to propagate before returning
+        #[cfg(not(feature = "mpw"))]
+        while self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) == 0
+            || self.csr.rf(utra::udma_i2c_0::REG_CMD_SIZE_R_CMD_SIZE) != 0
+        {}
+        #[cfg(feature = "mpw")]
+        while self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) == 0 {}
         self.pending = I2cPending::Write(data.len());
         Ok(data.len())
     }
@@ -297,8 +409,20 @@ impl I2c {
         // block has to be reset on every start transaction due to a... bug? programming error?
         // where the Rx length is mismatched from the actual length of Rx data expected because
         // it seems the Rx buffer pointer increments even during Tx events.
-        self.csr.wfo(utra::udma_i2c_0::REG_SETUP_R_DO_RST, 1);
-        self.csr.wo(utra::udma_i2c_0::REG_SETUP, 0);
+        #[cfg(feature = "mpw")]
+        unsafe {
+            self.csr.base().add(SETUP_OFFSET).write_volatile(DO_RST_MASK as u32);
+            self.csr.base().add(SETUP_OFFSET).write_volatile(0);
+        }
+        #[cfg(not(feature = "mpw"))]
+        {
+            self.udma_global.reset(match self.channel {
+                I2cChannel::Channel0 => PeriphId::I2c0,
+                I2cChannel::Channel1 => PeriphId::I2c1,
+                I2cChannel::Channel2 => PeriphId::I2c2,
+                I2cChannel::Channel3 => PeriphId::I2c3,
+            });
+        }
 
         // into the pre-allocated Tx buf
         self.new_tranaction();
@@ -319,16 +443,26 @@ impl I2c {
         // safety: this is safe because the cmd_buf_phys() slice is passed to a function that only
         // uses it as a base/bounds reference and it will not actually access the data.
         unsafe {
-            // the extra 3 are dummy bytes that were received while the address was being set up
+            // the extra 3 are dummy bytes that were received while the address was being set up - MPW bug
+            #[cfg(feature = "mpw")]
             self.udma_enqueue(Bank::Rx, &self.rx_buf_phys[..len + 3], CFG_EN);
+            #[cfg(not(feature = "mpw"))]
+            self.udma_enqueue(Bank::Rx, &self.rx_buf_phys[..len], CFG_EN);
             self.udma_enqueue(Bank::Custom, &self.cmd_buf_phys[..self.seq_len], CFG_EN);
         }
+        // wait for the commands to propagate before returning
+        #[cfg(not(feature = "mpw"))]
+        while self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) == 0
+            || self.csr.rf(utra::udma_i2c_0::REG_CMD_SIZE_R_CMD_SIZE) != 0
+        {}
+        #[cfg(feature = "mpw")]
+        while self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY) == 0 {}
         self.pending = I2cPending::Read(len);
         Ok(len)
     }
 }
 
-impl I2cApi for I2c {
+impl I2cApi for I2c<'_> {
     fn i2c_read(
         &mut self,
         dev: u8,

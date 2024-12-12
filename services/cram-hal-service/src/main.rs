@@ -166,7 +166,13 @@ fn main() {
         )
     };
     let mut i2c = unsafe {
-        cramium_hal::udma::I2c::new_with_ifram(i2c_channel, 400_000, cram_hal_service::PERCLK, i2c_ifram)
+        cramium_hal::udma::I2c::new_with_ifram(
+            i2c_channel,
+            400_000,
+            cram_hal_service::PERCLK,
+            i2c_ifram,
+            &udma_global,
+        )
     };
 
     // -------------------- begin timer workaround code
@@ -369,6 +375,12 @@ fn main() {
                     // events. Maybe this should be done? but for now, let's leave it
                     // as bare iron.
                     udma_global.map_event_with_offset(periph, event_offset, to_channel);
+                }
+            }
+            Opcode::PeriphReset => {
+                if let Some(scalar) = msg.body.scalar_message() {
+                    let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
+                    udma_global.reset(periph);
                 }
             }
             Opcode::I2c => {
