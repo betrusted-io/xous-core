@@ -57,6 +57,9 @@ pub(crate) enum Opcode {
     /// TRNG send poll
     SerialTrngPoll = 518,
 
+    /// Interrupt-context USB stack messages
+    IrqFidoRx = 768,
+
     #[cfg(feature = "mass-storage")]
     SetBlockDevice = 1024,
     #[cfg(feature = "mass-storage")]
@@ -84,6 +87,8 @@ pub(crate) enum Opcode {
     SuspendResume = 2049,
     /// Exits the server
     Quit = 4096,
+    /// Invalid opcode gutter
+    InvalidCall = 4097,
 
     /// API used by the logging crate. The number is hard-coded; don't change it.
     LogString = 8192,
