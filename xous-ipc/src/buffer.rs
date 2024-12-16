@@ -10,7 +10,7 @@ use rkyv::{
 };
 use xous::{
     CID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize, Message, Result,
-    map_memory, send_message, unmap_memory,
+    map_memory, send_message, try_send_message, unmap_memory,
 };
 
 #[derive(Debug)]
@@ -167,6 +167,21 @@ impl<'buf> Buffer<'buf> {
             valid: MemorySize::new(self.pages.len()),
         };
         let result = send_message(connection, Message::Move(msg))?;
+
+        // prevents it from being Dropped.
+        self.should_drop = false;
+        Ok(result)
+    }
+
+    #[allow(dead_code)]
+    pub fn try_send(mut self, connection: CID, id: u32) -> core::result::Result<Result, Error> {
+        let msg = MemoryMessage {
+            id: id as usize,
+            buf: self.pages,
+            offset: MemoryAddress::new(self.used),
+            valid: MemorySize::new(self.pages.len()),
+        };
+        let result = try_send_message(connection, Message::Move(msg))?;
 
         // prevents it from being Dropped.
         self.should_drop = false;
