@@ -3,7 +3,7 @@ use xous::{CID, MessageSender, msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
 use crate::api;
-use crate::api::keyboard::*;
+pub use crate::api::keyboard::*;
 
 pub fn start_keyboard_service() {
     std::thread::spawn(move || {
