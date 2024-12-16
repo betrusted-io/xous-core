@@ -40,6 +40,7 @@ renode = ["utralib/renode"]
 swap-userspace-testing = []
 oom-doom = []
 
-debug-print = []
+debug-print = [
+] # mutually exclusive feature with other crates that use the app UART
 debug-verbose = []
-default = ["debug-print"]
+default = []
