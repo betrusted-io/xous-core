@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 xous = "0.9.64"
-log-server = { package = "xous-api-log", version = "0.1.62", features = ["nostd"] }
+log-server = { package = "xous-api-log", version = "0.1.63", features = ["nostd"] }
 log = "0.4.17"

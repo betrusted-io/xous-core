@@ -30,7 +30,7 @@ js-sys = { version = "0.3", optional = true }
 wasm-bindgen-test = "0.3.18"
 
 [target.'cfg(target_os = "xous")'.dependencies]
-xous-names = { package = "xous-api-names", version = "0.9.64" }
+xous-names = { package = "xous-api-names", version = "0.9.65" }
 xous = "0.9.64"
 rkyv = { version = "0.8.8", default-features = false, features = [
   "std",
