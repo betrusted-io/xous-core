@@ -12,7 +12,7 @@ pub fn check_project_consistency() -> Result<(), DynError> {
     // TODO: retire utralib/svd2utra from publication as well
     let check_pkgs = [
         // this set updates with kernel API changes
-        "xous^0.9.65",
+        "xous^0.9.64",
         "xous-ipc^0.10.3",
         "xous-api-log^0.1.62",
         "xous-api-names^0.9.64",

@@ -293,7 +293,7 @@ pub struct Uicr {
 
 const CRG_UDC_CFG0_MAXSPEED_FS: u32 = 1;
 
-const CRG_UDC_ERDPLO_EHB: u32 = 1 << 3;
+pub const CRG_UDC_ERDPLO_EHB: u32 = 1 << 3;
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -687,9 +687,9 @@ pub struct ErstS {
 
 /// buffer info data structure
 pub struct BufferInfo {
-    vaddr: AtomicPtr<u8>,
-    dma: u64,
-    len: usize,
+    pub vaddr: AtomicPtr<u8>,
+    pub dma: u64,
+    pub len: usize,
 }
 impl Default for BufferInfo {
     fn default() -> Self { Self { vaddr: AtomicPtr::new(core::ptr::null_mut()), dma: 0, len: 0 } }
@@ -761,12 +761,12 @@ impl UdcEp {
 
 // Corigine USB device controller event data structure
 pub struct UdcEvent {
-    erst: BufferInfo,
-    p_erst: AtomicPtr<ErstS>,
-    event_ring: BufferInfo,
-    evt_dq_pt: AtomicPtr<EventTrbS>,
-    ccs: bool,
-    evt_seg0_last_trb: AtomicPtr<EventTrbS>,
+    pub erst: BufferInfo,
+    pub p_erst: AtomicPtr<ErstS>,
+    pub event_ring: BufferInfo,
+    pub evt_dq_pt: AtomicPtr<EventTrbS>,
+    pub ccs: bool,
+    pub evt_seg0_last_trb: AtomicPtr<EventTrbS>,
 }
 impl Default for UdcEvent {
     fn default() -> Self {
@@ -836,7 +836,7 @@ pub struct CorigineUsb {
     p_epcx: AtomicPtr<EpCxS>,
     p_epcx_len: usize,
 
-    udc_event: UdcEvent,
+    pub udc_event: UdcEvent,
 
     /// A place to put data received from the hardware immediately, before it
     /// is processed by the driver interface.
@@ -1336,6 +1336,14 @@ impl CorigineUsb {
         #[cfg(feature = "std")]
         log::trace!("End init_ep0");
     }
+
+    #[cfg(feature = "std")]
+    /// This must be called before `start()` is invoked if a custom handler is to be hooked.
+    /// The main reason this API exists is to provide some backward compatibility with prior APIs
+    /// that relied on the stock handler.
+    ///
+    /// Safety: only safe to call if you actually claimed the interrupt, before calling `start()`
+    pub unsafe fn irq_claimed(&self) { INTERRUPT_INIT_DONE.store(true, Ordering::SeqCst); }
 
     pub fn start(&mut self) {
         self.csr.wo(

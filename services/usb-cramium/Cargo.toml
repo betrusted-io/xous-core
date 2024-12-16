@@ -22,6 +22,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
 ] }
 packed_struct = { version = "0.10", default-features = false } # used by the xous-usb-hid crate
 locales = { path = "../../locales" }
+frunk_core = "0.4.2"
 
 [dependencies.usb-device]
 # see top level Cargo.toml for patch.crates-io directive to help with dev work
@@ -36,4 +37,10 @@ precursor = ["utralib/precursor", "utralib/std"]
 hosted = ["utralib/hosted", "utralib/std"]
 renode = ["utralib/renode", "utralib/std"]
 mass-storage = []
-default = ["mass-storage"]
+debug-print = [
+] # mutually exclusive feature with other crates that use the app UART
+
+prototyping = [
+] # temporary feature-out for figuring out the code; remove this if you don't recognize it anymore
+
+default = ["mass-storage", "debug-print"]
