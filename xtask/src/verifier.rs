@@ -13,11 +13,11 @@ pub fn check_project_consistency() -> Result<(), DynError> {
     let check_pkgs = [
         // this set updates with kernel API changes
         "xous^0.9.64",
-        "xous-ipc^0.10.3",
-        "xous-api-log^0.1.62",
-        "xous-api-names^0.9.64",
-        "xous-api-susres^0.9.62",
-        "xous-api-ticktimer^0.9.62",
+        "xous-ipc^0.10.4",
+        "xous-api-log^0.1.63",
+        "xous-api-names^0.9.65",
+        "xous-api-susres^0.9.63",
+        "xous-api-ticktimer^0.9.63",
     ];
     // utra/svd2utra changes are downgraded to warnings because these now prefer to pull
     // from the local patch version, so any inconsistency simply indicates we forgot to
