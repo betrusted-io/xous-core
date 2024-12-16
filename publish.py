@@ -12,7 +12,7 @@ UTRA_CRATES = [
     ["utralib", "utralib"],
 ]
 CRATES = [
-    # ["xous", "xous-rs"],
+    ["xous", "xous-rs"],
     # ["xous-kernel", "kernel"], # this is no longer published, as it is an implementation
     ["xous-ipc", "xous-ipc"],
     ["xous-api-log", "api/xous-api-log"],
