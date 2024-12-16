@@ -5792,6 +5792,7 @@ version = "0.1.0"
 dependencies = [
  "cram-hal-service",
  "cramium-hal",
+ "frunk_core",
  "locales",
  "log",
  "num-derive 0.4.2",
