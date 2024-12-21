@@ -35,10 +35,11 @@ impl Gfx {
     ///
     /// # Example
     /// ```
-    /// use graphics_server::{Gfx, Line, LineStyle, Point};
+    /// use graphics_server::{Gfx, Line, Point};
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// let line = Line::new(Point::new(0, 0), Point::new(100, 100), LineStyle::Solid);
+    /// let line = Line::new(Point::new(0, 0), Point::new(100, 100)); // if you want to specify a style, use Line::new_with_style
     /// gfx.draw_line(line).unwrap();
+    /// gfx.flush().unwrap();
     /// ```
     pub fn draw_line(&self, line: Line) -> Result<(), xous::Error> {
         send_message(
@@ -58,10 +59,11 @@ impl Gfx {
     ///
     /// # Example
     /// ```
-    /// use graphics_server::{Circle, Gfx, LineStyle, Point};
+    /// use graphics_server::{Circle, Gfx, Point};
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// let circle = Circle::new(Point::new(50, 50), 25, LineStyle::Solid);
+    /// let circle = Circle::new(Point::new(150, 150), 25); // if you want to specify a style, use Circle::new_with_style
     /// gfx.draw_circle(circle).unwrap();
+    /// gfx.flush().unwrap();
     /// ```
     pub fn draw_circle(&self, circ: Circle) -> Result<(), xous::Error> {
         send_message(
@@ -81,10 +83,11 @@ impl Gfx {
     ///
     /// # Example
     /// ```
-    /// use graphics_server::{Gfx, LineStyle, Point, Rectangle};
+    /// use graphics_server::{Gfx, Point, Rectangle};
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// let rect = Rectangle::new(Point::new(10, 10), Point::new(50, 50), LineStyle::Solid);
+    /// let rect = Rectangle::new(Point::new(100, 100), Point::new(250, 150)); // if you want to specify a style, use Rectangle::new_with_style
     /// gfx.draw_rectangle(rect).unwrap();
+    /// gfx.flush().unwrap();
     /// ```
     pub fn draw_rectangle(&self, rect: Rectangle) -> Result<(), xous::Error> {
         send_message(
@@ -104,13 +107,11 @@ impl Gfx {
     ///
     /// # Example
     /// ```
-    /// use graphics_server::{Gfx, LineStyle, Point, Rectangle, RoundedRectangle};
+    /// use graphics_server::{Gfx, Point, Rectangle, RoundedRectangle};
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// let rr = RoundedRectangle::new(
-    ///     Rectangle::new(Point::new(10, 10), Point::new(50, 50), LineStyle::Solid),
-    ///     5,
-    /// );
+    /// let rr = RoundedRectangle::new(Rectangle::new(Point::new(100, 100), Point::new(150, 200)), 5);
     /// gfx.draw_rounded_rectangle(rr).unwrap();
+    /// gfx.flush().unwrap();
     /// ```
     pub fn draw_rounded_rectangle(&self, rr: RoundedRectangle) -> Result<(), xous::Error> {
         send_message(
@@ -130,9 +131,13 @@ impl Gfx {
     ///
     /// # Example
     /// ```
-    /// use graphics_server::Gfx;
+    /// use graphics_server::{Circle, Gfx, Line, Point};
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// gfx.flush().unwrap();
+    /// let line = Line::new(Point::new(0, 0), Point::new(100, 100));
+    /// let circle = Circle::new(Point::new(150, 150), 25);
+    /// gfx.draw_line(line).unwrap();
+    /// gfx.draw_circle(circle).unwrap();
+    /// gfx.flush().unwrap(); // Both the line and the circle will be drawn
     /// ```
     pub fn flush(&self) -> Result<(), xous::Error> {
         send_message(self.conn, Message::new_scalar(Opcode::Flush.to_usize().unwrap(), 0, 0, 0, 0))
@@ -148,6 +153,7 @@ impl Gfx {
     /// use graphics_server::Gfx;
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
     /// gfx.draw_sleepscreen().unwrap();
+    /// gfx.flush().unwrap();
     /// ```
     pub fn draw_sleepscreen(&self) -> Result<(), xous::Error> {
         send_message(self.conn, Message::new_scalar(Opcode::DrawSleepScreen.to_usize().unwrap(), 0, 0, 0, 0))
@@ -164,6 +170,7 @@ impl Gfx {
     /// use graphics_server::Gfx;
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
     /// gfx.draw_boot_logo().unwrap();
+    /// gfx.flush().unwrap();
     /// ```
     pub fn draw_boot_logo(&self) -> Result<(), xous::Error> {
         send_message(self.conn, Message::new_scalar(Opcode::DrawBootLogo.to_usize().unwrap(), 0, 0, 0, 0))
@@ -179,8 +186,8 @@ impl Gfx {
     /// ```
     /// use graphics_server::Gfx;
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// let screen_dimensions = gfx.screen_size().unwrap();
-    /// println!("Screen size: {}x{}", screen_size.x, screen_size.y);
+    /// let screen_dimensions = gfx.screen_size().expect("Couldn't get screen size");
+    /// println!("Screen size: {}x{}", screen_dimensions.x, screen_dimensions.y);
     /// ```
     pub fn screen_size(&self) -> Result<Point, xous::Error> {
         let response = send_message(
@@ -231,14 +238,18 @@ impl Gfx {
     /// This function sends a message to the graphics server to draw the specified `TextView`.
     /// If the text in the `TextView` is too long to transmit in a single page of memory, it will be
     /// truncated.
+    /// Text that overflows the bounds of the `TextView` will be clipped.
     ///
     /// # Example
     /// ```
     /// use graphics_server::{Gfx, TextView};
-    /// let mut tv = TextView::new();
-    /// tv.set_text("Hello, world!");
-    /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
+    /// let clipping_area = Rectangle::new_coords(50, 50, 290, 450);
+    /// let text_bounds = Rectangle::new_coords(10, 10, 240, 400);
+    /// let mut tv = TextView::new(Gid::new([0, 0, 0, 0]), TextBounds::BoundingBox(text_bounds));
+    /// tv.clip_rect = Some(clipping_area);
+    /// write!(tv, "Hello, world!").unwrap();
     /// gfx.draw_textview(&mut tv).unwrap();
+    /// gfx.flush().unwrap();
     /// ````
     pub fn draw_textview(&self, tv: &mut TextView) -> Result<(), xous::Error> {
         if tv.text.len() > TEXTVIEW_LEN {
@@ -263,11 +274,12 @@ impl Gfx {
     ///
     /// # Example
     /// ```
-    /// use graphics_server::{Gfx, Line, LineStyle, Point, Rectangle};
-    /// let line = Line::new(Point::new(0, 0), Point::new(100, 100), LineStyle::Solid);
-    /// let clip = Rectangle::new(Point::new(10, 10), Point::new(90, 90), LineStyle::Solid);
+    /// use graphics_server::{Gfx, Line, Point, Rectangle};
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
+    /// let line = Line::new(Point::new(0, 0), Point::new(100, 100));
+    /// let clip = Rectangle::new(Point::new(10, 10), Point::new(90, 90));
     /// gfx.draw_line_clipped(line, clip).unwrap();
+    /// gfx.flush().unwrap();
     /// ```
     pub fn draw_line_clipped(&self, line: Line, clip: Rectangle) -> Result<(), xous::Error> {
         let co = ClipObject { clip, obj: ClipObjectType::Line(line) };
@@ -283,11 +295,12 @@ impl Gfx {
     ///
     /// # Example
     /// ```
-    /// use graphics_server::{Gfx, Line, LineStyle, Point, Rectangle};
-    /// let line = Line::new(Point::new(0, 0), Point::new(100, 100), LineStyle::Solid);
-    /// let clip = Rectangle::new(Point::new(10, 10), Point::new(90, 90), LineStyle::Solid);
+    /// use graphics_server::{Gfx, Line, Point, Rectangle};
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
+    /// let line = Line::new(Point::new(0, 0), Point::new(100, 100));
+    /// let clip = Rectangle::new(Point::new(10, 10), Point::new(90, 90));
     /// gfx.draw_line_clipped_xor(line, clip).unwrap();
+    /// gfx.flush().unwrap();
     /// ```
     pub fn draw_line_clipped_xor(&self, line: Line, clip: Rectangle) -> Result<(), xous::Error> {
         let co = ClipObject { clip, obj: ClipObjectType::XorLine(line) };
@@ -302,14 +315,12 @@ impl Gfx {
     ///
     /// # Example
     /// ```
-    /// use graphics_server::{Circle, Gfx, LineStyle, Point, Rectangle};
-    /// let circ = Circle::new(Point::new(50, 50), 25, LineStyle::Solid);
-    /// let clip = Rectangle::new(Point::new(10, 10), Point::new(90, 90), LineStyle::Solid);
+    /// use graphics_server::{Circle, Gfx, Point, Rectangle};
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// gfx.draw_circle_clipped(circ, clip).expect("Failed to draw clipped circle");
-    ///     Ok(_) => println!("Circle clipped successfully"),
-    ///     Err(e) => eprintln!("Failed to clip circle: {:?}", e),
-    /// }
+    /// let circ = Circle::new(Point::new(50, 50), 25);
+    /// let clip = Rectangle::new(Point::new(10, 10), Point::new(60, 60));
+    /// gfx.draw_circle_clipped(circ, clip).unwrap();
+    /// gfx.flush().unwrap();
     /// ```
     pub fn draw_circle_clipped(&self, circ: Circle, clip: Rectangle) -> Result<(), xous::Error> {
         let co = ClipObject { clip, obj: ClipObjectType::Circ(circ) };
@@ -324,13 +335,12 @@ impl Gfx {
     ///
     /// # Example
     /// ```
-    /// use graphics_server::{Gfx, LineStyle, Point, Rectangle};
-    /// let rect = Rectangle::new(Point::new(10, 10), Point::new(50, 50), LineStyle::Solid);
-    /// let clip = Rectangle::new(Point::new(0, 0), Point::new(100, 100), LineStyle::Solid);
-    /// match gfx.draw_rectangle_clipped(rect, clip) {
-    ///     Ok(_) => println!("Rectangle clipped successfully"),
-    ///     Err(e) => eprintln!("Failed to clip rectangle: {:?}", e),
-    /// }
+    /// use graphics_server::{Gfx, Point, Rectangle};
+    /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
+    /// let rect = Rectangle::new(Point::new(10, 10), Point::new(50, 50));
+    /// let clip = Rectangle::new(Point::new(0, 0), Point::new(60, 60));
+    /// gfx.draw_rectangle_clipped(rect, clip).unwrap();
+    /// gfx.flush().unwrap();
     /// ```
     pub fn draw_rectangle_clipped(&self, rect: Rectangle, clip: Rectangle) -> Result<(), xous::Error> {
         let co = ClipObject { clip, obj: ClipObjectType::Rect(rect) };
@@ -345,13 +355,12 @@ impl Gfx {
     ///
     /// # Example
     /// ```
-    /// use graphics_server::{Gfx, LineStyle, Point, Rectangle, RoundedRectangle};
-    /// let rr = RoundedRectangle::new(
-    ///     Rectangle::new(Point::new(10, 10), Point::new(50, 50), LineStyle::Solid),
-    ///     5,
-    /// );
-    /// let clip = Rectangle::new(Point::new(0, 0), Point::new(100, 100), LineStyle::Solid);
+    /// use graphics_server::{Gfx, Point, Rectangle, RoundedRectangle};
+    /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
+    /// let rr = RoundedRectangle::new(Rectangle::new(Point::new(10, 10), Point::new(50, 50)), 5);
+    /// let clip = Rectangle::new(Point::new(0, 0), Point::new(100, 100));
     /// gfx.draw_rounded_rectangle_clipped(rr, clip).unwrap();
+    /// gfx.flush().unwrap();
     /// ```
     pub fn draw_rounded_rectangle_clipped(
         &self,
@@ -363,18 +372,6 @@ impl Gfx {
         buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap()).map(|_| ())
     }
 
-    /// Draws a tile on the graphics server with clipping.
-    ///
-    /// This function sends a message to the graphics server to draw the specified `Tile`
-    /// within the specified `ClipRect` clip area.
-    ///
-    /// # Example
-    /// ```
-    /// use graphics_server::{Gfx, Point, Rectangle, Tile};
-    /// let tile = Tile::new(Point::new(10, 10), Point::new(50, 50));
-    /// let clip = Rectangle::new(Point::new(0, 0), Point::new(100, 100), LineStyle::Solid);
-    /// gfx.draw_tile_clipped(tile, clip).unwrap();
-    /// ```
     #[cfg(feature = "ditherpunk")]
     pub fn draw_tile_clipped(&self, tile: Tile, clip: Rectangle) -> Result<(), xous::Error> {
         let co = ClipObject { clip, obj: ClipObjectType::Tile(tile) };
@@ -391,9 +388,21 @@ impl Gfx {
     /// # Example
     /// ```
     /// use graphics_server::{ClipObjectList, Gfx, Point, Rectangle};
-    /// let object_list = ClipObjectList::default();
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
+    /// let mut object_list = ClipObjectList::default();
+    ///
+    /// // Create and add the first object (a line)
+    /// let line = Line::new(Point::new(0, 0), Point::new(100, 100));
+    /// let clip = Rectangle::new(Point::new(10, 10), Point::new(90, 90));
+    /// object_list.push(ClipObjectType::Line(line), clip);
+    ///
+    /// // Create and add the second object (a circle)
+    /// let circle = Circle::new(Point::new(150, 150), 25);
+    /// let clip2 = Rectangle::new(Point::new(20, 20), Point::new(400, 400));
+    /// object_list.push(ClipObjectType::Circ(line2), clip2);
+    ///
     /// gfx.draw_object_list_clipped(object_list).unwrap();
+    /// gfx.flush().unwrap();
     /// ```
     pub fn draw_object_list_clipped(&self, list: ClipObjectList) -> Result<(), xous::Error> {
         let buf = Buffer::into_buf(list).or(Err(xous::Error::InternalError))?;
@@ -403,14 +412,13 @@ impl Gfx {
     /// Sets the developer boot mode on the graphics server.
     ///
     /// This function sends a message to the graphics server to enable or disable the developer boot mode.
-    /// Once you've set it, you can't unset it.
     ///
     /// # Example
     /// ```
     /// use graphics_server::Gfx;
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// gfx.set_devboot(true).unwrap(); // Enable developer boot mode
-    /// gfx.set_devboot(false).unwrap(); // Disable developer boot mode
+    /// gfx.set_devboot(true); // Enable developer boot mode
+    /// gfx.set_devboot(false); // Disable developer boot mode
     /// ```
     pub fn set_devboot(&self, enable: bool) -> Result<(), xous::Error> {
         let ena = if enable { 1 } else { 0 };
@@ -428,7 +436,7 @@ impl Gfx {
     /// ```
     /// use graphics_server::{ArchivedBulkRead, Gfx};
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// let font_map = gfx.bulk_read_fontmap_op(0).unwrap();
+    /// let font_map = gfx.bulk_read_fontmap_op();
     /// // Process the font map as needed
     /// ```
     pub fn bulk_read_fontmap_op(&self) -> u32 { Opcode::BulkReadFonts.to_u32().unwrap() }
@@ -442,7 +450,7 @@ impl Gfx {
     /// ```
     /// use graphics_server::Gfx;
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// gfx.bulk_read_restart().unwrap();
+    /// gfx.bulk_read_restart();
     /// ```
     pub fn bulk_read_restart(&self) {
         send_message(
@@ -477,11 +485,15 @@ impl Gfx {
     /// The stashed state can be restored later using the `pop` function. This is useful for temporarily
     /// saving the current state before making changes, and then restoring it later.
     ///
+    /// If `blocking` is `true`, the function will wait until the graphics server confirms that the state
+    /// has been stashed, otherwise it will return immediately without waiting for confirmation.
+    ///
     /// # Example
     /// ```
     /// use graphics_server::Gfx;
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// gfx.stash(true); // Stash the current state in a blocking manner
+    /// let line = Line::new(Point::new(0, 0), Point::new(100, 100));
+    /// gfx.draw_line(line).unwrap(); // Draw a line before stashing
     /// gfx.stash(false); // Stash the current state in a non-blocking manner
     /// ```
     pub fn stash(&self, blocking: bool) {
@@ -505,14 +517,38 @@ impl Gfx {
     ///
     /// # Example
     /// ```
-    /// use graphics_server::Gfx;
+    /// use graphics_server::{DrawStyle, Gfx, Line, PixelColor, Point, Rectangle};
+    /// use ticktimer_server::Ticktimer;
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
+    /// let ticktimer = Ticktimer::new().expect("Couldn't connect to Ticktimer");
+    ///
+    /// // Draw a line
+    /// let line = Line::new(Point::new(0, 0), Point::new(100, 100));
+    /// gfx.draw_line(line).unwrap();
+    /// gfx.flush().unwrap();
+    ///
+    /// // Wait for a moment
+    /// ticktimer.sleep_ms(1000).unwrap();
+    ///
+    /// // Stash the current state
     /// gfx.stash(true); // Stash the current state in a blocking manner
-    /// // Make some changes to the graphics state
+    ///
+    /// // Clear the screen
+    /// let screensize = gfx.screen_size().expect("Couldn't get screen size");
+    /// let blackout = Rectangle::new_with_style(
+    ///     Point::new(0, 0),
+    ///     screensize,
+    ///     DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1),
+    /// );
+    /// gfx.draw_rectangle(blackout).unwrap();
+    /// gfx.flush().unwrap();
+    ///
+    /// // Wait for a moment
+    /// ticktimer.sleep_ms(1000).unwrap();
+    ///
+    /// // Restore the previously stashed state
     /// gfx.pop(true); // Restore the previously stashed state in a blocking manner
-    /// gfx.stash(false); // Stash the current state in a non-blocking manner
-    /// // Make some changes to the graphics state
-    /// gfx.pop(false); // Restore the previously stashed state in a non-blocking manner
+    /// gfx.flush().unwrap();
     /// ```
     pub fn pop(&self, blocking: bool) {
         if blocking {
