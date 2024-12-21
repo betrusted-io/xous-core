@@ -9,6 +9,26 @@ pub(crate) fn enable_irq(irq_no: usize) {
     mim::write(mim::read() | (1 << irq_no));
 }
 
+pub(crate) fn disable_all_irqs() {
+    // Note that the vexriscv "IRQ Mask" register is inverse-logic --
+    // that is, setting a bit in the "mask" register unmasks (i.e. enables) it.
+    mim::write(0);
+    unsafe { mie::clear_mext() };
+    unsafe { mstatus::clear_mie() };
+    // redo delegations
+    unsafe {
+        #[rustfmt::skip]
+        core::arch::asm!(
+            "li          t0, 0xffffffff",
+            "csrw        mideleg, t0",
+            "csrw        medeleg, t0",
+            // Re-install the machine mode trap handler
+            "la          t0, abort",
+            "csrw        mtvec, t0",
+        );
+    }
+}
+
 pub(crate) fn irq_setup() {
     unsafe {
         #[rustfmt::skip]
