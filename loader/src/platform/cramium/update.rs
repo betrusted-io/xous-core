@@ -21,8 +21,7 @@ use utralib::generated::*;
 use crate::SIGBLOCK_SIZE;
 use crate::platform::cramium::gfx;
 use crate::platform::cramium::sha512_digest::Sha512Prehash;
-use crate::platform::cramium::usb;
-use crate::platform::cramium::usb::SliceCursor;
+use crate::platform::cramium::usb::{self, SliceCursor, disable_all_irqs};
 use crate::platform::delay;
 
 // TODO:
@@ -163,6 +162,9 @@ pub fn process_update(perclk: u32) {
                 usb.init();
                 usb.start();
                 usb.update_current_speed();
+                // IRQ enable must happen without dependency on the hardware lock
+                usb.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xffff_ffff); // blanket clear
+                usb.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
 
                 let mut last_usb_state = usb.get_device_state();
                 let mut portsc = usb.portsc_val();
@@ -472,6 +474,9 @@ pub fn process_update(perclk: u32) {
                         crate::println!("Couldn't list dir: {:?}", e);
                     }
                 }
+                // unmap IRQs
+                disable_all_irqs();
+                usb.stop();
             } else {
                 crate::println!("USB core not allocated, can't do update!");
             }
