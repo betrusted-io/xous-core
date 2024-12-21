@@ -2,7 +2,7 @@ use core::fmt::{Error, Write};
 
 pub struct DebugUart {}
 impl DebugUart {
-    #[cfg(all(feature = "debug-print", any(feature = "precursor", feature = "renode")))]
+    #[cfg(all(feature = "debug-print-swapper", any(feature = "precursor", feature = "renode")))]
     pub fn putc(&mut self, c: u8) {
         use utralib::generated::*;
         let mut csr = CSR::new(loader::swap::SWAP_APP_UART_VADDR as *mut u32);
@@ -12,7 +12,7 @@ impl DebugUart {
         csr.wfo(utra::app_uart::RXTX_RXTX, c as u32);
     }
 
-    #[cfg(all(feature = "debug-print", any(feature = "cramium-soc")))]
+    #[cfg(all(feature = "debug-print-swapper", any(feature = "cramium-soc")))]
     pub fn putc(&mut self, c: u8) {
         use cramium_hal::udma;
         // safety: safe to call as long as the raw parts are initialized and we exclusively
@@ -30,7 +30,7 @@ impl DebugUart {
         uart.write(&[c]);
     }
 
-    #[cfg(not(feature = "debug-print"))]
+    #[cfg(not(feature = "debug-print-swapper"))]
     pub fn putc(&self, _c: u8) {}
 }
 
