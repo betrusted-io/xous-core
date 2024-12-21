@@ -429,22 +429,25 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
 
     udma_uart.write(b"APP UART INIT OK\n\r");
 
-    // map the debug UART HW page
-    cfg.map_page_32(
-        root,
-        // TODO: use PD2/3 AF2 for this UART; set up the IOs for this
-        utralib::utra::udma_uart_0::HW_UDMA_UART_0_BASE,
-        SWAP_APP_UART_VADDR,
-        FLG_R | FLG_W | FLG_U | FLG_VALID,
-        SWAPPER_PID,
-    );
-    // map the debug UART IFRAM page
-    cfg.map_page_32(
-        root,
-        // TODO: use PD2/3 AF2 for this UART; set up the IOs for this
-        APP_UART_IFRAM_ADDR,
-        SWAP_APP_UART_IFRAM_VADDR,
-        FLG_R | FLG_W | FLG_U | FLG_VALID,
-        SWAPPER_PID,
-    );
+    #[cfg(feature = "userspace-swap-debug")]
+    {
+        // map the debug UART HW page
+        cfg.map_page_32(
+            root,
+            // TODO: use PD2/3 AF2 for this UART; set up the IOs for this
+            utralib::utra::udma_uart_0::HW_UDMA_UART_0_BASE,
+            SWAP_APP_UART_VADDR,
+            FLG_R | FLG_W | FLG_U | FLG_VALID,
+            SWAPPER_PID,
+        );
+        // map the debug UART IFRAM page
+        cfg.map_page_32(
+            root,
+            // TODO: use PD2/3 AF2 for this UART; set up the IOs for this
+            APP_UART_IFRAM_ADDR,
+            SWAP_APP_UART_IFRAM_VADDR,
+            FLG_R | FLG_W | FLG_U | FLG_VALID,
+            SWAPPER_PID,
+        );
+    }
 }
