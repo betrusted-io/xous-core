@@ -18,7 +18,7 @@ use hw::CramiumUsb;
 use hw::UsbIrqReq;
 use num_traits::*;
 use usb_device::class_prelude::*;
-use utralib::AtomicCsr;
+use utralib::{AtomicCsr, utra};
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 use xous_usb_hid::device::fido::RawFidoReport;
@@ -49,6 +49,35 @@ pub(crate) fn main_hw() -> ! {
     log::trace!("registered with NS -- {:?}", usbdev_sid);
     let tt = ticktimer::Ticktimer::new().unwrap();
 
+    // confirm that the app UART is initialized in our PID - this needs to happen in a userspace call
+    // before any IRQ calls try to use it.
+    crate::println!("APP UART in PID {}", xous::process::id());
+
+    /*
+    log::info!("alloc 19");
+    let irq19_range = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utralib::utra::irqarray19::HW_IRQARRAY19_BASE),
+        None,
+        0x1000,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't allocate IRQ19 pages");
+    let irq19_csr = AtomicCsr::new(irq19_range.as_ptr() as *mut u32);
+    log::info!("irq19 addr: {:x}", unsafe { irq19_csr.base() } as usize);
+    xous::claim_interrupt(utralib::utra::irqarray19::IRQARRAY19_IRQ, hw::irq19_handler, unsafe {
+        irq19_csr.base()
+    } as *mut usize)
+    .expect("couldn't claim irq");
+    log::info!("enable IRQ19");
+    irq19_csr.wo(utralib::utra::irqarray19::EV_ENABLE, 0x80);
+    for i in 0..10 {
+        log::info!("wait");
+        tt.sleep_ms(1000).ok();
+        log::info!("{}", i);
+        irq19_csr.wfo(utralib::utra::irqarray19::EV_SOFT_TRIGGER, 0x80);
+    }
+    */
+
     let serial_number = format!("TODO!!"); // implement in cramium-hal once we have a serial number API
 
     let native_kbd =
@@ -78,40 +107,36 @@ pub(crate) fn main_hw() -> ! {
         cramium_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000
     );
     let irq_range = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utralib::utra::irqarray1::HW_IRQARRAY1_BASE),
+        xous::MemoryAddress::new(utra::irqarray1::HW_IRQARRAY1_BASE),
         None,
         0x1000,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
-    .expect("couldn't allocate IFRAM pages");
+    .expect("couldn't allocate IRQ1 pages");
     let usb = AtomicCsr::new(usb_mapping.as_ptr() as *mut u32);
     let irq_csr = AtomicCsr::new(irq_range.as_ptr() as *mut u32);
+    log::info!("IRQ1 csr: {:x} -> {:x}", utra::irqarray1::HW_IRQARRAY1_BASE, unsafe {
+        irq_csr.base() as usize
+    });
     let h_op: usize = Opcode::UsbIrqHandler.to_usize().unwrap();
 
-    let corigine_usb =
+    log::info!("making hw object");
+    let mut corigine_usb =
         unsafe { CorigineUsb::new(cid, h_op, ifram_range.as_ptr() as usize, usb.clone(), irq_csr.clone()) };
+    log::info!("reset..");
+    corigine_usb.reset(); // initial reset of the core; we want some time to pass before doing the next items
+
     // safety: this is only safe because we will actually claim the IRQ after all the initializations are
     // done, and we promise not to enable interrupts until that time, either.
     unsafe {
         corigine_usb.irq_claimed();
+        log::info!("claimed irq");
     }
     let cw = CorigineWrapper::new(corigine_usb);
     let usb_alloc = UsbBusAllocator::new(cw.clone());
 
-    let mut cu = Box::new(CramiumUsb::new(cid, cw, &usb_alloc, usb.clone(), irq_csr.clone(), &serial_number));
-
-    // this has to be done in `main` because we're passing a pointer to the Box'd structure, which
-    // the IRQ handler can freely and safely manipulate
-    xous::claim_interrupt(
-        utralib::utra::irqarray1::IRQARRAY1_IRQ,
-        hw::composite_handler,
-        &mut cu as *mut Box<CramiumUsb> as *mut usize,
-    )
-    .expect("couldn't claim irq");
-
-    // enable both the corigine core IRQ and the software IRQ bit
-    // software IRQ is used to initiate send/receive from software to the interrupt context
-    irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, hw::CORIGINE_IRQ_MASK | hw::SW_IRQ_MASK);
+    let mut cu = Box::new(CramiumUsb::new(usb.clone(), irq_csr.clone(), cid, cw, &usb_alloc, &serial_number));
+    cu.init();
 
     // under the theory that PIDs cannot be forged.
     // also if someone commandeers a process, all bets are off within that process (this is a general
@@ -213,12 +238,14 @@ pub(crate) fn main_hw() -> ! {
         }
     });
 
+    log::info!("Entering main loop");
+
     let mut msg_opt = None;
     loop {
         xous::reply_and_receive_next(usbdev_sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();
         let opcode = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidCall);
-        log::debug!("{:?}", opcode);
+        log::info!("{:?}", opcode);
         match opcode {
             Opcode::U2fRxDeferred => {
                 // notify the event listener, if any
