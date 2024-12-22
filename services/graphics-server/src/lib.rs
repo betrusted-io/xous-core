@@ -31,7 +31,7 @@ impl Gfx {
 
     pub fn conn(&self) -> xous::CID { self.conn }
 
-    /// Draws a line on the graphics server.
+    /// Draws a line.
     ///
     /// # Example
     /// ```
@@ -55,7 +55,7 @@ impl Gfx {
         .map(|_| ())
     }
 
-    /// Draws a circle on the graphics server.
+    /// Draws a circle.
     ///
     /// # Example
     /// ```
@@ -79,7 +79,7 @@ impl Gfx {
         .map(|_| ())
     }
 
-    /// Draws a rectangle on the graphics server.
+    /// Draws a rectangle.
     ///
     /// # Example
     /// ```
@@ -103,7 +103,7 @@ impl Gfx {
         .map(|_| ())
     }
 
-    /// Draws a rounded rectangle on the graphics server.
+    /// Draws a rounded rectangle.
     ///
     /// # Example
     /// ```
@@ -144,7 +144,7 @@ impl Gfx {
             .map(|_| ())
     }
 
-    /// Draws the sleep screen on the graphics server.
+    /// Draws the sleep screen.
     ///
     /// This function sends a message to the graphics server to draw the sleep screen.
     ///
@@ -160,7 +160,7 @@ impl Gfx {
             .map(|_| ())
     }
 
-    /// Draws the boot logo on the graphics server.
+    /// Draws the boot logo.
     ///
     /// This function sends a message to the graphics server to draw the boot logo.
     /// The boot logo is typically displayed during the device's startup sequence.
@@ -233,7 +233,7 @@ impl Gfx {
         }
     }
 
-    /// Draws a `TextView` on the graphics server.
+    /// Draws a `TextView`.
     ///
     /// This function sends a message to the graphics server to draw the specified `TextView`.
     /// If the text in the `TextView` is too long to transmit in a single page of memory, it will be
@@ -267,7 +267,7 @@ impl Gfx {
         Ok(())
     }
 
-    /// Draws a line on the graphics server with clipping.
+    /// Draws a line with clipping.
     ///
     /// This function sends a message to the graphics server to draw the specified `Line` within the specified
     /// `Rectangle` clip area.
@@ -287,7 +287,7 @@ impl Gfx {
         buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap()).map(|_| ())
     }
 
-    /// Draws a line on the graphics server with XOR clipping.
+    /// Draws a line with XOR clipping.
     /// For use in the deface operation.
     ///
     /// This function sends a message to the graphics server to draw the specified `Line` within the specified
@@ -308,7 +308,7 @@ impl Gfx {
         buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap()).map(|_| ())
     }
 
-    /// Draws a circle on the graphics server with clipping.
+    /// Draws a circle with clipping.
     ///
     /// This function sends a message to the graphics server to draw the specified `Circle` within the
     /// specified `Rectangle` clip area.
@@ -328,7 +328,7 @@ impl Gfx {
         buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap()).map(|_| ())
     }
 
-    /// Draws a rectangle on the graphics server with clipping.
+    /// Draws a rectangle with clipping.
     ///
     /// This function sends a message to the graphics server to draw the specified `Rectangle`
     /// within the specified `ClipRect` clip area.
@@ -348,7 +348,7 @@ impl Gfx {
         buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap()).map(|_| ())
     }
 
-    /// Draws a rounded rectangle on the graphics server with clipping.
+    /// Draws a rounded rectangle with clipping.
     ///
     /// This function sends a message to the graphics server to draw the specified `RoundedRectangle`
     /// within the specified `ClipRect` clip area.
@@ -380,7 +380,7 @@ impl Gfx {
         buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap()).map(|_| ())
     }
 
-    /// Draws a list of objects on the graphics server with clipping.
+    /// Draws a list of objects with clipping.
     ///
     /// This function sends a message to the graphics server to draw the specified list of objects
     /// within the specified `ClipRect` clip area.
@@ -409,7 +409,7 @@ impl Gfx {
         buf.lend(self.conn, Opcode::DrawClipObjectList.to_u32().unwrap()).map(|_| ())
     }
 
-    /// Sets the developer boot mode on the graphics server.
+    /// Sets the developer boot mode.
     ///
     /// This function sends a message to the graphics server to enable or disable the developer boot mode.
     ///
@@ -441,7 +441,7 @@ impl Gfx {
     /// ```
     pub fn bulk_read_fontmap_op(&self) -> u32 { Opcode::BulkReadFonts.to_u32().unwrap() }
 
-    /// Resets the bulk read pointer on the graphics server.
+    /// Resets the bulk read pointer.
     ///
     /// The bulk read operation auto-increments a pointer on the graphics server, so this message is necessary
     /// to reset the pointer to 0.
@@ -460,7 +460,7 @@ impl Gfx {
         .expect("couldn't reset bulk read");
     }
 
-    /// Runs a self-test pattern on the graphics server.
+    /// Runs a self-test pattern.
     ///
     /// This function sends a message to the graphics server to display a test pattern for a specified
     /// duration. The test pattern is typically used to verify the functionality of the graphics hardware.
@@ -479,7 +479,7 @@ impl Gfx {
         .expect("couldn't self test");
     }
 
-    /// Stashes the current graphics state on the graphics server.
+    /// Stashes the current graphics state.
     ///
     /// This function sends a message to the graphics server to stash (save) the current graphics state.
     /// The stashed state can be restored later using the `pop` function. This is useful for temporarily
