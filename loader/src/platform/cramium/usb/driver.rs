@@ -24,8 +24,6 @@ pub fn init_usb() {
 
     let mut usb = unsafe {
         cramium_hal::usb::driver::CorigineUsb::new(
-            0,
-            0,
             cramium_hal::board::CRG_UDC_MEMBASE,
             AtomicCsr::new(cramium_hal::usb::utra::CORIGINE_USB_BASE as *mut u32),
             AtomicCsr::new(utralib::utra::irqarray1::HW_IRQARRAY1_BASE as *mut u32),
