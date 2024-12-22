@@ -322,7 +322,7 @@ impl Gfx {
     /// `Rectangle` clip area.
     ///
     /// <details>
-    ///     <summary>Example Image</summary>
+    ///     <summary>Example Image - clipped line with clipping area represented by light rectangle.</summary>
     ///
     /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/line_clipped.png?raw=true)
     ///
@@ -350,7 +350,8 @@ impl Gfx {
     /// `Rectangle` clip area using XOR mode.
     ///
     /// <details>
-    ///     <summary>Example Image</summary>
+    ///     <summary>Example Image - line clipped by area represented by dark rectangle.  Light inner
+    /// rectangle added to show XOR behavior.</summary>
     ///
     /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/line_clipped_xor.png?raw=true)    ///
     /// </details>
@@ -376,7 +377,7 @@ impl Gfx {
     /// specified `Rectangle` clip area.
     ///
     /// <details>
-    ///     <summary>Example Image</summary>
+    ///     <summary>Example Image - circle clipped by area represented by dark rectangle.</summary>
     ///
     /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/circle_clipped.png?raw=true)
     ///
@@ -386,8 +387,8 @@ impl Gfx {
     /// ```
     /// use graphics_server::{Circle, Gfx, Point, Rectangle};
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// let circ = Circle::new(Point::new(50, 50), 25);
-    /// let clip = Rectangle::new(Point::new(10, 10), Point::new(60, 60));
+    /// let circ = Circle::new(Point::new(130, 130), 25);
+    /// let clip = Rectangle::new(Point::new(110, 110), Point::new(190, 190));
     /// gfx.draw_circle_clipped(circ, clip).unwrap();
     /// gfx.flush().unwrap();
     /// ```
@@ -403,7 +404,7 @@ impl Gfx {
     /// within the specified `ClipRect` clip area.
     ///
     /// <details>
-    ///     <summary>Example Image</summary>
+    ///     <summary>Example Image - rectangle clipped by area represented by light rectangle.</summary>
     ///
     /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/rectangle_clipped.png?raw=true)
     ///
@@ -413,8 +414,8 @@ impl Gfx {
     /// ```
     /// use graphics_server::{Gfx, Point, Rectangle};
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// let rect = Rectangle::new(Point::new(10, 10), Point::new(50, 50));
-    /// let clip = Rectangle::new(Point::new(0, 0), Point::new(60, 60));
+    /// let rect = Rectangle::new(Point::new(100, 100), Point::new(160, 160));
+    /// let clip = Rectangle::new(Point::new(110, 110), Point::new(190, 190));
     /// gfx.draw_rectangle_clipped(rect, clip).unwrap();
     /// gfx.flush().unwrap();
     /// ```
@@ -430,7 +431,8 @@ impl Gfx {
     /// within the specified `ClipRect` clip area.
     ///
     /// <details>
-    ///     <summary>Example Image</summary>
+    ///     <summary>Example Image - rounded rectangle clipped by area represented by light
+    /// rectangle.</summary>
     ///
     /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/rounded_rectangle_clipped.png?raw=true)
     ///
@@ -440,7 +442,7 @@ impl Gfx {
     /// ```
     /// use graphics_server::{Gfx, Point, Rectangle, RoundedRectangle};
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// let rr = RoundedRectangle::new(Rectangle::new(Point::new(10, 10), Point::new(50, 50)), 5);
+    /// let rr = RoundedRectangle::new(Rectangle::new(Point::new(100, 100), Point::new(160, 160)), 8);
     /// let clip = Rectangle::new(Point::new(0, 0), Point::new(100, 100));
     /// gfx.draw_rounded_rectangle_clipped(rr, clip).unwrap();
     /// gfx.flush().unwrap();
@@ -469,7 +471,8 @@ impl Gfx {
     /// within the specified `ClipRect` clip area.
     ///
     /// <details>
-    ///     <summary>Example Image</summary>
+    ///     <summary>Example Image - two objects, a line and a circle, each with their own clipping areas
+    /// represented by light rectangles.</summary>
     ///
     /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/object_list_clipped.png?raw=true)
     ///
@@ -488,8 +491,8 @@ impl Gfx {
     ///
     /// // Create and add the second object (a circle)
     /// let circle = Circle::new(Point::new(150, 150), 25);
-    /// let clip2 = Rectangle::new(Point::new(20, 20), Point::new(400, 400));
-    /// object_list.push(ClipObjectType::Circ(line2), clip2);
+    /// let clip2 = Rectangle::new(Point::new(140, 100), Point::new(190, 190));
+    /// object_list.push(ClipObjectType::Circ(circle), clip2);
     ///
     /// gfx.draw_object_list_clipped(object_list).unwrap();
     /// gfx.flush().unwrap();
@@ -561,7 +564,7 @@ impl Gfx {
     /// duration. The test pattern is typically used to verify the functionality of the graphics hardware.
     ///
     /// <details>
-    ///     <summary>Example Image</summary>
+    ///     <summary>Example Image - selftest in progress.</summary>
     ///
     /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/selftest.png?raw=true)
     ///
