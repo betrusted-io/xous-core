@@ -33,6 +33,13 @@ impl Gfx {
 
     /// Draws a line.
     ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/line.png?raw=true)
+    ///
+    /// </details>
+    ///
     /// # Example
     /// ```
     /// use graphics_server::{Gfx, Line, Point};
@@ -56,6 +63,13 @@ impl Gfx {
     }
 
     /// Draws a circle.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/circle.png?raw=true)
+    ///
+    /// </details>
     ///
     /// # Example
     /// ```
@@ -81,6 +95,13 @@ impl Gfx {
 
     /// Draws a rectangle.
     ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/rectangle.png?raw=true)
+    ///
+    /// </details>
+    ///
     /// # Example
     /// ```
     /// use graphics_server::{Gfx, Point, Rectangle};
@@ -104,6 +125,13 @@ impl Gfx {
     }
 
     /// Draws a rounded rectangle.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/rounded_rectangle.png?raw=true)
+    ///
+    /// </details>
     ///
     /// # Example
     /// ```
@@ -148,6 +176,13 @@ impl Gfx {
     ///
     /// This function sends a message to the graphics server to draw the sleep screen.
     ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/sleepscreen.png?raw=true)
+    ///
+    /// </details>
+    ///
     /// # Example
     /// ```
     /// use graphics_server::Gfx;
@@ -164,6 +199,13 @@ impl Gfx {
     ///
     /// This function sends a message to the graphics server to draw the boot logo.
     /// The boot logo is typically displayed during the device's startup sequence.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/boot_logo.png?raw=true)
+    ///
+    /// </details>
     ///
     /// # Example
     /// ```
@@ -240,6 +282,13 @@ impl Gfx {
     /// truncated.
     /// Text that overflows the bounds of the `TextView` will be clipped.
     ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/textview.png?raw=true)
+    ///
+    /// </details>
+    ///
     /// # Example
     /// ```
     /// use graphics_server::{Gfx, TextView};
@@ -272,6 +321,13 @@ impl Gfx {
     /// This function sends a message to the graphics server to draw the specified `Line` within the specified
     /// `Rectangle` clip area.
     ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/line_clipped.png?raw=true)
+    ///
+    /// </details>
+    ///
     /// # Example
     /// ```
     /// use graphics_server::{Gfx, Line, Point, Rectangle};
@@ -293,6 +349,12 @@ impl Gfx {
     /// This function sends a message to the graphics server to draw the specified `Line` within the specified
     /// `Rectangle` clip area using XOR mode.
     ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/line_clipped_xor.png?raw=true)    ///
+    /// </details>
+    ///
     /// # Example
     /// ```
     /// use graphics_server::{Gfx, Line, Point, Rectangle};
@@ -312,6 +374,13 @@ impl Gfx {
     ///
     /// This function sends a message to the graphics server to draw the specified `Circle` within the
     /// specified `Rectangle` clip area.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/circle_clipped.png?raw=true)
+    ///
+    /// </details>
     ///
     /// # Example
     /// ```
@@ -333,6 +402,13 @@ impl Gfx {
     /// This function sends a message to the graphics server to draw the specified `Rectangle`
     /// within the specified `ClipRect` clip area.
     ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/rectangle_clipped.png?raw=true)
+    ///
+    /// </details>
+    ///
     /// # Example
     /// ```
     /// use graphics_server::{Gfx, Point, Rectangle};
@@ -352,6 +428,13 @@ impl Gfx {
     ///
     /// This function sends a message to the graphics server to draw the specified `RoundedRectangle`
     /// within the specified `ClipRect` clip area.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/rounded_rectangle_clipped.png?raw=true)
+    ///
+    /// </details>
     ///
     /// # Example
     /// ```
@@ -385,6 +468,13 @@ impl Gfx {
     /// This function sends a message to the graphics server to draw the specified list of objects
     /// within the specified `ClipRect` clip area.
     ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/object_list_clipped.png?raw=true)
+    ///
+    /// </details>
+    ///
     /// # Example
     /// ```
     /// use graphics_server::{ClipObjectList, Gfx, Point, Rectangle};
@@ -412,6 +502,10 @@ impl Gfx {
     /// Sets the developer boot mode.
     ///
     /// This function sends a message to the graphics server to enable or disable the developer boot mode.
+    /// The purpose of this call is to let users be aware of who signed their kernel. Kernels signed with the
+    /// developer signature can boot, but this API call ensures that a small dashed line appears through the
+    /// status bar, so there is an obvious indicator that the kernel has yet to be self-signed. Self-signed
+    /// kernels do not have this signature.
     ///
     /// # Example
     /// ```
@@ -430,7 +524,8 @@ impl Gfx {
     ///
     /// Instead of implementing the read in the library, we hand the raw opcode to the caller.
     /// This allows the caller to re-use the bulk read data structure across multiple reads
-    /// instead of it being re-allocated and re-initialized every single call.
+    /// instead of it being re-allocated and re-initialized every single call. This is used by the security
+    /// system to inspect the font maps for integrity.
     ///
     /// # Example
     /// ```
@@ -464,6 +559,13 @@ impl Gfx {
     ///
     /// This function sends a message to the graphics server to display a test pattern for a specified
     /// duration. The test pattern is typically used to verify the functionality of the graphics hardware.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/selftest.png?raw=true)
+    ///
+    /// </details>
     ///
     /// # Example
     /// ```
@@ -514,6 +616,13 @@ impl Gfx {
     /// This function sends a message to the graphics server to restore the previously stashed graphics state.
     /// The stashed state can be restored using this function after it has been saved using the `stash`
     /// function. This is useful for reverting to a previous state after making temporary changes.
+    ///
+    /// <details>
+    ///     <summary>Example Image</summary>
+    ///
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/pop.png?raw=true)
+    ///
+    /// </details>
     ///
     /// # Example
     /// ```
