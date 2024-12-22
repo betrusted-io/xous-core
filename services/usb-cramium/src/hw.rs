@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::compiler_fence;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
-use cramium_hal::usb::driver::{CRG_UDC_ERDPLO_EHB, CorigineWrapper, CrgEvent, EventTrbS};
+use cramium_hal::usb::driver::{CRG_UDC_ERDPLO_EHB, CorigineWrapper, EventTrbS};
 use cramium_hal::usb::utra::*;
 use num_traits::*;
 use usb_cramium::HIDReport;
@@ -149,7 +149,10 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                                         // actually store the data or pass it on to userspace
                                         crate::println!("keyboard LEDs: {:?}", l);
                                     }
-                                    Err(e) => crate::println!("KEYB ERR: {:?}", e),
+                                    Err(e) => match e {
+                                        UsbError::WouldBlock => {}
+                                        _ => crate::println!("KEYB ERR: {:?}", e),
+                                    },
                                 };
                                 // u2f report handler
                                 match class.device::<RawFido<'_, _>, _>().read_report() {
@@ -169,7 +172,10 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                                         buf.try_send(usb.conn, Opcode::IrqFidoRx.to_u32().unwrap())
                                             .expect("couldn't send FIDO packet to userspace: maybe we need to implement a timeout/retry mechanism?");
                                     }
-                                    Err(e) => crate::println!("U2F ERR: {:?}", e),
+                                    Err(e) => match e {
+                                        UsbError::WouldBlock => {}
+                                        _ => crate::println!("U2F ERR: {:?}", e),
+                                    },
                                 }
                             }
                             {
@@ -276,6 +282,8 @@ impl<'a> CramiumUsb<'a> {
             .manufacturer("Kosagi")
             .product("Precursor")
             .serial_number(&serial_number)
+            // this is *required* by the corigine stack
+            .max_packet_size_0(64)
             .build();
 
         CramiumUsb {

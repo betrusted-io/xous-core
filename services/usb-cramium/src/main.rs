@@ -118,11 +118,10 @@ pub(crate) fn main_hw() -> ! {
     log::info!("IRQ1 csr: {:x} -> {:x}", utra::irqarray1::HW_IRQARRAY1_BASE, unsafe {
         irq_csr.base() as usize
     });
-    let h_op: usize = Opcode::UsbIrqHandler.to_usize().unwrap();
 
     log::info!("making hw object");
     let mut corigine_usb =
-        unsafe { CorigineUsb::new(cid, h_op, ifram_range.as_ptr() as usize, usb.clone(), irq_csr.clone()) };
+        unsafe { CorigineUsb::new(ifram_range.as_ptr() as usize, usb.clone(), irq_csr.clone()) };
     log::info!("reset..");
     corigine_usb.reset(); // initial reset of the core; we want some time to pass before doing the next items
 
