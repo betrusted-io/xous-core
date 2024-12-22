@@ -246,7 +246,7 @@ pub(crate) fn main_hw() -> ! {
     // safety: this is safe because we allocated ifram_range to have the same physical and virtual addresses
     #[cfg(feature = "cramium-soc")]
     let usbwrapper = CorigineWrapper::new(unsafe {
-        let mut cu = CorigineUsb::new(cid, h_op, ifram_range.as_ptr() as usize, usb.clone(), irq_csr.clone());
+        let mut cu = CorigineUsb::new(ifram_range.as_ptr() as usize, usb.clone(), irq_csr.clone());
         // assign the default handler, since this is the std case
         cu.assign_handler(cramium_hal::usb::driver::handle_event);
         cu
