@@ -44,7 +44,7 @@ impl Gfx {
     /// ```
     /// use graphics_server::{Gfx, Line, Point};
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// let line = Line::new(Point::new(0, 0), Point::new(100, 100)); // if you want to specify a style, use Line::new_with_style
+    /// let line = Line::new(Point::new(100, 100), Point::new(200, 200)); // if you want to specify a style, use Line::new_with_style
     /// gfx.draw_line(line).unwrap();
     /// gfx.flush().unwrap();
     /// ```
@@ -332,8 +332,8 @@ impl Gfx {
     /// ```
     /// use graphics_server::{Gfx, Line, Point, Rectangle};
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
-    /// let line = Line::new(Point::new(0, 0), Point::new(100, 100));
-    /// let clip = Rectangle::new(Point::new(10, 10), Point::new(90, 90));
+    /// let line = Line::new(Point::new(100, 100), Point::new(200, 200));
+    /// let clip = Rectangle::new(Point::new(110, 110), Point::new(190, 190));
     /// gfx.draw_line_clipped(line, clip).unwrap();
     /// gfx.flush().unwrap();
     /// ```
