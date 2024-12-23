@@ -593,6 +593,8 @@ impl Gfx {
     /// If `blocking` is `true`, the function will wait until the graphics server confirms that the state
     /// has been stashed, otherwise it will return immediately without waiting for confirmation.
     ///
+    /// NOTE: the top 34 lines will not be stashed, as this is the area where the status bar is drawn.
+    ///
     /// # Example
     /// ```
     /// use graphics_server::Gfx;
@@ -620,13 +622,6 @@ impl Gfx {
     /// The stashed state can be restored using this function after it has been saved using the `stash`
     /// function. This is useful for reverting to a previous state after making temporary changes.
     ///
-    /// <details>
-    ///     <summary>Example Image</summary>
-    ///
-    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/pop.png?raw=true)
-    ///
-    /// </details>
-    ///
     /// # Example
     /// ```
     /// use graphics_server::{DrawStyle, Gfx, Line, PixelColor, Point, Rectangle};
@@ -647,10 +642,10 @@ impl Gfx {
     ///
     /// // Clear the screen
     /// let screensize = gfx.screen_size().expect("Couldn't get screen size");
-    /// let blackout = Rectangle::new_with_style(
+    /// let whiteout = Rectangle::new_with_style(
     ///     Point::new(0, 0),
     ///     screensize,
-    ///     DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1),
+    ///     DrawStyle::new(PixelColor::Light, PixelColor::Light, 1),
     /// );
     /// gfx.draw_rectangle(blackout).unwrap();
     /// gfx.flush().unwrap();
