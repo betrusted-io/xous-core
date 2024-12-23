@@ -127,6 +127,12 @@ pub(crate) fn main_hw() -> ! {
     let cw = CorigineWrapper::new(corigine_usb);
     let usb_alloc = UsbBusAllocator::new(cw.clone());
 
+    // Notes:
+    //  - Most drivers would `Box()` the hardware management structure to make sure the compiler doesn't move
+    //    its location. However, we can't do this here because we are trying to maintain compatibility with
+    //    another crate that implements the USB stack which can't handle Box'd structures.
+    //  - It is safe to call `.init()` repeatedly because within `init()` we have an atomic bool that tracks
+    //    if the interrupt handler has been hooked, and ignores further requests to hook it.
     let mut cu = Box::new(CramiumUsb::new(usb.clone(), irq_csr.clone(), cid, cw, &usb_alloc, &serial_number));
     cu.init();
 

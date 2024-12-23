@@ -3,7 +3,7 @@
 
 #[cfg(not(target_os = "xous"))]
 mod main_hosted;
-#[cfg(any(feature = "precursor", feature = "renode", feature = "cramium-soc"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod main_hw;
 
 mod api;
@@ -21,13 +21,10 @@ mod spinal_udc;
 use packed_struct::PackedStructSlice;
 #[cfg(any(feature = "precursor", feature = "renode"))]
 use spinal_udc::*;
-#[cfg(all(
-    any(feature = "precursor", feature = "renode", feature = "cramium-soc"),
-    feature = "mass-storage"
-))]
+#[cfg(all(any(feature = "precursor", feature = "renode"), feature = "mass-storage"))]
 mod apps_block_device;
 
-#[cfg(any(feature = "precursor", feature = "renode", feature = "cramium-soc"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod hid;
 #[cfg(not(target_os = "xous"))]
 mod hosted;
@@ -39,7 +36,7 @@ use hosted::*;
 use num_traits::*;
 
 fn main() -> ! {
-    #[cfg(any(feature = "precursor", feature = "renode", feature = "cramium-soc"))]
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     main_hw::main_hw();
     #[cfg(not(target_os = "xous"))]
     main_hosted::main_hosted();

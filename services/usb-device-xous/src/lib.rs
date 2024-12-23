@@ -1,8 +1,5 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-#[cfg(feature = "cramium-soc")]
-use cram_hal_service::trng;
-
 pub mod api;
 pub use api::*;
 use num_traits::*;
