@@ -209,7 +209,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_show_notification.png?raw=true)
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals/show_notification.png?raw=true)
     ///
     /// </details>
     ///
@@ -248,7 +248,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_show_bip39.png?raw=true)
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals/show_bip39.png?raw=true)
     ///
     /// </details>
     ///
@@ -296,9 +296,9 @@ impl Modals {
     /// <details>
     ///     <summary>Example Images (from example code below)</summary>
     ///
-    /// ![Example Image - Initial](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_input_bip39_1.png?raw=true)
-    /// ![Example Image - Input](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_input_bip39_2.png?raw=true)
-    /// ![Example Image - Confirmation](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_input_bip39_3.png?raw=true)
+    /// ![Example Image - Initial](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals/input_bip39_1.png?raw=true)
+    /// ![Example Image - Input](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals/input_bip39_2.png?raw=true)
+    /// ![Example Image - Confirmation](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals/input_bip39_3.png?raw=true)
     ///
     /// </details>
     ///
@@ -385,7 +385,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_start_progress.png?raw=true)
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals/start_progress.png?raw=true)
     ///
     /// </details>
     ///
@@ -424,7 +424,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_slider.png?raw=true)
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals/slider.png?raw=true)
     ///
     /// </details>
     ///
@@ -616,7 +616,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_get_radiobutton.png?raw=true)
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals/get_radiobutton.png?raw=true)
     ///
     /// </details>
     ///
@@ -691,7 +691,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_get_checkbox.png?raw=true)
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals/get_checkbox.png?raw=true)
     ///
     /// </details>
     ///
@@ -794,7 +794,7 @@ impl Modals {
     /// <details>
     ///     <summary>Example Image</summary>
     ///
-    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals_dynamic_notification.png?raw=true)
+    /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/modals/dynamic_notification.png?raw=true)
     ///
     /// </details>
     ///
