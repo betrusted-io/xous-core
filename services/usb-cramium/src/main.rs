@@ -9,6 +9,9 @@ use core::convert::TryFrom;
 use core::num::NonZeroU8;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::collections::VecDeque;
+// Install a local panic handler
+#[cfg(feature = "debug-print-usb")]
+use std::panic;
 use std::sync::Arc;
 
 use api::{HIDReport, LogLevel, Opcode, U2fCode, U2fMsgIpc, UsbListenerRegistration};
@@ -31,6 +34,16 @@ enum TimeoutOp {
     Quit,
 }
 
+/*
+    TODO:
+    - [ ] USB stack doesn't know when the cable is unplugged. This is a hardware issue right now
+      with MPW hardware. Wait until NTO chips come back to try and solve this? and if the bug isn't fixed
+      there we can either work around this by adding a sense I/O for this purpose or we can use a timer
+      to poll USB connection status.
+    - [ ] Reduce debug spew. This is left in place for now because we will definitely need it in the
+      future and it hasn't seemed to affect the stack operation like it did in the user-space implementation.
+*/
+
 fn main() -> ! {
     #[cfg(target_os = "xous")]
     main_hw();
@@ -39,6 +52,15 @@ fn main() -> ! {
 }
 
 pub(crate) fn main_hw() -> ! {
+    // confirm that the app UART is initialized in our PID - this needs to happen in a userspace call
+    // before any IRQ calls try to use it.
+    crate::println!("APP UART in PID {}", xous::process::id());
+
+    #[cfg(feature = "debug-print-usb")]
+    panic::set_hook(Box::new(|info| {
+        crate::println!("{}", info);
+    }));
+
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
@@ -48,35 +70,6 @@ pub(crate) fn main_hw() -> ! {
     let cid = xous::connect(usbdev_sid).expect("couldn't create suspend callback connection");
     log::trace!("registered with NS -- {:?}", usbdev_sid);
     let tt = ticktimer::Ticktimer::new().unwrap();
-
-    // confirm that the app UART is initialized in our PID - this needs to happen in a userspace call
-    // before any IRQ calls try to use it.
-    crate::println!("APP UART in PID {}", xous::process::id());
-
-    /*
-    log::info!("alloc 19");
-    let irq19_range = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utralib::utra::irqarray19::HW_IRQARRAY19_BASE),
-        None,
-        0x1000,
-        xous::MemoryFlags::R | xous::MemoryFlags::W,
-    )
-    .expect("couldn't allocate IRQ19 pages");
-    let irq19_csr = AtomicCsr::new(irq19_range.as_ptr() as *mut u32);
-    log::info!("irq19 addr: {:x}", unsafe { irq19_csr.base() } as usize);
-    xous::claim_interrupt(utralib::utra::irqarray19::IRQARRAY19_IRQ, hw::irq19_handler, unsafe {
-        irq19_csr.base()
-    } as *mut usize)
-    .expect("couldn't claim irq");
-    log::info!("enable IRQ19");
-    irq19_csr.wo(utralib::utra::irqarray19::EV_ENABLE, 0x80);
-    for i in 0..10 {
-        log::info!("wait");
-        tt.sleep_ms(1000).ok();
-        log::info!("{}", i);
-        irq19_csr.wfo(utralib::utra::irqarray19::EV_SOFT_TRIGGER, 0x80);
-    }
-    */
 
     let serial_number = format!("TODO!!"); // implement in cramium-hal once we have a serial number API
 
@@ -177,7 +170,10 @@ pub(crate) fn main_hw() -> ! {
                 // loop only consumes CPU time when a timeout is active. Once it has timed out,
                 // it will wait for a new pump call.
                 let now = tt.elapsed_ms();
-                match num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(TimeoutOp::InvalidCall) {
+                let opcode =
+                    num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(TimeoutOp::InvalidCall);
+                log::info!("Timeout thread: {:?}", opcode);
+                match opcode {
                     TimeoutOp::Pump => {
                         if to_run.load(Ordering::SeqCst) {
                             let tt_lsb = target_time_lsb.load(Ordering::SeqCst);
@@ -241,7 +237,7 @@ pub(crate) fn main_hw() -> ! {
 
     let mut msg_opt = None;
     loop {
-        xous::reply_and_receive_next(usbdev_sid, &mut msg_opt).unwrap();
+        xous::reply_and_receive_next(usbdev_sid, &mut msg_opt).expect("Error fetching next message");
         let msg = msg_opt.as_mut().unwrap();
         let opcode = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidCall);
         log::info!("{:?}", opcode);
@@ -501,9 +497,9 @@ pub(crate) fn main_hw() -> ! {
         }
     }
     // clean up our program
-    log::trace!("main loop exit, destroying servers");
+    log::warn!("main loop exit, destroying servers");
     xns.unregister_server(usbdev_sid).unwrap();
     xous::destroy_server(usbdev_sid).unwrap();
-    log::trace!("quitting");
+    log::info!("quitting");
     xous::terminate_process(0)
 }

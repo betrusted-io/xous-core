@@ -64,16 +64,6 @@ pub enum UsbIrqReq {
 pub const CORIGINE_IRQ_MASK: u32 = 0x1;
 pub const SW_IRQ_MASK: u32 = 0x2;
 
-/*
-pub(crate) fn irq19_handler(_irq_no: usize, arg: *mut usize) {
-    crate::println!("irq19");
-    let irqarray19 = AtomicCsr::new(arg as *mut u32);
-    let pending = irqarray19.r(utra::irqarray19::EV_PENDING);
-    crate::println!("pending {:x}", pending);
-    irqarray19.wo(utra::irqarray19::EV_PENDING, pending);
-}
-*/
-
 pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
     let usb = unsafe { &mut *(arg as *mut CramiumUsb) };
 
@@ -301,7 +291,6 @@ impl<'a> CramiumUsb<'a> {
     }
 
     pub fn init(&mut self) {
-        log::info!("claiming interrupt");
         // this has to be done in `main` because we're passing a pointer to the Box'd structure, which
         // the IRQ handler can freely and safely manipulate
         xous::claim_interrupt(
@@ -310,9 +299,7 @@ impl<'a> CramiumUsb<'a> {
             self as *mut CramiumUsb as *mut usize,
         )
         .expect("couldn't claim irq");
-        log::info!("claimed IRQ with state at {:x}", self as *mut CramiumUsb as usize);
-
-        log::info!("Enabling IRQ");
+        log::debug!("claimed IRQ with state at {:x}", self as *mut CramiumUsb as usize);
 
         // enable both the corigine core IRQ and the software IRQ bit
         // software IRQ is used to initiate send/receive from software to the interrupt context
@@ -320,26 +307,13 @@ impl<'a> CramiumUsb<'a> {
         self.irq_csr.wo(utra::irqarray1::EV_EDGE_TRIGGERED, 0);
         self.irq_csr.wo(utra::irqarray1::EV_POLARITY, 0);
 
-        log::info!("init..");
         self.wrapper.hw.lock().unwrap().init();
-        log::info!("start2..");
         self.wrapper.hw.lock().unwrap().start();
-        log::info!("speed..");
         self.wrapper.hw.lock().unwrap().update_current_speed();
 
         // irq must me enabled without dependency on the hw lock
         self.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
         self.irq_csr.wo(utra::irqarray1::EV_ENABLE, CORIGINE_IRQ_MASK | SW_IRQ_MASK);
-
-        /*
-            let mut last_usb_state = self.wrapper.hw.lock().unwrap().get_device_state();
-            let mut portsc = self.wrapper.hw.lock().unwrap().portsc_val();
-            crate::println!("USB state: {:?}, {:x}", last_usb_state, portsc);
-
-            last_usb_state = self.wrapper.hw.lock().unwrap().get_device_state();
-            portsc = self.wrapper.hw.lock().unwrap().portsc_val();
-            crate::println!("USB state: {:?}, {:x}", last_usb_state, portsc);
-        */
     }
 
     pub fn sw_irq(&mut self, request_type: UsbIrqReq) {
