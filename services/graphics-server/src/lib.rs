@@ -377,7 +377,7 @@ impl Gfx {
     /// specified `Rectangle` clip area.
     ///
     /// <details>
-    ///     <summary>Example Image - circle clipped by area represented by dark rectangle.</summary>
+    ///     <summary>Example Image - circle clipped by area represented by light rectangle.</summary>
     ///
     /// ![Example Image](https://github.com/betrusted-io/xous-core/blob/main/docs/images/graphics-server/circle_clipped.png?raw=true)
     ///
