@@ -579,7 +579,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             //   - [planned] pddb server
             //   - [planned] vault application
             let bao_rram_pkgs = ["xous-ticktimer", "xous-log", "xous-names", "usb-cramium"].to_vec();
-            let bao_swap_pkgs = ["cram-hal-service", "bao-console", "bao-video"].to_vec();
+            let bao_swap_pkgs = ["cram-hal-service", "bao-console"].to_vec(); /* "bao-video" */
             if !builder.is_swap_set() {
                 builder.set_swap(0, 8 * 1024 * 1024);
             }
@@ -588,6 +588,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_feature("swap");
 
             builder.add_loader_feature("debug-print");
+            // the following feature needs to be uncommented if we also enable
+            // debug-print-swapper inside xous-swapper
+            if false {
+                builder.add_loader_feature("userspace-swap-debug");
+                builder.add_feature("debug-print-swapper");
+            } else {
+                builder.add_feature("debug-print-usb");
+            }
             builder.add_kernel_feature("debug-swap");
             // builder.add_kernel_feature("debug-print");
             // builder.add_kernel_feature("debug-swap-verbose");

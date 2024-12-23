@@ -9,6 +9,9 @@ use core::convert::TryFrom;
 use core::num::NonZeroU8;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::collections::VecDeque;
+// Install a local panic handler
+#[cfg(feature = "debug-print-usb")]
+use std::panic;
 use std::sync::Arc;
 
 use api::{HIDReport, LogLevel, Opcode, U2fCode, U2fMsgIpc, UsbListenerRegistration};
@@ -18,7 +21,7 @@ use hw::CramiumUsb;
 use hw::UsbIrqReq;
 use num_traits::*;
 use usb_device::class_prelude::*;
-use utralib::AtomicCsr;
+use utralib::{AtomicCsr, utra};
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 use xous_usb_hid::device::fido::RawFidoReport;
@@ -31,6 +34,16 @@ enum TimeoutOp {
     Quit,
 }
 
+/*
+    TODO:
+    - [ ] USB stack doesn't know when the cable is unplugged. This is a hardware issue right now
+      with MPW hardware. Wait until NTO chips come back to try and solve this? and if the bug isn't fixed
+      there we can either work around this by adding a sense I/O for this purpose or we can use a timer
+      to poll USB connection status.
+    - [ ] Reduce debug spew. This is left in place for now because we will definitely need it in the
+      future and it hasn't seemed to affect the stack operation like it did in the user-space implementation.
+*/
+
 fn main() -> ! {
     #[cfg(target_os = "xous")]
     main_hw();
@@ -39,6 +52,15 @@ fn main() -> ! {
 }
 
 pub(crate) fn main_hw() -> ! {
+    // confirm that the app UART is initialized in our PID - this needs to happen in a userspace call
+    // before any IRQ calls try to use it.
+    crate::println!("APP UART in PID {}", xous::process::id());
+
+    #[cfg(feature = "debug-print-usb")]
+    panic::set_hook(Box::new(|info| {
+        crate::println!("{}", info);
+    }));
+
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
@@ -78,40 +100,41 @@ pub(crate) fn main_hw() -> ! {
         cramium_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000
     );
     let irq_range = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utralib::utra::irqarray1::HW_IRQARRAY1_BASE),
+        xous::MemoryAddress::new(utra::irqarray1::HW_IRQARRAY1_BASE),
         None,
         0x1000,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
-    .expect("couldn't allocate IFRAM pages");
+    .expect("couldn't allocate IRQ1 pages");
     let usb = AtomicCsr::new(usb_mapping.as_ptr() as *mut u32);
     let irq_csr = AtomicCsr::new(irq_range.as_ptr() as *mut u32);
-    let h_op: usize = Opcode::UsbIrqHandler.to_usize().unwrap();
+    log::info!("IRQ1 csr: {:x} -> {:x}", utra::irqarray1::HW_IRQARRAY1_BASE, unsafe {
+        irq_csr.base() as usize
+    });
 
-    let corigine_usb =
-        unsafe { CorigineUsb::new(cid, h_op, ifram_range.as_ptr() as usize, usb.clone(), irq_csr.clone()) };
+    log::info!("making hw object");
+    let mut corigine_usb =
+        unsafe { CorigineUsb::new(ifram_range.as_ptr() as usize, usb.clone(), irq_csr.clone()) };
+    log::info!("reset..");
+    corigine_usb.reset(); // initial reset of the core; we want some time to pass before doing the next items
+
     // safety: this is only safe because we will actually claim the IRQ after all the initializations are
     // done, and we promise not to enable interrupts until that time, either.
     unsafe {
         corigine_usb.irq_claimed();
+        log::info!("claimed irq");
     }
     let cw = CorigineWrapper::new(corigine_usb);
     let usb_alloc = UsbBusAllocator::new(cw.clone());
 
-    let mut cu = Box::new(CramiumUsb::new(cid, cw, &usb_alloc, usb.clone(), irq_csr.clone(), &serial_number));
-
-    // this has to be done in `main` because we're passing a pointer to the Box'd structure, which
-    // the IRQ handler can freely and safely manipulate
-    xous::claim_interrupt(
-        utralib::utra::irqarray1::IRQARRAY1_IRQ,
-        hw::composite_handler,
-        &mut cu as *mut Box<CramiumUsb> as *mut usize,
-    )
-    .expect("couldn't claim irq");
-
-    // enable both the corigine core IRQ and the software IRQ bit
-    // software IRQ is used to initiate send/receive from software to the interrupt context
-    irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, hw::CORIGINE_IRQ_MASK | hw::SW_IRQ_MASK);
+    // Notes:
+    //  - Most drivers would `Box()` the hardware management structure to make sure the compiler doesn't move
+    //    its location. However, we can't do this here because we are trying to maintain compatibility with
+    //    another crate that implements the USB stack which can't handle Box'd structures.
+    //  - It is safe to call `.init()` repeatedly because within `init()` we have an atomic bool that tracks
+    //    if the interrupt handler has been hooked, and ignores further requests to hook it.
+    let mut cu = Box::new(CramiumUsb::new(usb.clone(), irq_csr.clone(), cid, cw, &usb_alloc, &serial_number));
+    cu.init();
 
     // under the theory that PIDs cannot be forged.
     // also if someone commandeers a process, all bets are off within that process (this is a general
@@ -153,7 +176,10 @@ pub(crate) fn main_hw() -> ! {
                 // loop only consumes CPU time when a timeout is active. Once it has timed out,
                 // it will wait for a new pump call.
                 let now = tt.elapsed_ms();
-                match num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(TimeoutOp::InvalidCall) {
+                let opcode =
+                    num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(TimeoutOp::InvalidCall);
+                log::info!("Timeout thread: {:?}", opcode);
+                match opcode {
                     TimeoutOp::Pump => {
                         if to_run.load(Ordering::SeqCst) {
                             let tt_lsb = target_time_lsb.load(Ordering::SeqCst);
@@ -213,12 +239,14 @@ pub(crate) fn main_hw() -> ! {
         }
     });
 
+    log::info!("Entering main loop");
+
     let mut msg_opt = None;
     loop {
-        xous::reply_and_receive_next(usbdev_sid, &mut msg_opt).unwrap();
+        xous::reply_and_receive_next(usbdev_sid, &mut msg_opt).expect("Error fetching next message");
         let msg = msg_opt.as_mut().unwrap();
         let opcode = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidCall);
-        log::debug!("{:?}", opcode);
+        log::info!("{:?}", opcode);
         match opcode {
             Opcode::U2fRxDeferred => {
                 // notify the event listener, if any
@@ -475,9 +503,9 @@ pub(crate) fn main_hw() -> ! {
         }
     }
     // clean up our program
-    log::trace!("main loop exit, destroying servers");
+    log::warn!("main loop exit, destroying servers");
     xns.unregister_server(usbdev_sid).unwrap();
     xous::destroy_server(usbdev_sid).unwrap();
-    log::trace!("quitting");
+    log::info!("quitting");
     xous::terminate_process(0)
 }

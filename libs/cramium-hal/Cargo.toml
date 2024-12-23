@@ -41,6 +41,8 @@ board-dabao = [] # Dev board form factor
 verilator-only = []
 mpw = []
 hdl-test = []
+verbose-debug = []
+debug-print-usb = []
 
 udma-stress-test = [
 ] # For RTL simulation testing - aggravates a key corner case
@@ -49,4 +51,4 @@ compress-entropy = []
 magic-manual = []
 std = ["log", "xous-api-names", "usb-device", "xous-api-ticktimer"]
 derive-rkyv = ["rkyv"]
-default = ["hdl-test"]
+default = []

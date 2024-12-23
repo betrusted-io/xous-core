@@ -24,8 +24,6 @@ pub fn init_usb() {
 
     let mut usb = unsafe {
         cramium_hal::usb::driver::CorigineUsb::new(
-            0,
-            0,
             cramium_hal::board::CRG_UDC_MEMBASE,
             AtomicCsr::new(cramium_hal::usb::utra::CORIGINE_USB_BASE as *mut u32),
             AtomicCsr::new(utralib::utra::irqarray1::HW_IRQARRAY1_BASE as *mut u32),
@@ -88,6 +86,9 @@ pub unsafe fn test_usb() {
         usb.init();
         usb.start();
         usb.update_current_speed();
+        // IRQ enable must happen without dependency on the hardware lock
+        usb.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xffff_ffff); // blanket clear
+        usb.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
 
         crate::println!("hw started...");
         /*

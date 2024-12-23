@@ -64,12 +64,6 @@ rand_chacha = "0.3.1"
 precursor = ["utralib/precursor", "utralib/std", "keyboard", "modals", "trng"]
 hosted = ["utralib/hosted", "utralib/std", "keyboard", "modals", "trng"]
 renode = ["utralib/renode", "utralib/std", "keyboard", "modals", "trng"]
-cramium-soc = [
-    "utralib/cramium-soc",
-    "utralib/std",
-    "cramium-hal",
-    "cram-hal-service",
-]
 minimal = ["mass-storage"]
 mass-storage = ["usbd_scsi", "usbd_mass_storage"]
 auto-trng = []

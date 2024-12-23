@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2024-11-30 01:26:23]]></description>
+    <description><![CDATA[Litex SoC 2024-12-21 21:24:42]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -406,32 +406,32 @@ triggering]]></description>
                             <description><![CDATA[Level of the ``nc_b0s3`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b0s4</name>
+                            <name>pioirq0_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Level of the ``nc_b0s4`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq0_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b0s5</name>
+                            <name>pioirq1_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Level of the ``nc_b0s5`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq1_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b0s6</name>
+                            <name>pioirq2_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Level of the ``nc_b0s6`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq2_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b0s7</name>
+                            <name>pioirq3_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[Level of the ``nc_b0s7`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq3_dupe`` event]]></description>
                         </field>
                         <field>
                             <name>nc_b0s8</name>
@@ -532,36 +532,36 @@ triggering]]></description>
 triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b0s4</name>
+                            <name>pioirq0_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[`1` when a "nc_b0s4" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pioirq0_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b0s5</name>
+                            <name>pioirq1_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[`1` when a "nc_b0s5" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pioirq1_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b0s6</name>
+                            <name>pioirq2_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[`1` when a "nc_b0s6" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pioirq2_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b0s7</name>
+                            <name>pioirq3_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[`1` when a "nc_b0s7" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pioirq3_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
                             <name>nc_b0s8</name>
@@ -666,32 +666,32 @@ triggering]]></description>
                             <description><![CDATA[Write a ``1`` to enable the ``nc_b0s3`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b0s4</name>
+                            <name>pioirq0_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b0s4`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq0_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b0s5</name>
+                            <name>pioirq1_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b0s5`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq1_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b0s6</name>
+                            <name>pioirq2_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b0s6`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq2_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b0s7</name>
+                            <name>pioirq3_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b0s7`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq3_dupe`` Event]]></description>
                         </field>
                         <field>
                             <name>nc_b0s8</name>
@@ -3164,11 +3164,11 @@ of triggering]]></description>
                             <description><![CDATA[Level of the ``uart3_err_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b14s8</name>
+                            <name>trng_done_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Level of the ``nc_b14s8`` event]]></description>
+                            <description><![CDATA[Level of the ``trng_done_dupe`` event]]></description>
                         </field>
                         <field>
                             <name>nc_b14s9</name>
@@ -3294,12 +3294,12 @@ form of triggering]]></description>
 form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b14s8</name>
+                            <name>trng_done_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[`1` when a "nc_b14s8" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "trng_done_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
                             <name>nc_b14s9</name>
@@ -3424,11 +3424,11 @@ of triggering]]></description>
                             <description><![CDATA[Write a ``1`` to enable the ``uart3_err_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b14s8</name>
+                            <name>trng_done_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b14s8`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``trng_done_dupe`` Event]]></description>
                         </field>
                         <field>
                             <name>nc_b14s9</name>
@@ -4011,32 +4011,32 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a "nc_b16s15" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                    <description><![CDATA[`1` when a "i2c0_eot_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>nc_b16s0</name>
+                            <name>cam_rx_dupe</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s0`` event]]></description>
+                            <description><![CDATA[Level of the ``cam_rx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s1</name>
+                            <name>i2s_rx_dupe</name>
                             <msb>1</msb>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s1`` event]]></description>
+                            <description><![CDATA[Level of the ``i2s_rx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s2</name>
+                            <name>i2s_tx_dupe</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s2`` event]]></description>
+                            <description><![CDATA[Level of the ``i2s_tx_dupe`` event]]></description>
                         </field>
                         <field>
                             <name>nc_b16s3</name>
@@ -4046,122 +4046,122 @@ of triggering]]></description>
                             <description><![CDATA[Level of the ``nc_b16s3`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s4</name>
+                            <name>spim1_rx_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s4`` event]]></description>
+                            <description><![CDATA[Level of the ``spim1_rx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s5</name>
+                            <name>spim1_tx_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s5`` event]]></description>
+                            <description><![CDATA[Level of the ``spim1_tx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s6</name>
+                            <name>spim1_cmd_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s6`` event]]></description>
+                            <description><![CDATA[Level of the ``spim1_cmd_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s7</name>
+                            <name>spim1_eot_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s7`` event]]></description>
+                            <description><![CDATA[Level of the ``spim1_eot_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s8</name>
+                            <name>spim2_rx_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s8`` event]]></description>
+                            <description><![CDATA[Level of the ``spim2_rx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s9</name>
+                            <name>spim2_tx_dupe</name>
                             <msb>9</msb>
                             <bitRange>[9:9]</bitRange>
                             <lsb>9</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s9`` event]]></description>
+                            <description><![CDATA[Level of the ``spim2_tx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s10</name>
+                            <name>spim2_cmd_dupe</name>
                             <msb>10</msb>
                             <bitRange>[10:10]</bitRange>
                             <lsb>10</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s10`` event]]></description>
+                            <description><![CDATA[Level of the ``spim2_cmd_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s11</name>
+                            <name>spim2_eot_dupe</name>
                             <msb>11</msb>
                             <bitRange>[11:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s11`` event]]></description>
+                            <description><![CDATA[Level of the ``spim2_eot_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s12</name>
+                            <name>i2c0_rx_dupe</name>
                             <msb>12</msb>
                             <bitRange>[12:12]</bitRange>
                             <lsb>12</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s12`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c0_rx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s13</name>
+                            <name>i2c0_tx_dupe</name>
                             <msb>13</msb>
                             <bitRange>[13:13]</bitRange>
                             <lsb>13</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s13`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c0_tx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s14</name>
+                            <name>i2c0_cmd_dupe</name>
                             <msb>14</msb>
                             <bitRange>[14:14]</bitRange>
                             <lsb>14</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s14`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c0_cmd_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s15</name>
+                            <name>i2c0_eot_dupe</name>
                             <msb>15</msb>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
-                            <description><![CDATA[Level of the ``nc_b16s15`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c0_eot_dupe`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a "nc_b16s15" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                    <description><![CDATA[`1` when a "i2c0_eot_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>nc_b16s0</name>
+                            <name>cam_rx_dupe</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s0" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "cam_rx_dupe" event occurs. This event uses an `EventSourceFlex` form
+of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s1</name>
+                            <name>i2s_rx_dupe</name>
                             <msb>1</msb>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s1" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "i2s_rx_dupe" event occurs. This event uses an `EventSourceFlex` form
+of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s2</name>
+                            <name>i2s_tx_dupe</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s2" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "i2s_tx_dupe" event occurs. This event uses an `EventSourceFlex` form
+of triggering]]></description>
                         </field>
                         <field>
                             <name>nc_b16s3</name>
@@ -4172,131 +4172,131 @@ triggering]]></description>
 triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s4</name>
+                            <name>spim1_rx_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s4" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "spim1_rx_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s5</name>
+                            <name>spim1_tx_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s5" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "spim1_tx_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s6</name>
+                            <name>spim1_cmd_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s6" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "spim1_cmd_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s7</name>
+                            <name>spim1_eot_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s7" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "spim1_eot_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s8</name>
+                            <name>spim2_rx_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s8" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "spim2_rx_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s9</name>
+                            <name>spim2_tx_dupe</name>
                             <msb>9</msb>
                             <bitRange>[9:9]</bitRange>
                             <lsb>9</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s9" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "spim2_tx_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s10</name>
+                            <name>spim2_cmd_dupe</name>
                             <msb>10</msb>
                             <bitRange>[10:10]</bitRange>
                             <lsb>10</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s10" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                            <description><![CDATA[`1` when a "spim2_cmd_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s11</name>
+                            <name>spim2_eot_dupe</name>
                             <msb>11</msb>
                             <bitRange>[11:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s11" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                            <description><![CDATA[`1` when a "spim2_eot_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s12</name>
+                            <name>i2c0_rx_dupe</name>
                             <msb>12</msb>
                             <bitRange>[12:12]</bitRange>
                             <lsb>12</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s12" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c0_rx_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s13</name>
+                            <name>i2c0_tx_dupe</name>
                             <msb>13</msb>
                             <bitRange>[13:13]</bitRange>
                             <lsb>13</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s13" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c0_tx_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s14</name>
+                            <name>i2c0_cmd_dupe</name>
                             <msb>14</msb>
                             <bitRange>[14:14]</bitRange>
                             <lsb>14</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s14" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c0_cmd_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s15</name>
+                            <name>i2c0_eot_dupe</name>
                             <msb>15</msb>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
-                            <description><![CDATA[`1` when a "nc_b16s15" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c0_eot_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a "nc_b16s15" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                    <description><![CDATA[`1` when a "i2c0_eot_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>nc_b16s0</name>
+                            <name>cam_rx_dupe</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s0`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``cam_rx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s1</name>
+                            <name>i2s_rx_dupe</name>
                             <msb>1</msb>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s1`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2s_rx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s2</name>
+                            <name>i2s_tx_dupe</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s2`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2s_tx_dupe`` Event]]></description>
                         </field>
                         <field>
                             <name>nc_b16s3</name>
@@ -4306,88 +4306,88 @@ of triggering]]></description>
                             <description><![CDATA[Write a ``1`` to enable the ``nc_b16s3`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s4</name>
+                            <name>spim1_rx_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s4`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``spim1_rx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s5</name>
+                            <name>spim1_tx_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s5`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``spim1_tx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s6</name>
+                            <name>spim1_cmd_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s6`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``spim1_cmd_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s7</name>
+                            <name>spim1_eot_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s7`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``spim1_eot_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s8</name>
+                            <name>spim2_rx_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s8`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``spim2_rx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s9</name>
+                            <name>spim2_tx_dupe</name>
                             <msb>9</msb>
                             <bitRange>[9:9]</bitRange>
                             <lsb>9</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s9`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``spim2_tx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s10</name>
+                            <name>spim2_cmd_dupe</name>
                             <msb>10</msb>
                             <bitRange>[10:10]</bitRange>
                             <lsb>10</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s10`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``spim2_cmd_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s11</name>
+                            <name>spim2_eot_dupe</name>
                             <msb>11</msb>
                             <bitRange>[11:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s11`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``spim2_eot_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s12</name>
+                            <name>i2c0_rx_dupe</name>
                             <msb>12</msb>
                             <bitRange>[12:12]</bitRange>
                             <lsb>12</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s12`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c0_rx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s13</name>
+                            <name>i2c0_tx_dupe</name>
                             <msb>13</msb>
                             <bitRange>[13:13]</bitRange>
                             <lsb>13</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s13`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c0_tx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s14</name>
+                            <name>i2c0_cmd_dupe</name>
                             <msb>14</msb>
                             <bitRange>[14:14]</bitRange>
                             <lsb>14</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s14`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c0_cmd_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b16s15</name>
+                            <name>i2c0_eot_dupe</name>
                             <msb>15</msb>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b16s15`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c0_eot_dupe`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -4473,88 +4473,88 @@ of triggering]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>nc_b17s0</name>
+                            <name>i2c1_rx_dupe</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Level of the ``nc_b17s0`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c1_rx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s1</name>
+                            <name>i2c1_tx_dupe</name>
                             <msb>1</msb>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
-                            <description><![CDATA[Level of the ``nc_b17s1`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c1_tx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s2</name>
+                            <name>i2c1_cmd_dupe</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[Level of the ``nc_b17s2`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c1_cmd_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s3</name>
+                            <name>i2c1_eot_dupe</name>
                             <msb>3</msb>
                             <bitRange>[3:3]</bitRange>
                             <lsb>3</lsb>
-                            <description><![CDATA[Level of the ``nc_b17s3`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c1_eot_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s4</name>
+                            <name>pioirq0_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Level of the ``nc_b17s4`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq0_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s5</name>
+                            <name>pioirq1_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Level of the ``nc_b17s5`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq1_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s6</name>
+                            <name>pioirq2_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Level of the ``nc_b17s6`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq2_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s7</name>
+                            <name>pioirq3_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[Level of the ``nc_b17s7`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq3_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s8</name>
+                            <name>qfcirq_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Level of the ``nc_b17s8`` event]]></description>
+                            <description><![CDATA[Level of the ``qfcirq_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s9</name>
+                            <name>adc_rx_dupe</name>
                             <msb>9</msb>
                             <bitRange>[9:9]</bitRange>
                             <lsb>9</lsb>
-                            <description><![CDATA[Level of the ``nc_b17s9`` event]]></description>
+                            <description><![CDATA[Level of the ``adc_rx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s10</name>
+                            <name>ioxirq_dupe</name>
                             <msb>10</msb>
                             <bitRange>[10:10]</bitRange>
                             <lsb>10</lsb>
-                            <description><![CDATA[Level of the ``nc_b17s10`` event]]></description>
+                            <description><![CDATA[Level of the ``ioxirq_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s11</name>
+                            <name>sddcirq_dupe</name>
                             <msb>11</msb>
                             <bitRange>[11:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[Level of the ``nc_b17s11`` event]]></description>
+                            <description><![CDATA[Level of the ``sddcirq_dupe`` event]]></description>
                         </field>
                         <field>
                             <name>nc_b17s12</name>
@@ -4595,100 +4595,100 @@ of triggering]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>nc_b17s0</name>
+                            <name>i2c1_rx_dupe</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[`1` when a "nc_b17s0" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c1_rx_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s1</name>
+                            <name>i2c1_tx_dupe</name>
                             <msb>1</msb>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
-                            <description><![CDATA[`1` when a "nc_b17s1" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c1_tx_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s2</name>
+                            <name>i2c1_cmd_dupe</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[`1` when a "nc_b17s2" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c1_cmd_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s3</name>
+                            <name>i2c1_eot_dupe</name>
                             <msb>3</msb>
                             <bitRange>[3:3]</bitRange>
                             <lsb>3</lsb>
-                            <description><![CDATA[`1` when a "nc_b17s3" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c1_eot_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s4</name>
+                            <name>pioirq0_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[`1` when a "nc_b17s4" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pioirq0_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s5</name>
+                            <name>pioirq1_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[`1` when a "nc_b17s5" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pioirq1_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s6</name>
+                            <name>pioirq2_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[`1` when a "nc_b17s6" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pioirq2_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s7</name>
+                            <name>pioirq3_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[`1` when a "nc_b17s7" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pioirq3_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s8</name>
+                            <name>qfcirq_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[`1` when a "nc_b17s8" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "qfcirq_dupe" event occurs. This event uses an `EventSourceFlex` form
+of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s9</name>
+                            <name>adc_rx_dupe</name>
                             <msb>9</msb>
                             <bitRange>[9:9]</bitRange>
                             <lsb>9</lsb>
-                            <description><![CDATA[`1` when a "nc_b17s9" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "adc_rx_dupe" event occurs. This event uses an `EventSourceFlex` form
+of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s10</name>
+                            <name>ioxirq_dupe</name>
                             <msb>10</msb>
                             <bitRange>[10:10]</bitRange>
                             <lsb>10</lsb>
-                            <description><![CDATA[`1` when a "nc_b17s10" event occurs. This event uses an `EventSourceFlex` form
+                            <description><![CDATA[`1` when a "ioxirq_dupe" event occurs. This event uses an `EventSourceFlex` form
 of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s11</name>
+                            <name>sddcirq_dupe</name>
                             <msb>11</msb>
                             <bitRange>[11:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[`1` when a "nc_b17s11" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                            <description><![CDATA[`1` when a "sddcirq_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
                             <name>nc_b17s12</name>
@@ -4733,88 +4733,88 @@ of triggering]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>nc_b17s0</name>
+                            <name>i2c1_rx_dupe</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b17s0`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c1_rx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s1</name>
+                            <name>i2c1_tx_dupe</name>
                             <msb>1</msb>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b17s1`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c1_tx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s2</name>
+                            <name>i2c1_cmd_dupe</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b17s2`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c1_cmd_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s3</name>
+                            <name>i2c1_eot_dupe</name>
                             <msb>3</msb>
                             <bitRange>[3:3]</bitRange>
                             <lsb>3</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b17s3`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c1_eot_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s4</name>
+                            <name>pioirq0_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b17s4`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq0_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s5</name>
+                            <name>pioirq1_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b17s5`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq1_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s6</name>
+                            <name>pioirq2_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b17s6`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq2_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s7</name>
+                            <name>pioirq3_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b17s7`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq3_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s8</name>
+                            <name>qfcirq_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b17s8`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``qfcirq_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s9</name>
+                            <name>adc_rx_dupe</name>
                             <msb>9</msb>
                             <bitRange>[9:9]</bitRange>
                             <lsb>9</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b17s9`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``adc_rx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s10</name>
+                            <name>ioxirq_dupe</name>
                             <msb>10</msb>
                             <bitRange>[10:10]</bitRange>
                             <lsb>10</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b17s10`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``ioxirq_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b17s11</name>
+                            <name>sddcirq_dupe</name>
                             <msb>11</msb>
                             <bitRange>[11:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b17s11`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``sddcirq_dupe`` Event]]></description>
                         </field>
                         <field>
                             <name>nc_b17s12</name>
@@ -4921,7 +4921,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a "nc_b18s15" event occurs. This event uses an `EventSourceFlex` form
+                    <description><![CDATA[`1` when a "cam_rx_dupe" event occurs. This event uses an `EventSourceFlex` form
 of triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -4956,94 +4956,94 @@ of triggering]]></description>
                             <description><![CDATA[Level of the ``pioirq3_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s4</name>
+                            <name>i2c2_rx_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Level of the ``nc_b18s4`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c2_rx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s5</name>
+                            <name>i2c2_tx_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Level of the ``nc_b18s5`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c2_tx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s6</name>
+                            <name>i2c2_cmd_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Level of the ``nc_b18s6`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c2_cmd_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s7</name>
+                            <name>i2c2_eot_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[Level of the ``nc_b18s7`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c2_eot_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s8</name>
+                            <name>i2c0_nack_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Level of the ``nc_b18s8`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c0_nack_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s9</name>
+                            <name>i2c1_nack_dupe</name>
                             <msb>9</msb>
                             <bitRange>[9:9]</bitRange>
                             <lsb>9</lsb>
-                            <description><![CDATA[Level of the ``nc_b18s9`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c1_nack_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s10</name>
+                            <name>i2c2_nack_dupe</name>
                             <msb>10</msb>
                             <bitRange>[10:10]</bitRange>
                             <lsb>10</lsb>
-                            <description><![CDATA[Level of the ``nc_b18s10`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c2_nack_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s11</name>
+                            <name>i2c0_err_dupe</name>
                             <msb>11</msb>
                             <bitRange>[11:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[Level of the ``nc_b18s11`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c0_err_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s12</name>
+                            <name>i2c1_err_dupe</name>
                             <msb>12</msb>
                             <bitRange>[12:12]</bitRange>
                             <lsb>12</lsb>
-                            <description><![CDATA[Level of the ``nc_b18s12`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c1_err_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s13</name>
+                            <name>i2c2_err_dupe</name>
                             <msb>13</msb>
                             <bitRange>[13:13]</bitRange>
                             <lsb>13</lsb>
-                            <description><![CDATA[Level of the ``nc_b18s13`` event]]></description>
+                            <description><![CDATA[Level of the ``i2c2_err_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s14</name>
+                            <name>ioxirq_dupe</name>
                             <msb>14</msb>
                             <bitRange>[14:14]</bitRange>
                             <lsb>14</lsb>
-                            <description><![CDATA[Level of the ``nc_b18s14`` event]]></description>
+                            <description><![CDATA[Level of the ``ioxirq_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s15</name>
+                            <name>cam_rx_dupe</name>
                             <msb>15</msb>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
-                            <description><![CDATA[Level of the ``nc_b18s15`` event]]></description>
+                            <description><![CDATA[Level of the ``cam_rx_dupe`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a "nc_b18s15" event occurs. This event uses an `EventSourceFlex` form
+                    <description><![CDATA[`1` when a "cam_rx_dupe" event occurs. This event uses an `EventSourceFlex` form
 of triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -5082,106 +5082,106 @@ form of triggering]]></description>
 form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s4</name>
+                            <name>i2c2_rx_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[`1` when a "nc_b18s4" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c2_rx_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s5</name>
+                            <name>i2c2_tx_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[`1` when a "nc_b18s5" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c2_tx_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s6</name>
+                            <name>i2c2_cmd_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[`1` when a "nc_b18s6" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c2_cmd_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s7</name>
+                            <name>i2c2_eot_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[`1` when a "nc_b18s7" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c2_eot_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s8</name>
+                            <name>i2c0_nack_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[`1` when a "nc_b18s8" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c0_nack_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s9</name>
+                            <name>i2c1_nack_dupe</name>
                             <msb>9</msb>
                             <bitRange>[9:9]</bitRange>
                             <lsb>9</lsb>
-                            <description><![CDATA[`1` when a "nc_b18s9" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c1_nack_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s10</name>
+                            <name>i2c2_nack_dupe</name>
                             <msb>10</msb>
                             <bitRange>[10:10]</bitRange>
                             <lsb>10</lsb>
-                            <description><![CDATA[`1` when a "nc_b18s10" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c2_nack_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s11</name>
+                            <name>i2c0_err_dupe</name>
                             <msb>11</msb>
                             <bitRange>[11:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[`1` when a "nc_b18s11" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c0_err_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s12</name>
+                            <name>i2c1_err_dupe</name>
                             <msb>12</msb>
                             <bitRange>[12:12]</bitRange>
                             <lsb>12</lsb>
-                            <description><![CDATA[`1` when a "nc_b18s12" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c1_err_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s13</name>
+                            <name>i2c2_err_dupe</name>
                             <msb>13</msb>
                             <bitRange>[13:13]</bitRange>
                             <lsb>13</lsb>
-                            <description><![CDATA[`1` when a "nc_b18s13" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                            <description><![CDATA[`1` when a "i2c2_err_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s14</name>
+                            <name>ioxirq_dupe</name>
                             <msb>14</msb>
                             <bitRange>[14:14]</bitRange>
                             <lsb>14</lsb>
-                            <description><![CDATA[`1` when a "nc_b18s14" event occurs. This event uses an `EventSourceFlex` form
+                            <description><![CDATA[`1` when a "ioxirq_dupe" event occurs. This event uses an `EventSourceFlex` form
 of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s15</name>
+                            <name>cam_rx_dupe</name>
                             <msb>15</msb>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
-                            <description><![CDATA[`1` when a "nc_b18s15" event occurs. This event uses an `EventSourceFlex` form
+                            <description><![CDATA[`1` when a "cam_rx_dupe" event occurs. This event uses an `EventSourceFlex` form
 of triggering]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a "nc_b18s15" event occurs. This event uses an `EventSourceFlex` form
+                    <description><![CDATA[`1` when a "cam_rx_dupe" event occurs. This event uses an `EventSourceFlex` form
 of triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -5216,88 +5216,88 @@ of triggering]]></description>
                             <description><![CDATA[Write a ``1`` to enable the ``pioirq3_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s4</name>
+                            <name>i2c2_rx_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b18s4`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c2_rx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s5</name>
+                            <name>i2c2_tx_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b18s5`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c2_tx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s6</name>
+                            <name>i2c2_cmd_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b18s6`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c2_cmd_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s7</name>
+                            <name>i2c2_eot_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b18s7`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c2_eot_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s8</name>
+                            <name>i2c0_nack_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b18s8`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c0_nack_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s9</name>
+                            <name>i2c1_nack_dupe</name>
                             <msb>9</msb>
                             <bitRange>[9:9]</bitRange>
                             <lsb>9</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b18s9`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c1_nack_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s10</name>
+                            <name>i2c2_nack_dupe</name>
                             <msb>10</msb>
                             <bitRange>[10:10]</bitRange>
                             <lsb>10</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b18s10`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c2_nack_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s11</name>
+                            <name>i2c0_err_dupe</name>
                             <msb>11</msb>
                             <bitRange>[11:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b18s11`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c0_err_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s12</name>
+                            <name>i2c1_err_dupe</name>
                             <msb>12</msb>
                             <bitRange>[12:12]</bitRange>
                             <lsb>12</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b18s12`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c1_err_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s13</name>
+                            <name>i2c2_err_dupe</name>
                             <msb>13</msb>
                             <bitRange>[13:13]</bitRange>
                             <lsb>13</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b18s13`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c2_err_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s14</name>
+                            <name>ioxirq_dupe</name>
                             <msb>14</msb>
                             <bitRange>[14:14]</bitRange>
                             <lsb>14</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b18s14`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``ioxirq_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s15</name>
+                            <name>cam_rx_dupe</name>
                             <msb>15</msb>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b18s15`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``cam_rx_dupe`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -5411,60 +5411,60 @@ of triggering]]></description>
                             <description><![CDATA[Level of the ``mbox_irq_error_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s4</name>
+                            <name>pioirq0_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Level of the ``nc_b19s4`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq0_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s5</name>
+                            <name>pioirq1_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Level of the ``nc_b19s5`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq1_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s6</name>
+                            <name>pioirq2_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Level of the ``nc_b19s6`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq2_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s7</name>
+                            <name>pioirq3_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[Level of the ``nc_b19s7`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq3_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s8</name>
+                            <name>sdio_rx_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Level of the ``nc_b19s8`` event]]></description>
+                            <description><![CDATA[Level of the ``sdio_rx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s9</name>
+                            <name>sdio_tx_dupe</name>
                             <msb>9</msb>
                             <bitRange>[9:9]</bitRange>
                             <lsb>9</lsb>
-                            <description><![CDATA[Level of the ``nc_b19s9`` event]]></description>
+                            <description><![CDATA[Level of the ``sdio_tx_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s10</name>
+                            <name>sdio_eot_dupe</name>
                             <msb>10</msb>
                             <bitRange>[10:10]</bitRange>
                             <lsb>10</lsb>
-                            <description><![CDATA[Level of the ``nc_b19s10`` event]]></description>
+                            <description><![CDATA[Level of the ``sdio_eot_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s11</name>
+                            <name>sdio_err_dupe</name>
                             <msb>11</msb>
                             <bitRange>[11:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[Level of the ``nc_b19s11`` event]]></description>
+                            <description><![CDATA[Level of the ``sdio_err_dupe`` event]]></description>
                         </field>
                         <field>
                             <name>nc_b19s12</name>
@@ -5537,68 +5537,68 @@ of triggering]]></description>
 `EventSourceFlex` form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s4</name>
+                            <name>pioirq0_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[`1` when a "nc_b19s4" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pioirq0_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s5</name>
+                            <name>pioirq1_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[`1` when a "nc_b19s5" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pioirq1_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s6</name>
+                            <name>pioirq2_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[`1` when a "nc_b19s6" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pioirq2_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s7</name>
+                            <name>pioirq3_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[`1` when a "nc_b19s7" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pioirq3_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s8</name>
+                            <name>sdio_rx_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[`1` when a "nc_b19s8" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "sdio_rx_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s9</name>
+                            <name>sdio_tx_dupe</name>
                             <msb>9</msb>
                             <bitRange>[9:9]</bitRange>
                             <lsb>9</lsb>
-                            <description><![CDATA[`1` when a "nc_b19s9" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "sdio_tx_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s10</name>
+                            <name>sdio_eot_dupe</name>
                             <msb>10</msb>
                             <bitRange>[10:10]</bitRange>
                             <lsb>10</lsb>
-                            <description><![CDATA[`1` when a "nc_b19s10" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                            <description><![CDATA[`1` when a "sdio_eot_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s11</name>
+                            <name>sdio_err_dupe</name>
                             <msb>11</msb>
                             <bitRange>[11:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[`1` when a "nc_b19s11" event occurs. This event uses an `EventSourceFlex` form
-of triggering]]></description>
+                            <description><![CDATA[`1` when a "sdio_err_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
                             <name>nc_b19s12</name>
@@ -5671,60 +5671,60 @@ of triggering]]></description>
                             <description><![CDATA[Write a ``1`` to enable the ``mbox_irq_error_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s4</name>
+                            <name>pioirq0_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b19s4`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq0_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s5</name>
+                            <name>pioirq1_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b19s5`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq1_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s6</name>
+                            <name>pioirq2_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b19s6`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq2_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s7</name>
+                            <name>pioirq3_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b19s7`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq3_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s8</name>
+                            <name>sdio_rx_dupe</name>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b19s8`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``sdio_rx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s9</name>
+                            <name>sdio_tx_dupe</name>
                             <msb>9</msb>
                             <bitRange>[9:9]</bitRange>
                             <lsb>9</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b19s9`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``sdio_tx_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s10</name>
+                            <name>sdio_eot_dupe</name>
                             <msb>10</msb>
                             <bitRange>[10:10]</bitRange>
                             <lsb>10</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b19s10`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``sdio_eot_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b19s11</name>
+                            <name>sdio_err_dupe</name>
                             <msb>11</msb>
                             <bitRange>[11:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b19s11`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``sdio_err_dupe`` Event]]></description>
                         </field>
                         <field>
                             <name>nc_b19s12</name>
@@ -5831,8 +5831,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a "nc_b2s15" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                    <description><![CDATA[`1` when a "aowkupint" event occurs. This event uses an `EventSourceFlex` form
+of triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -5943,18 +5943,18 @@ triggering]]></description>
                             <description><![CDATA[Level of the ``nc_b2s14`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b2s15</name>
+                            <name>aowkupint</name>
                             <msb>15</msb>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
-                            <description><![CDATA[Level of the ``nc_b2s15`` event]]></description>
+                            <description><![CDATA[Level of the ``aowkupint`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a "nc_b2s15" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                    <description><![CDATA[`1` when a "aowkupint" event occurs. This event uses an `EventSourceFlex` form
+of triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -6080,19 +6080,19 @@ triggering]]></description>
 triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b2s15</name>
+                            <name>aowkupint</name>
                             <msb>15</msb>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
-                            <description><![CDATA[`1` when a "nc_b2s15" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "aowkupint" event occurs. This event uses an `EventSourceFlex` form
+of triggering]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a "nc_b2s15" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                    <description><![CDATA[`1` when a "aowkupint" event occurs. This event uses an `EventSourceFlex` form
+of triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -6203,11 +6203,11 @@ triggering]]></description>
                             <description><![CDATA[Write a ``1`` to enable the ``nc_b2s14`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b2s15</name>
+                            <name>aowkupint</name>
                             <msb>15</msb>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b2s15`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``aowkupint`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -6293,60 +6293,60 @@ triggering]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sceintr0</name>
+                            <name>trng_done</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Level of the ``sceintr0`` event]]></description>
+                            <description><![CDATA[Level of the ``trng_done`` event]]></description>
                         </field>
                         <field>
-                            <name>sceintr1</name>
+                            <name>aes_done</name>
                             <msb>1</msb>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
-                            <description><![CDATA[Level of the ``sceintr1`` event]]></description>
+                            <description><![CDATA[Level of the ``aes_done`` event]]></description>
                         </field>
                         <field>
-                            <name>sceintr2</name>
+                            <name>pke_done</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[Level of the ``sceintr2`` event]]></description>
+                            <description><![CDATA[Level of the ``pke_done`` event]]></description>
                         </field>
                         <field>
-                            <name>sceintr3</name>
+                            <name>hash_done</name>
                             <msb>3</msb>
                             <bitRange>[3:3]</bitRange>
                             <lsb>3</lsb>
-                            <description><![CDATA[Level of the ``sceintr3`` event]]></description>
+                            <description><![CDATA[Level of the ``hash_done`` event]]></description>
                         </field>
                         <field>
-                            <name>sceintr4</name>
+                            <name>alu_done</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Level of the ``sceintr4`` event]]></description>
+                            <description><![CDATA[Level of the ``alu_done`` event]]></description>
                         </field>
                         <field>
-                            <name>sceintr5</name>
+                            <name>sdma_ichdone</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Level of the ``sceintr5`` event]]></description>
+                            <description><![CDATA[Level of the ``sdma_ichdone`` event]]></description>
                         </field>
                         <field>
-                            <name>sceintr6</name>
+                            <name>sdma_schdone</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Level of the ``sceintr6`` event]]></description>
+                            <description><![CDATA[Level of the ``sdma_schdone`` event]]></description>
                         </field>
                         <field>
-                            <name>sceintr7</name>
+                            <name>sdma_xchdone</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[Level of the ``sceintr7`` event]]></description>
+                            <description><![CDATA[Level of the ``sdma_xchdone`` event]]></description>
                         </field>
                         <field>
                             <name>nc_b3s8</name>
@@ -6415,68 +6415,68 @@ triggering]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sceintr0</name>
+                            <name>trng_done</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[`1` when a "sceintr0" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "trng_done" event occurs. This event uses an `EventSourceFlex` form
+of triggering]]></description>
                         </field>
                         <field>
-                            <name>sceintr1</name>
+                            <name>aes_done</name>
                             <msb>1</msb>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
-                            <description><![CDATA[`1` when a "sceintr1" event occurs. This event uses an `EventSourceFlex` form of
+                            <description><![CDATA[`1` when a "aes_done" event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
                         <field>
-                            <name>sceintr2</name>
+                            <name>pke_done</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[`1` when a "sceintr2" event occurs. This event uses an `EventSourceFlex` form of
+                            <description><![CDATA[`1` when a "pke_done" event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
                         <field>
-                            <name>sceintr3</name>
+                            <name>hash_done</name>
                             <msb>3</msb>
                             <bitRange>[3:3]</bitRange>
                             <lsb>3</lsb>
-                            <description><![CDATA[`1` when a "sceintr3" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "hash_done" event occurs. This event uses an `EventSourceFlex` form
+of triggering]]></description>
                         </field>
                         <field>
-                            <name>sceintr4</name>
+                            <name>alu_done</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[`1` when a "sceintr4" event occurs. This event uses an `EventSourceFlex` form of
+                            <description><![CDATA[`1` when a "alu_done" event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
                         <field>
-                            <name>sceintr5</name>
+                            <name>sdma_ichdone</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[`1` when a "sceintr5" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "sdma_ichdone" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>sceintr6</name>
+                            <name>sdma_schdone</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[`1` when a "sceintr6" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "sdma_schdone" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>sceintr7</name>
+                            <name>sdma_xchdone</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[`1` when a "sceintr7" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "sdma_xchdone" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
                             <name>nc_b3s8</name>
@@ -6553,60 +6553,60 @@ triggering]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sceintr0</name>
+                            <name>trng_done</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``sceintr0`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``trng_done`` Event]]></description>
                         </field>
                         <field>
-                            <name>sceintr1</name>
+                            <name>aes_done</name>
                             <msb>1</msb>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``sceintr1`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``aes_done`` Event]]></description>
                         </field>
                         <field>
-                            <name>sceintr2</name>
+                            <name>pke_done</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``sceintr2`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pke_done`` Event]]></description>
                         </field>
                         <field>
-                            <name>sceintr3</name>
+                            <name>hash_done</name>
                             <msb>3</msb>
                             <bitRange>[3:3]</bitRange>
                             <lsb>3</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``sceintr3`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``hash_done`` Event]]></description>
                         </field>
                         <field>
-                            <name>sceintr4</name>
+                            <name>alu_done</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``sceintr4`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``alu_done`` Event]]></description>
                         </field>
                         <field>
-                            <name>sceintr5</name>
+                            <name>sdma_ichdone</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``sceintr5`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``sdma_ichdone`` Event]]></description>
                         </field>
                         <field>
-                            <name>sceintr6</name>
+                            <name>sdma_schdone</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``sceintr6`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``sdma_schdone`` Event]]></description>
                         </field>
                         <field>
-                            <name>sceintr7</name>
+                            <name>sdma_xchdone</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``sceintr7`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``sdma_xchdone`` Event]]></description>
                         </field>
                         <field>
                             <name>nc_b3s8</name>
@@ -6748,60 +6748,60 @@ triggering]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>nc_b4s0</name>
+                            <name>trng_done_dupe</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Level of the ``nc_b4s0`` event]]></description>
+                            <description><![CDATA[Level of the ``trng_done_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s1</name>
+                            <name>aes_done_dupe</name>
                             <msb>1</msb>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
-                            <description><![CDATA[Level of the ``nc_b4s1`` event]]></description>
+                            <description><![CDATA[Level of the ``aes_done_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s2</name>
+                            <name>pke_done_dupe</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[Level of the ``nc_b4s2`` event]]></description>
+                            <description><![CDATA[Level of the ``pke_done_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s3</name>
+                            <name>hash_done_dupe</name>
                             <msb>3</msb>
                             <bitRange>[3:3]</bitRange>
                             <lsb>3</lsb>
-                            <description><![CDATA[Level of the ``nc_b4s3`` event]]></description>
+                            <description><![CDATA[Level of the ``hash_done_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s4</name>
+                            <name>alu_done_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Level of the ``nc_b4s4`` event]]></description>
+                            <description><![CDATA[Level of the ``alu_done_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s5</name>
+                            <name>sdma_ichdone_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Level of the ``nc_b4s5`` event]]></description>
+                            <description><![CDATA[Level of the ``sdma_ichdone_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s6</name>
+                            <name>sdma_schdone_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Level of the ``nc_b4s6`` event]]></description>
+                            <description><![CDATA[Level of the ``sdma_schdone_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s7</name>
+                            <name>sdma_xchdone_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[Level of the ``nc_b4s7`` event]]></description>
+                            <description><![CDATA[Level of the ``sdma_xchdone_dupe`` event]]></description>
                         </field>
                         <field>
                             <name>nc_b4s8</name>
@@ -6870,68 +6870,68 @@ triggering]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>nc_b4s0</name>
+                            <name>trng_done_dupe</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[`1` when a "nc_b4s0" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "trng_done_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s1</name>
+                            <name>aes_done_dupe</name>
                             <msb>1</msb>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
-                            <description><![CDATA[`1` when a "nc_b4s1" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "aes_done_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s2</name>
+                            <name>pke_done_dupe</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[`1` when a "nc_b4s2" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pke_done_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s3</name>
+                            <name>hash_done_dupe</name>
                             <msb>3</msb>
                             <bitRange>[3:3]</bitRange>
                             <lsb>3</lsb>
-                            <description><![CDATA[`1` when a "nc_b4s3" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "hash_done_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s4</name>
+                            <name>alu_done_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[`1` when a "nc_b4s4" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "alu_done_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s5</name>
+                            <name>sdma_ichdone_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[`1` when a "nc_b4s5" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "sdma_ichdone_dupe" event occurs. This event uses an
+`EventSourceFlex` form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s6</name>
+                            <name>sdma_schdone_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[`1` when a "nc_b4s6" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "sdma_schdone_dupe" event occurs. This event uses an
+`EventSourceFlex` form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s7</name>
+                            <name>sdma_xchdone_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[`1` when a "nc_b4s7" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "sdma_xchdone_dupe" event occurs. This event uses an
+`EventSourceFlex` form of triggering]]></description>
                         </field>
                         <field>
                             <name>nc_b4s8</name>
@@ -7008,60 +7008,60 @@ triggering]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>nc_b4s0</name>
+                            <name>trng_done_dupe</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b4s0`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``trng_done_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s1</name>
+                            <name>aes_done_dupe</name>
                             <msb>1</msb>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b4s1`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``aes_done_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s2</name>
+                            <name>pke_done_dupe</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b4s2`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pke_done_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s3</name>
+                            <name>hash_done_dupe</name>
                             <msb>3</msb>
                             <bitRange>[3:3]</bitRange>
                             <lsb>3</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b4s3`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``hash_done_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s4</name>
+                            <name>alu_done_dupe</name>
                             <msb>4</msb>
                             <bitRange>[4:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b4s4`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``alu_done_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s5</name>
+                            <name>sdma_ichdone_dupe</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b4s5`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``sdma_ichdone_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s6</name>
+                            <name>sdma_schdone_dupe</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b4s6`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``sdma_schdone_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b4s7</name>
+                            <name>sdma_xchdone_dupe</name>
                             <msb>7</msb>
                             <bitRange>[7:7]</bitRange>
                             <lsb>7</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b4s7`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``sdma_xchdone_dupe`` Event]]></description>
                         </field>
                         <field>
                             <name>nc_b4s8</name>
@@ -10274,14 +10274,15 @@ register to disable individual events.]]></description>
             <constant name="IFSUB_EV_MBOX_IRQ_ABORT_INIT" value="35" />
             <constant name="IFSUB_EV_MBOX_IRQ_DONE" value="36" />
             <constant name="IFSUB_EV_MBOX_IRQ_ERROR" value="37" />
-            <constant name="IFSUB_EV_SCEINTR0" value="48" />
-            <constant name="IFSUB_EV_SCEINTR1" value="49" />
-            <constant name="IFSUB_EV_SCEINTR2" value="50" />
-            <constant name="IFSUB_EV_SCEINTR3" value="51" />
-            <constant name="IFSUB_EV_SCEINTR4" value="52" />
-            <constant name="IFSUB_EV_SCEINTR5" value="53" />
-            <constant name="IFSUB_EV_SCEINTR6" value="54" />
-            <constant name="IFSUB_EV_SCEINTR7" value="55" />
+            <constant name="IFSUB_EV_AOWKUPINT" value="47" />
+            <constant name="IFSUB_EV_TRNG_DONE" value="48" />
+            <constant name="IFSUB_EV_AES_DONE" value="49" />
+            <constant name="IFSUB_EV_PKE_DONE" value="50" />
+            <constant name="IFSUB_EV_HASH_DONE" value="51" />
+            <constant name="IFSUB_EV_ALU_DONE" value="52" />
+            <constant name="IFSUB_EV_SDMA_ICHDONE" value="53" />
+            <constant name="IFSUB_EV_SDMA_SCHDONE" value="54" />
+            <constant name="IFSUB_EV_SDMA_XCHDONE" value="55" />
             <constant name="IFSUB_EV_UART0_RX" value="80" />
             <constant name="IFSUB_EV_UART0_TX" value="81" />
             <constant name="IFSUB_EV_UART0_RX_CHAR" value="82" />

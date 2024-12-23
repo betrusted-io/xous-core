@@ -128,6 +128,7 @@ usb = []
 qr = ["nalgebra"]
 updates = []
 cramium-mpw = ["cramium-hal/mpw"]
+userspace-swap-debug = []                # sets up app UART mapping.
 
 # general flags
 debug-print = []

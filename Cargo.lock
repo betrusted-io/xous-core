@@ -339,6 +339,7 @@ dependencies = [
  "log",
  "num-derive 0.4.2",
  "num-traits",
+ "usb-cramium",
  "utralib 0.1.25",
  "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
@@ -5806,6 +5807,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-ticktimer",
  "xous-ipc 0.10.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-riscv",
  "xous-usb-hid",
 ]
 
