@@ -510,12 +510,14 @@ impl Gfx {
     /// status bar, so there is an obvious indicator that the kernel has yet to be self-signed. Self-signed
     /// kernels do not have this signature.
     ///
+    /// NOTE: This call is a one-way operation. Once the developer boot mode is enabled, it cannot be
+    /// disabled.
+    ///
     /// # Example
     /// ```
     /// use graphics_server::Gfx;
     /// let gfx = Gfx::new(&xous_names::XousNames::new().unwrap()).unwrap();
     /// gfx.set_devboot(true); // Enable developer boot mode
-    /// gfx.set_devboot(false); // Disable developer boot mode
     /// ```
     pub fn set_devboot(&self, enable: bool) -> Result<(), xous::Error> {
         let ena = if enable { 1 } else { 0 };
