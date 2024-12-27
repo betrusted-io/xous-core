@@ -30,6 +30,38 @@ const REG_DLDO1_V: usize = 0x99;
 #[allow(dead_code)]
 const REG_DLDO2_V: usize = 0x9A;
 
+const REG_IRQ_ENABLE0: u8 = 0x40;
+const REG_IRQ_ENABLE1: u8 = 0x41;
+const REG_IRQ_ENABLE2: u8 = 0x42;
+const REG_IRQ_STATUS0: u8 = 0x48;
+const REG_IRQ_STATUS1: u8 = 0x49;
+const REG_IRQ_STATUS2: u8 = 0x4A;
+const VBUS_INSERT_MASK: u8 = 0x80;
+const VBUS_REMOVE_MASK: u8 = 0x40;
+
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum VbusIrq {
+    None,
+    Insert,
+    Remove,
+    InsertAndRemove,
+}
+
+/// From the raw u8 read back from the register
+impl From<u8> for VbusIrq {
+    fn from(value: u8) -> Self {
+        if (value & VBUS_INSERT_MASK) == 0 && (value & VBUS_REMOVE_MASK) == 0 {
+            VbusIrq::None
+        } else if (value & VBUS_INSERT_MASK) != 0 && (value & VBUS_REMOVE_MASK) == 0 {
+            VbusIrq::Insert
+        } else if (value & VBUS_INSERT_MASK) == 0 && (value & VBUS_REMOVE_MASK) != 0 {
+            VbusIrq::Remove
+        } else {
+            VbusIrq::InsertAndRemove
+        }
+    }
+}
+
 #[repr(u8)]
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum WhichLdo {
@@ -214,6 +246,37 @@ impl Axp2101 {
             }
         }
         ctl
+    }
+
+    /// This will clear all other IRQ sources except VBUS IRQ
+    /// If we need to take more IRQ sources then this API will need to be refactored.
+    pub fn setup_vbus_irq(&mut self, i2c: &mut dyn i2c::I2cApi, mode: VbusIrq) -> Result<(), xous::Error> {
+        let data = match mode {
+            VbusIrq::None => 0u8,
+            VbusIrq::Insert => VBUS_INSERT_MASK,
+            VbusIrq::Remove => VBUS_REMOVE_MASK,
+            VbusIrq::InsertAndRemove => VBUS_INSERT_MASK | VBUS_REMOVE_MASK,
+        };
+        // ENABLE1 has the code we want to target, but the rest also needs to be cleared so
+        // fill the values in with 0.
+        i2c.i2c_write(AXP2101_DEV, REG_IRQ_ENABLE0, &[0, data, 0]).map(|_| ())?;
+
+        // clear the status bits
+        let mut status = [0u8; 3];
+        i2c.i2c_read(AXP2101_DEV, REG_IRQ_STATUS0, &mut status, false)?;
+        i2c.i2c_write(AXP2101_DEV, REG_IRQ_STATUS0, &status).map(|_| ())
+    }
+
+    pub fn get_vbus_irq_status(&self, i2c: &mut dyn i2c::I2cApi) -> Result<VbusIrq, xous::Error> {
+        let mut buf = [0u8];
+        i2c.i2c_read(AXP2101_DEV, REG_IRQ_STATUS1, &mut buf, false)?;
+        Ok(VbusIrq::from(buf[0]))
+    }
+
+    /// This will clear all pending IRQs, regardless of the setup
+    pub fn clear_vbus_irq_pending(&mut self, i2c: &mut dyn i2c::I2cApi) -> Result<(), xous::Error> {
+        let data = VBUS_INSERT_MASK | VBUS_REMOVE_MASK;
+        i2c.i2c_write(AXP2101_DEV, REG_IRQ_STATUS1, &[data]).map(|_| ())
     }
 }
 
