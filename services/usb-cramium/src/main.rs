@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use api::{HIDReport, LogLevel, Opcode, U2fCode, U2fMsgIpc, UsbListenerRegistration};
 use cram_hal_service::api::KeyMap;
+use cramium_hal::axp2101::VbusIrq;
 use cramium_hal::usb::driver::{CorigineUsb, CorigineWrapper};
 use hw::CramiumUsb;
 use hw::UsbIrqReq;
@@ -236,6 +237,32 @@ pub(crate) fn main_hw() -> ! {
                 }
             }
             xous::destroy_server(to_server).unwrap();
+        }
+    });
+
+    std::thread::spawn({
+        move || {
+            log::info!("Connecting to I2C");
+            let mut i2c = cram_hal_service::I2c::new();
+            let mut pmic = cramium_hal::axp2101::Axp2101::new(&mut i2c).expect("couldn't open PMIC");
+            let iox = cram_hal_service::IoxHal::new();
+            log::info!("AXP2101 config: {:?}", pmic);
+            let tt = ticktimer::Ticktimer::new().unwrap();
+            pmic.setup_vbus_irq(&mut i2c, cramium_hal::axp2101::VbusIrq::InsertAndRemove)
+                .expect("couldn't setup IRQ");
+            // PB13 is the IRQ input
+            loop {
+                tt.sleep_ms(500).ok();
+                let status = pmic.get_vbus_irq_status(&mut i2c).unwrap();
+                log::info!(
+                    "Status: {:?}, {:?}",
+                    status,
+                    iox.get_gpio_pin_value(cramium_hal::iox::IoxPort::PB, 13)
+                );
+                if status != VbusIrq::None {
+                    pmic.clear_vbus_irq_pending(&mut i2c).expect("couldn't clear pending VBUS IRQ");
+                }
+            }
         }
     });
 
