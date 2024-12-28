@@ -996,6 +996,9 @@ def main():
     parser.add_argument(
         "--key", help="Backup key in hex or BIP-39 format. Used to factory-reset efused devices. Specify BIP-39 phrase within double-quotes.", type=str
     )
+    parser.add_argument(
+        "--clear-backup", help="Clear backup flag", required=False, action='store_true'
+    )
     args = parser.parse_args()
 
     if not len(sys.argv) > 1:
@@ -1114,6 +1117,12 @@ def main():
     if args.disable_boot:
         print("Disabling boot")
         pc_usb.erase_region(locs['LOC_LOADER'][0], 1024 * 256)
+
+    if args.clear_backup:
+        print("Clearing backup flag")
+        pc_usb.erase_region(locs["LOC_KERNEL"][0] + 0x0140_0000 - 0x1000, 4096)
+        print("Backup flag cleared")
+        exit(0)
 
     if args.enable_boot_wipe:
         if args.loader == None:
