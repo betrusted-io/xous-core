@@ -2,6 +2,9 @@
 // SPDX-FileCopyrightText: 2023 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
+// allow all functions to go unused in case debug is disabled with a feature flag
+#![allow(dead_code)]
+
 use core::fmt;
 
 use crate::{

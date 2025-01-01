@@ -16,9 +16,8 @@ num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 
 [features]
-"cramium" = []
-"cramium-soc" = []
-"cramium-fpga" = []
+"cramium" = ["utralib/cramium-fpga"]
 "hwsim" = []
-"ext" = []                   # must match setting in cram-mbox2
-default = ["cramium", "ext"]
+# ext specifies to use the APB client, instead of the loopback local
+"ext" = []            # must match setting in cram-mbox2
+default = ["cramium"]

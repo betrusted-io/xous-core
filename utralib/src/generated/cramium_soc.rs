@@ -491,7 +491,7 @@ pub mod utra {
     }
 
     pub mod coreuser {
-        pub const COREUSER_NUMREGS: usize = 4;
+        pub const COREUSER_NUMREGS: usize = 5;
 
         pub const CONTROL: crate::Register = crate::Register::new(0, 0xff);
         pub const CONTROL_ENABLE: crate::Field = crate::Field::new(1, 0, CONTROL);
@@ -514,6 +514,17 @@ pub mod utra {
         pub const MAP_HI_LUT5: crate::Field = crate::Field::new(8, 8, MAP_HI);
         pub const MAP_HI_LUT6: crate::Field = crate::Field::new(8, 16, MAP_HI);
         pub const MAP_HI_LUT7: crate::Field = crate::Field::new(8, 24, MAP_HI);
+
+        pub const USERVALUE: crate::Register = crate::Register::new(4, 0x3ffff);
+        pub const USERVALUE_USER0: crate::Field = crate::Field::new(2, 0, USERVALUE);
+        pub const USERVALUE_USER1: crate::Field = crate::Field::new(2, 2, USERVALUE);
+        pub const USERVALUE_USER2: crate::Field = crate::Field::new(2, 4, USERVALUE);
+        pub const USERVALUE_USER3: crate::Field = crate::Field::new(2, 6, USERVALUE);
+        pub const USERVALUE_USER4: crate::Field = crate::Field::new(2, 8, USERVALUE);
+        pub const USERVALUE_USER5: crate::Field = crate::Field::new(2, 10, USERVALUE);
+        pub const USERVALUE_USER6: crate::Field = crate::Field::new(2, 12, USERVALUE);
+        pub const USERVALUE_USER7: crate::Field = crate::Field::new(2, 14, USERVALUE);
+        pub const USERVALUE_DEFAULT: crate::Field = crate::Field::new(2, 16, USERVALUE);
 
         pub const HW_COREUSER_BASE: usize = 0xe0002000;
     }
@@ -5719,6 +5730,54 @@ mod tests {
         let mut baz = coreuser_csr.zf(utra::coreuser::MAP_HI_LUT7, bar);
         baz |= coreuser_csr.ms(utra::coreuser::MAP_HI_LUT7, 1);
         coreuser_csr.wfo(utra::coreuser::MAP_HI_LUT7, baz);
+
+        let foo = coreuser_csr.r(utra::coreuser::USERVALUE);
+        coreuser_csr.wo(utra::coreuser::USERVALUE, foo);
+        let bar = coreuser_csr.rf(utra::coreuser::USERVALUE_USER0);
+        coreuser_csr.rmwf(utra::coreuser::USERVALUE_USER0, bar);
+        let mut baz = coreuser_csr.zf(utra::coreuser::USERVALUE_USER0, bar);
+        baz |= coreuser_csr.ms(utra::coreuser::USERVALUE_USER0, 1);
+        coreuser_csr.wfo(utra::coreuser::USERVALUE_USER0, baz);
+        let bar = coreuser_csr.rf(utra::coreuser::USERVALUE_USER1);
+        coreuser_csr.rmwf(utra::coreuser::USERVALUE_USER1, bar);
+        let mut baz = coreuser_csr.zf(utra::coreuser::USERVALUE_USER1, bar);
+        baz |= coreuser_csr.ms(utra::coreuser::USERVALUE_USER1, 1);
+        coreuser_csr.wfo(utra::coreuser::USERVALUE_USER1, baz);
+        let bar = coreuser_csr.rf(utra::coreuser::USERVALUE_USER2);
+        coreuser_csr.rmwf(utra::coreuser::USERVALUE_USER2, bar);
+        let mut baz = coreuser_csr.zf(utra::coreuser::USERVALUE_USER2, bar);
+        baz |= coreuser_csr.ms(utra::coreuser::USERVALUE_USER2, 1);
+        coreuser_csr.wfo(utra::coreuser::USERVALUE_USER2, baz);
+        let bar = coreuser_csr.rf(utra::coreuser::USERVALUE_USER3);
+        coreuser_csr.rmwf(utra::coreuser::USERVALUE_USER3, bar);
+        let mut baz = coreuser_csr.zf(utra::coreuser::USERVALUE_USER3, bar);
+        baz |= coreuser_csr.ms(utra::coreuser::USERVALUE_USER3, 1);
+        coreuser_csr.wfo(utra::coreuser::USERVALUE_USER3, baz);
+        let bar = coreuser_csr.rf(utra::coreuser::USERVALUE_USER4);
+        coreuser_csr.rmwf(utra::coreuser::USERVALUE_USER4, bar);
+        let mut baz = coreuser_csr.zf(utra::coreuser::USERVALUE_USER4, bar);
+        baz |= coreuser_csr.ms(utra::coreuser::USERVALUE_USER4, 1);
+        coreuser_csr.wfo(utra::coreuser::USERVALUE_USER4, baz);
+        let bar = coreuser_csr.rf(utra::coreuser::USERVALUE_USER5);
+        coreuser_csr.rmwf(utra::coreuser::USERVALUE_USER5, bar);
+        let mut baz = coreuser_csr.zf(utra::coreuser::USERVALUE_USER5, bar);
+        baz |= coreuser_csr.ms(utra::coreuser::USERVALUE_USER5, 1);
+        coreuser_csr.wfo(utra::coreuser::USERVALUE_USER5, baz);
+        let bar = coreuser_csr.rf(utra::coreuser::USERVALUE_USER6);
+        coreuser_csr.rmwf(utra::coreuser::USERVALUE_USER6, bar);
+        let mut baz = coreuser_csr.zf(utra::coreuser::USERVALUE_USER6, bar);
+        baz |= coreuser_csr.ms(utra::coreuser::USERVALUE_USER6, 1);
+        coreuser_csr.wfo(utra::coreuser::USERVALUE_USER6, baz);
+        let bar = coreuser_csr.rf(utra::coreuser::USERVALUE_USER7);
+        coreuser_csr.rmwf(utra::coreuser::USERVALUE_USER7, bar);
+        let mut baz = coreuser_csr.zf(utra::coreuser::USERVALUE_USER7, bar);
+        baz |= coreuser_csr.ms(utra::coreuser::USERVALUE_USER7, 1);
+        coreuser_csr.wfo(utra::coreuser::USERVALUE_USER7, baz);
+        let bar = coreuser_csr.rf(utra::coreuser::USERVALUE_DEFAULT);
+        coreuser_csr.rmwf(utra::coreuser::USERVALUE_DEFAULT, bar);
+        let mut baz = coreuser_csr.zf(utra::coreuser::USERVALUE_DEFAULT, bar);
+        baz |= coreuser_csr.ms(utra::coreuser::USERVALUE_DEFAULT, 1);
+        coreuser_csr.wfo(utra::coreuser::USERVALUE_DEFAULT, baz);
   }
 
     #[test]

@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2024-12-27 08:15:32]]></description>
+    <description><![CDATA[Litex SoC 2025-01-01 15:33:54]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -343,28 +343,28 @@ directly to the bit position, and defaults to bit `0`]]></description>
                             <msb>7</msb>
                             <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID]]></description>
+                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
                         </field>
                         <field>
                             <name>lut1</name>
                             <msb>15</msb>
                             <bitRange>[15:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID]]></description>
+                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
                         </field>
                         <field>
                             <name>lut2</name>
                             <msb>23</msb>
                             <bitRange>[23:16]</bitRange>
                             <lsb>16</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID]]></description>
+                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
                         </field>
                         <field>
                             <name>lut3</name>
                             <msb>31</msb>
                             <bitRange>[31:24]</bitRange>
                             <lsb>24</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID]]></description>
+                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
                         </field>
                     </fields>
                 </register>
@@ -379,35 +379,106 @@ directly to the bit position, and defaults to bit `0`]]></description>
                             <msb>7</msb>
                             <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID]]></description>
+                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
                         </field>
                         <field>
                             <name>lut5</name>
                             <msb>15</msb>
                             <bitRange>[15:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID]]></description>
+                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
                         </field>
                         <field>
                             <name>lut6</name>
                             <msb>23</msb>
                             <bitRange>[23:16]</bitRange>
                             <lsb>16</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID]]></description>
+                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
                         </field>
                         <field>
                             <name>lut7</name>
                             <msb>31</msb>
                             <bitRange>[31:24]</bitRange>
                             <lsb>24</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID]]></description>
+                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>USERVALUE</name>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>user0</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Value of `CoreUser` for lut0 match]]></description>
+                        </field>
+                        <field>
+                            <name>user1</name>
+                            <msb>3</msb>
+                            <bitRange>[3:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Value of `CoreUser` for lut1 match]]></description>
+                        </field>
+                        <field>
+                            <name>user2</name>
+                            <msb>5</msb>
+                            <bitRange>[5:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[Value of `CoreUser` for lut2 match]]></description>
+                        </field>
+                        <field>
+                            <name>user3</name>
+                            <msb>7</msb>
+                            <bitRange>[7:6]</bitRange>
+                            <lsb>6</lsb>
+                            <description><![CDATA[Value of `CoreUser` for lut3 match]]></description>
+                        </field>
+                        <field>
+                            <name>user4</name>
+                            <msb>9</msb>
+                            <bitRange>[9:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[Value of `CoreUser` for lut4 match]]></description>
+                        </field>
+                        <field>
+                            <name>user5</name>
+                            <msb>11</msb>
+                            <bitRange>[11:10]</bitRange>
+                            <lsb>10</lsb>
+                            <description><![CDATA[Value of `CoreUser` for lut5 match]]></description>
+                        </field>
+                        <field>
+                            <name>user6</name>
+                            <msb>13</msb>
+                            <bitRange>[13:12]</bitRange>
+                            <lsb>12</lsb>
+                            <description><![CDATA[Value of `CoreUser` for lut6 match]]></description>
+                        </field>
+                        <field>
+                            <name>user7</name>
+                            <msb>15</msb>
+                            <bitRange>[15:14]</bitRange>
+                            <lsb>14</lsb>
+                            <description><![CDATA[Value of `CoreUser` for lut7 match]]></description>
+                        </field>
+                        <field>
+                            <name>default</name>
+                            <msb>17</msb>
+                            <bitRange>[17:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[Default value of `CoreUser`, for when none of the others match]]></description>
                         </field>
                     </fields>
                 </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x14</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>

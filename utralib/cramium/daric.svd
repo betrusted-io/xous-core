@@ -3118,10 +3118,42 @@ position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>sfr_cgufdpke</name>
-                            <msb>8</msb>
-                            <bitRange>[8:0]</bitRange>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[sfr_cgufdpke read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_CGUFDAORAM</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sysctrl/rtl/sysctrl.sv]]></description>
+                    <addressOffset>0x0038</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_cgufdaoram</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_cgufdaoram read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_CGUFDPER</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sysctrl/rtl/sysctrl.sv]]></description>
+                    <addressOffset>0x003c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_cgufdper</name>
+                            <msb>23</msb>
+                            <bitRange>[23:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_cgufdper read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
