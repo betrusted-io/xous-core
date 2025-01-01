@@ -1,5 +1,6 @@
 use core::fmt::{Error, Write};
 
+#[cfg(feature = "cramium-soc")]
 use cramium_hal::udma;
 
 #[macro_export]
@@ -33,10 +34,10 @@ pub static mut DEFAULT_UART_ADDR: *mut usize = 0x0000_0000 as *mut usize;
 impl Uart {
     pub fn putc(&self, c: u8) {
         assert!(unsafe { DEFAULT_UART_ADDR } as usize != 0);
-        let mut uart_csr = CSR::new(unsafe { DEFAULT_UART_ADDR as *mut u32 });
+        let mut uart_csr = utralib::CSR::new(unsafe { DEFAULT_UART_ADDR as *mut u32 });
 
-        while uart_csr.r(utra::duart::SFR_SR) != 0 {}
-        uart_csr.wo(utra::duart::SFR_TXD, c as u32);
+        while uart_csr.r(utralib::utra::duart::SFR_SR) != 0 {}
+        uart_csr.wo(utralib::utra::duart::SFR_TXD, c as u32);
     }
 }
 

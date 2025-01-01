@@ -1,7 +1,10 @@
 use core::fmt::{Error, Write};
+#[cfg(feature = "cramium-soc")]
 use std::pin::Pin;
 
+#[cfg(feature = "cramium-soc")]
 use cramium_hal::board::UART_DMA_TX_BUF_PHYS;
+#[cfg(feature = "cramium-soc")]
 use cramium_hal::udma;
 use utralib::generated::*;
 

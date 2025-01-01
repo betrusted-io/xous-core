@@ -16,6 +16,7 @@ num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 
 [features]
-"cramium" = []
-"ext" = []                   # must match setting in cram-mbox1
-default = ["cramium", "ext"]
+"cramium" = ["utralib/cramium-fpga"]
+# ext specifies to use the APB client, instead of the loopback local
+"ext" = []            # must match setting in cram-mbox1
+default = ["cramium"]

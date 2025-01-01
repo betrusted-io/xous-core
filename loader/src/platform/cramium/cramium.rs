@@ -2,6 +2,7 @@
 use cramium_hal::axp2101::Axp2101;
 #[cfg(not(feature = "verilator-only"))]
 use cramium_hal::iox::{Iox, IoxDir, IoxEnable, IoxFunction, IoxPort};
+#[cfg(feature = "cramium-soc")]
 use cramium_hal::udma;
 #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
 use cramium_hal::udma::PeriphId;
@@ -1556,6 +1557,7 @@ fn fsfreq_to_hz(fs_freq: u32) -> u32 { (fs_freq * (48_000_000 / 32)) / 1_000_000
 fn fsfreq_to_hz_32(fs_freq: u32) -> u32 { (fs_freq * (32_000_000 / 32)) / 1_000_000 }
 
 #[allow(dead_code)]
+#[cfg(feature = "cramium-soc")]
 /// Used mainly for debug breaks. Not used in every configuration.
 pub fn getc() -> char {
     let uart_buf_addr = loader::UART_IFRAM_ADDR;

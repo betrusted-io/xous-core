@@ -1012,6 +1012,8 @@ impl Builder {
             args.push("atsama5d2");
         } else if self.utra_target.contains("cramium-soc") {
             args.push("cramium-soc")
+        } else if self.utra_target.contains("cramium-fpga") {
+            args.push("cramium-soc")
         }
         args.push("--");
 
