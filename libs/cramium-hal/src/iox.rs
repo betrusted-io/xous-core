@@ -101,6 +101,14 @@ pub trait IoGpio {
     fn set_gpio_pin_dir(&self, port: IoxPort, pin: u8, dir: IoxDir);
 }
 
+pub trait IoIrq {
+    /// This hooks a given port/pin to generate a message to the server specified
+    /// with `server` and the opcode number `usize` when an IRQ is detected on the port/pin.
+    /// The active state of the IRQ is defined by `active`; the transition edge from inactive
+    /// to active is when the event is generated.
+    fn set_irq_pin(&self, port: IoxPort, pin: u8, active: IoxValue, server: &str, opcode: usize);
+}
+
 pub struct Iox {
     pub csr: SharedCsr<u32>,
 }
