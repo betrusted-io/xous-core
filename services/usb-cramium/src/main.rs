@@ -37,10 +37,6 @@ enum TimeoutOp {
 
 /*
     TODO:
-    - [ ] USB stack doesn't know when the cable is unplugged. This is a hardware issue right now
-      with MPW hardware. Wait until NTO chips come back to try and solve this? and if the bug isn't fixed
-      there we can either work around this by adding a sense I/O for this purpose or we can use a timer
-      to poll USB connection status.
     - [ ] Reduce debug spew. This is left in place for now because we will definitely need it in the
       future and it hasn't seemed to affect the stack operation like it did in the user-space implementation.
 */
