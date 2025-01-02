@@ -1,7 +1,7 @@
 // Constants that define pin locations, RAM offsets, etc. for the BaoSec board
 use crate::iox;
-use crate::iox::IoSetup;
 use crate::iox::*;
+use crate::iox::{IoIrq, IoSetup};
 
 pub const I2C_AXP2101_ADR: u8 = 0x34;
 pub const I2C_TUSB320_ADR: u8 = 0x47;
@@ -150,6 +150,7 @@ pub fn setup_memory_pins(iox: &dyn IoSetup) -> crate::udma::SpimChannel {
     crate::udma::SpimChannel::Channel1
 }
 
+/// This also sets up I2C-adjacent interrupt inputs as well
 pub fn setup_i2c_pins(iox: &dyn IoSetup) -> crate::udma::I2cChannel {
     // I2C_SCL_B[0]
     iox.setup_pin(
@@ -172,6 +173,17 @@ pub fn setup_i2c_pins(iox: &dyn IoSetup) -> crate::udma::I2cChannel {
         None,
         Some(IoxEnable::Enable),
         Some(IoxDriveStrength::Drive2mA),
+    );
+    // PB13 -> PMIC IRQ
+    iox.setup_pin(
+        IoxPort::PB,
+        13,
+        Some(IoxDir::Input),
+        Some(IoxFunction::Gpio),
+        Some(IoxEnable::Enable),
+        Some(IoxEnable::Enable),
+        None,
+        None,
     );
     crate::udma::I2cChannel::Channel0
 }
@@ -259,4 +271,8 @@ pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 3], [(Iox
         (KB_PORT, C_PINS[1]),
         (KB_PORT, C_PINS[2]),
     ])
+}
+
+pub fn setup_pmic_irq<T: IoIrq>(iox: &T, server: &str, opcode: usize) {
+    iox.set_irq_pin(IoxPort::PB, 13, IoxValue::Low, server, opcode);
 }

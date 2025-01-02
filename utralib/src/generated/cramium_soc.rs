@@ -2674,7 +2674,7 @@ pub mod utra {
     }
 
     pub mod sysctrl {
-        pub const SYSCTRL_NUMREGS: usize = 35;
+        pub const SYSCTRL_NUMREGS: usize = 37;
 
         pub const SFR_CGUSEC: crate::Register = crate::Register::new(0, 0xffff);
         pub const SFR_CGUSEC_SFR_CGUSEC: crate::Field = crate::Field::new(16, 0, SFR_CGUSEC);
@@ -2715,8 +2715,14 @@ pub mod utra {
         pub const SFR_CGUSEL1: crate::Register = crate::Register::new(12, 0x1);
         pub const SFR_CGUSEL1_SFR_CGUSEL1: crate::Field = crate::Field::new(1, 0, SFR_CGUSEL1);
 
-        pub const SFR_CGUFDPKE: crate::Register = crate::Register::new(13, 0x1ff);
-        pub const SFR_CGUFDPKE_SFR_CGUFDPKE: crate::Field = crate::Field::new(9, 0, SFR_CGUFDPKE);
+        pub const SFR_CGUFDPKE: crate::Register = crate::Register::new(13, 0xff);
+        pub const SFR_CGUFDPKE_SFR_CGUFDPKE: crate::Field = crate::Field::new(8, 0, SFR_CGUFDPKE);
+
+        pub const SFR_CGUFDAORAM: crate::Register = crate::Register::new(14, 0xffff);
+        pub const SFR_CGUFDAORAM_SFR_CGUFDAORAM: crate::Field = crate::Field::new(16, 0, SFR_CGUFDAORAM);
+
+        pub const SFR_CGUFDPER: crate::Register = crate::Register::new(15, 0xffffff);
+        pub const SFR_CGUFDPER_SFR_CGUFDPER: crate::Field = crate::Field::new(24, 0, SFR_CGUFDPER);
 
         pub const SFR_CGUFSSR_FSFREQ0: crate::Register = crate::Register::new(16, 0xffff);
         pub const SFR_CGUFSSR_FSFREQ0_FSFREQ0: crate::Field = crate::Field::new(16, 0, SFR_CGUFSSR_FSFREQ0);
@@ -13437,6 +13443,22 @@ mod tests {
         let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFDPKE_SFR_CGUFDPKE, bar);
         baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFDPKE_SFR_CGUFDPKE, 1);
         sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFDPKE_SFR_CGUFDPKE, baz);
+
+        let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFDAORAM);
+        sysctrl_csr.wo(utra::sysctrl::SFR_CGUFDAORAM, foo);
+        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_CGUFDAORAM_SFR_CGUFDAORAM);
+        sysctrl_csr.rmwf(utra::sysctrl::SFR_CGUFDAORAM_SFR_CGUFDAORAM, bar);
+        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFDAORAM_SFR_CGUFDAORAM, bar);
+        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFDAORAM_SFR_CGUFDAORAM, 1);
+        sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFDAORAM_SFR_CGUFDAORAM, baz);
+
+        let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFDPER);
+        sysctrl_csr.wo(utra::sysctrl::SFR_CGUFDPER, foo);
+        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_CGUFDPER_SFR_CGUFDPER);
+        sysctrl_csr.rmwf(utra::sysctrl::SFR_CGUFDPER_SFR_CGUFDPER, bar);
+        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFDPER_SFR_CGUFDPER, bar);
+        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFDPER_SFR_CGUFDPER, 1);
+        sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFDPER_SFR_CGUFDPER, baz);
 
         let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFSSR_FSFREQ0);
         sysctrl_csr.wo(utra::sysctrl::SFR_CGUFSSR_FSFREQ0, foo);

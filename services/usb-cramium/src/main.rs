@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use api::{HIDReport, LogLevel, Opcode, U2fCode, U2fMsgIpc, UsbListenerRegistration};
 use cram_hal_service::api::KeyMap;
+use cramium_hal::axp2101::VbusIrq;
 use cramium_hal::usb::driver::{CorigineUsb, CorigineWrapper};
 use hw::CramiumUsb;
 use hw::UsbIrqReq;
@@ -36,10 +37,6 @@ enum TimeoutOp {
 
 /*
     TODO:
-    - [ ] USB stack doesn't know when the cable is unplugged. This is a hardware issue right now
-      with MPW hardware. Wait until NTO chips come back to try and solve this? and if the bug isn't fixed
-      there we can either work around this by adding a sense I/O for this purpose or we can use a timer
-      to poll USB connection status.
     - [ ] Reduce debug spew. This is left in place for now because we will definitely need it in the
       future and it hasn't seemed to affect the stack operation like it did in the user-space implementation.
 */
@@ -239,6 +236,17 @@ pub(crate) fn main_hw() -> ! {
         }
     });
 
+    log::info!("Registering PMIC handler to detect USB plug/unplug events");
+    let iox = cram_hal_service::iox_lib::IoxHal::new();
+    cramium_hal::board::setup_pmic_irq(
+        &iox,
+        api::SERVER_NAME_USB_DEVICE,
+        Opcode::PmicIrq.to_usize().unwrap(),
+    );
+    let mut i2c = cram_hal_service::I2c::new();
+    let mut pmic = cramium_hal::axp2101::Axp2101::new(&mut i2c).expect("couldn't open PMIC");
+    pmic.setup_vbus_irq(&mut i2c, cramium_hal::axp2101::VbusIrq::Remove).expect("couldn't setup IRQ");
+
     log::info!("Entering main loop");
 
     let mut msg_opt = None;
@@ -248,6 +256,21 @@ pub(crate) fn main_hw() -> ! {
         let opcode = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidCall);
         log::info!("{:?}", opcode);
         match opcode {
+            Opcode::PmicIrq => match pmic.get_vbus_irq_status(&mut i2c).unwrap() {
+                VbusIrq::Insert => {
+                    log::error!("VBUS insert reported by PMIC, but we didn't ask for the event!");
+                }
+                VbusIrq::Remove => {
+                    log::info!("VBUS removed. Resetting stack.");
+                    cu.unplug();
+                }
+                VbusIrq::InsertAndRemove => {
+                    panic!("Unexpected report from vbus_irq status");
+                }
+                VbusIrq::None => {
+                    log::warn!("Received an interrupt but no actual event reported");
+                }
+            },
             Opcode::U2fRxDeferred => {
                 // notify the event listener, if any
                 if observer_conn.is_some() && observer_op.is_some() {

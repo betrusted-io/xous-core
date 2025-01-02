@@ -67,6 +67,10 @@ pub(crate) enum Opcode {
     #[cfg(feature = "mass-storage")]
     ResetBlockDevice = 1026,
 
+    /// Platform-specific messages for callback handlers
+    #[cfg(feature = "cramium-soc")]
+    PmicIrq = 1536,
+
     // HIDv2
     /// Read a HID report
     HIDReadReport = 1027,

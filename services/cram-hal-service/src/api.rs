@@ -1,5 +1,5 @@
 pub mod keyboard;
-use cramium_hal::iox;
+use cramium_hal::iox::{self, IoxPort, IoxValue};
 pub use keyboard::*;
 
 /// The Opcode numbers here should not be changed. You can add new ones,
@@ -46,6 +46,10 @@ pub enum Opcode {
 
     /// Peripheral reset
     PeriphReset = 10,
+
+    /// Configure Iox IRQ
+    ConfigureIoxIrq = 11,
+    IrqLocalHandler = 12,
 
     /// Exit server
     Quit = 255,
@@ -144,4 +148,13 @@ pub struct I2cTransactions {
 }
 impl From<Vec<I2cTransaction>> for I2cTransactions {
     fn from(value: Vec<I2cTransaction>) -> Self { Self { transactions: value } }
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct IoxIrqRegistration {
+    pub server: String,
+    pub opcode: usize,
+    pub port: IoxPort,
+    pub pin: u8,
+    pub active: IoxValue,
 }
