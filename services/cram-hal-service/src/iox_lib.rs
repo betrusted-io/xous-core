@@ -1,11 +1,14 @@
 use core::sync::atomic::Ordering;
 
 use cramium_hal::iox::{
-    IoGpio, IoSetup, IoxDir, IoxDriveStrength, IoxEnable, IoxFunction, IoxPort, IoxValue,
+    IoGpio, IoIrq, IoSetup, IoxDir, IoxDriveStrength, IoxEnable, IoxFunction, IoxPort, IoxValue,
 };
 use num_traits::*;
 
-use crate::{Opcode, SERVER_NAME_CRAM_HAL, api::IoxConfigMessage};
+use crate::{
+    Opcode, SERVER_NAME_CRAM_HAL,
+    api::{IoxConfigMessage, IoxIrqRegistration},
+};
 
 pub struct IoxHal {
     conn: xous::CID,
@@ -174,5 +177,13 @@ impl Drop for IoxHal {
                 xous::disconnect(self.conn).unwrap();
             }
         }
+    }
+}
+
+impl IoIrq for IoxHal {
+    fn set_irq_pin(&self, port: IoxPort, pin: u8, active: IoxValue, server: &str, opcode: usize) {
+        let msg = IoxIrqRegistration { server: server.to_owned(), opcode, port, pin, active };
+        let buf = xous_ipc::Buffer::into_buf(msg).unwrap();
+        buf.lend(self.conn, Opcode::ConfigureIoxIrq.to_u32().unwrap()).expect("Couldn't set up IRQ");
     }
 }
