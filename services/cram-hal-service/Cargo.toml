@@ -27,6 +27,7 @@ pio-proc = "0.2.2"
 pio = "0.2.1"
 rand_core = "0.6.4"
 rand_chacha = "0.3.1"
+bitfield = "0.13.2"
 
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
@@ -45,4 +46,4 @@ swap = []
 mpw = ["cramium-hal/mpw"]
 # add this feature to enable pre-emption
 quantum-timer = ["utralib", "pio"]
-default = ["app-uart"]
+default = ["app-uart", "utralib"]
