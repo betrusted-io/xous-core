@@ -16,6 +16,7 @@ num-traits = { version = "0.2.14", default-features = false }
 cramium-hal = { path = "../../libs/cramium-hal", features = [
     "std",
     "debug-print-usb",
+    # "verbose-debug",
     "axp2101",
 ] }
 cram-hal-service = { path = "../cram-hal-service" }
