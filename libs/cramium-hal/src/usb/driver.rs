@@ -36,7 +36,7 @@ const CRG_EVENT_RING_NUM: usize = 1;
 const CRG_ERST_SIZE: usize = 1;
 const CRG_EVENT_RING_SIZE: usize = 128;
 const CRG_EP0_TD_RING_SIZE: usize = 16;
-const CRG_EP_NUM: usize = 4;
+pub const CRG_EP_NUM: usize = 4;
 const CRG_TD_RING_SIZE: usize = 512; // was 1280 in original code. not even sure we need ... 64?
 const CRG_UDC_MAX_BURST: u32 = 15;
 const CRG_UDC_ISO_INTERVAL: u8 = 3;
@@ -1243,10 +1243,6 @@ impl CorigineUsb {
         compiler_fence(Ordering::SeqCst);
 
         // Set up storage for Endpoint contexts
-        #[cfg(feature = "std")]
-        log::trace!("Begin init_device_context");
-        #[cfg(not(feature = "std"))]
-        println!("Begin init_device_context");
         // init device context and ep context, refer to 7.6.2
         self.p_epcx = AtomicPtr::new((self.ifram_base_ptr + CRG_UDC_EPCX_OFFSET) as *mut EpCxS);
         self.p_epcx_len = CRG_EP_NUM * 2 * size_of::<EpCxS>();
@@ -1265,13 +1261,12 @@ impl CorigineUsb {
         // disable 2.0 LPM
         self.csr.wo(U2PORTPMSC, 0);
 
-        #[cfg(feature = "std")]
-        log::trace!("USB init done");
+        crate::println!("USB hw init done");
     }
 
     pub fn init_ep0(&mut self) {
-        #[cfg(feature = "std")]
-        log::trace!("Begin init_ep0");
+        #[cfg(feature = "verbose-debug")]
+        crate::println!("Begin init_ep0");
         let udc_ep = &mut self.udc_ep[0];
 
         udc_ep.ep_num = 0;
@@ -1311,15 +1306,7 @@ impl CorigineUsb {
         let cmd_param0: u32 = (udc_ep.tran_ring_info.vaddr.load(Ordering::SeqCst) as u32) & 0xFFFF_FFF0
             | self.csr.ms(CMDPARA0_CMD0_INIT_EP0_DCS, udc_ep.pcs as u32);
         let cmd_param1: u32 = 0;
-        #[cfg(feature = "std")]
-        {
-            log::debug!(
-                "ep0 ring dma addr = {:x}",
-                udc_ep.tran_ring_info.vaddr.load(Ordering::SeqCst) as usize
-            );
-            log::debug!("INIT EP0 CMD par0 = {:x} par1 = {:x}", cmd_param0, cmd_param1);
-        }
-        #[cfg(not(feature = "std"))]
+        #[cfg(feature = "verbose-debug")]
         {
             println!("ep0 ring dma addr = {:x}", udc_ep.tran_ring_info.vaddr.load(Ordering::SeqCst) as usize);
             println!("INIT EP0 CMD par0 = {:x} par1 = {:x}", cmd_param0, cmd_param1);
@@ -1329,8 +1316,6 @@ impl CorigineUsb {
             .expect("couldn't issue ep0 init command");
 
         self.ep0_buf = AtomicPtr::new((self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET) as *mut u8);
-        #[cfg(feature = "std")]
-        log::trace!("End init_ep0");
     }
 
     #[cfg(feature = "std")]
@@ -2168,7 +2153,7 @@ pub struct CorigineWrapper {
     /// Tuple is (type of endpoint, max packet size)
     pub ep_meta: [Option<(EpType, usize)>; CRG_EP_NUM],
     pub ep_out_ready: Box<[AtomicBool]>,
-    pub address_is_set: AtomicBool,
+    pub address_is_set: Arc<AtomicBool>,
     pub event: Option<CrgEvent>,
 }
 #[cfg(feature = "std")]
@@ -2183,7 +2168,7 @@ impl CorigineWrapper {
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
             event: None,
-            address_is_set: AtomicBool::new(false),
+            address_is_set: Arc::new(AtomicBool::new(false)),
         };
         c
     }
@@ -2198,7 +2183,7 @@ impl CorigineWrapper {
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
             event: None,
-            address_is_set: AtomicBool::new(self.address_is_set.load(Ordering::SeqCst)),
+            address_is_set: self.address_is_set.clone(),
         };
         c.ep_meta.copy_from_slice(&self.ep_meta);
         for (dst, src) in c.ep_out_ready.iter().zip(self.ep_out_ready.iter()) {
@@ -2327,7 +2312,7 @@ impl UsbBus for CorigineWrapper {
         let irq_csr = {
             let mut hw = self.core();
             // disable IRQs
-            hw.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 0);
+            hw.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 0);
             hw.reset();
             hw.init();
             hw.start();
@@ -2337,7 +2322,7 @@ impl UsbBus for CorigineWrapper {
         };
         // the lock is released, now we can enable irqs
         irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xffff_ffff); // blanket clear
-        irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
+        irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 3); // FIXME: hard coded value that enables CORIGINE_IRQ_MASK | SW_IRQ_MASK
 
         // TODO -- figure out what this means
         // self.force_reset().ok();
@@ -2530,9 +2515,11 @@ impl UsbBus for CorigineWrapper {
                 let ret = if let Some((ptr, len)) = self.core().app_ptr.take() {
                     self.ep_out_ready[ep_addr.index()].store(false, Ordering::SeqCst);
                     let app_buf = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
-                    if buf.len() > app_buf.len() {
+                    if buf.len() < app_buf.len() {
                         Err(UsbError::BufferOverflow)
                     } else {
+                        #[cfg(feature = "verbose-debug")]
+                        crate::println!("copy into len {} from len {}", buf.len(), app_buf.len());
                         buf[..app_buf.len()].copy_from_slice(app_buf);
                         crate::println!("   {:x?}", &buf[..app_buf.len().min(8)]);
                         Ok(app_buf.len())
@@ -2681,9 +2668,25 @@ impl UsbBus for CorigineWrapper {
     fn force_reset(&self) -> Result<()> {
         crate::println!(" ******* force_reset");
 
-        // This is the minimum we need to do to restart EP0, but, I think we also need to reset
-        // TRB pointers etc. See page 67 of the manual.
-        self.core().update_current_speed();
+        self.address_is_set.store(false, Ordering::SeqCst);
+        for eor in self.ep_out_ready.iter() {
+            eor.store(false, Ordering::SeqCst);
+        }
+        crate::println!(" ******** reset");
+        let irq_csr = {
+            let mut hw = self.core();
+            // disable IRQs
+            hw.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 0);
+            hw.reset();
+            hw.init();
+            hw.start();
+            hw.update_current_speed();
+            // IRQ enable must happen without dependency on the hardware lock
+            hw.irq_csr.clone()
+        };
+        // the lock is released, now we can enable irqs
+        irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xffff_ffff); // blanket clear
+        irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 3); // FIXME: hard coded value that enables CORIGINE_IRQ_MASK | SW_IRQ_MASK
 
         Ok(())
     }
