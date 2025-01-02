@@ -240,31 +240,16 @@ pub(crate) fn main_hw() -> ! {
         }
     });
 
-    std::thread::spawn({
-        move || {
-            log::info!("Connecting to I2C");
-            let mut i2c = cram_hal_service::I2c::new();
-            let mut pmic = cramium_hal::axp2101::Axp2101::new(&mut i2c).expect("couldn't open PMIC");
-            let iox = cram_hal_service::IoxHal::new();
-            log::info!("AXP2101 config: {:?}", pmic);
-            let tt = ticktimer::Ticktimer::new().unwrap();
-            pmic.setup_vbus_irq(&mut i2c, cramium_hal::axp2101::VbusIrq::InsertAndRemove)
-                .expect("couldn't setup IRQ");
-            // PB13 is the IRQ input
-            loop {
-                tt.sleep_ms(500).ok();
-                let status = pmic.get_vbus_irq_status(&mut i2c).unwrap();
-                log::info!(
-                    "Status: {:?}, {:?}",
-                    status,
-                    iox.get_gpio_pin_value(cramium_hal::iox::IoxPort::PB, 13)
-                );
-                if status != VbusIrq::None {
-                    pmic.clear_vbus_irq_pending(&mut i2c).expect("couldn't clear pending VBUS IRQ");
-                }
-            }
-        }
-    });
+    log::info!("Registering PMIC handler to detect USB plug/unplug events");
+    let iox = cram_hal_service::iox_lib::IoxHal::new();
+    cramium_hal::board::setup_pmic_irq(
+        &iox,
+        api::SERVER_NAME_USB_DEVICE,
+        Opcode::PmicIrq.to_usize().unwrap(),
+    );
+    let mut i2c = cram_hal_service::I2c::new();
+    let mut pmic = cramium_hal::axp2101::Axp2101::new(&mut i2c).expect("couldn't open PMIC");
+    pmic.setup_vbus_irq(&mut i2c, cramium_hal::axp2101::VbusIrq::Remove).expect("couldn't setup IRQ");
 
     log::info!("Entering main loop");
 
@@ -275,6 +260,21 @@ pub(crate) fn main_hw() -> ! {
         let opcode = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidCall);
         log::info!("{:?}", opcode);
         match opcode {
+            Opcode::PmicIrq => match pmic.get_vbus_irq_status(&mut i2c).unwrap() {
+                VbusIrq::Insert => {
+                    log::error!("VBUS insert reported by PMIC, but we didn't ask for the event!");
+                }
+                VbusIrq::Remove => {
+                    log::info!("VBUS removed. Resetting stack.");
+                    cu.unplug();
+                }
+                VbusIrq::InsertAndRemove => {
+                    panic!("Unexpected report from vbus_irq status");
+                }
+                VbusIrq::None => {
+                    log::warn!("Received an interrupt but no actual event reported");
+                }
+            },
             Opcode::U2fRxDeferred => {
                 // notify the event listener, if any
                 if observer_conn.is_some() && observer_op.is_some() {

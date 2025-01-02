@@ -320,4 +320,31 @@ impl<'a> CramiumUsb<'a> {
         self.irq_req = Some(request_type);
         self.irq_csr.wfo(utra::irqarray1::EV_SOFT_TRIGGER, SW_IRQ_MASK);
     }
+
+    /// Process an unplug event
+    pub fn unplug(&mut self) {
+        // disable all interrupts so we can safely go through initialization routines
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, 0);
+
+        self.wrapper.hw.lock().unwrap().reset();
+        self.wrapper.hw.lock().unwrap().init();
+        self.wrapper.hw.lock().unwrap().start();
+        self.wrapper.hw.lock().unwrap().update_current_speed();
+
+        // reset all shared data structures
+        self.device.force_reset().ok();
+        self.fido_tx_queue = RefCell::new(VecDeque::new());
+        self.kbd_tx_queue = RefCell::new(VecDeque::new());
+        self.irq_req = None;
+        self.wrapper.event = None;
+        self.wrapper.address_is_set.store(false, Ordering::SeqCst);
+        self.wrapper.ep_out_ready = (0..cramium_hal::usb::driver::CRG_EP_NUM + 1)
+            .map(|_| core::sync::atomic::AtomicBool::new(false))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+
+        // re-enable IRQs
+        self.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, CORIGINE_IRQ_MASK | SW_IRQ_MASK);
+    }
 }
