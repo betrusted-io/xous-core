@@ -31,10 +31,13 @@ const REG_DLDO1_V: usize = 0x99;
 const REG_DLDO2_V: usize = 0x9A;
 
 const REG_IRQ_ENABLE0: u8 = 0x40;
+#[allow(dead_code)]
 const REG_IRQ_ENABLE1: u8 = 0x41;
+#[allow(dead_code)]
 const REG_IRQ_ENABLE2: u8 = 0x42;
 const REG_IRQ_STATUS0: u8 = 0x48;
 const REG_IRQ_STATUS1: u8 = 0x49;
+#[allow(dead_code)]
 const REG_IRQ_STATUS2: u8 = 0x4A;
 const VBUS_INSERT_MASK: u8 = 0x80;
 const VBUS_REMOVE_MASK: u8 = 0x40;
