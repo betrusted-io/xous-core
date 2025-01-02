@@ -1,7 +1,7 @@
 // Constants that define pin locations, RAM offsets, etc. for the BaoSec board
 use crate::iox;
-use crate::iox::IoSetup;
 use crate::iox::*;
+use crate::iox::{IoIrq, IoSetup};
 
 pub const I2C_AXP2101_ADR: u8 = 0x34;
 pub const I2C_TUSB320_ADR: u8 = 0x47;
@@ -271,4 +271,8 @@ pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 3], [(Iox
         (KB_PORT, C_PINS[1]),
         (KB_PORT, C_PINS[2]),
     ])
+}
+
+pub fn setup_pmic_irq<T: IoIrq>(iox: &T, server: &str, opcode: usize) {
+    iox.set_irq_pin(IoxPort::PB, 13, IoxValue::Low, server, opcode);
 }
