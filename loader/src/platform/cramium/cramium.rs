@@ -1975,3 +1975,35 @@ pub unsafe fn init_clock_asic_c(freq_hz: u32, duty_sram: u32) -> u32 {
 
     100_000_000 // bodge for now
 }
+
+#[cfg(all(feature = "verilator-only", not(feature = "cramium-mpw")))]
+pub fn coreuser_config() {
+    // configure coruser signals. Specific to NTO.
+    use utra::coreuser::*;
+    crate::println!("coreuser setup...");
+    let mut coreuser = CSR::new(utra::coreuser::HW_COREUSER_BASE as *mut u32);
+    // set to 0 so we can safely mask it later on
+    coreuser.wo(USERVALUE, 0);
+    coreuser.rmwf(utra::coreuser::USERVALUE_DEFAULT, 3);
+    let trusted_asids = [(1, 0), (2, 0), (3, 1), (4, 2), (1, 0), (1, 0), (1, 0), (1, 0)];
+    let asid_fields = [
+        (utra::coreuser::MAP_LO_LUT0, utra::coreuser::USERVALUE_USER0),
+        (utra::coreuser::MAP_LO_LUT1, utra::coreuser::USERVALUE_USER1),
+        (utra::coreuser::MAP_LO_LUT2, utra::coreuser::USERVALUE_USER2),
+        (utra::coreuser::MAP_LO_LUT3, utra::coreuser::USERVALUE_USER3),
+        (utra::coreuser::MAP_HI_LUT4, utra::coreuser::USERVALUE_USER4),
+        (utra::coreuser::MAP_HI_LUT5, utra::coreuser::USERVALUE_USER5),
+        (utra::coreuser::MAP_HI_LUT6, utra::coreuser::USERVALUE_USER6),
+        (utra::coreuser::MAP_HI_LUT7, utra::coreuser::USERVALUE_USER7),
+    ];
+    for (&(asid, value), (map_field, uservalue_field)) in trusted_asids.iter().zip(asid_fields) {
+        coreuser.rmwf(map_field, asid);
+        coreuser.rmwf(uservalue_field, value);
+    }
+    coreuser.rmwf(CONTROL_INVERT_PRIV, 1);
+    coreuser.rmwf(CONTROL_ENABLE, 1);
+
+    // turn off updates
+    coreuser.wo(utra::coreuser::PROTECT, 1);
+    crate::println!("coreuser locked!");
+}

@@ -85,6 +85,11 @@ pub enum IniType {
 pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32) -> ! {
     #[cfg(all(feature = "cramium-soc", not(feature = "verilator-only")))]
     let perclk_freq = crate::platform::early_init(); // sets up PLLs so we're not running at 16MHz...
+    // need to make this "official" for NTO, the feature flag combo below works around some simulation config
+    // conflicts.
+    #[cfg(all(feature = "verilator-only", not(feature = "cramium-mpw")))]
+    platform::coreuser_config();
+
     #[cfg(not(all(feature = "cramium-soc", not(feature = "verilator-only"))))]
     let perclk_freq = 0;
 
