@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2025-01-01 15:33:54]]></description>
+    <description><![CDATA[Litex SoC 2025-01-11 17:47:31]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -282,38 +282,14 @@ register to disable individual events.]]></description>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[When set to `1`, mappings are enabled. When `0`, the `CoreUser` value is fixed
-to an 8-bit `1` value]]></description>
+to 0b0001_0000, and the `vex_mm` bit is set to '`1`.]]></description>
                         </field>
                         <field>
-                            <name>use8bit</name>
+                            <name>invert_priv</name>
                             <msb>1</msb>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
-                            <description><![CDATA[When set to `1`, use the 8-bit version of ASID for `CoreUser`. When `0`, map
-`CoreUser value to 1 bit]]></description>
-                        </field>
-                        <field>
-                            <name>shift</name>
-                            <msb>4</msb>
-                            <bitRange>[4:2]</bitRange>
-                            <lsb>2</lsb>
-                            <description><![CDATA[Sets the bit-shift for the 1-bit mapping of `CoreUser`. This field refers
-directly to the bit position, and defaults to bit `0`]]></description>
-                        </field>
-                        <field>
-                            <name>privilege</name>
-                            <msb>5</msb>
-                            <bitRange>[5:5]</bitRange>
-                            <lsb>5</lsb>
-                            <description><![CDATA[When set to `1`, requires the current privilege state to match that specified in
-`set_privilege.mpp`]]></description>
-                        </field>
-                        <field>
-                            <name>mpp</name>
-                            <msb>7</msb>
-                            <bitRange>[7:6]</bitRange>
-                            <lsb>6</lsb>
-                            <description><![CDATA[Value of `mpp` bit from `mstatus` that must match for code to be trusted]]></description>
+                            <description><![CDATA[When set to `1` inverts the sense of the privilege bit]]></description>
                         </field>
                     </fields>
                 </register>
@@ -330,6 +306,13 @@ directly to the bit position, and defaults to bit `0`]]></description>
                             <lsb>0</lsb>
                             <description><![CDATA[Computed value of the `CoreUser` signal as passed on to the SoC. For debugging.]]></description>
                         </field>
+                        <field>
+                            <name>mm</name>
+                            <msb>8</msb>
+                            <bitRange>[8:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[Computed value of the `mm` signal passed on to the SoC.]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
@@ -343,28 +326,28 @@ directly to the bit position, and defaults to bit `0`]]></description>
                             <msb>7</msb>
                             <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
+                            <description><![CDATA[Mapping of `CoreUser` ASID to coreuser dense conding bit 0]]></description>
                         </field>
                         <field>
                             <name>lut1</name>
                             <msb>15</msb>
                             <bitRange>[15:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
+                            <description><![CDATA[Mapping of `CoreUser` ASID to coreuser dense conding bit 0]]></description>
                         </field>
                         <field>
                             <name>lut2</name>
                             <msb>23</msb>
                             <bitRange>[23:16]</bitRange>
                             <lsb>16</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
+                            <description><![CDATA[Mapping of `CoreUser` ASID to coreuser dense conding bit 0]]></description>
                         </field>
                         <field>
                             <name>lut3</name>
                             <msb>31</msb>
                             <bitRange>[31:24]</bitRange>
                             <lsb>24</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
+                            <description><![CDATA[Mapping of `CoreUser` ASID to coreuser dense conding bit 0]]></description>
                         </field>
                     </fields>
                 </register>
@@ -379,28 +362,28 @@ directly to the bit position, and defaults to bit `0`]]></description>
                             <msb>7</msb>
                             <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
+                            <description><![CDATA[Mapping of `CoreUser` ASID to coreuser dense coding bit 1]]></description>
                         </field>
                         <field>
                             <name>lut5</name>
                             <msb>15</msb>
                             <bitRange>[15:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
+                            <description><![CDATA[Mapping of `CoreUser` ASID to coreuser dense coding bit 1]]></description>
                         </field>
                         <field>
                             <name>lut6</name>
                             <msb>23</msb>
                             <bitRange>[23:16]</bitRange>
                             <lsb>16</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
+                            <description><![CDATA[Mapping of `CoreUser` ASID to coreuser dense coding bit 1]]></description>
                         </field>
                         <field>
                             <name>lut7</name>
                             <msb>31</msb>
                             <bitRange>[31:24]</bitRange>
                             <lsb>24</lsb>
-                            <description><![CDATA[Value of `CoreUser` ASID bit 0]]></description>
+                            <description><![CDATA[Mapping of `CoreUser` ASID to coreuser dense coding bit 1]]></description>
                         </field>
                     </fields>
                 </register>
@@ -475,10 +458,26 @@ directly to the bit position, and defaults to bit `0`]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>PROTECT</name>
+                    <description><![CDATA[Writing `1` to this bit prevents any further updates to CoreUser configuration
+status. Can only be reversed with a system reset.]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>protect</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x14</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>

@@ -10653,11 +10653,18 @@ position to clear the flag]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>cr_wkupmask</name>
-                            <msb>9</msb>
-                            <bitRange>[9:0]</bitRange>
+                            <name>inten</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[cr_wkupmask read/write control register]]></description>
+                            <description><![CDATA[inten read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>wkupmask</name>
+                            <msb>17</msb>
+                            <bitRange>[17:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[wkupmask read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
