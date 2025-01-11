@@ -2,6 +2,7 @@
 use cramium_hal::axp2101::Axp2101;
 #[cfg(not(feature = "verilator-only"))]
 use cramium_hal::iox::{Iox, IoxDir, IoxEnable, IoxFunction, IoxPort};
+#[cfg(feature = "cramium-soc")]
 use cramium_hal::udma;
 #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
 use cramium_hal::udma::PeriphId;
@@ -1541,6 +1542,11 @@ unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x1f3f); // hclk
         daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x0f1f); // iclk
         daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x070f); // pclk
+
+        #[cfg(not(feature = "cramium-mpw"))]
+        // perclk divider - set to divide by 8 off of an 800Mhz base. Only found on NTO.
+        daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
+
         // commit dividers
         daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
     }
@@ -1556,6 +1562,7 @@ fn fsfreq_to_hz(fs_freq: u32) -> u32 { (fs_freq * (48_000_000 / 32)) / 1_000_000
 fn fsfreq_to_hz_32(fs_freq: u32) -> u32 { (fs_freq * (32_000_000 / 32)) / 1_000_000 }
 
 #[allow(dead_code)]
+#[cfg(feature = "cramium-soc")]
 /// Used mainly for debug breaks. Not used in every configuration.
 pub fn getc() -> char {
     let uart_buf_addr = loader::UART_IFRAM_ADDR;

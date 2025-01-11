@@ -217,7 +217,6 @@ impl<'a> I2c<'a> {
             pending: I2cPending::Idle,
             perclk_freq,
         };
-        crate::println!("Set divider to {}", divider,);
         i2c.send_cmd_list(&[I2cCmd::Config(divider)]);
         i2c
     }

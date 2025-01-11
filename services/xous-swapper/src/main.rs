@@ -330,7 +330,7 @@ fn write_to_swap_inner(
     };
 
     // step 2: write the page to swap
-    #[cfg(feature = "debug-print")]
+    #[cfg(feature = "debug-print-swapper")]
     writeln!(DebugUart {}, "WTS PID{} VA {:x}", candidate.raw_pid(), candidate.vaddr()).ok();
     // this is safe because the page is aligned and initialized as it comes from the kernel
     // remember that this page is overwritten with encrypted data
@@ -448,7 +448,7 @@ fn swap_handler(
 
         // swapper is not allowed to use `log` for debugging under most circumstances, because
         // the swapper can't send messages when handling a swap call. Instead, we use a local
-        // debug UART to handle this. This needs to be enabled with the "debug-print" feature
+        // debug UART to handle this. This needs to be enabled with the "debug-print-swapper" feature
         // and is mutually exclusive with the "gdb-stub" feature in the kernel since it uses
         // the same physical hardware.
         sss.inner = Some(SwapperSharedState {
@@ -507,7 +507,7 @@ fn swap_handler(
             };
             // clear the used bit in swap
             ss.sct.counts[paddr_in_swap / PAGE_SIZE] &= !loader::FLG_SWAP_USED;
-            #[cfg(feature = "debug-print")]
+            #[cfg(feature = "debug-print-swapper")]
             writeln!(
                 DebugUart {},
                 "RFS PID{} VA {:x} PA {:x} counts {:x}",

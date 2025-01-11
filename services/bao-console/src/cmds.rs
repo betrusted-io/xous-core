@@ -80,12 +80,15 @@ mod test;
 use test::*;
 mod trng_cmd;
 use trng_cmd::*;
+mod usb;
+use usb::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
     lastverb: String,
     ///// 2. declare storage for your command here.
     trng_cmd: TrngCmd,
+    usb: Usb,
 }
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
@@ -106,6 +109,7 @@ impl CmdEnv {
                 log::debug!("trng");
                 TrngCmd::new()
             },
+            usb: Usb::new(),
         }
     }
 
@@ -125,6 +129,7 @@ impl CmdEnv {
             &mut ver_cmd,
             &mut self.trng_cmd,
             &mut console_cmd,
+            &mut self.usb,
         ];
 
         if let Some(cmdline) = maybe_cmdline {

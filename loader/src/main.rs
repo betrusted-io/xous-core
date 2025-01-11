@@ -141,7 +141,8 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
         println!("No suspend marker found, doing a cold boot!");
         #[cfg(feature = "simulation-only")]
         println!("Configured for simulation. Skipping RAM clear!");
-        #[cfg(not(feature = "cramium-soc"))] // cramium-soc target clears RAM with assembly routine on boot
+        #[cfg(not(any(feature = "cramium-soc", feature = "cramium-fpga")))]
+        // cramium target clears RAM with assembly routine on boot
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg, &fs_prehash);
@@ -287,7 +288,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
 
         #[cfg(not(feature = "atsama5d27"))]
         {
-            #[cfg(not(feature = "cramium-soc"))]
+            #[cfg(not(any(feature = "cramium-soc", feature = "cramium-fpga")))]
             {
                 // uart mux only exists on the FPGA variant
                 use utralib::generated::*;

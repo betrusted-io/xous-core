@@ -148,6 +148,9 @@ impl Mbox {
     }
 
     pub fn try_send(&mut self, to_cm7: MboxToCm7Pkt) -> Result<(), MboxError> {
+        // clear any pending bits from previous transactions
+        self.csr.wo(mailbox::EV_PENDING, self.csr.r(mailbox::EV_PENDING));
+
         if to_cm7.data.len() > MAX_PKT_LEN {
             Err(MboxError::TxOverflow)
         } else {

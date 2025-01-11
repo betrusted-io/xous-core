@@ -11,7 +11,7 @@ use usb_cramium::HIDReport;
 use usb_device::class_prelude::*;
 use usb_device::device::UsbDevice;
 use usb_device::prelude::*;
-use utralib::AtomicCsr;
+use utralib::{AtomicCsr, utra};
 use xous_ipc::Buffer;
 use xous_usb_hid::device::DeviceClass;
 use xous_usb_hid::device::fido::RawFido;
@@ -69,15 +69,18 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
 
     // immediately clear the interrupt and re-enable it so we can catch an interrupt
     // that is generated while we are handling the interrupt.
-    let pending = usb.irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
+    let pending = usb.irq_csr.r(utra::irqarray1::EV_PENDING);
+    #[cfg(feature = "verbose-debug")]
+    crate::println!("pending: {:x}, status: {:x}", pending, usb.irq_csr.r(utra::irqarray1::EV_STATUS),);
     // clear pending
-    usb.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, pending);
+    usb.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xffff_ffff);
     // re-enable interrupts
-    usb.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 3);
+    usb.irq_csr.wo(utra::irqarray1::EV_ENABLE, CORIGINE_IRQ_MASK | SW_IRQ_MASK);
 
     if (pending & CORIGINE_IRQ_MASK) != 0 {
         let status = usb.csr.r(USBSTS);
-        // usb.print_status(status);
+        #[cfg(feature = "verbose-debug")]
+        crate::println!("status: {:x}", status);
         if (status & usb.csr.ms(USBSTS_SYSTEM_ERR, 1)) != 0 {
             crate::println!("System error");
             usb.csr.wfo(USBSTS_SYSTEM_ERR, 1);
@@ -98,26 +101,32 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
 
                         loop {
                             {
+                                #[cfg(feature = "verbose-debug")]
+                                crate::println!("getting event");
                                 // scoping on the hardware lock to manipulate pointer states
-                                let hw_lock = usb.wrapper.hw.borrow_mut().lock().unwrap();
-                                let event = {
-                                    if hw_lock.udc_event.evt_dq_pt.load(Ordering::SeqCst).is_null() {
+                                let mut corigine_usb = usb.wrapper.core();
+                                let mut event = {
+                                    if corigine_usb.udc_event.evt_dq_pt.load(Ordering::SeqCst).is_null() {
                                         // break;
                                         crate::println!("null pointer in process_event_ring");
                                         break;
                                     }
                                     let event_ptr =
-                                        hw_lock.udc_event.evt_dq_pt.load(Ordering::SeqCst) as usize;
+                                        corigine_usb.udc_event.evt_dq_pt.load(Ordering::SeqCst) as usize;
                                     unsafe {
                                         (event_ptr as *mut EventTrbS)
                                             .as_mut()
                                             .expect("couldn't deref pointer")
                                     }
                                 };
-
-                                if event.dw3.cycle_bit() != hw_lock.udc_event.ccs {
+                                if event.dw3.cycle_bit() != corigine_usb.udc_event.ccs {
                                     break;
                                 }
+
+                                // leaves a side-effect result of the CrgEvent inside the corigine_usb object
+                                #[cfg(feature = "verbose-debug")]
+                                crate::println!("handle inner");
+                                cramium_hal::usb::driver::handle_event_inner(&mut corigine_usb, &mut event);
                             }
 
                             let device = usb.device.borrow_mut();
@@ -130,7 +139,10 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                                         // actually store the data or pass it on to userspace
                                         crate::println!("keyboard LEDs: {:?}", l);
                                     }
-                                    Err(e) => crate::println!("KEYB ERR: {:?}", e),
+                                    Err(e) => match e {
+                                        UsbError::WouldBlock => {}
+                                        _ => crate::println!("KEYB ERR: {:?}", e),
+                                    },
                                 };
                                 // u2f report handler
                                 match class.device::<RawFido<'_, _>, _>().read_report() {
@@ -150,12 +162,15 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                                         buf.try_send(usb.conn, Opcode::IrqFidoRx.to_u32().unwrap())
                                             .expect("couldn't send FIDO packet to userspace: maybe we need to implement a timeout/retry mechanism?");
                                     }
-                                    Err(e) => crate::println!("U2F ERR: {:?}", e),
+                                    Err(e) => match e {
+                                        UsbError::WouldBlock => {}
+                                        _ => crate::println!("U2F ERR: {:?}", e),
+                                    },
                                 }
                             }
                             {
                                 // scoping on the hardware lock to manipulate pointer states
-                                let mut hw_lock = usb.wrapper.hw.borrow_mut().lock().unwrap();
+                                let mut hw_lock = usb.wrapper.core();
                                 if hw_lock.udc_event.evt_dq_pt.load(Ordering::SeqCst)
                                     == hw_lock.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst)
                                 {
@@ -176,19 +191,11 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                                 }
                             }
                         }
-
                         // update dequeue pointer
                         usb.csr.wo(ERDPHI, 0);
                         usb.csr.wo(
                             ERDPLO,
-                            (usb.wrapper
-                                .hw
-                                .borrow_mut()
-                                .lock()
-                                .unwrap()
-                                .udc_event
-                                .evt_dq_pt
-                                .load(Ordering::SeqCst) as u32
+                            (usb.wrapper.core().udc_event.evt_dq_pt.load(Ordering::SeqCst) as u32
                                 & 0xFFFF_FFF0)
                                 | CRG_UDC_ERDPLO_EHB,
                         );
@@ -227,8 +234,14 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
     }
 }
 
+#[repr(align(32))]
 pub struct CramiumUsb<'a> {
     pub conn: xous::CID,
+    pub csr: AtomicCsr<u32>,
+    pub irq_csr: AtomicCsr<u32>,
+    pub fido_tx_queue: RefCell<VecDeque<RawFidoReport>>,
+    pub kbd_tx_queue: RefCell<VecDeque<Keyboard>>,
+    pub irq_req: Option<UsbIrqReq>,
     pub wrapper: CorigineWrapper,
     pub device: UsbDevice<'a, CorigineWrapper>,
     pub class: UsbHidClass<
@@ -239,20 +252,15 @@ pub struct CramiumUsb<'a> {
             frunk_core::hlist::HCons<NKROBootKeyboard<'a, CorigineWrapper>, frunk_core::hlist::HNil>,
         >,
     >,
-    pub csr: AtomicCsr<u32>,
-    pub irq_csr: AtomicCsr<u32>,
-    pub fido_tx_queue: RefCell<VecDeque<RawFidoReport>>,
-    pub kbd_tx_queue: RefCell<VecDeque<Keyboard>>,
-    pub irq_req: Option<UsbIrqReq>,
 }
 
 impl<'a> CramiumUsb<'a> {
     pub fn new(
+        csr: AtomicCsr<u32>,
+        irq_csr: AtomicCsr<u32>,
         cid: xous::CID,
         cw: CorigineWrapper,
         usb_alloc: &'a UsbBusAllocator<CorigineWrapper>,
-        csr: AtomicCsr<u32>,
-        irq_csr: AtomicCsr<u32>,
         serial_number: &'a String,
     ) -> Self {
         let class = UsbHidClassBuilder::new()
@@ -264,6 +272,8 @@ impl<'a> CramiumUsb<'a> {
             .manufacturer("Kosagi")
             .product("Precursor")
             .serial_number(&serial_number)
+            // this is *required* by the corigine stack
+            .max_packet_size_0(64)
             .build();
 
         CramiumUsb {
@@ -280,8 +290,61 @@ impl<'a> CramiumUsb<'a> {
         }
     }
 
+    pub fn init(&mut self) {
+        // this has to be done in `main` because we're passing a pointer to the Box'd structure, which
+        // the IRQ handler can freely and safely manipulate
+        xous::claim_interrupt(
+            utra::irqarray1::IRQARRAY1_IRQ,
+            composite_handler,
+            self as *mut CramiumUsb as *mut usize,
+        )
+        .expect("couldn't claim irq");
+        log::debug!("claimed IRQ with state at {:x}", self as *mut CramiumUsb as usize);
+
+        // enable both the corigine core IRQ and the software IRQ bit
+        // software IRQ is used to initiate send/receive from software to the interrupt context
+        self.irq_csr.wo(utra::irqarray1::EV_SOFT, 0);
+        self.irq_csr.wo(utra::irqarray1::EV_EDGE_TRIGGERED, 0);
+        self.irq_csr.wo(utra::irqarray1::EV_POLARITY, 0);
+
+        self.wrapper.hw.lock().unwrap().init();
+        self.wrapper.hw.lock().unwrap().start();
+        self.wrapper.hw.lock().unwrap().update_current_speed();
+
+        // irq must me enabled without dependency on the hw lock
+        self.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, CORIGINE_IRQ_MASK | SW_IRQ_MASK);
+    }
+
     pub fn sw_irq(&mut self, request_type: UsbIrqReq) {
         self.irq_req = Some(request_type);
-        self.irq_csr.wfo(utralib::utra::irqarray1::EV_SOFT_TRIGGER, SW_IRQ_MASK);
+        self.irq_csr.wfo(utra::irqarray1::EV_SOFT_TRIGGER, SW_IRQ_MASK);
+    }
+
+    /// Process an unplug event
+    pub fn unplug(&mut self) {
+        // disable all interrupts so we can safely go through initialization routines
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, 0);
+
+        self.wrapper.hw.lock().unwrap().reset();
+        self.wrapper.hw.lock().unwrap().init();
+        self.wrapper.hw.lock().unwrap().start();
+        self.wrapper.hw.lock().unwrap().update_current_speed();
+
+        // reset all shared data structures
+        self.device.force_reset().ok();
+        self.fido_tx_queue = RefCell::new(VecDeque::new());
+        self.kbd_tx_queue = RefCell::new(VecDeque::new());
+        self.irq_req = None;
+        self.wrapper.event = None;
+        self.wrapper.address_is_set.store(false, Ordering::SeqCst);
+        self.wrapper.ep_out_ready = (0..cramium_hal::usb::driver::CRG_EP_NUM + 1)
+            .map(|_| core::sync::atomic::AtomicBool::new(false))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+
+        // re-enable IRQs
+        self.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, CORIGINE_IRQ_MASK | SW_IRQ_MASK);
     }
 }

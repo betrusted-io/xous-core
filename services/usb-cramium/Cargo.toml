@@ -13,7 +13,12 @@ log-server = { package = "xous-api-log", version = "0.1.63" }
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-cramium-hal = { path = "../../libs/cramium-hal", features = ["std"] }
+cramium-hal = { path = "../../libs/cramium-hal", features = [
+    "std",
+    "debug-print-usb",
+    # "verbose-debug",
+    "axp2101",
+] }
 cram-hal-service = { path = "../cram-hal-service" }
 xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main" }
 rkyv = { version = "0.8.8", default-features = false, features = [
@@ -23,6 +28,8 @@ rkyv = { version = "0.8.8", default-features = false, features = [
 packed_struct = { version = "0.10", default-features = false } # used by the xous-usb-hid crate
 locales = { path = "../../locales" }
 frunk_core = "0.4.2"
+# for debugging interrupts
+riscv = { version = "0.5.6", package = "xous-riscv" }
 
 [dependencies.usb-device]
 # see top level Cargo.toml for patch.crates-io directive to help with dev work
@@ -37,10 +44,11 @@ precursor = ["utralib/precursor", "utralib/std"]
 hosted = ["utralib/hosted", "utralib/std"]
 renode = ["utralib/renode", "utralib/std"]
 mass-storage = []
-debug-print = [
+debug-print-usb = [
 ] # mutually exclusive feature with other crates that use the app UART
+verbose-debug = []
 
 prototyping = [
 ] # temporary feature-out for figuring out the code; remove this if you don't recognize it anymore
 
-default = ["mass-storage", "debug-print"]
+default = ["mass-storage", "debug-print-usb"]

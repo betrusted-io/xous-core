@@ -516,17 +516,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // ------ Cramium hardware image configs ------
-        Some("cramium-fpga") | Some("cramium-soc") => {
-            let board = "board-dabao";
-            // select the board
-            builder.add_feature(board);
-            builder.add_loader_feature(board);
-            builder.add_kernel_feature(board);
+        Some("cramium-sim") | Some("cramium-soc") => {
+            match task.as_deref() {
+                Some("cramium-soc") => {
+                    let board = "board-dabao";
+                    // select the board
+                    builder.add_feature(board);
+                    builder.add_loader_feature(board);
+                    builder.add_kernel_feature(board);
+                }
+                _ => (), // don't add any board because this is simulation
+            };
 
             // placement in flash is a tension between dev convenience and RAM usage. Things in flash
             // are resident, non-swapable, but end up making the slow kernel burn process take longer.
             let cramium_flash_pkgs =
-                ["xous-ticktimer", "xous-log", "xous-names" /* "cram-hal-service" */].to_vec();
+                ["xous-log", "xous-names", "cram-mbox1", "cram-mbox2" /* "cram-hal-service" */].to_vec();
             let cramium_swap_pkgs = [].to_vec();
 
             builder.add_loader_feature("debug-print");
@@ -541,7 +546,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             builder.add_loader_feature("sram-margin");
             match task.as_deref() {
-                Some("cramium-fpga") => builder.target_cramium_fpga(),
+                Some("cramium-sim") => builder.target_cramium_fpga(),
                 Some("cramium-soc") => builder.target_cramium_soc(),
                 _ => panic!("should be unreachable"),
             };
@@ -579,7 +584,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             //   - [planned] pddb server
             //   - [planned] vault application
             let bao_rram_pkgs = ["xous-ticktimer", "xous-log", "xous-names", "usb-cramium"].to_vec();
-            let bao_swap_pkgs = ["cram-hal-service", "bao-console", "bao-video"].to_vec();
+            let bao_swap_pkgs = ["cram-hal-service", "bao-console"].to_vec(); /* "bao-video" */
             if !builder.is_swap_set() {
                 builder.set_swap(0, 8 * 1024 * 1024);
             }
@@ -588,6 +593,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_feature("swap");
 
             builder.add_loader_feature("debug-print");
+            // the following feature needs to be uncommented if we also enable
+            // debug-print-swapper inside xous-swapper
+            if false {
+                builder.add_loader_feature("userspace-swap-debug");
+                builder.add_feature("debug-print-swapper");
+            } else {
+                builder.add_feature("debug-print-usb");
+            }
             builder.add_kernel_feature("debug-swap");
             // builder.add_kernel_feature("debug-print");
             // builder.add_kernel_feature("debug-swap-verbose");
@@ -779,6 +792,7 @@ Hardware images:
  av-test                 automation framework for TRNG testing (AV directly, no CPRNG). [cratespecs] ignored.
  tiny                    Precursor tiny image. For testing with services built out-of-tree.
  cramium-soc             BSP validation image for Cramium. Contains a superset of features, in various states of testing.
+ cramium-sim             Tiny target for verilator simulation
  baosec                  Baosec application target image.
 
 Hosted emulation:
