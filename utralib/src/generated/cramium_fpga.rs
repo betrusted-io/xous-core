@@ -524,17 +524,15 @@ pub mod utra {
     }
 
     pub mod coreuser {
-        pub const COREUSER_NUMREGS: usize = 5;
+        pub const COREUSER_NUMREGS: usize = 6;
 
-        pub const CONTROL: crate::Register = crate::Register::new(0, 0xff);
+        pub const CONTROL: crate::Register = crate::Register::new(0, 0x3);
         pub const CONTROL_ENABLE: crate::Field = crate::Field::new(1, 0, CONTROL);
-        pub const CONTROL_USE8BIT: crate::Field = crate::Field::new(1, 1, CONTROL);
-        pub const CONTROL_SHIFT: crate::Field = crate::Field::new(3, 2, CONTROL);
-        pub const CONTROL_PRIVILEGE: crate::Field = crate::Field::new(1, 5, CONTROL);
-        pub const CONTROL_MPP: crate::Field = crate::Field::new(2, 6, CONTROL);
+        pub const CONTROL_INVERT_PRIV: crate::Field = crate::Field::new(1, 1, CONTROL);
 
-        pub const STATUS: crate::Register = crate::Register::new(1, 0xff);
+        pub const STATUS: crate::Register = crate::Register::new(1, 0x1ff);
         pub const STATUS_COREUSER: crate::Field = crate::Field::new(8, 0, STATUS);
+        pub const STATUS_MM: crate::Field = crate::Field::new(1, 8, STATUS);
 
         pub const MAP_LO: crate::Register = crate::Register::new(2, 0xffffffff);
         pub const MAP_LO_LUT0: crate::Field = crate::Field::new(8, 0, MAP_LO);
@@ -558,6 +556,9 @@ pub mod utra {
         pub const USERVALUE_USER6: crate::Field = crate::Field::new(2, 12, USERVALUE);
         pub const USERVALUE_USER7: crate::Field = crate::Field::new(2, 14, USERVALUE);
         pub const USERVALUE_DEFAULT: crate::Field = crate::Field::new(2, 16, USERVALUE);
+
+        pub const PROTECT: crate::Register = crate::Register::new(5, 0x1);
+        pub const PROTECT_PROTECT: crate::Field = crate::Field::new(1, 0, PROTECT);
 
         pub const HW_COREUSER_BASE: usize = 0xe0002000;
     }
@@ -4181,8 +4182,9 @@ pub mod utra {
         pub const CR_CLK1HZFD: crate::Register = crate::Register::new(1, 0x3fff);
         pub const CR_CLK1HZFD_CR_CLK1HZFD: crate::Field = crate::Field::new(14, 0, CR_CLK1HZFD);
 
-        pub const CR_WKUPMASK: crate::Register = crate::Register::new(2, 0x3ff);
-        pub const CR_WKUPMASK_CR_WKUPMASK: crate::Field = crate::Field::new(10, 0, CR_WKUPMASK);
+        pub const CR_WKUPMASK: crate::Register = crate::Register::new(2, 0x3ffff);
+        pub const CR_WKUPMASK_INTEN: crate::Field = crate::Field::new(8, 0, CR_WKUPMASK);
+        pub const CR_WKUPMASK_WKUPMASK: crate::Field = crate::Field::new(10, 8, CR_WKUPMASK);
 
         pub const CR_RSTCRMASK: crate::Register = crate::Register::new(3, 0x1f);
         pub const CR_RSTCRMASK_CR_RSTCRMASK: crate::Field = crate::Field::new(5, 0, CR_RSTCRMASK);
@@ -5744,26 +5746,11 @@ mod tests {
         let mut baz = coreuser_csr.zf(utra::coreuser::CONTROL_ENABLE, bar);
         baz |= coreuser_csr.ms(utra::coreuser::CONTROL_ENABLE, 1);
         coreuser_csr.wfo(utra::coreuser::CONTROL_ENABLE, baz);
-        let bar = coreuser_csr.rf(utra::coreuser::CONTROL_USE8BIT);
-        coreuser_csr.rmwf(utra::coreuser::CONTROL_USE8BIT, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::CONTROL_USE8BIT, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::CONTROL_USE8BIT, 1);
-        coreuser_csr.wfo(utra::coreuser::CONTROL_USE8BIT, baz);
-        let bar = coreuser_csr.rf(utra::coreuser::CONTROL_SHIFT);
-        coreuser_csr.rmwf(utra::coreuser::CONTROL_SHIFT, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::CONTROL_SHIFT, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::CONTROL_SHIFT, 1);
-        coreuser_csr.wfo(utra::coreuser::CONTROL_SHIFT, baz);
-        let bar = coreuser_csr.rf(utra::coreuser::CONTROL_PRIVILEGE);
-        coreuser_csr.rmwf(utra::coreuser::CONTROL_PRIVILEGE, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::CONTROL_PRIVILEGE, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::CONTROL_PRIVILEGE, 1);
-        coreuser_csr.wfo(utra::coreuser::CONTROL_PRIVILEGE, baz);
-        let bar = coreuser_csr.rf(utra::coreuser::CONTROL_MPP);
-        coreuser_csr.rmwf(utra::coreuser::CONTROL_MPP, bar);
-        let mut baz = coreuser_csr.zf(utra::coreuser::CONTROL_MPP, bar);
-        baz |= coreuser_csr.ms(utra::coreuser::CONTROL_MPP, 1);
-        coreuser_csr.wfo(utra::coreuser::CONTROL_MPP, baz);
+        let bar = coreuser_csr.rf(utra::coreuser::CONTROL_INVERT_PRIV);
+        coreuser_csr.rmwf(utra::coreuser::CONTROL_INVERT_PRIV, bar);
+        let mut baz = coreuser_csr.zf(utra::coreuser::CONTROL_INVERT_PRIV, bar);
+        baz |= coreuser_csr.ms(utra::coreuser::CONTROL_INVERT_PRIV, 1);
+        coreuser_csr.wfo(utra::coreuser::CONTROL_INVERT_PRIV, baz);
 
         let foo = coreuser_csr.r(utra::coreuser::STATUS);
         coreuser_csr.wo(utra::coreuser::STATUS, foo);
@@ -5772,6 +5759,11 @@ mod tests {
         let mut baz = coreuser_csr.zf(utra::coreuser::STATUS_COREUSER, bar);
         baz |= coreuser_csr.ms(utra::coreuser::STATUS_COREUSER, 1);
         coreuser_csr.wfo(utra::coreuser::STATUS_COREUSER, baz);
+        let bar = coreuser_csr.rf(utra::coreuser::STATUS_MM);
+        coreuser_csr.rmwf(utra::coreuser::STATUS_MM, bar);
+        let mut baz = coreuser_csr.zf(utra::coreuser::STATUS_MM, bar);
+        baz |= coreuser_csr.ms(utra::coreuser::STATUS_MM, 1);
+        coreuser_csr.wfo(utra::coreuser::STATUS_MM, baz);
 
         let foo = coreuser_csr.r(utra::coreuser::MAP_LO);
         coreuser_csr.wo(utra::coreuser::MAP_LO, foo);
@@ -5866,6 +5858,14 @@ mod tests {
         let mut baz = coreuser_csr.zf(utra::coreuser::USERVALUE_DEFAULT, bar);
         baz |= coreuser_csr.ms(utra::coreuser::USERVALUE_DEFAULT, 1);
         coreuser_csr.wfo(utra::coreuser::USERVALUE_DEFAULT, baz);
+
+        let foo = coreuser_csr.r(utra::coreuser::PROTECT);
+        coreuser_csr.wo(utra::coreuser::PROTECT, foo);
+        let bar = coreuser_csr.rf(utra::coreuser::PROTECT_PROTECT);
+        coreuser_csr.rmwf(utra::coreuser::PROTECT_PROTECT, bar);
+        let mut baz = coreuser_csr.zf(utra::coreuser::PROTECT_PROTECT, bar);
+        baz |= coreuser_csr.ms(utra::coreuser::PROTECT_PROTECT, 1);
+        coreuser_csr.wfo(utra::coreuser::PROTECT_PROTECT, baz);
   }
 
     #[test]
@@ -17470,11 +17470,16 @@ mod tests {
 
         let foo = ao_sysctrl_csr.r(utra::ao_sysctrl::CR_WKUPMASK);
         ao_sysctrl_csr.wo(utra::ao_sysctrl::CR_WKUPMASK, foo);
-        let bar = ao_sysctrl_csr.rf(utra::ao_sysctrl::CR_WKUPMASK_CR_WKUPMASK);
-        ao_sysctrl_csr.rmwf(utra::ao_sysctrl::CR_WKUPMASK_CR_WKUPMASK, bar);
-        let mut baz = ao_sysctrl_csr.zf(utra::ao_sysctrl::CR_WKUPMASK_CR_WKUPMASK, bar);
-        baz |= ao_sysctrl_csr.ms(utra::ao_sysctrl::CR_WKUPMASK_CR_WKUPMASK, 1);
-        ao_sysctrl_csr.wfo(utra::ao_sysctrl::CR_WKUPMASK_CR_WKUPMASK, baz);
+        let bar = ao_sysctrl_csr.rf(utra::ao_sysctrl::CR_WKUPMASK_INTEN);
+        ao_sysctrl_csr.rmwf(utra::ao_sysctrl::CR_WKUPMASK_INTEN, bar);
+        let mut baz = ao_sysctrl_csr.zf(utra::ao_sysctrl::CR_WKUPMASK_INTEN, bar);
+        baz |= ao_sysctrl_csr.ms(utra::ao_sysctrl::CR_WKUPMASK_INTEN, 1);
+        ao_sysctrl_csr.wfo(utra::ao_sysctrl::CR_WKUPMASK_INTEN, baz);
+        let bar = ao_sysctrl_csr.rf(utra::ao_sysctrl::CR_WKUPMASK_WKUPMASK);
+        ao_sysctrl_csr.rmwf(utra::ao_sysctrl::CR_WKUPMASK_WKUPMASK, bar);
+        let mut baz = ao_sysctrl_csr.zf(utra::ao_sysctrl::CR_WKUPMASK_WKUPMASK, bar);
+        baz |= ao_sysctrl_csr.ms(utra::ao_sysctrl::CR_WKUPMASK_WKUPMASK, 1);
+        ao_sysctrl_csr.wfo(utra::ao_sysctrl::CR_WKUPMASK_WKUPMASK, baz);
 
         let foo = ao_sysctrl_csr.r(utra::ao_sysctrl::CR_RSTCRMASK);
         ao_sysctrl_csr.wo(utra::ao_sysctrl::CR_RSTCRMASK, foo);
