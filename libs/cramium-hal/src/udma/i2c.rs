@@ -303,10 +303,6 @@ impl<'a> I2c<'a> {
     }
 
     pub fn reset(&mut self) {
-        // reset the block
-        self.udma_reset(Bank::Custom);
-        self.udma_reset(Bank::Tx);
-        self.udma_reset(Bank::Rx);
         // reset the block, if MPW. If NTO, this needs to be handled by the upper level code with a
         // reset to udma_global
         #[cfg(feature = "mpw")]
@@ -322,6 +318,19 @@ impl<'a> I2c<'a> {
                 I2cChannel::Channel2 => PeriphId::I2c2,
                 I2cChannel::Channel3 => PeriphId::I2c3,
             });
+        }
+        for _i in 0..20 {
+            // dummy read
+            let _ = self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY);
+        }
+        // reset the block
+        self.udma_reset(Bank::Custom);
+        self.udma_reset(Bank::Tx);
+        self.udma_reset(Bank::Rx);
+
+        for _i in 0..20 {
+            // dummy read
+            let _ = self.csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY);
         }
 
         self.send_cmd_list(&[I2cCmd::Config(self.divider)]);
