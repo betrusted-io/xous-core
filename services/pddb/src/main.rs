@@ -1,6 +1,3 @@
-#![cfg_attr(target_os = "none", no_std)]
-#![cfg_attr(target_os = "none", no_main)]
-
 extern crate bitfield;
 /// # PDDB - Plausibly Deniable DataBase
 ///
@@ -369,11 +366,18 @@ mod api;
 use api::*;
 mod backend;
 use backend::*;
+#[cfg(feature = "gen1")]
 mod ux;
 use rkyv::with::Identity;
+#[cfg(feature = "gen1")]
 use ux::*;
+#[cfg(feature = "gen1")]
 mod menu;
+#[cfg(feature = "gen1")]
 use menu::*;
+
+#[cfg(feature = "gen2")]
+mod hw;
 
 mod libstd;
 
@@ -399,6 +403,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
+#[cfg(feature = "gen1")]
 use locales::t;
 use num_traits::*;
 use rkyv::{
@@ -504,12 +509,16 @@ fn wrapped_main() -> ! {
     let entropy = Rc::new(RefCell::new(TrngPool::new()));
 
     // for less-secured user prompts (everything but password entry)
+    #[cfg(feature = "gen1")]
     let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
 
     // our very own password modal. Password modals are precious and privately owned, to avoid
     // other processes from crafting them.
+    #[cfg(feature = "gen1")]
     let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
+    #[cfg(feature = "gen1")]
     let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
+    #[cfg(feature = "gen1")]
     let pw_handle = thread::spawn({
         // this comment keeps rustfmt from flattening this block
         move || password_ux_manager(xous::connect(pddb_sid).unwrap(), pw_sid)
@@ -555,8 +564,9 @@ fn wrapped_main() -> ! {
         }
     });
 
-    // our menu handler
     let my_cid = xous::connect(pddb_sid).unwrap();
+    // our menu handler
+    #[cfg(feature = "gen1")]
     let _ = thread::spawn({
         let my_cid = my_cid.clone();
         move || {
@@ -664,6 +674,7 @@ fn wrapped_main() -> ! {
     let mut scratch = [MaybeUninit::<u8>::uninit(); 256];
 
     // register a suspend/resume listener
+    #[cfg(feature = "gen1")]
     let mut susres =
         susres::Susres::new(Some(susres::SuspendOrder::Early), &xns, Opcode::SuspendResume as u32, my_cid)
             .expect("couldn't create suspend/resume object");
@@ -672,6 +683,7 @@ fn wrapped_main() -> ! {
         let op: Opcode = FromPrimitive::from_usize(msg.body.id() & 0xffff).unwrap_or(Opcode::InvalidOpcode);
         log::debug!("{:x?}", op);
         match op {
+            #[cfg(feature = "gen1")]
             Opcode::SuspendResume => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 basis_cache.suspend(&mut pddb_os);
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
@@ -714,6 +726,11 @@ fn wrapped_main() -> ! {
             //      retries.
             // If we need more nuance out of this routine, consider creating a custom public enum type to help
             // marshall this.
+            #[cfg(feature = "gen2")]
+            Opcode::TryMount => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                unimplemented!();
+            }),
+            #[cfg(feature = "gen1")]
             Opcode::TryMount => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let llio = llio::Llio::new(&xns);
                 while !llio.is_ec_ready() {
@@ -2329,6 +2346,7 @@ fn wrapped_main() -> ! {
     xous::terminate_process(0)
 }
 
+#[cfg(feature = "gen1")]
 fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous::CID) -> PasswordState {
     log::info!("Requesting login password");
     loop {
@@ -2388,6 +2406,8 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
         }
     }
 }
+
+#[cfg(feature = "gen1")]
 fn try_mount_or_format(
     modals: &modals::Modals,
     pddb_os: &mut PddbOs,
