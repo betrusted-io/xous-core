@@ -15,14 +15,53 @@ use aes::{Aes256, BLOCK_SIZE, Block};
 use aes_gcm_siv::aead::{Aead, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
 use backend::bcrypt::*;
+#[cfg(feature = "gen1")]
 use modals::Modals;
+#[cfg(feature = "gen1")]
 use root_keys::api::AesRootkeyType;
+#[cfg(feature = "gen1")]
 use root_keys::api::KeywrapError;
 use sha2::{Digest, Sha512_256Hw, Sha512_256Sw};
 use spinor::SPINOR_BULK_ERASE_SIZE;
 use subtle::ConstantTimeEq;
 
 use crate::*;
+
+/*
+    Refactor notes --
+
+    What to do about rootkeys? The features used by this crate are:
+      - selection of an AES key at an index
+      - password entry to unlock key at index (this is handled inside rootkeys)
+      - key wrapping using the indexed key
+      - block decrypt/encrypt with the indexed key
+      - also queries are made with regards to the key box health and initialization status
+
+    What to do about modals?
+      - The work flow for many of the crates assumes we can have a blocking user I/O
+        via the modals crate
+      - I think that the modals crate should probably be the "right" layer for things
+        to talk to the UI.
+    Question:
+      - Can we adapt modals to a small (128x128) pixel display?
+      - Can we adapt modals to a console-like text interface?
+
+    Suggestion:
+      - Stop the refactor on PDDB at this moment and dig into modals/rootkeys
+        - Rootkeys can place the keys in RRAM at the "final" location according to ACRAM lock abilities
+          even if the lifecycle stuff is broken, the ability to read/write those keys are configured
+          "out of band"
+        - Modals should include an implementation directly inside the modals crate that pulls in
+          the mini-gfx library, so that there are no other dependencies to get user I/O going.
+
+    Observation: I could check in this partial, broken code right now into a branch, and come back
+    to it later. As long as I don't select the PDDB crate as a cramium target, it doesn't break
+    anything else in the code base?
+
+    Probably better just to branch this for now - let's make a branch, stick it in xous-core,
+    and put some notes around it in a WIP pull request. In fact let's put all this data in that
+    PR so we have some publicly trackable information about how this is progressing.
+*/
 
 #[cfg(not(feature = "deterministic"))]
 type FspaceSet = HashSet<PhysPage>;
@@ -137,8 +176,14 @@ type EmuMemoryRange = xous::MemoryRange;
 #[cfg(any(feature = "precursor", feature = "renode"))]
 type EmuSpinor = spinor::Spinor;
 
+#[cfg(feature = "cramium-soc")]
+type EmuMemoryRange = xous::MemoryRange;
+#[cfg(feature = "cramium-soc")]
+type EmuSpinor = crate::hw::baosec::Spinor;
+
 pub(crate) struct PddbOs {
     spinor: EmuSpinor,
+    #[cfg(feature = "gen1")]
     rootkeys: root_keys::RootKeys,
     tt: ticktimer_server::Ticktimer,
     pddb_mr: EmuMemoryRange,
@@ -275,6 +320,40 @@ impl PddbOs {
             #[cfg(feature = "perfcounter")]
             use_perf: true,
         };
+        #[cfg(any(feature = "cramium-soc"))]
+        let ret = PddbOs {
+            spinor: crate::hw::Spinor::new(&xns).unwrap(),
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
+            pddb_mr: pddb,
+            pt_phys_base: PageAlignedPa::from(0 as u32),
+            key_phys_base,
+            mbbb_phys_base,
+            fscb_phys_base,
+            data_phys_base: PageAlignedPa::from(
+                fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32,
+            ),
+            system_basis_key: None,
+            cipher_ecb: None,
+            fspace_cache: FspaceSet::new(),
+            fspace_log_addrs: Vec::<PageAlignedPa>::new(),
+            fspace_log_next_addr: None,
+            fspace_log_len: 0,
+            dna,
+            // default to our own DNA in this case
+            migration_dna: dna,
+            dna_mode: DnaMode::Normal,
+            entropy: trngpool,
+            pw_cid,
+            failed_logins: 0,
+            #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
+            testnames: HashSet::new(),
+            #[cfg(feature = "perfcounter")]
+            perfclient,
+            #[cfg(feature = "perfcounter")]
+            pc_id,
+            #[cfg(feature = "perfcounter")]
+            use_perf: true,
+        };
         // emulated
         #[cfg(not(target_os = "xous"))]
         let ret = {
@@ -362,9 +441,13 @@ impl PddbOs {
         self.pddb_mr.reset();
     }
 
+    #[cfg(feature = "gen1")]
     pub(crate) fn is_efuse_secured(&self) -> bool {
         self.rootkeys.is_efuse_secured().expect("couldn't query efuse security state") == Some(true)
     }
+
+    #[cfg(feature = "gen2")]
+    pub(crate) fn is_efuse_secured(&self) -> bool { unimplemented!() }
 
     pub(crate) fn nonce_gen(&self) -> Nonce {
         let nonce_array = self.entropy.borrow_mut().get_nonce();
@@ -383,8 +466,14 @@ impl PddbOs {
     pub(crate) fn timestamp_now(&self) -> u64 { self.tt.elapsed_ms() }
 
     /// checks if the root keys are initialized, which is a prerequisite to formatting and mounting
+    #[cfg(feature = "gen1")]
     pub(crate) fn rootkeys_initialized(&self) -> bool {
         self.rootkeys.is_initialized().expect("couldn't query initialization state of the rootkeys server")
+    }
+
+    #[cfg(feature = "gen2")]
+    pub(crate) fn rootkeys_initialized(&self) -> bool {
+        unimplemented!();
     }
 
     /// patches data at an offset starting from the data physical base address, which corresponds
@@ -771,7 +860,11 @@ impl PddbOs {
         self.cipher_ecb = None;
     }
 
+    #[cfg(feature = "gen1")]
     pub(crate) fn clear_password(&self) { self.rootkeys.clear_password(AesRootkeyType::User0); }
+
+    #[cfg(feature = "gen2")]
+    pub(crate) fn clear_password(&self) { todo!("implement password clearing") }
 
     pub(crate) fn try_login(&mut self) -> PasswordState {
         use aes::cipher::KeyInit;
@@ -811,42 +904,49 @@ impl PddbOs {
             // now try to populate our keys, and prep a migration if necessary
             let mut syskey_pt = [0u8; 32];
             let mut syskey = [0u8; 32];
-            let mut keys_updated = false;
-            match self.rootkeys.unwrap_key(&scd.system_key_pt, AES_KEYSIZE) {
-                Ok(skpt) => syskey_pt.copy_from_slice(&skpt),
-                Err(e) => match e {
-                    KeywrapError::UpgradeToNew((key, upgrade)) => {
-                        log::warn!("pt key migration required");
-                        syskey_pt.copy_from_slice(&key);
-                        new_crypto_keys.system_key_pt.copy_from_slice(&upgrade);
-                        keys_updated = true;
-                    }
-                    _ => {
-                        log::error!("Couldn't unwrap our system key: {:?}", e);
-                        self.failed_logins = self.failed_logins.saturating_add(1);
-                        return PasswordState::Incorrect(self.failed_logins);
-                    }
-                },
+            #[cfg(feature = "gen1")]
+            {
+                let mut keys_updated = false;
+                match self.rootkeys.unwrap_key(&scd.system_key_pt, AES_KEYSIZE) {
+                    Ok(skpt) => syskey_pt.copy_from_slice(&skpt),
+                    Err(e) => match e {
+                        KeywrapError::UpgradeToNew((key, upgrade)) => {
+                            log::warn!("pt key migration required");
+                            syskey_pt.copy_from_slice(&key);
+                            new_crypto_keys.system_key_pt.copy_from_slice(&upgrade);
+                            keys_updated = true;
+                        }
+                        _ => {
+                            log::error!("Couldn't unwrap our system key: {:?}", e);
+                            self.failed_logins = self.failed_logins.saturating_add(1);
+                            return PasswordState::Incorrect(self.failed_logins);
+                        }
+                    },
+                }
+                match self.rootkeys.unwrap_key(&scd.system_key, AES_KEYSIZE) {
+                    Ok(sk) => syskey.copy_from_slice(&sk),
+                    Err(e) => match e {
+                        KeywrapError::UpgradeToNew((key, upgrade)) => {
+                            log::warn!("data key migration required");
+                            syskey.copy_from_slice(&key);
+                            new_crypto_keys.system_key.copy_from_slice(&upgrade);
+                            keys_updated = true;
+                        }
+                        _ => {
+                            log::error!("Couldn't unwrap our system key: {:?}", e);
+                            self.failed_logins = self.failed_logins.saturating_add(1);
+                            return PasswordState::Incorrect(self.failed_logins);
+                        }
+                    },
+                }
+                if keys_updated {
+                    log::warn!("Migration event from incorrectly wrapped key");
+                    self.patch_keys(new_crypto_keys.deref(), 0);
+                }
             }
-            match self.rootkeys.unwrap_key(&scd.system_key, AES_KEYSIZE) {
-                Ok(sk) => syskey.copy_from_slice(&sk),
-                Err(e) => match e {
-                    KeywrapError::UpgradeToNew((key, upgrade)) => {
-                        log::warn!("data key migration required");
-                        syskey.copy_from_slice(&key);
-                        new_crypto_keys.system_key.copy_from_slice(&upgrade);
-                        keys_updated = true;
-                    }
-                    _ => {
-                        log::error!("Couldn't unwrap our system key: {:?}", e);
-                        self.failed_logins = self.failed_logins.saturating_add(1);
-                        return PasswordState::Incorrect(self.failed_logins);
-                    }
-                },
-            }
-            if keys_updated {
-                log::warn!("Migration event from incorrectly wrapped key");
-                self.patch_keys(new_crypto_keys.deref(), 0);
+            #[cfg(feature = "gen2")]
+            {
+                todo!("implement password entry")
             }
 
             let cipher = Aes256::new(GenericArray::from_slice(&syskey_pt));
@@ -879,11 +979,18 @@ impl PddbOs {
     fn syskey_ensure(&mut self) {
         while self.try_login() != PasswordState::Correct {
             self.clear_password(); // clear the bad password entry
-            let xns = xous_names::XousNames::new().unwrap();
-            let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
-            modals
-                .show_notification(t!("pddb.badpass_infallible", locales::LANG), None)
-                .expect("notification failed");
+            #[cfg(feature = "gen1")]
+            {
+                let xns = xous_names::XousNames::new().unwrap();
+                let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
+                modals
+                    .show_notification(t!("pddb.badpass_infallible", locales::LANG), None)
+                    .expect("notification failed");
+            }
+            #[cfg(feature = "gen2")]
+            {
+                todo!("implement feedback that syskey is not available");
+            }
         }
     }
 
@@ -1976,6 +2083,7 @@ impl PddbOs {
         }
     }
 
+    #[cfg(feature = "gen1")]
     fn pw_check(&self, modals: &modals::Modals) -> Result<()> {
         let mut success = false;
         while !success {
@@ -2008,6 +2116,7 @@ impl PddbOs {
     }
 
     /// this function attempts to change the PIN. returns Ok() if changed, error if not.
+    #[cfg(feature = "gen1")]
     pub(crate) fn pddb_change_pin(&mut self, modals: &modals::Modals) -> Result<()> {
         if let Some(system_keys) = &self.system_basis_key {
             // get the new password
