@@ -1,9 +1,9 @@
 use cramium_hal::iox::{IoxPort, IoxValue};
-use cramium_hal::minigfx::*;
 use cramium_hal::sh1107::{Mono, Oled128x128};
 use cramium_hal::udma::PeriphId;
 use num_traits::ToPrimitive;
 use utralib::utra;
+use ux_api::minigfx::*;
 
 mod gfx;
 mod homography;

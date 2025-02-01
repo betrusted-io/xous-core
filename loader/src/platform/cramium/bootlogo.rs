@@ -1,5 +1,5 @@
-use cramium_hal::minigfx::{FrameBuffer, Point};
 use cramium_hal::sh1107::{Mono, Oled128x128};
+use ux_api::minigfx::{FrameBuffer, Point};
 
 pub fn show_logo(sh1107: &mut Oled128x128) {
     /* // pattern test for debugging pixel orientations - done with this now, I think?

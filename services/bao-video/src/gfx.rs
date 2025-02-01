@@ -1,4 +1,5 @@
-use cramium_hal::{minigfx::*, sh1107::Mono};
+use cramium_hal::sh1107::Mono;
+use ux_api::minigfx::*;
 
 // The discipline for all the APIs in this module are that they act on a FrameBuffer which is
 // passed to the function. This allows us to bind the drawing computation on the caller-side of

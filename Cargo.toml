@@ -112,6 +112,7 @@ members = [
   "services/bao-video",
   "services/usb-cramium",
   "services/bao-console",
+  "libs/ux-api",
 ]
 resolver = "2"
 

@@ -370,7 +370,7 @@ pub fn early_init() -> u32 {
     #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
     {
         // show the boot logo
-        use cramium_hal::minigfx::FrameBuffer;
+        use ux_api::minigfx::FrameBuffer;
 
         let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(perclk, &mut iox, &mut udma_global);
         sh1107.init();
@@ -384,8 +384,8 @@ pub fn early_init() -> u32 {
     // makes things a little bit cleaner for JTAG ops, it seems.
     #[cfg(feature = "board-bringup")]
     {
-        use cramium_hal::minigfx::{Line, Point};
         use cramium_hal::{iox::IoxValue, minigfx::ColorNative, sh1107::Mono, udma::Udma};
+        use ux_api::minigfx::{Line, Point};
 
         use crate::platform::cramium::gfx;
         //------------- test I2C ------------

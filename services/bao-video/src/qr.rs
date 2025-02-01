@@ -2,7 +2,7 @@ use core::cell::RefCell;
 use core::convert::TryFrom;
 use core::ops::{BitXor, Not};
 
-use cramium_hal::minigfx::{ColorNative, FrameBuffer, Point};
+use ux_api::minigfx::{ColorNative, FrameBuffer, Point};
 
 use crate::gfx;
 
@@ -26,7 +26,7 @@ pub const HOMOGRAPHY_MARGIN: isize = -4;
 pub const CROSSHAIR_LEN: isize = 3;
 
 pub fn draw_crosshair(image: &mut dyn FrameBuffer, p: Point) {
-    use cramium_hal::minigfx::Line;
+    use ux_api::minigfx::Line;
     gfx::line(
         image,
         Line::new(p + Point::new(0, CROSSHAIR_LEN), p - Point::new(0, CROSSHAIR_LEN)),
