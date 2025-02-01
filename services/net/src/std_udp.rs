@@ -169,12 +169,15 @@ pub(crate) fn std_udp_rx(
     // Adding the message to the udp_rx_waiting list prevents it from going out of scope and
     // thus prevents the .drop() method from being called. Since messages are returned to the sender
     // in the .drop() method, this keeps the caller blocked for the lifetime of the message.
-    insert_or_append(udp_rx_waiting, UdpStdState {
-        msg, /* <-- msg is inserted into the udp_rx_waiting vector, thus preventing the lend_mut from
-              * returning. */
-        handle: *handle,
-        expiry,
-    });
+    insert_or_append(
+        udp_rx_waiting,
+        UdpStdState {
+            msg, /* <-- msg is inserted into the udp_rx_waiting vector, thus preventing the lend_mut from
+                  * returning. */
+            handle: *handle,
+            expiry,
+        },
+    );
 }
 
 pub(crate) fn std_udp_tx(

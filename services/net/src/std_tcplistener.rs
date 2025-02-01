@@ -147,12 +147,15 @@ pub(crate) fn std_tcp_accept(
     // Adding the message to the udp_rx_waiting list prevents it from going out of scope and
     // thus prevents the .drop() method from being called. Since messages are returned to the sender
     // in the .drop() method, this keeps the caller blocked for the lifetime of the message.
-    insert_or_append(tcp_accept_waiting, AcceptingSocket {
-        env: msg, /* <-- msg is inserted into the tcp_accept_waiting vector, thus preventing the
-                   * lend_mut from returning. */
-        handle: *handle,
-        fd,
-    });
+    insert_or_append(
+        tcp_accept_waiting,
+        AcceptingSocket {
+            env: msg, /* <-- msg is inserted into the tcp_accept_waiting vector, thus preventing the
+                       * lend_mut from returning. */
+            handle: *handle,
+            fd,
+        },
+    );
 }
 
 pub(crate) fn tcp_accept_success(buf: &mut [u8], fd: u16, ep: IpEndpoint) {

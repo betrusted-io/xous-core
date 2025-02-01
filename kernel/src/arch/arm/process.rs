@@ -364,9 +364,14 @@ impl Process {
         if sp <= 16 {
             return Err(xous_kernel::Error::BadAddress);
         }
-        crate::arch::syscall::invoke(thread, pid == 1, entrypoint, (sp - 16) & !0xf, EXIT_THREAD, &[
-            setup.arg1, setup.arg2, setup.arg3, setup.arg4,
-        ]);
+        crate::arch::syscall::invoke(
+            thread,
+            pid == 1,
+            entrypoint,
+            (sp - 16) & !0xf,
+            EXIT_THREAD,
+            &[setup.arg1, setup.arg2, setup.arg3, setup.arg4],
+        );
         Ok(())
     }
 

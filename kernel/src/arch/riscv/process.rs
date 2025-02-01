@@ -414,9 +414,14 @@ impl Process {
             *val = 0;
         }
         thread.sepc = 0;
-        crate::arch::syscall::invoke(thread, pid == 1, entrypoint, (sp - 16) & !0xf, EXIT_THREAD, &[
-            setup.arg1, setup.arg2, setup.arg3, setup.arg4,
-        ]);
+        crate::arch::syscall::invoke(
+            thread,
+            pid == 1,
+            entrypoint,
+            (sp - 16) & !0xf,
+            EXIT_THREAD,
+            &[setup.arg1, setup.arg2, setup.arg3, setup.arg4],
+        );
         Ok(())
     }
 

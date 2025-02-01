@@ -658,10 +658,13 @@ mod tests {
 
         crate::bcrypt::bcrypt(5, &salt, pw, &mut output);
 
-        assert_eq!(output, [
-            22, 80, 102, 192, 193, 204, 118, 167, 41, 102, 241, 75, 103, 49, 4, 245, 194, 145, 85, 104, 179,
-            60, 88, 53
-        ]);
+        assert_eq!(
+            output,
+            [
+                22, 80, 102, 192, 193, 204, 118, 167, 41, 102, 241, 75, 103, 49, 4, 245, 194, 145, 85, 104,
+                179, 60, 88, 53
+            ]
+        );
     }
 
     #[test]
@@ -670,10 +673,13 @@ mod tests {
         let mut output: [u8; 24] = [0; 24];
         let pw = "this is a test of a very long password that is exactly 72 characters lon";
         crate::bcrypt::bcrypt(10, &salt, pw, &mut output);
-        assert_eq!(output, [
-            46, 39, 41, 217, 39, 103, 62, 189, 120, 3, 248, 84, 175, 40, 134, 190, 76, 43, 232, 147, 129,
-            237, 116, 61
-        ]);
+        assert_eq!(
+            output,
+            [
+                46, 39, 41, 217, 39, 103, 62, 189, 120, 3, 248, 84, 175, 40, 134, 190, 76, 43, 232, 147, 129,
+                237, 116, 61
+            ]
+        );
     }
 
     #[test]
@@ -682,9 +688,12 @@ mod tests {
         let mut output: [u8; 24] = [0; 24];
         let pw = "this is a test of a very long password that is exactly 72 characters long, but this one is even longer";
         crate::bcrypt::bcrypt(10, &salt, pw, &mut output);
-        assert_eq!(output, [
-            46, 39, 41, 217, 39, 103, 62, 189, 120, 3, 248, 84, 175, 40, 134, 190, 76, 43, 232, 147, 129,
-            237, 116, 61
-        ]);
+        assert_eq!(
+            output,
+            [
+                46, 39, 41, 217, 39, 103, 62, 189, 120, 3, 248, 84, 175, 40, 134, 190, 76, 43, 232, 147, 129,
+                237, 116, 61
+            ]
+        );
     }
 }

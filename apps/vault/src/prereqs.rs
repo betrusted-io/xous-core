@@ -84,11 +84,15 @@ pub(crate) fn prereqs(sid: xous::SID, time_conn: xous::CID) -> ([u32; 4], bool) 
                 if allow_redraw {
                     gam.draw_rectangle(
                         content,
-                        Rectangle::new_with_style(Point::new(0, 0), screensize, DrawStyle {
-                            fill_color: Some(PixelColor::Light),
-                            stroke_color: None,
-                            stroke_width: 0,
-                        }),
+                        Rectangle::new_with_style(
+                            Point::new(0, 0),
+                            screensize,
+                            DrawStyle {
+                                fill_color: Some(PixelColor::Light),
+                                stroke_color: None,
+                                stroke_width: 0,
+                            },
+                        ),
                     )
                     .expect("can't clear content area");
 
