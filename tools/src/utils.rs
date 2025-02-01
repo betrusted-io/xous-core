@@ -85,10 +85,10 @@ pub fn parse_csr_csv(filename: &str) -> Result<CsrConfig, ConfigError> {
                     if region_name == "csr" {
                         csr_base = base_addr;
                     } else {
-                        map.insert(region_name.to_string().to_lowercase(), CsrMemoryRegion {
-                            start: base_addr,
-                            length,
-                        });
+                        map.insert(
+                            region_name.to_string().to_lowercase(),
+                            CsrMemoryRegion { start: base_addr, length },
+                        );
                     }
                 }
                 _ => (),

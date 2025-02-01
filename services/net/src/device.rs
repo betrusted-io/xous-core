@@ -64,13 +64,16 @@ impl phy::Device for NetPhy {
                 .wlan_fetch_loopback_packet(&mut self.rx_buffer[..rx_len as usize])
                 .expect("Couldn't call wlan_fetch_packet in device adapter");
 
-            Some((NetPhyRxToken { buf: &mut self.rx_buffer[..rx_len as usize] }, NetPhyTxToken {
-                buf: &mut self.tx_buffer[..],
-                com: &self.com,
-                loopback_conn: self.loopback_conn,
-                loopback_count: self.loopback_pending.clone(),
-                caps: csum_copy,
-            }))
+            Some((
+                NetPhyRxToken { buf: &mut self.rx_buffer[..rx_len as usize] },
+                NetPhyTxToken {
+                    buf: &mut self.tx_buffer[..],
+                    com: &self.com,
+                    loopback_conn: self.loopback_conn,
+                    loopback_count: self.loopback_pending.clone(),
+                    caps: csum_copy,
+                },
+            ))
         } else {
             if let Some(rx_len) = self.rx_avail.take() {
                 log::debug!("device rx of {} bytes", rx_len);
@@ -78,13 +81,16 @@ impl phy::Device for NetPhy {
                     .wlan_fetch_packet(&mut self.rx_buffer[..rx_len as usize])
                     .expect("Couldn't call wlan_fetch_packet in device adapter");
 
-                Some((NetPhyRxToken { buf: &mut self.rx_buffer[..rx_len as usize] }, NetPhyTxToken {
-                    buf: &mut self.tx_buffer[..],
-                    com: &self.com,
-                    loopback_conn: self.loopback_conn,
-                    loopback_count: self.loopback_pending.clone(),
-                    caps: csum_copy,
-                }))
+                Some((
+                    NetPhyRxToken { buf: &mut self.rx_buffer[..rx_len as usize] },
+                    NetPhyTxToken {
+                        buf: &mut self.tx_buffer[..],
+                        com: &self.com,
+                        loopback_conn: self.loopback_conn,
+                        loopback_count: self.loopback_pending.clone(),
+                        caps: csum_copy,
+                    },
+                ))
             } else {
                 log::trace!("nothing to rx");
                 None

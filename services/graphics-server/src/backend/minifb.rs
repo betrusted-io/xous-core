@@ -150,11 +150,16 @@ impl XousDisplay {
 
 impl MinifbThread {
     pub fn run_while(self, mut predicate: impl FnMut() -> bool) {
-        let mut window = Window::new("Precursor", WIDTH as usize, HEIGHT as usize, WindowOptions {
-            scale_mode: minifb::ScaleMode::AspectRatioStretch,
-            resize: true,
-            ..WindowOptions::default()
-        })
+        let mut window = Window::new(
+            "Precursor",
+            WIDTH as usize,
+            HEIGHT as usize,
+            WindowOptions {
+                scale_mode: minifb::ScaleMode::AspectRatioStretch,
+                resize: true,
+                ..WindowOptions::default()
+            },
+        )
         .unwrap_or_else(|e| {
             log::error!("{e:?}");
             std::process::abort();
