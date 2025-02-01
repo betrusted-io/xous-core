@@ -1,4 +1,5 @@
-use crate::Point;
+use ux_api::minigfx::Point;
+
 use crate::qr::*;
 
 /// This function takes a fraction described as `m.n`, where n is a fraction out of 1024, as well
