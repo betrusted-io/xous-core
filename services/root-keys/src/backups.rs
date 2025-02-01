@@ -189,10 +189,10 @@ pub(crate) fn restore_backup(key: &BackupKey, backup: &BackupDataCt) -> Option<B
 
     // Attempt decryption. This is None on failure
     let plaintext = cipher
-        .decrypt(Nonce::from_slice(&backup.nonce), Payload {
-            aad: BACKUP_AAD.as_bytes(),
-            msg: &backup.ct_plus_mac,
-        })
+        .decrypt(
+            Nonce::from_slice(&backup.nonce),
+            Payload { aad: BACKUP_AAD.as_bytes(), msg: &backup.ct_plus_mac },
+        )
         .ok();
 
     if kcom.0.ct_eq(&backup.commitment).into() {

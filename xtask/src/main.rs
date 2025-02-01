@@ -70,40 +70,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ]
     .to_vec();
     // minimal set of packages to do bare-iron graphical I/O
-    let gfx_base_pkgs = [&base_pkgs[..], &[
-        "graphics-server", // raw (unprotected) frame buffer primitives
-        "early_settings",  // required by keyboard
-        "keyboard",        // required by graphics-server
-        "spinor",          // required by keyboard - to save key mapping
-        "llio",            // required by spinor
-    ]]
+    let gfx_base_pkgs = [
+        &base_pkgs[..],
+        &[
+            "graphics-server", // raw (unprotected) frame buffer primitives
+            "early_settings",  // required by keyboard
+            "keyboard",        // required by graphics-server
+            "spinor",          // required by keyboard - to save key mapping
+            "llio",            // required by spinor
+        ],
+    ]
     .concat();
     // packages in the user image - most of the services at this layer have cross-dependencies
-    let user_pkgs = [&gfx_base_pkgs[..], &[
-        // net services
-        "com",
-        "net",
-        "dns",
-        // UX abstractions
-        "gam",
-        "ime-frontend",
-        "ime-plugin-shell",
-        "codec",
-        "modals",
-        // security
-        "root-keys",
-        "trng",
-        "sha2",
-        // "engine-25519",
-        "jtag",
-        // GUI front end
-        "status",
-        "shellchat",
-        // filesystem
-        "pddb",
-        // usb services
-        "usb-device-xous",
-    ]]
+    let user_pkgs = [
+        &gfx_base_pkgs[..],
+        &[
+            // net services
+            "com",
+            "net",
+            "dns",
+            // UX abstractions
+            "gam",
+            "ime-frontend",
+            "ime-plugin-shell",
+            "codec",
+            "modals",
+            // security
+            "root-keys",
+            "trng",
+            "sha2",
+            // "engine-25519",
+            "jtag",
+            // GUI front end
+            "status",
+            "shellchat",
+            // filesystem
+            "pddb",
+            // usb services
+            "usb-device-xous",
+        ],
+    ]
     .concat();
     // for fast testing of compilation targets of the PDDB to real hardware
     let pddb_dev_pkgs = [&base_pkgs[..], &["pddb", "sha2"]].concat();

@@ -579,10 +579,12 @@ fn main() -> ! {
                 i2c.i2c_mutex_acquire();
                 // set clock units to 1 second, output pulse length to ~218ms
                 // and program the elapsed time (TIMERB_CLK is followed by TIMERB)
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB_CLK, &[(TimerClk::CLK_1_S
-                    | TimerClk::PULSE_218_MS)
-                    .bits()])
-                    .expect("RTC access error");
+                i2c.i2c_write(
+                    ABRTCMC_I2C_ADR,
+                    ABRTCMC_TIMERB_CLK,
+                    &[(TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()],
+                )
+                .expect("RTC access error");
                 // program elapsed time
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB, &[seconds]).expect("RTC access error");
                 // enable timerb countdown interrupt, also clears any prior interrupt flag

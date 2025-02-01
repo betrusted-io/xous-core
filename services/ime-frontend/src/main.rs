@@ -142,22 +142,26 @@ impl InputTracker {
             self.gam
                 .draw_rectangle(
                     pc,
-                    Rectangle::new_with_style(Point::new(0, 0), pc_bounds, DrawStyle {
-                        fill_color: Some(PixelColor::Light),
-                        stroke_color: None,
-                        stroke_width: 0,
-                    }),
+                    Rectangle::new_with_style(
+                        Point::new(0, 0),
+                        pc_bounds,
+                        DrawStyle {
+                            fill_color: Some(PixelColor::Light),
+                            stroke_color: None,
+                            stroke_width: 0,
+                        },
+                    ),
                 )
                 .expect("can't clear prediction area");
             // add the border line on top
             self.gam
                 .draw_line(
                     pc,
-                    Line::new_with_style(Point::new(0, 0), Point::new(pc_bounds.x, 0), DrawStyle {
-                        fill_color: None,
-                        stroke_color: Some(PixelColor::Dark),
-                        stroke_width: 1,
-                    }),
+                    Line::new_with_style(
+                        Point::new(0, 0),
+                        Point::new(pc_bounds.x, 0),
+                        DrawStyle { fill_color: None, stroke_color: Some(PixelColor::Dark), stroke_width: 1 },
+                    ),
                 )
                 .expect("can't draw prediction top border");
         }
@@ -167,11 +171,15 @@ impl InputTracker {
             self.gam
                 .draw_rectangle(
                     ic,
-                    Rectangle::new_with_style(Point::new(0, 0), ic_bounds, DrawStyle {
-                        fill_color: Some(PixelColor::Light),
-                        stroke_color: None,
-                        stroke_width: 0,
-                    }),
+                    Rectangle::new_with_style(
+                        Point::new(0, 0),
+                        ic_bounds,
+                        DrawStyle {
+                            fill_color: Some(PixelColor::Light),
+                            stroke_color: None,
+                            stroke_width: 0,
+                        },
+                    ),
                 )
                 .expect("can't clear input area");
 
@@ -179,11 +187,11 @@ impl InputTracker {
             self.gam
                 .draw_line(
                     ic,
-                    Line::new_with_style(Point::new(0, 0), Point::new(ic_bounds.x, 0), DrawStyle {
-                        fill_color: None,
-                        stroke_color: Some(PixelColor::Dark),
-                        stroke_width: 1,
-                    }),
+                    Line::new_with_style(
+                        Point::new(0, 0),
+                        Point::new(ic_bounds.x, 0),
+                        DrawStyle { fill_color: None, stroke_color: Some(PixelColor::Dark), stroke_width: 1 },
+                    ),
                 )
                 .expect("can't draw input top line border");
         }
@@ -676,11 +684,11 @@ impl InputTracker {
             }
             let pc_bounds: Point =
                 self.gam.get_canvas_bounds(pc).expect("Couldn't get prediction canvas bounds");
-            let pc_clip: Rectangle = Rectangle::new_with_style(Point::new(0, 1), pc_bounds, DrawStyle {
-                fill_color: Some(PixelColor::Light),
-                stroke_color: None,
-                stroke_width: 0,
-            });
+            let pc_clip: Rectangle = Rectangle::new_with_style(
+                Point::new(0, 1),
+                pc_bounds,
+                DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 },
+            );
             if debug1 {
                 info!("got pc_bound {:?}", pc_bounds);
             }
