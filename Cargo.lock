@@ -361,6 +361,7 @@ dependencies = [
  "num-traits",
  "rqrr",
  "utralib 0.1.25",
+ "ux-api",
  "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
@@ -1017,6 +1018,7 @@ dependencies = [
  "rkyv 0.8.8",
  "usb-device",
  "utralib 0.1.25",
+ "ux-api",
  "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -3018,6 +3020,7 @@ dependencies = [
  "sha2-loader",
  "simple-fatfs",
  "utralib 0.1.25",
+ "ux-api",
  "xous-pl230",
  "xous-riscv",
 ]
@@ -3179,6 +3182,7 @@ version = "0.1.0"
 dependencies = [
  "bit_field",
  "cram-hal-service",
+ "cramium-hal",
  "gam",
  "locales",
  "log",
@@ -6019,6 +6023,10 @@ name = "uuid"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
+
+[[package]]
+name = "ux-api"
+version = "0.1.0"
 
 [[package]]
 name = "valuable"
