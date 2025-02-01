@@ -258,10 +258,13 @@ pub fn report_stop(_pid: xous_kernel::PID, tid: xous_kernel::TID, _pc: usize) {
         return;
     };
 
-    let Ok(new_gdb) = inner.report_stop(&mut target, MultiThreadStopReason::SignalWithThread {
-        signal: Signal::EXC_BREAKPOINT,
-        tid: Tid::new(tid).unwrap(),
-    }) else {
+    let Ok(new_gdb) = inner.report_stop(
+        &mut target,
+        MultiThreadStopReason::SignalWithThread {
+            signal: Signal::EXC_BREAKPOINT,
+            tid: Tid::new(tid).unwrap(),
+        },
+    ) else {
         println!("Unable to report stop");
         return;
     };

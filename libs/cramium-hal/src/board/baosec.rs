@@ -266,11 +266,10 @@ pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 3], [(Iox
             Some(IoxDriveStrength::Drive2mA),
         );
     }
-    ([(KB_PORT, R_PINS[0]), (KB_PORT, R_PINS[1]), (KB_PORT, R_PINS[2])], [
-        (KB_PORT, C_PINS[0]),
-        (KB_PORT, C_PINS[1]),
-        (KB_PORT, C_PINS[2]),
-    ])
+    (
+        [(KB_PORT, R_PINS[0]), (KB_PORT, R_PINS[1]), (KB_PORT, R_PINS[2])],
+        [(KB_PORT, C_PINS[0]), (KB_PORT, C_PINS[1]), (KB_PORT, C_PINS[2])],
+    )
 }
 
 pub fn setup_pmic_irq<T: IoIrq>(iox: &T, server: &str, opcode: usize) {
