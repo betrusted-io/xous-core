@@ -1056,6 +1056,14 @@ bit position to clear the flag]]></description>
                             <description><![CDATA[chkpass flag register. `1` means event happened, write back `1` in respective
 bit position to clear the flag]]></description>
                         </field>
+                        <field>
+                            <name>chkfail</name>
+                            <msb>6</msb>
+                            <bitRange>[6:6]</bitRange>
+                            <lsb>6</lsb>
+                            <description><![CDATA[chkfail flag register. `1` means event happened, write back `1` in respective
+bit position to clear the flag]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
@@ -1108,6 +1116,13 @@ bit position to clear the flag]]></description>
                             <bitRange>[3:3]</bitRange>
                             <lsb>3</lsb>
                             <description><![CDATA[opt_schnr[1:0] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>tsmode</name>
+                            <msb>4</msb>
+                            <bitRange>[4:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[tsmode read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -1239,10 +1254,26 @@ bit position to clear the flag]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>SFR_KEYIDX</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/crypto_top/rtl/combohasha.sv]]></description>
+                    <addressOffset>0x0060</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_keyidx</name>
+                            <msb>9</msb>
+                            <bitRange>[9:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_keyidx read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x40</size>
+                <size>0x64</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -1371,8 +1402,8 @@ bit position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>sfr_optnw</name>
-                            <msb>12</msb>
-                            <bitRange>[12:0]</bitRange>
+                            <msb>13</msb>
+                            <bitRange>[13:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[sfr_optnw read/write control register]]></description>
                         </field>
@@ -1387,8 +1418,8 @@ bit position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>sfr_optew</name>
-                            <msb>12</msb>
-                            <bitRange>[12:0]</bitRange>
+                            <msb>13</msb>
+                            <bitRange>[13:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[sfr_optew read/write control register]]></description>
                         </field>
@@ -1795,11 +1826,11 @@ position to clear the flag]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfr_xch_func</name>
+                            <name>xchcr_func</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfr_xch_func read/write control register]]></description>
+                            <description><![CDATA[xchcr_func read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -1811,11 +1842,11 @@ position to clear the flag]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfr_xch_opt</name>
-                            <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
+                            <name>xchcr_opt</name>
+                            <msb>9</msb>
+                            <bitRange>[9:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfr_xch_opt read/write control register]]></description>
+                            <description><![CDATA[xchcr_opt read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -1827,11 +1858,11 @@ position to clear the flag]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfr_xch_axstart</name>
+                            <name>xchcr_axstart</name>
                             <msb>31</msb>
                             <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfr_xch_axstart read/write control register]]></description>
+                            <description><![CDATA[xchcr_axstart read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -1843,11 +1874,11 @@ position to clear the flag]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfr_xch_segid</name>
+                            <name>xchcr_segid</name>
                             <msb>7</msb>
                             <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfr_xch_segid read/write control register]]></description>
+                            <description><![CDATA[xchcr_segid read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -1891,11 +1922,11 @@ position to clear the flag]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfr_sch_func</name>
+                            <name>schcr_func</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfr_sch_func read/write control register]]></description>
+                            <description><![CDATA[schcr_func read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -1907,11 +1938,11 @@ position to clear the flag]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfr_sch_opt</name>
-                            <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
+                            <name>schcr_opt</name>
+                            <msb>9</msb>
+                            <bitRange>[9:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfr_sch_opt read/write control register]]></description>
+                            <description><![CDATA[schcr_opt read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -1923,11 +1954,11 @@ position to clear the flag]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfr_sch_axstart</name>
+                            <name>schcr_axstart</name>
                             <msb>31</msb>
                             <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfr_sch_axstart read/write control register]]></description>
+                            <description><![CDATA[schcr_axstart read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -1939,11 +1970,11 @@ position to clear the flag]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfr_sch_segid</name>
+                            <name>schcr_segid</name>
                             <msb>7</msb>
                             <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfr_sch_segid read/write control register]]></description>
+                            <description><![CDATA[schcr_segid read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -2362,26 +2393,10 @@ bit position to clear the flag]]></description>
                         </field>
                     </fields>
                 </register>
-                <register>
-                    <name>SFR_TS</name>
-                    <description><![CDATA[See file:///F:/code/cram-nto/modules/crypto_top/rtl/sce_glbsfra.sv]]></description>
-                    <addressOffset>0x00fc</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>cr_ts</name>
-                            <msb>15</msb>
-                            <bitRange>[15:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[cr_ts read/write control register]]></description>
-                        </field>
-                    </fields>
-                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x100</size>
+                <size>0x64</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -2712,18 +2727,18 @@ position to clear the flag]]></description>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_PWMEVSEL</name>
+                    <name>SFR_TMREVEN</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/sysctrl/rtl/evc.sv]]></description>
                     <addressOffset>0x0034</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>pwm_evsel</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
+                            <name>sfr_tmreven</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[pwm_evsel read/write control register]]></description>
+                            <description><![CDATA[sfr_tmreven read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -2889,10 +2904,106 @@ position to clear the flag]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>SFR_CM7ERRCR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sysctrl/rtl/evc.sv]]></description>
+                    <addressOffset>0x0084</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>erren</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[erren read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCEVSEL_RRC_EVSEL0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sysctrl/rtl/evc.sv]]></description>
+                    <addressOffset>0x0090</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rrc_evsel0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[rrc_evsel read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCEVSEL_RRC_EVSEL1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sysctrl/rtl/evc.sv]]></description>
+                    <addressOffset>0x0094</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rrc_evsel1</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[rrc_evsel read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCEVSEL_RRC_EVSEL2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sysctrl/rtl/evc.sv]]></description>
+                    <addressOffset>0x0098</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rrc_evsel2</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[rrc_evsel read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCEVSEL_RRC_EVSEL3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sysctrl/rtl/evc.sv]]></description>
+                    <addressOffset>0x009c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rrc_evsel3</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[rrc_evsel read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RRCEVEN</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sysctrl/rtl/evc.sv]]></description>
+                    <addressOffset>0x00a0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rrc_even</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[rrc_even read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x84</size>
+                <size>0xa4</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -2990,8 +3101,8 @@ position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>cfgfdcr_0_4_0</name>
-                            <msb>23</msb>
-                            <bitRange>[23:0]</bitRange>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[cfgfdcr read/write control register]]></description>
                         </field>
@@ -3006,8 +3117,8 @@ position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>cfgfdcr_0_4_1</name>
-                            <msb>23</msb>
-                            <bitRange>[23:0]</bitRange>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[cfgfdcr read/write control register]]></description>
                         </field>
@@ -3022,8 +3133,8 @@ position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>cfgfdcr_0_4_2</name>
-                            <msb>23</msb>
-                            <bitRange>[23:0]</bitRange>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[cfgfdcr read/write control register]]></description>
                         </field>
@@ -3038,8 +3149,8 @@ position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>cfgfdcr_0_4_3</name>
-                            <msb>23</msb>
-                            <bitRange>[23:0]</bitRange>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[cfgfdcr read/write control register]]></description>
                         </field>
@@ -3054,8 +3165,8 @@ position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>cfgfdcr_0_4_4</name>
-                            <msb>23</msb>
-                            <bitRange>[23:0]</bitRange>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[cfgfdcr read/write control register]]></description>
                         </field>
@@ -3070,8 +3181,8 @@ position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>cfgfdcr</name>
-                            <msb>23</msb>
-                            <bitRange>[23:0]</bitRange>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[cfgfdcr read/write control register]]></description>
                         </field>
@@ -3150,8 +3261,8 @@ position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>sfr_cgufdper</name>
-                            <msb>23</msb>
-                            <bitRange>[23:0]</bitRange>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[sfr_cgufdper read/write control register]]></description>
                         </field>
@@ -3166,8 +3277,8 @@ position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>fsfreq0</name>
-                            <msb>15</msb>
-                            <bitRange>[15:0]</bitRange>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[fsfreq read only status register]]></description>
                         </field>
@@ -3182,8 +3293,8 @@ position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>fsfreq1</name>
-                            <msb>15</msb>
-                            <bitRange>[15:0]</bitRange>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[fsfreq read only status register]]></description>
                         </field>
@@ -3198,8 +3309,8 @@ position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>fsfreq2</name>
-                            <msb>15</msb>
-                            <bitRange>[15:0]</bitRange>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[fsfreq read only status register]]></description>
                         </field>
@@ -3214,8 +3325,8 @@ position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>fsfreq3</name>
-                            <msb>15</msb>
-                            <bitRange>[15:0]</bitRange>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[fsfreq read only status register]]></description>
                         </field>
@@ -3230,8 +3341,8 @@ position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>sfr_cgufsvld</name>
-                            <msb>3</msb>
-                            <bitRange>[3:0]</bitRange>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[sfr_cgufsvld read only status register]]></description>
                         </field>
@@ -9728,8 +9839,8 @@ respective bit position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>sfr_rrccr</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[sfr_rrccr read/write control register]]></description>
                         </field>
@@ -9776,27 +9887,11 @@ respective bit position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>sfr_rrcfr</name>
-                            <msb>3</msb>
-                            <bitRange>[3:0]</bitRange>
+                            <msb>4</msb>
+                            <bitRange>[4:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[sfr_rrcfr flag register. `1` means event happened, write back `1` in respective
 bit position to clear the flag]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>SFR_RRCAR</name>
-                    <description><![CDATA[See file:///F:/code/cram-nto/modules/rrc/rtl/rrc.sv]]></description>
-                    <addressOffset>0x0010</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>sfr_rrcar</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[sfr_rrcar performs action on write of value: PM_RRAM_SUICIDE]]></description>
                         </field>
                     </fields>
                 </register>
@@ -9896,10 +9991,26 @@ bit position to clear the flag]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>SFR_RRCAR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/rrc/rtl/rrc.sv]]></description>
+                    <addressOffset>0x00f0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_rrcar</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_rrcar performs action on write of value: 0x2468]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x2c</size>
+                <size>0xf4</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -10614,18 +10725,32 @@ position to clear the flag]]></description>
             <groupName>AO_SYSCTRL</groupName>
             <registers>
                 <register>
-                    <name>CR_CLK32KSEL</name>
+                    <name>CR_CR</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>cr_clk32ksel</name>
+                            <name>clk32kselreg</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[cr_clk32ksel read/write control register]]></description>
+                            <description><![CDATA[clk32kselreg read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>pdisoen</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[pdisoen read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>pclkicg</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[pclkicg read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -10685,18 +10810,18 @@ position to clear the flag]]></description>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_PMUCR</name>
+                    <name>SFR_PMUCSR</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfrpmucr</name>
+                            <name>pmucrreg</name>
                             <msb>7</msb>
                             <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfrpmucr read/write control register]]></description>
+                            <description><![CDATA[pmucrreg read only status register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -10733,50 +10858,50 @@ position to clear the flag]]></description>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_PMUDFT</name>
+                    <name>SFR_PMUDFTSR</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfrpmudft</name>
+                            <name>pmudftreg</name>
                             <msb>5</msb>
                             <bitRange>[5:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfrpmudft read/write control register]]></description>
+                            <description><![CDATA[pmudftreg read only status register]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_PMUTRM0</name>
+                    <name>SFR_PMUTRM0CSR</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
                     <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfrpmutrm</name>
+                            <name>pmutrmreg</name>
                             <msb>31</msb>
                             <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfrpmutrm read/write control register]]></description>
+                            <description><![CDATA[pmutrmreg read only status register]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_PMUTRM1</name>
+                    <name>SFR_PMUTRM1CSR</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
                     <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfrpmutrm</name>
+                            <name>pmutrmreg</name>
                             <msb>1</msb>
                             <bitRange>[1:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfrpmutrm read/write control register]]></description>
+                            <description><![CDATA[pmutrmreg read only status register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -17511,12 +17636,12 @@ bit position to clear the flag]]></description>
             <memoryRegion>
                 <name>SEG_PIB</name>
                 <baseAddress>0x40020C00</baseAddress>
-                <size>0x00000400</size>
+                <size>0x00000800</size>
             </memoryRegion>
             <memoryRegion>
                 <name>SEG_PSIB</name>
-                <baseAddress>0x40021000</baseAddress>
-                <size>0x00000400</size>
+                <baseAddress>0x40021400</baseAddress>
+                <size>0x00000000</size>
             </memoryRegion>
             <memoryRegion>
                 <name>SEG_POB</name>
