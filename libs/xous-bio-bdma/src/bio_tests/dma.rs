@@ -1,6 +1,7 @@
 use core::mem::size_of;
 
 use utra::bio_bdma::SFR_CFGINFO;
+use utralib::utra::bio_bdma::SFR_CONFIG_CLOCKING_MODE;
 
 use crate::*;
 
@@ -84,7 +85,7 @@ pub fn filter_test() -> usize {
     bio_ss.bio.wo(utra::bio_bdma::SFR_FILTER_BOUNDS_2, (0x6000_0000 - HW_IOX_BASE as u32) >> 12);
 
     // with the filters so set, test some transactions that "should" pass
-    if dma_basic(false) != 4 {
+    if dma_basic(false, 0) != 4 {
         passing = false;
         print!("DMA Filter: allowed transactions are incorrectly blocked");
     };
@@ -195,7 +196,7 @@ pub fn filter_test() -> usize {
 ///
 /// The `concurrent` flag causes the CPU to do concurrent traffic during the test to
 /// exercise contention on AXI bus.
-pub fn dma_basic(concurrent: bool) -> usize {
+pub fn dma_basic(concurrent: bool, clkmode: u8) -> usize {
     const TEST_LEN: usize = 64;
     let mut passing = 0;
     if !concurrent {
@@ -211,6 +212,9 @@ pub fn dma_basic(concurrent: bool) -> usize {
     // stop all the machines, so that code can be loaded
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
     bio_ss.load_code(dma_basic_code(), 0, BioCore::Core0);
+
+    // setup clocking mode option
+    bio_ss.bio.rmwf(SFR_CONFIG_CLOCKING_MODE, clkmode as u32);
 
     // These actually "don't matter" because there are no synchronization instructions in the code
     // Everything runs at "full tilt"
@@ -640,7 +644,7 @@ bio_code!(dma_mc_dst_addr_code, DMA_MC_DST_ADDR_START, DMA_MC_DST_ADDR_END,
 );
 
 /// Attempt to fire off all four engines at once, simultaneously, for maximum bus contention
-pub fn dma_coincident() -> usize {
+pub fn dma_coincident(clkmode: u8) -> usize {
     let mut passing = 0;
     print!("DMA coincident\r");
     // clear prior test config state
@@ -650,6 +654,9 @@ pub fn dma_coincident() -> usize {
     let mut bio_ss = BioSharedState::new();
     // reset all the fifos
     bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0xF);
+
+    // setup clocking mode option
+    bio_ss.bio.rmwf(SFR_CONFIG_CLOCKING_MODE, clkmode as u32);
 
     // stop all the machines, so that code can be loaded
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
