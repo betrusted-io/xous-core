@@ -543,7 +543,7 @@ bio_code!(dma_u16_code, DMA_U16_START, DMA_U16_END,
 
 /// Multi-core DMA copy. More performant, but uses two cores for address generation in
 /// parallel with the copy master.
-pub fn dma_multicore() -> usize {
+pub fn dma_multicore(clkmode: u8) -> usize {
     let mut passing = 0;
     print!("DMA fast\r");
     // clear prior test config state
@@ -554,6 +554,9 @@ pub fn dma_multicore() -> usize {
 
     // reset all the fifos
     bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0xF);
+
+    // setup clocking mode option
+    bio_ss.bio.rmwf(SFR_CONFIG_CLOCKING_MODE, clkmode as u32);
 
     // stop all the machines, so that code can be loaded
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
