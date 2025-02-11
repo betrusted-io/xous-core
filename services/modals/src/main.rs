@@ -31,12 +31,14 @@ mod api;
 use api::*;
 #[cfg(feature = "ditherpunk")]
 use gam::Bitmap;
-#[cfg(not(any(feature = "hosted-baosec")))]
+#[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
 use gam::modal::*;
 use locales::t;
 #[cfg(feature = "tts")]
 use tts_frontend::TtsFrontend;
-#[cfg(any(feature = "hosted-baosec"))]
+#[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+use ux_api::minigfx::*;
+#[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
 use ux_api::widgets::*;
 use xous::{Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
@@ -65,7 +67,10 @@ enum RendererState {
     RunImage(ManagedImage),
 }
 
+#[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
 const DEFAULT_STYLE: GlyphStyle = gam::SYSTEM_STYLE;
+#[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+const DEFAULT_STYLE: GlyphStyle = ux_api::SYSTEM_STYLE;
 
 fn main() -> ! {
     #[cfg(not(feature = "ditherpunk"))]
@@ -129,6 +134,7 @@ fn wrapped_main() -> ! {
         DEFAULT_STYLE,
         8,
     );
+    #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
     renderer_modal.spawn_helper(
         modals_sid,
         renderer_modal.sid,
@@ -477,10 +483,8 @@ fn wrapped_main() -> ! {
                         log::debug!("should be active!");
                     }
                     RendererState::RunNotification(config) => {
-                        let mut notification = gam::modal::Notification::new(
-                            renderer_cid,
-                            Opcode::NotificationReturn.to_u32().unwrap(),
-                        );
+                        let mut notification =
+                            Notification::new(renderer_cid, Opcode::NotificationReturn.to_u32().unwrap());
                         let text = config.message.as_str();
                         let tmp: String;
                         let qrtext = match &config.qrtext {
@@ -504,16 +508,20 @@ fn wrapped_main() -> ! {
                         renderer_modal.activate();
                     }
                     RendererState::RunBip39(config) => {
-                        let notification = gam::modal::Notification::new(
-                            renderer_cid,
-                            Opcode::NotificationReturn.to_u32().unwrap(),
-                        );
+                        let notification =
+                            Notification::new(renderer_cid, Opcode::NotificationReturn.to_u32().unwrap());
                         let mut text = String::new();
                         if let Some(c) = &config.caption {
                             text.push_str(c.as_str());
                             text.push_str("\n\n");
                         }
 
+                        #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+                        let phrase = ux_api::widgets::bytes_to_bip39(
+                            &config.bip39_data[..config.bip39_len as usize].to_vec(),
+                        )
+                        .unwrap_or(vec![t!("bip39.invalid_bytes", locales::LANG).to_string()]);
+                        #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
                         let phrase = renderer_modal
                             .gam
                             .bytes_to_bip39(&config.bip39_data[..config.bip39_len as usize].to_vec())
@@ -539,11 +547,8 @@ fn wrapped_main() -> ! {
                         renderer_modal.activate();
                     }
                     RendererState::RunBip39Input(config) => {
-                        let b39input = gam::modal::Bip39Entry::new(
-                            false,
-                            renderer_cid,
-                            Opcode::Bip39Return.to_u32().unwrap(),
-                        );
+                        let b39input =
+                            Bip39Entry::new(false, renderer_cid, Opcode::Bip39Return.to_u32().unwrap());
                         let mut text = String::new();
                         if let Some(c) = &config.caption {
                             text.push_str(c.as_str());
@@ -606,10 +611,8 @@ fn wrapped_main() -> ! {
                         renderer_modal.activate();
                     }
                     RendererState::RunRadio(config) => {
-                        let mut radiobuttons = gam::modal::RadioButtons::new(
-                            renderer_cid,
-                            Opcode::RadioReturn.to_u32().unwrap(),
-                        );
+                        let mut radiobuttons =
+                            RadioButtons::new(renderer_cid, Opcode::RadioReturn.to_u32().unwrap());
                         list_hash.clear();
                         list_selected = 0u32;
                         for item in fixed_items.iter() {
@@ -633,10 +636,8 @@ fn wrapped_main() -> ! {
                         renderer_modal.activate();
                     }
                     RendererState::RunCheckBox(config) => {
-                        let mut checkbox = gam::modal::CheckBoxes::new(
-                            renderer_cid,
-                            Opcode::CheckBoxReturn.to_u32().unwrap(),
-                        );
+                        let mut checkbox =
+                            CheckBoxes::new(renderer_cid, Opcode::CheckBoxReturn.to_u32().unwrap());
                         list_hash.clear();
                         list_selected = 0u32;
                         for item in fixed_items.iter() {
@@ -678,7 +679,7 @@ fn wrapped_main() -> ! {
                             tts.tts_simple(text.as_str()).unwrap();
                             bot_text.push_str(text.as_str());
                         }
-                        let mut gutter = gam::modal::Notification::new(
+                        let mut gutter = Notification::new(
                             renderer_cid,
                             Opcode::HandleDynamicNotificationKeyhit.to_u32().unwrap(),
                         );
@@ -702,6 +703,7 @@ fn wrapped_main() -> ! {
                 }
             }
             Some(Opcode::FinishProgress) => msg_scalar_unpack!(msg, caller, _, _, _, {
+                #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
                 renderer_modal.gam.relinquish_focus().unwrap();
                 op = RendererState::None;
                 // unblock the caller, which was forwarded on as the first argument
@@ -736,6 +738,7 @@ fn wrapped_main() -> ! {
                         config.text.is_none(),
                         None,
                     );
+                    #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
                     log::debug!("UPDATE_DYN gid: {:?}", renderer_modal.canvas);
                     renderer_modal.redraw();
                     xous::yield_slice();
@@ -752,6 +755,7 @@ fn wrapped_main() -> ! {
                 }
             },
             Some(Opcode::DoCloseDynamicNotification) => {
+                #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
                 renderer_modal.gam.relinquish_focus().unwrap();
                 dynamic_notification_active = false;
                 op = RendererState::None;
