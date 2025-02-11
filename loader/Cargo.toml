@@ -96,6 +96,7 @@ board-baosec = [
     "ed25519-dalek",
     "sha2",
     "digest",
+    "ux-api/board-baosec",
 ]
 board-baosor = ["cramium-hal/board-baosor"]
 board-dabao = ["cramium-hal/board-dabao"]
