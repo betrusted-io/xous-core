@@ -2,7 +2,7 @@ use core::cmp::{max, min};
 
 use crate::minigfx::*;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Rectangle {
     pub tl: Point,
     pub br: Point,
@@ -190,4 +190,26 @@ impl Rectangle {
         self.br.x += margin.x;
         self.br.y += margin.y;
     }
+}
+
+//////////////////////// Rounded Rectangle
+#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct RoundedRectangle {
+    pub border: Rectangle, // drawstyle is inherited from the Rectangle
+    pub radius: isize,
+}
+impl RoundedRectangle {
+    pub fn new(rr: Rectangle, r: isize) -> RoundedRectangle {
+        let mut r_adj = r;
+        // disallow radii that are greater than 2x the width of the rectangle
+        if r > (rr.br.x - rr.tl.x) {
+            r_adj = 0;
+        }
+        if r > (rr.br.y - rr.tl.y) {
+            r_adj = 0;
+        }
+        RoundedRectangle { border: rr, radius: r_adj }
+    }
+
+    pub fn translate(&mut self, offset: Point) { self.border.translate(offset); }
 }
