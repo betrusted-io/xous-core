@@ -4,7 +4,37 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+xous = "0.9.64"
+num-derive = { version = "0.4.2", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+], optional = true }
+zeroize = "1.8.1"
+enum_dispatch = "0.3.7"
 
 [features]
-std = []
-default = ["std"]
+# various feature gates - recommended to be selective about these because
+# any feature included but not used will still generate the code to handle it
+ditherpunk = []
+textentry = []
+bip39entry = []
+radiobuttons = []
+checkboxes = []
+slider = []
+notification = []
+consoleinput = []
+
+default-widgets = [
+    "textentry",
+    "bip39entry",
+    "radiobuttons",
+    "checkboxes",
+    "slider",
+    "notification",
+    "consoleinput",
+]
+
+std = ["rkyv"]
+default = ["std", "default-widgets"]
