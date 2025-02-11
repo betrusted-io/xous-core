@@ -12,8 +12,11 @@ use std::cmp::max;
 use std::convert::TryInto;
 
 use bit_field::BitField;
+#[cfg(not(any(feature = "hosted-baosec")))]
 use gam::*;
 use num_traits::*;
+#[cfg(any(feature = "hosted-baosec"))]
+use ux_api::widgets::*;
 use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;
 

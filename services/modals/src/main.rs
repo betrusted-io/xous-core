@@ -31,10 +31,13 @@ mod api;
 use api::*;
 #[cfg(feature = "ditherpunk")]
 use gam::Bitmap;
+#[cfg(not(any(feature = "hosted-baosec")))]
 use gam::modal::*;
 use locales::t;
 #[cfg(feature = "tts")]
 use tts_frontend::TtsFrontend;
+#[cfg(any(feature = "hosted-baosec"))]
+use ux_api::widgets::*;
 use xous::{Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 #[cfg(feature = "tts")]

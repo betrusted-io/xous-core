@@ -1,6 +1,9 @@
 #[cfg(feature = "ditherpunk")]
 use gam::Tile;
+#[cfg(not(any(feature = "hosted-baosec")))]
 use gam::modal::*;
+#[cfg(any(feature = "hosted-baosec"))]
+use ux_api::widgets::*;
 
 pub(crate) const SERVER_NAME_MODALS: &str = "_Modal Dialog Server_";
 
