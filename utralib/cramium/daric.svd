@@ -1765,8 +1765,8 @@ bit position to clear the flag]]></description>
                     <fields>
                         <field>
                             <name>sfr_fr</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <msb>2</msb>
+                            <bitRange>[2:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[sfr_fr flag register. `1` means event happened, write back `1` in respective bit
 position to clear the flag]]></description>
@@ -2213,22 +2213,6 @@ position to clear the flag]]></description>
             <baseAddress>0x40028000</baseAddress>
             <groupName>SCE_GLBSFR</groupName>
             <registers>
-                <register>
-                    <name>SFR_SCEMODE</name>
-                    <description><![CDATA[See file:///F:/code/cram-nto/modules/crypto_top/rtl/sce_glbsfra.sv]]></description>
-                    <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>cr_scemode</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[cr_scemode read/write control register]]></description>
-                        </field>
-                    </fields>
-                </register>
                 <register>
                     <name>SFR_SUBEN</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/crypto_top/rtl/sce_glbsfra.sv]]></description>
@@ -3547,11 +3531,11 @@ position to clear the flag]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfr_aclkgr</name>
+                            <name>aclksubgate</name>
                             <msb>7</msb>
                             <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfr_aclkgr read only status register]]></description>
+                            <description><![CDATA[aclksubgate read only status register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -3563,11 +3547,11 @@ position to clear the flag]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfr_hclkgr</name>
+                            <name>hclksubgate</name>
                             <msb>7</msb>
                             <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfr_hclkgr read only status register]]></description>
+                            <description><![CDATA[hclksubgate read only status register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -3579,11 +3563,11 @@ position to clear the flag]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfr_iclkgr</name>
+                            <name>iclksubgate</name>
                             <msb>7</msb>
                             <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfr_iclkgr read only status register]]></description>
+                            <description><![CDATA[iclksubgate read only status register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -3595,11 +3579,11 @@ position to clear the flag]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>sfr_pclkgr</name>
+                            <name>pclksubgate</name>
                             <msb>7</msb>
                             <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[sfr_pclkgr read only status register]]></description>
+                            <description><![CDATA[pclksubgate read only status register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -9241,10 +9225,26 @@ respective bit position to clear the flag]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>SFR_RAMSEC</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/core/rtl/coresub_sramtrm.sv]]></description>
+                    <addressOffset>0x0030</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>ramsec</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[ramsec read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x24</size>
+                <size>0x34</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -10202,14 +10202,14 @@ bit position to clear the flag]]></description>
             <groupName>GLUECHAIN</groupName>
             <registers>
                 <register>
-                    <name>SFR_GCMASK</name>
+                    <name>SFR_GCMASK_CR_GCMASK0</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/gluechain.sv]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>cr_gcmask</name>
+                            <name>cr_gcmask0</name>
                             <msb>31</msb>
                             <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
@@ -10218,14 +10218,14 @@ bit position to clear the flag]]></description>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_GCSR</name>
+                    <name>SFR_GCSR_GLUEREG0</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/gluechain.sv]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>gluereg</name>
+                            <name>gluereg0</name>
                             <msb>31</msb>
                             <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
@@ -10234,14 +10234,14 @@ bit position to clear the flag]]></description>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_GCRST</name>
+                    <name>SFR_GCRST_GLUERST0</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/gluechain.sv]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>gluerst</name>
+                            <name>gluerst0</name>
                             <msb>31</msb>
                             <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
@@ -10250,14 +10250,14 @@ bit position to clear the flag]]></description>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_GCTEST</name>
+                    <name>SFR_GCTEST_GLUETEST0</name>
                     <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/gluechain.sv]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>gluetest</name>
+                            <name>gluetest0</name>
                             <msb>31</msb>
                             <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
@@ -10373,74 +10373,10 @@ bit position to clear the flag]]></description>
                         </field>
                     </fields>
                 </register>
-                <register>
-                    <name>SFR_MLSR_SR_MLSR4</name>
-                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/mesh.sv]]></description>
-                    <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>sr_mlsr4</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[sr_mlsr read only status register]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>SFR_MLSR_SR_MLSR5</name>
-                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/mesh.sv]]></description>
-                    <addressOffset>0x001c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>sr_mlsr5</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[sr_mlsr read only status register]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>SFR_MLSR_SR_MLSR6</name>
-                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/mesh.sv]]></description>
-                    <addressOffset>0x0020</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>sr_mlsr6</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[sr_mlsr read only status register]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>SFR_MLSR_SR_MLSR7</name>
-                    <description><![CDATA[See file:///F:/code/cram-nto/modules/sec/rtl/mesh.sv]]></description>
-                    <addressOffset>0x0024</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>sr_mlsr7</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[sr_mlsr read only status register]]></description>
-                        </field>
-                    </fields>
-                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x28</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -11261,10 +11197,26 @@ bit position to clear the flag]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>SFR_AOPADPU</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/ao/rtl/ao_sysctrl.sv]]></description>
+                    <addressOffset>0x0064</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_aopadpu</name>
+                            <msb>9</msb>
+                            <bitRange>[9:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_aopadpu read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x64</size>
+                <size>0x68</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
