@@ -365,7 +365,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_apps(&get_cratespecs());
         }
         Some("baosec-emu") => {
-            let bao_pkgs = ["xous-ticktimer", "xous-log", "xous-names", "modals"];
+            let bao_pkgs = ["xous-ticktimer", "xous-log", "xous-names", "modals", "bao-video"];
             builder
                 .target_hosted()
                 .add_feature("hosted-baosec")
