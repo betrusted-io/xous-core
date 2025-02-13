@@ -122,12 +122,12 @@ pub const MAX_HEIGHT: u8 = {{.Font.Size}};
 pub const CODEPOINTS: [u32; {{.GS.CodepointsLen}}] = [
 {{.GS.Codepoints}}];
 
-#[cfg(any(feature="precursor", feature="renode", feature="cramium-soc"))]
+#[cfg(any(feature="precursor", feature="renode", feature="cramium-soc", feature="board-baosec"))]
 pub(crate) static GLYPH_LOCATION: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 pub(crate) const GLYPH_LEN: usize = {{.GS.GlyphsLen}};
 
 pub(crate) fn glyphs() -> &'static [u32] {
-    #[cfg(any(feature="precursor", feature="renode", feature="cramium-soc"))]
+    #[cfg(any(feature="precursor", feature="renode", feature="cramium-soc", feature="board-baosec"))]
     unsafe {
         let data: *const u32 = core::mem::transmute(GLYPH_LOCATION.load(core::sync::atomic::Ordering::SeqCst));
         core::slice::from_raw_parts(data, GLYPH_LEN)

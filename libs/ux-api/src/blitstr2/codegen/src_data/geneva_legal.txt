@@ -1,6 +1,0 @@
-// This code includes encoded bitmaps of glyphs from the Geneva typeface which
-// was designed by Susan Kare and released by Apple in 1984. Geneva is a
-// registered trademark of Apple Inc. The PNG sprite sheets of Geneva glyphs came
-// from screenshots taken on Macintosh System 7, with additional Latin Extended
-// characters added by Sam Blenny.
-//
