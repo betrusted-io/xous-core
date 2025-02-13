@@ -1,5 +1,4 @@
 use core::fmt::Write;
-use std::convert::TryInto;
 
 use locales::t;
 use qrcode::{Color, QrCode};
@@ -71,3 +70,6 @@ impl Notification {
         todo!();
     }
 }
+
+use crate::widgets::ActionApi;
+impl ActionApi for Notification {}

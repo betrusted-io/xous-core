@@ -48,6 +48,9 @@ impl Bip39Entry {
     }
 }
 
+use crate::widgets::ActionApi;
+impl ActionApi for Bip39Entry {}
+
 // Eventually more language support can be added here:
 //
 // In order to integrate this well, we need to re-do the language build

@@ -1,7 +1,8 @@
-use core::ops::Not;
+use enum_dispatch::enum_dispatch;
 
 use super::*;
 
+#[enum_dispatch(ActionApi)]
 pub enum ActionType {
     #[cfg(feature = "textentry")]
     TextEntry(TextEntry),
@@ -19,4 +20,15 @@ pub enum ActionType {
     Image,
     #[cfg(feature = "consoleinput")]
     ConsoleInput,
+}
+
+#[enum_dispatch]
+pub trait ActionApi {
+    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 { glyph_height + margin * 2 }
+    fn redraw(&self, _at_height: i16, _modal: &Modal) { unimplemented!() }
+    fn close(&mut self) {}
+    fn is_password(&self) -> bool { false }
+    /// navigation is one of '∴' | '←' | '→' | '↑' | '↓'
+    fn key_action(&mut self, _key: char) -> Option<ValidatorErr> { None }
+    fn set_action_opcode(&mut self, _op: u32) {}
 }

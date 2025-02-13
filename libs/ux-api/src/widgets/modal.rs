@@ -5,6 +5,7 @@ use xous_ipc::Buffer;
 use super::*;
 use crate::blitstr2::glyph_height_hint;
 use crate::minigfx::*;
+use crate::platform::{LINES, WIDTH};
 
 pub struct Modal<'a> {
     pub top_text: Option<TextView>,
@@ -79,6 +80,8 @@ impl<'a> Modal<'a> {
             bot_memoized_height: None,
             growable: false,
         };
+        layout(&mut modal, top_text, bot_text, style);
+
         modal
     }
 
@@ -87,6 +90,8 @@ impl<'a> Modal<'a> {
     }
 
     pub fn redraw(&mut self) {
+        let action_resolver: Box<&dyn ActionApi> = Box::new(&self.action);
+        action_resolver.redraw(0, &self);
         todo!();
     }
 
@@ -169,3 +174,96 @@ impl<'a> Modal<'a> {
         };
     }
 }
+
+pub fn screen_bounds() -> Point { Point::new(WIDTH, LINES) }
+
+// comment this out while I figure out how to shim in the HAL layer for the graphics emulation
+fn layout(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle) {}
+/*
+fn layout(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle) {
+    // we need to set a "max" size to our modal box, so that the text computations don't fail later on
+    let current_bounds = screen_bounds();
+
+    // method:
+    //   - we assume the GAM gives us an initial modal with a "maximum" height setting
+    //   - items are populated within this maximal canvas setting, and then the actual height needed is
+    //     computed
+    //   - the canvas is resized to this actual height
+    // problems:
+    //   - there is no sanity check on the size of the text boxes. So if you give the UX element a top_text
+    //     box that's huge, it will just overflow the canvas size and nothing else will get drawn.
+
+    let mut total_height = modal.margin;
+    log::trace!("step 0 total_height: {}", total_height);
+    // compute height of top_text, if any
+    if let Some(top_str) = top_text {
+        let mut top_tv = TextView::new(TextBounds::GrowableFromTl(
+            Point::new(modal.margin, modal.margin),
+            (modal.canvas_width - modal.margin * 2) as u16,
+        ));
+        top_tv.draw_border = false;
+        top_tv.style = style;
+        top_tv.margin = Point::new(0, 0); // all margin already accounted for in the raw bounds of the text drawing
+        top_tv.ellipsis = false;
+        top_tv.invert = modal.inverted;
+        // specify a clip rect that's the biggest possible allowed. If we don't do this, the current canvas
+        // bounds are used, and the operation will fail if the text has to get bigger.
+        top_tv.clip_rect = Some(Rectangle::new(
+            Point::new(0, 0),
+            Point::new(current_bounds.x, LINES - 2 * modal.line_height),
+        ));
+        write!(top_tv.text, "{}", top_str).unwrap();
+
+        log::trace!("posting top tv: {:?}", top_tv);
+        modal.gam.bounds_compute_textview(&mut top_tv).expect("couldn't simulate top text size");
+        if let Some(bounds) = top_tv.bounds_computed {
+            log::trace!("top_tv bounds computed {}", bounds.br.y - bounds.tl.y);
+            total_height += bounds.br.y - bounds.tl.y;
+        } else {
+            log::warn!("couldn't compute height for modal top_text: {:?}", top_tv);
+            // probably should find a better way to deal with this.
+            total_height += LINES - (modal.line_height * 2);
+        }
+        modal.top_text = Some(top_tv);
+    }
+    total_height += modal.margin;
+
+    // compute height of action item
+    log::trace!("step 1 total_height: {}", total_height);
+    total_height += modal.action.height(modal.line_height, modal.margin, &modal);
+    total_height += modal.margin;
+
+    // compute height of bot_text, if any
+    log::trace!("step 2 total_height: {}", total_height);
+    if let Some(bot_str) = bot_text {
+        let mut bot_tv = TextView::new(TextBounds::GrowableFromTl(
+            Point::new(modal.margin, total_height),
+            (modal.canvas_width - modal.margin * 2) as u16,
+        ));
+        bot_tv.draw_border = false;
+        bot_tv.style = style;
+        bot_tv.margin = Point::new(0, 0); // all margin already accounted for in the raw bounds of the text drawing
+        bot_tv.ellipsis = false;
+        bot_tv.invert = modal.inverted;
+        // specify a clip rect that's the biggest possible allowed. If we don't do this, the current canvas
+        // bounds are used, and the operation will fail if the text has to get bigger.
+        bot_tv.clip_rect = Some(Rectangle::new(
+            Point::new(0, 0),
+            Point::new(current_bounds.x, LINES - 2 * modal.line_height),
+        ));
+        write!(bot_tv.text, "{}", bot_str).unwrap();
+
+        log::trace!("posting bot tv: {:?}", bot_tv);
+        modal.gam.bounds_compute_textview(&mut bot_tv).expect("couldn't simulate bot text size");
+        if let Some(bounds) = bot_tv.bounds_computed {
+            total_height += bounds.br.y - bounds.tl.y;
+        } else {
+            log::error!("couldn't compute height for modal bot_text: {:?}", bot_tv);
+            panic!("couldn't compute height for modal bot_text");
+        }
+        modal.bot_text = Some(bot_tv);
+        total_height += modal.margin;
+    }
+    log::trace!("step 3 total_height: {}", total_height);
+}
+*/

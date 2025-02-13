@@ -78,3 +78,6 @@ impl Slider {
         }
     }
 }
+
+use crate::widgets::ActionApi;
+impl ActionApi for Slider {}

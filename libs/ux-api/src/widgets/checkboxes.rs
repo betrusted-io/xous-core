@@ -23,3 +23,6 @@ impl CheckBoxes {
 
     pub fn clear_items(&mut self) { self.items.clear(); }
 }
+
+use crate::widgets::ActionApi;
+impl ActionApi for CheckBoxes {}

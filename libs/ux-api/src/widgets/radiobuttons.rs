@@ -34,3 +34,6 @@ impl RadioButtons {
         self.action_payload.clear();
     }
 }
+
+use crate::widgets::ActionApi;
+impl ActionApi for RadioButtons {}
