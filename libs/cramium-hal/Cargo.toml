@@ -38,6 +38,7 @@ board-baosec = [
     "axp2101",
     "ux-api/board-baosec",
 ] # USB form factor token
+hosted-baosec = [] # emulated hardware on x86 platform
 board-baosor = ["camera-ov2640", "axp2101"] # Precursor form factor
 board-dabao = [] # Dev board form factor
 verilator-only = []
