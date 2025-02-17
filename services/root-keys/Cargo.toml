@@ -19,6 +19,7 @@ llio = { path = "../llio" }
 com = { path = "../com" }
 xous-semver = "0.1.2"
 utralib = { version = "0.1.25", optional = true, default-features = false }
+blitstr2 = { path = "../../libs/blitstr2" }
 
 xous-ipc = "0.10.4"
 num-derive = { version = "0.4.1", default-features = false }

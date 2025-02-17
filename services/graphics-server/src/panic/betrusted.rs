@@ -2,6 +2,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 
+use blitstr2::{GlyphSprite, NULL_GLYPH_SPRITE};
 use utralib::generated::*;
 
 /// We can have no allocations inside this, and ideally, it's as minimal as possible.
@@ -23,9 +24,8 @@ use utralib::generated::*;
 /// Note that the frame buffer is 336 px wide, which is 10.5 32-bit words.
 /// The excess 16 bits are the dirty bit field.
 use crate::{
-    api::{GlyphSprite, PixelColor},
+    api::PixelColor,
     backend::{FB_SIZE, FB_WIDTH_PIXELS, FB_WIDTH_WORDS},
-    blitstr2::NULL_GLYPH_SPRITE,
 };
 /// How far down the screen the panic box draws
 const TOP_OFFSET: usize = 48;
@@ -224,7 +224,7 @@ impl<'a> PanicDisplay<'a> {
                 self.x = TEXT_MARGIN;
                 continue;
             }
-            self.draw_glyph(self.x, self.y, crate::blitstr2::mono_glyph(ch).unwrap_or(NULL_GLYPH_SPRITE));
+            self.draw_glyph(self.x, self.y, blitstr2::mono_glyph(ch).unwrap_or(NULL_GLYPH_SPRITE));
             self.x += GLYPH_WIDTH;
             if self.x >= WIDTH_CHARS * GLYPH_WIDTH {
                 self.x = TEXT_MARGIN;

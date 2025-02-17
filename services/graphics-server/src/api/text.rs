@@ -1,8 +1,9 @@
 use core::ops::Add;
 
 use String;
+use blitstr2::GlyphStyle;
 
-use crate::api::{Cursor, Gid, GlyphStyle, Point, Rectangle};
+use crate::api::{Cursor, Gid, Point, Rectangle};
 
 /// coordinates are local to the canvas, not absolute to the screen
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]

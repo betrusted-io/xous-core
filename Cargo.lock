@@ -361,6 +361,7 @@ dependencies = [
  "num-traits",
  "rqrr",
  "utralib 0.1.25",
+ "ux-api",
  "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
@@ -515,6 +516,18 @@ dependencies = [
  "radium",
  "tap",
  "wyz",
+]
+
+[[package]]
+name = "blitstr2"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "num-derive 0.4.2",
+ "num-traits",
+ "rkyv 0.8.8",
+ "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.10.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1017,6 +1030,7 @@ dependencies = [
  "rkyv 0.8.8",
  "usb-device",
  "utralib 0.1.25",
+ "ux-api",
  "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -2186,6 +2200,7 @@ checksum = "0fd8b261ccf00df8c5cc60c082bb7d7aa64c33a433cfcc091ca244326c924b2c"
 name = "gam"
 version = "0.1.0"
 dependencies = [
+ "blitstr2",
  "com",
  "content-plugin-api",
  "cram-hal-service",
@@ -2306,6 +2321,7 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 name = "graphics-server"
 version = "0.1.0"
 dependencies = [
+ "blitstr2",
  "cram-hal-service",
  "cramium-hal",
  "keyboard",
@@ -3018,6 +3034,7 @@ dependencies = [
  "sha2-loader",
  "simple-fatfs",
  "utralib 0.1.25",
+ "ux-api",
  "xous-pl230",
  "xous-riscv",
 ]
@@ -3179,6 +3196,7 @@ version = "0.1.0"
 dependencies = [
  "bit_field",
  "cram-hal-service",
+ "cramium-hal",
  "gam",
  "locales",
  "log",
@@ -3188,6 +3206,7 @@ dependencies = [
  "trng",
  "tts-frontend",
  "utralib 0.1.25",
+ "ux-api",
  "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
@@ -4539,6 +4558,7 @@ dependencies = [
  "aes 0.8.3",
  "aes-gcm-siv",
  "aes-kw",
+ "blitstr2",
  "blowfish",
  "byteorder",
  "cipher",
@@ -4913,6 +4933,7 @@ version = "0.1.0"
 dependencies = [
  "aes 0.8.3",
  "base64 0.20.0",
+ "blitstr2",
  "chrono",
  "cipher",
  "codec",
@@ -5163,6 +5184,7 @@ checksum = "5c0e04424e733e69714ca1bbb9204c1a57f09f5493439520f9f68c132ad25eec"
 name = "status"
 version = "0.1.0"
 dependencies = [
+ "blitstr2",
  "chrono",
  "codec",
  "com",
@@ -6020,6 +6042,26 @@ name = "uuid"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
+
+[[package]]
+name = "ux-api"
+version = "0.1.0"
+dependencies = [
+ "blitstr2",
+ "digest 0.9.0",
+ "enum_dispatch",
+ "hex 0.4.3",
+ "locales",
+ "log",
+ "num-derive 0.4.2",
+ "num-traits",
+ "qrcode",
+ "rkyv 0.8.8",
+ "sha2",
+ "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.10.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "zeroize",
+]
 
 [[package]]
 name = "valuable"

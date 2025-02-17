@@ -22,8 +22,8 @@ mod bip39entry;
 use core::fmt::Write;
 
 pub use bip39entry::*;
+pub use blitstr2::GlyphStyle;
 use enum_dispatch::enum_dispatch;
-pub use graphics_server::api::GlyphStyle;
 use graphics_server::api::*;
 use num_traits::*;
 use xous_ipc::Buffer;

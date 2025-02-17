@@ -19,17 +19,13 @@ mod sleep_note;
 
 use api::*;
 
-mod blitstr2;
 mod wordwrap;
-#[macro_use]
-mod style_macros;
 
+use api::BulkRead;
+use blitstr2::{GlyphStyle, fontmap, glyph_to_height_hint};
 use num_traits::FromPrimitive;
 use xous::{MemoryRange, msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
-
-mod fontmap;
-use api::BulkRead;
 
 #[cfg(any(feature = "precursor", feature = "renode", feature = "cramium-soc"))]
 // only install for hardware targets; hosted mode uses host's panic handler
@@ -311,29 +307,29 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                     let screen_offset: Point = tv.clip_rect.unwrap().tl;
 
                     let typeset_extent = match tv.bounds_hint {
-                        TextBounds::BoundingBox(r) => Pt::new(
+                        TextBounds::BoundingBox(r) => Point::new(
                             r.br().x - r.tl().x - tv.margin.x * 2,
                             r.br().y - r.tl().y - tv.margin.y * 2,
                         ),
                         TextBounds::GrowableFromBr(br, width) => {
-                            Pt::new(width as i16 - tv.margin.x * 2, br.y - tv.margin.y * 2)
+                            Point::new(width as i16 - tv.margin.x * 2, br.y - tv.margin.y * 2)
                         }
                         TextBounds::GrowableFromBl(bl, width) => {
-                            Pt::new(width as i16 - tv.margin.x * 2, bl.y - tv.margin.y * 2)
+                            Point::new(width as i16 - tv.margin.x * 2, bl.y - tv.margin.y * 2)
                         }
-                        TextBounds::GrowableFromTl(tl, width) => Pt::new(
+                        TextBounds::GrowableFromTl(tl, width) => Point::new(
                             width as i16 - tv.margin.x * 2,
                             (clip_rect.br().y - clip_rect.tl().y - tl.y) - tv.margin.y * 2,
                         ),
-                        TextBounds::GrowableFromTr(tr, width) => Pt::new(
+                        TextBounds::GrowableFromTr(tr, width) => Point::new(
                             width as i16 - tv.margin.x * 2,
                             (clip_rect.br().y - clip_rect.tl().y - tr.y) - tv.margin.y * 2,
                         ),
-                        TextBounds::CenteredTop(r) => Pt::new(
+                        TextBounds::CenteredTop(r) => Point::new(
                             r.br().x - r.tl().x - tv.margin.x * 2,
                             r.br().y - r.tl().y - tv.margin.y * 2,
                         ),
-                        TextBounds::CenteredBot(r) => Pt::new(
+                        TextBounds::CenteredBot(r) => Point::new(
                             r.br().x - r.tl().x - tv.margin.x * 2,
                             r.br().y - r.tl().y - tv.margin.y * 2,
                         ),

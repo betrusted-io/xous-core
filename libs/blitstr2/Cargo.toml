@@ -1,0 +1,31 @@
+[package]
+authors = ["Sam Blenny", "bunnie <bunnie@kosagi.com>"]
+description = "Font rendering crate for Xous"
+edition = "2018"
+name = "blitstr2"
+version = "0.1.0"
+
+# Dependency versions enforced by Cargo.lock.
+[dependencies]
+log = "0.4.14"
+xous = "0.9.64"
+
+xous-ipc = "0.10.4"
+num-derive = { version = "0.4.2", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+] }
+
+[features]
+# selection of board settings for display resolution
+cramium-soc = []
+board-baosec = []
+board-baosor = []
+hosted-baosec = []
+hosted = []
+renode = []
+precursor = []
+
+default = []

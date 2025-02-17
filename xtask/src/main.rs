@@ -364,6 +364,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // .add_feature("test-rekey")
                 .add_apps(&get_cratespecs());
         }
+        Some("baosec-emu") => {
+            let bao_pkgs = ["xous-ticktimer", "xous-log", "xous-names", "modals", "bao-video"];
+            builder
+                .target_hosted()
+                .add_feature("hosted-baosec")
+                .add_services(&bao_pkgs)
+                .add_apps(&get_cratespecs());
+        }
         Some("pddb-ci") => {
             builder
                 .target_hosted()
@@ -804,6 +812,7 @@ Hardware images:
 
 Hosted emulation:
  run                     Run user image in hosted mode with release flags. [cratespecs] are apps
+ baosec-emu              Run user image in hosted mode but for the baosec target
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors). [cratespecs] ignored.
  pddb-btest              PDDB stress tester for secret basis creation/deletion [cratespecs] ignored.
  hosted-debug            Run user image in hosted mode with debug flags. [cratespecs] are apps

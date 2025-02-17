@@ -2691,7 +2691,7 @@ impl<'a> RootKeys {
         });
         let loader_len = xous::LOADER_CODE_LEN
             - SIGBLOCK_SIZE
-            + graphics_server::fontmap::FONT_TOTAL_LEN as u32
+            + blitstr2::fontmap::FONT_TOTAL_LEN as u32
             // these also need to be updated in graphics-server/src/main.rs @ Some(Opcode::BulkReadfonts)
             + 16 // for the minimum compatible semver
             + 16 // for the current semver

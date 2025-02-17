@@ -15,6 +15,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use std::collections::HashMap;
 
 use api::Opcode;
+use blitstr2::GlyphStyle;
 #[cfg(feature = "cramium-soc")]
 use cram_hal_service::trng;
 use gam::{MAIN_MENU_NAME, ROOTKEY_MODAL_NAME};
