@@ -1,8 +1,9 @@
 // `Command` vendored from https://github.com/ithinuel/sh1107-rs/tree/main
+use ux_api::minigfx::{ColorNative, FrameBuffer, Point};
+
 use crate::{
     ifram::IframRange,
     iox::{IoGpio, IoSetup, IoxPort},
-    minigfx::{ColorNative, FrameBuffer, Point},
     udma::{PeriphId, Spim, SpimClkPha, SpimClkPol, SpimCs, UdmaGlobalConfig},
 };
 

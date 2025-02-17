@@ -125,3 +125,6 @@ impl TextEntry {
         }
     }
 }
+
+use crate::widgets::ActionApi;
+impl ActionApi for TextEntry {}

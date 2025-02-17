@@ -17,4 +17,5 @@ utralib = { version = "0.1.25", optional = true, default-features = false }
 [features]
 precursor = ["utralib/precursor"]
 renode = ["utralib/renode"]
+std = []
 default = []

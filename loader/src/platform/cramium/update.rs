@@ -8,7 +8,6 @@ use cramium_hal::mbox::{
     MBOX_PROTOCOL_REV, Mbox, MboxError, MboxToCm7Pkt, PAYLOAD_LEN_WORDS, RERAM_PAGE_SIZE_BYTES, ToCm7Op,
     ToRvOp,
 };
-use cramium_hal::minigfx::{FrameBuffer, Point};
 use cramium_hal::sh1107::{Mono, Oled128x128};
 use cramium_hal::udma;
 use cramium_hal::udma::*;
@@ -17,6 +16,7 @@ use ed25519_dalek::{Digest, Signature, VerifyingKey};
 use sha2::Sha512;
 use simple_fatfs::PathBuf;
 use utralib::generated::*;
+use ux_api::minigfx::{FrameBuffer, Point};
 
 use crate::SIGBLOCK_SIZE;
 use crate::platform::cramium::gfx;
