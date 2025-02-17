@@ -22,10 +22,9 @@ pub mod shapes;
 pub use shapes::*;
 pub mod text;
 pub use text::*;
-pub mod glyphstyle;
-pub use glyphstyle::*;
-pub mod blitstr2;
-pub use blitstr2::*;
+pub mod cursor;
+pub use cursor::*;
+
 #[cfg(feature = "ditherpunk")]
 pub mod tile;
 use std::hash::{Hash, Hasher};

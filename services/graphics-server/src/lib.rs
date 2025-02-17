@@ -1,20 +1,18 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-// pub mod size;
 pub mod api;
 #[cfg(feature = "ditherpunk")]
 pub use api::Tile;
 pub use api::{
-    Circle, ClipObject, ClipObjectList, ClipObjectType, ClipRect, Cursor, DrawStyle, Gid, GlyphStyle, Line,
-    PixelColor, Point, Rectangle, RoundedRectangle, TextBounds, TextOp, TextView, TokenClaim,
+    Circle, ClipObject, ClipObjectList, ClipObjectType, DrawStyle, Gid, Line, PixelColor, Point, Rectangle,
+    RoundedRectangle, TextBounds, TextOp, TextView, TokenClaim,
 };
 pub mod op;
-
-pub mod fontmap;
+pub mod wordwrap;
 pub use api::ArchivedBulkRead;
 pub use api::BulkRead;
 use api::{Opcode, TEXTVIEW_LEN}; // if you prefer to map the api into your local namespace
-pub use fontmap::*;
+use blitstr2::GlyphStyle;
 use num_traits::ToPrimitive;
 use xous::{Message, send_message};
 use xous_ipc::Buffer;

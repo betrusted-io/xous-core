@@ -1,6 +1,8 @@
 use core::cmp::{max, min};
 
-use crate::api::{ClipRect, DrawStyle, Point};
+use blitstr2::ClipRect;
+
+use crate::api::{DrawStyle, Point};
 use crate::op::{HEIGHT, WIDTH};
 
 #[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]

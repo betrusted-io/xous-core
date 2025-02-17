@@ -2,7 +2,7 @@ use core::cell::Cell;
 use core::fmt::Write;
 use std::cell::RefCell;
 
-use graphics_server::api::GlyphStyle;
+use blitstr2::*;
 use graphics_server::api::*;
 use num_traits::*;
 use xous_ipc::Buffer;

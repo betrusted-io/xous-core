@@ -8,7 +8,7 @@ mod betrusted;
 #[cfg(any(feature = "precursor", feature = "renode"))]
 pub use crate::backend::betrusted::*;
 
-#[cfg(feature = "cramium-soc")]
+#[cfg(feature = "board-baosor")]
 mod cramium;
-#[cfg(feature = "cramium-soc")]
+#[cfg(feature = "board-baosor")]
 pub use crate::backend::cramium::*;

@@ -19,11 +19,11 @@ use std::sync::{Arc, Mutex};
 #[cfg_attr(not(target_os = "xous"), allow(unused_imports))]
 use std::thread;
 
+use blitstr2::GlyphStyle;
 use chrono::prelude::*;
 use com::api::*;
 use crossbeam::channel::{Receiver, Sender, at, select, unbounded};
 use gam::{GamObjectList, GamObjectType};
-use graphics_server::api::GlyphStyle;
 use graphics_server::*;
 use locales::t;
 use num_traits::*;

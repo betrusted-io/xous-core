@@ -15,7 +15,7 @@ pub mod bitmap;
 use api::Opcode; // if you prefer to map the api into your local namespace
 #[cfg(feature = "ditherpunk")]
 pub use bitmap::{Bitmap, DecodePng, Img, PixelType};
-pub use graphics_server::api::GlyphStyle;
+pub use blitstr2::GlyphStyle;
 pub use graphics_server::api::PixelColor;
 #[cfg(feature = "ditherpunk")]
 pub use graphics_server::api::Tile;
