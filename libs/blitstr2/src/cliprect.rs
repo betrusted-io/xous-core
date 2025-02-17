@@ -1,8 +1,8 @@
 // Copyright (c) 2022 Sam Blenny
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-use super::{LINES, WIDTH};
-use crate::api::Pt;
+use crate::platform::{LINES, WIDTH};
+use crate::pt::Pt;
 
 /// ClipRect specifies a region of pixels. X and y pixel ranges are inclusive of
 /// min and exclusive of max (i.e. it's min.x..max.x rather than min.x..=max.x)
@@ -17,7 +17,7 @@ pub struct ClipRect {
 #[allow(dead_code)]
 impl ClipRect {
     /// Initialize a rectangle using automatic min/max fixup for corner points
-    pub fn new(min_x: i16, min_y: i16, max_x: i16, max_y: i16) -> ClipRect {
+    pub fn new(min_x: isize, min_y: isize, max_x: isize, max_y: isize) -> ClipRect {
         // Make sure min_x <= max_x && min_y <= max_y
         let mut min = Pt { x: min_x, y: min_y };
         let mut max = Pt { x: max_x, y: max_y };
@@ -32,13 +32,10 @@ impl ClipRect {
         ClipRect { min, max }
     }
 
-    pub fn to_rect(&self) -> crate::api::Rectangle {
-        crate::api::Rectangle::new_coords(
-            self.min.x as i16,
-            self.min.y as i16,
-            self.max.x as i16,
-            self.max.y as i16,
-        )
+    /// Returns a tuple of raw arguments that can be used to construct a rectangle using
+    /// a native Rectangle object depending on the platform implementation
+    pub fn to_rect(&self) -> (isize, isize, isize, isize) {
+        (self.min.x as isize, self.min.y as isize, self.max.x as isize, self.max.y as isize)
     }
 
     /// Make a rectangle of the full screen size (0,0)..(WIDTH,LINES)

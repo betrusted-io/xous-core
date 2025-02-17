@@ -3,10 +3,10 @@
     "Config for use with main.go. Before making changes here, see config_editor.rb."
   ],
   "loadermod": [
-    "../../../../../loader/src/fonts.rs"
+    "../../../loader/src/fonts.rs"
   ],
   "fontmap": [
-    "../../fontmap.rs"
+    "../src/fontmap.rs"
   ],
   "glyphSets": [
     {
@@ -20,8 +20,8 @@
       "index": "src_data/basic_emoji.codepoints",
       "indexType": "txt-row-major",
       "glyphTrim": "CJK",
-      "rustout": "../fonts/emoji.rs",
-      "loaderout": "../../../../../loader/src/fonts/emoji.rs",
+      "rustout": "../src/fonts/emoji.rs",
+      "loaderout": "../../../loader/src/fonts/emoji.rs",
       "small": true
     },
     {
@@ -35,8 +35,8 @@
       "index": "src_data/hanzi.codepoints",
       "indexType": "txt-row-major",
       "glyphTrim": "CJK",
-      "rustout": "../fonts/zh.rs",
-      "loaderout": "../../../../../loader/src/fonts/zh.rs",
+      "rustout": "../src/fonts/zh.rs",
+      "loaderout": "../../../loader/src/fonts/zh.rs",
       "small": false
     },
     {
@@ -50,8 +50,8 @@
       "index": "src_data/Izumi16.codepoints",
       "indexType": "txt-row-major",
       "glyphTrim": "CJK",
-      "rustout": "../fonts/ja.rs",
-      "loaderout": "../../../../../loader/src/fonts/ja.rs",
+      "rustout": "../src/fonts/ja.rs",
+      "loaderout": "../../../loader/src/fonts/ja.rs",
       "small": false
     },
     {
@@ -65,8 +65,8 @@
       "index": "src_data/neodgm.codepoints",
       "indexType": "txt-row-major",
       "glyphTrim": "CJK",
-      "rustout": "../fonts/kr.rs",
-      "loaderout": "../../../../../loader/src/fonts/kr.rs",
+      "rustout": "../src/fonts/kr.rs",
+      "loaderout": "../../../loader/src/fonts/kr.rs",
       "small": false
     },
     {
@@ -80,8 +80,8 @@
       "index": "src_data/latin_index.json",
       "indexType": "json-grid-coord",
       "glyphTrim": "proportional",
-      "rustout": "../fonts/bold.rs",
-      "loaderout": "../../../../../loader/src/fonts/bold.rs",
+      "rustout": "../src/fonts/bold.rs",
+      "loaderout": "../../../loader/src/fonts/bold.rs",
       "small": true
     },
     {
@@ -95,8 +95,8 @@
       "index": "src_data/latin_index.json",
       "indexType": "json-grid-coord",
       "glyphTrim": "monospace",
-      "rustout": "../fonts/mono.rs",
-      "loaderout": "../../../../../loader/src/fonts/mono.rs",
+      "rustout": "../src/fonts/mono.rs",
+      "loaderout": "../../../loader/src/fonts/mono.rs",
       "small": true
     },
     {
@@ -110,8 +110,8 @@
       "index": "src_data/latin_index.json",
       "indexType": "json-grid-coord",
       "glyphTrim": "proportional",
-      "rustout": "../fonts/regular.rs",
-      "loaderout": "../../../../../loader/src/fonts/regular.rs",
+      "rustout": "../src/fonts/regular.rs",
+      "loaderout": "../../../loader/src/fonts/regular.rs",
       "small": true
     },
     {
@@ -125,8 +125,8 @@
       "index": "src_data/latin_index.json",
       "indexType": "json-grid-coord",
       "glyphTrim": "proportional",
-      "rustout": "../fonts/tall.rs",
-      "loaderout": "../../../../../loader/src/fonts/tall.rs",
+      "rustout": "../src/fonts/tall.rs",
+      "loaderout": "../../../loader/src/fonts/tall.rs",
       "small": true
     },
     {
@@ -140,8 +140,8 @@
       "index": "src_data/latin_index.json",
       "indexType": "json-grid-coord",
       "glyphTrim": "proportional",
-      "rustout": "../fonts/small.rs",
-      "loaderout": "../../../../../loader/src/fonts/small.rs",
+      "rustout": "../src/fonts/small.rs",
+      "loaderout": "../../../loader/src/fonts/small.rs",
       "small": true
     }
   ]

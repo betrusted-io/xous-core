@@ -1,5 +1,5 @@
 // A set of macros that define the priority order for resolving fonts across language definitions.
-
+#[macro_export]
 macro_rules! style_wrapper {
     ($rule:ident, $base_style:ident, $ch:ident) => {
         match &$base_style {
@@ -29,6 +29,7 @@ macro_rules! style_wrapper {
     };
 }
 
+#[macro_export]
 macro_rules! zh_rules {
     ($base_style:expr, $emoji_style:expr, $ch:ident) => {
         match zh_glyph($ch) {
@@ -53,6 +54,7 @@ macro_rules! zh_rules {
     };
 }
 
+#[macro_export]
 macro_rules! jp_rules {
     ($base_style:expr, $emoji_style:expr, $ch:ident) => {
         match ja_glyph($ch) {
@@ -77,6 +79,7 @@ macro_rules! jp_rules {
     };
 }
 
+#[macro_export]
 macro_rules! kr_rules {
     ($base_style:expr, $emoji_style:expr, $ch:ident) => {
         match kr_glyph($ch) {
@@ -101,6 +104,7 @@ macro_rules! kr_rules {
     };
 }
 
+#[macro_export]
 macro_rules! en_audio_rules {
     ($base_style:expr, $emoji_style:expr, $ch:ident) => {
         match $base_style($ch) {
@@ -116,6 +120,7 @@ macro_rules! en_audio_rules {
     };
 }
 
+#[macro_export]
 macro_rules! english_rules {
     ($base_style:expr, $emoji_style:expr, $ch:ident) => {
         match $base_style($ch) {
@@ -140,9 +145,9 @@ macro_rules! english_rules {
     };
 }
 
-pub(crate) use en_audio_rules;
-pub(crate) use english_rules;
-pub(crate) use jp_rules;
-pub(crate) use kr_rules;
-pub(crate) use style_wrapper;
-pub(crate) use zh_rules;
+pub use en_audio_rules;
+pub use english_rules;
+pub use jp_rules;
+pub use kr_rules;
+pub use style_wrapper;
+pub use zh_rules;
