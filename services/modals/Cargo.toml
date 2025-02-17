@@ -43,4 +43,5 @@ board-baosec = ["ux-api/board-baosec"]
 tts = []
 ditherpunk = []
 hazardous-debug = []
-default = ["trng"]
+# "gam" is required for cargo doc to run successfully
+default = ["trng", "gam"]
