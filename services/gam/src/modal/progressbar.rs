@@ -1,4 +1,4 @@
-use graphics_server::api::GlyphStyle;
+use blitstr2::GlyphStyle;
 
 use crate::*;
 

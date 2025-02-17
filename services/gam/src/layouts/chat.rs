@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
+use blitstr2::GlyphStyle;
 #[cfg(feature = "cramium-soc")]
 use cram_hal_service::trng;
 use graphics_server::*;
 
+use crate::Canvas;
 use crate::contexts::MISC_CONTEXT_DEFAULT_TRUST;
-use crate::{Canvas, GlyphStyle};
 use crate::{LayoutApi, LayoutBehavior};
 const TRUST_OFFSET: u8 = 2;
 

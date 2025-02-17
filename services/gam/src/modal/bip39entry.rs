@@ -2,7 +2,7 @@ use core::cell::Cell;
 use core::fmt::Write;
 use std::string::String;
 
-use glyphstyle::GlyphStyle;
+use blitstr2::{GlyphStyle, glyph_to_height_hint};
 use graphics_server::api::*;
 use locales::t;
 use xous_ipc::Buffer;
