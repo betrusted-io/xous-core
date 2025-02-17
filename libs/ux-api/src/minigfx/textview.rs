@@ -1,6 +1,7 @@
 use core::ops::Add;
 
 use String;
+use blitstr2::GlyphStyle;
 
 use super::*;
 

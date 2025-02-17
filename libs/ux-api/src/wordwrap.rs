@@ -24,13 +24,34 @@
 ///
 /// If the overall string cannot fit within the absolute bounds defined by the `max` area and/or the
 /// `bounds`, the rendering is halted, and ellipses are inserted at the end.
-use crate::blitstr2::{self, *};
+use blitstr2::*;
+
 use crate::minigfx::*;
 use crate::platform::FB_SIZE;
-use crate::style_macros::*;
+
+/// A TypesetWord is a Word that has beet turned into sprites and placed at a specific location on the canvas,
+/// defined by its `bb` record. The intention is that this abstract representation can be passed directly to
+/// a rasterizer for rendering.
+#[derive(Debug)]
+pub struct TypesetWord {
+    /// glyph data to directly render the word
+    pub gs: Vec<GlyphSprite>,
+    /// top left origin point for rendering of the glyphs
+    pub origin: Point,
+    /// width of the word
+    pub width: isize,
+    /// overall height for the word
+    pub height: isize,
+    /// set if this `word` is not drawable, e.g. a newline placeholder.
+    /// *however* the Vec<GlyphSprite> should still be checked for an insertion point, so that
+    /// successive newlines properly get their insertion point drawn
+    pub non_drawable: bool,
+    /// the position in the originating abstract string of the first character in the word
+    pub strpos: usize,
+}
 
 impl TypesetWord {
-    pub fn new(origin: Pt, strpos: usize) -> Self {
+    pub fn new(origin: Point, strpos: usize) -> Self {
         TypesetWord {
             gs: Vec::<GlyphSprite>::new(),
             origin,
@@ -41,7 +62,7 @@ impl TypesetWord {
         }
     }
 
-    pub fn one_glyph(origin: Pt, gs: GlyphSprite, strpos: usize) -> Self {
+    pub fn one_glyph(origin: Point, gs: GlyphSprite, strpos: usize) -> Self {
         TypesetWord {
             gs: vec![gs],
             origin,
@@ -91,7 +112,7 @@ pub enum OverflowStrategy {
 
 /// ComposedType is text that has been laid out and wrapped, along with metadata about the bounds
 /// of the final composition. ComposedType coordinates are always in screen-space.
-pub(crate) struct ComposedType {
+pub struct ComposedType {
     words: Vec<TypesetWord>,
     bounding_box: ClipRect,
     cursor: Cursor,
@@ -142,27 +163,15 @@ impl ComposedType {
                     if glyph.large {
                         blitstr2::xor_glyph_large(
                             frbuf,
-                            &Point::new(maybe_x, maybe_y),
+                            (maybe_x, maybe_y),
                             *glyph,
                             glyph.invert ^ invert,
                             cr,
                         );
                     } else if !glyph.double {
-                        blitstr2::xor_glyph(
-                            frbuf,
-                            &Point::new(maybe_x, maybe_y),
-                            *glyph,
-                            glyph.invert ^ invert,
-                            cr,
-                        );
+                        blitstr2::xor_glyph(frbuf, (maybe_x, maybe_y), *glyph, glyph.invert ^ invert, cr);
                     } else {
-                        blitstr2::xor_glyph_2x(
-                            frbuf,
-                            &Point::new(maybe_x, maybe_y),
-                            *glyph,
-                            glyph.invert ^ invert,
-                            cr,
-                        );
+                        blitstr2::xor_glyph_2x(frbuf, (maybe_x, maybe_y), *glyph, glyph.invert ^ invert, cr);
                     }
                     if glyph.insert {
                         // log::info!("insert at {},{}", glyph.ch, strpos - 1);
@@ -207,7 +216,7 @@ impl ComposedType {
 ///
 /// An insertion point cursor will be injected into the TypesetWord stream at the character offset in
 /// the input `string` if it is specified as `Some(usize)`.
-pub(crate) struct Typesetter {
+pub struct Typesetter {
     charpos: usize,
     cursor: Cursor, /* indicates the current insertion point for a candidate. it is not updated as the
                      * candidates are formed. */
@@ -224,7 +233,7 @@ pub(crate) struct Typesetter {
     last_line_height: usize, // scorecarding for the very last line on the loop exit
 }
 impl Typesetter {
-    pub fn setup(s: &str, extent: &Pt, base_style: &GlyphStyle, insertion_point: Option<usize>) -> Self {
+    pub fn setup(s: &str, extent: &Point, base_style: &GlyphStyle, insertion_point: Option<usize>) -> Self {
         let bb = ClipRect::new(0, 0, extent.x, extent.y);
         let mut space = style_glyph(' ', base_style);
         space.kern = 0;
@@ -245,8 +254,9 @@ impl Typesetter {
         Typesetter {
             charpos: 0,
             cursor: Cursor::new(0, 0, 0),
-            candidate: TypesetWord::new(Pt::new(0, 0), 0), /* first word candidate starts at the top left
-                                                            * corner */
+            candidate: TypesetWord::new(Point::new(0, 0), 0), /* first word candidate starts at the top
+                                                               * left
+                                                               * corner */
             bb,
             space,
             ellipsis,

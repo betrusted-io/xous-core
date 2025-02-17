@@ -15,6 +15,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
 ], optional = true }
 zeroize = "1.8.1"
 enum_dispatch = "0.3.7"
+blitstr2 = { path = "../blitstr2", optional = true }
 
 # used in notifications
 locales = { path = "../../locales" }
@@ -48,15 +49,15 @@ default-widgets = [
 ]
 
 # board definition is used to define things like the size of the screen.
-board-baosec = []
+board-baosec = ["blitstr2/board-baosec"]
 board-baosor = []
-hosted-baosec = []
+hosted-baosec = ["blitstr2/hosted-baosec"]
 
 # Used by font codegen routine
-hosted = []
-renode = []
+hosted = ["blitstr2/hosted"]
+renode = ["blitstr2/renode"]
 cramium-soc = []
-precursor = []
+precursor = ["blitstr2/precursor"]
 
 std = ["rkyv"]
 default = ["std", "default-widgets"]

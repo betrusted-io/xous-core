@@ -1,16 +1,14 @@
 // Copyright (c) 2022 Sam Blenny
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-use blitstr2::ClipRect;
+use blitstr2::{ClipRect, GlyphSprite};
 
-use super::GlyphSprite;
-use super::TypesetWord;
-use crate::minigfx::Point;
+use crate::{minigfx::Point, wordwrap::TypesetWord};
 
 /// Cursor specifies a drawing position along a line of text. Lines of text can
 /// be different heights. Line_height is for keeping track of the tallest
 /// character that has been drawn so far on the current line.
-#[derive(Copy, Clone, Debug, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Cursor {
     pub pt: Point,
     pub line_height: usize,
@@ -51,7 +49,7 @@ mod tests {
 
     #[test]
     fn test_cursor_equivalence() {
-        let c1 = Cursor { pt: Point { x: 1, y: 2 }, line_height: 0 };
+        let c1 = Cursor { pt: Pt { x: 1, y: 2 }, line_height: 0 };
         let c2 = Cursor::new(1, 2, 0);
         assert_eq!(c1, c2);
         let clip = ClipRect::new(1, 2, 3, 4);

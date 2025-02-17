@@ -1,9 +1,9 @@
 use std::fmt::Write;
 
+use blitstr2::{GlyphStyle, glyph_height_hint};
 use xous_ipc::Buffer;
 
 use super::*;
-use crate::blitstr2::glyph_height_hint;
 use crate::minigfx::*;
 use crate::platform::{LINES, WIDTH};
 
