@@ -244,8 +244,8 @@ impl WLANMan {
         networks.retain(|&n| n.len() != 0);
         // limit the total number displayed so that the "okay" button does not disappear off the bottom
         let max_entries = match gam::SYSTEM_STYLE {
-            graphics_server::GlyphStyle::Tall => 13,
-            graphics_server::GlyphStyle::Regular => 16,
+            blitstr2::GlyphStyle::Tall => 13,
+            blitstr2::GlyphStyle::Regular => 16,
             _ => 12,
         };
         networks.truncate(max_entries);
