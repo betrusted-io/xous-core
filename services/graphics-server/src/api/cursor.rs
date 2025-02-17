@@ -1,26 +1,29 @@
 // Copyright (c) 2022 Sam Blenny
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-use super::GlyphSprite;
-use super::TypesetWord;
-use super::cliprect::ClipRect;
-use super::pt::Pt;
+use blitstr2::{ClipRect, GlyphSprite};
+
+use crate::{Point, wordwrap::TypesetWord};
 
 /// Cursor specifies a drawing position along a line of text. Lines of text can
 /// be different heights. Line_height is for keeping track of the tallest
 /// character that has been drawn so far on the current line.
 #[derive(Copy, Clone, Debug, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Cursor {
-    pub pt: Pt,
+    pub pt: Point,
     pub line_height: usize,
 }
 #[allow(dead_code)]
 impl Cursor {
     // Make a new Cursor. When in doubt, set line_height = 0.
-    pub fn new(x: i16, y: i16, line_height: usize) -> Cursor { Cursor { pt: Pt { x, y }, line_height } }
+    pub fn new(x: isize, y: isize, line_height: usize) -> Cursor {
+        Cursor { pt: Point { x: x as i16, y: y as i16 }, line_height }
+    }
 
     // Make a Cursor aligned at the top left corner of a ClipRect
-    pub fn from_top_left_of(r: ClipRect) -> Cursor { Cursor { pt: r.min, line_height: 0 } }
+    pub fn from_top_left_of(r: ClipRect) -> Cursor {
+        Cursor { pt: Point::new(r.min.x as i16, r.min.y as i16), line_height: 0 }
+    }
 
     pub fn update_glyph(&mut self, glyph: &GlyphSprite) {
         self.pt.x += glyph.wide as i16;
@@ -28,13 +31,13 @@ impl Cursor {
     }
 
     pub(crate) fn update_word(&mut self, word: &TypesetWord) {
-        self.pt.x += word.width;
+        self.pt.x += word.width as i16;
         self.line_height = self.line_height.max(word.height as usize);
     }
 
     pub fn add(&self, other: Cursor) -> Cursor {
         Cursor {
-            pt: Pt::new(self.pt.x + other.pt.x, self.pt.y + other.pt.y),
+            pt: Point::new(self.pt.x + other.pt.x, self.pt.y + other.pt.y),
             line_height: self.line_height.max(other.line_height),
         }
     }
