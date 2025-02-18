@@ -28,7 +28,6 @@ pub struct Modal<'a> {
     pub inverted: bool,
     pub style: GlyphStyle,
     pub helper_data: Option<Buffer<'a>>,
-    pub name: String,
 
     // optimize draw time
     top_dirty: bool,
@@ -39,7 +38,6 @@ pub struct Modal<'a> {
 
 impl<'a> Modal<'a> {
     pub fn new(
-        name: &str,
         action: ActionType,
         top_text: Option<&str>,
         bot_text: Option<&str>,
@@ -73,7 +71,6 @@ impl<'a> Modal<'a> {
             inverted,
             style,
             helper_data: None,
-            name: String::from(name),
             top_dirty: true,
             bot_dirty: true,
             top_memoized_height: None,
