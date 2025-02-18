@@ -28,6 +28,8 @@ bit_field = "0.9.0"
 cramium-hal = { path = "../../libs/cramium-hal", optional = true, features = [
     "std",
 ] }
+cramium-emu = { path = "../../libs/cramium-emu", optional = true }
+blitstr2 = { path = "../../libs/blitstr2" }
 ux-api = { path = "../../libs/ux-api", optional = true, features = ["std"] }
 
 utralib = { version = "0.1.25", optional = true, default-features = false }
@@ -35,9 +37,10 @@ utralib = { version = "0.1.25", optional = true, default-features = false }
 [features]
 precursor = ["utralib/precursor", "trng", "gam", "tts-frontend"]
 hosted = ["utralib/hosted", "trng", "gam", "tts-frontend"]
-hosted-baosec = ["ux-api/hosted-baosec"]
 renode = ["utralib/renode", "trng", "gam", "tts-frontend"]
+
 cramium-soc = ["utralib/cramium-soc", "cram-hal-service"]
+hosted-baosec = ["ux-api/hosted-baosec", "cramium-emu"]
 board-baosec = ["ux-api/board-baosec"]
 doc-deps = ["gam"]
 
@@ -45,4 +48,4 @@ tts = []
 ditherpunk = []
 hazardous-debug = []
 # "gam" is required for cargo doc to run successfully
-default = ["trng"]
+default = []
