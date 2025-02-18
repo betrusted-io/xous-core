@@ -1,3 +1,5 @@
+use crate::Opcode;
+
 pub fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -7,6 +9,7 @@ pub fn wrapped_main() -> ! {
 
     let tt = ticktimer::Ticktimer::new().unwrap();
 
+    let mut msg_opt = None;
     loop {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();

@@ -17,6 +17,7 @@ cramium-hal = { path = "../../libs/cramium-hal", features = [
 ], optional = true }
 cram-hal-service = { path = "../cram-hal-service", optional = true }
 ux-api = { path = "../../libs/ux-api" }
+cramium-emu = { path = "../../libs/cramium-emu", optional = true }
 
 # QR decoding
 libm = { version = "0.2.8" }
@@ -30,7 +31,7 @@ locales = { path = "../../locales" }
 # (for UI development) and actual hardware targets. In UI development all camera data
 # is "faked"
 board-baosec = ["cram-hal-service"]
-hosted-baosec = []
+hosted-baosec = ["cramium-emu"]
 
 cramium-soc = ["utralib/cramium-soc"]
 decongest-udma = []
