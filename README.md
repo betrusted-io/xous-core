@@ -23,6 +23,15 @@ from source.  It consists of the following projects:
 - Some system packages are needed, which can be installed with `sudo apt install libssl-dev libxkbcommon-dev` or similar
 - If you receive an error about `feature resolver is required`, try installing a newer version of `rustc` and `cargo` via [rustup](https://rustup.rs)
 
+## Building Documentation
+A flag of `--feature doc-deps` must be passed when running `cargo doc`, like this:
+
+`cargo doc --no-deps --feature doc-deps`
+
+This flag is required because Xous requires a target board to be specified in
+all build configurations. `doc-deps` specifies a set of dummy dependencies
+that satisfy board requirements for the purpose of building documentation.
+
 ## Local-vs-crates.io Verification
 By default the `xtask` resolver runs a check to confirm that your local files
 match the ones referenced in `crates.io`. For a handful of core crates, the
@@ -59,13 +68,13 @@ will begin scrolling in your terminal.
 
 ### Hosted Mode UI navigation
 
-| Precursor | Host |
-| --------- | ---- |
-| D-pad middle button | Home |
-| D-pad up | up arrow |
-| D-pad down | down arrow |
-| D-pad left | left arrow |
-| D-pad right | right arrow |
+| Precursor           | Host        |
+| ------------------- | ----------- |
+| D-pad middle button | Home        |
+| D-pad up            | up arrow    |
+| D-pad down          | down arrow  |
+| D-pad left          | left arrow  |
+| D-pad right         | right arrow |
 
 
 ## Quickstart using an emulator

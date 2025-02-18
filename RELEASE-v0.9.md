@@ -506,7 +506,13 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - Number of pages to allocate could be automated inside the `xous-ipc` crate, but this will be delegated to a future time with a new API.
   - Most applications were forward-ported, except for `app-loader` which has already bit-rotted for other reasons and may be deprecated because we can use "swap" space to effectively do app loading (to be made available in future hardware revs)
   - Serialization is a bit easier now with the new `rkyv`, we don't have to track a `pos` explicitly; all of the archival metadata is now stuck at the end of the archive, so all you need to know is the final length of the serialized record and you're done.
-
+- Refactor `blitstr2` to be in its own `libs` crate, allowing it to be re-used across multiple configurations
+- Clean up the board vs soc abstraction. There are still places that don't adhere to this distinction, but:
+  - A `soc` flag specifies dependencies that are generic to a system-on-chip (SoC). For example, the locations of registers, or the extents of memory regions contained in the `soc`.
+  - A `board` flag specifies dependencies that are specific to a board. For example, the resolution of displays, pin mappings to peripherals, and sizes of external memory. Typically, a board assumes a `soc`, so both a `board-*` and `*-soc` set of flags are required to fully specify a build.
+  - Precursor (the first target for Xous) did not hold to this abstraction and conflated the two, so it is a special case in the build system.
+  - "Hosted" mode emulations are considered to be a `board` target; the `soc` is assumed to be the host (linux, windows, etc.)
+- Since all builds require a `board` specifier, documentation now requires a `doc-deps` flag to be passed. This effectively specifies a set of dummy board dependencies so that the documentation can build. Here is the recommended command line for building docs: `cargo doc --no-deps --feature doc-deps`
 
 ## Roadmap
 - Lots of testing and bug fixes
