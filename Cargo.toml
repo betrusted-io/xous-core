@@ -113,7 +113,7 @@ members = [
   "services/bao-video",
   "services/usb-cramium",
   "services/bao-console",
-  "libs/ux-api",
+  "libs/ux-api", "libs/cramium-emu",
 ]
 resolver = "2"
 
