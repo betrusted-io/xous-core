@@ -352,6 +352,7 @@ name = "bao-video"
 version = "0.1.0"
 dependencies = [
  "cram-hal-service",
+ "cramium-emu",
  "cramium-hal",
  "libm 0.2.8",
  "locales",
@@ -1015,6 +1016,17 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
+]
+
+[[package]]
+name = "cramium-emu"
+version = "0.1.0"
+dependencies = [
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "ux-api",
+ "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-names",
 ]
 
 [[package]]
@@ -3195,7 +3207,9 @@ name = "modals"
 version = "0.1.0"
 dependencies = [
  "bit_field",
+ "blitstr2",
  "cram-hal-service",
+ "cramium-emu",
  "cramium-hal",
  "gam",
  "locales",
