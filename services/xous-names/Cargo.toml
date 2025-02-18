@@ -29,8 +29,11 @@ utralib = { version = "0.1.25", optional = true, default-features = false }
 [features]
 cramium-soc = ["utralib/cramium-soc"]
 cramium-fpga = ["utralib/cramium-fpga"]
+hosted-baosec = []
+
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
+
 debugprint = []
-default = []                            # "debugprint"
+default = []    # "debugprint"
