@@ -21,7 +21,6 @@ use cramium_hal::{
     ov2640::Ov2640,
     sh1107::{MainThreadToken, Mono, Oled128x128, claim_main_thread},
 };
-use num_traits::ToPrimitive;
 #[cfg(not(feature = "hosted-baosec"))]
 use utralib::utra;
 
@@ -106,8 +105,6 @@ fn handle_irq(_irq_no: usize, arg: *mut usize) {
     )
     .ok();
 }
-#[cfg(feature = "hosted-baosec")]
-fn handle_irq(_irq_no: usize, arg: *mut usize) {}
 
 fn main() -> ! {
     let stack_size = 1 * 1024 * 1024;
