@@ -2,7 +2,8 @@ use core::cmp::{max, min};
 
 use crate::minigfx::*;
 
-#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug, Clone, Copy)]
 pub struct Rectangle {
     pub tl: Point,
     pub br: Point,
@@ -193,7 +194,8 @@ impl Rectangle {
 }
 
 //////////////////////// Rounded Rectangle
-#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug, Clone, Copy)]
 pub struct RoundedRectangle {
     pub border: Rectangle, // drawstyle is inherited from the Rectangle
     pub radius: isize,

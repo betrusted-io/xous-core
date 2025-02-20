@@ -1,11 +1,13 @@
 use core::mem::size_of;
 
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, KeyInit, Nonce, Tag};
+use cramium_api::udma::*;
+use cramium_api::*;
 use cramium_hal::board::{APP_UART_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR};
 use cramium_hal::ifram::IframRange;
-use cramium_hal::iox::*;
+use cramium_hal::iox::Iox;
 use cramium_hal::sce;
-use cramium_hal::udma::*;
+use cramium_hal::udma::{GlobalConfig, Spim, SpimClkPha, SpimClkPol, SpimCs};
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::RngCore;
 use rand_chacha::rand_core::SeedableRng;
@@ -396,16 +398,16 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
     // Set up the UDMA_UART block to the correct baud rate and enable status
     let udma_global =
         cramium_hal::udma::GlobalConfig::new(utralib::utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
-    udma_global.clock_on(cramium_hal::udma::PeriphId::Uart0);
+    udma_global.clock_on(PeriphId::Uart0);
     udma_global.map_event(
-        cramium_hal::udma::PeriphId::Uart0,
-        cramium_hal::udma::PeriphEventType::Uart(cramium_hal::udma::EventUartOffset::Rx),
-        cramium_hal::udma::EventChannel::Channel2,
+        PeriphId::Uart0,
+        PeriphEventType::Uart(EventUartOffset::Rx),
+        EventChannel::Channel2,
     );
     udma_global.map_event(
-        cramium_hal::udma::PeriphId::Uart0,
-        cramium_hal::udma::PeriphEventType::Uart(cramium_hal::udma::EventUartOffset::Tx),
-        cramium_hal::udma::EventChannel::Channel3,
+        PeriphId::Uart0,
+        PeriphEventType::Uart(EventUartOffset::Tx),
+        EventChannel::Channel3,
     );
 
     let baudrate: u32 = 115200;

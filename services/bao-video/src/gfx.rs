@@ -1,3 +1,6 @@
+#[cfg(feature = "hosted-baosec")]
+use cramium_emu::display::Mono;
+#[cfg(feature = "board-baosec")]
 use cramium_hal::sh1107::Mono;
 use ux_api::minigfx::*;
 

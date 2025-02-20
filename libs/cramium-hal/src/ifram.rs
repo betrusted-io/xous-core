@@ -1,3 +1,4 @@
+use cramium_api::*;
 #[cfg(feature = "std")]
 use xous::Result;
 use xous::{MemoryRange, Message, send_message};
@@ -17,16 +18,6 @@ pub struct IframRange {
     /// be "dropped".
     pub(crate) conn: Option<xous::CID>,
 }
-
-/// Constrain potential types for UDMA words to only what is representable and valid
-/// for the UDMA subsystem.
-pub trait UdmaWidths {}
-impl UdmaWidths for i8 {}
-impl UdmaWidths for u8 {}
-impl UdmaWidths for i16 {}
-impl UdmaWidths for u16 {}
-impl UdmaWidths for i32 {}
-impl UdmaWidths for u32 {}
 
 impl IframRange {
     /// Request `length` bytes of memory in an optional Bank

@@ -1,7 +1,5 @@
 // Constants that define pin locations, RAM offsets, etc. for the BaoSec board
-use crate::iox;
-use crate::iox::*;
-use crate::iox::{IoIrq, IoSetup};
+use cramium_api::*;
 
 pub const I2C_AXP2101_ADR: u8 = 0x34;
 pub const I2C_TUSB320_ADR: u8 = 0x47;
@@ -44,62 +42,62 @@ pub const IFRAM1_RESERVED_PAGE_RANGE: [usize; 2] = [31 - CAM_IFRAM_LEN_PAGES, 31
 
 /// Setup pins for the baosec display
 /// Returns a spi channel object and descriptor for the C/D + CS pins as a (port, c/d pin, cs pin) tuple
-pub fn setup_display_pins(iox: &dyn IoSetup) -> (crate::udma::SpimChannel, iox::IoxPort, u8, u8) {
+pub fn setup_display_pins(iox: &dyn IoSetup) -> (SpimChannel, IoxPort, u8, u8) {
     const SPI_CS_PIN: u8 = 3;
     const SPI_CLK_PIN: u8 = 0;
     const SPI_DAT_PIN: u8 = 1;
     const SPI_CD_PIN: u8 = 2;
-    const SPI_PORT: iox::IoxPort = iox::IoxPort::PC;
+    const SPI_PORT: IoxPort = IoxPort::PC;
 
     // SPIM_CLK_B[2]
     iox.setup_pin(
         SPI_PORT,
         SPI_CLK_PIN,
-        Some(iox::IoxDir::Output),
-        Some(iox::IoxFunction::AF2),
+        Some(IoxDir::Output),
+        Some(IoxFunction::AF2),
         None,
         None,
-        Some(iox::IoxEnable::Enable),
-        Some(iox::IoxDriveStrength::Drive2mA),
+        Some(IoxEnable::Enable),
+        Some(IoxDriveStrength::Drive2mA),
     );
     // SPIM_SD0_B[2]
     iox.setup_pin(
         SPI_PORT,
         SPI_DAT_PIN,
-        Some(iox::IoxDir::Output),
-        Some(iox::IoxFunction::AF2),
+        Some(IoxDir::Output),
+        Some(IoxFunction::AF2),
         None,
         None,
-        Some(iox::IoxEnable::Enable),
-        Some(iox::IoxDriveStrength::Drive2mA),
+        Some(IoxEnable::Enable),
+        Some(IoxDriveStrength::Drive2mA),
     );
     // SPIM_CSN0_B[2]
     iox.setup_pin(
         SPI_PORT,
         SPI_CS_PIN,
-        Some(iox::IoxDir::Output),
-        Some(iox::IoxFunction::AF2),
+        Some(IoxDir::Output),
+        Some(IoxFunction::AF2),
         None,
-        Some(iox::IoxEnable::Enable),
-        Some(iox::IoxEnable::Enable),
-        Some(iox::IoxDriveStrength::Drive2mA),
+        Some(IoxEnable::Enable),
+        Some(IoxEnable::Enable),
+        Some(IoxDriveStrength::Drive2mA),
     );
     // C/D pin is a gpio direct-drive
     iox.setup_pin(
         SPI_PORT,
         SPI_CD_PIN,
-        Some(iox::IoxDir::Output),
+        Some(IoxDir::Output),
         Some(IoxFunction::Gpio),
         None,
         None,
         Some(IoxEnable::Enable),
-        Some(iox::IoxDriveStrength::Drive2mA),
+        Some(IoxDriveStrength::Drive2mA),
     );
     // using bank SPIM_B[2]
-    (crate::udma::SpimChannel::Channel2, SPI_PORT, SPI_CD_PIN, SPI_CS_PIN)
+    (SpimChannel::Channel2, SPI_PORT, SPI_CD_PIN, SPI_CS_PIN)
 }
 
-pub fn setup_memory_pins(iox: &dyn IoSetup) -> crate::udma::SpimChannel {
+pub fn setup_memory_pins(iox: &dyn IoSetup) -> SpimChannel {
     // JPC7_13
     // SPIM_CLK_A[1]
     iox.setup_pin(
@@ -147,11 +145,11 @@ pub fn setup_memory_pins(iox: &dyn IoSetup) -> crate::udma::SpimChannel {
         Some(IoxEnable::Enable),
         Some(IoxDriveStrength::Drive2mA),
     );
-    crate::udma::SpimChannel::Channel1
+    SpimChannel::Channel1
 }
 
 /// This also sets up I2C-adjacent interrupt inputs as well
-pub fn setup_i2c_pins(iox: &dyn IoSetup) -> crate::udma::I2cChannel {
+pub fn setup_i2c_pins(iox: &dyn IoSetup) -> I2cChannel {
     // I2C_SCL_B[0]
     iox.setup_pin(
         IoxPort::PB,
@@ -185,7 +183,7 @@ pub fn setup_i2c_pins(iox: &dyn IoSetup) -> crate::udma::I2cChannel {
         None,
         None,
     );
-    crate::udma::I2cChannel::Channel0
+    I2cChannel::Channel0
 }
 
 /// returns the power-down port and pin number

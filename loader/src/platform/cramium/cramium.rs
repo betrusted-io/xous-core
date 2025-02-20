@@ -1,13 +1,14 @@
-#[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
-use cramium_hal::axp2101::Axp2101;
 #[cfg(not(feature = "verilator-only"))]
-use cramium_hal::iox::{Iox, IoxDir, IoxEnable, IoxFunction, IoxPort};
+use cramium_api::{
+    udma::{PeriphId, UdmaGlobalConfig},
+    *,
+};
+#[cfg(not(feature = "verilator-only"))]
+use cramium_hal::iox::Iox;
 #[cfg(feature = "cramium-soc")]
 use cramium_hal::udma;
 #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
-use cramium_hal::udma::PeriphId;
-#[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
-use cramium_hal::udma::UdmaGlobalConfig;
+use cramium_hal::{axp2101::Axp2101, udma::GlobalConfig};
 use utralib::generated::*;
 
 #[cfg(feature = "qr")]
@@ -240,17 +241,17 @@ pub fn early_init() -> u32 {
 
     // Set up the UDMA_UART block to the correct baud rate and enable status
     #[allow(unused_mut)] // some configs require mut
-    let mut udma_global = udma::GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
-    udma_global.clock_on(udma::PeriphId::Uart1);
+    let mut udma_global = GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
+    udma_global.clock_on(PeriphId::Uart1);
     udma_global.map_event(
-        udma::PeriphId::Uart1,
-        udma::PeriphEventType::Uart(udma::EventUartOffset::Rx),
-        udma::EventChannel::Channel0,
+        PeriphId::Uart1,
+        PeriphEventType::Uart(EventUartOffset::Rx),
+        EventChannel::Channel0,
     );
     udma_global.map_event(
-        udma::PeriphId::Uart1,
-        udma::PeriphEventType::Uart(udma::EventUartOffset::Tx),
-        udma::EventChannel::Channel1,
+        PeriphId::Uart1,
+        PeriphEventType::Uart(EventUartOffset::Tx),
+        EventChannel::Channel1,
     );
 
     let baudrate: u32 = 115200;
@@ -372,7 +373,12 @@ pub fn early_init() -> u32 {
         // show the boot logo
         use ux_api::minigfx::FrameBuffer;
 
-        let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(perclk, &mut iox, &mut udma_global);
+        let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(
+            cramium_hal::sh1107::MainThreadToken::new(),
+            perclk,
+            &mut iox,
+            &mut udma_global,
+        );
         sh1107.init();
         crate::platform::cramium::bootlogo::show_logo(&mut sh1107);
         sh1107.buffer_swap();

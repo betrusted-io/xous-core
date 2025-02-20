@@ -1,11 +1,13 @@
+use cramium_api::camera::*;
+use cramium_api::*;
 use utralib::CSR;
 use utralib::utra;
 use utralib::utra::udma_camera::REG_CAM_CFG_GLOB;
 
 use super::constants::*;
+use crate::ifram::IframRange;
 use crate::udma::Udma;
 use crate::udma::*;
-use crate::{ifram::IframRange, ifram::UdmaWidths, udma::I2cApi};
 
 pub const OV2640_DEV: u8 = 0x30;
 
@@ -15,37 +17,6 @@ pub const CFG_FRAMESLICE_EN: utralib::Field = utralib::Field::new(1, 7, REG_CAM_
 pub const CFG_FORMAT: utralib::Field = utralib::Field::new(3, 8, REG_CAM_CFG_GLOB);
 pub const CFG_SHIFT: utralib::Field = utralib::Field::new(4, 11, REG_CAM_CFG_GLOB);
 pub const CFG_GLOB_EN: utralib::Field = utralib::Field::new(1, 31, REG_CAM_CFG_GLOB);
-
-#[derive(Clone, Copy)]
-pub enum Resolution {
-    Res480x272,
-    Res640x480,
-    Res320x240,
-    Res160x120,
-    Res256x256,
-}
-
-#[derive(Clone, Copy)]
-#[repr(u32)]
-pub enum Format {
-    Rgb565 = 0,
-    Rgb555 = 1,
-    Rgb444 = 2,
-    BypassLe = 4,
-    BypassBe = 5,
-}
-
-impl Into<(usize, usize)> for Resolution {
-    fn into(self) -> (usize, usize) {
-        match self {
-            Resolution::Res160x120 => (160, 120),
-            Resolution::Res320x240 => (320, 240),
-            Resolution::Res480x272 => (480, 272),
-            Resolution::Res640x480 => (640, 480),
-            Resolution::Res256x256 => (256, 256),
-        }
-    }
-}
 
 pub struct Ov2640 {
     csr: CSR<u32>,

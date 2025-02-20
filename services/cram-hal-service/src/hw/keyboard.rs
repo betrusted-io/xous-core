@@ -1,9 +1,7 @@
+use cramium_api::keyboard::*;
 use num_traits::*;
 use xous::{CID, MessageSender, msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
-
-use crate::api;
-pub use crate::api::keyboard::*;
 
 pub fn start_keyboard_service() {
     std::thread::spawn(move || {
@@ -20,7 +18,7 @@ fn keyboard_bouncer() {
     let sid = xous::create_server_with_address(b"keyboard_bouncer")
         .expect("couldn't create keyboard log bounce server");
     let xns = xous_names::XousNames::new().unwrap();
-    let kbd = cram_hal_service::keyboard::Keyboard::new(&xns).unwrap();
+    let kbd = cramium_api::keyboard::Keyboard::new(&xns).unwrap();
     let mut msg_opt = None;
     loop {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
@@ -39,7 +37,7 @@ fn keyboard_bouncer() {
 
 fn keyboard_service() {
     let xns = xous_names::XousNames::new().unwrap();
-    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, None).expect("can't register server");
+    let kbd_sid = xns.register_name(cramium_api::SERVER_NAME_KBD, None).expect("can't register server");
 
     let mut listener_conn: Option<CID> = None;
     let mut listener_op: Option<usize> = None;

@@ -1,9 +1,9 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use cramium_hal::udma::I2cApi;
+use cramium_api::*;
 use xous_ipc::Buffer;
 
-use crate::api::{I2cResult, I2cTransaction, I2cTransactionType, I2cTransactions, Opcode};
+use crate::api::Opcode;
 
 pub struct I2c {
     conn: xous::CID,
