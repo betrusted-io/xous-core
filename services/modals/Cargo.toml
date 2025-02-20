@@ -28,7 +28,7 @@ bit_field = "0.9.0"
 cramium-hal = { path = "../../libs/cramium-hal", optional = true, features = [
     "std",
 ] }
-cramium-emu = { path = "../../libs/cramium-emu", optional = true }
+cramium-emu = { path = "../cramium-emu", optional = true }
 blitstr2 = { path = "../../libs/blitstr2" }
 ux-api = { path = "../../libs/ux-api", optional = true, features = ["std"] }
 
