@@ -8,12 +8,19 @@ pub mod style;
 pub use style::*;
 pub mod circle;
 pub use circle::*;
+
+#[cfg(feature = "std")]
 pub mod textview;
+#[cfg(feature = "std")]
 pub use textview::*;
+#[cfg(feature = "std")]
 pub mod cursor;
+#[cfg(feature = "std")]
 pub use cursor::*;
+#[cfg(feature = "std")]
 pub(crate) mod op;
 
+#[cfg(feature = "std")]
 use blitstr2::GlyphSprite;
 
 /// Abstract trait for a FrameBuffer. Slower than native manipulation
@@ -35,6 +42,7 @@ pub trait FrameBuffer {
 /// defined by its `bb` record. The intention is that this abstract representation can be passed directly to
 /// a rasterizer for rendering.
 #[derive(Debug)]
+#[cfg(feature = "std")]
 pub(crate) struct TypesetWord {
     /// glyph data to directly render the word
     pub gs: Vec<GlyphSprite>,

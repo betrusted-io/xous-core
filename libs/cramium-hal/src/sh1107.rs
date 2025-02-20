@@ -1,15 +1,27 @@
 // `Command` vendored from https://github.com/ithinuel/sh1107-rs/tree/main
+use cramium_api::*;
 use ux_api::minigfx::{ColorNative, FrameBuffer, Point};
 
-use crate::{
-    ifram::IframRange,
-    iox::{IoGpio, IoSetup, IoxPort},
-    udma::{PeriphId, Spim, SpimClkPha, SpimClkPol, SpimCs, UdmaGlobalConfig},
-};
+use crate::ifram::IframRange;
+use crate::udma::{Spim, SpimClkPha, SpimClkPol, SpimCs};
 
 pub const COLUMN: isize = 128;
 pub const ROW: isize = 128;
 pub const PAGE: u8 = ROW as u8 / 8;
+
+pub struct MainThreadToken(());
+impl MainThreadToken {
+    pub fn new() -> Self { MainThreadToken(()) }
+}
+pub enum Never {}
+
+/// Shim for hosted mode compatibility
+#[inline]
+pub fn claim_main_thread(f: impl FnOnce(MainThreadToken) -> Never + Send + 'static) -> ! {
+    // Just call the closure - this backend will work on any thread
+    #[allow(unreachable_code)] // false positive
+    match f(MainThreadToken(())) {}
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct MonoColor(ColorNative);
@@ -180,7 +192,12 @@ pub struct Oled128x128<'a> {
 }
 
 impl<'a> Oled128x128<'a> {
-    pub fn new<T>(perclk_freq: u32, iox: &'a T, udma_global: &'a dyn UdmaGlobalConfig) -> Self
+    pub fn new<T>(
+        _main_thread_token: MainThreadToken,
+        perclk_freq: u32,
+        iox: &'a T,
+        udma_global: &'a dyn UdmaGlobalConfig,
+    ) -> Self
     where
         T: IoSetup + IoGpio,
     {
@@ -249,11 +266,9 @@ impl<'a> Oled128x128<'a> {
         }
     }
 
-    fn set_data(&self) { self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, crate::iox::IoxValue::High); }
+    fn set_data(&self) { self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::High); }
 
-    fn set_command(&self) {
-        self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, crate::iox::IoxValue::Low);
-    }
+    fn set_command(&self) { self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::Low); }
 
     pub fn buffer_swap(&mut self) { self.active_buffer = self.active_buffer.swap(); }
 

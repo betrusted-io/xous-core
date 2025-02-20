@@ -1,3 +1,4 @@
+use cramium_api::*;
 use utralib::generated::utra::iox;
 
 use crate::SharedCsr;
@@ -18,97 +19,6 @@ macro_rules! set_pin_in_bank {
         }
     }};
 }
-
-#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-#[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-#[repr(u32)]
-pub enum IoxPort {
-    PA = 0,
-    PB = 1,
-    PC = 2,
-    PD = 3,
-    PE = 4,
-    PF = 5,
-}
-
-#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-#[derive(Debug)]
-#[repr(u32)]
-pub enum IoxFunction {
-    Gpio = 0b00,
-    AF1 = 0b01,
-    AF2 = 0b10,
-    AF3 = 0b11,
-}
-
-#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-#[derive(Debug)]
-#[repr(u32)]
-pub enum IoxDriveStrength {
-    Drive2mA = 0b00,
-    Drive4mA = 0b01,
-    Drive8mA = 0b10,
-    Drive12mA = 0b11,
-}
-
-#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-#[derive(Debug)]
-#[repr(u32)]
-pub enum IoxDir {
-    Input = 0,
-    Output = 1,
-}
-
-#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-#[derive(Debug)]
-#[repr(u32)]
-pub enum IoxEnable {
-    Disable = 0,
-    Enable = 1,
-}
-
-#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[repr(u32)]
-pub enum IoxValue {
-    Low = 0,
-    High = 1,
-}
-/// The From trait for IoxValue takes any non-zero value and interprets it as "high".
-impl From<u32> for IoxValue {
-    fn from(value: u32) -> Self { if value == 0 { IoxValue::Low } else { IoxValue::High } }
-}
-
-/// Use a trait that will allow us to share code between both `std` and `no-std` implementations
-pub trait IoSetup {
-    fn setup_pin(
-        &self,
-        port: IoxPort,
-        pin: u8,
-        direction: Option<IoxDir>,
-        function: Option<IoxFunction>,
-        schmitt_trigger: Option<IoxEnable>,
-        pullup: Option<IoxEnable>,
-        slow_slew: Option<IoxEnable>,
-        strength: Option<IoxDriveStrength>,
-    );
-}
-
-/// Traits for accessing GPIOs after the port has been set up.
-pub trait IoGpio {
-    fn set_gpio_pin_value(&self, port: IoxPort, pin: u8, value: IoxValue);
-    fn get_gpio_pin_value(&self, port: IoxPort, pin: u8) -> IoxValue;
-    fn set_gpio_pin_dir(&self, port: IoxPort, pin: u8, dir: IoxDir);
-}
-
-pub trait IoIrq {
-    /// This hooks a given port/pin to generate a message to the server specified
-    /// with `server` and the opcode number `usize` when an IRQ is detected on the port/pin.
-    /// The active state of the IRQ is defined by `active`; the transition edge from inactive
-    /// to active is when the event is generated.
-    fn set_irq_pin(&self, port: IoxPort, pin: u8, active: IoxValue, server: &str, opcode: usize);
-}
-
 pub struct Iox {
     pub csr: SharedCsr<u32>,
 }

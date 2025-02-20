@@ -29,11 +29,18 @@
 /// a `TextResponseValid` message which pumps the work queue.
 mod api;
 use api::*;
+use blitstr2::GlyphStyle;
+#[cfg(feature = "cramium-soc")]
+use cram_hal_service::trng::Trng;
+#[cfg(feature = "hosted-baosec")]
+use cramium_emu::trng::Trng;
 #[cfg(feature = "ditherpunk")]
 use gam::Bitmap;
 #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
 use gam::modal::*;
 use locales::t;
+#[cfg(all(not(feature = "cramium-soc"), not(feature = "doc-deps"), not(feature = "hosted-baosec")))]
+use trng::Trng;
 #[cfg(feature = "tts")]
 use tts_frontend::TtsFrontend;
 #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
@@ -42,6 +49,7 @@ use ux_api::minigfx::*;
 use ux_api::widgets::*;
 use xous::{Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
+
 #[cfg(feature = "tts")]
 const TICK_INTERVAL: u64 = 2500;
 
@@ -126,6 +134,7 @@ fn wrapped_main() -> ! {
     let mut last_percentage = 0;
     let mut start_work: u32 = 0;
     let mut end_work: u32 = 100;
+    #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
     let mut renderer_modal = Modal::new(
         gam::SHARED_MODAL_NAME,
         ActionType::TextEntry(text_action.clone()),
@@ -134,6 +143,9 @@ fn wrapped_main() -> ! {
         DEFAULT_STYLE,
         8,
     );
+    #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+    let mut renderer_modal =
+        Modal::new(ActionType::TextEntry(text_action.clone()), Some("Placeholder"), None, DEFAULT_STYLE, 8);
     #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
     renderer_modal.spawn_helper(
         modals_sid,
@@ -147,10 +159,7 @@ fn wrapped_main() -> ! {
     let mut list_selected = 0u32;
 
     let mut token_lock: Option<[u32; 4]> = None;
-    #[cfg(feature = "cramium-soc")]
-    let trng = cram_hal_service::trng::Trng::new(&xns).unwrap();
-    #[cfg(not(feature = "cramium-soc"))]
-    let trng = trng::Trng::new(&xns).unwrap();
+    let trng = Trng::new(&xns).unwrap();
     // this is a random number that serves as a "default" that cannot be guessed
     let default_nonce =
         [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap()];
@@ -799,7 +808,7 @@ fn wrapped_main() -> ! {
                     renderer_modal.set_growable(false); // reset the growable state, it's assumed to be default false
                     log::trace!("validating text entry modal");
                     let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let text = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
+                    let text = buf.to_original::<TextEntryPayloads, _>().unwrap();
                     if let Some(mut origin) = dr.take() {
                         let mut response = unsafe {
                             Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap())
@@ -856,7 +865,7 @@ fn wrapped_main() -> ! {
             Some(Opcode::Bip39Return) => match op {
                 RendererState::RunBip39Input(_config) => {
                     let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let b39 = buf.to_original::<gam::modal::Bip39EntryPayload, _>().unwrap();
+                    let b39 = buf.to_original::<Bip39EntryPayload, _>().unwrap();
                     if let Some(mut origin) = dr.take() {
                         let mut response = unsafe {
                             Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap())

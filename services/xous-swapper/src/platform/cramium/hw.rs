@@ -2,6 +2,7 @@ use core::fmt::Write;
 use core::mem::size_of;
 
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, Error, KeyInit, Nonce, Tag};
+use cramium_api::*;
 use cramium_hal::board::SPIM_RAM_IFRAM_ADDR;
 use cramium_hal::ifram::IframRange;
 use cramium_hal::udma::*;

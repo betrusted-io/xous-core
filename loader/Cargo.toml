@@ -18,6 +18,7 @@ armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "upd
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", optional = true }
 sha2-loader = { path = "./sha2-loader", default-features = false, optional = true }
 cramium-hal = { path = "../libs/cramium-hal", optional = true, default-features = false }
+cramium-api = { path = "../libs/cramium-api", optional = true, default-features = false }
 ux-api = { path = "../libs/ux-api", optional = true, default-features = false }
 xous-pl230 = { path = "../libs/xous-pl230", optional = true, features = [
     "tests",
@@ -80,14 +81,14 @@ renode = [
 cramium-soc = [
     "utralib/cramium-soc",
     "debug-print",
-    "cramium-hal",
-    "ux-api",
+    "cramium-hal/cramium-soc",
+    "cramium-api",
     "rand_chacha",
     "sram-margin",
     # "boot-delay",
 ]
 board-baosec = [
-    "cramium-hal/board-baosec",
+    "cramium-hal/loader-baosec",
     "updates",
     "usb",
     "libm",
@@ -96,10 +97,10 @@ board-baosec = [
     "ed25519-dalek",
     "sha2",
     "digest",
-    "ux-api/board-baosec",
+    "ux-api/loader-baosec",
 ]
-board-baosor = ["cramium-hal/board-baosor"]
-board-dabao = ["cramium-hal/board-dabao"]
+board-baosor = ["cramium-hal/loader-baosor"]
+board-dabao = ["cramium-hal/loader-dabao"]
 cramium-fpga = ["utralib/cramium-fpga", "debug-print"]
 atsama5d27 = ["utralib/atsama5d27", "armv7", "dep:atsama5d27"]
 

@@ -4,6 +4,8 @@ Core files for the Xous microkernel operating system.
 
 You might find this [wiki](https://github.com/betrusted-io/betrusted-wiki/wiki) handy, as well as the [Xous Book](https://betrusted.io/xous-book/).
 
+Users targeting Baochip platforms should also familiarize with the [Boachip API structure and glossary](./README-baochip.md) as the platform has several targets and gone through numerous name changes.
+
 This repository contains everything necessary to build the Xous kernel
 from source.  It consists of the following projects:
 
@@ -22,6 +24,15 @@ from source.  It consists of the following projects:
 - If you are doing development on the digital signatures with the Python helper scripts, you will need: `pycryptodome` (signing - PEM read), `cryptography` (signing - x509 read), `pynacl` (signing - ed25519 signatures) (most users won't need this).
 - Some system packages are needed, which can be installed with `sudo apt install libssl-dev libxkbcommon-dev` or similar
 - If you receive an error about `feature resolver is required`, try installing a newer version of `rustc` and `cargo` via [rustup](https://rustup.rs)
+
+## Building Documentation
+A flag of `--feature doc-deps` must be passed when running `cargo doc`, like this:
+
+`cargo doc --no-deps --feature doc-deps`
+
+This flag is required because Xous requires a target board to be specified in
+all build configurations. `doc-deps` specifies a set of dummy dependencies
+that satisfy board requirements for the purpose of building documentation.
 
 ## Local-vs-crates.io Verification
 By default the `xtask` resolver runs a check to confirm that your local files
@@ -59,13 +70,13 @@ will begin scrolling in your terminal.
 
 ### Hosted Mode UI navigation
 
-| Precursor | Host |
-| --------- | ---- |
-| D-pad middle button | Home |
-| D-pad up | up arrow |
-| D-pad down | down arrow |
-| D-pad left | left arrow |
-| D-pad right | right arrow |
+| Precursor           | Host        |
+| ------------------- | ----------- |
+| D-pad middle button | Home        |
+| D-pad up            | up arrow    |
+| D-pad down          | down arrow  |
+| D-pad left          | left arrow  |
+| D-pad right         | right arrow |
 
 
 ## Quickstart using an emulator

@@ -1,4 +1,4 @@
-use crate::udma::i2c;
+use cramium_api::*;
 
 pub const AXP2101_DEV: u8 = 0x34;
 
@@ -136,7 +136,7 @@ pub struct Axp2101 {
 }
 
 impl Axp2101 {
-    pub fn new(i2c: &mut dyn i2c::I2cApi) -> Result<Axp2101, xous::Error> {
+    pub fn new(i2c: &mut dyn I2cApi) -> Result<Axp2101, xous::Error> {
         let mut s = Axp2101 {
             dcdc_ena: [false; 4],
             fast_ramp: false,
@@ -149,7 +149,7 @@ impl Axp2101 {
         Ok(s)
     }
 
-    pub fn update(&mut self, i2c: &mut dyn i2c::I2cApi) -> Result<(), xous::Error> {
+    pub fn update(&mut self, i2c: &mut dyn I2cApi) -> Result<(), xous::Error> {
         let mut buf = [0u8; 0xb0];
         i2c.i2c_read(AXP2101_DEV, 0x0, &mut buf, false)?;
 
@@ -175,7 +175,7 @@ impl Axp2101 {
 
     pub fn set_dcdc(
         &mut self,
-        i2c: &mut dyn i2c::I2cApi,
+        i2c: &mut dyn I2cApi,
         setting: Option<(f32, bool)>,
         which: WhichDcDc,
     ) -> Result<(), xous::Error> {
@@ -197,7 +197,7 @@ impl Axp2101 {
 
     pub fn set_ldo(
         &mut self,
-        i2c: &mut dyn i2c::I2cApi,
+        i2c: &mut dyn I2cApi,
         setting: Option<f32>,
         which: WhichLdo,
     ) -> Result<(), xous::Error> {
@@ -253,7 +253,7 @@ impl Axp2101 {
 
     /// This will clear all other IRQ sources except VBUS IRQ
     /// If we need to take more IRQ sources then this API will need to be refactored.
-    pub fn setup_vbus_irq(&mut self, i2c: &mut dyn i2c::I2cApi, mode: VbusIrq) -> Result<(), xous::Error> {
+    pub fn setup_vbus_irq(&mut self, i2c: &mut dyn I2cApi, mode: VbusIrq) -> Result<(), xous::Error> {
         let data = match mode {
             VbusIrq::None => 0u8,
             VbusIrq::Insert => VBUS_INSERT_MASK,
@@ -270,14 +270,14 @@ impl Axp2101 {
         i2c.i2c_write(AXP2101_DEV, REG_IRQ_STATUS0, &status).map(|_| ())
     }
 
-    pub fn get_vbus_irq_status(&self, i2c: &mut dyn i2c::I2cApi) -> Result<VbusIrq, xous::Error> {
+    pub fn get_vbus_irq_status(&self, i2c: &mut dyn I2cApi) -> Result<VbusIrq, xous::Error> {
         let mut buf = [0u8];
         i2c.i2c_read(AXP2101_DEV, REG_IRQ_STATUS1, &mut buf, false)?;
         Ok(VbusIrq::from(buf[0]))
     }
 
     /// This will clear all pending IRQs, regardless of the setup
-    pub fn clear_vbus_irq_pending(&mut self, i2c: &mut dyn i2c::I2cApi) -> Result<(), xous::Error> {
+    pub fn clear_vbus_irq_pending(&mut self, i2c: &mut dyn I2cApi) -> Result<(), xous::Error> {
         let data = VBUS_INSERT_MASK | VBUS_REMOVE_MASK;
         i2c.i2c_write(AXP2101_DEV, REG_IRQ_STATUS1, &[data]).map(|_| ())
     }

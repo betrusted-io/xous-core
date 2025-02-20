@@ -1,6 +1,7 @@
 use core::ops::{Add, AddAssign, Div, DivAssign, Index, Mul, MulAssign, Neg, Sub, SubAssign};
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct Point {
     pub x: isize,
     pub y: isize,

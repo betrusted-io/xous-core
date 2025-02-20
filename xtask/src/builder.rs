@@ -262,6 +262,17 @@ impl Builder {
         self
     }
 
+    /// Configure for hosted mode
+    pub fn target_hosted_baosec(&mut self) -> &mut Builder {
+        self.loader = CrateSpec::None;
+        self.target = None;
+        self.target_kernel = None;
+        self.stream = BuildStream::Release;
+        self.utra_target = "hosted-baosec".to_string();
+        self.run_svd2repl = false;
+        self
+    }
+
     /// Configure for renode targets
     pub fn target_renode(&mut self) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
@@ -668,7 +679,7 @@ impl Builder {
             self.features.push("renode".into());
             self.loader_features.push("renode".into());
             self.kernel_features.push("renode".into());
-        } else if self.utra_target.contains("hosted") {
+        } else if self.utra_target == "hosted" {
             self.features.push("hosted".into());
             // there is no loader in hosed mode
             self.kernel_features.push("hosted".into());
@@ -696,6 +707,9 @@ impl Builder {
             self.kernel_features.push(format!("utralib/{}", &self.utra_target));
             self.loader_features.push("cramium-soc".into());
             self.loader_features.push(format!("utralib/{}", &self.utra_target));
+        } else if self.utra_target.contains("hosted-baosec") {
+            self.features.push("hosted-baosec".into());
+            self.kernel_features.push("hosted".into());
         } else {
             return Err("Target unknown: please check your UTRA target".into());
         }
