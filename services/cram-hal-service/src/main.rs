@@ -3,10 +3,8 @@ mod hw;
 
 use api::*;
 use bitfield::*;
-use cramium_hal::{
-    iox::{self, IoxPort, IoxValue},
-    udma::{EventChannel, GlobalConfig, I2cApi, PeriphId},
-};
+use cramium_api::*;
+use cramium_hal::{iox::Iox, udma::GlobalConfig};
 use num_traits::*;
 use utralib::CSR;
 #[cfg(feature = "quantum-timer")]
@@ -147,7 +145,7 @@ fn main() {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let sid = xns.register_name(cram_hal_service::SERVER_NAME_CRAM_HAL, None).expect("can't register server");
+    let sid = xns.register_name(cramium_api::SERVER_NAME_CRAM_HAL, None).expect("can't register server");
     let self_cid = xous::connect(sid).expect("couldn't create self-connection");
 
     let mut ifram_allocs = [Vec::new(), Vec::new()];
@@ -186,7 +184,7 @@ fn main() {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't claim the IOX hardware page");
-    let iox = iox::Iox::new(iox_page.as_ptr() as *mut u32);
+    let iox = Iox::new(iox_page.as_ptr() as *mut u32);
 
     let udma_global_csr = xous::syscall::map_memory(
         xous::MemoryAddress::new(utralib::generated::HW_UDMA_CTRL_BASE),
@@ -225,7 +223,7 @@ fn main() {
         cramium_hal::udma::I2c::new_with_ifram(
             i2c_channel,
             400_000,
-            cram_hal_service::PERCLK,
+            cramium_api::PERCLK,
             i2c_ifram,
             &udma_global,
         )
@@ -501,8 +499,7 @@ fn main() {
             }
             Opcode::SetGpioBank => {
                 if let Some(scalar) = msg.body.scalar_message() {
-                    let port: cramium_hal::iox::IoxPort =
-                        num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
+                    let port: IoxPort = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     let value = scalar.arg2 as u16;
                     let bitmask = scalar.arg3 as u16;
                     iox.set_gpio_bank(port, value, bitmask);
@@ -510,8 +507,7 @@ fn main() {
             }
             Opcode::GetGpioBank => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
-                    let port: cramium_hal::iox::IoxPort =
-                        num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
+                    let port: IoxPort = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     scalar.arg1 = iox.get_gpio_bank(port) as usize;
                 }
             }

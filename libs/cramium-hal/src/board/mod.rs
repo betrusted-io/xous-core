@@ -1,12 +1,12 @@
-#[cfg(feature = "board-baosec")]
+#[cfg(any(feature = "board-baosec", feature = "loader-baosec"))]
 pub mod baosec;
-#[cfg(feature = "board-baosec")]
+#[cfg(any(feature = "board-baosec", feature = "loader-baosec"))]
 pub use baosec::*;
-#[cfg(feature = "board-baosor")]
+#[cfg(any(feature = "board-baosor", feature = "loader-baosor"))]
 pub mod baosor;
-#[cfg(feature = "board-baosor")]
+#[cfg(any(feature = "board-baosor", feature = "loader-baosor"))]
 pub use baosor::*;
-#[cfg(feature = "board-dabao")]
+#[cfg(any(feature = "board-dabao", feature = "loader-dabao"))]
 pub mod dabao;
-#[cfg(feature = "board-dabao")]
+#[cfg(any(feature = "board-dabao", feature = "loader-dabao"))]
 pub use dabao::*;

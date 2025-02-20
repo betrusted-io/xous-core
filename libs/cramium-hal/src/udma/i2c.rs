@@ -1,3 +1,4 @@
+use cramium_api::*;
 use utralib::*;
 
 use crate::ifram::IframRange;
@@ -53,13 +54,6 @@ impl Into<u32> for I2cCmd {
         }
     }
 }
-#[derive(Debug, Clone, Copy)]
-pub enum I2cChannel {
-    Channel0,
-    Channel1,
-    Channel2,
-    Channel3,
-}
 
 enum I2cPending {
     Idle,
@@ -68,19 +62,6 @@ enum I2cPending {
 }
 impl I2cPending {
     fn take(&mut self) -> I2cPending { core::mem::replace(self, I2cPending::Idle) }
-}
-
-pub trait I2cApi {
-    fn i2c_write(&mut self, dev: u8, adr: u8, data: &[u8]) -> Result<usize, xous::Error>;
-
-    /// initiate an i2c read. The read buffer is passed during the await.
-    fn i2c_read(
-        &mut self,
-        dev: u8,
-        adr: u8,
-        buf: &mut [u8],
-        repeated_start: bool,
-    ) -> Result<usize, xous::Error>;
 }
 
 const MAX_I2C_TXLEN: usize = 512;

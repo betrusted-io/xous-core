@@ -1,6 +1,7 @@
 use crate::minigfx::*;
 
-#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug, Clone, Copy)]
 pub struct Circle {
     pub center: Point,
     pub radius: isize,

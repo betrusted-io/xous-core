@@ -41,6 +41,7 @@ renode = ["utralib/renode", "susres/renode", "watchdog"]
 
 cramium-soc = ["utralib/cramium-soc", "utralib/std"]
 cramium-fpga = ["utralib/cramium-fpga"]
+hosted-baosec = []
 
 susres = []
 debug-print = []

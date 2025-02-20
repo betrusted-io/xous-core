@@ -114,6 +114,8 @@ members = [
   "services/usb-cramium",
   "services/bao-console",
   "libs/ux-api",
+  "services/cramium-emu",
+  "libs/cramium-api",
 ]
 resolver = "2"
 

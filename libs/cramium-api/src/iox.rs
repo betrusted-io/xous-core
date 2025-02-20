@@ -1,22 +1,139 @@
-use core::sync::atomic::Ordering;
+#[cfg(feature = "std")]
+use core::sync::atomic::{AtomicU32, Ordering};
+#[cfg(feature = "std")]
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
-use cramium_hal::iox::{
-    IoGpio, IoIrq, IoSetup, IoxDir, IoxDriveStrength, IoxEnable, IoxFunction, IoxPort, IoxValue,
-};
-use num_traits::*;
+#[cfg(feature = "std")]
+use super::*;
 
-use crate::{
-    Opcode, SERVER_NAME_CRAM_HAL,
-    api::{IoxConfigMessage, IoxIrqRegistration},
-};
+pub const OP_CONFIGURE_IOX: usize = 4;
+pub const OP_SET_GPIO_BANK: usize = 5;
+pub const OP_GET_GPIO_BANK: usize = 6;
+pub const OP_CONFIGURE_IOX_IRQ: usize = 11;
 
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+#[repr(u32)]
+pub enum IoxPort {
+    PA = 0,
+    PB = 1,
+    PC = 2,
+    PD = 3,
+    PE = 4,
+    PF = 5,
+}
+
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug)]
+#[repr(u32)]
+pub enum IoxFunction {
+    Gpio = 0b00,
+    AF1 = 0b01,
+    AF2 = 0b10,
+    AF3 = 0b11,
+}
+
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug)]
+#[repr(u32)]
+pub enum IoxDriveStrength {
+    Drive2mA = 0b00,
+    Drive4mA = 0b01,
+    Drive8mA = 0b10,
+    Drive12mA = 0b11,
+}
+
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug)]
+#[repr(u32)]
+pub enum IoxDir {
+    Input = 0,
+    Output = 1,
+}
+
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug)]
+#[repr(u32)]
+pub enum IoxEnable {
+    Disable = 0,
+    Enable = 1,
+}
+
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(u32)]
+pub enum IoxValue {
+    Low = 0,
+    High = 1,
+}
+/// The From trait for IoxValue takes any non-zero value and interprets it as "high".
+impl From<u32> for IoxValue {
+    fn from(value: u32) -> Self { if value == 0 { IoxValue::Low } else { IoxValue::High } }
+}
+
+/// Use a trait that will allow us to share code between both `std` and `no-std` implementations
+pub trait IoSetup {
+    fn setup_pin(
+        &self,
+        port: IoxPort,
+        pin: u8,
+        direction: Option<IoxDir>,
+        function: Option<IoxFunction>,
+        schmitt_trigger: Option<IoxEnable>,
+        pullup: Option<IoxEnable>,
+        slow_slew: Option<IoxEnable>,
+        strength: Option<IoxDriveStrength>,
+    );
+}
+
+/// Traits for accessing GPIOs after the port has been set up.
+pub trait IoGpio {
+    fn set_gpio_pin_value(&self, port: IoxPort, pin: u8, value: IoxValue);
+    fn get_gpio_pin_value(&self, port: IoxPort, pin: u8) -> IoxValue;
+    fn set_gpio_pin_dir(&self, port: IoxPort, pin: u8, dir: IoxDir);
+}
+
+pub trait IoIrq {
+    /// This hooks a given port/pin to generate a message to the server specified
+    /// with `server` and the opcode number `usize` when an IRQ is detected on the port/pin.
+    /// The active state of the IRQ is defined by `active`; the transition edge from inactive
+    /// to active is when the event is generated.
+    fn set_irq_pin(&self, port: IoxPort, pin: u8, active: IoxValue, server: &str, opcode: usize);
+}
+
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug)]
+pub struct IoxConfigMessage {
+    pub port: IoxPort,
+    pub pin: u8,
+    pub direction: Option<IoxDir>,
+    pub function: Option<IoxFunction>,
+    pub schmitt_trigger: Option<IoxEnable>,
+    pub pullup: Option<IoxEnable>,
+    pub slow_slew: Option<IoxEnable>,
+    pub strength: Option<IoxDriveStrength>,
+}
+
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug)]
+#[cfg(feature = "std")]
+pub struct IoxIrqRegistration {
+    pub server: String,
+    pub opcode: usize,
+    pub port: IoxPort,
+    pub pin: u8,
+    pub active: IoxValue,
+}
+
+#[cfg(feature = "std")]
 pub struct IoxHal {
     conn: xous::CID,
 }
 
+#[cfg(feature = "std")]
 impl IoxHal {
     pub fn new() -> Self {
-        crate::REFCOUNT.fetch_add(1, Ordering::Relaxed);
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let xns = xous_names::XousNames::new().unwrap();
         let conn =
             xns.request_connection(SERVER_NAME_CRAM_HAL).expect("Couldn't connect to Cramium HAL server");
@@ -27,7 +144,7 @@ impl IoxHal {
         xous::send_message(
             self.conn,
             xous::Message::new_blocking_scalar(
-                Opcode::SetGpioBank.to_usize().unwrap(),
+                OP_SET_GPIO_BANK,
                 port as usize,
                 // values to set
                 (value as usize) << (pin as usize),
@@ -43,7 +160,7 @@ impl IoxHal {
         xous::send_message(
             self.conn,
             xous::Message::new_blocking_scalar(
-                Opcode::SetGpioBank.to_usize().unwrap(),
+                OP_SET_GPIO_BANK,
                 port as usize,
                 // values to set
                 value as usize,
@@ -58,13 +175,7 @@ impl IoxHal {
     pub fn get_gpio_pin_value(&self, port: IoxPort, pin: u8) -> IoxValue {
         match xous::send_message(
             self.conn,
-            xous::Message::new_blocking_scalar(
-                Opcode::GetGpioBank.to_usize().unwrap(),
-                port as usize,
-                0,
-                0,
-                0,
-            ),
+            xous::Message::new_blocking_scalar(OP_GET_GPIO_BANK, port as usize, 0, 0, 0),
         ) {
             Ok(xous::Result::Scalar5(_, value, _, _, _)) => {
                 if value & (1 << pin as usize) != 0 {
@@ -80,13 +191,7 @@ impl IoxHal {
     pub fn get_gpio_bank_value(&self, port: IoxPort) -> u32 {
         match xous::send_message(
             self.conn,
-            xous::Message::new_blocking_scalar(
-                Opcode::GetGpioBank.to_usize().unwrap(),
-                port as usize,
-                0,
-                0,
-                0,
-            ),
+            xous::Message::new_blocking_scalar(OP_GET_GPIO_BANK, port as usize, 0, 0, 0),
         ) {
             Ok(xous::Result::Scalar5(_, value, _, _, _)) => value as u32,
             _ => panic!("Internal Error: Couldn't get GPIO pin value"),
@@ -126,6 +231,7 @@ impl IoxHal {
     }
 }
 
+#[cfg(feature = "std")]
 impl IoSetup for IoxHal {
     fn setup_pin(
         &self,
@@ -141,10 +247,11 @@ impl IoSetup for IoxHal {
         let msg =
             IoxConfigMessage { port, pin, direction, function, schmitt_trigger, pullup, slow_slew, strength };
         let buf = xous_ipc::Buffer::into_buf(msg).unwrap();
-        buf.lend(self.conn, Opcode::ConfigureIox.to_u32().unwrap()).expect("Couldn't set up IO");
+        buf.lend(self.conn, OP_CONFIGURE_IOX as u32).expect("Couldn't set up IO");
     }
 }
 
+#[cfg(feature = "std")]
 impl IoGpio for IoxHal {
     fn get_gpio_pin_value(&self, port: IoxPort, pin: u8) -> IoxValue { self.get_gpio_pin_value(port, pin) }
 
@@ -160,7 +267,7 @@ impl IoGpio for IoxHal {
             strength: None,
         };
         let buf = xous_ipc::Buffer::into_buf(msg).unwrap();
-        buf.lend(self.conn, Opcode::ConfigureIox.to_u32().unwrap()).expect("Couldn't set up IO");
+        buf.lend(self.conn, OP_CONFIGURE_IOX as u32).expect("Couldn't set up IO");
     }
 
     fn set_gpio_pin_value(&self, port: IoxPort, pin: u8, value: IoxValue) {
@@ -168,11 +275,12 @@ impl IoGpio for IoxHal {
     }
 }
 
+#[cfg(feature = "std")]
 impl Drop for IoxHal {
     fn drop(&mut self) {
         // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the
         // connection.
-        if crate::REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
+        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe {
                 xous::disconnect(self.conn).unwrap();
             }
@@ -180,10 +288,11 @@ impl Drop for IoxHal {
     }
 }
 
+#[cfg(feature = "std")]
 impl IoIrq for IoxHal {
     fn set_irq_pin(&self, port: IoxPort, pin: u8, active: IoxValue, server: &str, opcode: usize) {
         let msg = IoxIrqRegistration { server: server.to_owned(), opcode, port, pin, active };
         let buf = xous_ipc::Buffer::into_buf(msg).unwrap();
-        buf.lend(self.conn, Opcode::ConfigureIoxIrq.to_u32().unwrap()).expect("Couldn't set up IRQ");
+        buf.lend(self.conn, OP_CONFIGURE_IOX_IRQ as u32).expect("Couldn't set up IRQ");
     }
 }

@@ -19,6 +19,10 @@ cramium-hal = { path = "../../libs/cramium-hal", features = [
     "derive-rkyv",
     "std",
 ] }
+cramium-api = { path = "../../libs/cramium-api", features = [
+    "derive-rkyv",
+    "std",
+] }
 xous-pl230 = { path = "../../libs/xous-pl230", features = ["cramium-soc"] }
 # xous-pio = { path = "../../libs/xous-pio", default-features = false, features = [
 #     "cramium-soc",

@@ -1,9 +1,10 @@
 use core::convert::TryInto;
 use core::fmt::Write;
 
+use cramium_api::*;
 use cramium_hal::board::SPIM_FLASH_IFRAM_ADDR;
 use cramium_hal::ifram::IframRange;
-use cramium_hal::iox::{IoGpio, IoSetup, Iox, IoxPort, IoxValue};
+use cramium_hal::iox::Iox;
 use cramium_hal::mbox::{
     MBOX_PROTOCOL_REV, Mbox, MboxError, MboxToCm7Pkt, PAYLOAD_LEN_WORDS, RERAM_PAGE_SIZE_BYTES, ToCm7Op,
     ToRvOp,
@@ -108,7 +109,12 @@ pub fn process_update(perclk: u32) {
     let mut udma_global = udma::GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
 
     let iox_kbd = iox.clone();
-    let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(perclk, &mut iox, &mut udma_global);
+    let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(
+        cramium_hal::sh1107::MainThreadToken::new(),
+        perclk,
+        &mut iox,
+        &mut udma_global,
+    );
 
     gfx::msg(&mut sh1107, "    START to boot", Point::new(0, 16), Mono::White.into(), Mono::Black.into());
     gfx::msg(&mut sh1107, "   SELECT to update", Point::new(0, 0), Mono::White.into(), Mono::Black.into());

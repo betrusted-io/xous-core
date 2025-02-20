@@ -206,7 +206,6 @@ fn keyboard_service() {
     xous::terminate_process(0)
 }
 
-#[cfg(not(feature = "rawserial"))]
 fn esc_match(esc_chars: &[u8]) -> Result<Option<char>, ()> {
     let mut extended = Vec::<u8>::new();
     for (i, &c) in esc_chars.iter().enumerate() {
