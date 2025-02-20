@@ -17,7 +17,8 @@ cramium-hal = { path = "../../libs/cramium-hal", features = [
 ], optional = true }
 cram-hal-service = { path = "../cram-hal-service", optional = true }
 ux-api = { path = "../../libs/ux-api" }
-cramium-emu = { path = "../../libs/cramium-emu", optional = true }
+cramium-emu = { path = "../cramium-emu", optional = true }
+cramium-api = { path = "../../libs/cramium-api" }
 
 # QR decoding
 libm = { version = "0.2.8" }
@@ -30,9 +31,12 @@ locales = { path = "../../locales" }
 # This crate is baosec specific; these flags switch between hosted mode emulation
 # (for UI development) and actual hardware targets. In UI development all camera data
 # is "faked"
-board-baosec = ["cram-hal-service"]
+board-baosec = ["cram-hal-service", "cramium-hal"]
 hosted-baosec = ["cramium-emu"]
 
 cramium-soc = ["utralib/cramium-soc"]
 decongest-udma = []
-default = ["decongest-udma"]
+default = [
+    "decongest-udma",
+    # "hosted-baosec",
+] # hosted-baosec should be removed for commit, this is only here to make vscode happy
