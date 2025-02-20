@@ -1,21 +1,13 @@
 pub mod api;
 pub mod i2c_lib;
-pub mod iox_lib;
-pub mod keyboard;
 pub mod trng;
 
-use api::Opcode;
-use cramium_hal::udma::{EventChannel, PeriphEventType, PeriphId, UdmaGlobalConfig};
-pub use i2c_lib::*;
-pub use iox_lib::*;
-use num_traits::*;
-
-/// Do not change this constant, it is hard-coded into libraries in order to break
-/// circular dependencies on the IFRAM block.
-pub const SERVER_NAME_CRAM_HAL: &str = "_Cramium-SoC HAL_";
-pub const PERCLK: u32 = 100_000_000;
-
 use core::sync::atomic::{AtomicU32, Ordering};
+
+use api::Opcode;
+use cramium_api::*;
+pub use i2c_lib::*;
+use num_traits::*;
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
 pub struct UdmaGlobal {
