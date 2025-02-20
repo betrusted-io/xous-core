@@ -709,6 +709,7 @@ impl Builder {
             self.loader_features.push(format!("utralib/{}", &self.utra_target));
         } else if self.utra_target.contains("hosted-baosec") {
             self.features.push("hosted-baosec".into());
+            self.kernel_features.push("hosted".into());
         } else {
             return Err("Target unknown: please check your UTRA target".into());
         }
