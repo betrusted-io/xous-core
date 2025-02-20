@@ -1,12 +1,12 @@
 use core::ops::Add;
 
-use String;
 use blitstr2::GlyphStyle;
 
 use super::*;
 
 /// coordinates are local to the canvas, not absolute to the screen
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug, Copy, Clone)]
 pub enum TextBounds {
     // fixed width and height in a rectangle
     BoundingBox(Rectangle),
@@ -46,7 +46,8 @@ impl TextBounds {
     }
 }
 
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, PartialEq)]
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug, Copy, Clone)]
 // operations that may be requested of a TextView when sent to GAM
 pub enum TextOp {
     Nop,
@@ -76,7 +77,8 @@ impl From<usize> for TextOp {
 pub const TEXTVIEW_LEN: usize = 3072;
 pub const TEXTVIEW_DEFAULT_STYLE: GlyphStyle = GlyphStyle::Regular;
 
-#[derive(Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Clone)]
 pub struct TextView {
     // this is the operation as specified for the GAM. Note this is different from the "op" when sent to
     // graphics-server only the GAM should be sending TextViews to the graphics-server, and a different

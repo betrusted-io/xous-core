@@ -1,7 +1,8 @@
 use crate::minigfx::Point;
 
 /// Type wrapper for native colors
-#[derive(Clone, Copy, PartialEq, Eq, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ColorNative(pub usize);
 impl From<usize> for ColorNative {
     fn from(value: usize) -> Self { Self { 0: value } }
@@ -11,7 +12,8 @@ impl Into<usize> for ColorNative {
 }
 
 /// Style properties for an object
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug, Copy, Clone)]
 pub struct DrawStyle {
     /// Fill colour of the object
     pub fill_color: Option<ColorNative>,
@@ -40,7 +42,8 @@ impl Default for DrawStyle {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PixelColor {
     Dark,
     Light,
