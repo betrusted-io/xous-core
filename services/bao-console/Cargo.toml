@@ -13,6 +13,7 @@ log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 cramium-hal = { path = "../../libs/cramium-hal", features = ["std"] }
+cramium-api = { path = "../../libs/cramium-api" }
 cram-hal-service = { path = "../cram-hal-service" }
 usb-cramium = { path = "../usb-cramium" }
 
