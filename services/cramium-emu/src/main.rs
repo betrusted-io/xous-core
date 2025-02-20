@@ -9,7 +9,6 @@ fn main() {
 
     let xns = xous_names::XousNames::new().unwrap();
     let sid = xns.register_name(cramium_api::SERVER_NAME_CRAM_HAL, None).expect("can't register server");
-    let self_cid = xous::connect(sid).expect("couldn't create self-connection");
 
     // start keyboard emulator service
     keyboard::start_keyboard_service();
@@ -26,7 +25,7 @@ fn main() {
             HalOpcode::MapIfram => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
                     let requested_size = scalar.arg1; // requested size
-                    let requested_bank = scalar.arg2; // Specifies bank 0, 1, or don't care (any number but 0 or 1)
+                    let _requested_bank = scalar.arg2; // Specifies bank 0, 1, or don't care (any number but 0 or 1)
 
                     // return as if the mapping passed
                     scalar.arg1 = requested_size;
@@ -34,7 +33,7 @@ fn main() {
                 }
             }
             HalOpcode::UnmapIfram => {
-                if let Some(scalar) = msg.body.scalar_message() {
+                if let Some(_scalar) = msg.body.scalar_message() {
                     // do nothing
                 }
             }

@@ -135,10 +135,6 @@ impl<'a> Oled128x128 {
         }
     }
 
-    fn set_data(&self) {}
-
-    fn set_command(&self) {}
-
     pub fn buffer_swap(&mut self) { self.active_buffer = self.active_buffer.swap(); }
 
     pub fn buffer_mut(&mut self) -> &mut [u32] { &mut self.buffers[self.active_buffer.as_index()] }
