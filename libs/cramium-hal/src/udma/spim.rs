@@ -1,6 +1,7 @@
+use cramium_api::*;
 use utralib::*;
 
-use crate::ifram::{IframRange, UdmaWidths};
+use crate::ifram::IframRange;
 use crate::udma::*;
 
 pub const FLASH_PAGE_LEN: usize = 256;
@@ -165,13 +166,6 @@ impl Into<u32> for SpimCmd {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum SpimChannel {
-    Channel0,
-    Channel1,
-    Channel2,
-    Channel3,
-}
 #[derive(Debug)]
 pub struct Spim {
     csr: CSR<u32>,
