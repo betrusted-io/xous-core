@@ -9,8 +9,8 @@ pub const ROW: isize = 128;
 pub const PAGE: u8 = ROW as u8 / 8;
 
 const MAX_FPS: usize = 60;
-const DARK_COLOUR: u32 = 0xB5B5AD;
-const LIGHT_COLOUR: u32 = 0x1B1B19;
+const DARK_COLOUR: u32 = 0x161616;
+const LIGHT_COLOUR: u32 = 0xC5C5BD;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct MonoColor(ColorNative);
@@ -166,7 +166,7 @@ impl FrameBuffer for Oled128x128 {
             return;
         }
         let buffer = self.buffer_mut();
-        buffer[(p.x + p.y * ROW) as usize] = on.0 as u32;
+        buffer[(p.x + (ROW - 1 - p.y) * COLUMN) as usize] = on.0 as u32;
     }
 
     fn dimensions(&self) -> Point { Point::new(COLUMN, ROW) }
