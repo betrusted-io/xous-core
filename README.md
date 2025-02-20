@@ -4,6 +4,8 @@ Core files for the Xous microkernel operating system.
 
 You might find this [wiki](https://github.com/betrusted-io/betrusted-wiki/wiki) handy, as well as the [Xous Book](https://betrusted.io/xous-book/).
 
+Users targeting Baochip platforms should also familiarize with the [Boachip API structure and glossary](./README-baochip.md) as the platform has several targets and gone through numerous name changes.
+
 This repository contains everything necessary to build the Xous kernel
 from source.  It consists of the following projects:
 
