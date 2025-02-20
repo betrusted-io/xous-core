@@ -3,7 +3,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use cramium_api::*;
 use xous_ipc::Buffer;
 
-use crate::api::Opcode;
+use crate::api::HalOpcode;
 
 pub struct I2c {
     conn: xous::CID,
@@ -23,7 +23,7 @@ impl I2c {
     /// No further I2C requests may happen while this is processing.
     pub fn i2c_transactions(&self, list: I2cTransactions) -> Result<I2cTransactions, xous::Error> {
         let mut buf = Buffer::into_buf(list).map_err(|_| xous::Error::InternalError)?;
-        buf.lend_mut(self.conn, Opcode::I2c as u32)?;
+        buf.lend_mut(self.conn, HalOpcode::I2c as u32)?;
         buf.to_original()
     }
 }
