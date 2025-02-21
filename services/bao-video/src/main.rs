@@ -21,6 +21,7 @@ use cramium_hal::{
     ov2640::Ov2640,
     sh1107::{MainThreadToken, Mono, Oled128x128, claim_main_thread},
 };
+use num_traits::*;
 #[cfg(not(feature = "hosted-baosec"))]
 use utralib::utra;
 
@@ -133,6 +134,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
     let mut sh1107 = Oled128x128::new(main_thread_token, cramium_api::PERCLK, &iox, &udma_global);
     sh1107.init();
+    gfx::msg(&mut sh1107, "hello world", Point::new(0, 64), Mono::White.into(), Mono::Black.into());
     sh1107.buffer_swap();
     sh1107.draw();
 
