@@ -19,7 +19,7 @@ mod sleep_note;
 
 use blitstr2::{GlyphStyle, fontmap, glyph_to_height_hint};
 use num_traits::FromPrimitive;
-use ux_api::wordwrap;
+use ux_api::wordwrap::*;
 use xous::{MemoryRange, msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
@@ -30,8 +30,6 @@ mod panic;
 use core::ops::Add;
 use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-
-use crate::wordwrap::*;
 
 #[cfg(feature = "gfx-testing")]
 mod testing;
