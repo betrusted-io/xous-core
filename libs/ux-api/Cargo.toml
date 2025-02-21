@@ -65,6 +65,8 @@ cramium-soc = []
 precursor = ["blitstr2/precursor"]
 derive-rkyv = ["rkyv"]
 
+doc-deps = ["hosted", "blitstr2/hosted"]
+
 std = [
     "derive-rkyv",
     "locales",
