@@ -67,7 +67,7 @@ pub struct TypesetWord {
     /// overall height for the word
     pub height: isize,
     /// set if this `word` is not drawable, e.g. a newline placeholder.
-    /// *however* the Vec<GlyphSprite> should still be checked for an insertion point, so that
+    /// *however* the `Vec<GlyphSprite>` should still be checked for an insertion point, so that
     /// successive newlines properly get their insertion point drawn
     pub non_drawable: bool,
     /// the position in the originating abstract string of the first character in the word
