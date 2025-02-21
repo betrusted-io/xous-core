@@ -42,7 +42,7 @@ renode = ["utralib/renode", "trng", "gam", "tts-frontend"]
 cramium-soc = ["utralib/cramium-soc", "cram-hal-service"]
 hosted-baosec = ["ux-api/hosted-baosec", "cramium-emu"]
 board-baosec = ["ux-api/board-baosec"]
-doc-deps = ["gam"]
+doc-deps = ["gam", "ux-api/doc-deps"]
 
 tts = []
 ditherpunk = []
