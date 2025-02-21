@@ -19,9 +19,10 @@ use blitstr2::GlyphStyle;
 #[cfg(feature = "cramium-soc")]
 use cram_hal_service::trng;
 use gam::{MAIN_MENU_NAME, ROOTKEY_MODAL_NAME};
-use graphics_server::*;
 use log::info;
 use num_traits::*;
+use ux_api::service::api::*;
+use ux_api::minigfx::*;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
@@ -78,7 +79,7 @@ fn wrapped_main() -> ! {
             screensize.x,
             // note: if this gets modified, the "pop" routine in gfx/backend/betrusted.rs also needs to be
             // updated
-            glyph_height_hint as i16 * 2,
+            glyph_height_hint as isize * 2,
         ),
         255,
         &trng,

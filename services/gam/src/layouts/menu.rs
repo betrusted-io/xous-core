@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 #[cfg(feature = "cramium-soc")]
 use cram_hal_service::trng;
-use graphics_server::*;
+use ux_api::minigfx::*;
+use ux_api::service::api::*;
 
 use crate::Canvas;
 use crate::contexts::MISC_CONTEXT_DEFAULT_TRUST;
@@ -12,11 +13,11 @@ const TRUST_OFFSET: u8 = 0;
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct MenuLayout {
     pub menu: Gid,
-    menu_y_pad: i16,
-    _menu_x_pad: i16,
-    menu_min_height: i16,
+    menu_y_pad: isize,
+    _menu_x_pad: isize,
+    menu_min_height: isize,
     screensize: Point,
-    _height: i16,
+    _height: isize,
 }
 impl MenuLayout {
     pub fn init(
@@ -26,10 +27,11 @@ impl MenuLayout {
     ) -> Result<MenuLayout, xous::Error> {
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
         // get the height of various text regions to compute the layout
-        let height: i16 = gfx.glyph_height_hint(gam::SYSTEM_STYLE).expect("couldn't get glyph height") as i16;
+        let height: isize =
+            gfx.glyph_height_hint(gam::SYSTEM_STYLE).expect("couldn't get glyph height") as isize;
 
-        const MENU_Y_PAD: i16 = 100;
-        const MENU_X_PAD: i16 = 35;
+        const MENU_Y_PAD: isize = 100;
+        const MENU_X_PAD: isize = 35;
         // build for an initial size of 1 entry
         let menu_canvas = Canvas::new(
             Rectangle::new_coords(MENU_X_PAD, MENU_Y_PAD, screensize.x - MENU_X_PAD, MENU_Y_PAD + height),
@@ -70,14 +72,14 @@ impl LayoutApi for MenuLayout {
     fn resize_height(
         &mut self,
         _gfx: &graphics_server::Gfx,
-        new_height: i16,
+        new_height: isize,
         _status_canvas: &Rectangle,
         canvases: &mut HashMap<Gid, Canvas>,
     ) -> Result<Point, xous::Error> {
         let menu_canvas = canvases.get_mut(&self.menu).expect("couldn't find menu canvas");
         let orig_rect = menu_canvas.clip_rect();
 
-        let mut height: i16 = if new_height < self.menu_min_height {
+        let mut height: isize = if new_height < self.menu_min_height {
             self.menu_min_height + self.menu_y_pad
         } else {
             new_height + self.menu_y_pad

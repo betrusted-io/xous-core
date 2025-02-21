@@ -24,8 +24,9 @@ use core::fmt::Write;
 pub use bip39entry::*;
 pub use blitstr2::GlyphStyle;
 use enum_dispatch::enum_dispatch;
-use graphics_server::api::*;
 use num_traits::*;
+use ux_api::service::api::*;
+use ux_api::minigfx::*;
 use xous_ipc::Buffer;
 
 use crate::Gam;
@@ -49,8 +50,10 @@ pub enum ActionType {
 
 #[enum_dispatch]
 pub trait ActionApi {
-    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 { glyph_height + margin * 2 }
-    fn redraw(&self, _at_height: i16, _modal: &Modal) { unimplemented!() }
+    fn height(&self, glyph_height: isize, margin: isize, _modal: &Modal) -> isize {
+        glyph_height + margin * 2
+    }
+    fn redraw(&self, _at_height: isize, _modal: &Modal) { unimplemented!() }
     fn close(&mut self) {}
     fn is_password(&self) -> bool { false }
     /// navigation is one of '∴' | '←' | '→' | '↑' | '↓'
@@ -213,10 +216,10 @@ pub struct Modal<'a> {
     //pub index: usize, // currently selected item
     pub canvas: Gid,
     pub authtoken: [u32; 4],
-    pub margin: i16,
-    pub line_height: i16,
-    pub canvas_width: i16,
-    pub maximal_height: i16,
+    pub margin: isize,
+    pub line_height: isize,
+    pub canvas_width: isize,
+    pub maximal_height: isize,
     pub inverted: bool,
     pub style: GlyphStyle,
     pub helper_data: Option<Buffer<'a>>,
@@ -224,9 +227,9 @@ pub struct Modal<'a> {
 
     // optimize draw time
     top_dirty: bool,
-    top_memoized_height: Option<i16>,
+    top_memoized_height: Option<isize>,
     bot_dirty: bool,
-    bot_memoized_height: Option<i16>,
+    bot_memoized_height: Option<isize>,
 }
 
 fn recompute_canvas(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle) {
@@ -343,7 +346,7 @@ impl<'a> Modal<'a> {
         top_text: Option<&str>,
         bot_text: Option<&str>,
         style: GlyphStyle,
-        margin: i16,
+        margin: isize,
     ) -> Modal<'a> {
         let xns = xous_names::XousNames::new().unwrap();
         let sid = xous::create_server().expect("can't create private modal message server");
@@ -370,9 +373,9 @@ impl<'a> Modal<'a> {
             gam.request_content_canvas(authtoken.unwrap()).expect("couldn't get my content canvas from GAM");
         let line_height = if locales::LANG == "zh" {
             // zh has no "small" style
-            gam.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height hint") as i16
+            gam.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height hint") as isize
         } else {
-            gam.glyph_height_hint(style).expect("couldn't get glyph height hint") as i16
+            gam.glyph_height_hint(style).expect("couldn't get glyph height hint") as isize
         };
         let canvas_bounds = gam.get_canvas_bounds(canvas).expect("couldn't get starting canvas bounds");
 
@@ -465,7 +468,7 @@ impl<'a> Modal<'a> {
     }
 
     pub fn redraw(&mut self) {
-        const BORDER_WIDTH: i16 = 3;
+        const BORDER_WIDTH: isize = 3;
         log::debug!("modal redraw");
         let canvas_size = self.gam.get_canvas_bounds(self.canvas).unwrap();
         let do_redraw = self.top_dirty || self.bot_dirty || self.inverted;
