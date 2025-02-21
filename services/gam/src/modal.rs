@@ -25,8 +25,8 @@ pub use bip39entry::*;
 pub use blitstr2::GlyphStyle;
 use enum_dispatch::enum_dispatch;
 use num_traits::*;
-use ux_api::service::api::*;
 use ux_api::minigfx::*;
+use ux_api::service::api::*;
 use xous_ipc::Buffer;
 
 use crate::Gam;

@@ -6,8 +6,8 @@ use enum_dispatch::enum_dispatch;
 use gam::MAIN_MENU_NAME;
 use ime_plugin_api::{ImeFrontEndApi, ImefDescriptor};
 use log::info;
-use ux_api::service::api::*;
 use ux_api::minigfx::*;
+use ux_api::service::api::*;
 use xous_ipc::Buffer;
 
 use crate::api::Opcode;

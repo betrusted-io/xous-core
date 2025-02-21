@@ -21,8 +21,8 @@ use cram_hal_service::trng;
 use gam::{MAIN_MENU_NAME, ROOTKEY_MODAL_NAME};
 use log::info;
 use num_traits::*;
-use ux_api::service::api::*;
 use ux_api::minigfx::*;
+use ux_api::service::api::*;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
