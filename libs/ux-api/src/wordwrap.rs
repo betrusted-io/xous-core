@@ -42,7 +42,7 @@ pub struct TypesetWord {
     /// overall height for the word
     pub height: isize,
     /// set if this `word` is not drawable, e.g. a newline placeholder.
-    /// *however* the Vec<GlyphSprite> should still be checked for an insertion point, so that
+    /// *however* the `Vec<GlyphSprite>` should still be checked for an insertion point, so that
     /// successive newlines properly get their insertion point drawn
     pub non_drawable: bool,
     /// the position in the originating abstract string of the first character in the word
@@ -277,7 +277,7 @@ impl Typesetter {
     /// the caller must reset the cursor to the desired resume position, otherwise it will pick
     /// up again at the overflow position.
     ///
-    /// The final Vec::<TypesetWord> is snapped to the top left of the Renderable region. This
+    /// The final `Vec::<TypesetWord>` is snapped to the top left of the Renderable region. This
     /// needs to be transformed into the final screen coordinate space before blitting.
     pub fn typeset(&mut self, strat: OverflowStrategy) -> ComposedType {
         // a composition only lasts as long as the lifetime of this call, and is passed back to the caller
