@@ -1,16 +1,16 @@
 use super::*;
 
 /// LCD Frame buffer bounds
-pub const LCD_WORDS_PER_LINE: usize = crate::platform::WIDTH as usize / core::mem::size_of::<u32>();
+pub const LCD_WORDS_PER_LINE: usize = crate::platform::FB_WIDTH_WORDS;
 pub const LCD_PX_PER_LINE: usize = crate::platform::WIDTH as usize;
 pub const LCD_LINES: usize = crate::platform::LINES as usize;
 pub const LCD_FRAME_BUF_SIZE: usize = LCD_WORDS_PER_LINE * LCD_LINES;
 
-pub const WIDTH: isize = crate::platform::WIDTH;
-pub const HEIGHT: isize = crate::platform::LINES;
+pub const WIDTH: isize = crate::platform::WIDTH as isize;
+pub const HEIGHT: isize = crate::platform::LINES as isize;
 
 /// For passing frame buffer references
-pub type LcdFB = [u32; LCD_FRAME_BUF_SIZE];
+pub type LcdFB = [u32];
 
 /// Set the expected rectangle length for the busy animation
 pub const BUSY_ANIMATION_RECT_WIDTH: isize = 32; // golden ratio off of a height of 20
@@ -21,9 +21,9 @@ fn put_pixel(fb: &mut LcdFB, x: isize, y: isize, color: ColorNative) {
         clip_y = LCD_LINES - 1;
     }
 
-    let clip_x: usize = x as usize;
+    let mut clip_x: usize = x as usize;
     if clip_x >= LCD_PX_PER_LINE {
-        clip_y = LCD_PX_PER_LINE - 1;
+        clip_x = LCD_PX_PER_LINE - 1;
     }
 
     let pc = PixelColor::from(color.0);
@@ -43,9 +43,9 @@ fn xor_pixel(fb: &mut LcdFB, x: isize, y: isize) {
         clip_y = LCD_LINES - 1;
     }
 
-    let clip_x: usize = x as usize;
+    let mut clip_x: usize = x as usize;
     if clip_x >= LCD_PX_PER_LINE {
-        clip_y = LCD_PX_PER_LINE - 1;
+        clip_x = LCD_PX_PER_LINE - 1;
     }
 
     fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] ^= 1 << (clip_x % 32);
@@ -56,7 +56,7 @@ fn xor_pixel(fb: &mut LcdFB, x: isize, y: isize) {
 pub fn line(fb: &mut LcdFB, l: Line, clip: Option<Rectangle>, xor: bool) {
     let color: ColorNative;
     if l.style.stroke_color.is_some() {
-        color = l.style.stroke_color.unwrap();
+        color = ColorNative::from(l.style.stroke_color.unwrap());
     } else {
         return;
     }
@@ -139,9 +139,15 @@ impl Iterator for CircleIterator {
                 let is_fill = len <= outer_radius_sq + 1;
 
                 item = if is_border && self.style.stroke_color.is_some() {
-                    Some(Pixel(self.center + t, self.style.stroke_color.expect("Border color not defined")))
+                    Some(Pixel(
+                        self.center + t,
+                        self.style.stroke_color.expect("Border color not defined").into(),
+                    ))
                 } else if is_fill && self.style.fill_color.is_some() {
-                    Some(Pixel(self.center + t, self.style.fill_color.expect("Fill color not defined")))
+                    Some(Pixel(
+                        self.center + t,
+                        self.style.fill_color.expect("Fill color not defined").into(),
+                    ))
                 } else {
                     None
                 };
@@ -227,11 +233,11 @@ impl Iterator for RectangleIterator {
                 || (self.p.x <= br.x && self.p.x > br.x - border_width)
                 ) && self.style.stroke_color.is_some()
                 {
-                    out = Some(Pixel(self.p, self.style.stroke_color.expect("Expected stroke")));
+                    out = Some(Pixel(self.p, self.style.stroke_color.expect("Expected stroke").into()));
                 }
                 // Fill
                 else if let Some(fill) = self.style.fill_color {
-                    out = Some(Pixel(self.p, fill));
+                    out = Some(Pixel(self.p, fill.into()));
                 }
             }
 
@@ -329,9 +335,15 @@ impl Iterator for QuadrantIterator {
                 let is_fill = len <= outer_radius_sq + 1;
 
                 item = if is_border && self.style.stroke_color.is_some() {
-                    Some(Pixel(self.center + t, self.style.stroke_color.expect("Border color not defined")))
+                    Some(Pixel(
+                        self.center + t,
+                        self.style.stroke_color.expect("Border color not defined").into(),
+                    ))
                 } else if is_fill && self.style.fill_color.is_some() {
-                    Some(Pixel(self.center + t, self.style.fill_color.expect("Fill color not defined")))
+                    Some(Pixel(
+                        self.center + t,
+                        self.style.fill_color.expect("Fill color not defined").into(),
+                    ))
                 } else {
                     None
                 };
@@ -473,11 +485,11 @@ impl Iterator for RoundedRectangleIterator {
                             || (self.p.x <= br.x && self.p.x > br.x - border_width)
                     ) && self.style.stroke_color.is_some()
                     {
-                        out = Some(Pixel(self.p, self.style.stroke_color.expect("Expected stroke")));
+                        out = Some(Pixel(self.p, self.style.stroke_color.expect("Expected stroke").into()));
                     }
                     // Fill
                     else if let Some(fill) = self.style.fill_color {
-                        out = Some(Pixel(self.p, fill));
+                        out = Some(Pixel(self.p, fill.into()));
                     }
                 }
             }
@@ -564,8 +576,6 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
  *
  * author: nworbnhoj
  */
-#[cfg(feature = "ditherpunk")]
-use crate::api::Tile;
 #[cfg(feature = "ditherpunk")]
 pub fn tile(fb: &mut LcdFB, tile: Tile, clip: Option<Rectangle>) {
     use std::cmp::{max, min};

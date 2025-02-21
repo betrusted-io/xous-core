@@ -8,6 +8,12 @@ pub mod style;
 pub use style::*;
 pub mod circle;
 pub use circle::*;
+pub mod clip;
+pub use clip::*;
+#[cfg(feature = "ditherpunk")]
+pub mod tile;
+#[cfg(feature = "ditherpunk")]
+pub use tile::*;
 
 #[cfg(feature = "std")]
 pub mod textview;
@@ -18,7 +24,7 @@ pub mod cursor;
 #[cfg(feature = "std")]
 pub use cursor::*;
 #[cfg(feature = "std")]
-pub(crate) mod op;
+pub mod op;
 
 #[cfg(feature = "std")]
 use blitstr2::GlyphSprite;
@@ -43,7 +49,7 @@ pub trait FrameBuffer {
 /// a rasterizer for rendering.
 #[derive(Debug)]
 #[cfg(feature = "std")]
-pub(crate) struct TypesetWord {
+pub struct TypesetWord {
     /// glyph data to directly render the word
     pub gs: Vec<GlyphSprite>,
     /// top left origin point for rendering of the glyphs
