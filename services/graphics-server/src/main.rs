@@ -5,6 +5,7 @@ mod backend;
 use backend::XousDisplay;
 use ux_api::minigfx::op;
 use ux_api::minigfx::*;
+use ux_api::platform::{FB_LINES, FB_SIZE, FB_WIDTH_WORDS};
 use ux_api::service::api;
 use ux_api::service::api::*;
 
@@ -233,23 +234,23 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                     log::trace!("DrawClipObject {:?}", obj);
                     match obj.obj {
                         ClipObjectType::Line(line) => {
-                            op::line(display.native_buffer(), line, Some(obj.clip), false);
+                            op::line(&mut display, line, Some(obj.clip), false);
                         }
                         ClipObjectType::XorLine(line) => {
-                            op::line(display.native_buffer(), line, Some(obj.clip), true);
+                            op::line(&mut display, line, Some(obj.clip), true);
                         }
                         ClipObjectType::Circ(circ) => {
-                            op::circle(display.native_buffer(), circ, Some(obj.clip));
+                            op::circle(&mut display, circ, Some(obj.clip));
                         }
                         ClipObjectType::Rect(rect) => {
-                            op::rectangle(display.native_buffer(), rect, Some(obj.clip), false);
+                            op::rectangle(&mut display, rect, Some(obj.clip), false);
                         }
                         ClipObjectType::RoundRect(rr) => {
-                            op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
+                            op::rounded_rectangle(&mut display, rr, Some(obj.clip));
                         }
                         #[cfg(feature = "ditherpunk")]
                         ClipObjectType::Tile(tile) => {
-                            op::tile(display.native_buffer(), tile, Some(obj.clip));
+                            op::tile(&mut display, tile, Some(obj.clip));
                         }
                     }
                 }
@@ -260,23 +261,23 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                         if let Some(obj) = maybe_item {
                             match obj.obj {
                                 ClipObjectType::Line(line) => {
-                                    op::line(display.native_buffer(), line, Some(obj.clip), false);
+                                    op::line(&mut display, line, Some(obj.clip), false);
                                 }
                                 ClipObjectType::XorLine(line) => {
-                                    op::line(display.native_buffer(), line, Some(obj.clip), true);
+                                    op::line(&mut display, line, Some(obj.clip), true);
                                 }
                                 ClipObjectType::Circ(circ) => {
-                                    op::circle(display.native_buffer(), circ, Some(obj.clip));
+                                    op::circle(&mut display, circ, Some(obj.clip));
                                 }
                                 ClipObjectType::Rect(rect) => {
-                                    op::rectangle(display.native_buffer(), rect, Some(obj.clip), false);
+                                    op::rectangle(&mut display, rect, Some(obj.clip), false);
                                 }
                                 ClipObjectType::RoundRect(rr) => {
-                                    op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
+                                    op::rounded_rectangle(&mut display, rr, Some(obj.clip));
                                 }
                                 #[cfg(feature = "ditherpunk")]
                                 ClipObjectType::Tile(tile) => {
-                                    op::tile(display.native_buffer(), tile, Some(obj.clip));
+                                    op::tile(&mut display, tile, Some(obj.clip));
                                 }
                             }
                         } else {
@@ -432,12 +433,12 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                     if !tv.dry_run() {
                         if tv.rounded_border.is_some() {
                             op::rounded_rectangle(
-                                display.native_buffer(),
+                                &mut display,
                                 RoundedRectangle::new(clear_rect, tv.rounded_border.unwrap() as _),
                                 tv.clip_rect,
                             );
                         } else {
-                            op::rectangle(display.native_buffer(), clear_rect, tv.clip_rect, false);
+                            op::rectangle(&mut display, clear_rect, tv.clip_rect, false);
                         }
                     }
                     // for now, if we're in braille mode, emit all text to the debug log so we can see it
@@ -451,12 +452,7 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                         let smallest_rect = clear_rect
                             .clip_with(tv.clip_rect.unwrap())
                             .unwrap_or(Rectangle::new(Point::new(0, 0), Point::new(0, 0)));
-                        composition.render(
-                            display.native_buffer(),
-                            composition_top_left,
-                            tv.invert,
-                            smallest_rect,
-                        );
+                        composition.render(&mut display, composition_top_left, tv.invert, smallest_rect);
                     }
 
                     // run the busy animation
@@ -486,7 +482,7 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                                         stroke_color: None,
                                         stroke_width: 0,
                                     };
-                                    op::rectangle(display.native_buffer(), trunc_rect, tv.clip_rect, true);
+                                    op::rectangle(&mut display, trunc_rect, tv.clip_rect, true);
                                 } // the "right" rectangle is handled by the clipping mask
                                 let mut xor_rect = Rectangle::new(
                                     Point::new(left_x as isize, clear_rect.tl().y),
@@ -500,7 +496,7 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                                     stroke_color: None,
                                     stroke_width: 0,
                                 };
-                                op::rectangle(display.native_buffer(), xor_rect, tv.clip_rect, true);
+                                op::rectangle(&mut display, xor_rect, tv.clip_rect, true);
                             }
                         } else {
                             // don't do the animation, this could be abused to create inverted text
@@ -526,33 +522,33 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                 Some(GfxOpcode::Clear) => {
                     let mut r = Rectangle::full_screen();
                     r.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 0);
-                    op::rectangle(display.native_buffer(), r, screen_clip.into(), false)
+                    op::rectangle(&mut display, r, screen_clip.into(), false)
                 }
                 Some(GfxOpcode::Line) => msg_scalar_unpack!(msg, p1, p2, style, _, {
                     let l = Line::new_with_style(Point::from(p1), Point::from(p2), DrawStyle::from(style));
-                    op::line(display.native_buffer(), l, screen_clip.into(), false);
+                    op::line(&mut display, l, screen_clip.into(), false);
                 }),
                 Some(GfxOpcode::Rectangle) => msg_scalar_unpack!(msg, tl, br, style, _, {
                     let r =
                         Rectangle::new_with_style(Point::from(tl), Point::from(br), DrawStyle::from(style));
-                    op::rectangle(display.native_buffer(), r, screen_clip.into(), false);
+                    op::rectangle(&mut display, r, screen_clip.into(), false);
                 }),
                 Some(GfxOpcode::RoundedRectangle) => msg_scalar_unpack!(msg, tl, br, style, r, {
                     let rr = RoundedRectangle::new(
                         Rectangle::new_with_style(Point::from(tl), Point::from(br), DrawStyle::from(style)),
                         r as _,
                     );
-                    op::rounded_rectangle(display.native_buffer(), rr, screen_clip.into());
+                    op::rounded_rectangle(&mut display, rr, screen_clip.into());
                 }),
                 #[cfg(feature = "ditherpunk")]
                 Some(GfxOpcode::Tile) => {
                     let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     let bm = buffer.to_original::<Tile, _>().unwrap();
-                    op::tile(display.native_buffer(), bm, screen_clip.into());
+                    op::tile(&mut display, bm, screen_clip.into());
                 }
                 Some(GfxOpcode::Circle) => msg_scalar_unpack!(msg, center, radius, style, _, {
                     let c = Circle::new_with_style(Point::from(center), radius as _, DrawStyle::from(style));
-                    op::circle(display.native_buffer(), c, screen_clip.into());
+                    op::circle(&mut display, c, screen_clip.into());
                 }),
                 Some(GfxOpcode::ScreenSize) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                     let pt = display.screen_size();
@@ -623,40 +619,39 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                     let mut stashmem = xous::syscall::map_memory(
                         None,
                         None,
-                        ((backend::FB_SIZE * 4) + 4096) & !4095,
+                        ((FB_SIZE * 4) + 4096) & !4095,
                         xous::MemoryFlags::R | xous::MemoryFlags::W,
                     )
                     .expect("couldn't map stash frame buffer");
                     // Safety: `u8` contains no undefined values
-                    let stash = unsafe { &mut stashmem.as_slice_mut()[..backend::FB_SIZE] };
+                    let stash = unsafe { &mut stashmem.as_slice_mut()[..FB_SIZE] };
                     for (&src, dst) in display.as_slice().iter().zip(stash.iter_mut()) {
                         *dst = src;
                     }
-                    for lines in 0..backend::FB_LINES {
+                    for lines in 0..FB_LINES {
                         // mark all lines dirty
-                        stash[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+                        stash[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
                     }
 
                     let start_time = ticktimer.elapsed_ms();
                     let mut testmem = xous::syscall::map_memory(
                         None,
                         None,
-                        ((backend::FB_SIZE * 4) + 4096) & !4095,
+                        ((FB_SIZE * 4) + 4096) & !4095,
                         xous::MemoryFlags::R | xous::MemoryFlags::W,
                     )
                     .expect("couldn't map stash frame buffer");
                     // Safety: `u8` contains no undefined values
-                    let testpat = unsafe { &mut testmem.as_slice_mut()[..backend::FB_SIZE] };
+                    let testpat = unsafe { &mut testmem.as_slice_mut()[..FB_SIZE] };
                     const DWELL: usize = 1000;
                     while ticktimer.elapsed_ms() - start_time < duration as u64 {
                         // all black
                         for w in testpat.iter_mut() {
                             *w = 0;
                         }
-                        for lines in 0..backend::FB_LINES {
+                        for lines in 0..FB_LINES {
                             // mark dirty bits
-                            testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |=
-                                0x1_0000;
+                            testpat[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
                         }
                         display.blit_screen(testpat);
                         display.redraw();
@@ -672,18 +667,18 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                         ticktimer.sleep_ms(DWELL).unwrap();
 
                         // vertical bars
-                        for lines in 0..backend::FB_LINES {
-                            for words in 0..backend::FB_WIDTH_WORDS {
-                                testpat[lines * backend::FB_WIDTH_WORDS + words] = 0xaaaa_aaaa;
+                        for lines in 0..FB_LINES {
+                            for words in 0..FB_WIDTH_WORDS {
+                                testpat[lines * FB_WIDTH_WORDS + words] = 0xaaaa_aaaa;
                             }
                         }
                         display.blit_screen(testpat);
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
 
-                        for lines in 0..backend::FB_LINES {
-                            for words in 0..backend::FB_WIDTH_WORDS {
-                                testpat[lines * backend::FB_WIDTH_WORDS + words] = 0x5555_5555;
+                        for lines in 0..FB_LINES {
+                            for words in 0..FB_WIDTH_WORDS {
+                                testpat[lines * FB_WIDTH_WORDS + words] = 0x5555_5555;
                             }
                         }
                         display.blit_screen(testpat);
@@ -691,31 +686,29 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                         ticktimer.sleep_ms(DWELL).unwrap();
 
                         // horiz bars
-                        for lines in 0..backend::FB_LINES {
-                            for words in 0..backend::FB_WIDTH_WORDS {
+                        for lines in 0..FB_LINES {
+                            for words in 0..FB_WIDTH_WORDS {
                                 if lines % 2 == 0 {
-                                    testpat[lines * backend::FB_WIDTH_WORDS + words] = 0x0;
+                                    testpat[lines * FB_WIDTH_WORDS + words] = 0x0;
                                 } else {
-                                    testpat[lines * backend::FB_WIDTH_WORDS + words] = 0xffff_ffff;
+                                    testpat[lines * FB_WIDTH_WORDS + words] = 0xffff_ffff;
                                 }
                             }
-                            testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |=
-                                0x1_0000;
+                            testpat[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
                         }
                         display.blit_screen(testpat);
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
 
-                        for lines in 0..backend::FB_LINES {
-                            for words in 0..backend::FB_WIDTH_WORDS {
+                        for lines in 0..FB_LINES {
+                            for words in 0..FB_WIDTH_WORDS {
                                 if lines % 2 == 1 {
-                                    testpat[lines * backend::FB_WIDTH_WORDS + words] = 0x0;
+                                    testpat[lines * FB_WIDTH_WORDS + words] = 0x0;
                                 } else {
-                                    testpat[lines * backend::FB_WIDTH_WORDS + words] = 0xffff_ffff;
+                                    testpat[lines * FB_WIDTH_WORDS + words] = 0xffff_ffff;
                                 }
                             }
-                            testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |=
-                                0x1_0000;
+                            testpat[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
                         }
                         display.blit_screen(testpat);
                         display.redraw();
