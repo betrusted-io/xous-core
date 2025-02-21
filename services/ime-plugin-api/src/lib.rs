@@ -263,8 +263,8 @@ pub enum ImefCallback {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct ImefDescriptor {
-    pub input_canvas: Option<graphics_server::Gid>,
-    pub prediction_canvas: Option<graphics_server::Gid>,
+    pub input_canvas: Option<ux_api::service::api::Gid>,
+    pub prediction_canvas: Option<ux_api::service::api::Gid>,
     pub predictor: Option<String>,
     pub token: [u32; 4], // token used to lookup our connected app inside the GAM
     pub predictor_token: Option<[u32; 4]>,
