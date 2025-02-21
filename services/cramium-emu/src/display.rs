@@ -179,6 +179,24 @@ impl FrameBuffer for Oled128x128 {
         let color = ColorNative(buffer[(p.x + p.y * ROW) as usize] as usize);
         Some(color)
     }
+
+    fn xor_pixel(&mut self, p: Point) {
+        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+            return;
+        }
+        let buffer = self.buffer_mut();
+        let color: Mono = ColorNative(buffer[(p.x + p.y * ROW) as usize] as usize).into();
+        let xor_color = if color == Mono::Black { Mono::White } else { Mono::Black };
+        let on: ColorNative = xor_color.into();
+        buffer[(p.x + (ROW - 1 - p.y) * COLUMN) as usize] = on.0 as u32;
+    }
+
+    /// This is highly unsafe. Don't use it - this is only implemented to provide cross-compatibility
+    /// with other platforms that require this access.
+    unsafe fn raw_mut(&mut self) -> &mut ux_api::platform::FbRaw {
+        let len = self.native_buffer.lock().unwrap().len();
+        core::slice::from_raw_parts_mut(self.native_buffer.lock().unwrap().as_mut_ptr(), len)
+    }
 }
 
 impl MinifbThread {
