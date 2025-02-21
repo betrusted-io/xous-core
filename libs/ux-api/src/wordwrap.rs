@@ -27,7 +27,6 @@
 use blitstr2::*;
 
 use crate::minigfx::*;
-use crate::platform::FB_SIZE;
 
 /// A TypesetWord is a Word that has beet turned into sprites and placed at a specific location on the canvas,
 /// defined by its `bb` record. The intention is that this abstract representation can be passed directly to
@@ -129,7 +128,7 @@ impl ComposedType {
 
     /// Note: it is up to the caller to ensure that clip_rect is within the renderable screen area. We do no
     /// additional checks around this.
-    pub fn render(&self, frbuf: &mut [u32; FB_SIZE], offset: Point, invert: bool, clip_rect: Rectangle) {
+    pub fn render<T: FrameBuffer>(&self, frbuf: &mut T, offset: Point, invert: bool, clip_rect: Rectangle) {
         const MAX_GLYPH_MARGIN: isize = 16;
         // let mut strpos; // just for debugging insertion points
         for word in self.words.iter() {
@@ -160,18 +159,19 @@ impl ComposedType {
                 } else {
                     let cr =
                         ClipRect::new(clip_rect.tl().x, clip_rect.tl().y, clip_rect.br().x, clip_rect.br().y);
+                    let rawbuf = unsafe { frbuf.raw_mut() };
                     if glyph.large {
                         blitstr2::xor_glyph_large(
-                            frbuf,
+                            rawbuf,
                             (maybe_x, maybe_y),
                             *glyph,
                             glyph.invert ^ invert,
                             cr,
                         );
                     } else if !glyph.double {
-                        blitstr2::xor_glyph(frbuf, (maybe_x, maybe_y), *glyph, glyph.invert ^ invert, cr);
+                        blitstr2::xor_glyph(rawbuf, (maybe_x, maybe_y), *glyph, glyph.invert ^ invert, cr);
                     } else {
-                        blitstr2::xor_glyph_2x(frbuf, (maybe_x, maybe_y), *glyph, glyph.invert ^ invert, cr);
+                        blitstr2::xor_glyph_2x(rawbuf, (maybe_x, maybe_y), *glyph, glyph.invert ^ invert, cr);
                     }
                     if glyph.insert {
                         // log::info!("insert at {},{}", glyph.ch, strpos - 1);

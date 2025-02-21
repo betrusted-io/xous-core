@@ -77,7 +77,7 @@ impl Ov2640 {
     // pub fn effect(&mut self, _i2c: &mut dyn I2cApi, _effect: Effect) {}
 
     /// Returns (product ID, manufacturer ID) - hard coded to match OV2640 values
-    pub fn read_id(&self, i2c: &mut dyn I2cApi) -> (u16, u16) { (0x2641, 0x7fa2) }
+    pub fn read_id(&self, _i2c: &mut dyn I2cApi) -> (u16, u16) { (0x2641, 0x7fa2) }
 
     pub fn delay(&self, quantum: usize) {
         std::thread::sleep(std::time::Duration::from_millis(quantum as u64));

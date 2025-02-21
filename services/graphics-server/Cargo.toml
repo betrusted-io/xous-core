@@ -15,6 +15,7 @@ susres = { package = "xous-api-susres", version = "0.9.63" }
 ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.63" }
 locales = { path = "../../locales" }
 blitstr2 = { path = "../../libs/blitstr2" }
+ux-api = { path = "../../libs/ux-api" }
 
 xous-ipc = "0.10.4"
 xous-names = { package = "xous-api-names", version = "0.9.65" }
@@ -46,11 +47,16 @@ cramium-soc = [
 ]
 board-baosor = ["cramium-hal/board-baosor", "blitstr2/board-baosor"]
 
-precursor = ["utralib/precursor", "blitstr2/precursor"]
-hosted = ["utralib/hosted", "blitstr2/hosted"]
-renode = ["utralib/renode", "blitstr2/renode"]
+precursor = [
+    "utralib/precursor",
+    "blitstr2/precursor",
+    "ux-api/precursor",
+    "ux-api/std",
+]
+hosted = ["utralib/hosted", "blitstr2/hosted", "ux-api/hosted", "ux-api/std"]
+renode = ["utralib/renode", "blitstr2/renode", "ux-api/renode", "ux-api/std"]
 debugprint = []
 braille = []
 gfx-testing = []
-ditherpunk = []
+ditherpunk = ["ux-api/ditherpunk"]
 default = []

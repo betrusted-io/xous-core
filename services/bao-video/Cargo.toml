@@ -31,8 +31,8 @@ locales = { path = "../../locales" }
 # This crate is baosec specific; these flags switch between hosted mode emulation
 # (for UI development) and actual hardware targets. In UI development all camera data
 # is "faked"
-board-baosec = ["cram-hal-service", "cramium-hal"]
-hosted-baosec = ["cramium-emu"]
+board-baosec = ["cram-hal-service", "cramium-hal", "ux-api/board-baosec"]
+hosted-baosec = ["cramium-emu", "ux-api/hosted-baosec"]
 
 cramium-soc = ["utralib/cramium-soc"]
 decongest-udma = []

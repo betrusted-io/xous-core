@@ -1,8 +1,8 @@
 use core::fmt::Write;
 
-use graphics_server::api::GlyphStyle;
-use graphics_server::*;
 use num_traits::*;
+use ux_api::minigfx::GlyphStyle;
+use ux_api::minigfx::*;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 enum TestType {

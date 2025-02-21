@@ -97,7 +97,7 @@ pub fn msg<'a>(fb: &mut dyn FrameBuffer, text: &'a str, ll_pos: Point, fg: Color
 pub fn line(fb: &mut dyn FrameBuffer, l: Line, clip: Option<Rectangle>, xor: bool) {
     let color: ColorNative;
     if l.style.stroke_color.is_some() {
-        color = l.style.stroke_color.unwrap();
+        color = l.style.stroke_color.unwrap().into();
     } else {
         return;
     }
