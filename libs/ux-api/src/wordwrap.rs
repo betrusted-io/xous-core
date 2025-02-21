@@ -27,7 +27,6 @@
 use blitstr2::*;
 
 use crate::minigfx::*;
-use crate::platform::FB_SIZE;
 
 /// A TypesetWord is a Word that has beet turned into sprites and placed at a specific location on the canvas,
 /// defined by its `bb` record. The intention is that this abstract representation can be passed directly to
@@ -129,7 +128,7 @@ impl ComposedType {
 
     /// Note: it is up to the caller to ensure that clip_rect is within the renderable screen area. We do no
     /// additional checks around this.
-    pub fn render(&self, frbuf: &mut [u32; FB_SIZE], offset: Point, invert: bool, clip_rect: Rectangle) {
+    pub fn render(&self, frbuf: &mut [u32], offset: Point, invert: bool, clip_rect: Rectangle) {
         const MAX_GLYPH_MARGIN: isize = 16;
         // let mut strpos; // just for debugging insertion points
         for word in self.words.iter() {
