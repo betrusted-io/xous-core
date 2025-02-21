@@ -1,13 +1,12 @@
 use susres::{RegManager, RegOrField, SuspendResume};
 use utralib::generated::*;
-use ux_api::minigfx::Point;
-use ux_api::platform::{LINES, WIDTH};
+use ux_api::minigfx::{ColorNative, FrameBuffer, PixelColor, Point};
+use ux_api::platform::*;
 use xous::MemoryRange;
 
-pub const FB_WIDTH_WORDS: usize = 11;
-pub const FB_WIDTH_PIXELS: usize = WIDTH as usize;
-pub const FB_LINES: usize = LINES as usize;
-pub const FB_SIZE: usize = FB_WIDTH_WORDS * FB_LINES; // 44 bytes by 536 lines
+const LCD_WORDS_PER_LINE: usize = FB_WIDTH_WORDS;
+const LCD_PX_PER_LINE: isize = WIDTH as isize;
+const LCD_LINES: isize = FB_LINES as isize;
 const CONFIG_CLOCK_FREQUENCY: u32 = 100_000_000;
 
 pub struct MainThreadToken(());
@@ -276,4 +275,110 @@ impl XousDisplay {
             self.csr.wfo(utra::memlcd::DEVBOOT_DEVBOOT, 0);
         }
     }
+}
+
+impl FrameBuffer for XousDisplay {
+    /// Puts a pixel of ColorNative at x, y. (0, 0) is defined as the lower left corner.
+    fn put_pixel(&mut self, p: Point, color: ColorNative) {
+        let fb: &mut [u32] = unsafe { self.fb.as_slice_mut() };
+        let clip_y: usize;
+        if p.y >= LCD_LINES {
+            clip_y = LCD_LINES as usize - 1;
+        } else if p.y < 0 {
+            clip_y = 0;
+        } else {
+            clip_y = p.y as usize;
+        }
+
+        let clip_x: usize;
+        if p.x >= LCD_PX_PER_LINE {
+            clip_x = LCD_PX_PER_LINE as usize - 1;
+        } else if p.x < 0 {
+            clip_x = 0;
+        } else {
+            clip_x = p.x as usize;
+        }
+
+        let pc = PixelColor::from(color.0);
+
+        if pc == PixelColor::Light {
+            fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] |= 1 << (clip_x % 32)
+        } else {
+            fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] &= !(1 << (clip_x % 32))
+        }
+        // set the dirty bit on the line that contains the pixel
+        fb[clip_y * LCD_WORDS_PER_LINE + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
+    }
+
+    /// Retrieves a pixel value from the frame buffer; returns None if the point is out of bounds.
+    ///
+    /// Note: this has not be carefully tested as this API is not used by the legacy code base.
+    /// Anyone using this API for the first time may benefit in checking that it is correct.
+    fn get_pixel(&mut self, p: Point) -> Option<ColorNative> {
+        let fb: &mut [u32] = unsafe { self.fb.as_slice_mut() };
+        let clip_y: usize;
+        if p.y >= LCD_LINES {
+            return None;
+        } else if p.y < 0 {
+            return None;
+        } else {
+            clip_y = p.y as usize;
+        }
+
+        let clip_x: usize;
+        if p.x >= LCD_PX_PER_LINE {
+            return None;
+        } else if p.x < 0 {
+            return None;
+        } else {
+            clip_x = p.x as usize;
+        }
+        Some(ColorNative::from(
+            (fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] & (1 << (clip_x % 32))) as usize,
+        ));
+        todo!("Check that this API is implemented correctly before using it!");
+    }
+
+    /// XORs a pixel to what is in the existing frame buffer. The exact definition of "XOR" is somewhat
+    /// ambiguous for full color systems but is generally meant to imply a light/dark swap of foreground
+    /// and background colors for a color theme.
+    fn xor_pixel(&mut self, p: Point) {
+        let fb: &mut [u32] = unsafe { self.fb.as_slice_mut() };
+        let clip_y: usize;
+        if p.y >= LCD_LINES {
+            return;
+        } else if p.y < 0 {
+            return;
+        } else {
+            clip_y = p.y as usize;
+        }
+
+        let clip_x: usize;
+        if p.x >= LCD_PX_PER_LINE {
+            return;
+        } else if p.x < 0 {
+            return;
+        } else {
+            clip_x = p.x as usize;
+        }
+
+        fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] ^= 1 << (clip_x % 32);
+        // set the dirty bit on the line that contains the pixel
+        fb[clip_y * LCD_WORDS_PER_LINE + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
+    }
+
+    /// Swaps the drawable buffer to the screen and sends it to the hardware
+    fn draw(&mut self) { self.redraw(); }
+
+    /// Clears the drawable buffer
+    fn clear(&mut self) {
+        let fb: &mut [u32] = unsafe { self.fb.as_slice_mut() };
+        fb.fill(0xFFFF_FFFF);
+    }
+
+    /// Returns the size of the frame buffer as a Point
+    fn dimensions(&self) -> Point { self.screen_size() }
+
+    /// Returns a raw pointer to the frame buffer
+    unsafe fn raw_mut(&mut self) -> &mut ux_api::platform::FbRaw { self.native_buffer() }
 }
