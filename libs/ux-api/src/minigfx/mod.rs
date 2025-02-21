@@ -29,6 +29,8 @@ pub mod op;
 #[cfg(feature = "std")]
 use blitstr2::GlyphSprite;
 
+use crate::platform;
+
 /// Abstract trait for a FrameBuffer. Slower than native manipulation
 /// of the [u8] contents of a frame buffer, but more portable.
 pub trait FrameBuffer {
@@ -36,12 +38,18 @@ pub trait FrameBuffer {
     fn put_pixel(&mut self, p: Point, color: ColorNative);
     /// Retrieves a pixel value from the frame buffer; returns None if the point is out of bounds.
     fn get_pixel(&mut self, p: Point) -> Option<ColorNative>;
+    /// XORs a pixel to what is in the existing frame buffer. The exact definition of "XOR" is somewhat
+    /// ambiguous for full color systems but is generally meant to imply a light/dark swap of foreground
+    /// and background colors for a color theme.
+    fn xor_pixel(&mut self, p: Point);
     /// Swaps the drawable buffer to the screen and sends it to the hardware
     fn draw(&mut self);
     /// Clears the drawable buffer
     fn clear(&mut self);
     /// Returns the size of the frame buffer as a Point
     fn dimensions(&self) -> Point;
+    /// Returns a raw pointer to the frame buffer
+    unsafe fn raw_mut(&mut self) -> &mut platform::FbRaw;
 }
 
 /// A TypesetWord is a Word that has beet turned into sprites and placed at a specific location on the canvas,
