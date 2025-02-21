@@ -1,4 +1,4 @@
-use crate::api::{Circle, DrawStyle, Line, Pixel, PixelColor, Point, Rectangle, RoundedRectangle};
+use ux_api::minigfx::*;
 
 /// LCD Frame buffer bounds
 pub const LCD_WORDS_PER_LINE: usize = 11;
@@ -563,7 +563,7 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
  * author: nworbnhoj
  */
 #[cfg(feature = "ditherpunk")]
-use crate::api::Tile;
+use ux_api::minigfx::Tile;
 #[cfg(feature = "ditherpunk")]
 pub fn tile(fb: &mut LcdFB, tile: Tile, clip: Option<Rectangle>) {
     use std::cmp::{max, min};

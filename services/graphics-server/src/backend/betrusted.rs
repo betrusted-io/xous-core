@@ -1,9 +1,8 @@
 use susres::{RegManager, RegOrField, SuspendResume};
 use utralib::generated::*;
+use ux_api::minigfx::Point;
+use ux_api::platform::{LINES, WIDTH};
 use xous::MemoryRange;
-
-use crate::api::Point;
-use crate::api::{LINES, WIDTH};
 
 pub const FB_WIDTH_WORDS: usize = 11;
 pub const FB_WIDTH_PIXELS: usize = WIDTH as usize;
@@ -188,7 +187,7 @@ impl XousDisplay {
         self.redraw();
     }
 
-    pub fn screen_size(&self) -> Point { Point::new(FB_WIDTH_PIXELS as i16, FB_LINES as i16) }
+    pub fn screen_size(&self) -> Point { Point::new(FB_WIDTH_PIXELS as isize, FB_LINES as isize) }
 
     pub fn redraw(&mut self) {
         let mut busy_count = 0;

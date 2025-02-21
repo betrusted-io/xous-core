@@ -27,9 +27,7 @@ use blitstr2::style_macros::*;
 /// If the overall string cannot fit within the absolute bounds defined by the `max` area and/or the
 /// `bounds`, the rendering is halted, and ellipses are inserted at the end.
 use blitstr2::*;
-
-use crate::api::*;
-
+use ux_api::minigfx::*;
 /// A TypesetWord is a Word that has beet turned into sprites and placed at a specific location on the canvas,
 /// defined by its `bb` record. The intention is that this abstract representation can be passed directly to
 /// a rasterizer for rendering.
@@ -40,9 +38,9 @@ pub struct TypesetWord {
     /// top left origin point for rendering of the glyphs
     pub origin: Point,
     /// width of the word
-    pub width: i16,
+    pub width: isize,
     /// overall height for the word
-    pub height: i16,
+    pub height: isize,
     /// set if this `word` is not drawable, e.g. a newline placeholder.
     /// *however* the `Vec<GlyphSprite>` should still be checked for an insertion point, so that
     /// successive newlines properly get their insertion point drawn
@@ -67,23 +65,23 @@ impl TypesetWord {
         TypesetWord {
             gs: vec![gs],
             origin,
-            width: gs.wide as i16,
-            height: gs.high as i16,
+            width: gs.wide as isize,
+            height: gs.high as isize,
             non_drawable: false,
             strpos,
         }
     }
 
     pub fn push(&mut self, gs: GlyphSprite) {
-        self.width += (gs.wide + gs.kern) as i16;
-        self.height = self.height.max(gs.high as i16);
+        self.width += (gs.wide + gs.kern) as isize;
+        self.height = self.height.max(gs.high as isize);
         self.gs.push(gs);
     }
 
     /// if the pop is invalid, we'll return an invalid character. Just...don't do that. k?
     pub fn pop(&mut self) -> GlyphSprite {
         let gs = self.gs.pop().unwrap_or(NULL_GLYPH_SPRITE);
-        self.width -= (gs.wide + gs.kern) as i16;
+        self.width -= (gs.wide + gs.kern) as isize;
         // we can't undo any height transformations, unfortunately, because we don't know what the previous
         // state was but it's fairly minor if text is set funny on a line because text overflowed and
         // had e.g. emoji buried amongst small font text...
@@ -124,14 +122,14 @@ impl ComposedType {
         ComposedType { words, bounding_box: bounds, cursor, overflow }
     }
 
-    pub fn bb_width(&self) -> i16 { self.bounding_box.max.x as i16 - self.bounding_box.min.x as i16 }
+    pub fn bb_width(&self) -> isize { self.bounding_box.max.x as isize - self.bounding_box.min.x as isize }
 
-    pub fn bb_height(&self) -> i16 { self.bounding_box.max.y as i16 - self.bounding_box.min.y as i16 }
+    pub fn bb_height(&self) -> isize { self.bounding_box.max.y as isize - self.bounding_box.min.y as isize }
 
     /// Note: it is up to the caller to ensure that clip_rect is within the renderable screen area. We do no
     /// additional checks around this.
     pub fn render(&self, frbuf: &mut [u32; FB_SIZE], offset: Point, invert: bool, clip_rect: Rectangle) {
-        const MAX_GLYPH_MARGIN: i16 = 16;
+        const MAX_GLYPH_MARGIN: isize = 16;
         // let mut strpos; // just for debugging insertion points
         for word in self.words.iter() {
             // strpos = word.strpos;
@@ -141,8 +139,8 @@ impl ComposedType {
                 // the offset can actually be negative for good reasons, e.g., we're doing a scrollable
                 // buffer, but the blitstr2 was written assuming only positive offsets. Handle
                 // this here.
-                let maybe_x = offset.x + point.x as i16;
-                let maybe_y = offset.y + point.y as i16;
+                let maybe_x = offset.x + point.x as isize;
+                let maybe_y = offset.y + point.y as isize;
                 let mut renderable = true;
                 // allow MAX_GLYPH_MARGIN so we can get partial rendering of text that's slightly off screen
                 if maybe_x < (clip_rect.tl().x - MAX_GLYPH_MARGIN) || maybe_x > clip_rect.br().x {
@@ -153,7 +151,7 @@ impl ComposedType {
                     log::trace!("not renderable maybe_y: {}, {:?}", maybe_y, clip_rect);
                     renderable = false;
                 }
-                point.x += (glyph.wide + glyph.kern) as i16; // keep scorekeeping on this, because it could eventually become renderable
+                point.x += (glyph.wide + glyph.kern) as isize; // keep scorekeeping on this, because it could eventually become renderable
                 if !renderable {
                     // quickly short circuit over any text that is definitely outside of our clipping
                     // rectangle
@@ -193,11 +191,11 @@ impl ComposedType {
                     if glyph.insert {
                         // log::info!("insert at {},{}", glyph.ch, strpos - 1);
                         // draw the insertion point after the glyph's position
-                        crate::op::line(
+                        ux_api::minigfx::op::line(
                             frbuf,
                             Line::new(
-                                Point::new(maybe_x as i16 - 1, maybe_y as _),
-                                Point::new(maybe_x as i16 - 1, maybe_y as i16 + glyph.high as i16),
+                                Point::new(maybe_x as isize - 1, maybe_y as _),
+                                Point::new(maybe_x as isize - 1, maybe_y as isize + glyph.high as isize),
                             ),
                             Some(clip_rect),
                             invert,
@@ -246,7 +244,7 @@ pub struct Typesetter {
     s: String,
     base_style: GlyphStyle,
     overflow: bool,
-    max_width: i16,
+    max_width: isize,
     last_line_height: usize, // scorecarding for the very last line on the loop exit
 }
 impl Typesetter {
@@ -519,19 +517,21 @@ impl Typesetter {
         // repeated, bare newlines will have a candidate height of 0, as it contains no glyphs. correct for
         // that.
         let corrected_height =
-            if self.candidate.height == 0 { self.cursor.line_height as i16 } else { self.candidate.height };
+            if self.candidate.height == 0 { self.cursor.line_height as isize } else { self.candidate.height };
         log::trace!(
             "{} < {}",
-            corrected_height + self.cursor.pt.y + self.cursor.line_height as i16,
+            corrected_height + self.cursor.pt.y + self.cursor.line_height as isize,
             self.bb.max.y
         );
-        corrected_height + self.cursor.pt.y + (self.cursor.line_height as i16) < self.bb.max.y as i16
+        corrected_height + self.cursor.pt.y + (self.cursor.line_height as isize) < self.bb.max.y as isize
     }
 
-    fn does_word_fit_on_line(&self) -> bool { self.candidate.width + self.cursor.pt.x < self.bb.max.x as i16 }
+    fn does_word_fit_on_line(&self) -> bool {
+        self.candidate.width + self.cursor.pt.x < self.bb.max.x as isize
+    }
 
     fn is_word_longer_than_line(&self) -> bool {
-        self.candidate.width >= (self.bb.max.x as i16 - self.bb.min.x as i16)
+        self.candidate.width >= (self.bb.max.x as isize - self.bb.min.x as isize)
     }
 
     fn is_insert_point(&self) -> bool {
@@ -574,8 +574,8 @@ impl Typesetter {
     fn move_candidate_to_newline(&mut self) {
         // advance the rendering line, without inserting a newline placeholder
         self.last_line_height = self.cursor.line_height;
-        self.cursor.pt.y += self.cursor.line_height as i16;
-        self.cursor.pt.x = self.bb.min.x as i16;
+        self.cursor.pt.y += self.cursor.line_height as isize;
+        self.cursor.pt.x = self.bb.min.x as isize;
         self.cursor.line_height = self.candidate.height as usize;
         // now set the current candidate word's origin to the beginning of this new line
         self.candidate.origin = self.cursor.pt;
@@ -606,7 +606,7 @@ impl Typesetter {
     /// set to our space point, because the caller will have already stashed the previously formed word
     fn try_append_space(&mut self, composition: &mut Vec<TypesetWord>) -> bool {
         assert!(self.candidate.gs.len() == 0, "self.candidate was not set to a new state prior to this call");
-        if (self.cursor.pt.x + self.space.wide as i16) < self.bb.max.x as i16 {
+        if (self.cursor.pt.x + self.space.wide as isize) < self.bb.max.x as isize {
             // our candidate word is "just as space"
             let mut candidate_space = self.space.clone();
             if self.is_insert_point() {
@@ -617,7 +617,7 @@ impl Typesetter {
             self.cursor.line_height = self.cursor.line_height.max(self.space.high as usize);
             // if we're at the beginning of a line, mark the candidate word (that just contains a space) as
             // non-drawable
-            if self.cursor.pt.x == self.bb.min.x as i16 {
+            if self.cursor.pt.x == self.bb.min.x as isize {
                 self.candidate.non_drawable = true;
             }
             // now commit it
@@ -631,7 +631,7 @@ impl Typesetter {
     /// resets the cursor state to the top left of the box for the next line to render.
     fn oneline_epilogue(&mut self) {
         self.cursor.pt.y = 0; // this should be redundant, as we never have more than one line in this mode
-        self.cursor.pt.x = self.bb.min.x as i16;
+        self.cursor.pt.x = self.bb.min.x as isize;
         if self.cursor.line_height == 0 {
             // in case we have successive newlines, just default to the "regular" height
             self.cursor.line_height = glyph_to_height_hint(GlyphStyle::Regular);

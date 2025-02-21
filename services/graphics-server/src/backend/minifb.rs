@@ -3,11 +3,10 @@
 use std::sync::{Arc, Mutex, mpsc};
 
 use minifb::{Key, Window, WindowOptions};
+use ux_api::minigfx::Point;
+use ux_api::platform::{LINES, WIDTH};
 
-use crate::api::Point;
-use crate::api::{LINES, WIDTH};
-
-const HEIGHT: i16 = LINES;
+const HEIGHT: isize = LINES as isize;
 
 /// Width of the screen in 32-bit words
 const WIDTH_WORDS: usize = 11;
@@ -111,7 +110,7 @@ impl XousDisplay {
         self.redraw();
     }
 
-    pub fn screen_size(&self) -> Point { Point::new(WIDTH as i16, HEIGHT as i16) }
+    pub fn screen_size(&self) -> Point { Point::new(WIDTH as isize, HEIGHT as isize) }
 
     pub fn blit_screen(&mut self, bmp: &[u32]) {
         for (dest, src) in self.emulated_buffer.iter_mut().zip(bmp.iter()) {
