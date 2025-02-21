@@ -3,6 +3,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 #[cfg(feature = "std")]
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
+#[cfg(feature = "std")]
 use num_traits::ToPrimitive;
 
 #[cfg(feature = "std")]
