@@ -9,8 +9,8 @@ pub const ROW: isize = 128;
 pub const PAGE: u8 = ROW as u8 / 8;
 
 const MAX_FPS: usize = 60;
-const DARK_COLOUR: u32 = 0xB5B5AD;
-const LIGHT_COLOUR: u32 = 0x1B1B19;
+const DARK_COLOUR: u32 = 0x161616;
+const LIGHT_COLOUR: u32 = 0xC5C5BD;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct MonoColor(ColorNative);
@@ -135,10 +135,6 @@ impl<'a> Oled128x128 {
         }
     }
 
-    fn set_data(&self) {}
-
-    fn set_command(&self) {}
-
     pub fn buffer_swap(&mut self) { self.active_buffer = self.active_buffer.swap(); }
 
     pub fn buffer_mut(&mut self) -> &mut [u32] { &mut self.buffers[self.active_buffer.as_index()] }
@@ -170,7 +166,7 @@ impl FrameBuffer for Oled128x128 {
             return;
         }
         let buffer = self.buffer_mut();
-        buffer[(p.x + p.y * ROW) as usize] = on.0 as u32;
+        buffer[(p.x + (ROW - 1 - p.y) * COLUMN) as usize] = on.0 as u32;
     }
 
     fn dimensions(&self) -> Point { Point::new(COLUMN, ROW) }
@@ -182,6 +178,24 @@ impl FrameBuffer for Oled128x128 {
         let buffer = self.buffer();
         let color = ColorNative(buffer[(p.x + p.y * ROW) as usize] as usize);
         Some(color)
+    }
+
+    fn xor_pixel(&mut self, p: Point) {
+        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+            return;
+        }
+        let buffer = self.buffer_mut();
+        let color: Mono = ColorNative(buffer[(p.x + p.y * ROW) as usize] as usize).into();
+        let xor_color = if color == Mono::Black { Mono::White } else { Mono::Black };
+        let on: ColorNative = xor_color.into();
+        buffer[(p.x + (ROW - 1 - p.y) * COLUMN) as usize] = on.0 as u32;
+    }
+
+    /// This is highly unsafe. Don't use it - this is only implemented to provide cross-compatibility
+    /// with other platforms that require this access.
+    unsafe fn raw_mut(&mut self) -> &mut ux_api::platform::FbRaw {
+        let len = self.native_buffer.lock().unwrap().len();
+        core::slice::from_raw_parts_mut(self.native_buffer.lock().unwrap().as_mut_ptr(), len)
     }
 }
 

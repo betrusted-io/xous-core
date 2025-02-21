@@ -16,14 +16,12 @@ use api::Opcode; // if you prefer to map the api into your local namespace
 #[cfg(feature = "ditherpunk")]
 pub use bitmap::{Bitmap, DecodePng, Img, PixelType};
 pub use blitstr2::GlyphStyle;
-pub use graphics_server::api::PixelColor;
-#[cfg(feature = "ditherpunk")]
-pub use graphics_server::api::Tile;
-pub use graphics_server::api::{Circle, Gid, Line, RoundedRectangle, TokenClaim};
-pub use graphics_server::api::{Point, Rectangle};
-pub use graphics_server::api::{TextOp, TextView};
 use ime_plugin_api::{ApiToken, ImefCallback};
 use num_traits::*;
+pub use ux_api::minigfx::PixelColor;
+#[cfg(feature = "ditherpunk")]
+pub use ux_api::minigfx::Tile;
+pub use ux_api::service::api::*;
 use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;
 
@@ -153,8 +151,8 @@ impl Gam {
     /// This will also truncate any text that is too long to fit into a single paged-sized transaction, as set
     /// by `graphics_server::api::TEXTVIEW_LEN`
     pub fn post_textview(&self, tv: &mut TextView) -> Result<(), xous::Error> {
-        if tv.text.len() > graphics_server::api::TEXTVIEW_LEN {
-            tv.text.truncate(graphics_server::api::TEXTVIEW_LEN);
+        if tv.text.len() > ux_api::minigfx::TEXTVIEW_LEN {
+            tv.text.truncate(ux_api::minigfx::TEXTVIEW_LEN);
         }
         tv.set_op(TextOp::Render);
         // force the clip_rect to none, in case a stale value from a previous bounds computation was hanging

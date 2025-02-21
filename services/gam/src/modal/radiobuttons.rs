@@ -1,9 +1,9 @@
 use core::fmt::Write;
 
-use graphics_server::api::*;
 use locales::t;
 #[cfg(feature = "tts")]
 use tts_frontend::TtsFrontend;
+use ux_api::minigfx::*;
 use xous_ipc::Buffer;
 
 use crate::*;
@@ -14,7 +14,7 @@ pub struct RadioButtons {
     pub action_conn: xous::CID,
     pub action_opcode: u32,
     pub action_payload: RadioButtonPayload, // the current "radio button" selection
-    pub select_index: i16,                  // the current candidate to be selected
+    pub select_index: isize,                // the current candidate to be selected
     pub is_password: bool,
     gam: crate::Gam,
     #[cfg(feature = "tts")]
@@ -53,12 +53,12 @@ impl RadioButtons {
 impl ActionApi for RadioButtons {
     fn set_action_opcode(&mut self, op: u32) { self.action_opcode = op }
 
-    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
+    fn height(&self, glyph_height: isize, margin: isize, _modal: &Modal) -> isize {
         // total items, then +1 for the "Okay" message
-        (self.items.len() as i16 + 1) * glyph_height + margin * 2 + margin * 2 + 5 // +4 for some bottom margin slop
+        (self.items.len() as isize + 1) * glyph_height + margin * 2 + margin * 2 + 5 // +4 for some bottom margin slop
     }
 
-    fn redraw(&self, at_height: i16, modal: &Modal) {
+    fn redraw(&self, at_height: isize, modal: &Modal) {
         let color = if self.is_password { PixelColor::Light } else { PixelColor::Dark };
 
         // prime a textview with the correct general style parameters
@@ -174,13 +174,13 @@ impl ActionApi for RadioButtons {
                 }
             }
             '↓' => {
-                if self.select_index < self.items.len() as i16 + 1 {
+                if self.select_index < self.items.len() as isize + 1 {
                     // +1 is the "OK" button
                     self.select_index += 1;
                 }
             }
             '∴' | '\u{d}' => {
-                if self.select_index < self.items.len() as i16 {
+                if self.select_index < self.items.len() as isize {
                     self.action_payload =
                         RadioButtonPayload::new(self.items[self.select_index as usize].as_str());
                     #[cfg(feature = "tts")]

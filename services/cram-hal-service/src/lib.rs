@@ -4,7 +4,6 @@ pub mod trng;
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use api::Opcode;
 use cramium_api::*;
 pub use i2c_lib::*;
 use num_traits::*;
@@ -27,7 +26,7 @@ impl UdmaGlobal {
         xous::send_message(
             self.conn,
             xous::Message::new_blocking_scalar(
-                Opcode::ConfigureUdmaClock.to_usize().unwrap(),
+                HalOpcode::ConfigureUdmaClock.to_usize().unwrap(),
                 peripheral as u32 as usize,
                 if enable { 1 } else { 0 },
                 0,
@@ -49,7 +48,7 @@ impl UdmaGlobal {
         xous::send_message(
             self.conn,
             xous::Message::new_blocking_scalar(
-                Opcode::ConfigureUdmaEvent.to_usize().unwrap(),
+                HalOpcode::ConfigureUdmaEvent.to_usize().unwrap(),
                 peripheral as u32 as usize,
                 et_u32 as usize,
                 to_channel as u32 as usize,
@@ -63,7 +62,7 @@ impl UdmaGlobal {
         xous::send_message(
             self.conn,
             xous::Message::new_blocking_scalar(
-                Opcode::PeriphReset.to_usize().unwrap(),
+                HalOpcode::PeriphReset.to_usize().unwrap(),
                 peripheral as u32 as usize,
                 0,
                 0,

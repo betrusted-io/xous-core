@@ -5,9 +5,11 @@ pub mod cursor;
 mod fontmap;
 pub mod minigfx;
 pub mod platform;
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", any(feature = "cramium-soc", feature = "hosted-baosec")))]
 pub mod widgets;
 #[cfg(feature = "std")]
-mod wordwrap;
+pub mod wordwrap;
 #[cfg(feature = "std")]
 pub const SYSTEM_STYLE: blitstr2::GlyphStyle = blitstr2::GlyphStyle::Tall;
+#[cfg(feature = "std")]
+pub mod service;

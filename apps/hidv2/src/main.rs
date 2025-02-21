@@ -4,10 +4,11 @@
 use core::fmt::Write;
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use graphics_server::api::GlyphStyle;
-use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView};
+use blitstr2::GlyphStyle;
 use num_traits::*;
 use usb_device_xous::UsbHid;
+use ux_api::minigfx::*;
+use ux_api::service::api::*;
 
 pub(crate) const SERVER_NAME_HIDV2: &str = "_HIDv2_";
 

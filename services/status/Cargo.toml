@@ -17,7 +17,7 @@ llio = { path = "../llio" }
 xous = "0.9.64"
 xous-ipc = "0.10.4"
 xous-names = { package = "xous-api-names", version = "0.9.65" }
-graphics-server = { path = "../graphics-server" }
+ux-api = { path = "../../libs/ux-api" }
 gam = { path = "../gam" }
 locales = { path = "../../locales" }
 susres = { package = "xous-api-susres", version = "0.9.63" }

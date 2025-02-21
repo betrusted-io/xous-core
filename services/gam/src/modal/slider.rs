@@ -1,6 +1,6 @@
 use core::fmt::Write;
 
-use graphics_server::api::*;
+use ux_api::minigfx::*;
 
 use crate::*;
 
@@ -83,7 +83,7 @@ impl Slider {
     }
 }
 impl ActionApi for Slider {
-    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
+    fn height(&self, glyph_height: isize, margin: isize, _modal: &Modal) -> isize {
         /*
         margin
             min            max    <- glyph height
@@ -96,7 +96,7 @@ impl ActionApi for Slider {
 
     fn set_action_opcode(&mut self, op: u32) { self.action_opcode = op }
 
-    fn redraw(&self, at_height: i16, modal: &Modal) {
+    fn redraw(&self, at_height: isize, modal: &Modal) {
         let color = if self.is_password { PixelColor::Light } else { PixelColor::Dark };
         let fill_color = if self.is_password { PixelColor::Dark } else { PixelColor::Light };
 
@@ -145,7 +145,7 @@ impl ActionApi for Slider {
             let textwidth = if let Some(bounds) = tv.bounds_computed {
                 bounds.br.x - bounds.tl.x
             } else {
-                maxwidth as i16
+                maxwidth as isize
             };
             let offset = (modal.canvas_width - textwidth) / 2;
             // render current setting
@@ -170,7 +170,7 @@ impl ActionApi for Slider {
         draw_list.push(GamObjectType::Rect(outer_rect)).unwrap();
         let total_width = modal.canvas_width - modal.margin * 4;
         let slider_point =
-            (total_width * (self.action_payload - self.min) as i16) / (self.max - self.min) as i16;
+            (total_width * (self.action_payload - self.min) as isize) / (self.max - self.min) as isize;
         let inner_rect = Rectangle::new_with_style(
             Point::new(modal.margin * 2, modal.margin + modal.line_height + at_height),
             Point::new(modal.margin * 2 + slider_point, modal.margin + modal.line_height * 2 + at_height),

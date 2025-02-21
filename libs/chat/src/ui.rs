@@ -2,13 +2,14 @@ use std::cmp::min;
 use std::fmt::Write as TextWrite;
 use std::io::{Error, ErrorKind, Read, Write};
 
+use blitstr2::GlyphStyle;
 use dialogue::{Dialogue, post::Post};
 use gam::{MenuMatic, UxRegistration, menu_matic};
-use graphics_server::api::GlyphStyle;
-use graphics_server::{DrawStyle, Gid, Line, PixelColor, Point, Rectangle, TextBounds, TextView};
 use locales::t;
 use modals::Modals;
 use ticktimer_server::Ticktimer;
+use ux_api::minigfx::*;
+use ux_api::service::api::*;
 use xous::{CID, MessageEnvelope};
 use xous_names::XousNames;
 
@@ -29,7 +30,7 @@ pub struct VisualProperties {
     pub margin: Point,        // margin to edge of canvas
     pub bubble_margin: Point, // margin of text in bubbles
     pub bubble_radius: u16,
-    pub bubble_space: i16, // spacing between text bubbles
+    pub bubble_space: isize, // spacing between text bubbles
 }
 #[allow(dead_code)]
 pub(crate) struct Ui {
@@ -145,7 +146,7 @@ impl Ui {
         let bubble_properties = VisualProperties {
             canvas,
             total_screensize: screensize,
-            layout_screensize: Point::new(screensize.x, screensize.y - status_height as i16),
+            layout_screensize: Point::new(screensize.x, screensize.y - status_height as isize),
             status_height,
             bubble_width: ((screensize.x / 5) * 4) as u16, // 80% width for the text bubbles
             margin: Point::new(4, 4),
@@ -482,7 +483,7 @@ impl Ui {
             .draw_rectangle(
                 self.vp.canvas,
                 Rectangle::new_with_style(
-                    Point::new(0, self.vp.status_height as i16),
+                    Point::new(0, self.vp.status_height as isize),
                     self.vp.total_screensize,
                     DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 },
                 ),
@@ -705,9 +706,9 @@ impl Ui {
 
             // 4. draw the text bubbles, in the order computed in step 2.
             let mut y = if self.layout_topdown {
-                self.vp.status_height as i16 + self.vp.bubble_margin.y
+                self.vp.status_height as isize + self.vp.bubble_margin.y
             } else {
-                self.vp.status_height as i16 + self.vp.layout_screensize.y - self.vp.bubble_margin.y
+                self.vp.status_height as isize + self.vp.layout_screensize.y - self.vp.bubble_margin.y
             };
             log::debug!(
                 "Laying out with selected {:?} in range {:?}; topdown: {:?}",
@@ -745,13 +746,13 @@ impl Ui {
                             );
                         }
                         if self.layout_topdown {
-                            y += actual_r.height() as i16;
+                            y += actual_r.height() as isize;
                         } else {
-                            y -= actual_r.height() as i16;
+                            y -= actual_r.height() as isize;
                         }
                         // sanity check the computations
-                        if y > self.vp.layout_screensize.y + self.vp.status_height as i16
-                            || y < self.vp.status_height as i16
+                        if y > self.vp.layout_screensize.y + self.vp.status_height as isize
+                            || y < self.vp.status_height as isize
                         {
                             log::error!(
                                 "Computed range of elements sent to layout overflows at index {}",
@@ -779,8 +780,8 @@ impl Ui {
             // 5. draw status bar on top of any post that happens to flow over the top...
             self.gam.post_textview(&mut self.status_tv).expect("couldn't render status bar");
             let status_border = Line::new(
-                Point::new(0, self.vp.status_height as i16),
-                Point::new(self.vp.total_screensize.x, self.vp.status_height as i16),
+                Point::new(0, self.vp.status_height as isize),
+                Point::new(self.vp.total_screensize.x, self.vp.status_height as isize),
             );
             self.gam.draw_line(self.vp.canvas, status_border).expect("couldn't draw status lower border");
 

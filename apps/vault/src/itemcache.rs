@@ -478,7 +478,7 @@ impl ItemLists {
         self.li_mut(list_type).remove(key)
     }
 
-    pub fn set_items_per_screen(&mut self, ips: i16) {
+    pub fn set_items_per_screen(&mut self, ips: isize) {
         self.fido.set_items_per_screen(ips as usize);
         self.totp.set_items_per_screen(ips as usize);
         self.pw.set_items_per_screen(ips as usize);

@@ -1,9 +1,9 @@
 use core::fmt::Write;
 
-use graphics_server::api::*;
 use locales::t;
 #[cfg(feature = "tts")]
 use tts_frontend::TtsFrontend;
+use ux_api::minigfx::*;
 use xous_ipc::Buffer;
 
 use crate::*;
@@ -14,7 +14,7 @@ pub struct CheckBoxes {
     pub action_conn: xous::CID,
     pub action_opcode: u32,
     pub action_payload: CheckBoxPayload,
-    pub select_index: i16,
+    pub select_index: isize,
     gam: crate::Gam,
     #[cfg(feature = "tts")]
     pub tts: TtsFrontend,
@@ -42,17 +42,17 @@ impl CheckBoxes {
 impl ActionApi for CheckBoxes {
     fn set_action_opcode(&mut self, op: u32) { self.action_opcode = op }
 
-    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
+    fn height(&self, glyph_height: isize, margin: isize, _modal: &Modal) -> isize {
         // account for hard line-breaks in items
         let line_break_count =
             self.items.iter().fold(0, |acc, item| acc + item.as_str().chars().filter(|c| *c == '\n').count());
         // total items + line-breaks +1 blank line +1 "Okay" message
-        let line_count: i16 = (self.items.len() + line_break_count + 1 + 1) as i16;
+        let line_count: isize = (self.items.len() + line_break_count + 1 + 1) as isize;
 
         line_count * glyph_height + 2 * margin
     }
 
-    fn redraw(&self, at_height: i16, modal: &Modal) {
+    fn redraw(&self, at_height: isize, modal: &Modal) {
         // prime a textview with the correct general style parameters
         let mut tv = TextView::new(modal.canvas, TextBounds::BoundingBox(Rectangle::new_coords(0, 0, 1, 1)));
         tv.ellipsis = true;
@@ -70,11 +70,11 @@ impl ActionApi for CheckBoxes {
 
         let mut cur_line = 0;
         let mut cur_y = at_height;
-        let mut cur_line_height: i16;
+        let mut cur_line_height: isize;
         let mut do_okay = true;
         for item in self.items.iter() {
             // account for hard line-breaks
-            let item_line_count: i16 = 1 + item.as_str().chars().filter(|c| *c == '\n').count() as i16;
+            let item_line_count: isize = 1 + item.as_str().chars().filter(|c| *c == '\n').count() as isize;
             cur_line_height = modal.line_height * item_line_count + item_line_count; // extra pixel between lines
             if cur_line == self.select_index {
                 #[cfg(feature = "tts")]
@@ -173,7 +173,7 @@ impl ActionApi for CheckBoxes {
                 }
             }
             '↓' => {
-                if self.select_index < self.items.len() as i16 + 1 {
+                if self.select_index < self.items.len() as isize + 1 {
                     // +1 is the "OK" button
                     self.select_index += 1;
                 }

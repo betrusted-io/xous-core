@@ -3,6 +3,7 @@ use core::ops::Add;
 use blitstr2::GlyphStyle;
 
 use super::*;
+use crate::service::api::Gid;
 
 /// coordinates are local to the canvas, not absolute to the screen
 #[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
@@ -84,8 +85,9 @@ pub struct TextView {
     // graphics-server only the GAM should be sending TextViews to the graphics-server, and a different
     // coding scheme is used for that link.
     operation: TextOp,
+    canvas: Gid, // GID of the canvas to draw on
     pub clip_rect: Option<Rectangle>, /* this is set by the GAM to the canvas' clip_rect; needed by gfx
-                                       * for drawing. Note this is in screen coordinates. */
+                  * for drawing. Note this is in screen coordinates. */
 
     pub untrusted: bool, // render content with random stipples to indicate the strings within are untrusted
     pub token: Option<[u32; 4]>, // optional 128-bit token which is presented to prove a field's trustability
@@ -121,8 +123,9 @@ pub struct TextView {
     pub text: String,
 }
 impl TextView {
-    pub fn new(bounds_hint: TextBounds) -> Self {
+    pub fn new(canvas: Gid, bounds_hint: TextBounds) -> Self {
         TextView {
+            canvas,
             operation: TextOp::Nop,
             untrusted: true,
             token: None,
@@ -155,11 +158,14 @@ impl TextView {
 
     pub fn get_op(&self) -> TextOp { self.operation }
 
+    pub fn get_canvas_gid(&self) -> Gid { self.canvas }
+
     pub fn to_str(&self) -> &str { self.text.as_str() }
 
     pub fn clear_str(&mut self) { self.text.clear() }
 
     pub fn populate_from(&mut self, t: &TextView) {
+        self.canvas = t.canvas;
         self.operation = t.operation;
         self.untrusted = t.untrusted;
         self.token = t.token;

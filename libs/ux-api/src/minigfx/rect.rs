@@ -191,6 +191,25 @@ impl Rectangle {
         self.br.x += margin.x;
         self.br.y += margin.y;
     }
+
+    /// Make a rectangle of the full screen size
+    pub fn full_screen() -> Rectangle {
+        Rectangle {
+            tl: Point::new(0, 0),
+            br: Point::new(crate::platform::WIDTH as isize, crate::platform::HEIGHT as isize),
+            style: DrawStyle::default(),
+        }
+    }
+
+    /// Make a rectangle of the screen size minus padding
+    pub fn padded_screen() -> Rectangle {
+        let pad = 6;
+        Rectangle {
+            tl: Point::new(pad, pad),
+            br: Point::new(crate::platform::WIDTH as isize - pad, crate::platform::HEIGHT as isize - pad),
+            style: DrawStyle::default(),
+        }
+    }
 }
 
 //////////////////////// Rounded Rectangle

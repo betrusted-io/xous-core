@@ -85,3 +85,53 @@ impl Neg for Point {
 
     fn neg(self) -> Self::Output { Point::new(-self.x, -self.y) }
 }
+
+impl From<(i16, i16)> for Point {
+    fn from(other: (i16, i16)) -> Self { Point::new(other.0 as isize, other.1 as isize) }
+}
+
+impl From<[i16; 2]> for Point {
+    fn from(other: [i16; 2]) -> Self { Point::new(other[0] as isize, other[1] as isize) }
+}
+
+impl From<&[i16; 2]> for Point {
+    fn from(other: &[i16; 2]) -> Self { Point::new(other[0] as isize, other[1] as isize) }
+}
+
+impl From<(isize, isize)> for Point {
+    fn from(other: (isize, isize)) -> Self { Point::new(other.0 as isize, other.1 as isize) }
+}
+
+impl From<[isize; 2]> for Point {
+    fn from(other: [isize; 2]) -> Self { Point::new(other[0] as isize, other[1] as isize) }
+}
+
+impl From<&[isize; 2]> for Point {
+    fn from(other: &[isize; 2]) -> Self { Point::new(other[0] as isize, other[1] as isize) }
+}
+
+impl From<Point> for (i16, i16) {
+    fn from(other: Point) -> (i16, i16) { (other.x as i16, other.y as i16) }
+}
+
+impl From<&Point> for (i16, i16) {
+    fn from(other: &Point) -> (i16, i16) { (other.x as i16, other.y as i16) }
+}
+
+impl From<Point> for (isize, isize) {
+    fn from(other: Point) -> (isize, isize) { (other.x, other.y) }
+}
+
+impl From<&Point> for (isize, isize) {
+    fn from(other: &Point) -> (isize, isize) { (other.x as isize, other.y as isize) }
+}
+
+/// Warning: bounds check on x/y is not implemented to improve performance
+impl From<Point> for usize {
+    fn from(point: Point) -> usize { (point.x as usize) << 16 | (point.y as usize) }
+}
+
+/// Warning: bounds check on x/y is not implemented to improve performance
+impl From<usize> for Point {
+    fn from(p: usize) -> Point { Point { x: (p >> 16 & 0xffff) as _, y: (p & 0xffff) as _ } }
+}

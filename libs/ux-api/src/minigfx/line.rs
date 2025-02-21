@@ -1,6 +1,7 @@
 use crate::minigfx::*;
 
-#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug, Copy, Clone)]
 pub struct Line {
     pub start: Point,
     pub end: Point,

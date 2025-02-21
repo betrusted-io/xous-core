@@ -1,13 +1,13 @@
 use core::fmt::Write;
 use std::convert::TryInto;
 
-use graphics_server::api::*;
 use locales::t;
 use qrcode::{Color, QrCode};
+use ux_api::minigfx::*;
 
 use crate::*;
 
-pub(crate) const QUIET_MODULES: i16 = 2;
+pub(crate) const QUIET_MODULES: isize = 2;
 
 #[derive(Debug)]
 pub struct Notification {
@@ -65,7 +65,7 @@ impl Notification {
         }
     }
 
-    fn draw_text(&self, at_height: i16, modal: &Modal) {
+    fn draw_text(&self, at_height: isize, modal: &Modal) {
         // prime a textview with the correct general style parameters
         let mut tv = TextView::new(modal.canvas, TextBounds::BoundingBox(Rectangle::new_coords(0, 0, 1, 1)));
         tv.ellipsis = true;
@@ -96,14 +96,14 @@ impl Notification {
         modal.gam.post_textview(&mut tv).expect("couldn't post tv");
     }
 
-    fn draw_qrcode(&self, at_height: i16, modal: &Modal) {
+    fn draw_qrcode(&self, at_height: isize, modal: &Modal) {
         // calculate pixel size of each module in the qrcode
-        let qrcode_modules: i16 = self.qrwidth.try_into().unwrap();
-        let modules: i16 = qrcode_modules + 2 * QUIET_MODULES;
+        let qrcode_modules: isize = self.qrwidth.try_into().unwrap();
+        let modules: isize = qrcode_modules + 2 * QUIET_MODULES;
         let canvas_width = modal.canvas_width - 2 * modal.margin;
-        let mod_size_px: i16 = canvas_width / modules;
+        let mod_size_px: isize = canvas_width / modules;
         let qrcode_width_px = qrcode_modules * mod_size_px;
-        let quiet_px: i16 = (canvas_width - qrcode_width_px) / 2;
+        let quiet_px: isize = (canvas_width - qrcode_width_px) / 2;
 
         // Iterate thru qrcode and stamp each square module like a typewriter
         let black = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
@@ -115,7 +115,7 @@ impl Notification {
             Rectangle::new_with_style(Point::new(0, 0), Point::new(mod_size_px - 1, mod_size_px - 1), black);
         let step = Point::new(mod_size_px, 0);
         let cr_lf = Point::new(-qrcode_modules * mod_size_px, mod_size_px);
-        let mut j: i16;
+        let mut j: isize;
         module.translate(Point::new(right, top));
         for (i, stamp) in self.qrcode.iter().enumerate() {
             j = i.try_into().unwrap();
@@ -132,7 +132,7 @@ impl Notification {
 impl ActionApi for Notification {
     fn set_action_opcode(&mut self, op: u32) { self.action_opcode = op }
 
-    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
+    fn height(&self, glyph_height: isize, margin: isize, _modal: &Modal) -> isize {
         if self.manual_dismiss {
             let qr_height = if self.qrwidth > 0 { 300 } else { 0 };
             glyph_height + margin * 2 + 5 + qr_height
@@ -141,7 +141,7 @@ impl ActionApi for Notification {
         }
     }
 
-    fn redraw(&self, at_height: i16, modal: &Modal) {
+    fn redraw(&self, at_height: isize, modal: &Modal) {
         if self.manual_dismiss {
             self.draw_text(at_height, modal);
 

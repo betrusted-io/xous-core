@@ -25,7 +25,7 @@ pub enum SpimChannel {
 }
 
 #[repr(u32)]
-#[derive(Copy, Clone, num_derive::FromPrimitive)]
+#[derive(Copy, Clone, num_derive::FromPrimitive, Debug)]
 pub enum PeriphId {
     Uart0 = 1 << 0,
     Uart1 = 1 << 1,

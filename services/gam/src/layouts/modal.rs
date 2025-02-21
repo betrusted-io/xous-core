@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 #[cfg(feature = "cramium-soc")]
 use cram_hal_service::trng;
-use graphics_server::*;
+use ux_api::minigfx::*;
+use ux_api::service::api::*;
 
 use crate::Canvas;
 use crate::api::CanvasType;
@@ -13,12 +14,12 @@ const TRUST_OFFSET: u8 = 16;
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct ModalLayout {
     pub modal: Gid,
-    modal_y_pad: i16,
-    _modal_x_pad: i16,
-    modal_min_height: i16,
+    modal_y_pad: isize,
+    _modal_x_pad: isize,
+    modal_min_height: isize,
     screensize: Point,
-    _height: i16,
-    _modal_y_max: i16,
+    _height: isize,
+    _modal_y_max: isize,
 }
 impl ModalLayout {
     pub fn init(
@@ -28,10 +29,11 @@ impl ModalLayout {
     ) -> Result<ModalLayout, xous::Error> {
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
         // get the height of various text regions to compute the layout
-        let height: i16 = gfx.glyph_height_hint(gam::SYSTEM_STYLE).expect("couldn't get glyph height") as i16;
+        let height: isize =
+            gfx.glyph_height_hint(gam::SYSTEM_STYLE).expect("couldn't get glyph height") as isize;
 
-        const MODAL_Y_PAD: i16 = 80;
-        const MODAL_X_PAD: i16 = 20;
+        const MODAL_Y_PAD: isize = 80;
+        const MODAL_X_PAD: isize = 20;
         // base trust - 1 so that status bar can always ride on top
         let modal_canvas = Canvas::new(
             Rectangle::new_coords(
@@ -79,14 +81,14 @@ impl LayoutApi for ModalLayout {
     fn resize_height(
         &mut self,
         _gfx: &graphics_server::Gfx,
-        new_height: i16,
+        new_height: isize,
         _status_canvas: &Rectangle,
         canvases: &mut HashMap<Gid, Canvas>,
     ) -> Result<Point, xous::Error> {
         let modal_canvas = canvases.get_mut(&self.modal).expect("couldn't find modal canvas");
         let orig_rect = modal_canvas.clip_rect();
 
-        let mut height: i16 = if new_height < self.modal_min_height {
+        let mut height: isize = if new_height < self.modal_min_height {
             self.modal_min_height + self.modal_y_pad
         } else {
             new_height + self.modal_y_pad

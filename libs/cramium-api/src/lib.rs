@@ -8,6 +8,8 @@ pub mod iox;
 pub use iox::*;
 pub mod i2c;
 pub use i2c::*;
+pub mod api;
+pub use api::*;
 #[cfg(feature = "std")]
 pub mod keyboard;
 

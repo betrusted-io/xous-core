@@ -11,6 +11,7 @@ xous-names = { package = "xous-api-names", version = "0.9.65" }
 "rand" = "0.8"
 rand_core = "0.6.4"
 log = "0.4.14"
+log-server = { package = "xous-api-log", version = "0.1.63" }
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [

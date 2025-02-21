@@ -4,7 +4,6 @@ use std::thread;
 
 use blitstr2::{GlyphSprite, NULL_GLYPH_SPRITE};
 use utralib::generated::*;
-
 /// We can have no allocations inside this, and ideally, it's as minimal as possible.
 ///
 /// The graphics handler code and font renderer code are duplicated into this module to
@@ -23,10 +22,8 @@ use utralib::generated::*;
 ///
 /// Note that the frame buffer is 336 px wide, which is 10.5 32-bit words.
 /// The excess 16 bits are the dirty bit field.
-use crate::{
-    api::PixelColor,
-    backend::{FB_SIZE, FB_WIDTH_PIXELS, FB_WIDTH_WORDS},
-};
+use ux_api::minigfx::PixelColor;
+use ux_api::platform::{FB_SIZE, FB_WIDTH_PIXELS, FB_WIDTH_WORDS};
 /// How far down the screen the panic box draws
 const TOP_OFFSET: usize = 48;
 /// Width and height of the panic box in characters

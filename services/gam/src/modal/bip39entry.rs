@@ -3,8 +3,8 @@ use core::fmt::Write;
 use std::string::String;
 
 use blitstr2::{GlyphStyle, glyph_to_height_hint};
-use graphics_server::api::*;
 use locales::t;
+use ux_api::minigfx::*;
 use xous_ipc::Buffer;
 
 use crate::*;
@@ -17,9 +17,9 @@ pub struct Bip39Entry {
     pub user_input: String,
     pub payload: Option<Vec<u8>>,
     pub suggested_words: Vec<String>,
-    suggestion_index: Cell<i16>,
-    line_height: Cell<i16>,
-    margin: Cell<i16>,
+    suggestion_index: Cell<isize>,
+    line_height: Cell<isize>,
+    margin: Cell<isize>,
     gam: crate::Gam,
 }
 
@@ -54,11 +54,11 @@ impl Bip39Entry {
     }
 }
 
-const NUM_RECCOS: i16 = 5;
-const AESTHETIC_GAP: i16 = 5;
+const NUM_RECCOS: isize = 5;
+const AESTHETIC_GAP: isize = 5;
 const STYLE_OVERRIDE: GlyphStyle = GlyphStyle::Bold;
-const ACCEPTED_WORD_LINES: i16 = 5; // all 0's key requires 5 lines (abandon abandon abandon....art)
-const STATUS_LINES: i16 = 3;
+const ACCEPTED_WORD_LINES: isize = 5; // all 0's key requires 5 lines (abandon abandon abandon....art)
+const STATUS_LINES: isize = 3;
 
 impl ActionApi for Bip39Entry {
     fn set_action_opcode(&mut self, op: u32) { self.action_opcode = op }
@@ -67,7 +67,7 @@ impl ActionApi for Bip39Entry {
 
     /// The total canvas height is computed with this API call
     /// The canvas height is not dynamically adjustable for modals.
-    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
+    fn height(&self, glyph_height: isize, margin: isize, _modal: &Modal) -> isize {
         /*
 
               cat                   <-- active entry 1 line + 2x margin
@@ -102,7 +102,7 @@ impl ActionApi for Bip39Entry {
         // which is private to the GAM. Thus we receive a copy of this from our caller and stash it
         // here for future reference. `glyph_height` can change depending upon the locale; in particular,
         // CJK languages have taller glyphs.
-        self.line_height.set(glyph_to_height_hint(STYLE_OVERRIDE) as i16 + 2);
+        self.line_height.set(glyph_to_height_hint(STYLE_OVERRIDE) as isize + 2);
         self.margin.set(6);
 
         // compute the overall_height of the entry fields
@@ -120,7 +120,7 @@ impl ActionApi for Bip39Entry {
         overall_height
     }
 
-    fn redraw(&self, at_height: i16, modal: &Modal) {
+    fn redraw(&self, at_height: isize, modal: &Modal) {
         let color = if self.is_password { PixelColor::Light } else { PixelColor::Dark };
 
         let mut current_height = at_height;
@@ -161,7 +161,7 @@ impl ActionApi for Bip39Entry {
                 if index >= NUM_RECCOS as usize {
                     break;
                 }
-                if index as i16 == self.suggestion_index.get() {
+                if index as isize == self.suggestion_index.get() {
                     // draw the dot
                     let mut tv = TextView::new(
                         modal.canvas,

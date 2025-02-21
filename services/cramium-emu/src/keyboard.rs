@@ -34,7 +34,6 @@ fn keyboard_bouncer() {
         }
     }
 }
-
 fn keyboard_service() {
     let xns = xous_names::XousNames::new().unwrap();
     let kbd_sid = xns.register_name(cramium_api::SERVER_NAME_KBD, None).expect("can't register server");

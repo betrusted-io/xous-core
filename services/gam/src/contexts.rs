@@ -4,9 +4,10 @@ use std::collections::HashMap;
 use cram_hal_service::{keyboard, trng};
 use enum_dispatch::enum_dispatch;
 use gam::MAIN_MENU_NAME;
-use graphics_server::*;
 use ime_plugin_api::{ImeFrontEndApi, ImefDescriptor};
 use log::info;
+use ux_api::minigfx::*;
+use ux_api::service::api::*;
 use xous_ipc::Buffer;
 
 use crate::api::Opcode;
@@ -37,7 +38,7 @@ pub(crate) trait LayoutApi {
     fn resize_height(
         &mut self,
         gfx: &graphics_server::Gfx,
-        new_height: i16,
+        new_height: isize,
         status_cliprect: &Rectangle,
         canvases: &mut HashMap<Gid, Canvas>,
     ) -> Result<Point, xous::Error>;
@@ -348,7 +349,7 @@ impl ContextManager {
         &mut self,
         gfx: &graphics_server::Gfx,
         gam_token: [u32; 4],
-        new_height: i16,
+        new_height: isize,
         status_cliprect: &Rectangle,
         canvases: &mut HashMap<Gid, Canvas>,
     ) -> Option<Point> {
@@ -370,7 +371,7 @@ impl ContextManager {
         &mut self,
         gfx: &graphics_server::Gfx,
         app_token: [u32; 4],
-        new_height: i16,
+        new_height: isize,
         status_cliprect: &Rectangle,
         canvases: &mut HashMap<Gid, Canvas>,
     ) -> Option<Point> {

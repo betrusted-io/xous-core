@@ -1,7 +1,7 @@
 use std::cmp::max;
 use std::convert::TryInto;
 
-use crate::api::*;
+use super::*;
 //////////////////////// Tile -------- author: nworbnhoj
 
 /*
@@ -23,7 +23,7 @@ pub(crate) const OUT_OF_BOUNDS: usize = usize::MAX;
 #[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Tile {
     bound: Rectangle,
-    width_words: i16,
+    width_words: isize,
     max_bound: Rectangle,
     words: [Word; WORDS_PER_TILE],
 }
@@ -31,9 +31,9 @@ pub struct Tile {
 impl Tile {
     pub fn new(mut bound: Rectangle) -> Self {
         log::trace!("new Tile {:?}", bound);
-        let bits_per_word = BITS_PER_WORD as i16;
-        let bits_per_tile = BITS_PER_TILE as i16;
-        let words_per_tile = WORDS_PER_TILE as i16;
+        let bits_per_word = BITS_PER_WORD as isize;
+        let bits_per_tile = BITS_PER_TILE as isize;
+        let words_per_tile = WORDS_PER_TILE as isize;
 
         let width_bits = bound.br.x - bound.tl.x + 1;
         // establish width limits
@@ -89,7 +89,7 @@ impl Tile {
 
     fn word_index(&self, point: Point) -> usize {
         if self.bound.intersects_point(point) {
-            let tile_line: i16 = (point.y - self.bound.tl.y).try_into().unwrap();
+            let tile_line: isize = (point.y - self.bound.tl.y).try_into().unwrap();
             let first_word_in_line: usize = (tile_line * self.width_words).try_into().unwrap();
             let bit_index: usize = (point.x - self.bound.tl.x).try_into().unwrap();
             first_word_in_line + (bit_index / BITS_PER_WORD)
@@ -124,7 +124,7 @@ impl Tile {
 
     pub fn get_pixel(&self, point: Point) -> PixelColor {
         let word: usize = self.get_word(point).try_into().unwrap();
-        let bpw: i16 = BITS_PER_WORD.try_into().unwrap();
+        let bpw: isize = BITS_PER_WORD.try_into().unwrap();
         let bit = point.x % bpw;
         PixelColor::from((word >> bit) & 1)
     }
@@ -132,7 +132,7 @@ impl Tile {
     /// Adding a pixel outside of bound (but within max_bound) will expand bound.
     pub fn set_pixel(&mut self, point: Point, color: PixelColor) {
         let word_index = self.word_index_mut(point);
-        let bpw: i16 = BITS_PER_WORD.try_into().unwrap();
+        let bpw: isize = BITS_PER_WORD.try_into().unwrap();
         match word_index == OUT_OF_BOUNDS {
             true => {}
             false => {
@@ -151,8 +151,8 @@ impl Tile {
         self.bound.tl.y += offset.y;
         self.bound.br.x += offset.x;
         self.bound.br.y += offset.y;
-        let max_x = self.bound.tl.x + self.width_words * BITS_PER_WORD as i16 - 1;
-        let max_y = self.bound.tl.y + WORDS_PER_TILE as i16 / self.width_words - 1;
+        let max_x = self.bound.tl.x + self.width_words * BITS_PER_WORD as isize - 1;
+        let max_y = self.bound.tl.y + WORDS_PER_TILE as isize / self.width_words - 1;
         self.max_bound = Rectangle::new(self.bound.tl, Point::new(max_x, max_y));
     }
 

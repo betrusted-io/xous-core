@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use blitstr2::GlyphStyle;
 #[cfg(feature = "cramium-soc")]
 use cram_hal_service::trng;
-use graphics_server::*;
+use ux_api::minigfx::*;
+use ux_api::service::api::*;
 
 use crate::Canvas;
 use crate::contexts::MISC_CONTEXT_DEFAULT_TRUST;
@@ -18,11 +19,11 @@ pub(crate) struct ChatLayout {
     pub input: Gid,
 
     // my internal bookkeeping records. Allow input area to grow into content area
-    min_content_height: i16,
-    min_input_height: i16,
+    min_content_height: isize,
+    min_input_height: isize,
     _screensize: Point,
-    _small_height: i16,
-    _regular_height: i16,
+    _small_height: isize,
+    _regular_height: isize,
 }
 impl ChatLayout {
     // pass in the status canvas so we can size around it, but we can't draw on it
@@ -34,10 +35,10 @@ impl ChatLayout {
     ) -> Result<ChatLayout, xous::Error> {
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
         // get the height of various text regions to compute the layout
-        let small_height: i16 =
-            gfx.glyph_height_hint(GlyphStyle::Small).expect("couldn't get glyph height") as i16;
-        let regular_height: i16 =
-            gfx.glyph_height_hint(gam::SYSTEM_STYLE).expect("couldn't get glyph height") as i16;
+        let small_height: isize =
+            gfx.glyph_height_hint(GlyphStyle::Small).expect("couldn't get glyph height") as isize;
+        let regular_height: isize =
+            gfx.glyph_height_hint(gam::SYSTEM_STYLE).expect("couldn't get glyph height") as isize;
         let margin = 4;
 
         // allocate canvases in structures, and record their GID for future reference
@@ -121,14 +122,15 @@ impl LayoutApi for ChatLayout {
     fn resize_height(
         &mut self,
         gfx: &graphics_server::Gfx,
-        new_height: i16,
+        new_height: isize,
         status_canvas: &Rectangle,
         canvases: &mut HashMap<Gid, Canvas>,
     ) -> Result<Point, xous::Error> {
         let input_canvas = canvases.get(&self.input).expect("couldn't find input canvas");
         let predictive_canvas = canvases.get(&self.predictive).expect("couldn't find predictive canvas");
 
-        let height: i16 = if new_height < self.min_input_height { self.min_input_height } else { new_height };
+        let height: isize =
+            if new_height < self.min_input_height { self.min_input_height } else { new_height };
         let mut new_input_rect = Rectangle::new_v_stack(predictive_canvas.clip_rect(), -height);
         let mut new_content_rect = Rectangle::new_v_span(*status_canvas, new_input_rect);
         if (new_content_rect.br.y - new_content_rect.tl.y) > self.min_content_height {
