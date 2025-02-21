@@ -1,7 +1,6 @@
 mod api;
 mod hw;
 
-use api::*;
 use bitfield::*;
 use cramium_api::*;
 use cramium_hal::{iox::Iox, udma::GlobalConfig};
@@ -312,8 +311,7 @@ fn main() {
     loop {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();
-        let opcode =
-            num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(api::HalOpcode::InvalidCall);
+        let opcode = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(HalOpcode::InvalidCall);
         log::debug!("{:?}", opcode);
         match opcode {
             HalOpcode::MapIfram => {

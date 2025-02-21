@@ -3,8 +3,6 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use cramium_api::*;
 use xous_ipc::Buffer;
 
-use crate::api::HalOpcode;
-
 pub struct I2c {
     conn: xous::CID,
 }
