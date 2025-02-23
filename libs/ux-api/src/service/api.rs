@@ -86,6 +86,12 @@ pub enum GfxOpcode {
     /// draw the boot logo (for continuity as apps initialize)
     DrawBootLogo,
 
+    /// Handle Camera IRQs
+    CamIrq,
+
+    /// Gutter for invalid calls
+    InvalidCall,
+
     Quit,
 }
 
