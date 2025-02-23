@@ -23,7 +23,8 @@ def bitflip(data_block, bitwidth=32):
 
 def convert(ifile, ofile):
     # Open the image and convert it to 1-bit mode (black & white)
-    im = Image.open(ifile)
+    im = Image.open(ifile).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+    # im = Image.open(ifile)
     im = im.convert("1")  # pixels will be either 0 (black) or 255 (white)
 
     # Get pixel data in row-major order
@@ -37,7 +38,7 @@ def convert(ifile, ofile):
     for p in pixels:
         bit = 1 if p else 0
         # Place the bit in the current 32-bit integer at the position given by count
-        current |= (bit << count)
+        current |= (bit << (31 - count))
         count += 1
         if count == 32:
             packed.append(current)
@@ -51,25 +52,20 @@ def convert(ifile, ofile):
 
     with open(ofile, "w") as output:
         output.write("#![cfg_attr(rustfmt, rustfmt_skip)]\n")
-        output.write("pub const BITMAP: [u32; 512] = [")
-        for index in range(512):
-            if index % 16 == 0:
-                output.write("\n")
-            b = packed[index]
-            if index % 16 < 15:
-                output.write("0x{:08x}, ".format(b))
-            else:
-                output.write("0x{:08x},".format(b))
+        output.write("pub const BITMAP: [u32; 512] = [\n")
+        for index in range(512 // 4):
+            output.write("  0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x},\n"
+                         .format(packed[index * 4 + 0], packed[index * 4 + 1], packed[index * 4 + 2], packed[index * 4 + 3]))
         output.write("\n];\n")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Convert BMP to rust header file")
     parser.add_argument(
-        "-f", "--file", required=True, help="filename to process", type=str
+        "-f", "--file", required=False, help="filename to process", type=str, default="libs/ux-api/src/bitmaps/test1.png"
     )
     parser.add_argument(
-        "-o", "--output-file", required=False, help="name of output Rust file", type=str, default="logo.rs"
+        "-o", "--output-file", required=False, help="name of output Rust file", type=str, default="test1.rs"
     )
     args = parser.parse_args()
 
