@@ -420,17 +420,30 @@ impl<'a> Oled128x128<'a> {
 
     pub fn screen_size(&self) -> Point { Point::new(WIDTH, LINES) }
 
-    pub fn redraw(&mut self) { self.draw(); }
+    pub fn redraw(&mut self) {
+        self.buffer_swap();
+        self.draw();
+    }
 
     pub fn blit_screen(&mut self, bmp: &[u32]) {
-        let buf = self.buffer_mut();
-
         for (i, &word) in bmp.iter().enumerate() {
-            let bytes = word.to_ne_bytes();
+            for bit in 0..32 {
+                if (word & (1 << (31 - bit))) != 0 {
+                    self.put_pixel(
+                        Point::new((i as isize % 4) * 32 + bit, i as isize / 4),
+                        Mono::White.into(),
+                    );
+                }
+            }
+        }
+        /*
+        for (i, &word) in bmp.iter().enumerate() {
+            let bytes = word.to_le_bytes();
             let start = i * core::mem::size_of::<u32>();
             let end = start + core::mem::size_of::<u32>();
             buf[start..end].copy_from_slice(&bytes);
         }
+        */
     }
 
     pub fn set_devboot(&mut self, _ena: bool) {
