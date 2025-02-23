@@ -1,12 +1,13 @@
 // `Command` vendored from https://github.com/ithinuel/sh1107-rs/tree/main
 use cramium_api::*;
 use ux_api::minigfx::{ColorNative, FrameBuffer, Point};
+use ux_api::platform::*;
 
 use crate::ifram::IframRange;
 use crate::udma::{Spim, SpimClkPha, SpimClkPol, SpimCs};
 
-pub const COLUMN: isize = 128;
-pub const ROW: isize = 128;
+pub const COLUMN: isize = WIDTH;
+pub const ROW: isize = LINES;
 pub const PAGE: u8 = ROW as u8 / 8;
 
 pub struct MainThreadToken(());
@@ -182,6 +183,7 @@ pub struct Oled128x128<'a> {
     spim: Spim,
     // front and back buffers
     buffers: [&'static mut [u8]; 2],
+    srfb: [u8; WIDTH as usize * HEIGHT as usize / core::mem::size_of::<u8>()],
     // length of the sideband memory region for queuing commands to the OLED. Must be allocated
     // immediately after the total frame buffer length
     pub sideband_len: usize,
@@ -258,6 +260,7 @@ impl<'a> Oled128x128<'a> {
             buffers: [unsafe { core::slice::from_raw_parts_mut(ifram_vaddr as *mut u8, 2048) }, unsafe {
                 core::slice::from_raw_parts_mut((ifram_vaddr + 2048) as *mut u8, 2048)
             }],
+            srfb: [0u8; WIDTH as usize * HEIGHT as usize / core::mem::size_of::<u8>()],
             sideband_len: 256,
             active_buffer: BufferState::A,
             cd_port,
@@ -299,6 +302,32 @@ impl<'a> Oled128x128<'a> {
                 .expect("Couldn't initiate oled command");
         }
         self.spim.txrx_await(false).unwrap();
+    }
+
+    pub fn screen_size(&self) -> Point { Point::new(WIDTH, LINES) }
+
+    pub fn redraw(&mut self) { self.draw(); }
+
+    pub fn blit_screen(&mut self, bmp: &[u32]) {
+        let buf = self.buffer_mut();
+
+        for (i, &word) in bmp.iter().enumerate() {
+            let bytes = word.to_ne_bytes();
+            let start = i * core::mem::size_of::<u32>();
+            let end = start + core::mem::size_of::<u32>();
+            buf[start..end].copy_from_slice(&bytes);
+        }
+    }
+
+    pub fn set_devboot(&mut self, _ena: bool) {
+        unimplemented!("devboot feature does not exist on this platform");
+    }
+
+    pub fn stash(&mut self) { self.srfb.copy_from_slice(&self.buffers[self.active_buffer.as_index()]); }
+
+    pub fn pop(&mut self) {
+        self.buffers[self.active_buffer.as_index()].copy_from_slice(&self.srfb);
+        self.redraw();
     }
 
     pub fn init(&mut self) {
@@ -390,5 +419,36 @@ impl<'a> FrameBuffer for Oled128x128<'a> {
         } else {
             Some(Mono::Black.into())
         }
+    }
+
+    fn xor_pixel(&mut self, p: Point) {
+        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+            return;
+        }
+        let buffer = self.buffer_mut();
+
+        let flip: ColorNative =
+            if buffer[p.x as usize + (p.y as usize / 8) * COLUMN as usize] & (1 << (p.y % 8)) != 0 {
+                Mono::Black.into()
+            } else {
+                Mono::White.into()
+            };
+        if flip.0 != 0 {
+            buffer[p.x as usize + (p.y as usize / 8) * COLUMN as usize] |= 1 << (p.y % 8);
+        } else {
+            buffer[p.x as usize + (p.y as usize / 8) * COLUMN as usize] &= !(1 << (p.y % 8));
+        }
+    }
+
+    /// This is highly unsafe. Don't use it - this is only implemented to provide cross-compatibility
+    /// with other platforms that require this access.
+    /// This "works in theory" because the data is striped so that the LSBs align with the lower numbered
+    /// pixels, but an unsafe mapping like this is a dumpster fire as far as Rust is concerned.
+    unsafe fn raw_mut(&mut self) -> &mut ux_api::platform::FbRaw {
+        let len = self.buffer().len();
+        core::slice::from_raw_parts_mut(
+            self.buffer_mut().as_mut_ptr() as *mut u32,
+            len / core::mem::size_of::<u32>(),
+        )
     }
 }
