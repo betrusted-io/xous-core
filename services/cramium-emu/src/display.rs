@@ -146,7 +146,10 @@ impl<'a> Oled128x128 {
 
     pub fn screen_size(&self) -> Point { Point::new(WIDTH, LINES) }
 
-    pub fn redraw(&mut self) { self.draw(); }
+    pub fn redraw(&mut self) {
+        self.draw();
+        self.buffer_swap();
+    }
 
     pub fn set_devboot(&mut self, _ena: bool) {
         unimplemented!("devboot feature does not exist on this platform");
@@ -183,7 +186,7 @@ impl FrameBuffer for Oled128x128 {
     /// Transfers the back buffer
     fn draw(&mut self) {
         // this must be opposite of what `buffer` / `buffer_mut` returns
-        let buffer = self.buffers[self.active_buffer.swap().as_index()];
+        let buffer = self.buffer();
         let mut native_buffer = self.native_buffer.lock().unwrap();
         native_buffer.copy_from_slice(&buffer);
     }
