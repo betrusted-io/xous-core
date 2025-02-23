@@ -736,7 +736,11 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                 }
                 Some(GfxOpcode::Quit) => break,
                 None => {
-                    log::error!("received GfxOpcode scalar that is not handled");
+                    log::error!("Received invalid GfxOpcode. Ignoring.");
+                }
+                _ => {
+                    // This is perfectly normal because not all opcodes are handled by all platforms.
+                    log::debug!("Invalid or unhandled opcode: {:?}", op);
                 }
             }
         } else {
