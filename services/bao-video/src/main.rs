@@ -136,7 +136,7 @@ fn map_fonts() -> MemoryRange {
     log::info!(
         "font base at virtual 0x{:08x}, len of 0x{:08x}",
         fontregion.as_ptr() as usize,
-        usize::from(fontregion.len())
+        fontregion.len()
     );
 
     log::trace!(
@@ -212,8 +212,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     // Mutex-protected.
     #[cfg(feature = "board-baosec")]
     {
-        let hw_if = unsafe { display.hw_regs() };
-        panic::panic_handler_thread(is_panic.clone(), hw_if);
+        let panic_display = unsafe { display.to_raw_parts() };
+        panic::panic_handler_thread(is_panic.clone(), panic_display);
     }
 
     // ---- camera initialization
@@ -628,6 +628,10 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
                 // ---- "regular" graphics API (almost a mirror of what is in graphics-server - maybe we could
                 // turn this even into a shared function?)
+
+                // ---- TODO ---- if the routines below don't require substantial modifications, figure out a
+                // way to wrap this into a library call that can be shared between graphics-server
+                // and here.
                 GfxOpcode::DrawClipObject => {
                     let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     let obj = buffer.to_original::<ClipObject, _>().unwrap();
@@ -1009,7 +1013,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     bulkread.from_offset += readlen as u32;
                     buf.replace(bulkread).unwrap();
                 }
-                GfxOpcode::TestPattern => msg_blocking_scalar_unpack!(msg, duration, _, _, _, {
+                GfxOpcode::TestPattern => msg_blocking_scalar_unpack!(msg, _duration, _, _, _, {
                     todo!("Need to write this for factory testing");
                 }),
                 GfxOpcode::Stash => {
