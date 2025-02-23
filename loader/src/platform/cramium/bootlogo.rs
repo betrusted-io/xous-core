@@ -20,7 +20,7 @@ pub fn show_logo(sh1107: &mut Oled128x128) {
     sh1107.buffer_mut().fill(0);
     for (i, &word) in ux_api::bitmaps::baochip128x128::BITMAP.iter().enumerate() {
         for bit in 0..32 {
-            if (b & (1 << (31 - bit))) != 0 {
+            if (word & (1 << (31 - bit))) != 0 {
                 sh1107.put_pixel(Point::new((i as isize % 4) * 32 + bit, i as isize / 4), Mono::White.into());
             }
         }
