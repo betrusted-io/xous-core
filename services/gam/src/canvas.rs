@@ -4,8 +4,9 @@ use std::collections::HashMap;
 
 #[cfg(feature = "cramium-soc")]
 use cram_hal_service::trng;
-use graphics_server::*;
 use log::{error, info};
+use ux_api::minigfx::*;
+use ux_api::service::api::*;
 
 // "Drawable" vs "NotDrawable" is a security distinction.
 // "OnScreen" vs "Offscreen" is a layout distinction.
@@ -300,17 +301,17 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut Hash
                         // do the actual defacing
                         // get 64 bits of entropy, and express it geometrically
                         let mut rand = trng.get_u64().unwrap();
-                        let mut x = (rand & 0xFFF) as i16;
+                        let mut x = (rand & 0xFFF) as isize;
                         rand >>= 12;
-                        let mut y = (rand & 0xFFF) as i16;
+                        let mut y = (rand & 0xFFF) as isize;
                         rand >>= 12;
-                        let mut delta_x = (rand & 0x3F) as i16 + 64;
+                        let mut delta_x = (rand & 0x3F) as isize + 64;
                         rand >>= 6;
                         if (rand & 1) == 1 {
                             delta_x = -delta_x;
                         }
                         rand >>= 1;
-                        let mut delta_y = (rand & 0x3F) as i16 + 64;
+                        let mut delta_y = (rand & 0x3F) as isize + 64;
                         rand >>= 6;
                         if (rand & 1) == 1 {
                             delta_y = -delta_y;
@@ -340,7 +341,7 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut Hash
     }
     defaced
 }
-fn remap_rand(end_range: i32, rand: i16, source_range: i32) -> i16 {
+fn remap_rand(end_range: i32, rand: isize, source_range: i32) -> isize {
     // x is a number from 0 through 2^12 -1 = 4095
     // we want to take 0<->4095 and renormalize to a range of -width/2 <-> width/2 and
     // then add it to width/2 to get a somewhat regular distribution (a modulus would
@@ -352,7 +353,7 @@ fn remap_rand(end_range: i32, rand: i16, source_range: i32) -> i16 {
         / 100i32 // remap to -end_range/2:end_range/2
         + (end_range as i32 / 2)
         // remap to 0:end_range
-    ) as i16
+    ) as isize
 }
 
 // we use the "screen" parameter to determine when we can turn off drawing to canvases that are off-screen

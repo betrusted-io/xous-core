@@ -1,6 +1,6 @@
 use enumset::EnumSet;
-use graphics_server::Rectangle;
 use rkyv::{Archive, Deserialize, Serialize};
+use ux_api::minigfx::*;
 
 use super::attach::Attach;
 use crate::PostFlag;

@@ -6,10 +6,10 @@ use std::time::SystemTime;
 
 use chrono::{TimeZone, Utc};
 use gam::{GlyphStyle, UxRegistration};
-use graphics_server::{DrawStyle, PixelColor, Point, Rectangle, TextView};
 use locales::t;
 use num_traits::*;
 use sntpc::{Error, NtpContext, NtpTimestampGenerator, NtpUdpSocket, Result};
+use ux_api::minigfx::*;
 use xous::{Message, send_message};
 
 use crate::VaultOp;
@@ -98,7 +98,7 @@ pub(crate) fn prereqs(sid: xous::SID, time_conn: xous::CID) -> ([u32; 4], bool) 
 
                     let mut title_text = TextView::new(
                         content,
-                        graphics_server::TextBounds::CenteredBot(Rectangle::new(
+                        TextBounds::CenteredBot(Rectangle::new(
                             Point::new(0, 0),
                             Point::new(screensize.x, 150),
                         )),

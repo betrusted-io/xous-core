@@ -35,8 +35,9 @@ use std::sync::Arc;
 use std::thread;
 
 use gam::UxRegistration;
-use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView};
 use log::info;
+use ux_api::minigfx::*;
+use ux_api::service::api::*;
 use xous::MessageEnvelope;
 use xous_ipc::Buffer;
 
@@ -138,7 +139,7 @@ struct Repl {
     margin: Point,        // margin to edge of canvas
     bubble_margin: Point, // margin of text in bubbles
     bubble_radius: u16,
-    bubble_space: i16, // spacing between text bubbles
+    bubble_space: isize, // spacing between text bubbles
 
     // command environment
     env: CmdEnv,

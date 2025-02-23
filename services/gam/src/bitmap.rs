@@ -19,8 +19,7 @@ use std::convert::TryInto;
 use std::io::Read;
 use std::ops::Deref;
 
-use graphics_server::PixelColor;
-use graphics_server::api::*;
+use ux_api::minigfx::*;
 
 mod img;
 pub use img::*;
@@ -106,7 +105,7 @@ impl Bitmap {
 
         let mut mosaic: Vec<Tile> = Vec::new();
 
-        let to_width: i16 = to_width.try_into().unwrap();
+        let to_width: isize = to_width.try_into().unwrap();
         let single_line = Point::new(to_width - 1, 0);
         let mut bound = Rectangle::new(Point::new(0, 0), single_line);
         let mut tile = Tile::new(bound);
@@ -115,7 +114,7 @@ impl Bitmap {
         for word in words {
             tile.set_word(Point::new(x, y), word);
             blank_tile = false;
-            x += BITS_PER_WORD as i16;
+            x += BITS_PER_WORD as isize;
             if x >= to_width {
                 (x, y) = (0, y + 1);
             }
@@ -189,8 +188,8 @@ impl Bitmap {
     }
 
     fn hull(mosaic: &Vec<Tile>) -> Rectangle {
-        let mut hull_tl = Point::new(i16::MAX, i16::MAX);
-        let mut hull_br = Point::new(i16::MIN, i16::MIN);
+        let mut hull_tl = Point::new(isize::MAX, isize::MAX);
+        let mut hull_br = Point::new(isize::MIN, isize::MIN);
         let mut tile_area = 0;
         for (_i, tile) in mosaic.iter().enumerate() {
             let tile_bound = tile.bound();
@@ -242,14 +241,14 @@ impl Bitmap {
     }
 
     pub fn rotate90(&mut self) -> Self {
-        let bits_per_word: i16 = BITS_PER_WORD.try_into().unwrap();
+        let bits_per_word: isize = BITS_PER_WORD.try_into().unwrap();
         let (size_x, size_y) = self.size();
-        let size_x: i16 = size_x.try_into().unwrap();
-        let size_y: i16 = size_y.try_into().unwrap();
+        let size_x: isize = size_x.try_into().unwrap();
+        let size_y: isize = size_y.try_into().unwrap();
         let mut r90 = Bitmap::new(Point::new(size_y, size_x));
         let (_, r90_size_y) = r90.size();
 
-        let mut x: i16 = 0;
+        let mut x: isize = 0;
         let mut r90_y = 0;
         let mut block: [Word; BITS_PER_WORD] = [0; BITS_PER_WORD];
         while x < size_x {

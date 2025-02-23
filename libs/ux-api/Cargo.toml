@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 xous = "0.9.64"
 xous-ipc = { version = "0.10.4", optional = true }
+xous-names = { package = "xous-api-names", version = "0.9.65", optional = true }
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
@@ -64,5 +65,16 @@ cramium-soc = []
 precursor = ["blitstr2/precursor"]
 derive-rkyv = ["rkyv"]
 
-std = ["derive-rkyv", "locales", "qrcode", "xous-ipc", "hex", "sha2", "digest"]
+doc-deps = ["hosted", "blitstr2/hosted"]
+
+std = [
+    "derive-rkyv",
+    "locales",
+    "qrcode",
+    "xous-ipc",
+    "hex",
+    "sha2",
+    "digest",
+    "xous-names",
+]
 default = ["std", "default-widgets"]

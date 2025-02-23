@@ -7,3 +7,8 @@ pub use baosec::*;
 mod baosor;
 #[cfg(any(feature = "board-baosor", feature = "loader-baosor"))]
 pub use baosor::*;
+
+#[cfg(any(feature = "hosted", feature = "renode", feature = "precursor"))]
+mod precursor;
+#[cfg(any(feature = "hosted", feature = "renode", feature = "precursor"))]
+pub use precursor::*;

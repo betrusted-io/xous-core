@@ -7,7 +7,7 @@ impl I2c {
 
     /// This is used to pass a list of I2C transactions that must be completed atomically
     /// No further I2C requests may happen while this is processing.
-    pub fn i2c_transactions(&self, list: I2cTransactions) -> Result<I2cTransactions, xous::Error> {
+    pub fn i2c_transactions(&self, _list: I2cTransactions) -> Result<I2cTransactions, xous::Error> {
         Ok(I2cTransactions { transactions: vec![] })
     }
 }
