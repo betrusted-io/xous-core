@@ -124,7 +124,7 @@ fn map_fonts() -> MemoryRange {
     // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
     // because the reserved area is much larger
     let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32 + 8) & 0xFFFF_F000) + 0x1000;
-    log::trace!("requesting map of length 0x{:08x} at 0x{:08x}", fontlen, fontmap::FONT_BASE);
+    log::info!("requesting map of length 0x{:08x} at 0x{:08x}", fontlen, fontmap::FONT_BASE);
     let fontregion = xous::syscall::map_memory(
         xous::MemoryAddress::new(fontmap::FONT_BASE),
         None,

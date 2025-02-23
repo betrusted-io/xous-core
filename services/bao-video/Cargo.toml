@@ -45,7 +45,7 @@ hosted-baosec = ["cramium-emu", "ux-api/hosted-baosec"]
 # temporary feature - remove after we have properly created a camera control API
 autotest = []
 
-cramium-soc = ["utralib/cramium-soc"]
+cramium-soc = ["utralib/cramium-soc", "blitstr2/cramium-soc"]
 decongest-udma = []
 default = [
     "decongest-udma",
