@@ -172,11 +172,20 @@ impl<'a> Oled128x128 {
 
     pub fn blit_screen(&mut self, bmp: &[u32]) {
         let buf = self.buffer_mut();
-        for (i, &word) in bmp.iter().enumerate() {
+
+        let mut temp = [0u32; COLUMN as usize * ROW as usize];
+        // this routine will paint the bitmap into temp flipped horizontally
+        for (i, &word) in bmp.iter().rev().enumerate() {
             for bit in 0..32 {
                 let pixel_index = i * 32 + bit;
                 let is_white = (word >> bit) & 1 != 0;
-                buf[pixel_index] = if is_white { LIGHT_COLOUR } else { DARK_COLOUR };
+                temp[pixel_index] = if is_white { LIGHT_COLOUR } else { DARK_COLOUR };
+            }
+        }
+        // this flips it horizontally
+        for (src_line, dst_line) in temp.chunks(COLUMN as usize).zip(buf.chunks_mut(COLUMN as usize)) {
+            for (&s, d) in src_line.iter().rev().zip(dst_line.iter_mut()) {
+                *d = s;
             }
         }
     }
