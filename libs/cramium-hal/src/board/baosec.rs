@@ -40,15 +40,20 @@ pub const CRG_UDC_MEMBASE: usize =
 pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 9, 31];
 pub const IFRAM1_RESERVED_PAGE_RANGE: [usize; 2] = [31 - CAM_IFRAM_LEN_PAGES, 31];
 
+// Display pins
+const SPI_CS_PIN: u8 = 3;
+const SPI_CLK_PIN: u8 = 0;
+const SPI_DAT_PIN: u8 = 1;
+const SPI_CD_PIN: u8 = 2;
+const SPI_PORT: IoxPort = IoxPort::PC;
+
+/// Returns just the pin mappings without setting anything up.
+pub fn get_display_pins() -> (SpimChannel, IoxPort, u8, u8) {
+    (SpimChannel::Channel2, SPI_PORT, SPI_CD_PIN, SPI_CS_PIN)
+}
 /// Setup pins for the baosec display
 /// Returns a spi channel object and descriptor for the C/D + CS pins as a (port, c/d pin, cs pin) tuple
 pub fn setup_display_pins(iox: &dyn IoSetup) -> (SpimChannel, IoxPort, u8, u8) {
-    const SPI_CS_PIN: u8 = 3;
-    const SPI_CLK_PIN: u8 = 0;
-    const SPI_DAT_PIN: u8 = 1;
-    const SPI_CD_PIN: u8 = 2;
-    const SPI_PORT: IoxPort = IoxPort::PC;
-
     // SPIM_CLK_B[2]
     iox.setup_pin(
         SPI_PORT,
@@ -94,7 +99,7 @@ pub fn setup_display_pins(iox: &dyn IoSetup) -> (SpimChannel, IoxPort, u8, u8) {
         Some(IoxDriveStrength::Drive2mA),
     );
     // using bank SPIM_B[2]
-    (SpimChannel::Channel2, SPI_PORT, SPI_CD_PIN, SPI_CS_PIN)
+    get_display_pins()
 }
 
 pub fn setup_memory_pins(iox: &dyn IoSetup) -> SpimChannel {

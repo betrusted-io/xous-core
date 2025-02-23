@@ -352,6 +352,7 @@ dependencies = [
 name = "bao-video"
 version = "0.1.0"
 dependencies = [
+ "blitstr2",
  "cram-hal-service",
  "cramium-api",
  "cramium-emu",
@@ -362,6 +363,7 @@ dependencies = [
  "nalgebra",
  "num-derive 0.4.2",
  "num-traits",
+ "rkyv 0.8.8",
  "rqrr",
  "utralib 0.1.25",
  "ux-api",
@@ -369,6 +371,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
+ "xous-ipc 0.10.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

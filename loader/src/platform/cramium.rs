@@ -6,8 +6,6 @@ pub mod swap;
 pub use swap::*;
 #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
 mod bootlogo;
-#[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
-mod poweron_bt;
 
 #[cfg(feature = "updates")]
 mod update;

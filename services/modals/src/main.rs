@@ -44,8 +44,6 @@ use trng::Trng;
 #[cfg(feature = "tts")]
 use tts_frontend::TtsFrontend;
 #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
-use ux_api::minigfx::*;
-#[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
 use ux_api::widgets::*;
 use xous::{Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
