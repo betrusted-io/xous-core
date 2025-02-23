@@ -11,7 +11,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-use blitstr2::{GlyphStyle, fontmap, glyph_to_height_hint};
+use blitstr2::fontmap;
 #[cfg(feature = "board-baosec")]
 use cram_hal_service::{I2c, UdmaGlobal};
 use cramium_api::*;
@@ -27,7 +27,6 @@ use cramium_hal::{
     ov2640::Ov2640,
     sh1107::{MainThreadToken, Mono, Oled128x128, claim_main_thread},
 };
-use num_traits::*;
 #[cfg(not(feature = "hosted-baosec"))]
 use utralib::utra;
 use ux_api::minigfx::{self, FrameBuffer};
@@ -243,6 +242,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     #[cfg(feature = "decongest-udma")]
     log::info!("Decongest udma option enabled.");
 
+    #[cfg(not(feature = "hosted-baosec"))]
     let cid = xous::connect(sid).unwrap(); // self-connection always succeeds
 
     // ---- register interrupt handler
