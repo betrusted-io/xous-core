@@ -27,6 +27,8 @@ use cramium_hal::{
     ov2640::Ov2640,
     sh1107::{MainThreadToken, Mono, Oled128x128, claim_main_thread},
 };
+#[cfg(feature = "board-baosec")]
+use num_traits::*;
 #[cfg(not(feature = "hosted-baosec"))]
 use utralib::utra;
 use ux_api::minigfx::{self, FrameBuffer};
