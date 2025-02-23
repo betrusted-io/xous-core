@@ -3,9 +3,10 @@ use std::sync::{Arc, Mutex, mpsc};
 use cramium_api::*;
 use minifb::{Key, Window, WindowOptions};
 use ux_api::minigfx::{ColorNative, FrameBuffer, Point};
+use ux_api::platform::*;
 
-pub const COLUMN: isize = 128;
-pub const ROW: isize = 128;
+pub const COLUMN: isize = WIDTH;
+pub const ROW: isize = LINES;
 pub const PAGE: u8 = ROW as u8 / 8;
 
 const MAX_FPS: usize = 60;
@@ -111,6 +112,7 @@ pub struct Oled128x128 {
     native_buffer: Arc<Mutex<Vec<u32>>>, //[u32; WIDTH * HEIGHT],
     // front and back buffers
     buffers: [[u32; COLUMN as usize * ROW as usize]; 2],
+    srfb: [u32; COLUMN as usize * ROW as usize],
     active_buffer: BufferState,
 }
 
@@ -131,6 +133,7 @@ impl<'a> Oled128x128 {
         Self {
             native_buffer,
             buffers: [[DARK_COLOUR; COLUMN as usize * ROW as usize]; 2],
+            srfb: [DARK_COLOUR; COLUMN as usize * ROW as usize],
             active_buffer: BufferState::A,
         }
     }
@@ -141,6 +144,21 @@ impl<'a> Oled128x128 {
 
     pub fn buffer(&self) -> &[u32] { &self.buffers[self.active_buffer.as_index()] }
 
+    pub fn screen_size(&self) -> Point { Point::new(WIDTH, LINES) }
+
+    pub fn redraw(&mut self) { self.draw(); }
+
+    pub fn set_devboot(&mut self, _ena: bool) {
+        unimplemented!("devboot feature does not exist on this platform");
+    }
+
+    pub fn stash(&mut self) { self.srfb.copy_from_slice(&self.buffers[self.active_buffer.as_index()]); }
+
+    pub fn pop(&mut self) {
+        self.buffers[self.active_buffer.as_index()].copy_from_slice(&self.srfb);
+        self.redraw();
+    }
+
     pub fn send_command<'b, U>(&'b mut self, _cmd: U)
     where
         U: IntoIterator<Item = u8> + 'b,
@@ -148,6 +166,17 @@ impl<'a> Oled128x128 {
     }
 
     pub fn init(&mut self) {}
+
+    pub fn blit_screen(&mut self, bmp: &[u32]) {
+        let buf = self.buffer_mut();
+        for (i, &word) in bmp.iter().enumerate() {
+            for bit in 0..32 {
+                let pixel_index = i * 32 + bit;
+                let is_white = (word >> bit) & 1 != 0;
+                buf[pixel_index] = if is_white { LIGHT_COLOUR } else { DARK_COLOUR };
+            }
+        }
+    }
 }
 
 impl FrameBuffer for Oled128x128 {
