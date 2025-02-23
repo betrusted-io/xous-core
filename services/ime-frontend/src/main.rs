@@ -6,7 +6,6 @@ use core::fmt::Write;
 
 use emoji::*;
 use gam::api::SetCanvasBoundsRequest;
-use graphics_server::{DrawStyle, Gid, Line, PixelColor, Point, Rectangle, TextBounds, TextView};
 use ime_plugin_api::{ApiToken, PredictionApi, PredictionPlugin, PredictionTriggers};
 use ime_plugin_api::{ImefCallback, ImefDescriptor, ImefOpcode};
 use locales::t;
@@ -14,6 +13,8 @@ use log::{error, info};
 use num_traits::{FromPrimitive, ToPrimitive};
 #[cfg(feature = "tts")]
 use tts_frontend::*;
+use ux_api::minigfx::*;
+use ux_api::service::api::*;
 use xous::{CID, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
@@ -644,7 +645,7 @@ impl InputTracker {
                         31 // a default value to grow in case we don't have a valid last height
                     };
                     let mut req = SetCanvasBoundsRequest {
-                        requested: Point::new(0, ic_bounds.y + delta as i16),
+                        requested: Point::new(0, ic_bounds.y + delta as isize),
                         granted: None,
                         token_type: gam::TokenType::Gam,
                         token: self.gam_token.unwrap(),
@@ -746,7 +747,7 @@ impl InputTracker {
                     info!("valid_predictions: {}", valid_predictions);
                 }
                 // OK, let's start initially with just a naive, split-by-N layout of the prediction area
-                let approx_width = pc_bounds.x / valid_predictions as i16;
+                let approx_width = pc_bounds.x / valid_predictions as isize;
 
                 let mut i = 0;
                 for p in self.pred_options.iter() {

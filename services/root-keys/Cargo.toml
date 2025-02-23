@@ -44,7 +44,7 @@ locales = { path = "../../locales" }
 modals = { path = "../modals" }
 
 # to access font maps for signing verification
-graphics-server = { path = "../graphics-server" }
+ux-api = { path = "../../libs/ux-api" }
 
 # for reboots and fuse operations
 jtag = { path = "../jtag" }

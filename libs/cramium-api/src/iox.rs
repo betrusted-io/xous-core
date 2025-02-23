@@ -4,12 +4,10 @@ use core::sync::atomic::{AtomicU32, Ordering};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
 #[cfg(feature = "std")]
-use super::*;
+use num_traits::ToPrimitive;
 
-pub const OP_CONFIGURE_IOX: usize = 4;
-pub const OP_SET_GPIO_BANK: usize = 5;
-pub const OP_GET_GPIO_BANK: usize = 6;
-pub const OP_CONFIGURE_IOX_IRQ: usize = 11;
+#[cfg(feature = "std")]
+use super::*;
 
 #[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 #[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -144,7 +142,7 @@ impl IoxHal {
         xous::send_message(
             self.conn,
             xous::Message::new_blocking_scalar(
-                OP_SET_GPIO_BANK,
+                HalOpcode::SetGpioBank.to_usize().unwrap(),
                 port as usize,
                 // values to set
                 (value as usize) << (pin as usize),
@@ -160,7 +158,7 @@ impl IoxHal {
         xous::send_message(
             self.conn,
             xous::Message::new_blocking_scalar(
-                OP_SET_GPIO_BANK,
+                HalOpcode::SetGpioBank.to_usize().unwrap(),
                 port as usize,
                 // values to set
                 value as usize,
@@ -175,7 +173,13 @@ impl IoxHal {
     pub fn get_gpio_pin_value(&self, port: IoxPort, pin: u8) -> IoxValue {
         match xous::send_message(
             self.conn,
-            xous::Message::new_blocking_scalar(OP_GET_GPIO_BANK, port as usize, 0, 0, 0),
+            xous::Message::new_blocking_scalar(
+                HalOpcode::GetGpioBank.to_usize().unwrap(),
+                port as usize,
+                0,
+                0,
+                0,
+            ),
         ) {
             Ok(xous::Result::Scalar5(_, value, _, _, _)) => {
                 if value & (1 << pin as usize) != 0 {
@@ -191,7 +195,13 @@ impl IoxHal {
     pub fn get_gpio_bank_value(&self, port: IoxPort) -> u32 {
         match xous::send_message(
             self.conn,
-            xous::Message::new_blocking_scalar(OP_GET_GPIO_BANK, port as usize, 0, 0, 0),
+            xous::Message::new_blocking_scalar(
+                HalOpcode::GetGpioBank.to_usize().unwrap(),
+                port as usize,
+                0,
+                0,
+                0,
+            ),
         ) {
             Ok(xous::Result::Scalar5(_, value, _, _, _)) => value as u32,
             _ => panic!("Internal Error: Couldn't get GPIO pin value"),
@@ -247,7 +257,7 @@ impl IoSetup for IoxHal {
         let msg =
             IoxConfigMessage { port, pin, direction, function, schmitt_trigger, pullup, slow_slew, strength };
         let buf = xous_ipc::Buffer::into_buf(msg).unwrap();
-        buf.lend(self.conn, OP_CONFIGURE_IOX as u32).expect("Couldn't set up IO");
+        buf.lend(self.conn, HalOpcode::ConfigureIox as u32).expect("Couldn't set up IO");
     }
 }
 
@@ -267,7 +277,7 @@ impl IoGpio for IoxHal {
             strength: None,
         };
         let buf = xous_ipc::Buffer::into_buf(msg).unwrap();
-        buf.lend(self.conn, OP_CONFIGURE_IOX as u32).expect("Couldn't set up IO");
+        buf.lend(self.conn, HalOpcode::ConfigureIox as u32).expect("Couldn't set up IO");
     }
 
     fn set_gpio_pin_value(&self, port: IoxPort, pin: u8, value: IoxValue) {
@@ -293,6 +303,6 @@ impl IoIrq for IoxHal {
     fn set_irq_pin(&self, port: IoxPort, pin: u8, active: IoxValue, server: &str, opcode: usize) {
         let msg = IoxIrqRegistration { server: server.to_owned(), opcode, port, pin, active };
         let buf = xous_ipc::Buffer::into_buf(msg).unwrap();
-        buf.lend(self.conn, OP_CONFIGURE_IOX_IRQ as u32).expect("Couldn't set up IRQ");
+        buf.lend(self.conn, HalOpcode::ConfigureIoxIrq as u32).expect("Couldn't set up IRQ");
     }
 }

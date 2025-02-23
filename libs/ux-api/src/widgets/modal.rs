@@ -172,7 +172,7 @@ impl<'a> Modal<'a> {
     }
 }
 
-pub fn screen_bounds() -> Point { Point::new(WIDTH, LINES) }
+pub fn screen_bounds() -> Point { Point::new(WIDTH as isize, LINES as isize) }
 
 // comment this out while I figure out how to shim in the HAL layer for the graphics emulation
 fn layout(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle) {}

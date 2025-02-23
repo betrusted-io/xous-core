@@ -457,9 +457,9 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                             log::info!("heap size: {}", heap_usage());
                                             let mut png = DecodePng::new(reader).expect("png decode failed");
                                             const BORDER: u32 = 3;
-                                            let modal_size = gam::Point::new(
-                                                (gam::IMG_MODAL_WIDTH - 2 * BORDER) as i16,
-                                                (gam::IMG_MODAL_HEIGHT - 2 * BORDER) as i16,
+                                            let modal_size = ux_api::minigfx::Point::new(
+                                                (gam::IMG_MODAL_WIDTH - 2 * BORDER) as isize,
+                                                (gam::IMG_MODAL_HEIGHT - 2 * BORDER) as isize,
                                             );
                                             let bm = gam::Bitmap::from_png(&mut png, Some(modal_size));
 

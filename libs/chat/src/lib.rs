@@ -9,12 +9,12 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use api::*;
+use blitstr2::GlyphStyle;
 use gam::MenuItem;
-use graphics_server::api::GlyphStyle;
-use graphics_server::{Point, Rectangle, TextBounds, TextView};
 use num_traits::FromPrimitive;
 pub use ui::BUSY_ANIMATION_RATE_MS;
 use ui::VisualProperties;
+use ux_api::minigfx::*;
 use xous::{CID, Error, SID, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
@@ -35,7 +35,7 @@ pub(crate) fn default_textview(
         bubble_tv.border_width = 1;
     }
     bubble_tv.clip_rect =
-        Some(Rectangle::new(Point::new(0, vp.status_height as i16 + vp.margin.y), vp.layout_screensize));
+        Some(Rectangle::new(Point::new(0, vp.status_height as isize + vp.margin.y), vp.layout_screensize));
     bubble_tv.draw_border = true;
     bubble_tv.clear_area = true;
     bubble_tv.rounded_border = Some(vp.bubble_radius);
@@ -63,7 +63,7 @@ fn bubble(
     post: &crate::dialogue::post::Post,
     dialogue: &crate::dialogue::Dialogue,
     hilite: bool,
-    anchor_y: i16,
+    anchor_y: isize,
 ) -> TextView {
     // create a textview with all of our default properties
     let mut bubble_tv = default_textview(post, hilite, vp);

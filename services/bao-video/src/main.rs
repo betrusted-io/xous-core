@@ -21,7 +21,7 @@ use cramium_hal::{
     ov2640::Ov2640,
     sh1107::{MainThreadToken, Mono, Oled128x128, claim_main_thread},
 };
-use num_traits::ToPrimitive;
+use num_traits::*;
 #[cfg(not(feature = "hosted-baosec"))]
 use utralib::utra;
 
@@ -106,8 +106,6 @@ fn handle_irq(_irq_no: usize, arg: *mut usize) {
     )
     .ok();
 }
-#[cfg(feature = "hosted-baosec")]
-fn handle_irq(_irq_no: usize, arg: *mut usize) {}
 
 fn main() -> ! {
     let stack_size = 1 * 1024 * 1024;
@@ -136,6 +134,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
     let mut sh1107 = Oled128x128::new(main_thread_token, cramium_api::PERCLK, &iox, &udma_global);
     sh1107.init();
+    gfx::msg(&mut sh1107, "hello world", Point::new(0, 64), Mono::White.into(), Mono::Black.into());
     sh1107.buffer_swap();
     sh1107.draw();
 
@@ -170,6 +169,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let cid = xous::connect(sid).unwrap(); // self-connection always succeeds
     // register interrupt handler
     #[cfg(not(feature = "hosted-baosec"))]
+    let cam_irq; // this binding has to out-live the temporaries below
+    #[cfg(not(feature = "hosted-baosec"))]
     {
         let irq = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::irqarray8::HW_IRQARRAY8_BASE),
@@ -181,9 +182,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
         let mut irq_csr = utralib::CSR::new(irq.as_mut_ptr() as *mut u32);
         irq_csr.wo(utra::irqarray8::EV_PENDING, 0xFFFF); // clear any pending interrupts
 
-        let cam_irq = CamIrq { csr: utralib::CSR::new(irq.as_mut_ptr() as *mut u32), cid };
+        cam_irq = CamIrq { csr: utralib::CSR::new(irq.as_mut_ptr() as *mut u32), cid };
         let irq_arg = &cam_irq as *const CamIrq as *mut usize;
-        log::debug!("irq_arg: {:x}", irq_arg as usize);
+        log::info!("irq_arg: {:x}", irq_arg as usize);
         xous::claim_interrupt(utra::irqarray8::IRQARRAY8_IRQ, handle_irq, irq_arg)
             .expect("couldn't claim IRQ8");
         // enable camera Rx IRQ

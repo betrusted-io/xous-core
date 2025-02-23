@@ -3,12 +3,13 @@
 
 use core::fmt::Write;
 
-use graphics_server::api::GlyphStyle;
-use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView};
+use blitstr2::GlyphStyle;
 use locales::t;
 use num_traits::*;
 #[cfg(feature = "tts")]
 use tts_frontend::*;
+use ux_api::minigfx::*;
+use ux_api::service::api::Gid;
 
 /// Basic 'Hello World!' application that draws a simple
 /// TextView to the screen.

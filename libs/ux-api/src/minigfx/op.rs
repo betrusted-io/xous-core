@@ -1,62 +1,22 @@
 use super::*;
+use crate::minigfx::FrameBuffer;
 
 /// LCD Frame buffer bounds
-pub const LCD_WORDS_PER_LINE: usize = crate::platform::WIDTH as usize / core::mem::size_of::<u32>();
+pub const LCD_WORDS_PER_LINE: usize = crate::platform::FB_WIDTH_WORDS;
 pub const LCD_PX_PER_LINE: usize = crate::platform::WIDTH as usize;
 pub const LCD_LINES: usize = crate::platform::LINES as usize;
 pub const LCD_FRAME_BUF_SIZE: usize = LCD_WORDS_PER_LINE * LCD_LINES;
 
-pub const WIDTH: isize = crate::platform::WIDTH;
-pub const HEIGHT: isize = crate::platform::LINES;
-
-/// For passing frame buffer references
-pub type LcdFB = [u32; LCD_FRAME_BUF_SIZE];
+pub const WIDTH: isize = crate::platform::WIDTH as isize;
+pub const HEIGHT: isize = crate::platform::LINES as isize;
 
 /// Set the expected rectangle length for the busy animation
 pub const BUSY_ANIMATION_RECT_WIDTH: isize = 32; // golden ratio off of a height of 20
 
-fn put_pixel(fb: &mut LcdFB, x: isize, y: isize, color: ColorNative) {
-    let mut clip_y: usize = y as usize;
-    if clip_y >= LCD_LINES {
-        clip_y = LCD_LINES - 1;
-    }
-
-    let clip_x: usize = x as usize;
-    if clip_x >= LCD_PX_PER_LINE {
-        clip_y = LCD_PX_PER_LINE - 1;
-    }
-
-    let pc = PixelColor::from(color.0);
-
-    if pc == PixelColor::Light {
-        fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] |= 1 << (clip_x % 32)
-    } else {
-        fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] &= !(1 << (clip_x % 32))
-    }
-    // set the dirty bit on the line that contains the pixel
-    fb[clip_y * LCD_WORDS_PER_LINE + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
-}
-
-fn xor_pixel(fb: &mut LcdFB, x: isize, y: isize) {
-    let mut clip_y: usize = y as usize;
-    if clip_y >= LCD_LINES {
-        clip_y = LCD_LINES - 1;
-    }
-
-    let clip_x: usize = x as usize;
-    if clip_x >= LCD_PX_PER_LINE {
-        clip_y = LCD_PX_PER_LINE - 1;
-    }
-
-    fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] ^= 1 << (clip_x % 32);
-    // set the dirty bit on the line that contains the pixel
-    fb[clip_y * LCD_WORDS_PER_LINE + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
-}
-
-pub fn line(fb: &mut LcdFB, l: Line, clip: Option<Rectangle>, xor: bool) {
+pub fn line<T: FrameBuffer>(fb: &mut T, l: Line, clip: Option<Rectangle>, xor: bool) {
     let color: ColorNative;
     if l.style.stroke_color.is_some() {
-        color = l.style.stroke_color.unwrap();
+        color = ColorNative::from(l.style.stroke_color.unwrap());
     } else {
         return;
     }
@@ -75,9 +35,9 @@ pub fn line(fb: &mut LcdFB, l: Line, clip: Option<Rectangle>, xor: bool) {
         if x0 >= 0 && y0 >= 0 && x0 < (WIDTH as _) && y0 < (HEIGHT as _) {
             if clip.is_none() || (clip.unwrap().intersects_point(Point::new(x0, y0))) {
                 if !xor {
-                    put_pixel(fb, x0 as _, y0 as _, color);
+                    fb.put_pixel(Point::new(x0, y0), color);
                 } else {
-                    xor_pixel(fb, x0 as _, y0 as _);
+                    fb.xor_pixel(Point::new(x0, y0));
                 }
             }
         }
@@ -139,9 +99,15 @@ impl Iterator for CircleIterator {
                 let is_fill = len <= outer_radius_sq + 1;
 
                 item = if is_border && self.style.stroke_color.is_some() {
-                    Some(Pixel(self.center + t, self.style.stroke_color.expect("Border color not defined")))
+                    Some(Pixel(
+                        self.center + t,
+                        self.style.stroke_color.expect("Border color not defined").into(),
+                    ))
                 } else if is_fill && self.style.fill_color.is_some() {
-                    Some(Pixel(self.center + t, self.style.fill_color.expect("Fill color not defined")))
+                    Some(Pixel(
+                        self.center + t,
+                        self.style.fill_color.expect("Fill color not defined").into(),
+                    ))
                 } else {
                     None
                 };
@@ -165,7 +131,7 @@ impl Iterator for CircleIterator {
     }
 }
 
-pub fn circle(fb: &mut LcdFB, circle: Circle, clip: Option<Rectangle>) {
+pub fn circle<T: FrameBuffer>(fb: &mut T, circle: Circle, clip: Option<Rectangle>) {
     let radius = circle.radius.abs() as u16;
     let c = CircleIterator {
         center: circle.center,
@@ -176,7 +142,7 @@ pub fn circle(fb: &mut LcdFB, circle: Circle, clip: Option<Rectangle>) {
     };
 
     for pixel in c {
-        put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
+        fb.put_pixel(pixel.0, pixel.1);
     }
 }
 
@@ -227,11 +193,11 @@ impl Iterator for RectangleIterator {
                 || (self.p.x <= br.x && self.p.x > br.x - border_width)
                 ) && self.style.stroke_color.is_some()
                 {
-                    out = Some(Pixel(self.p, self.style.stroke_color.expect("Expected stroke")));
+                    out = Some(Pixel(self.p, self.style.stroke_color.expect("Expected stroke").into()));
                 }
                 // Fill
                 else if let Some(fill) = self.style.fill_color {
-                    out = Some(Pixel(self.p, fill));
+                    out = Some(Pixel(self.p, fill.into()));
                 }
             }
 
@@ -250,13 +216,13 @@ impl Iterator for RectangleIterator {
     }
 }
 
-pub fn rectangle(fb: &mut LcdFB, rect: Rectangle, clip: Option<Rectangle>, xor: bool) {
+pub fn rectangle<T: FrameBuffer>(fb: &mut T, rect: Rectangle, clip: Option<Rectangle>, xor: bool) {
     let r =
         RectangleIterator { top_left: rect.tl, bottom_right: rect.br, style: rect.style, p: rect.tl, clip };
 
     for pixel in r {
         if !xor {
-            put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
+            fb.put_pixel(pixel.0, pixel.1);
         } else {
             if rect.width() <= BUSY_ANIMATION_RECT_WIDTH as u32 {
                 // only allow xor of a rectangle if it is within the expected width for the busy animation
@@ -264,14 +230,14 @@ pub fn rectangle(fb: &mut LcdFB, rect: Rectangle, clip: Option<Rectangle>, xor: 
                 // text on an otherwise untrusted dialog box (I suspect it's not impossible, but introduces
                 // a likelihood of drawing artifacts especially across translations and font size selections).
                 if pixel.0.y % 25 != 5 {
-                    xor_pixel(fb, pixel.0.x, pixel.0.y);
+                    fb.xor_pixel(pixel.0);
                 } else {
                     // don't allow XOR on some pixels to avoid this being used as a primitive to synthesize
                     // secure boxes
                 }
             } else {
                 log::warn!("invalid xor rect width");
-                put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
+                fb.put_pixel(pixel.0, pixel.1);
             }
         }
     }
@@ -329,9 +295,15 @@ impl Iterator for QuadrantIterator {
                 let is_fill = len <= outer_radius_sq + 1;
 
                 item = if is_border && self.style.stroke_color.is_some() {
-                    Some(Pixel(self.center + t, self.style.stroke_color.expect("Border color not defined")))
+                    Some(Pixel(
+                        self.center + t,
+                        self.style.stroke_color.expect("Border color not defined").into(),
+                    ))
                 } else if is_fill && self.style.fill_color.is_some() {
-                    Some(Pixel(self.center + t, self.style.fill_color.expect("Fill color not defined")))
+                    Some(Pixel(
+                        self.center + t,
+                        self.style.fill_color.expect("Fill color not defined").into(),
+                    ))
                 } else {
                     None
                 };
@@ -393,7 +365,7 @@ impl Iterator for QuadrantIterator {
     }
 }
 
-pub fn quadrant(fb: &mut LcdFB, circle: Circle, quad: Quadrant, clip: Option<Rectangle>) {
+pub fn quadrant<T: FrameBuffer>(fb: &mut T, circle: Circle, quad: Quadrant, clip: Option<Rectangle>) {
     let starting_pixel = match quad {
         Quadrant::TopLeft => Point::new(-(circle.radius as isize), -(circle.radius as isize)),
         Quadrant::TopRight => Point::new(0, -(circle.radius as isize)),
@@ -410,7 +382,7 @@ pub fn quadrant(fb: &mut LcdFB, circle: Circle, quad: Quadrant, clip: Option<Rec
     };
 
     for pixel in q {
-        put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
+        fb.put_pixel(pixel.0, pixel.1);
     }
 }
 
@@ -473,11 +445,11 @@ impl Iterator for RoundedRectangleIterator {
                             || (self.p.x <= br.x && self.p.x > br.x - border_width)
                     ) && self.style.stroke_color.is_some()
                     {
-                        out = Some(Pixel(self.p, self.style.stroke_color.expect("Expected stroke")));
+                        out = Some(Pixel(self.p, self.style.stroke_color.expect("Expected stroke").into()));
                     }
                     // Fill
                     else if let Some(fill) = self.style.fill_color {
-                        out = Some(Pixel(self.p, fill));
+                        out = Some(Pixel(self.p, fill.into()));
                     }
                 }
             }
@@ -497,7 +469,7 @@ impl Iterator for RoundedRectangleIterator {
     }
 }
 
-pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rectangle>) {
+pub fn rounded_rectangle<T: FrameBuffer>(fb: &mut T, rr: RoundedRectangle, clip: Option<Rectangle>) {
     // compute the four quadrants
     // call the rr iterator on the rectangle
     // then call it on one each of the four circle quadrants
@@ -522,7 +494,7 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
     };
     // draw the body
     for pixel in rri {
-        put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
+        fb.put_pixel(pixel.0, pixel.1);
     }
     //log::info!("GFX|OP: topleft {:?}, {:?}, {:?}, {:?}", rri.tlq.br, rr.radius, rr.border.style, clip);
     // now draw the corners
@@ -565,9 +537,8 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
  * author: nworbnhoj
  */
 #[cfg(feature = "ditherpunk")]
-use crate::api::Tile;
-#[cfg(feature = "ditherpunk")]
-pub fn tile(fb: &mut LcdFB, tile: Tile, clip: Option<Rectangle>) {
+pub fn tile<T: FrameBuffer>(fb_api: &mut T, tile: Tile, clip: Option<Rectangle>) {
+    let fb = unsafe { fb_api.raw_mut() };
     use std::cmp::{max, min};
     let fb_size: Point = Point::new((LCD_PX_PER_LINE - 1) as isize, (LCD_LINES - 1) as isize);
     const FB_WORDS_PER_LINE: usize = LCD_WORDS_PER_LINE;

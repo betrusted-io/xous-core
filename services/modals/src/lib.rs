@@ -189,6 +189,7 @@ impl Modals {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn =
             xns.request_connection_blocking(api::SERVER_NAME_MODALS).expect("Can't connect to Modals server");
+        #[cfg(not(feature = "doc-deps"))]
         let trng = Trng::new(&xns).unwrap();
         #[allow(unused_mut)]
         let mut token = [0u32; 4];

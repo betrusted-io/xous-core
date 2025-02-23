@@ -5,8 +5,6 @@ pub struct Trng {}
 impl Trng {
     pub fn new(_xns: &xous_names::XousNames) -> Result<Self, xous::Error> { Ok(Trng {}) }
 
-    fn reseed(&self) {}
-
     pub fn get_u32(&self) -> Result<u32, xous::Error> { Ok(rand::thread_rng().gen()) }
 
     pub fn get_u64(&self) -> Result<u64, xous::Error> { Ok(rand::thread_rng().gen()) }
