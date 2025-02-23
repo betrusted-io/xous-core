@@ -1,14 +1,18 @@
 // `Command` vendored from https://github.com/ithinuel/sh1107-rs/tree/main
+use cramium_api::EventChannel;
 use cramium_api::*;
 use ux_api::minigfx::{ColorNative, FrameBuffer, Point};
 use ux_api::platform::*;
 
 use crate::ifram::IframRange;
-use crate::udma::{Spim, SpimClkPha, SpimClkPol, SpimCs};
+use crate::udma::{self, Spim, SpimClkPha, SpimClkPol, SpimCs};
 
 pub const COLUMN: isize = WIDTH;
 pub const ROW: isize = LINES;
 pub const PAGE: u8 = ROW as u8 / 8;
+
+// IFRAM space reserved for UDMA channel commands
+const SIDEBAND_LEN: usize = 256;
 
 pub struct MainThreadToken(());
 impl MainThreadToken {
@@ -261,7 +265,117 @@ impl<'a> Oled128x128<'a> {
                 core::slice::from_raw_parts_mut((ifram_vaddr + 2048) as *mut u8, 2048)
             }],
             srfb: [0u8; WIDTH as usize * HEIGHT as usize / core::mem::size_of::<u8>()],
-            sideband_len: 256,
+            sideband_len: SIDEBAND_LEN,
+            active_buffer: BufferState::A,
+            cd_port,
+            cd_pin,
+            iox,
+        }
+    }
+
+    /// This should only be called to initialize the panic handler with its own
+    /// copy of hardware registers.
+    ///
+    /// # Safety
+    /// This creates a raw copy of the SPI hardware handle, which diverges from the copy used
+    /// by the framebuffer. This is only safe when there are no more operations to be done to
+    /// adjust the hardware mode of the SPIM.
+    ///
+    /// Furthermore, "anyone" with a copy of this data can clobber existing graphics operations. Thus,
+    /// any access to these registers have to be protected with a mutex of some form. In the case of
+    /// the panic handler, the `is_panic` `AtomicBool` will suppress graphics loop operation
+    /// in the case of a panic.
+    pub unsafe fn to_raw_parts(
+        &self,
+    ) -> (
+        usize,
+        udma::SpimCs,
+        u8,
+        u8,
+        Option<EventChannel>,
+        udma::SpimMode,
+        udma::SpimByteAlign,
+        IframRange,
+        usize,
+        usize,
+        u8,
+    ) {
+        self.spim.into_raw_parts()
+    }
+
+    /// Creates a clone of the display handle. This is only safe if the handles are used in a
+    /// mutually excluslive fashion, and the handles are shared only within the same process space
+    /// (i.e. between threads in a single process). The primary purpose for this to exist is to create
+    /// a dedicated display object inside a panic handler thread.
+    ///
+    /// The outer implementation of the main loop with the panic handler has to enforce the mutual exclusion
+    /// property, otherwise unpredictable behavior may occur.
+    ///
+    /// A fresh reference to the iox object is required, so that the lifetimes of the iox object are not
+    /// entangled between the original reference and the clone.
+    pub unsafe fn from_raw_parts<T>(
+        display_parts: (
+            usize,
+            udma::SpimCs,
+            u8,
+            u8,
+            Option<EventChannel>,
+            udma::SpimMode,
+            udma::SpimByteAlign,
+            IframRange,
+            usize,
+            usize,
+            u8,
+        ),
+        iox: &'a T,
+    ) -> Self
+    where
+        T: IoGpio,
+    {
+        // extract the raw parts
+        let (
+            csr,
+            cs,
+            sot_wait,
+            eot_wait,
+            event_channel,
+            mode,
+            _align,
+            ifram,
+            tx_buf_len_bytes,
+            rx_buf_len_bytes,
+            dummy_cycles,
+        ) = display_parts;
+        // compile them into a new object
+        let mut spim = unsafe {
+            Spim::from_raw_parts(
+                csr,
+                cs,
+                sot_wait,
+                eot_wait,
+                event_channel,
+                mode,
+                _align,
+                ifram,
+                tx_buf_len_bytes,
+                rx_buf_len_bytes,
+                dummy_cycles,
+            )
+        };
+        spim.set_endianness(crate::udma::SpimEndian::MsbFirst);
+        let ifram_vaddr = spim.ifram.virt_range.as_mut_ptr();
+        let (_channel, cd_port, cd_pin, _cs_pin) = crate::board::get_display_pins();
+        Self {
+            spim,
+            // safety: this is safe because these ranges are in fact allocated, and all values can be
+            // represented. They have a static lifetime because they are mapped to hardware. There is
+            // in fact an unsafe front/back buffer contention, but that's the whole point of this routine,
+            // to safely manage that.
+            buffers: [unsafe { core::slice::from_raw_parts_mut(ifram_vaddr as *mut u8, 2048) }, unsafe {
+                core::slice::from_raw_parts_mut(ifram_vaddr.add(2048) as *mut u8, 2048)
+            }],
+            srfb: [0u8; WIDTH as usize * HEIGHT as usize / core::mem::size_of::<u8>()],
+            sideband_len: SIDEBAND_LEN,
             active_buffer: BufferState::A,
             cd_port,
             cd_pin,
@@ -440,10 +554,18 @@ impl<'a> FrameBuffer for Oled128x128<'a> {
         }
     }
 
-    /// This is highly unsafe. Don't use it - this is only implemented to provide cross-compatibility
-    /// with other platforms that require this access.
-    /// This "works in theory" because the data is striped so that the LSBs align with the lower numbered
-    /// pixels, but an unsafe mapping like this is a dumpster fire as far as Rust is concerned.
+    /// This "works" because the data is striped so that the LSBs align with the lower numbered
+    /// pixels. This mapping is only safe because the underlying frame buffer is hard-mapped to
+    /// an aligned address that always exists in memory, and every element is representable and
+    /// correct between the original buffer type and the FbRaw type.
+    ///
+    /// The transformation grabs the raw pointer to the frame buffer and simply forces it into
+    /// a slice with the correct type; I feel like this kind of transformation runs a risk of running
+    /// afoul of compiler optimizations, and there is probably a better way to do this; but also,
+    /// we need the core access to be extremely performant because when we grab a raw frame buffer
+    /// the whole point is to bit-bang access to hardware frame buffer memory for assembling
+    /// glyphs and pixels during image compositing, so we can't afford any abstraction overhead;
+    /// whatever abstraction is used *has* to be zero-cost.
     unsafe fn raw_mut(&mut self) -> &mut ux_api::platform::FbRaw {
         let len = self.buffer().len();
         core::slice::from_raw_parts_mut(
