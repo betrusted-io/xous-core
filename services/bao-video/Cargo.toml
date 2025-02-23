@@ -19,6 +19,12 @@ cram-hal-service = { path = "../cram-hal-service", optional = true }
 ux-api = { path = "../../libs/ux-api" }
 cramium-emu = { path = "../cramium-emu", optional = true }
 cramium-api = { path = "../../libs/cramium-api" }
+blitstr2 = { path = "../../libs/blitstr2" }
+xous-ipc = "0.10.4"
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+] }
 
 # QR decoding
 libm = { version = "0.2.8" }
@@ -28,11 +34,16 @@ rqrr = "0.8.0"
 locales = { path = "../../locales" }
 
 [features]
+ditherpunk = []
+
 # This crate is baosec specific; these flags switch between hosted mode emulation
 # (for UI development) and actual hardware targets. In UI development all camera data
 # is "faked"
 board-baosec = ["cram-hal-service", "cramium-hal", "ux-api/board-baosec"]
 hosted-baosec = ["cramium-emu", "ux-api/hosted-baosec"]
+
+# temporary feature - remove after we have properly created a camera control API
+autotest = []
 
 cramium-soc = ["utralib/cramium-soc"]
 decongest-udma = []
