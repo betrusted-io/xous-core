@@ -82,7 +82,7 @@ pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 pub const KERNEL_OFFSET: usize = 0x6_0000;
 
 #[allow(dead_code)]
-pub(crate) fn delay(quantum: usize) {
+pub fn delay(quantum: usize) {
     use utralib::{CSR, utra};
     // abuse the d11ctime timer to create some time-out like thing
     let mut d11c = CSR::new(utra::d11ctime::HW_D11CTIME_BASE as *mut u32);
@@ -381,8 +381,32 @@ pub fn early_init() -> u32 {
         );
         sh1107.init();
         crate::platform::cramium::bootlogo::show_logo(&mut sh1107);
-        sh1107.buffer_swap();
         sh1107.draw();
+        #[cfg(feature = "sh1107-bringup")]
+        loop {
+            use core::fmt::Write;
+
+            use ux_api::minigfx::Point;
+            for i in 0..96 {
+                sh1107.buffer_mut().fill(0);
+                let native_buf = unsafe { sh1107.raw_mut() };
+                let p = if i < 64 { i } else { i - 64 + 128 };
+                native_buf[p / 32] = 1 << (p % 32);
+                native_buf[0] |= 1;
+                use crate::platform::cramium::gfx;
+                let mut usizestr = crate::platform::UsizeToString::new();
+                write!(usizestr, "{}:[{}]{}", p, p / 32, p % 32).ok();
+                gfx::msg(
+                    &mut sh1107,
+                    usizestr.as_str(),
+                    Point::new(20, 64),
+                    cramium_hal::sh1107::Mono::White.into(),
+                    cramium_hal::sh1107::Mono::Black.into(),
+                );
+                sh1107.draw();
+                delay(250);
+            }
+        }
     }
 
     // Board bring-up: send characters to confirm the UART is configured & ready to go for the logging crate!
