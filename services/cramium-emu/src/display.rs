@@ -203,7 +203,7 @@ impl FrameBuffer for Oled128x128 {
     fn clear(&mut self) { self.buffer_mut().fill(DARK_COLOUR); }
 
     fn put_pixel(&mut self, p: Point, on: ColorNative) {
-        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+        if p.x >= COLUMN || p.y >= ROW || p.x < 0 || p.y < 0 {
             return;
         }
         let buffer = self.buffer_mut();
@@ -213,7 +213,7 @@ impl FrameBuffer for Oled128x128 {
     fn dimensions(&self) -> Point { Point::new(COLUMN, ROW) }
 
     fn get_pixel(&mut self, p: Point) -> Option<ColorNative> {
-        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+        if p.x >= COLUMN || p.y >= ROW || p.x < 0 || p.y < 0 {
             return None;
         }
         let buffer = self.buffer();
@@ -222,7 +222,7 @@ impl FrameBuffer for Oled128x128 {
     }
 
     fn xor_pixel(&mut self, p: Point) {
-        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+        if p.x >= COLUMN || p.y >= ROW || p.x < 0 || p.y < 0 {
             return;
         }
         let buffer = self.buffer_mut();
