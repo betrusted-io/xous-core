@@ -3,7 +3,6 @@
 use core::ops::Add;
 
 use blitstr2::*;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
 use super::FrameBuffer;
@@ -76,10 +75,15 @@ pub fn line<T: FrameBuffer>(
     screen_clip: Option<Rectangle>,
     msg: &mut xous::envelope::Envelope,
 ) {
-    msg_scalar_unpack!(msg, p1, p2, style, _, {
+    if let Some(scalar) = msg.body.scalar_message() {
+        let p1 = scalar.arg1;
+        let p2 = scalar.arg2;
+        let style = scalar.arg3;
         let l = Line::new_with_style(Point::from(p1), Point::from(p2), DrawStyle::from(style));
         op::line(display, l, screen_clip, false);
-    })
+    } else {
+        panic!("Incorrect message type");
+    }
 }
 
 pub fn rectangle<T: FrameBuffer>(
@@ -87,10 +91,15 @@ pub fn rectangle<T: FrameBuffer>(
     screen_clip: Option<Rectangle>,
     msg: &mut xous::envelope::Envelope,
 ) {
-    msg_scalar_unpack!(msg, tl, br, style, _, {
+    if let Some(scalar) = msg.body.scalar_message() {
+        let tl = scalar.arg1;
+        let br = scalar.arg2;
+        let style = scalar.arg3;
         let r = Rectangle::new_with_style(Point::from(tl), Point::from(br), DrawStyle::from(style));
         op::rectangle(display, r, screen_clip.into(), false);
-    })
+    } else {
+        panic!("Incorrect message type");
+    }
 }
 
 pub fn rounded_rectangle<T: FrameBuffer>(
@@ -98,13 +107,19 @@ pub fn rounded_rectangle<T: FrameBuffer>(
     screen_clip: Option<Rectangle>,
     msg: &mut xous::envelope::Envelope,
 ) {
-    msg_scalar_unpack!(msg, tl, br, style, r, {
+    if let Some(scalar) = msg.body.scalar_message() {
+        let tl = scalar.arg1;
+        let br = scalar.arg2;
+        let style = scalar.arg3;
+        let r = scalar.arg4;
         let rr = RoundedRectangle::new(
             Rectangle::new_with_style(Point::from(tl), Point::from(br), DrawStyle::from(style)),
             r as _,
         );
         op::rounded_rectangle(display, rr, screen_clip.into());
-    })
+    } else {
+        panic!("Incorrect message type");
+    }
 }
 
 #[cfg(feature = "ditherpunk")]
@@ -123,18 +138,27 @@ pub fn circle<T: FrameBuffer>(
     screen_clip: Option<Rectangle>,
     msg: &mut xous::envelope::Envelope,
 ) {
-    msg_scalar_unpack!(msg, center, radius, style, _, {
+    if let Some(scalar) = msg.body.scalar_message() {
+        let center = scalar.arg1;
+        let radius = scalar.arg2;
+        let style = scalar.arg3;
         let c = Circle::new_with_style(Point::from(center), radius as _, DrawStyle::from(style));
         op::circle(display, c, screen_clip.into());
-    })
+    } else {
+        panic!("Incorrect message type");
+    }
 }
 
 pub fn query_glyph_props(msg: &mut xous::envelope::Envelope) {
-    msg_blocking_scalar_unpack!(msg, style, _, _, _, {
+    if let Some(scalar) = msg.body.scalar_message_mut() {
+        let style = scalar.arg1;
         let glyph = GlyphStyle::from(style);
-        xous::return_scalar2(msg.sender, glyph.into(), glyph_to_height_hint(glyph))
-            .expect("could not return QueryGlyphProps request");
-    })
+
+        scalar.arg1 = glyph.into();
+        scalar.arg2 = glyph_to_height_hint(glyph);
+    } else {
+        panic!("Incorrect message type");
+    }
 }
 
 pub fn draw_text_view<T: FrameBuffer>(display: &mut T, msg: &mut xous::envelope::Envelope) {
