@@ -6,7 +6,7 @@
 #[cfg(not(feature = "cramium-soc"))]
 pub const FONT_BASE: usize = 0x2053_0000;
 #[cfg(feature = "cramium-soc")]
-pub const FONT_BASE: usize = 0x6001_0000;
+pub const FONT_BASE: usize = 0x6004_0000;
 
 #[cfg(not(feature = "cramium-soc"))]
 pub const EMOJI_OFFSET: usize = 0x0;
