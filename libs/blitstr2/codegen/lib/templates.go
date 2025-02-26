@@ -187,7 +187,7 @@ const fontmapTemplate = `#![cfg_attr(rustfmt, rustfmt_skip)]
 #[cfg(not(feature = "cramium-soc"))]
 pub const FONT_BASE: usize = 0x2053_0000;
 #[cfg(feature = "cramium-soc")]
-pub const FONT_BASE: usize = 0x6001_0000;
+pub const FONT_BASE: usize = 0x6004_0000;
 
 {{range $f := .FontDir}}#[cfg(not(feature = "cramium-soc"))]
 pub const {{$f.Name}}: usize = 0x{{$f.Len}};

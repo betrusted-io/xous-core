@@ -2,6 +2,7 @@ use core::fmt::Write;
 
 use blitstr2::GlyphStyle;
 use num_traits::*;
+use ticktimer::Ticktimer;
 use ux_api::minigfx::*;
 use ux_api::service::api::*;
 
@@ -22,8 +23,8 @@ pub fn tests() {
     let _ = std::thread::spawn({
         move || {
             let xns = xous_names::XousNames::new().unwrap();
-            let gfx = graphics_server::Gfx::new(&xns).unwrap();
-            let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+            let gfx = bao_video::Gfx::new(&xns).unwrap();
+            let ticktimer = Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
             for index in TestType::BusyAnimation.to_usize().unwrap()..TestType::End.to_usize().unwrap() {
                 // pause between each tests

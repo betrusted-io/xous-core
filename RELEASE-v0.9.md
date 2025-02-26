@@ -513,6 +513,10 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - Precursor (the first target for Xous) did not hold to this abstraction and conflated the two, so it is a special case in the build system.
   - "Hosted" mode emulations are considered to be a `board` target; the `soc` is assumed to be the host (linux, windows, etc.)
 - Since all builds require a `board` specifier, documentation now requires a `doc-deps` flag to be passed. This effectively specifies a set of dummy board dependencies so that the documentation can build. Here is the recommended command line for building docs: `cargo doc --no-deps --feature doc-deps`
+- Move graphics api to `ux-api` crate. This enables multi-platform support for the existing graphics libraries.
+  - graphics-server is deprecated as a dependency. Clients should now use `ux-api::minigfx` for drawing primitive dependencies.
+  - This change now hides the GAM abstraction in most cases. The GAM is used to implement windowing; for lightweight platforms that don't have the screen real estate for windows, the `canvas`/`Gid` abstractions still exist but are ignored, and applications can draw directly to the screen.
+  - `baosec` target in particular supports no windowing as the screen is 128x128: the UI is purely modal, where every user interaction occupies the entire screen.
 
 ## Roadmap
 - Lots of testing and bug fixes

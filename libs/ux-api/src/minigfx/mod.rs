@@ -24,6 +24,8 @@ pub mod cursor;
 #[cfg(feature = "std")]
 pub use cursor::*;
 #[cfg(feature = "std")]
+pub mod handlers;
+#[cfg(feature = "std")]
 pub mod op;
 
 #[cfg(feature = "std")]

@@ -3,9 +3,10 @@ use std::sync::{Arc, Mutex, mpsc};
 use cramium_api::*;
 use minifb::{Key, Window, WindowOptions};
 use ux_api::minigfx::{ColorNative, FrameBuffer, Point};
+use ux_api::platform::*;
 
-pub const COLUMN: isize = 128;
-pub const ROW: isize = 128;
+pub const COLUMN: isize = WIDTH;
+pub const ROW: isize = LINES;
 pub const PAGE: u8 = ROW as u8 / 8;
 
 const MAX_FPS: usize = 60;
@@ -111,6 +112,7 @@ pub struct Oled128x128 {
     native_buffer: Arc<Mutex<Vec<u32>>>, //[u32; WIDTH * HEIGHT],
     // front and back buffers
     buffers: [[u32; COLUMN as usize * ROW as usize]; 2],
+    srfb: [u32; COLUMN as usize * ROW as usize],
     active_buffer: BufferState,
 }
 
@@ -131,6 +133,7 @@ impl<'a> Oled128x128 {
         Self {
             native_buffer,
             buffers: [[DARK_COLOUR; COLUMN as usize * ROW as usize]; 2],
+            srfb: [DARK_COLOUR; COLUMN as usize * ROW as usize],
             active_buffer: BufferState::A,
         }
     }
@@ -141,6 +144,24 @@ impl<'a> Oled128x128 {
 
     pub fn buffer(&self) -> &[u32] { &self.buffers[self.active_buffer.as_index()] }
 
+    pub fn screen_size(&self) -> Point { Point::new(WIDTH, LINES) }
+
+    pub fn redraw(&mut self) {
+        self.draw();
+        self.buffer_swap();
+    }
+
+    pub fn set_devboot(&mut self, _ena: bool) {
+        unimplemented!("devboot feature does not exist on this platform");
+    }
+
+    pub fn stash(&mut self) { self.srfb.copy_from_slice(&self.buffers[self.active_buffer.as_index()]); }
+
+    pub fn pop(&mut self) {
+        self.buffers[self.active_buffer.as_index()].copy_from_slice(&self.srfb);
+        self.redraw();
+    }
+
     pub fn send_command<'b, U>(&'b mut self, _cmd: U)
     where
         U: IntoIterator<Item = u8> + 'b,
@@ -148,13 +169,33 @@ impl<'a> Oled128x128 {
     }
 
     pub fn init(&mut self) {}
+
+    pub fn blit_screen(&mut self, bmp: &[u32]) {
+        let buf = self.buffer_mut();
+
+        let mut temp = [0u32; COLUMN as usize * ROW as usize];
+        // this routine will paint the bitmap into temp flipped horizontally
+        for (i, &word) in bmp.iter().rev().enumerate() {
+            for bit in 0..32 {
+                let pixel_index = i * 32 + bit;
+                let is_white = (word >> bit) & 1 != 0;
+                temp[pixel_index] = if is_white { LIGHT_COLOUR } else { DARK_COLOUR };
+            }
+        }
+        // this flips it horizontally
+        for (src_line, dst_line) in temp.chunks(COLUMN as usize).zip(buf.chunks_mut(COLUMN as usize)) {
+            for (&s, d) in src_line.iter().rev().zip(dst_line.iter_mut()) {
+                *d = s;
+            }
+        }
+    }
 }
 
 impl FrameBuffer for Oled128x128 {
     /// Transfers the back buffer
     fn draw(&mut self) {
         // this must be opposite of what `buffer` / `buffer_mut` returns
-        let buffer = self.buffers[self.active_buffer.swap().as_index()];
+        let buffer = self.buffer();
         let mut native_buffer = self.native_buffer.lock().unwrap();
         native_buffer.copy_from_slice(&buffer);
     }
@@ -162,7 +203,7 @@ impl FrameBuffer for Oled128x128 {
     fn clear(&mut self) { self.buffer_mut().fill(DARK_COLOUR); }
 
     fn put_pixel(&mut self, p: Point, on: ColorNative) {
-        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+        if p.x >= COLUMN || p.y >= ROW || p.x < 0 || p.y < 0 {
             return;
         }
         let buffer = self.buffer_mut();
@@ -172,7 +213,7 @@ impl FrameBuffer for Oled128x128 {
     fn dimensions(&self) -> Point { Point::new(COLUMN, ROW) }
 
     fn get_pixel(&mut self, p: Point) -> Option<ColorNative> {
-        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+        if p.x >= COLUMN || p.y >= ROW || p.x < 0 || p.y < 0 {
             return None;
         }
         let buffer = self.buffer();
@@ -181,7 +222,7 @@ impl FrameBuffer for Oled128x128 {
     }
 
     fn xor_pixel(&mut self, p: Point) {
-        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+        if p.x >= COLUMN || p.y >= ROW || p.x < 0 || p.y < 0 {
             return;
         }
         let buffer = self.buffer_mut();
