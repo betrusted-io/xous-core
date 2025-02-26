@@ -34,6 +34,7 @@ rqrr = "0.8.0"
 locales = { path = "../../locales" }
 
 [features]
+gfx-testing = []
 ditherpunk = []
 
 # This crate is baosec specific; these flags switch between hosted mode emulation
@@ -49,5 +50,6 @@ cramium-soc = ["utralib/cramium-soc", "blitstr2/cramium-soc"]
 decongest-udma = []
 default = [
     "decongest-udma",
+    # "gfx-testing",
     # "hosted-baosec",
 ] # hosted-baosec should be removed for commit, this is only here to make vscode happy
