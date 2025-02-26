@@ -115,6 +115,7 @@ swap = ["aes-gcm-siv"]
 
 # cramium target flags
 board-bringup = []
+sh1107-bringup = []                      # used to discover FB parameters
 sram-margin = []
 boot-delay = []
 simulation-only = []
