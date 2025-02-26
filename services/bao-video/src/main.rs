@@ -6,6 +6,9 @@ mod modules;
 #[cfg(feature = "board-baosec")]
 mod panic;
 mod qr;
+#[cfg(feature = "gfx-testing")]
+mod testing;
+
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -33,7 +36,7 @@ use num_traits::*;
 use utralib::utra;
 use ux_api::minigfx::{self, FrameBuffer};
 use ux_api::service::api::*;
-use xous::{MemoryRange, msg_blocking_scalar_unpack, msg_scalar_unpack};
+use xous::MemoryRange;
 use xous_ipc::Buffer;
 
 // Scope of this crate: *No calls to modals* this can create dependency lockups.
@@ -182,13 +185,15 @@ fn main() -> ! {
 
 pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
 
     // ---- Xous setup
     let xns = xous_names::XousNames::new().unwrap();
     let sid = xns.register_name(SERVER_NAME_GFX, None).expect("can't register server");
 
     let tt = ticktimer::Ticktimer::new().unwrap();
+    // wait for other servers to start
+    tt.sleep_ms(100).ok();
 
     // ---- basic hardware setup
     let iox = IoxHal::new();
@@ -293,6 +298,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let mut frame = [0u8; IMAGE_WIDTH * IMAGE_HEIGHT];
     let mut decode_success;
     let mut msg_opt = None;
+    #[cfg(feature = "gfx-testing")]
+    testing::tests();
     loop {
         if !is_panic.load(Ordering::Relaxed) {
             xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
@@ -657,27 +664,42 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 GfxOpcode::Circle => {
                     minigfx::handlers::circle(&mut display, screen_clip.into(), msg);
                 }
-                GfxOpcode::ScreenSize => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    let pt = display.screen_size();
-                    xous::return_scalar2(msg.sender, pt.x as usize, pt.y as usize)
-                        .expect("couldn't return ScreenSize request");
-                }),
+                GfxOpcode::ScreenSize => {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
+                        let pt = display.screen_size();
+                        scalar.arg1 = pt.x as usize;
+                        scalar.arg2 = pt.y as usize;
+                    } else {
+                        panic!("Incorrect message type");
+                    }
+                }
                 GfxOpcode::QueryGlyphProps => {
                     minigfx::handlers::query_glyph_props(msg);
                 }
-                GfxOpcode::DrawSleepScreen => msg_scalar_unpack!(msg, _, _, _, _, {
-                    display.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
-                    display.redraw();
-                }),
-                GfxOpcode::DrawBootLogo => msg_scalar_unpack!(msg, _, _, _, _, {
-                    display.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
-                    display.redraw();
-                }),
-                GfxOpcode::RestartBulkRead => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    bulkread.from_offset = 0;
-                    xous::return_scalar(msg.sender, 0)
-                        .expect("couldn't ack that bulk read pointer was reset");
-                }),
+                GfxOpcode::DrawSleepScreen => {
+                    if let Some(_scalar) = msg.body.scalar_message() {
+                        display.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
+                        display.redraw();
+                    } else {
+                        panic!("Incorrect message type");
+                    }
+                }
+                GfxOpcode::DrawBootLogo => {
+                    if let Some(_scalar) = msg.body.scalar_message() {
+                        display.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
+                        display.redraw();
+                    } else {
+                        panic!("Incorrect message type");
+                    }
+                }
+                GfxOpcode::RestartBulkRead => {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
+                        bulkread.from_offset = 0;
+                        scalar.arg1 = 0;
+                    } else {
+                        panic!("Incorrect message type");
+                    }
+                }
                 GfxOpcode::BulkReadFonts => {
                     // this also needs to reflect in root-keys/src/implementation.rs @ sign_loader()
                     let fontlen = fontmap::FONT_TOTAL_LEN as u32
@@ -713,24 +735,29 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     bulkread.from_offset += readlen as u32;
                     buf.replace(bulkread).unwrap();
                 }
-                GfxOpcode::TestPattern => msg_blocking_scalar_unpack!(msg, _duration, _, _, _, {
-                    todo!("Need to write this for factory testing");
-                }),
+                GfxOpcode::TestPattern => {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
+                        let _duration = scalar.arg1;
+                        todo!("Need to write this for factory testing");
+                    } else {
+                        panic!("Incorrect message type");
+                    }
+                }
                 GfxOpcode::Stash => {
                     display.stash();
-                    match msg.body {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
                         // ack the message if it's a blocking scalar
-                        xous::Message::BlockingScalar(_) => xous::return_scalar(msg.sender, 1).unwrap(),
-                        _ => (),
+                        scalar.arg1 = 1;
                     }
+                    // no failure if it's not
                 }
                 GfxOpcode::Pop => {
                     display.pop();
-                    match msg.body {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
                         // ack the message if it's a blocking scalar
-                        xous::Message::BlockingScalar(_) => xous::return_scalar(msg.sender, 1).unwrap(),
-                        _ => (),
+                        scalar.arg1 = 1;
                     }
+                    // no failure if it's not
                 }
                 GfxOpcode::Quit => break,
                 _ => {
