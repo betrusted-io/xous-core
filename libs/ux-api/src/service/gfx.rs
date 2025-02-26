@@ -231,7 +231,7 @@ impl Gfx {
             Message::new_blocking_scalar(GfxOpcode::ScreenSize.to_usize().unwrap(), 0, 0, 0, 0),
         )
         .expect("ScreenSize message failed");
-        if let xous::Result::Scalar2(x, y) = response {
+        if let xous::Result::Scalar5(_, x, y, _, _) = response {
             Ok(Point::new(x as _, y as _))
         } else {
             panic!("unexpected return value: {:#?}", response);
@@ -262,7 +262,7 @@ impl Gfx {
             ),
         )
         .expect("QueryGlyphProps failed");
-        if let xous::Result::Scalar2(_, h) = response {
+        if let xous::Result::Scalar5(_, _, h, _, _) = response {
             Ok(h)
         } else {
             panic!("unexpected return value: {:#?}", response);
