@@ -119,7 +119,6 @@ pub fn process_update(perclk: u32) {
     gfx::msg(&mut sh1107, "    START to boot", Point::new(0, 16), Mono::White.into(), Mono::Black.into());
     gfx::msg(&mut sh1107, "   SELECT to update", Point::new(0, 0), Mono::White.into(), Mono::Black.into());
 
-    sh1107.buffer_swap();
     sh1107.draw();
 
     // setup IO pins to check for update viability
@@ -144,7 +143,6 @@ pub fn process_update(perclk: u32) {
 
     if do_update {
         gfx::msg(&mut sh1107, "Connect to USB", Point::new(16, 64), Mono::White.into(), Mono::Black.into());
-        sh1107.buffer_swap();
         sh1107.draw();
 
         crate::platform::cramium::usb::init_usb();
@@ -218,7 +216,6 @@ pub fn process_update(perclk: u32) {
                                 Mono::Black.into(),
                                 Mono::White.into(),
                             );
-                            sh1107.buffer_swap();
                             sh1107.draw();
                             last_usb_state = new_usb_state;
                         }
@@ -279,7 +276,6 @@ pub fn process_update(perclk: u32) {
                                             Mono::White.into(),
                                             Mono::Black.into(),
                                         );
-                                        sh1107.buffer_swap();
                                         sh1107.draw();
                                         sh1107.clear();
                                         return;
@@ -467,7 +463,6 @@ pub fn process_update(perclk: u32) {
                                             Mono::White.into(),
                                             Mono::Black.into(),
                                         );
-                                        sh1107.buffer_swap();
                                         sh1107.draw();
                                         sh1107.clear();
                                         return;
@@ -490,12 +485,11 @@ pub fn process_update(perclk: u32) {
     }
 
     gfx::msg(&mut sh1107, "   Booting Xous...", Point::new(0, 64), Mono::White.into(), Mono::Black.into());
-    sh1107.buffer_swap();
     sh1107.draw();
     sh1107.clear();
 }
 
-struct UsizeToString {
+pub struct UsizeToString {
     buf: [u8; 16], // Enough space for a u32 decimal string
     pos: usize,
 }
@@ -525,7 +519,6 @@ fn progress_bar(sh1107: &mut Oled128x128<'_>, percentage: usize) {
     let mut usizestr = UsizeToString::new();
     write!(usizestr, "{}%", percentage).ok();
     gfx::msg(sh1107, usizestr.as_str(), Point::new(55, 26), Mono::Black.into(), Mono::White.into());
-    sh1107.buffer_swap();
     sh1107.draw();
     sh1107.clear();
 }
