@@ -38,7 +38,7 @@ pub enum Mono {
 impl From<ColorNative> for Mono {
     fn from(value: ColorNative) -> Self {
         match value.0 {
-            0 => Mono::Black,
+            1 => Mono::Black,
             _ => Mono::White,
         }
     }
@@ -46,8 +46,8 @@ impl From<ColorNative> for Mono {
 impl Into<ColorNative> for Mono {
     fn into(self) -> ColorNative {
         match self {
-            Mono::Black => ColorNative::from(0),
-            Mono::White => ColorNative::from(1),
+            Mono::Black => ColorNative::from(1),
+            Mono::White => ColorNative::from(0),
         }
     }
 }
@@ -409,29 +409,7 @@ impl<'a> Oled128x128<'a> {
 
     pub fn redraw(&mut self) { self.draw(); }
 
-    pub fn blit_screen(&mut self, bmp: &[u32]) {
-        self.buffer.copy_from_slice(&bmp);
-        /*
-        for (i, &word) in bmp.iter().enumerate() {
-            for bit in 0..32 {
-                if (word & (1 << (31 - bit))) != 0 {
-                    self.put_pixel(
-                        Point::new((i as isize % 4) * 32 + bit, i as isize / 4),
-                        Mono::White.into(),
-                    );
-                }
-            }
-        }
-        */
-        /*
-        for (i, &word) in bmp.iter().enumerate() {
-            let bytes = word.to_le_bytes();
-            let start = i * core::mem::size_of::<u32>();
-            let end = start + core::mem::size_of::<u32>();
-            buf[start..end].copy_from_slice(&bytes);
-        }
-        */
-    }
+    pub fn blit_screen(&mut self, bmp: &[u32]) { self.buffer.copy_from_slice(bmp); }
 
     pub fn set_devboot(&mut self, _ena: bool) {
         unimplemented!("devboot feature does not exist on this platform");
@@ -461,7 +439,7 @@ impl<'a> Oled128x128<'a> {
             SetVCOMHDeselectLevel(0x35),
             SetPageAddress(0),
             ForceEntireDisplay(false),
-            SetDisplayMode(DisplayMode::BlackOnWhite),
+            SetDisplayMode(DisplayMode::WhiteOnBlack),
             DisplayOnOff(DisplayState::On),
         ];
 
@@ -501,10 +479,10 @@ impl<'a> FrameBuffer for Oled128x128<'a> {
         }
     }
 
-    fn clear(&mut self) { self.buffer_mut().fill(0); }
+    fn clear(&mut self) { self.buffer_mut().fill(0xFFFF_FFFF); }
 
     fn put_pixel(&mut self, p: Point, on: ColorNative) {
-        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+        if p.x >= COLUMN || p.y >= ROW || p.x < 0 || p.y < 0 {
             return;
         }
         let bitnum = (p.x + p.y * COLUMN) as usize;
@@ -518,7 +496,7 @@ impl<'a> FrameBuffer for Oled128x128<'a> {
     fn dimensions(&self) -> Point { Point::new(COLUMN, ROW) }
 
     fn get_pixel(&self, p: Point) -> Option<ColorNative> {
-        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+        if p.x >= COLUMN || p.y >= ROW || p.x < 0 || p.y < 0 {
             return None;
         }
         let bitnum = (p.x + p.y * COLUMN) as usize;
@@ -530,7 +508,7 @@ impl<'a> FrameBuffer for Oled128x128<'a> {
     }
 
     fn xor_pixel(&mut self, p: Point) {
-        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+        if p.x >= COLUMN || p.y >= ROW || p.x < 0 || p.y < 0 {
             return;
         }
         let bitnum = (p.x + p.y * COLUMN) as usize;
