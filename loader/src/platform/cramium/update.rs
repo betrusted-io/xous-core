@@ -29,6 +29,8 @@ use crate::platform::delay;
 //   - Port unicode font drawing into loader
 //   - Support localization
 
+const TEXT_MIDLINE: isize = 51;
+
 // Empirically measured PORTSC when the port is unplugged. This might be a brittle way
 // to detect if the device is unplugged.
 const DISCONNECT_STATE: u32 = 0x40b;
@@ -116,8 +118,15 @@ pub fn process_update(perclk: u32) {
         &mut udma_global,
     );
 
-    gfx::msg(&mut sh1107, "    START to boot", Point::new(0, 16), Mono::White.into(), Mono::Black.into());
-    gfx::msg(&mut sh1107, "   SELECT to update", Point::new(0, 0), Mono::White.into(), Mono::Black.into());
+    crate::platform::cramium::bootlogo::show_logo(&mut sh1107);
+    gfx::msg(
+        &mut sh1107,
+        "    START to boot",
+        Point::new(0, 115 - 16),
+        Mono::White.into(),
+        Mono::Black.into(),
+    );
+    gfx::msg(&mut sh1107, "   SELECT to update", Point::new(0, 115), Mono::White.into(), Mono::Black.into());
 
     sh1107.draw();
 
@@ -142,7 +151,13 @@ pub fn process_update(perclk: u32) {
     sh1107.clear();
 
     if do_update {
-        gfx::msg(&mut sh1107, "Connect to USB", Point::new(16, 64), Mono::White.into(), Mono::Black.into());
+        gfx::msg(
+            &mut sh1107,
+            "Connect to USB",
+            Point::new(16, TEXT_MIDLINE),
+            Mono::White.into(),
+            Mono::Black.into(),
+        );
         sh1107.draw();
 
         crate::platform::cramium::usb::init_usb();
@@ -198,21 +213,21 @@ pub fn process_update(perclk: u32) {
                             gfx::msg(
                                 &mut sh1107,
                                 "Copy files to device",
-                                Point::new(6, 64),
+                                Point::new(6, TEXT_MIDLINE),
                                 Mono::White.into(),
                                 Mono::Black.into(),
                             );
                             gfx::msg(
                                 &mut sh1107,
                                 "Press SELECT",
-                                Point::new(22, 46),
+                                Point::new(22, TEXT_MIDLINE + 18),
                                 Mono::Black.into(),
                                 Mono::White.into(),
                             );
                             gfx::msg(
                                 &mut sh1107,
                                 "when finished!",
-                                Point::new(19, 32),
+                                Point::new(19, TEXT_MIDLINE + 32),
                                 Mono::Black.into(),
                                 Mono::White.into(),
                             );
@@ -272,7 +287,7 @@ pub fn process_update(perclk: u32) {
                                         gfx::msg(
                                             &mut sh1107,
                                             "Kernel invalid!",
-                                            Point::new(10, 64),
+                                            Point::new(10, TEXT_MIDLINE),
                                             Mono::White.into(),
                                             Mono::Black.into(),
                                         );
@@ -459,7 +474,7 @@ pub fn process_update(perclk: u32) {
                                         gfx::msg(
                                             &mut sh1107,
                                             "Swap invalid!",
-                                            Point::new(6, 64),
+                                            Point::new(6, TEXT_MIDLINE),
                                             Mono::White.into(),
                                             Mono::Black.into(),
                                         );
@@ -484,7 +499,13 @@ pub fn process_update(perclk: u32) {
         }
     }
 
-    gfx::msg(&mut sh1107, "   Booting Xous...", Point::new(0, 64), Mono::White.into(), Mono::Black.into());
+    gfx::msg(
+        &mut sh1107,
+        "   Booting Xous...",
+        Point::new(0, TEXT_MIDLINE),
+        Mono::White.into(),
+        Mono::Black.into(),
+    );
     sh1107.draw();
     sh1107.clear();
 }
@@ -513,12 +534,24 @@ impl Write for UsizeToString {
 }
 
 fn progress_bar(sh1107: &mut Oled128x128<'_>, percentage: usize) {
-    gfx::msg(sh1107, "Writing, do not", Point::new(8, 64), Mono::White.into(), Mono::Black.into());
-    gfx::msg(sh1107, "reset or turn off!", Point::new(4, 50), Mono::White.into(), Mono::Black.into());
+    gfx::msg(sh1107, "Writing, do not", Point::new(8, TEXT_MIDLINE), Mono::White.into(), Mono::Black.into());
+    gfx::msg(
+        sh1107,
+        "reset or turn off!",
+        Point::new(4, TEXT_MIDLINE + 14),
+        Mono::White.into(),
+        Mono::Black.into(),
+    );
 
     let mut usizestr = UsizeToString::new();
     write!(usizestr, "{}%", percentage).ok();
-    gfx::msg(sh1107, usizestr.as_str(), Point::new(55, 26), Mono::Black.into(), Mono::White.into());
+    gfx::msg(
+        sh1107,
+        usizestr.as_str(),
+        Point::new(55, TEXT_MIDLINE + 38),
+        Mono::Black.into(),
+        Mono::White.into(),
+    );
     sh1107.draw();
     sh1107.clear();
 }
