@@ -16,6 +16,6 @@ pub fn show_logo(sh1107: &mut Oled128x128) {
     }
     crate::println!("oled test end");
     */
-    sh1107.buffer_mut().fill(0);
+    sh1107.buffer_mut().fill(0xFFFF_FFFF);
     sh1107.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
 }
