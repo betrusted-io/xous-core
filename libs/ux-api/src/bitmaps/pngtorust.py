@@ -23,7 +23,7 @@ def bitflip(data_block, bitwidth=32):
 
 def convert(ifile, ofile):
     # Open the image and convert it to 1-bit mode (black & white)
-    im = Image.open(ifile).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+    im = Image.open(ifile).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
     # im = Image.open(ifile)
     im = im.convert("1")  # pixels will be either 0 (black) or 255 (white)
 
@@ -36,7 +36,7 @@ def convert(ifile, ofile):
 
     # Process each pixel: assign bit value 1 for white (255) and 0 for black (0)
     for p in pixels:
-        bit = 1 if p else 0
+        bit = 0 if p else 1
         # Place the bit in the current 32-bit integer at the position given by count
         current |= (bit << (31 - count))
         count += 1
@@ -55,7 +55,7 @@ def convert(ifile, ofile):
         output.write("pub const BITMAP: [u32; 512] = [\n")
         for index in range(512 // 4):
             output.write("  0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x},\n"
-                         .format(packed[index * 4 + 0], packed[index * 4 + 1], packed[index * 4 + 2], packed[index * 4 + 3]))
+                         .format(packed[index * 4 + 3], packed[index * 4 + 2], packed[index * 4 + 1], packed[index * 4 + 0]))
         output.write("\n];\n")
 
 
