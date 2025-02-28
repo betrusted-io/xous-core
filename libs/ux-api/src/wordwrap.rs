@@ -164,14 +164,14 @@ impl ComposedType {
                         blitstr2::xor_glyph_large(
                             rawbuf,
                             (maybe_x, maybe_y),
-                            *glyph,
+                            glyph,
                             glyph.invert ^ invert,
                             cr,
                         );
                     } else if !glyph.double {
-                        blitstr2::xor_glyph(rawbuf, (maybe_x, maybe_y), *glyph, glyph.invert ^ invert, cr);
+                        blitstr2::xor_glyph(rawbuf, (maybe_x, maybe_y), glyph, glyph.invert ^ invert, cr);
                     } else {
-                        blitstr2::xor_glyph_2x(rawbuf, (maybe_x, maybe_y), *glyph, glyph.invert ^ invert, cr);
+                        blitstr2::xor_glyph_2x(rawbuf, (maybe_x, maybe_y), glyph, glyph.invert ^ invert, cr);
                     }
                     if glyph.insert {
                         // log::info!("insert at {},{}", glyph.ch, strpos - 1);
