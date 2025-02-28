@@ -179,8 +179,8 @@ impl FrameBuffer for XousDisplay {
     ///
     /// Note: this has not be carefully tested as this API is not used by the legacy code base.
     /// Anyone using this API for the first time may benefit in checking that it is correct.
-    fn get_pixel(&mut self, p: Point) -> Option<ColorNative> {
-        let fb: &mut [u32] = &mut self.emulated_buffer;
+    fn get_pixel(&self, p: Point) -> Option<ColorNative> {
+        let fb: &[u32] = &self.emulated_buffer;
         let clip_y: usize;
         if p.y >= LCD_LINES {
             return None;
