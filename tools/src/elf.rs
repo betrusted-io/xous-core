@@ -138,10 +138,20 @@ pub fn read_program<P: AsRef<Path>>(filename: P) -> Result<ProgramDescription, E
         let mut fi = File::open(filename).map_err(ElfReadError::OpenElfError)?;
         fi.read_to_end(&mut b).map_err(ElfReadError::ReadFileError)?;
     }
-    process_program(&b)
+    process_program(&b, false)
 }
 
-pub fn process_program(b: &[u8]) -> Result<ProgramDescription, ElfReadError> {
+#[allow(clippy::cognitive_complexity)]
+pub fn read_loader<P: AsRef<Path>>(filename: P) -> Result<ProgramDescription, ElfReadError> {
+    let mut b = Vec::new();
+    {
+        let mut fi = File::open(filename).map_err(ElfReadError::OpenElfError)?;
+        fi.read_to_end(&mut b).map_err(ElfReadError::ReadFileError)?;
+    }
+    process_program(&b, true)
+}
+
+pub fn process_program(b: &[u8], rom_only: bool) -> Result<ProgramDescription, ElfReadError> {
     let elf = ElfFile::new(&b).map_err(|x| ElfReadError::ParseElfError(x))?;
     let entry_point = elf.header.pt2.entry_point() as u32;
     let mut program_data = Cursor::new(Vec::new());
@@ -178,13 +188,13 @@ pub fn process_program(b: &[u8]) -> Result<ProgramDescription, ElfReadError> {
 
         debug!("Section {}:", name);
         debug!("Official header:");
-        debug!("{:?}", s);
+        debug!("{:x?}", s);
         debug!("Interpreted:");
         debug!("    flags:            {:?}", s.flags());
         debug!("    type:             {:?}", s.get_type());
         debug!("    address:          {:08x}", s.address());
         debug!("    offset:           {:08x}", s.offset());
-        debug!("    size:             {:?}", s.size());
+        debug!("    size:             {:x?}", s.size());
         debug!("    link:             {:?}", s.link());
         size += s.size();
         // Pad the section so it's a multiple of 4 bytes.
@@ -198,6 +208,65 @@ pub fn process_program(b: &[u8]) -> Result<ProgramDescription, ElfReadError> {
         if name == ".data" {
             data_offset = s.address() as u32;
             data_size += s.size() as u32;
+
+            if rom_only {
+                debug!(
+                    "\n-- Not writing {}, type: {:?} flags: {:x}, len: {:x} -- ROM image requested --\n",
+                    name,
+                    s.get_type(),
+                    s.flags(),
+                    s.size(),
+                );
+
+                // This flag in particular causes the data section to be skipped. This "must be" the case
+                // for the loader, because the loader doesn't have a loader. Thus as a requirement, the
+                // loader must have a data region that is all 0. Check that this condition is met.
+                let section_data = s.raw_data(&elf);
+                if !section_data.iter().all(|&x| x == 0) {
+                    // If you get this panic, this is why it happened, and what you need to do.
+                    //
+                    // The why: the loader itself doesn't have a loader. So, any .data required by
+                    // the loader program can't be set up in advance for the loader.
+                    //
+                    // What causes this: generally, a `static mut` in the loader will cause some .data
+                    // to be allocated. In the precursor/betrusted loader, there are no instances of this.
+                    //
+                    // However, in the baochip loaders, the USB handler needs to be a `static mut` because
+                    // the interrupt handler needs to be able to find it at a globally known location, and
+                    // the data has to persist beyond the scope of a single interrupt.
+                    //
+                    // Why we can skip it in the case of the loader: the reason we don't have to include
+                    // the data section in the loader's ROM image is two-fold. 1) the data going into the
+                    // `static mut` interrupt handler is assumed uninitialized (due to the wrapper being
+                    // an Option<Usb> set to None); and 2) the RAM is fully zeroized by a small assembly
+                    // routine that executes before the loader runs. (1) means that in practice, the contents
+                    // of the .data section is always 0. (2) means we can just whack a pointer at where the
+                    // data section should go and the assumptions are met for the loader.
+                    //
+                    // So, the `if` statement above assures us that we didn't do something like create
+                    // a `static mut` which has a non-zero value that program execution relies upon.
+                    //
+                    // The basic answer for the loader is "don't do that". Because the loader doesn't have
+                    // a loader, it needs to be self-sufficient in terms of setting up all of its state,
+                    // so in the case that some global shared state is needed, there should be an explicit
+                    // initializer somewhere in the code. If this panic triggers, look for the code that
+                    // is assuming some data is magically pre-loaded for the loader, and eliminate that code.
+                    println!("Loader data section is not all 0's. This case is not handled by the loader.");
+                    println!("Here is what is non-zero, as (byte offset: byte) tuples:");
+                    let mut printed = 0;
+                    for (i, &d) in section_data.iter().enumerate() {
+                        if d != 0 {
+                            printed += 1;
+                            println!("    ({:04x}: {:02x})", i, d);
+                        }
+                        if printed > 64 {
+                            println!("** Output cut off due to debug length limit");
+                            break;
+                        }
+                    }
+                }
+                continue;
+            }
         } else if s.get_type() == Ok(ShType::NoBits) {
             // Add bss-type sections to the data section
             bss_size += s.size() as u32;
@@ -230,11 +299,10 @@ pub fn process_program(b: &[u8]) -> Result<ProgramDescription, ElfReadError> {
         }
         debug!("Adding {} to the file", name);
         debug!(
-            "s offset: {:08x}  program_offset: {:08x}  Bytes: {}  seek: {}",
+            "  s.offset: {:08x}  program_offset: {:08x}  Bytes: {:08x}",
             s.offset(),
             program_offset,
             s.raw_data(&elf).len(),
-            program_offset
         );
         let section_data = s.raw_data(&elf);
         debug!(

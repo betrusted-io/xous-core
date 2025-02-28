@@ -14,7 +14,37 @@ static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 pub(crate) static mut USB: Option<CorigineUsb> = None;
 
-pub fn init_usb() {
+/// Safety issue: the loader itself doesn't have a loader. So, any .data required by
+/// the loader program can't be set up in advance for the loader.
+///
+/// The root problem: generally, a `static mut` in the loader will cause some .data
+/// to be allocated. The USB handler needs to be a `static mut` because
+/// the interrupt handler needs to be able to find it at a globally known location, and
+/// the data has to persist beyond the scope of a single interrupt.
+///
+/// The assumption: we don't have to include the data section in the loader's ROM image
+/// because 1) the data going into the `static mut` interrupt handler is assumed uninitialized
+/// (due to the wrapper being an Option<Usb> set to None); and 2) the RAM is fully zeroized by a
+/// small assembly routine that executes before the loader runs.
+///
+/// (1) means that in practice, the contents of the .data section is "almost 0".
+/// (2) means we can just whack a pointer at where the
+/// data section should go and the assumptions are met for the loader.
+///
+/// The inconsistency: inspecting the generated binary indicates that the `None` representation
+/// for USB is not `0`; it instead has the representation of `2`. This means that if we try to
+/// access `USB` prior to initialization, we will get UB.
+///
+/// Safe usage: init_usb() must be called before any attempt to access USB, including interrupts.
+/// Furthermore, we have to manually guarantee that there are no concurrency/race conditions accessing
+/// the USB structure (we are in no_std so we don't have a Mutex). Finally, we have to ensure that
+/// USB is initialized with no assumptions about what is in memory prior to any access to it.
+///
+/// Even then, we might have some risk of UB if the compiler decides it really wants to rely
+/// on some pre-initialized structure of the `USB` static mut `None`. In practice, we haven't
+/// seen this, but we run a risk of this breaking in future versions of Rust because the compiler
+/// is allowed to assume that `USB` has the correct value to represent a `None` on boot.
+pub unsafe fn init_usb() {
     let heap_start = HEAP_ADDRESS;
     let heap_end = HEAP_ADDRESS + HEAP_LEN;
     let heap_size = heap_end - heap_start;

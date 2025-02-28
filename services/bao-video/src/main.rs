@@ -69,11 +69,15 @@ pub const BW_THRESH: u8 = 128;
 // luck of the draw if the interpolation hits exactly right, or if we're roughly a module
 // off from ideal, which causes the data around that point to be interpreted incorrectly.
 
+/// This converts a frame of `[u8]` grayscale pixels that may be larger than the native
+/// frame buffer resolution into a black and white bitmap.
 pub fn blit_to_display(display: &mut Oled128x128, frame: &[u8], display_cleared: bool) {
     for (y, row) in frame.chunks(IMAGE_WIDTH).enumerate() {
         if y & 1 == 0 {
+            // skip every other line
             for (x, &pixval) in row.iter().enumerate() {
                 if x & 1 == 0 {
+                    // skip every other pixel
                     if x < display.dimensions().x as usize * 2
                         && y < display.dimensions().y as usize * 2 - (gfx::CHAR_HEIGHT as usize + 1) * 2
                     {
@@ -141,7 +145,7 @@ fn map_fonts() -> MemoryRange {
         fontregion.len()
     );
 
-    log::trace!(
+    log::debug!(
         "mapping tall font to 0x{:08x}",
         fontregion.as_ptr() as usize + fontmap::TALL_OFFSET as usize
     );
@@ -185,7 +189,8 @@ fn main() -> ! {
 
 pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
+    log::info!("my PID is {}", xous::process::id());
 
     // ---- Xous setup
     let xns = xous_names::XousNames::new().unwrap();
@@ -202,7 +207,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
     let mut display = Oled128x128::new(main_thread_token, cramium_api::PERCLK, &iox, &udma_global);
     display.init();
-    display.buffer_swap();
+    display.clear();
     display.draw();
 
     let fontregion = map_fonts();
@@ -577,8 +582,6 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         );
                     }
 
-                    // swap the double buffer and update to the display
-                    display.buffer_swap();
                     display.draw();
                     if decode_success {
                         tt.sleep_ms(2000).ok();

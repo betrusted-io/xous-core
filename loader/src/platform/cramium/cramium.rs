@@ -59,20 +59,6 @@ use crate::platform::cramium::{homography, qr};
    break into the loader updater less able to get at any root keys?
 */
 
-/*
-    To-do:
-      -[x] Add dummy lifecycle gate call
-      -[x] New OLED base driver
-      -[x] I2C driver (axp2101 default setting as first item of use)
-      -[x] camera base driver (maybe loopback to OLED as demo?)
-      -[ ] USB stack into loader; debugging there. Present as bulk transfer to emulated disk on
-           PSRAM using ghostFS
-      -[ ] bring mbox routine into loader so we can have access to ReRAM write primitive; structure so
-           that we can improve this easily as the chip bugs are fixed
-      -[ ] Image validation & burning routine
-      -[ ] Loop back and fix USB in the Xous OS mode
-*/
-
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
@@ -82,7 +68,7 @@ pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 pub const KERNEL_OFFSET: usize = 0x6_0000;
 
 #[allow(dead_code)]
-pub(crate) fn delay(quantum: usize) {
+pub fn delay(quantum: usize) {
     use utralib::{CSR, utra};
     // abuse the d11ctime timer to create some time-out like thing
     let mut d11c = CSR::new(utra::d11ctime::HW_D11CTIME_BASE as *mut u32);
@@ -381,8 +367,32 @@ pub fn early_init() -> u32 {
         );
         sh1107.init();
         crate::platform::cramium::bootlogo::show_logo(&mut sh1107);
-        sh1107.buffer_swap();
         sh1107.draw();
+        #[cfg(feature = "sh1107-bringup")]
+        loop {
+            use core::fmt::Write;
+
+            use ux_api::minigfx::Point;
+            for i in 0..96 {
+                sh1107.buffer_mut().fill(0);
+                let native_buf = unsafe { sh1107.raw_mut() };
+                let p = if i < 64 { i } else { i - 64 + 128 };
+                native_buf[p / 32] = 1 << (p % 32);
+                native_buf[0] |= 1;
+                use crate::platform::cramium::gfx;
+                let mut usizestr = crate::platform::UsizeToString::new();
+                write!(usizestr, "{}:[{}]{}", p, p / 32, p % 32).ok();
+                gfx::msg(
+                    &mut sh1107,
+                    usizestr.as_str(),
+                    Point::new(20, 64),
+                    cramium_hal::sh1107::Mono::White.into(),
+                    cramium_hal::sh1107::Mono::Black.into(),
+                );
+                sh1107.draw();
+                delay(250);
+            }
+        }
     }
 
     // Board bring-up: send characters to confirm the UART is configured & ready to go for the logging crate!
@@ -600,9 +610,9 @@ pub fn early_init() -> u32 {
                     use crate::platform::cramium::homography::*;
                     if let Some(h) = find_homography(src_f, dst_f) {
                         if let Some(h_inv) = h.try_inverse() {
-                            crate::println!("{:?}", h_inv);
+                            // crate::println!("{:?}", h_inv);
                             let h_inv_fp = matrix3_to_fixp(h_inv);
-                            crate::println!("{:?}", h_inv_fp);
+                            // crate::println!("{:?}", h_inv_fp);
 
                             // apply homography to generate a new buffer for processing
                             let mut aligned = [0u8; QR_WIDTH * QR_HEIGHT];
