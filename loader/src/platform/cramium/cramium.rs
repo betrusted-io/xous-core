@@ -624,9 +624,9 @@ pub fn early_init() -> u32 {
                     use crate::platform::cramium::homography::*;
                     if let Some(h) = find_homography(src_f, dst_f) {
                         if let Some(h_inv) = h.try_inverse() {
-                            crate::println!("{:?}", h_inv);
+                            // crate::println!("{:?}", h_inv);
                             let h_inv_fp = matrix3_to_fixp(h_inv);
-                            crate::println!("{:?}", h_inv_fp);
+                            // crate::println!("{:?}", h_inv_fp);
 
                             // apply homography to generate a new buffer for processing
                             let mut aligned = [0u8; QR_WIDTH * QR_HEIGHT];
