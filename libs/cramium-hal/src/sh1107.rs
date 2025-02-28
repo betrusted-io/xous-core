@@ -38,7 +38,7 @@ pub enum Mono {
 impl From<ColorNative> for Mono {
     fn from(value: ColorNative) -> Self {
         match value.0 {
-            0 => Mono::Black,
+            1 => Mono::Black,
             _ => Mono::White,
         }
     }
@@ -46,8 +46,8 @@ impl From<ColorNative> for Mono {
 impl Into<ColorNative> for Mono {
     fn into(self) -> ColorNative {
         match self {
-            Mono::Black => ColorNative::from(0),
-            Mono::White => ColorNative::from(1),
+            Mono::Black => ColorNative::from(1),
+            Mono::White => ColorNative::from(0),
         }
     }
 }
@@ -500,11 +500,7 @@ impl<'a> FrameBuffer for Oled128x128<'a> {
             return None;
         }
         let bitnum = (p.x + p.y * COLUMN) as usize;
-        if self.buffer[bitnum / 32] & 1 << (bitnum % 32) != 0 {
-            Some(Mono::White.into())
-        } else {
-            Some(Mono::Black.into())
-        }
+        if self.buffer[bitnum / 32] & 1 << (bitnum % 32) != 0 { Some(1.into()) } else { Some(0.into()) }
     }
 
     fn xor_pixel(&mut self, p: Point) {
