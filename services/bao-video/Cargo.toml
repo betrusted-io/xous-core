@@ -40,7 +40,12 @@ ditherpunk = []
 # This crate is baosec specific; these flags switch between hosted mode emulation
 # (for UI development) and actual hardware targets. In UI development all camera data
 # is "faked"
-board-baosec = ["cram-hal-service", "cramium-hal", "ux-api/board-baosec"]
+board-baosec = [
+    "cram-hal-service",
+    "cramium-hal",
+    "ux-api/board-baosec",
+    "blitstr2/board-baosec",
+]
 hosted-baosec = ["cramium-emu", "ux-api/hosted-baosec"]
 
 # temporary feature - remove after we have properly created a camera control API
@@ -50,6 +55,7 @@ cramium-soc = ["utralib/cramium-soc", "blitstr2/cramium-soc"]
 decongest-udma = []
 default = [
     "decongest-udma",
+    "autotest",
     # "gfx-testing",
     # "hosted-baosec",
 ] # hosted-baosec should be removed for commit, this is only here to make vscode happy
