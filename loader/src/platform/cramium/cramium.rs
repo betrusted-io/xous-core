@@ -59,20 +59,6 @@ use crate::platform::cramium::{homography, qr};
    break into the loader updater less able to get at any root keys?
 */
 
-/*
-    To-do:
-      -[x] Add dummy lifecycle gate call
-      -[x] New OLED base driver
-      -[x] I2C driver (axp2101 default setting as first item of use)
-      -[x] camera base driver (maybe loopback to OLED as demo?)
-      -[ ] USB stack into loader; debugging there. Present as bulk transfer to emulated disk on
-           PSRAM using ghostFS
-      -[ ] bring mbox routine into loader so we can have access to ReRAM write primitive; structure so
-           that we can improve this easily as the chip bugs are fixed
-      -[ ] Image validation & burning routine
-      -[ ] Loop back and fix USB in the Xous OS mode
-*/
-
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
