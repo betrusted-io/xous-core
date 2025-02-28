@@ -87,7 +87,7 @@ pub(crate) fn panic_handler_thread(
                     blitstr2::xor_glyph(
                         unsafe { d.raw_mut() },
                         (x, y),
-                        blitstr2::mono_glyph(ch).unwrap_or(NULL_GLYPH_SPRITE),
+                        &blitstr2::mono_glyph(ch).unwrap_or(NULL_GLYPH_SPRITE),
                         true,
                         cr,
                     );

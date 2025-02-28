@@ -38,7 +38,7 @@ pub enum Mono {
 impl From<ColorNative> for Mono {
     fn from(value: ColorNative) -> Self {
         match value.0 {
-            0 => Mono::Black,
+            1 => Mono::Black,
             _ => Mono::White,
         }
     }
@@ -46,8 +46,8 @@ impl From<ColorNative> for Mono {
 impl Into<ColorNative> for Mono {
     fn into(self) -> ColorNative {
         match self {
-            Mono::Black => ColorNative::from(0),
-            Mono::White => ColorNative::from(1),
+            Mono::Black => ColorNative::from(1),
+            Mono::White => ColorNative::from(0),
         }
     }
 }
@@ -166,32 +166,14 @@ impl Command {
     }
 }
 
-#[repr(usize)]
-#[derive(Eq, PartialEq, Copy, Clone)]
-enum BufferState {
-    A = 0,
-    B = 2048,
-}
-impl BufferState {
-    pub fn swap(self) -> Self { if self == BufferState::A { BufferState::B } else { BufferState::A } }
-
-    pub fn as_index(&self) -> usize {
-        match self {
-            BufferState::A => 0,
-            BufferState::B => 1,
-        }
-    }
-}
-
 pub struct Oled128x128<'a> {
     spim: Spim,
-    // front and back buffers
-    buffers: [&'static mut [u8]; 2],
-    srfb: [u8; WIDTH as usize * HEIGHT as usize / core::mem::size_of::<u8>()],
+    hw_buf: &'static mut [u32],
+    buffer: [u32; WIDTH as usize * HEIGHT as usize / (core::mem::size_of::<u32>() * 8)],
+    stash: [u32; WIDTH as usize * HEIGHT as usize / (core::mem::size_of::<u32>() * 8)],
     // length of the sideband memory region for queuing commands to the OLED. Must be allocated
     // immediately after the total frame buffer length
     pub sideband_len: usize,
-    active_buffer: BufferState,
     cd_port: IoxPort,
     cd_pin: u8,
     iox: &'a dyn IoGpio,
@@ -235,7 +217,8 @@ impl<'a> Oled128x128<'a> {
                 0,
                 0,
                 None,
-                // 2x buffers reserved: (128 * 128 / 8) * 2 = 4096
+                // 1x buffers reserved: (128 * 128 / 8) * 1 = 2048
+                // Add 2048 for the dummy Rx (to ensure that the command actually goes through)
                 // Add 256 for display commands.
                 // Internally, an extra 16 is added for UDMA SPIM commands (these are commands
                 // to the SPIM hardware itself, not transmitted to the display).
@@ -243,7 +226,7 @@ impl<'a> Oled128x128<'a> {
                 // an IFRAM range large enough to accommodate that. However, because we have
                 // to round up any allocations to a full page length, we end up with extra
                 // unused space.
-                4096 + 256, // the 256 is for direct commands
+                2048 + 256, // the 256 is for direct commands
                 // the 2048 is for dummy-Rx so we can properly measure when the transaction is done
                 2048,
                 None,
@@ -261,12 +244,15 @@ impl<'a> Oled128x128<'a> {
             // represented. They have a static lifetime because they are mapped to hardware. There is
             // in fact an unsafe front/back buffer contention, but that's the whole point of this routine,
             // to safely manage that.
-            buffers: [unsafe { core::slice::from_raw_parts_mut(ifram_vaddr as *mut u8, 2048) }, unsafe {
-                core::slice::from_raw_parts_mut((ifram_vaddr + 2048) as *mut u8, 2048)
-            }],
-            srfb: [0u8; WIDTH as usize * HEIGHT as usize / core::mem::size_of::<u8>()],
+            hw_buf: unsafe {
+                core::slice::from_raw_parts_mut(
+                    ifram_vaddr as *mut u32,
+                    WIDTH as usize * HEIGHT as usize / (size_of::<u32>() * 8),
+                )
+            },
+            buffer: [0u32; WIDTH as usize * HEIGHT as usize / (core::mem::size_of::<u32>() * 8)],
+            stash: [0u32; WIDTH as usize * HEIGHT as usize / (core::mem::size_of::<u32>() * 8)],
             sideband_len: SIDEBAND_LEN,
-            active_buffer: BufferState::A,
             cd_port,
             cd_pin,
             iox,
@@ -371,34 +357,52 @@ impl<'a> Oled128x128<'a> {
             // represented. They have a static lifetime because they are mapped to hardware. There is
             // in fact an unsafe front/back buffer contention, but that's the whole point of this routine,
             // to safely manage that.
-            buffers: [unsafe { core::slice::from_raw_parts_mut(ifram_vaddr as *mut u8, 2048) }, unsafe {
-                core::slice::from_raw_parts_mut(ifram_vaddr.add(2048) as *mut u8, 2048)
-            }],
-            srfb: [0u8; WIDTH as usize * HEIGHT as usize / core::mem::size_of::<u8>()],
+            hw_buf: unsafe {
+                core::slice::from_raw_parts_mut(
+                    ifram_vaddr as *mut u32,
+                    WIDTH as usize * HEIGHT as usize / (size_of::<u32>() * 8),
+                )
+            },
+            buffer: [0u32; WIDTH as usize * HEIGHT as usize / (core::mem::size_of::<u32>() * 8)],
+            stash: [0u32; WIDTH as usize * HEIGHT as usize / (core::mem::size_of::<u32>() * 8)],
             sideband_len: SIDEBAND_LEN,
-            active_buffer: BufferState::A,
             cd_port,
             cd_pin,
             iox,
         }
     }
 
+    pub fn buffer_mut(&mut self) -> &mut ux_api::platform::FbRaw { &mut self.buffer }
+
+    pub fn buffer(&self) -> &ux_api::platform::FbRaw { &self.buffer }
+
+    pub fn screen_size(&self) -> Point { Point::new(WIDTH, LINES) }
+
+    pub fn redraw(&mut self) { self.draw(); }
+
+    pub fn blit_screen(&mut self, bmp: &[u32]) { self.buffer.copy_from_slice(bmp); }
+
+    pub fn set_devboot(&mut self, _ena: bool) {
+        unimplemented!("devboot feature does not exist on this platform");
+    }
+
+    pub fn stash(&mut self) { self.stash.copy_from_slice(&self.buffer); }
+
+    pub fn pop(&mut self) {
+        self.buffer.copy_from_slice(&self.stash);
+        self.redraw();
+    }
+
     fn set_data(&self) { self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::High); }
 
     fn set_command(&self) { self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::Low); }
-
-    pub fn buffer_swap(&mut self) { self.active_buffer = self.active_buffer.swap(); }
-
-    pub fn buffer_mut(&mut self) -> &mut [u8] { self.buffers[self.active_buffer.as_index()] }
-
-    pub fn buffer(&self) -> &[u8] { self.buffers[self.active_buffer.as_index()] }
 
     pub fn send_command<'b, U>(&'b mut self, cmd: U)
     where
         U: IntoIterator<Item = u8> + 'b,
     {
         self.set_command();
-        let total_buf_len = self.buffers.iter().map(|x| x.len()).sum();
+        let total_buf_len = self.buffer.len() * size_of::<u32>();
         let mut len = 0; // track the full length of the iterator
         // emplace the command in the sideband area, which is after both frame buffers
         // crate::print!("cmd: ");
@@ -418,45 +422,6 @@ impl<'a> Oled128x128<'a> {
         self.spim.txrx_await(false).unwrap();
     }
 
-    pub fn screen_size(&self) -> Point { Point::new(WIDTH, LINES) }
-
-    pub fn redraw(&mut self) {
-        self.buffer_swap();
-        self.draw();
-    }
-
-    pub fn blit_screen(&mut self, bmp: &[u32]) {
-        for (i, &word) in bmp.iter().enumerate() {
-            for bit in 0..32 {
-                if (word & (1 << (31 - bit))) != 0 {
-                    self.put_pixel(
-                        Point::new((i as isize % 4) * 32 + bit, i as isize / 4),
-                        Mono::White.into(),
-                    );
-                }
-            }
-        }
-        /*
-        for (i, &word) in bmp.iter().enumerate() {
-            let bytes = word.to_le_bytes();
-            let start = i * core::mem::size_of::<u32>();
-            let end = start + core::mem::size_of::<u32>();
-            buf[start..end].copy_from_slice(&bytes);
-        }
-        */
-    }
-
-    pub fn set_devboot(&mut self, _ena: bool) {
-        unimplemented!("devboot feature does not exist on this platform");
-    }
-
-    pub fn stash(&mut self) { self.srfb.copy_from_slice(&self.buffers[self.active_buffer.as_index()]); }
-
-    pub fn pop(&mut self) {
-        self.buffers[self.active_buffer.as_index()].copy_from_slice(&self.srfb);
-        self.redraw();
-    }
-
     pub fn init(&mut self) {
         use Command::*;
         let init_sequence = [
@@ -464,17 +429,17 @@ impl<'a> Oled128x128<'a> {
             SetDCDCSettings(0x0),
             SetStartLine(0),
             SetDisplayOffset(0),
-            SetContrastControl(0x4f),
-            SetAddressMode(AddressMode::Page),
-            SetSegmentReMap(true),
-            SetCOMScanDirection(Direction::Normal),
+            SetContrastControl(0x2f), // was 0x4f, was a bit too bright
+            SetAddressMode(AddressMode::Column),
+            SetSegmentReMap(false),
+            SetCOMScanDirection(Direction::Inverted),
             SetMultiplexRatio(128),
             SetClkDividerOscFrequency { divider: 1, osc_freq_ratio: 5 },
             SetChargePeriods { precharge: Some(2), discharge: 2 },
             SetVCOMHDeselectLevel(0x35),
             SetPageAddress(0),
             ForceEntireDisplay(false),
-            SetDisplayMode(DisplayMode::BlackOnWhite),
+            SetDisplayMode(DisplayMode::WhiteOnBlack),
             DisplayOnOff(DisplayState::On),
         ];
 
@@ -486,12 +451,11 @@ impl<'a> Oled128x128<'a> {
 }
 
 impl<'a> FrameBuffer for Oled128x128<'a> {
-    /// Transfers the back buffer
+    /// Copies the SRAM buffer to IFRAM and then transfers that over SPI
     fn draw(&mut self) {
-        // this must be opposite of what `buffer` / `buffer_mut` returns
-        let buffer_start = self.active_buffer.swap() as usize;
-        let chunk_size = 128;
-        let chunks = self.buffer().len() / chunk_size;
+        self.hw_buf.copy_from_slice(&self.buffer);
+        let chunk_size = 16;
+        let chunks = self.buffer().len() * size_of::<u32>() / chunk_size;
         // we don't do this with an iterator because it involves an immutable borrow of
         // `buffer`, which prevents us from doing anything with the interface inside the loop.
         for page in 0..chunks {
@@ -499,91 +463,62 @@ impl<'a> FrameBuffer for Oled128x128<'a> {
             // the transaction is done before the data is done transmitting, and we have to
             // toggle set_data() only after the physical transaction is done, not after the
             // the last UDMA action has been queued.
-            self.send_command(Command::SetPageAddress(page as u8).encode());
-            self.send_command(Command::SetColumnAddress(0).encode());
+            self.send_command(Command::SetPageAddress(0).encode());
+            self.send_command(Command::SetColumnAddress(page as u8).encode());
             // wait for commands to finish before toggling set_data
             // self.spim.tx_data_await(false);
-            // crate::println!("Send page {}, offset {:x}", page, buffer_start + page * chunk_size);
+            // crate::println!("Send page {}, offset {:x}", page, page * chunk_size);
             self.set_data();
             // safety: data is already copied into the DMA buffer. size & len are in bounds.
             unsafe {
                 self.spim
-                    .txrx_data_async_from_parts::<u8>(
-                        buffer_start + page * chunk_size,
-                        chunk_size,
-                        true,
-                        false,
-                    )
+                    .txrx_data_async_from_parts::<u8>(page * chunk_size, chunk_size, true, false)
                     .expect("Couldn't initiate oled data transfer");
             }
             self.spim.txrx_await(false).unwrap();
         }
     }
 
-    fn clear(&mut self) { self.buffer_mut().fill(0); }
+    fn clear(&mut self) { self.buffer_mut().fill(0xFFFF_FFFF); }
 
     fn put_pixel(&mut self, p: Point, on: ColorNative) {
-        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+        if p.x >= COLUMN || p.y >= ROW || p.x < 0 || p.y < 0 {
             return;
         }
-        let buffer = self.buffer_mut();
+        let bitnum = (p.x + p.y * COLUMN) as usize;
         if on.0 != 0 {
-            buffer[p.x as usize + (p.y as usize / 8) * COLUMN as usize] |= 1 << (p.y % 8);
+            self.buffer[bitnum / 32] |= 1 << (bitnum % 32);
         } else {
-            buffer[p.x as usize + (p.y as usize / 8) * COLUMN as usize] &= !(1 << (p.y % 8));
+            self.buffer[bitnum / 32] &= !(1 << (bitnum % 32));
         }
     }
 
     fn dimensions(&self) -> Point { Point::new(COLUMN, ROW) }
 
-    fn get_pixel(&mut self, p: Point) -> Option<ColorNative> {
-        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
+    fn get_pixel(&self, p: Point) -> Option<ColorNative> {
+        if p.x >= COLUMN || p.y >= ROW || p.x < 0 || p.y < 0 {
             return None;
         }
-        let buffer = self.buffer_mut();
-        if buffer[p.x as usize + (p.y as usize / 8) * COLUMN as usize] & (1 << (p.y % 8)) != 0 {
-            Some(Mono::White.into())
-        } else {
-            Some(Mono::Black.into())
-        }
+        let bitnum = (p.x + p.y * COLUMN) as usize;
+        if self.buffer[bitnum / 32] & 1 << (bitnum % 32) != 0 { Some(1.into()) } else { Some(0.into()) }
     }
 
     fn xor_pixel(&mut self, p: Point) {
-        if p.x > COLUMN || p.y > ROW || p.x < 0 || p.y < 0 {
-            return;
-        }
-        let buffer = self.buffer_mut();
-
-        let flip: ColorNative =
-            if buffer[p.x as usize + (p.y as usize / 8) * COLUMN as usize] & (1 << (p.y % 8)) != 0 {
-                Mono::Black.into()
-            } else {
-                Mono::White.into()
-            };
-        if flip.0 != 0 {
-            buffer[p.x as usize + (p.y as usize / 8) * COLUMN as usize] |= 1 << (p.y % 8);
-        } else {
-            buffer[p.x as usize + (p.y as usize / 8) * COLUMN as usize] &= !(1 << (p.y % 8));
+        if let Some(px) = self.get_pixel(p) {
+            let mono_px: Mono = px.into();
+            self.put_pixel(
+                p,
+                match mono_px {
+                    Mono::Black => Mono::White,
+                    Mono::White => Mono::Black,
+                }
+                .into(),
+            );
         }
     }
 
-    /// This "works" because the data is striped so that the LSBs align with the lower numbered
-    /// pixels. This mapping is only safe because the underlying frame buffer is hard-mapped to
-    /// an aligned address that always exists in memory, and every element is representable and
-    /// correct between the original buffer type and the FbRaw type.
-    ///
-    /// The transformation grabs the raw pointer to the frame buffer and simply forces it into
-    /// a slice with the correct type; I feel like this kind of transformation runs a risk of running
-    /// afoul of compiler optimizations, and there is probably a better way to do this; but also,
-    /// we need the core access to be extremely performant because when we grab a raw frame buffer
-    /// the whole point is to bit-bang access to hardware frame buffer memory for assembling
-    /// glyphs and pixels during image compositing, so we can't afford any abstraction overhead;
-    /// whatever abstraction is used *has* to be zero-cost.
-    unsafe fn raw_mut(&mut self) -> &mut ux_api::platform::FbRaw {
-        let len = self.buffer().len();
-        core::slice::from_raw_parts_mut(
-            self.buffer_mut().as_mut_ptr() as *mut u32,
-            len / core::mem::size_of::<u32>(),
-        )
-    }
+    /// In this architecture, it's actually totally safe to do this, but the trait
+    /// is marked unsafe because in some other displays it may require some tomfoolery
+    /// to get reference types to match up.
+    unsafe fn raw_mut(&mut self) -> &mut ux_api::platform::FbRaw { self.buffer_mut() }
 }

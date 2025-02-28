@@ -25,7 +25,7 @@ fn main() {
         eprintln!("Specify an output path, or change the suffix of your input file from \".bin\"");
         process::exit(1);
     }
-    let pd = elf::read_program(&input_filename).unwrap_or_else(|e| {
+    let pd = elf::read_loader(&input_filename).unwrap_or_else(|e| {
         eprintln!("Unable to read input file: {}", e);
         process::exit(1);
     });

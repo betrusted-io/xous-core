@@ -22,8 +22,8 @@ pub enum Mono {
 }
 impl From<ColorNative> for Mono {
     fn from(value: ColorNative) -> Self {
-        match value.0 as u32 {
-            DARK_COLOUR => Mono::Black,
+        match value.0 {
+            1 => Mono::Black,
             _ => Mono::White,
         }
     }
@@ -31,25 +31,8 @@ impl From<ColorNative> for Mono {
 impl Into<ColorNative> for Mono {
     fn into(self) -> ColorNative {
         match self {
-            Mono::Black => ColorNative::from(DARK_COLOUR as usize),
-            Mono::White => ColorNative::from(LIGHT_COLOUR as usize),
-        }
-    }
-}
-
-#[repr(usize)]
-#[derive(Eq, PartialEq, Copy, Clone)]
-enum BufferState {
-    A = 0,
-    B = 2048,
-}
-impl BufferState {
-    pub fn swap(self) -> Self { if self == BufferState::A { BufferState::B } else { BufferState::A } }
-
-    pub fn as_index(&self) -> usize {
-        match self {
-            BufferState::A => 0,
-            BufferState::B => 1,
+            Mono::Black => ColorNative::from(1),
+            Mono::White => ColorNative::from(0),
         }
     }
 }
@@ -111,9 +94,8 @@ struct XousKeyboardHandler {
 pub struct Oled128x128 {
     native_buffer: Arc<Mutex<Vec<u32>>>, //[u32; WIDTH * HEIGHT],
     // front and back buffers
-    buffers: [[u32; COLUMN as usize * ROW as usize]; 2],
-    srfb: [u32; COLUMN as usize * ROW as usize],
-    active_buffer: BufferState,
+    buffer: [u32; WIDTH as usize * HEIGHT as usize / (core::mem::size_of::<u32>() * 8)],
+    stash: [u32; WIDTH as usize * HEIGHT as usize / (core::mem::size_of::<u32>() * 8)],
 }
 
 impl<'a> Oled128x128 {
@@ -132,33 +114,29 @@ impl<'a> Oled128x128 {
 
         Self {
             native_buffer,
-            buffers: [[DARK_COLOUR; COLUMN as usize * ROW as usize]; 2],
-            srfb: [DARK_COLOUR; COLUMN as usize * ROW as usize],
-            active_buffer: BufferState::A,
+            buffer: [0u32; WIDTH as usize * HEIGHT as usize / (core::mem::size_of::<u32>() * 8)],
+            stash: [0u32; WIDTH as usize * HEIGHT as usize / (core::mem::size_of::<u32>() * 8)],
         }
     }
 
-    pub fn buffer_swap(&mut self) { self.active_buffer = self.active_buffer.swap(); }
+    pub fn buffer_mut(&mut self) -> &mut ux_api::platform::FbRaw { &mut self.buffer }
 
-    pub fn buffer_mut(&mut self) -> &mut [u32] { &mut self.buffers[self.active_buffer.as_index()] }
-
-    pub fn buffer(&self) -> &[u32] { &self.buffers[self.active_buffer.as_index()] }
+    pub fn buffer(&self) -> &ux_api::platform::FbRaw { &self.buffer }
 
     pub fn screen_size(&self) -> Point { Point::new(WIDTH, LINES) }
 
-    pub fn redraw(&mut self) {
-        self.draw();
-        self.buffer_swap();
-    }
+    pub fn redraw(&mut self) { self.draw(); }
+
+    pub fn blit_screen(&mut self, bmp: &[u32]) { self.buffer.copy_from_slice(bmp); }
 
     pub fn set_devboot(&mut self, _ena: bool) {
         unimplemented!("devboot feature does not exist on this platform");
     }
 
-    pub fn stash(&mut self) { self.srfb.copy_from_slice(&self.buffers[self.active_buffer.as_index()]); }
+    pub fn stash(&mut self) { self.stash.copy_from_slice(&self.buffer); }
 
     pub fn pop(&mut self) {
-        self.buffers[self.active_buffer.as_index()].copy_from_slice(&self.srfb);
+        self.buffer.copy_from_slice(&self.stash);
         self.redraw();
     }
 
@@ -169,75 +147,58 @@ impl<'a> Oled128x128 {
     }
 
     pub fn init(&mut self) {}
-
-    pub fn blit_screen(&mut self, bmp: &[u32]) {
-        let buf = self.buffer_mut();
-
-        let mut temp = [0u32; COLUMN as usize * ROW as usize];
-        // this routine will paint the bitmap into temp flipped horizontally
-        for (i, &word) in bmp.iter().rev().enumerate() {
-            for bit in 0..32 {
-                let pixel_index = i * 32 + bit;
-                let is_white = (word >> bit) & 1 != 0;
-                temp[pixel_index] = if is_white { LIGHT_COLOUR } else { DARK_COLOUR };
-            }
-        }
-        // this flips it horizontally
-        for (src_line, dst_line) in temp.chunks(COLUMN as usize).zip(buf.chunks_mut(COLUMN as usize)) {
-            for (&s, d) in src_line.iter().rev().zip(dst_line.iter_mut()) {
-                *d = s;
-            }
-        }
-    }
 }
 
 impl FrameBuffer for Oled128x128 {
-    /// Transfers the back buffer
     fn draw(&mut self) {
-        // this must be opposite of what `buffer` / `buffer_mut` returns
-        let buffer = self.buffer();
-        let mut native_buffer = self.native_buffer.lock().unwrap();
-        native_buffer.copy_from_slice(&buffer);
+        for (index, pixel) in self.native_buffer.lock().unwrap().iter_mut().enumerate() {
+            *pixel =
+                if (self.buffer[index / 32] & (1 << (index % 32))) != 0 { DARK_COLOUR } else { LIGHT_COLOUR }
+        }
     }
 
-    fn clear(&mut self) { self.buffer_mut().fill(DARK_COLOUR); }
+    fn clear(&mut self) { self.buffer_mut().fill(0xFFFF_FFFF); }
 
     fn put_pixel(&mut self, p: Point, on: ColorNative) {
         if p.x >= COLUMN || p.y >= ROW || p.x < 0 || p.y < 0 {
             return;
         }
-        let buffer = self.buffer_mut();
-        buffer[(p.x + (ROW - 1 - p.y) * COLUMN) as usize] = on.0 as u32;
+        let bitnum = (p.x + p.y * COLUMN) as usize;
+        if on.0 != 0 {
+            self.buffer[bitnum / 32] |= 1 << (bitnum % 32);
+        } else {
+            self.buffer[bitnum / 32] &= !(1 << (bitnum % 32));
+        }
     }
 
     fn dimensions(&self) -> Point { Point::new(COLUMN, ROW) }
 
-    fn get_pixel(&mut self, p: Point) -> Option<ColorNative> {
+    fn get_pixel(&self, p: Point) -> Option<ColorNative> {
         if p.x >= COLUMN || p.y >= ROW || p.x < 0 || p.y < 0 {
             return None;
         }
-        let buffer = self.buffer();
-        let color = ColorNative(buffer[(p.x + p.y * ROW) as usize] as usize);
-        Some(color)
+        let bitnum = (p.x + p.y * COLUMN) as usize;
+        if self.buffer[bitnum / 32] & 1 << (bitnum % 32) != 0 { Some(1.into()) } else { Some(0.into()) }
     }
 
     fn xor_pixel(&mut self, p: Point) {
-        if p.x >= COLUMN || p.y >= ROW || p.x < 0 || p.y < 0 {
-            return;
+        if let Some(px) = self.get_pixel(p) {
+            let mono_px: Mono = px.into();
+            self.put_pixel(
+                p,
+                match mono_px {
+                    Mono::Black => Mono::White,
+                    Mono::White => Mono::Black,
+                }
+                .into(),
+            );
         }
-        let buffer = self.buffer_mut();
-        let color: Mono = ColorNative(buffer[(p.x + p.y * ROW) as usize] as usize).into();
-        let xor_color = if color == Mono::Black { Mono::White } else { Mono::Black };
-        let on: ColorNative = xor_color.into();
-        buffer[(p.x + (ROW - 1 - p.y) * COLUMN) as usize] = on.0 as u32;
     }
 
-    /// This is highly unsafe. Don't use it - this is only implemented to provide cross-compatibility
-    /// with other platforms that require this access.
-    unsafe fn raw_mut(&mut self) -> &mut ux_api::platform::FbRaw {
-        let len = self.native_buffer.lock().unwrap().len();
-        core::slice::from_raw_parts_mut(self.native_buffer.lock().unwrap().as_mut_ptr(), len)
-    }
+    /// In this architecture, it's actually totally safe to do this, but the trait
+    /// is marked unsafe because in some other displays it may require some tomfoolery
+    /// to get reference types to match up.
+    unsafe fn raw_mut(&mut self) -> &mut ux_api::platform::FbRaw { self.buffer_mut() }
 }
 
 impl MinifbThread {

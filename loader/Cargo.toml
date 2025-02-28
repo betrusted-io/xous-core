@@ -91,7 +91,6 @@ board-baosec = [
     "cramium-hal/loader-baosec",
     "updates",
     "usb",
-    "libm",
     "simple-fatfs",
     "linked_list_allocator",
     "ed25519-dalek",
@@ -115,6 +114,7 @@ swap = ["aes-gcm-siv"]
 
 # cramium target flags
 board-bringup = []
+sh1107-bringup = []                      # used to discover FB parameters
 sram-margin = []
 boot-delay = []
 simulation-only = []
@@ -129,7 +129,7 @@ fast-fclk = []
 clock-tests = []
 reset-debug = []
 usb = []
-qr = ["nalgebra"]
+qr = ["nalgebra", "libm"]
 updates = []
 cramium-mpw = ["cramium-hal/mpw"]
 userspace-swap-debug = []                # sets up app UART mapping.

@@ -517,6 +517,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - graphics-server is deprecated as a dependency. Clients should now use `ux-api::minigfx` for drawing primitive dependencies.
   - This change now hides the GAM abstraction in most cases. The GAM is used to implement windowing; for lightweight platforms that don't have the screen real estate for windows, the `canvas`/`Gid` abstractions still exist but are ignored, and applications can draw directly to the screen.
   - `baosec` target in particular supports no windowing as the screen is 128x128: the UI is purely modal, where every user interaction occupies the entire screen.
+  - Modify the core message loop to use reply_and_receive_next() API
 
 ## Roadmap
 - Lots of testing and bug fixes

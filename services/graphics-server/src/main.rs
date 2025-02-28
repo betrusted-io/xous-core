@@ -34,7 +34,7 @@ mod testing;
 fn draw_boot_logo(display: &mut XousDisplay) { display.blit_screen(&poweron::LOGO_MAP); }
 
 #[cfg(any(feature = "precursor", feature = "renode"))]
-fn map_fonts() -> MemoryRange {
+fn map_fonts() -> xous::MemoryRange {
     log::trace!("mapping fonts");
     // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
     // because the reserved area is much larger
@@ -80,7 +80,7 @@ fn map_fonts() -> MemoryRange {
 }
 
 #[cfg(any(feature = "cramium-soc"))]
-fn map_fonts() -> MemoryRange {
+fn map_fonts() -> xous::MemoryRange {
     log::trace!("mapping fonts");
     // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
     // because the reserved area is much larger
