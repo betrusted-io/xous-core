@@ -173,6 +173,12 @@ impl ComposedType {
                     } else {
                         blitstr2::xor_glyph_2x(rawbuf, (maybe_x, maybe_y), glyph, glyph.invert ^ invert, cr);
                     }
+                    // Platform-dependent cursor inversion because the color scheme for sh1107 doesn't comply
+                    // to precursor norms
+                    #[cfg(any(feature = "board-baosec", feature = "hosted-baosec"))]
+                    let curse_invert = true;
+                    #[cfg(not(any(feature = "board-baosec", feature = "hosted-baosec")))]
+                    let curse_invert = invert;
                     if glyph.insert {
                         // log::info!("insert at {},{}", glyph.ch, strpos - 1);
                         // draw the insertion point after the glyph's position
@@ -183,8 +189,9 @@ impl ComposedType {
                                 Point::new(maybe_x as isize - 1, maybe_y as isize + glyph.high as isize),
                             ),
                             Some(clip_rect),
-                            invert,
+                            curse_invert,
                         );
+                        frbuf.put_pixel(Point::new(2, 2), 0.into());
                     }
                 }
             }
