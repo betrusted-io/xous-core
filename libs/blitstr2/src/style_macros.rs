@@ -121,6 +121,7 @@ macro_rules! en_audio_rules {
 }
 
 #[macro_export]
+#[cfg(not(any(feature = "board-baosec", feature = "hosted-baosec")))]
 macro_rules! english_rules {
     ($base_style:expr, $emoji_style:expr, $ch:ident) => {
         match $base_style($ch) {
@@ -139,6 +140,24 @@ macro_rules! english_rules {
                             },
                         },
                     },
+                },
+            },
+        }
+    };
+}
+
+#[macro_export]
+// Reflect reduced font space on small-memory footprint devices
+#[cfg(any(feature = "board-baosec", feature = "hosted-baosec"))]
+macro_rules! english_rules {
+    ($base_style:expr, $emoji_style:expr, $ch:ident) => {
+        match $base_style($ch) {
+            Ok(g) => g,
+            _ => match $emoji_style($ch) {
+                Ok(g) => g,
+                _ => match $base_style(REPLACEMENT) {
+                    Ok(g) => g,
+                    _ => NULL_GLYPH_SPRITE,
                 },
             },
         }

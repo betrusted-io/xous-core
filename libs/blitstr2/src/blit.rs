@@ -29,7 +29,7 @@ pub const REPLACEMENT: char = '\u{FFFD}';
 /// 2. Spans words:  xr:30..36 => (data[0].bit_01)->(data[1].bit_29), mask:[0x0000_0003,0xe000_000]
 ///
 /// Point `p` is specified as a tuple of `(isize, isize)` where index 0 is the x-coord, and 1 is the y-coord
-pub fn xor_glyph(fb: &mut FrBuf, p: (isize, isize), gs: GlyphSprite, xor: bool, cr: ClipRect) {
+pub fn xor_glyph(fb: &mut FrBuf, p: (isize, isize), gs: &GlyphSprite, xor: bool, cr: ClipRect) {
     let px = p.0;
     let py = p.1;
     const SPRITE_PX: isize = 16;
@@ -64,7 +64,6 @@ pub fn xor_glyph(fb: &mut FrBuf, p: (isize, isize), gs: GlyphSprite, xor: bool, 
     let mut row_base = py * WORDS_PER_LINE as isize;
     let row_upper_limit = cr.max.y as isize * WORDS_PER_LINE as isize;
     let row_lower_limit = cr.min.y as isize * WORDS_PER_LINE as isize;
-    let glyph = gs.glyph;
     for y in 0..high as usize {
         if row_base >= row_upper_limit {
             log::trace!("off the bottom");
@@ -80,7 +79,7 @@ pub fn xor_glyph(fb: &mut FrBuf, p: (isize, isize), gs: GlyphSprite, xor: bool, 
             //  ...
             let mask = 0x0000ffff as u32;
             let shift = (y as u32 & 1) << 4;
-            let pattern = (glyph[y >> 1] >> shift) & mask;
+            let pattern = (gs.glyph[y >> 1] >> shift) & mask;
 
             // compute partial masks to prevent glyphs from "spilling over" the clip rectangle
             let mut partial_mask_lo = 0xffff_ffff;
@@ -126,7 +125,7 @@ pub fn xor_glyph(fb: &mut FrBuf, p: (isize, isize), gs: GlyphSprite, xor: bool, 
 }
 
 /// Blit a glyph that is based off of 32x sprites.
-pub fn xor_glyph_large(fb: &mut FrBuf, p: (isize, isize), gs: GlyphSprite, xor: bool, cr: ClipRect) {
+pub fn xor_glyph_large(fb: &mut FrBuf, p: (isize, isize), gs: &GlyphSprite, xor: bool, cr: ClipRect) {
     let px = p.0;
     let py = p.1;
     const SPRITE_PX: isize = 32;
@@ -218,7 +217,7 @@ pub fn xor_glyph_large(fb: &mut FrBuf, p: (isize, isize), gs: GlyphSprite, xor: 
 ///
 /// This is similar to xor_glyph(). But, instead of using 16px sprites for input
 /// and output, this takes 16px sprites as input and blits 32px sprites as output.
-pub fn xor_glyph_2x(fb: &mut FrBuf, p: (isize, isize), gs: GlyphSprite, xor: bool, cr: ClipRect) {
+pub fn xor_glyph_2x(fb: &mut FrBuf, p: (isize, isize), gs: &GlyphSprite, xor: bool, cr: ClipRect) {
     let px = p.0;
     let py = p.1;
     const SPRITE_PX: isize = 16;

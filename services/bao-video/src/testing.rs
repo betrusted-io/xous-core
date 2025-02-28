@@ -8,6 +8,7 @@ use ux_api::service::api::*;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 enum TestType {
+    BasicTest = 8,
     BusyAnimation = 9,
     BoundingBox = 10,
     LowerRight = 11,
@@ -26,7 +27,7 @@ pub fn tests() {
             let gfx = bao_video::Gfx::new(&xns).unwrap();
             let ticktimer = Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
-            for index in TestType::BusyAnimation.to_usize().unwrap()..TestType::End.to_usize().unwrap() {
+            for index in TestType::BasicTest.to_usize().unwrap()..TestType::End.to_usize().unwrap() {
                 // pause between each tests
                 ticktimer.sleep_ms(1000).unwrap();
                 // draw a black screen
@@ -41,9 +42,9 @@ pub fn tests() {
 
                 // start the test
                 ticktimer.sleep_ms(1000).unwrap();
-                let clipping_area = Rectangle::new_coords(50, 50, 290, 450);
+                let clipping_area = Rectangle::new_coords(5, 5, 120, 120);
 
-                let text_bounds = Rectangle::new_coords(10, 10, 240, 300);
+                let text_bounds = Rectangle::new_coords(10, 10, 110, 110);
 
                 //let mut checkbound = clipping_area.clone(); // this checks against the final clipping area.
                 let mut checkbound = text_bounds.clone(); // this is just around the bounds specified by the TV
@@ -54,8 +55,25 @@ pub fn tests() {
                 gfx.flush().unwrap();
 
                 match FromPrimitive::from_usize(index) {
+                    Some(TestType::BasicTest) => {
+                        let mut tv =
+                            TextView::new(Gid::new([0, 0, 0, 0]), TextBounds::BoundingBox(text_bounds));
+                        tv.clip_rect = Some(clipping_area);
+                        tv.style = TEST_STYLE;
+                        tv.ellipsis = true;
+                        tv.rounded_border = Some(4);
+                        write!(tv, "This is a test of basic word wrapping 自动换行 inside a 😃 bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
+                        write!(tv, "Let's add more text😃 until it overflows this is just another test with https://github.com/samblenny/blitstr2/commit/bb7d4ab6a2d8913dcb520895a3c242c933413aae more words and words and words and whatever.").unwrap();
+                        log::info!("rendering: {:?}", tv);
+                        tv.insertion = None;
+                        tv.invert = true;
+                        gfx.draw_textview(&mut tv).unwrap();
+                        gfx.flush().unwrap();
+                        log::info!("rendered: {:?}", tv);
+                        ticktimer.sleep_ms(1000).unwrap();
+                    }
                     Some(TestType::BusyAnimation) => {
-                        let anim_rect = Rectangle::new_coords(10, 10, 240, 30);
+                        let anim_rect = Rectangle::new_coords(10, 10, 120, 30);
                         let mut tv =
                             TextView::new(Gid::new([0, 0, 0, 0]), TextBounds::BoundingBox(anim_rect));
                         tv.clip_rect = Some(clipping_area);
@@ -65,10 +83,11 @@ pub fn tests() {
                         tv.insertion = None;
                         tv.draw_border = false;
                         tv.busy_animation_state = Some(0);
+                        tv.invert = true;
                         for y in 0..30 {
                             gfx.draw_rectangle(checkbound).unwrap();
                             tv.bounds_hint =
-                                TextBounds::BoundingBox(Rectangle::new_coords(10, 10 + y, 240, 30 + y));
+                                TextBounds::BoundingBox(Rectangle::new_coords(10, 10 + y, 120, 30 + y));
                             for _ in 0..5 {
                                 gfx.draw_textview(&mut tv).unwrap();
                                 gfx.flush().unwrap();
@@ -87,6 +106,7 @@ pub fn tests() {
                         write!(tv, "Let's add more text😃 until it overflows this is just another test with https://github.com/samblenny/blitstr2/commit/bb7d4ab6a2d8913dcb520895a3c242c933413aae more words and words and words and whatever.").unwrap();
                         log::info!("rendering: {:?}", tv);
                         tv.insertion = None;
+                        tv.invert = true;
                         gfx.draw_textview(&mut tv).unwrap();
                         gfx.flush().unwrap();
                         log::info!("rendered: {:?}", tv);
@@ -107,6 +127,7 @@ pub fn tests() {
                         write!(tv, "This is a test of basic word😃 wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                         log::info!("rendering: {:?}", tv);
                         tv.insertion = Some(0);
+                        tv.invert = true;
                         gfx.draw_textview(&mut tv).unwrap();
                         gfx.flush().unwrap();
                         log::info!("rendered: {:?}", tv);
@@ -128,6 +149,7 @@ pub fn tests() {
                         write!(tv, "This is a test of basic word😃 wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                         log::info!("rendering: {:?}", tv);
                         tv.insertion = Some(3);
+                        tv.invert = true;
                         gfx.draw_textview(&mut tv).unwrap();
                         gfx.flush().unwrap();
                         log::info!("rendered: {:?}", tv);
@@ -148,6 +170,7 @@ pub fn tests() {
                         write!(tv, "This is a test of basic word😃 wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                         log::info!("rendering: {:?}", tv);
                         tv.insertion = Some(4);
+                        tv.invert = true;
                         gfx.draw_textview(&mut tv).unwrap();
                         gfx.flush().unwrap();
                         log::info!("rendered: {:?}", tv);
@@ -165,6 +188,7 @@ pub fn tests() {
                         tv.style = TEST_STYLE;
                         tv.ellipsis = false;
                         tv.rounded_border = None;
+                        tv.invert = true;
                         write!(tv, "This is a test of basic word😃 wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                         log::info!("rendering: {:?}", tv);
                         tv.insertion = Some(5);
@@ -178,7 +202,7 @@ pub fn tests() {
                         //gfx.flush().unwrap();
 
                         for x_off in 0..32 {
-                            let clipping_area = Rectangle::new_coords(100, 100, 200, 200);
+                            let clipping_area = Rectangle::new_coords(10, 10, 110, 110);
                             let text_bounds = Rectangle::new_coords(-20 + x_off, -20 + x_off, 150, 150);
 
                             let mut checkbound = clipping_area.clone(); // this checks against the final clipping area.
@@ -193,6 +217,7 @@ pub fn tests() {
                             tv.style = TEST_STYLE;
                             tv.ellipsis = false;
                             tv.rounded_border = None;
+                            tv.invert = true;
                             write!(tv, "This is a test of basic word wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                             log::info!("rendering: {:?}", tv);
                             tv.insertion = Some(x_off as i32 + 10);
@@ -214,9 +239,10 @@ pub fn tests() {
                         tv.style = TEST_STYLE;
                         tv.ellipsis = true;
                         tv.rounded_border = Some(4);
+                        tv.invert = true;
                         write!(tv, "This is a test of basic 自动换行 inside\na\n\n😃 bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                         write!(tv, "Let's add more text😃 until it overflows this is just another test with https://github.com/samblenny/blitstr2/commit/bb7d4ab6a2d8913dcb520895a3c242c933413aae more words and words and words and whatever.").unwrap();
-                        for i in 20..60 {
+                        for i in 0..10 {
                             log::info!("insertion point at {},{:?}", i, tv.to_str().chars().skip(i).next());
                             tv.insertion = Some(i as i32);
                             gfx.draw_textview(&mut tv).unwrap();

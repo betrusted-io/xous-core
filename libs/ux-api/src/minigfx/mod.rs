@@ -39,7 +39,7 @@ pub trait FrameBuffer {
     /// Puts a pixel of ColorNative at x, y. (0, 0) is defined as the lower left corner.
     fn put_pixel(&mut self, p: Point, color: ColorNative);
     /// Retrieves a pixel value from the frame buffer; returns None if the point is out of bounds.
-    fn get_pixel(&mut self, p: Point) -> Option<ColorNative>;
+    fn get_pixel(&self, p: Point) -> Option<ColorNative>;
     /// XORs a pixel to what is in the existing frame buffer. The exact definition of "XOR" is somewhat
     /// ambiguous for full color systems but is generally meant to imply a light/dark swap of foreground
     /// and background colors for a color theme.

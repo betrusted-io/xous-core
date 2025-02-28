@@ -60,7 +60,7 @@ pub fn msg<'a>(fb: &mut dyn FrameBuffer, text: &'a str, ll_pos: Point, fg: Color
             let color = if FONT_IMAGE[bitmap_byte as usize] & (1 << bitmap_bit) != 0 { fg } else { bg };
 
             let x = ll_pos.x + CHAR_WIDTH * idx + char_walk_x;
-            let y = ll_pos.y + (CHAR_HEIGHT - char_walk_y);
+            let y = ll_pos.y + char_walk_y;
 
             // draw color at x, y
             if (current_char as u8 != 0xd) && (current_char as u8 != 0xa) {
