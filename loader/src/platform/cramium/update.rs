@@ -160,8 +160,13 @@ pub fn process_update(perclk: u32) {
         );
         sh1107.draw();
 
-        crate::platform::cramium::usb::init_usb();
-        // it's all unsafe because USB is global mutable state
+        // safety: this is safe because we're calling this before any access to `USB` static mut
+        // state, and we also understand that the .data section doesn't exist in the loader and
+        // we've taken countermeasures to initialize everything "from code", i.e. not relying
+        // on static compile-time assignments for the static mut state.
+        unsafe { crate::platform::cramium::usb::init_usb() };
+
+        // Below is all unsafe because USB is global mutable state
         unsafe {
             if let Some(ref mut usb_ref) = crate::platform::cramium::usb::USB {
                 let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
