@@ -372,13 +372,30 @@ impl<'a> Oled128x128<'a> {
         }
     }
 
-    fn set_data(&self) { self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::High); }
-
-    fn set_command(&self) { self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::Low); }
-
     pub fn buffer_mut(&mut self) -> &mut ux_api::platform::FbRaw { &mut self.buffer }
 
     pub fn buffer(&self) -> &ux_api::platform::FbRaw { &self.buffer }
+
+    pub fn screen_size(&self) -> Point { Point::new(WIDTH, LINES) }
+
+    pub fn redraw(&mut self) { self.draw(); }
+
+    pub fn blit_screen(&mut self, bmp: &[u32]) { self.buffer.copy_from_slice(bmp); }
+
+    pub fn set_devboot(&mut self, _ena: bool) {
+        unimplemented!("devboot feature does not exist on this platform");
+    }
+
+    pub fn stash(&mut self) { self.stash.copy_from_slice(&self.buffer); }
+
+    pub fn pop(&mut self) {
+        self.buffer.copy_from_slice(&self.stash);
+        self.redraw();
+    }
+
+    fn set_data(&self) { self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::High); }
+
+    fn set_command(&self) { self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::Low); }
 
     pub fn send_command<'b, U>(&'b mut self, cmd: U)
     where
@@ -403,23 +420,6 @@ impl<'a> Oled128x128<'a> {
                 .expect("Couldn't initiate oled command");
         }
         self.spim.txrx_await(false).unwrap();
-    }
-
-    pub fn screen_size(&self) -> Point { Point::new(WIDTH, LINES) }
-
-    pub fn redraw(&mut self) { self.draw(); }
-
-    pub fn blit_screen(&mut self, bmp: &[u32]) { self.buffer.copy_from_slice(bmp); }
-
-    pub fn set_devboot(&mut self, _ena: bool) {
-        unimplemented!("devboot feature does not exist on this platform");
-    }
-
-    pub fn stash(&mut self) { self.stash.copy_from_slice(&self.buffer); }
-
-    pub fn pop(&mut self) {
-        self.buffer.copy_from_slice(&self.stash);
-        self.redraw();
     }
 
     pub fn init(&mut self) {
