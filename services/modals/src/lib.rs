@@ -2,7 +2,7 @@
 
 pub mod api;
 use api::*;
-#[cfg(feature = "ditherpunk")]
+#[cfg(any(feature = "ditherpunk", feature = "modal-testing"))]
 pub mod tests;
 
 use core::cell::Cell;
