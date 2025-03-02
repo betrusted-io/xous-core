@@ -166,7 +166,12 @@ pub fn draw_text_view<T: FrameBuffer>(display: &mut T, msg: &mut xous::envelope:
     let mut tv = buffer.to_original::<TextView, _>().unwrap();
 
     if tv.clip_rect.is_none() {
-        return;
+        if cfg!(feature = "hosted-baosec") || cfg!(feature = "cramium-soc") || cfg!(feature = "board-baosec")
+        {
+            tv.clip_rect = Some(Rectangle::new(Point::new(0, 0), display.dimensions()));
+        } else {
+            return;
+        }
     } // if no clipping rectangle is specified, nothing to draw
 
     // this is the clipping rectangle of the canvas in screen coordinates
