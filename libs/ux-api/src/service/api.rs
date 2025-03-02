@@ -12,6 +12,8 @@ impl Gid {
     pub fn new(id: [u32; 4]) -> Self { Gid { gid: id } }
 
     pub fn gid(&self) -> [u32; 4] { self.gid }
+
+    pub fn dummy() -> Self { Gid { gid: [0xdead, 0xbeef, 0xdead, 0xbeef] } }
 }
 impl Hash for Gid {
     fn hash<H>(&self, state: &mut H)
@@ -88,6 +90,10 @@ pub enum GfxOpcode {
 
     /// Handle Camera IRQs
     CamIrq,
+
+    /// V2 API for claiming ownership of screen for modal operation
+    AcquireModal,
+    ReleaseModal,
 
     /// Gutter for invalid calls
     InvalidCall,
