@@ -24,8 +24,10 @@ pub enum ActionType {
 
 #[enum_dispatch]
 pub trait ActionApi {
-    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 { glyph_height + margin * 2 }
-    fn redraw(&self, _at_height: i16, _modal: &Modal) { unimplemented!() }
+    fn height(&self, glyph_height: isize, margin: isize, _modal: &Modal) -> isize {
+        glyph_height + margin * 2
+    }
+    fn redraw(&self, _at_height: isize, _modal: &Modal) { unimplemented!() }
     fn close(&mut self) {}
     fn is_password(&self) -> bool { false }
     /// navigation is one of '∴' | '←' | '→' | '↑' | '↓'
