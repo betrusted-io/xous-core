@@ -471,6 +471,11 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                     }
                     // no failure if it's not
                 }
+                GfxOpcode::AcquireModal | GfxOpcode::ReleaseModal => {
+                    unimplemented!(
+                        "Acquire/Release modal is not supported for this target. Use the GAM instead."
+                    );
+                }
                 GfxOpcode::Quit => break,
                 GfxOpcode::InvalidCall => {
                     log::error!("Received invalid GfxOpcode. Ignoring.");
