@@ -16,12 +16,12 @@ use bit_field::BitField;
 use cram_hal_service::trng::Trng;
 #[cfg(feature = "hosted-baosec")]
 use cramium_emu::trng::Trng;
-#[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
+#[cfg(not(any(feature = "hosted-baosec", feature = "board-baosec")))]
 use gam::*;
 use num_traits::*;
 #[cfg(all(not(feature = "cramium-soc"), not(feature = "doc-deps"), not(feature = "hosted-baosec")))]
 use trng::Trng;
-#[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+#[cfg(any(feature = "hosted-baosec", feature = "board-baosec"))]
 use ux_api::widgets::*;
 use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;
