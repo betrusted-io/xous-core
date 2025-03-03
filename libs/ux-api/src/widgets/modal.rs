@@ -6,8 +6,20 @@ use xous_ipc::Buffer;
 use super::*;
 use crate::minigfx::*;
 use crate::platform::{LINES, WIDTH};
+use crate::service::api::Gid;
+use crate::service::gfx::Gfx;
+
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub enum ModalOpcode {
+    // if changes are made here, also update MenuOpcode
+    Redraw = 0x4000_0000, /* set the high bit so that "standard" enums don't conflict with the
+                           * Modal-specific opcodes */
+    Rawkeys,
+    Quit,
+}
 
 pub struct Modal<'a> {
+    gfx: Gfx,
     pub top_text: Option<TextView>,
     pub bot_text: Option<TextView>,
     pub action: ActionType,
@@ -56,7 +68,9 @@ impl<'a> Modal<'a> {
 
         // we now have a canvas that is some minimal height, but with the final width as allowed by the GAM.
         // compute the final height based upon the contents within.
+        let xns = xous_names::XousNames::new().unwrap();
         let mut modal = Modal {
+            gfx: Gfx::new(&xns).unwrap(),
             top_text: None,
             bot_text: None,
             action,
@@ -83,17 +97,29 @@ impl<'a> Modal<'a> {
     }
 
     pub fn activate(&self) {
-        todo!();
+        self.gfx.acquire_modal().expect("Couldn't acquire lock on graphics subsystem");
+        self.gfx.clear().ok();
+        self.redraw();
+        self.gfx.flush().ok();
     }
 
-    pub fn redraw(&mut self) {
+    pub fn redraw(&self) {
         let action_resolver: Box<&dyn ActionApi> = Box::new(&self.action);
         action_resolver.redraw(0, &self);
-        todo!();
     }
 
     pub fn key_event(&mut self, keys: [char; 4]) {
-        todo!();
+        for &k in keys.iter() {
+            if k != '\u{0}' {
+                log::debug!("got key '{}'", k);
+                let action_resolver: Box<&mut dyn ActionApi> = Box::new(&mut self.action);
+                let err = action_resolver.key_action(k);
+                if let Some(err_msg) = err {
+                    self.modify(None, None, false, Some(&err_msg), false, None);
+                }
+            }
+        }
+        self.redraw();
     }
 
     /// This empowers an action within a modal to potentially consume all the available height in a canvas
@@ -175,8 +201,6 @@ impl<'a> Modal<'a> {
 pub fn screen_bounds() -> Point { Point::new(WIDTH as isize, LINES as isize) }
 
 // comment this out while I figure out how to shim in the HAL layer for the graphics emulation
-fn layout(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle) {}
-/*
 fn layout(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle) {
     // we need to set a "max" size to our modal box, so that the text computations don't fail later on
     let current_bounds = screen_bounds();
@@ -194,10 +218,13 @@ fn layout(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, sty
     log::trace!("step 0 total_height: {}", total_height);
     // compute height of top_text, if any
     if let Some(top_str) = top_text {
-        let mut top_tv = TextView::new(TextBounds::GrowableFromTl(
-            Point::new(modal.margin, modal.margin),
-            (modal.canvas_width - modal.margin * 2) as u16,
-        ));
+        let mut top_tv = TextView::new(
+            Gid::dummy(),
+            TextBounds::GrowableFromTl(
+                Point::new(modal.margin, modal.margin),
+                (modal.canvas_width - modal.margin * 2) as u16,
+            ),
+        );
         top_tv.draw_border = false;
         top_tv.style = style;
         top_tv.margin = Point::new(0, 0); // all margin already accounted for in the raw bounds of the text drawing
@@ -212,7 +239,7 @@ fn layout(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, sty
         write!(top_tv.text, "{}", top_str).unwrap();
 
         log::trace!("posting top tv: {:?}", top_tv);
-        modal.gam.bounds_compute_textview(&mut top_tv).expect("couldn't simulate top text size");
+        modal.gfx.bounds_compute_textview(&mut top_tv).expect("couldn't simulate top text size");
         if let Some(bounds) = top_tv.bounds_computed {
             log::trace!("top_tv bounds computed {}", bounds.br.y - bounds.tl.y);
             total_height += bounds.br.y - bounds.tl.y;
@@ -235,10 +262,13 @@ fn layout(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, sty
     // compute height of bot_text, if any
     log::trace!("step 2 total_height: {}", total_height);
     if let Some(bot_str) = bot_text {
-        let mut bot_tv = TextView::new(TextBounds::GrowableFromTl(
-            Point::new(modal.margin, total_height),
-            (modal.canvas_width - modal.margin * 2) as u16,
-        ));
+        let mut bot_tv = TextView::new(
+            Gid::dummy(),
+            TextBounds::GrowableFromTl(
+                Point::new(modal.margin, total_height),
+                (modal.canvas_width - modal.margin * 2) as u16,
+            ),
+        );
         bot_tv.draw_border = false;
         bot_tv.style = style;
         bot_tv.margin = Point::new(0, 0); // all margin already accounted for in the raw bounds of the text drawing
@@ -253,7 +283,7 @@ fn layout(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, sty
         write!(bot_tv.text, "{}", bot_str).unwrap();
 
         log::trace!("posting bot tv: {:?}", bot_tv);
-        modal.gam.bounds_compute_textview(&mut bot_tv).expect("couldn't simulate bot text size");
+        modal.gfx.bounds_compute_textview(&mut bot_tv).expect("couldn't simulate bot text size");
         if let Some(bounds) = bot_tv.bounds_computed {
             total_height += bounds.br.y - bounds.tl.y;
         } else {
@@ -265,4 +295,3 @@ fn layout(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, sty
     }
     log::trace!("step 3 total_height: {}", total_height);
 }
-*/
