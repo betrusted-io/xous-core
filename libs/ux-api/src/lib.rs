@@ -5,7 +5,7 @@ pub mod cursor;
 mod fontmap;
 pub mod minigfx;
 pub mod platform;
-#[cfg(all(feature = "std", any(feature = "cramium-soc", feature = "hosted-baosec")))]
+#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-baosec")))]
 pub mod widgets;
 #[cfg(feature = "std")]
 pub mod wordwrap;
