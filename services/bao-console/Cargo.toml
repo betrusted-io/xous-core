@@ -18,8 +18,10 @@ cramium-hal = { path = "../../libs/cramium-hal", features = [
 cramium-api = { path = "../../libs/cramium-api" }
 cram-hal-service = { path = "../cram-hal-service", optional = true }
 cramium-emu = { path = "../cramium-emu", optional = true }
-usb-cramium = { path = "../usb-cramium" }
-modals = { path = "../modals" }
+usb-cramium = { path = "../usb-cramium", features = ["cramium-soc"] }
+modals = { path = "../modals", default-features = false, features = [
+    "cramium-soc",
+] }
 
 [features]
 cramium-soc = ["utralib/cramium-soc"]
