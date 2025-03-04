@@ -705,6 +705,18 @@ impl Gfx {
     pub fn release_modal(&self) -> Result<xous::Result, xous::Error> {
         send_message(self.conn, Message::new_scalar(GfxOpcode::ReleaseModal.to_usize().unwrap(), 0, 0, 0, 0))
     }
+
+    /// V2-only API
+    pub fn draw_object_list(&self, list: ObjectList) -> Result<(), xous::Error> {
+        let buf = match Buffer::into_buf(list) {
+            Ok(b) => b,
+            Err(e) => {
+                log::error!("err: {:?}", e);
+                panic!("error")
+            }
+        };
+        buf.lend(self.conn, GfxOpcode::UnclippedObjectList.to_u32().unwrap()).map(|_| ())
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

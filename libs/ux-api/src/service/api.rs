@@ -94,6 +94,8 @@ pub enum GfxOpcode {
     /// V2 API for claiming ownership of screen for modal operation
     AcquireModal,
     ReleaseModal,
+    /// V2 API for fast drawing of multiple objects
+    UnclippedObjectList,
 
     /// Gutter for invalid calls
     InvalidCall,
