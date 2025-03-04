@@ -46,9 +46,11 @@ impl ClipObjectList {
 #[derive(Debug, Clone)]
 /// This API relies on an upgraded version of rkyv that was not available when the ClipObjectList
 /// API was defined: we can now just use a `Vec` to do the trick.
+#[cfg(feature = "std")]
 pub struct ObjectList {
     pub list: Vec<ClipObjectType>,
 }
+#[cfg(feature = "std")]
 impl ObjectList {
     pub fn new() -> Self { Self { list: Vec::new() } }
 
