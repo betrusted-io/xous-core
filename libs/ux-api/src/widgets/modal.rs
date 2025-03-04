@@ -4,6 +4,7 @@ use blitstr2::{GlyphStyle, glyph_height_hint};
 use xous_ipc::Buffer;
 
 use super::*;
+use crate::minigfx::op::HEIGHT;
 use crate::minigfx::*;
 use crate::platform::{LINES, WIDTH};
 use crate::service::api::Gid;
@@ -19,7 +20,7 @@ pub enum ModalOpcode {
 }
 
 pub struct Modal<'a> {
-    gfx: Gfx,
+    pub gfx: Gfx,
     pub top_text: Option<TextView>,
     pub bot_text: Option<TextView>,
     pub action: ActionType,
@@ -96,16 +97,74 @@ impl<'a> Modal<'a> {
         modal
     }
 
-    pub fn activate(&self) {
+    pub fn activate(&mut self) {
         self.gfx.acquire_modal().expect("Couldn't acquire lock on graphics subsystem");
         self.gfx.clear().ok();
         self.redraw();
         self.gfx.flush().ok();
     }
 
-    pub fn redraw(&self) {
+    pub fn redraw(&mut self) {
+        let do_redraw = self.top_dirty || self.bot_dirty || self.inverted;
+        if do_redraw {
+            self.gfx.clear().unwrap();
+        }
+        let mut cur_height = self.margin;
+        if let Some(mut tv) = self.top_text.as_mut() {
+            if do_redraw {
+                self.gfx.draw_textview(&mut tv).expect("couldn't draw text");
+                if let Some(bounds) = tv.bounds_computed {
+                    let y = bounds.br.y - bounds.tl.y;
+                    let y_clip = if y > HEIGHT - self.line_height * 3 {
+                        log::warn!("overside text, clipping back {}", HEIGHT - (self.line_height * 2));
+                        HEIGHT - (self.line_height * 2)
+                    } else {
+                        y
+                    };
+                    cur_height += y_clip;
+                    log::trace!("top_tv height: {}", y_clip);
+                    self.top_memoized_height = Some(y_clip);
+                } else {
+                    log::warn!("text bounds didn't compute setting to max");
+                    self.top_memoized_height = Some(HEIGHT - (self.line_height * 2));
+                }
+                self.top_dirty = false;
+            } else {
+                cur_height +=
+                    self.top_memoized_height.expect("internal error: memoization didn't work correctly");
+            }
+        } else {
+            self.top_dirty = false;
+        }
+
+        let action_height = self.action.height(self.line_height, self.margin, &self);
+        if !do_redraw {
+            self.gfx.clear().unwrap();
+        }
+
         let action_resolver: Box<&dyn ActionApi> = Box::new(&self.action);
-        action_resolver.redraw(0, &self);
+        action_resolver.redraw(cur_height, &self);
+
+        cur_height += action_height;
+
+        if let Some(mut tv) = self.bot_text.as_mut() {
+            if do_redraw {
+                self.gfx.draw_textview(&mut tv).expect("couldn't draw text");
+                if let Some(bounds) = tv.bounds_computed {
+                    cur_height += bounds.br.y - bounds.tl.y;
+                    self.bot_memoized_height = Some(bounds.br.y - bounds.tl.y);
+                }
+                self.bot_dirty = false;
+            } else {
+                cur_height +=
+                    self.bot_memoized_height.expect("internal error: memoization didn't work correctly");
+            }
+        } else {
+            self.bot_dirty = false;
+        }
+        log::trace!("total height: {}", cur_height);
+        log::trace!("modal redraw##");
+        self.gfx.flush().unwrap();
     }
 
     pub fn key_event(&mut self, keys: [char; 4]) {
@@ -195,6 +254,7 @@ impl<'a> Modal<'a> {
         } else {
             self.style
         };
+        layout(self, top_text, bot_text, style);
     }
 }
 
@@ -218,37 +278,41 @@ fn layout(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, sty
     log::trace!("step 0 total_height: {}", total_height);
     // compute height of top_text, if any
     if let Some(top_str) = top_text {
-        let mut top_tv = TextView::new(
-            Gid::dummy(),
-            TextBounds::GrowableFromTl(
-                Point::new(modal.margin, modal.margin),
-                (modal.canvas_width - modal.margin * 2) as u16,
-            ),
-        );
-        top_tv.draw_border = false;
-        top_tv.style = style;
-        top_tv.margin = Point::new(0, 0); // all margin already accounted for in the raw bounds of the text drawing
-        top_tv.ellipsis = false;
-        top_tv.invert = modal.inverted;
-        // specify a clip rect that's the biggest possible allowed. If we don't do this, the current canvas
-        // bounds are used, and the operation will fail if the text has to get bigger.
-        top_tv.clip_rect = Some(Rectangle::new(
-            Point::new(0, 0),
-            Point::new(current_bounds.x, LINES - 2 * modal.line_height),
-        ));
-        write!(top_tv.text, "{}", top_str).unwrap();
+        if top_str.len() > 0 {
+            let mut top_tv = TextView::new(
+                Gid::dummy(),
+                TextBounds::GrowableFromTl(
+                    Point::new(modal.margin, modal.margin),
+                    (modal.canvas_width - modal.margin * 2) as u16,
+                ),
+            );
+            top_tv.draw_border = false;
+            top_tv.style = style;
+            top_tv.margin = Point::new(0, 0); // all margin already accounted for in the raw bounds of the text drawing
+            top_tv.ellipsis = false;
+            top_tv.invert = true;
+            // specify a clip rect that's the biggest possible allowed. If we don't do this, the current
+            // canvas bounds are used, and the operation will fail if the text has to get bigger.
+            top_tv.clip_rect = Some(Rectangle::new(
+                Point::new(0, 0),
+                Point::new(current_bounds.x, LINES - 2 * modal.line_height),
+            ));
+            write!(top_tv.text, "{}", top_str).unwrap();
 
-        log::trace!("posting top tv: {:?}", top_tv);
-        modal.gfx.bounds_compute_textview(&mut top_tv).expect("couldn't simulate top text size");
-        if let Some(bounds) = top_tv.bounds_computed {
-            log::trace!("top_tv bounds computed {}", bounds.br.y - bounds.tl.y);
-            total_height += bounds.br.y - bounds.tl.y;
+            log::trace!("posting top tv: {:?}", top_tv);
+            modal.gfx.bounds_compute_textview(&mut top_tv).expect("couldn't simulate top text size");
+            if let Some(bounds) = top_tv.bounds_computed {
+                log::trace!("top_tv bounds computed {}", bounds.br.y - bounds.tl.y);
+                total_height += bounds.br.y - bounds.tl.y;
+            } else {
+                log::warn!("couldn't compute height for modal top_text: {:?}", top_tv);
+                // probably should find a better way to deal with this.
+                total_height += LINES - (modal.line_height * 2);
+            }
+            modal.top_text = Some(top_tv);
         } else {
-            log::warn!("couldn't compute height for modal top_text: {:?}", top_tv);
-            // probably should find a better way to deal with this.
-            total_height += LINES - (modal.line_height * 2);
+            modal.top_text = None;
         }
-        modal.top_text = Some(top_tv);
     }
     total_height += modal.margin;
 
@@ -273,7 +337,7 @@ fn layout(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, sty
         bot_tv.style = style;
         bot_tv.margin = Point::new(0, 0); // all margin already accounted for in the raw bounds of the text drawing
         bot_tv.ellipsis = false;
-        bot_tv.invert = modal.inverted;
+        bot_tv.invert = true;
         // specify a clip rect that's the biggest possible allowed. If we don't do this, the current canvas
         // bounds are used, and the operation will fail if the text has to get bigger.
         bot_tv.clip_rect = Some(Rectangle::new(
