@@ -683,6 +683,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 GfxOpcode::DrawClipObjectList => {
                     minigfx::handlers::draw_clip_object_list(&mut display, msg);
                 }
+                GfxOpcode::UnclippedObjectList => {
+                    minigfx::handlers::draw_object_list(&mut display, msg);
+                }
                 GfxOpcode::DrawTextView => {
                     minigfx::handlers::draw_text_view(&mut display, msg);
                 }
