@@ -28,6 +28,7 @@ bit_field = "0.9.0"
 cramium-hal = { path = "../../libs/cramium-hal", optional = true, features = [
     "std",
 ] }
+cramium-api = { path = "../../libs/cramium-api", optional = true }
 cramium-emu = { path = "../cramium-emu", optional = true }
 blitstr2 = { path = "../../libs/blitstr2" }
 ux-api = { path = "../../libs/ux-api", optional = true, features = ["std"] }
@@ -40,9 +41,10 @@ hosted = ["utralib/hosted", "trng", "gam", "tts-frontend"]
 renode = ["utralib/renode", "trng", "gam", "tts-frontend"]
 
 cramium-soc = ["utralib/cramium-soc", "cram-hal-service"]
-hosted-baosec = ["ux-api/hosted-baosec", "cramium-emu"]
-board-baosec = ["ux-api/board-baosec"]
+hosted-baosec = ["ux-api/hosted-baosec", "cramium-emu", "cramium-api"]
+board-baosec = ["ux-api/board-baosec", "cramium-api"]
 doc-deps = ["gam", "ux-api/doc-deps"]
+modal-testing = []
 
 tts = []
 ditherpunk = []

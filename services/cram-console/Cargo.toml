@@ -17,11 +17,10 @@ num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 
 # xous-pio = { path = "../../libs/xous-pio", optional = true }
-xous-pl230 = { path = "../../libs/xous-pl230", optional = true }
+# xous-pl230 = { path = "../../libs/xous-pl230", optional = true }
 # this is temporary, until we get GAM/modals pulled in
 ux-api = { path = "../../libs/ux-api" }
 modals = { path = "../modals", features = ["cramium-soc"] }
-gam = { path = "../gam" }
 locales = { path = "../../locales" }
 usb-device-xous = { path = "../usb-device-xous", default-features = false, optional = true }
 cramium-hal = { path = "../../libs/cramium-hal", features = ["std"] }
@@ -30,8 +29,11 @@ ime-plugin-shell = { path = "../ime-plugin-shell" }
 xous-swapper = { path = "../xous-swapper" }
 
 [features]
-"cramium-fpga" = ["utralib/cramium-fpga", "xous-pl230/cramium-fpga"]
-"cramium-soc" = ["utralib/cramium-soc", "xous-pl230/cramium-soc"]
+"cramium-fpga" = ["utralib/cramium-fpga"]
+"cramium-soc" = ["utralib/cramium-soc"]
+"board-baosec" = ["modals/board-baosec"]
+"hosted-baosec" = ["modals/hosted-baosec"]
+
 "hwsim" = []
 "shellperf" = []
 "mass-storage" = []
@@ -39,7 +41,7 @@ xous-swapper = { path = "../xous-swapper" }
 "tts" = []
 "early-ball" = []
 # "pio-test" = ["xous-pio"]
-"pl230-test" = ["xous-pl230"]
+# "pl230-test" = ["xous-pl230"]
 "hwtest" = []
 "pddb" = []
 "gam" = []

@@ -9,9 +9,12 @@ mod qr;
 #[cfg(feature = "gfx-testing")]
 mod testing;
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
+use std::{
+    collections::VecDeque,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use blitstr2::fontmap;
@@ -37,6 +40,7 @@ use utralib::utra;
 use ux_api::minigfx::{self, FrameBuffer};
 use ux_api::service::api::*;
 use xous::MemoryRange;
+use xous::sender::Sender;
 use xous_ipc::Buffer;
 
 // Scope of this crate: *No calls to modals* this can create dependency lockups.
@@ -189,7 +193,7 @@ fn main() -> ! {
 
 pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
     log::info!("my PID is {}", xous::process::id());
 
     // ---- Xous setup
@@ -299,6 +303,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
         cam.capture_async();
     }
 
+    let mut modal_queue = VecDeque::<Sender>::new();
     let mut frames = 0;
     let mut frame = [0u8; IMAGE_WIDTH * IMAGE_HEIGHT];
     let mut decode_success;
@@ -636,12 +641,50 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     log::error!("Invalid call to bao video server: {:?}", msg);
                 }
 
+                // ---- v2 graphics API
+                GfxOpcode::AcquireModal => {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
+                        let sender = msg.sender;
+                        log::debug!("Acquirer Sender: {:x?}", sender);
+                        modal_queue.push_back(sender);
+                        if modal_queue.len() > 1 {
+                            // Prevents `msg` from being "dropped" which would cause the blocking scalar to
+                            // return
+                            core::mem::forget(msg_opt.take());
+                        } else {
+                            scalar.arg1 = 0;
+                            // the message is responded to, which allows the caller to unblock
+                        }
+                    }
+                }
+                GfxOpcode::ReleaseModal => {
+                    if let Some(_scalar) = msg.body.scalar_message() {
+                        let sender = msg.sender;
+                        log::debug!("Release Sender: {:x?}", sender);
+                        if let Some(pos) = modal_queue
+                            .iter()
+                            .position(|x| x.to_usize() & 0xffff_0000 == sender.to_usize() & 0xffff_0000)
+                        {
+                            modal_queue.remove(pos);
+                        } else {
+                            log::error!("Release modal called but sender {:x?} was not found", sender);
+                        };
+                        if let Some(sender) = modal_queue.front() {
+                            // Notify the waiter that it is allowed to run
+                            xous::return_scalar(*sender, 0).unwrap();
+                        }
+                    }
+                }
+
                 // ---- "regular" graphics API
                 GfxOpcode::DrawClipObject => {
                     minigfx::handlers::draw_clip_object(&mut display, msg);
                 }
                 GfxOpcode::DrawClipObjectList => {
                     minigfx::handlers::draw_clip_object_list(&mut display, msg);
+                }
+                GfxOpcode::UnclippedObjectList => {
+                    minigfx::handlers::draw_object_list(&mut display, msg);
                 }
                 GfxOpcode::DrawTextView => {
                     minigfx::handlers::draw_text_view(&mut display, msg);
@@ -651,9 +694,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     display.redraw();
                 }
                 GfxOpcode::Clear => {
-                    let mut r = Rectangle::full_screen();
-                    r.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 0);
-                    op::rectangle(&mut display, r, screen_clip.into(), false)
+                    display.clear();
                 }
                 GfxOpcode::Line => {
                     minigfx::handlers::line(&mut display, screen_clip.into(), msg);

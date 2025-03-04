@@ -310,6 +310,31 @@ impl Gfx {
         Ok(())
     }
 
+    /// Bounds computation does no checks on security since it's a non-drawing operation. While normal drawing
+    /// always takes the bounds from the canvas, the caller can specify a clip_rect in this tv, instead of
+    /// drawing the clip_rect from the Canvas associated with the tv.
+    pub fn bounds_compute_textview(&self, tv: &mut TextView) -> Result<(), xous::Error> {
+        let mut tv_query = tv.clone();
+        tv_query.set_dry_run(true);
+        let mut buf = Buffer::into_buf(tv_query).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, GfxOpcode::DrawTextView.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
+        let tvr = buf.to_original::<TextView, _>().unwrap();
+
+        tv.cursor = tvr.cursor;
+        tv.bounds_computed = tvr.bounds_computed;
+        tv.overflow = tvr.overflow;
+        // don't update the animation state when just computing the textview bounds
+        // tv.busy_animation_state = tvr.busy_animation_state;
+        Ok(())
+    }
+
+    /// Clear the screen in a device-optimized fashion. The exact background color depends on the device.
+    pub fn clear(&self) -> Result<(), xous::Error> {
+        send_message(self.conn, Message::new_scalar(GfxOpcode::Clear.to_usize().unwrap(), 0, 0, 0, 0))
+            .map(|_| ())
+    }
+
     /// Draws a line with clipping.
     ///
     /// This function sends a message to the graphics server to draw the specified `Line` within the specified
@@ -664,6 +689,33 @@ impl Gfx {
             send_message(self.conn, Message::new_scalar(GfxOpcode::Pop.to_usize().unwrap(), 0, 0, 0, 0))
                 .expect("couldn't pop");
         }
+    }
+
+    /// This will cause the caller to block until it is granted a lock on the modal state.
+    ///
+    /// This is a v2-only API. Calling it on a v1 system will cause a panic.
+    pub fn acquire_modal(&self) -> Result<xous::Result, xous::Error> {
+        send_message(
+            self.conn,
+            Message::new_blocking_scalar(GfxOpcode::AcquireModal.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+    }
+
+    /// This is a v2-only API. Calling it on a v1 system will cause a panic.
+    pub fn release_modal(&self) -> Result<xous::Result, xous::Error> {
+        send_message(self.conn, Message::new_scalar(GfxOpcode::ReleaseModal.to_usize().unwrap(), 0, 0, 0, 0))
+    }
+
+    /// V2-only API
+    pub fn draw_object_list(&self, list: ObjectList) -> Result<(), xous::Error> {
+        let buf = match Buffer::into_buf(list) {
+            Ok(b) => b,
+            Err(e) => {
+                log::error!("err: {:?}", e);
+                panic!("error")
+            }
+        };
+        buf.lend(self.conn, GfxOpcode::UnclippedObjectList.to_u32().unwrap()).map(|_| ())
     }
 }
 

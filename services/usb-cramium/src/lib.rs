@@ -1,6 +1,9 @@
 #![cfg_attr(target_os = "none", no_std)]
 
+#[cfg(feature = "cramium-soc")]
 use cram_hal_service::trng;
+#[cfg(feature = "hosted-baosec")]
+use cramium_emu::trng;
 
 pub mod api;
 pub use api::*;
