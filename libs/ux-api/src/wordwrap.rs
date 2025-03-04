@@ -160,18 +160,20 @@ impl ComposedType {
                     let cr =
                         ClipRect::new(clip_rect.tl().x, clip_rect.tl().y, clip_rect.br().x, clip_rect.br().y);
                     let rawbuf = unsafe { frbuf.raw_mut() };
-                    if glyph.large {
-                        blitstr2::xor_glyph_large(
-                            rawbuf,
-                            (maybe_x, maybe_y),
-                            glyph,
-                            glyph.invert ^ invert,
-                            cr,
-                        );
-                    } else if !glyph.double {
-                        blitstr2::xor_glyph(rawbuf, (maybe_x, maybe_y), glyph, glyph.invert ^ invert, cr);
+                    let char_invert = if cfg!(feature = "hosted-baosec") || cfg!(feature = "board-baosec") {
+                        // OLED display background is black for power savings, so all polarities of drawing
+                        // need to be allowed
+                        true
                     } else {
-                        blitstr2::xor_glyph_2x(rawbuf, (maybe_x, maybe_y), glyph, glyph.invert ^ invert, cr);
+                        glyph.invert ^ invert
+                    };
+
+                    if glyph.large {
+                        blitstr2::xor_glyph_large(rawbuf, (maybe_x, maybe_y), glyph, char_invert, cr);
+                    } else if !glyph.double {
+                        blitstr2::xor_glyph(rawbuf, (maybe_x, maybe_y), glyph, char_invert, cr);
+                    } else {
+                        blitstr2::xor_glyph_2x(rawbuf, (maybe_x, maybe_y), glyph, char_invert, cr);
                     }
                     // Platform-dependent cursor inversion because the color scheme for sh1107 doesn't comply
                     // to precursor norms
