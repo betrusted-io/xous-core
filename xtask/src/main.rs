@@ -365,7 +365,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_apps(&get_cratespecs());
         }
         Some("baosec-emu") => {
-            let bao_pkgs = ["xous-ticktimer", "xous-log", "xous-names", "modals", "bao-video", "cramium-emu"];
+            let bao_pkgs = [
+                "xous-ticktimer",
+                "xous-log",
+                "xous-names",
+                "modals",
+                "bao-video",
+                "cramium-emu",
+                "bao-console",
+            ];
             builder
                 // hosted-baosec feature added below
                 .target_hosted_baosec()
@@ -598,7 +606,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             //   - [planned] pddb server
             //   - [planned] vault application
             let bao_rram_pkgs = ["xous-ticktimer", "xous-log", "xous-names" /* "usb-cramium" */].to_vec(); /* "usb-cramium" */
-            let bao_swap_pkgs = ["cram-hal-service", "bao-console", "bao-video"].to_vec(); /* "bao-video" */
+            let bao_swap_pkgs = ["cram-hal-service", "bao-console", "bao-video", "modals"].to_vec(); /* "bao-video" */
             if !builder.is_swap_set() {
                 builder.set_swap(0, 8 * 1024 * 1024);
             }

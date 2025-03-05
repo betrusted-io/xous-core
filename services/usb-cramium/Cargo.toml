@@ -18,8 +18,9 @@ cramium-hal = { path = "../../libs/cramium-hal", features = [
     "debug-print-usb",
     # "verbose-debug",
     "axp2101",
-] }
-cram-hal-service = { path = "../cram-hal-service" }
+], optional = true }
+cram-hal-service = { path = "../cram-hal-service", optional = true }
+cramium-emu = { path = "../cramium-emu", optional = true }
 xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main" }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
@@ -37,7 +38,14 @@ version = "0.2.8"
 features = ["log"]
 
 [features]
-cramium-soc = ["utralib/cramium-soc", "utralib/std"]
+cramium-soc = []
+board-baosec = [
+    "utralib/cramium-soc",
+    "utralib/std",
+    "cramium-hal",
+    "cram-hal-service",
+]
+hosted-baosec = ["utralib/hosted", "utralib/std", "cramium-emu"]
 # none of these other modes are actually supported, but are listed here
 # to allow direct re-use of API code
 precursor = ["utralib/precursor", "utralib/std"]

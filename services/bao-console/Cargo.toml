@@ -12,11 +12,32 @@ log-server = { package = "xous-api-log", version = "0.1.63" }
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-cramium-hal = { path = "../../libs/cramium-hal", features = ["std"] }
+cramium-hal = { path = "../../libs/cramium-hal", features = [
+    "std",
+], optional = true }
 cramium-api = { path = "../../libs/cramium-api" }
-cram-hal-service = { path = "../cram-hal-service" }
+cram-hal-service = { path = "../cram-hal-service", optional = true }
+cramium-emu = { path = "../cramium-emu", optional = true }
 usb-cramium = { path = "../usb-cramium" }
+modals = { path = "../modals", default-features = false }
 
 [features]
-cramium-soc = ["utralib/cramium-soc"]
+cramium-soc = [
+    "utralib/cramium-soc",
+    "modals/cramium-soc",
+    "usb-cramium/cramium-soc",
+]
+board-baosec = [
+    "modals/board-baosec",
+    "cram-hal-service",
+    "cramium-hal",
+    "usb-cramium/board-baosec",
+]
+hosted-baosec = [
+    "modals/hosted-baosec",
+    "usb-cramium/hosted-baosec",
+    "cramium-emu",
+]
+
+modal-testing = []
 default = []

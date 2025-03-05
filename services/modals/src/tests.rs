@@ -2,7 +2,10 @@ use std::thread;
 
 #[cfg(feature = "ditherpunk")]
 use bitmap::PixelType;
+#[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
 use gam::*;
+#[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+use ux_api::widgets::*;
 use xous_names::XousNames;
 
 use super::*;
