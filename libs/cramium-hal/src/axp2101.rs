@@ -3,6 +3,7 @@ use cramium_api::*;
 pub const AXP2101_DEV: u8 = 0x34;
 
 const REG_DCDC_ENA: usize = 0x80;
+const REG_DCDC_PWM: usize = 0x81;
 const REG_DCDC1_V: usize = 0x82;
 const REG_DCDC2_V: usize = 0x83;
 const REG_DCDC3_V: usize = 0x84;
@@ -280,6 +281,39 @@ impl Axp2101 {
     pub fn clear_vbus_irq_pending(&mut self, i2c: &mut dyn I2cApi) -> Result<(), xous::Error> {
         let data = VBUS_INSERT_MASK | VBUS_REMOVE_MASK;
         i2c.i2c_write(AXP2101_DEV, REG_IRQ_STATUS1, &[data]).map(|_| ())
+    }
+
+    pub fn set_pwm_mode(
+        &mut self,
+        i2c: &mut dyn I2cApi,
+        which: WhichDcDc,
+        always: bool,
+    ) -> Result<(), xous::Error> {
+        match which {
+            WhichDcDc::Dcdc5 => Err(xous::Error::BadAddress),
+            _ => {
+                let mut buf = [0u8];
+                i2c.i2c_read(AXP2101_DEV, REG_DCDC_PWM as u8, &mut buf, false).map(|_| ())?;
+                if always {
+                    buf[0] |= 4u8 << (which as usize as u8);
+                } else {
+                    buf[0] &= !(4u8 << (which as usize as u8));
+                }
+                i2c.i2c_write(AXP2101_DEV, REG_DCDC_PWM as u8, &buf).map(|_| ())
+            }
+        }
+    }
+
+    pub fn debug(&mut self, i2c: &mut dyn I2cApi) {
+        let mut buf = [0u8, 0u8];
+        i2c.i2c_read(AXP2101_DEV, REG_DCDC_ENA as u8, &mut buf, false).unwrap();
+        crate::println!("ena|pwm bef: {:x?}", buf);
+        // force CCM mode
+        i2c.i2c_write(AXP2101_DEV, REG_DCDC_ENA as u8, &[buf[0] | 0b0100_0000]).unwrap();
+        // disable spreading, force PWM on DCDC2
+        i2c.i2c_write(AXP2101_DEV, REG_DCDC_PWM as u8, &[(buf[1] & 0b0011_1111) | 0b0000_1000]).unwrap();
+        i2c.i2c_read(AXP2101_DEV, REG_DCDC_ENA as u8, &mut buf, false).unwrap();
+        crate::println!("ena|pwm aft: {:x?}", buf);
     }
 }
 

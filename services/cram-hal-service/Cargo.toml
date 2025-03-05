@@ -23,12 +23,12 @@ cramium-api = { path = "../../libs/cramium-api", features = [
     "derive-rkyv",
     "std",
 ] }
-xous-pl230 = { path = "../../libs/xous-pl230", features = ["cramium-soc"] }
+# xous-pl230 = { path = "../../libs/xous-pl230", features = ["cramium-soc"] }
 # xous-pio = { path = "../../libs/xous-pio", default-features = false, features = [
 #     "cramium-soc",
 # ] }
-pio-proc = "0.2.2"
-pio = "0.2.1"
+# pio-proc = "0.2.2"
+# pio = "0.2.1"
 rand_core = "0.6.4"
 rand_chacha = "0.3.1"
 bitfield = "0.13.2"

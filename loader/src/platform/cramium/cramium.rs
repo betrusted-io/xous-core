@@ -329,6 +329,9 @@ pub fn early_init() -> u32 {
             };
         }
         if let Some(mut pmic) = pmic {
+            // disable CCM, force PWM on for DCDC2 - required for rail stability
+            pmic.set_pwm_mode(&mut i2c, cramium_hal::axp2101::WhichDcDc::Dcdc2, true).unwrap();
+
             pmic.set_ldo(&mut i2c, Some(2.5), cramium_hal::axp2101::WhichLdo::Aldo2).unwrap();
             pmic.set_dcdc(&mut i2c, Some((1.2, false)), cramium_hal::axp2101::WhichDcDc::Dcdc4).unwrap();
             crate::println!("AXP2101 configure: {:?}", pmic);

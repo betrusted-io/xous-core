@@ -36,14 +36,14 @@ use cram_hal_service::trng::Trng;
 use cramium_emu::trng::Trng;
 #[cfg(feature = "ditherpunk")]
 use gam::Bitmap;
-#[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
+#[cfg(not(any(feature = "hosted-baosec", feature = "board-baosec")))]
 use gam::modal::*;
 use locales::t;
 #[cfg(all(not(feature = "cramium-soc"), not(feature = "doc-deps"), not(feature = "hosted-baosec")))]
 use trng::Trng;
 #[cfg(feature = "tts")]
 use tts_frontend::TtsFrontend;
-#[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+#[cfg(any(feature = "hosted-baosec", feature = "board-baosec"))]
 use ux_api::widgets::*;
 use xous::{Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
@@ -144,6 +144,11 @@ fn wrapped_main() -> ! {
     #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
     let mut renderer_modal =
         Modal::new(ActionType::TextEntry(text_action.clone()), Some("Placeholder"), None, DEFAULT_STYLE, 8);
+    #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+    {
+        let kbd = cramium_api::keyboard::Keyboard::new(&xns).unwrap();
+        kbd.register_listener(api::SERVER_NAME_MODALS, Opcode::ModalKeypress.to_u32().unwrap() as usize);
+    }
     #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
     renderer_modal.spawn_helper(
         modals_sid,
