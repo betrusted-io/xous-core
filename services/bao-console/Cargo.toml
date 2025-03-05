@@ -39,4 +39,5 @@ hosted-baosec = [
     "cramium-emu",
 ]
 
+modal-testing = []
 default = []
