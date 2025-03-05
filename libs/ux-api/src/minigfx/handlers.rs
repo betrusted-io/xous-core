@@ -90,6 +90,7 @@ pub fn draw_object_list<T: FrameBuffer>(display: &mut T, msg: &mut xous::envelop
             ClipObjectType::RoundRect(rr) => {
                 op::rounded_rectangle(display, rr, None);
             }
+            #[cfg(feature = "ditherpunk")]
             _ => {
                 unimplemented!("Object type not yet implemented");
             }
