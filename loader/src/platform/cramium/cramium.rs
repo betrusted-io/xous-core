@@ -334,7 +334,42 @@ pub fn early_init() -> u32 {
 
             pmic.set_ldo(&mut i2c, Some(2.5), cramium_hal::axp2101::WhichLdo::Aldo2).unwrap();
             pmic.set_dcdc(&mut i2c, Some((1.2, false)), cramium_hal::axp2101::WhichDcDc::Dcdc4).unwrap();
-            crate::println!("AXP2101 configure: {:?}", pmic);
+
+            // This debug print creates a lot of extra code...
+            // crate::println!("AXP2101 configure: {:?}", pmic);
+
+            // test battery power off
+            /*
+            crate::println!("poweroff");
+            pmic.set_ldo(&mut i2c, None, cramium_hal::axp2101::WhichLdo::Aldo3).unwrap();
+            crate::println!("poweroff done");
+            */
+
+            // try to get the BATTFET disengaged on AXP2101
+            // the lowest current we can get is 3mA...
+            /*
+            let mut buf = [0u8, 0u8];
+            crate::println!("debug");
+            i2c.i2c_read(0x34, 0u8, &mut buf, false).unwrap();
+            crate::println!("0|1 bef: {:x?}", buf);
+
+            buf[0] = 0;
+            buf[1] = 0;
+            // force batfet off
+            i2c.i2c_write(0x34, 0x12u8, &buf[..1]).unwrap();
+            crate::println!("delay");
+            i2c.i2c_read(0x34, 0u8, &mut buf, false).unwrap();
+            crate::println!("0|1 aft: {:x?}", buf);
+
+            crate::println!("enable power off");
+            buf[0] = 0x2;
+            i2c.i2c_write(0x34, 0x22u8, &buf[..1]).unwrap();
+
+            crate::println!("poweroff");
+            buf[0] = 0x1;
+            i2c.i2c_write(0x34, 0x10u8, &buf[..1]).unwrap();
+            crate::println!("poweroff done");
+            */
 
             // Make this true to have the system shut down by disconnecting its own battery while on battery
             // power Note this does nothing if you have USB power plugged in.
