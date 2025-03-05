@@ -126,7 +126,9 @@ impl From<usize> for WhichDcDc {
     }
 }
 
-#[derive(Debug)]
+// Deriving this causes floating point converters to be included in the output
+// which is +40k of code
+// #[derive(Debug)]
 pub struct Axp2101 {
     pub dcdc_ena: [bool; 4],
     pub fast_ramp: bool,
