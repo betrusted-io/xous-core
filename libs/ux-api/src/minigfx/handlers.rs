@@ -70,6 +70,34 @@ pub fn draw_clip_object_list<T: FrameBuffer>(display: &mut T, msg: &mut xous::en
     }
 }
 
+pub fn draw_object_list<T: FrameBuffer>(display: &mut T, msg: &mut xous::envelope::Envelope) {
+    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+    let list_ipc = buffer.to_original::<ObjectList, _>().unwrap();
+    for &item in list_ipc.list.iter() {
+        match item {
+            ClipObjectType::Line(line) => {
+                op::line(display, line, None, false);
+            }
+            ClipObjectType::XorLine(line) => {
+                op::line(display, line, None, true);
+            }
+            ClipObjectType::Circ(circ) => {
+                op::circle(display, circ, None);
+            }
+            ClipObjectType::Rect(rect) => {
+                op::rectangle(display, rect, None, false);
+            }
+            ClipObjectType::RoundRect(rr) => {
+                op::rounded_rectangle(display, rr, None);
+            }
+            #[cfg(feature = "ditherpunk")]
+            _ => {
+                unimplemented!("Object type not yet implemented");
+            }
+        }
+    }
+}
+
 pub fn line<T: FrameBuffer>(
     display: &mut T,
     screen_clip: Option<Rectangle>,
@@ -166,7 +194,12 @@ pub fn draw_text_view<T: FrameBuffer>(display: &mut T, msg: &mut xous::envelope:
     let mut tv = buffer.to_original::<TextView, _>().unwrap();
 
     if tv.clip_rect.is_none() {
-        return;
+        if cfg!(feature = "hosted-baosec") || cfg!(feature = "cramium-soc") || cfg!(feature = "board-baosec")
+        {
+            tv.clip_rect = Some(Rectangle::new(Point::new(0, 0), display.dimensions()));
+        } else {
+            return;
+        }
     } // if no clipping rectangle is specified, nothing to draw
 
     // this is the clipping rectangle of the canvas in screen coordinates

@@ -41,3 +41,35 @@ impl ClipObjectList {
         }
     }
 }
+
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug, Clone)]
+/// This API relies on an upgraded version of rkyv that was not available when the ClipObjectList
+/// API was defined: we can now just use a `Vec` to do the trick.
+#[cfg(feature = "std")]
+pub struct ObjectList {
+    pub list: Vec<ClipObjectType>,
+}
+#[cfg(feature = "std")]
+impl ObjectList {
+    pub fn new() -> Self { Self { list: Vec::new() } }
+
+    /// The intent was for the push() to be infalliable, but in practice, draw lists could get
+    /// arbitrarily large and some back-pressure is needed to keep the memory allocation within
+    /// bounds that the system can handle. Thus, this method can fail returning the pushed object,
+    /// at which point one should send the draw list to the graphics engine, and retry the push.
+    pub fn push(&mut self, item: ClipObjectType) -> Result<(), ClipObjectType> {
+        // TODO: export the capacity limit of a buffer. The origin of the capacity limit is equal to
+        // the size of a page of memory, plus 256 bytes for "scratch" area for rkyv to work in. I did
+        // try to use the .replace() method with an allocation of a large enough buffer to hold the whole
+        // Vec, but it seems to fail. I think it could be that the scratch space hard-coded into the IPC
+        // library is not big enough...
+        if self.list.capacity() * size_of::<ClipObjectType>() + size_of::<Vec<ClipObjectType>>() < 4096 - 256
+        {
+            self.list.push(item);
+            Ok(())
+        } else {
+            Err(item)
+        }
+    }
+}

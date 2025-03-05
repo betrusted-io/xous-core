@@ -50,3 +50,13 @@ impl RngCore for Trng {
 }
 
 impl CryptoRng for Trng {}
+
+pub mod api {
+    #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq, Copy, Clone)]
+    pub enum TrngTestMode {
+        // No test mode configured. Whitened data is sampled.
+        None,
+        // Raw TRNG output.
+        Raw,
+    }
+}
