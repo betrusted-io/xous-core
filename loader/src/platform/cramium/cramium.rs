@@ -86,6 +86,10 @@ pub fn delay(quantum: usize) {
 
 #[cfg(all(feature = "cramium-soc", not(feature = "verilator-only")))]
 pub fn early_init() -> u32 {
+    // TODO: pull in the EMA settings from nto-tests
+    // *((volatile uint32_t*)0x40014000) = 0x3; //sramcfg.cach:ema[2:0]=0x4 (default for 0.8V), 0x3 for 0.9V
+    // *((volatile uint32_t*)0x40014014) = 0x1; //sramcfg.vexram:ema[2:0]=0x4 (default for 0.8V), 0x1 for 0.9V
+
     // Set up the initial clocks. This is done as a "poke array" into a table of addresses.
     // Why? because this is actually how it's done for the chip verification code. We can
     // make this nicer and more abstract with register meanings down the road, if necessary,
