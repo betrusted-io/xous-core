@@ -10,7 +10,8 @@ version = "0.1.0"
 com = { path = "../com" }
 content-plugin-api = { path = "../content-plugin-api" }                     # all content canvas providers must provide this API
 gam = { path = "../gam" }
-graphics-server = { path = "../graphics-server" }
+blitstr2 = { path = "../../libs/blitstr2" }
+ux-api = { path = "../../libs/ux-api" }
 ime-plugin-api = { path = "../ime-plugin-api" }
 ime-plugin-shell = { path = "../ime-plugin-shell" }
 ime-plugin-tts = { path = "../ime-plugin-tts" }

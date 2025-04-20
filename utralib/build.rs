@@ -1,6 +1,6 @@
 use std::env;
 use std::fs::OpenOptions;
-#[cfg(not(feature = "hosted"))]
+#[cfg(not(any(feature = "hosted", feature = "hosted-baosec")))]
 use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
@@ -137,7 +137,7 @@ fn main() {
     //
     // Debug this using:
     //  $env:CARGO_LOG="cargo::core::compiler::fingerprint=info"
-    #[cfg(not(feature = "hosted"))]
+    #[cfg(not(any(feature = "hosted", feature = "hosted-baosec")))]
     {
         let mut svd_files = Vec::new();
         for svd in svd_filenames.iter() {
@@ -180,7 +180,7 @@ fn main() {
             writeln!(svd_file, "utralib/{}", svd).unwrap();
         }
     }
-    #[cfg(feature = "hosted")]
+    #[cfg(any(feature = "hosted", feature = "hosted-baosec"))]
     {
         let svd_path = out_dir().join("../../SVD_PATH");
         let mut svd_file = OpenOptions::new().create(true).write(true).truncate(true).open(svd_path).unwrap();

@@ -1,12 +1,13 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-mod api;
-
 mod backend;
 use backend::XousDisplay;
-
-mod op;
+use ux_api::minigfx::*;
+use ux_api::minigfx::{self, op};
+use ux_api::platform::{FB_LINES, FB_SIZE, FB_WIDTH_WORDS};
+use ux_api::service::api;
+use ux_api::service::api::*;
 
 mod logo;
 #[cfg(not(feature = "cramium-soc"))]
@@ -17,29 +18,15 @@ mod poweron_bt;
 use poweron_bt as poweron;
 mod sleep_note;
 
-use api::*;
-
-mod blitstr2;
-mod wordwrap;
-#[macro_use]
-mod style_macros;
-
-use num_traits::FromPrimitive;
-use xous::{MemoryRange, msg_blocking_scalar_unpack, msg_scalar_unpack};
+use blitstr2::fontmap;
 use xous_ipc::Buffer;
-
-mod fontmap;
-use api::BulkRead;
 
 #[cfg(any(feature = "precursor", feature = "renode", feature = "cramium-soc"))]
 // only install for hardware targets; hosted mode uses host's panic handler
 mod panic;
 
-use core::ops::Add;
 use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-
-use crate::wordwrap::*;
 
 #[cfg(feature = "gfx-testing")]
 mod testing;
@@ -47,7 +34,7 @@ mod testing;
 fn draw_boot_logo(display: &mut XousDisplay) { display.blit_screen(&poweron::LOGO_MAP); }
 
 #[cfg(any(feature = "precursor", feature = "renode"))]
-fn map_fonts() -> MemoryRange {
+fn map_fonts() -> xous::MemoryRange {
     log::trace!("mapping fonts");
     // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
     // because the reserved area is much larger
@@ -93,7 +80,7 @@ fn map_fonts() -> MemoryRange {
 }
 
 #[cfg(any(feature = "cramium-soc"))]
-fn map_fonts() -> MemoryRange {
+fn map_fonts() -> xous::MemoryRange {
     log::trace!("mapping fonts");
     // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
     // because the reserved area is much larger
@@ -133,7 +120,7 @@ fn map_fonts() -> MemoryRange {
 }
 
 #[cfg(not(target_os = "xous"))]
-fn map_fonts() -> MemoryRange {
+fn map_fonts() -> xous::MemoryRange {
     // does nothing
     let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32 + 8) & 0xFFFF_F000) + 0x1000;
     let fontregion = xous::syscall::map_memory(None, None, fontlen as usize, xous::MemoryFlags::R)
@@ -215,7 +202,7 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
     let sr_cid = xous::connect(sid).expect("couldn't create suspend callback connection");
     #[cfg(not(feature = "cramium-soc"))]
     let mut susres =
-        susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, Opcode::SuspendResume as u32, sr_cid)
+        susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, GfxOpcode::SuspendResume as u32, sr_cid)
             .expect("couldn't create suspend/resume object");
 
     let mut bulkread = BulkRead::default(); // holding buffer for bulk reads; wastes ~8k when not in use, but saves a lot of copy/init for each iteration of the read
@@ -224,377 +211,108 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
 
     #[cfg(feature = "gfx-testing")]
     testing::tests();
+    let mut msg_opt = None;
     loop {
         if !is_panic.load(Ordering::Relaxed) {
-            // non-panic graphics operations if we are in a panic situation
-            let mut msg = xous::receive_message(sid).unwrap();
-            let op = FromPrimitive::from_usize(msg.body.id());
-            log::trace!("{:?}", op);
+            xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
+            let msg = msg_opt.as_mut().unwrap();
+            let op = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(GfxOpcode::InvalidCall);
+            log::debug!("{:?}", op);
             match op {
                 #[cfg(not(feature = "cramium-soc"))]
-                Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
-                    display.suspend();
-                    susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                    display.resume();
-                }),
-                Some(Opcode::DrawClipObject) => {
-                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let obj = buffer.to_original::<ClipObject, _>().unwrap();
-                    log::trace!("DrawClipObject {:?}", obj);
-                    match obj.obj {
-                        ClipObjectType::Line(line) => {
-                            op::line(display.native_buffer(), line, Some(obj.clip), false);
-                        }
-                        ClipObjectType::XorLine(line) => {
-                            op::line(display.native_buffer(), line, Some(obj.clip), true);
-                        }
-                        ClipObjectType::Circ(circ) => {
-                            op::circle(display.native_buffer(), circ, Some(obj.clip));
-                        }
-                        ClipObjectType::Rect(rect) => {
-                            op::rectangle(display.native_buffer(), rect, Some(obj.clip), false);
-                        }
-                        ClipObjectType::RoundRect(rr) => {
-                            op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
-                        }
-                        #[cfg(feature = "ditherpunk")]
-                        ClipObjectType::Tile(tile) => {
-                            op::tile(display.native_buffer(), tile, Some(obj.clip));
-                        }
-                    }
-                }
-                Some(Opcode::DrawClipObjectList) => {
-                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let list_ipc = buffer.to_original::<ClipObjectList, _>().unwrap();
-                    for maybe_item in list_ipc.list.iter() {
-                        if let Some(obj) = maybe_item {
-                            match obj.obj {
-                                ClipObjectType::Line(line) => {
-                                    op::line(display.native_buffer(), line, Some(obj.clip), false);
-                                }
-                                ClipObjectType::XorLine(line) => {
-                                    op::line(display.native_buffer(), line, Some(obj.clip), true);
-                                }
-                                ClipObjectType::Circ(circ) => {
-                                    op::circle(display.native_buffer(), circ, Some(obj.clip));
-                                }
-                                ClipObjectType::Rect(rect) => {
-                                    op::rectangle(display.native_buffer(), rect, Some(obj.clip), false);
-                                }
-                                ClipObjectType::RoundRect(rr) => {
-                                    op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
-                                }
-                                #[cfg(feature = "ditherpunk")]
-                                ClipObjectType::Tile(tile) => {
-                                    op::tile(display.native_buffer(), tile, Some(obj.clip));
-                                }
-                            }
-                        } else {
-                            // stop at the first None entry -- if the sender packed the list with a hole in
-                            // it, that's their bad
-                            break;
-                        }
-                    }
-                }
-                Some(Opcode::DrawTextView) => {
-                    let mut buffer =
-                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                    let mut tv = buffer.to_original::<TextView, _>().unwrap();
-
-                    if tv.clip_rect.is_none() {
-                        continue;
-                    } // if no clipping rectangle is specified, nothing to draw
-
-                    // this is the clipping rectangle of the canvas in screen coordinates
-                    let clip_rect = tv.clip_rect.unwrap();
-                    // this is the translation vector to and from screen space
-                    let screen_offset: Point = tv.clip_rect.unwrap().tl;
-
-                    let typeset_extent = match tv.bounds_hint {
-                        TextBounds::BoundingBox(r) => Pt::new(
-                            r.br().x - r.tl().x - tv.margin.x * 2,
-                            r.br().y - r.tl().y - tv.margin.y * 2,
-                        ),
-                        TextBounds::GrowableFromBr(br, width) => {
-                            Pt::new(width as i16 - tv.margin.x * 2, br.y - tv.margin.y * 2)
-                        }
-                        TextBounds::GrowableFromBl(bl, width) => {
-                            Pt::new(width as i16 - tv.margin.x * 2, bl.y - tv.margin.y * 2)
-                        }
-                        TextBounds::GrowableFromTl(tl, width) => Pt::new(
-                            width as i16 - tv.margin.x * 2,
-                            (clip_rect.br().y - clip_rect.tl().y - tl.y) - tv.margin.y * 2,
-                        ),
-                        TextBounds::GrowableFromTr(tr, width) => Pt::new(
-                            width as i16 - tv.margin.x * 2,
-                            (clip_rect.br().y - clip_rect.tl().y - tr.y) - tv.margin.y * 2,
-                        ),
-                        TextBounds::CenteredTop(r) => Pt::new(
-                            r.br().x - r.tl().x - tv.margin.x * 2,
-                            r.br().y - r.tl().y - tv.margin.y * 2,
-                        ),
-                        TextBounds::CenteredBot(r) => Pt::new(
-                            r.br().x - r.tl().x - tv.margin.x * 2,
-                            r.br().y - r.tl().y - tv.margin.y * 2,
-                        ),
-                    };
-                    let mut typesetter = Typesetter::setup(
-                        tv.to_str(),
-                        &typeset_extent,
-                        &tv.style,
-                        if let Some(i) = tv.insertion { Some(i as usize) } else { None },
-                    );
-                    let composition = typesetter.typeset(if tv.ellipsis {
-                        OverflowStrategy::Ellipsis
+                GfxOpcode::SuspendResume => {
+                    if let Some(scalar) = msg.body.scalar_message() {
+                        let token = scalar.arg1;
+                        display.suspend();
+                        susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                        display.resume();
                     } else {
-                        OverflowStrategy::Abort
-                    });
-
-                    let composition_top_left = match tv.bounds_hint {
-                        TextBounds::BoundingBox(r) => r.tl().add(tv.margin),
-                        TextBounds::GrowableFromBr(br, _width) => Point::new(
-                            br.x - (composition.bb_width() as i16 + tv.margin.x),
-                            br.y - (composition.bb_height() as i16 + tv.margin.y),
-                        ),
-                        TextBounds::GrowableFromBl(bl, _width) => Point::new(
-                            bl.x + tv.margin.x,
-                            bl.y - (composition.bb_height() as i16 + tv.margin.y),
-                        ),
-                        TextBounds::GrowableFromTl(tl, _width) => tl.add(tv.margin),
-                        TextBounds::GrowableFromTr(tr, _width) => Point::new(
-                            tr.x - (composition.bb_width() as i16 + tv.margin.x),
-                            tr.y + tv.margin.y,
-                        ),
-                        TextBounds::CenteredTop(r) => {
-                            if r.width() as i16 > composition.bb_width() {
-                                r.tl().add(Point::new((r.width() as i16 - composition.bb_width()) / 2, 0))
-                            } else {
-                                r.tl().add(tv.margin)
-                            }
-                        }
-                        TextBounds::CenteredBot(r) => {
-                            if r.width() as i16 > composition.bb_width() {
-                                r.tl().add(Point::new(
-                                    (r.width() as i16 - composition.bb_width()) / 2,
-                                    if (r.height() as i16) > (composition.bb_height() + tv.margin.y) {
-                                        (r.height() as i16) - (composition.bb_height() + tv.margin.y)
-                                    } else {
-                                        0
-                                    },
-                                ))
-                            } else {
-                                r.tl().add(tv.margin)
-                            }
-                        }
+                        panic!("Incorrect message type");
                     }
-                    .add(screen_offset);
-
-                    // compute the clear rectangle -- the border is already in screen coordinates, just add
-                    // the margin around it
-                    let mut clear_rect = match tv.bounds_hint {
-                        TextBounds::BoundingBox(mut r) => {
-                            r.translate(screen_offset);
-                            r
-                        }
-                        _ => {
-                            if tv.busy_animation_state.is_some() {
-                                // we want to clear the entire potentially drawable region, not just the dirty
-                                // box if we're doing a busy animation.
-                                let r = Rectangle::new(
-                                    Point::new(screen_offset.x, composition_top_left.y),
-                                    Point::new(screen_offset.x, composition_top_left.y)
-                                        .add(Point::new(typeset_extent.x, composition.bb_height())),
-                                );
-                                r
-                            } else {
-                                // composition_top_left already had a screen_offset added when it was
-                                // computed. just margin it out
-                                let mut r = Rectangle::new(
-                                    composition_top_left,
-                                    composition_top_left.add(Point::new(
-                                        composition.bb_width() as _,
-                                        composition.bb_height() as _,
-                                    )),
-                                );
-                                r.margin_out(tv.margin);
-                                r
-                            }
-                        }
-                    };
-
-                    log::trace!("clip_rect: {:?}", clip_rect);
-                    log::trace!("composition_top_left: {:?}", composition_top_left);
-                    log::trace!("clear_rect: {:?}", clear_rect);
-                    // draw the bubble/border and/or clear the background area
-                    let bordercolor = if tv.draw_border { Some(PixelColor::Dark) } else { None };
-                    let borderwidth: i16 = if tv.draw_border { tv.border_width as i16 } else { 0 };
-                    let fillcolor = if tv.clear_area || tv.invert {
-                        if tv.invert { Some(PixelColor::Dark) } else { Some(PixelColor::Light) }
-                    } else {
-                        None
-                    };
-
-                    clear_rect.style = DrawStyle {
-                        fill_color: fillcolor,
-                        stroke_color: bordercolor,
-                        stroke_width: borderwidth,
-                    };
-                    if !tv.dry_run() {
-                        if tv.rounded_border.is_some() {
-                            op::rounded_rectangle(
-                                display.native_buffer(),
-                                RoundedRectangle::new(clear_rect, tv.rounded_border.unwrap() as _),
-                                tv.clip_rect,
-                            );
-                        } else {
-                            op::rectangle(display.native_buffer(), clear_rect, tv.clip_rect, false);
-                        }
-                    }
-                    // for now, if we're in braille mode, emit all text to the debug log so we can see it
-                    //if cfg!(feature = "braille") {
-                    //   log::info!("{}", tv);
-                    //}
-
-                    if !tv.dry_run() {
-                        // note: make the clip rect `tv.clip_rect.unwrap()` if you want to debug wordwrapping
-                        // artifacts; otherwise smallest_rect masks some problems
-                        let smallest_rect = clear_rect
-                            .clip_with(tv.clip_rect.unwrap())
-                            .unwrap_or(Rectangle::new(Point::new(0, 0), Point::new(0, 0)));
-                        composition.render(
-                            display.native_buffer(),
-                            composition_top_left,
-                            tv.invert,
-                            smallest_rect,
-                        );
-                    }
-
-                    // run the busy animation
-                    if let Some(state) = tv.busy_animation_state {
-                        let total_width = typeset_extent.x as i16;
-                        if total_width > op::BUSY_ANIMATION_RECT_WIDTH * 2 {
-                            let step = state as i16 % (op::BUSY_ANIMATION_RECT_WIDTH * 2);
-                            for offset in (0..(total_width + op::BUSY_ANIMATION_RECT_WIDTH * 2))
-                                .step_by((op::BUSY_ANIMATION_RECT_WIDTH * 2) as usize)
-                            {
-                                let left_x = offset + step + composition_top_left.x;
-                                if offset == 0
-                                    && (step >= op::BUSY_ANIMATION_RECT_WIDTH)
-                                    && (step < op::BUSY_ANIMATION_RECT_WIDTH * 2)
-                                {
-                                    // handle the truncated "left" rectangle
-                                    let mut trunc_rect = Rectangle::new(
-                                        Point::new(composition_top_left.x as i16, clear_rect.tl().y),
-                                        Point::new(
-                                            (step + composition_top_left.x - op::BUSY_ANIMATION_RECT_WIDTH)
-                                                as i16,
-                                            clear_rect.br().y,
-                                        ),
-                                    );
-                                    trunc_rect.style = DrawStyle {
-                                        fill_color: Some(PixelColor::Light),
-                                        stroke_color: None,
-                                        stroke_width: 0,
-                                    };
-                                    op::rectangle(display.native_buffer(), trunc_rect, tv.clip_rect, true);
-                                } // the "right" rectangle is handled by the clipping mask
-                                let mut xor_rect = Rectangle::new(
-                                    Point::new(left_x as i16, clear_rect.tl().y),
-                                    Point::new(
-                                        (left_x + op::BUSY_ANIMATION_RECT_WIDTH) as i16,
-                                        clear_rect.br().y,
-                                    ),
-                                );
-                                xor_rect.style = DrawStyle {
-                                    fill_color: Some(PixelColor::Light),
-                                    stroke_color: None,
-                                    stroke_width: 0,
-                                };
-                                op::rectangle(display.native_buffer(), xor_rect, tv.clip_rect, true);
-                            }
-                        } else {
-                            // don't do the animation, this could be abused to create inverted text
-                        }
-                        tv.busy_animation_state = Some(state + 2);
-                    }
-
-                    // type mismatch for now, replace this with a simple equals once we sort that out
-                    tv.cursor.pt.x = composition.final_cursor().pt.x;
-                    tv.cursor.pt.y = composition.final_cursor().pt.y;
-                    tv.cursor.line_height = composition.final_cursor().line_height;
-                    tv.overflow = Some(composition.final_overflow());
-
-                    tv.bounds_computed = Some(clear_rect);
-                    log::trace!("cursor ret {:?}, bounds ret {:?}", tv.cursor, tv.bounds_computed);
-                    // pack our data back into the buffer to return
-                    buffer.replace(tv).unwrap();
                 }
-                Some(Opcode::Flush) => {
+                GfxOpcode::DrawClipObject => {
+                    minigfx::handlers::draw_clip_object(&mut display, msg);
+                }
+                GfxOpcode::DrawClipObjectList => {
+                    minigfx::handlers::draw_clip_object_list(&mut display, msg);
+                }
+                GfxOpcode::DrawTextView => {
+                    minigfx::handlers::draw_text_view(&mut display, msg);
+                }
+                GfxOpcode::Flush => {
                     log::trace!("***gfx flush*** redraw##");
                     display.redraw();
                 }
-                Some(Opcode::Clear) => {
+                GfxOpcode::Clear => {
                     let mut r = Rectangle::full_screen();
                     r.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 0);
-                    op::rectangle(display.native_buffer(), r, screen_clip.into(), false)
+                    op::rectangle(&mut display, r, screen_clip.into(), false)
                 }
-                Some(Opcode::Line) => msg_scalar_unpack!(msg, p1, p2, style, _, {
-                    let l = Line::new_with_style(Point::from(p1), Point::from(p2), DrawStyle::from(style));
-                    op::line(display.native_buffer(), l, screen_clip.into(), false);
-                }),
-                Some(Opcode::Rectangle) => msg_scalar_unpack!(msg, tl, br, style, _, {
-                    let r =
-                        Rectangle::new_with_style(Point::from(tl), Point::from(br), DrawStyle::from(style));
-                    op::rectangle(display.native_buffer(), r, screen_clip.into(), false);
-                }),
-                Some(Opcode::RoundedRectangle) => msg_scalar_unpack!(msg, tl, br, style, r, {
-                    let rr = RoundedRectangle::new(
-                        Rectangle::new_with_style(Point::from(tl), Point::from(br), DrawStyle::from(style)),
-                        r as _,
-                    );
-                    op::rounded_rectangle(display.native_buffer(), rr, screen_clip.into());
-                }),
+                GfxOpcode::Line => {
+                    minigfx::handlers::line(&mut display, screen_clip.into(), msg);
+                }
+                GfxOpcode::Rectangle => {
+                    minigfx::handlers::rectangle(&mut display, screen_clip.into(), msg);
+                }
+                GfxOpcode::RoundedRectangle => {
+                    minigfx::handlers::rounded_rectangle(&mut display, screen_clip.into(), msg);
+                }
                 #[cfg(feature = "ditherpunk")]
-                Some(Opcode::Tile) => {
-                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let bm = buffer.to_original::<Tile, _>().unwrap();
-                    op::tile(display.native_buffer(), bm, screen_clip.into());
+                GfxOpcode::Tile => {
+                    minigfx::handlers::tile(&mut display, screen_clip.into(), msg);
                 }
-                Some(Opcode::Circle) => msg_scalar_unpack!(msg, center, radius, style, _, {
-                    let c = Circle::new_with_style(Point::from(center), radius as _, DrawStyle::from(style));
-                    op::circle(display.native_buffer(), c, screen_clip.into());
-                }),
-                Some(Opcode::ScreenSize) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    let pt = display.screen_size();
-                    xous::return_scalar2(msg.sender, pt.x as usize, pt.y as usize)
-                        .expect("couldn't return ScreenSize request");
-                }),
-                Some(Opcode::QueryGlyphProps) => msg_blocking_scalar_unpack!(msg, style, _, _, _, {
-                    let glyph = GlyphStyle::from(style);
-                    xous::return_scalar2(msg.sender, glyph.into(), glyph_to_height_hint(glyph))
-                        .expect("could not return QueryGlyphProps request");
-                }),
-                Some(Opcode::DrawSleepScreen) => msg_scalar_unpack!(msg, _, _, _, _, {
-                    display.blit_screen(&logo::LOGO_MAP);
-                    display.redraw();
-                }),
-                Some(Opcode::DrawBootLogo) => msg_scalar_unpack!(msg, _, _, _, _, {
-                    display.blit_screen(&poweron::LOGO_MAP);
-                    display.redraw();
-                }),
-                Some(Opcode::Devboot) => msg_scalar_unpack!(msg, ena, _, _, _, {
-                    if ena != 0 {
-                        display.set_devboot(true);
+                GfxOpcode::Circle => {
+                    minigfx::handlers::circle(&mut display, screen_clip.into(), msg);
+                }
+                GfxOpcode::ScreenSize => {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
+                        let pt = display.screen_size();
+                        scalar.arg1 = pt.x as usize;
+                        scalar.arg2 = pt.y as usize;
                     } else {
-                        display.set_devboot(false);
+                        panic!("Incorrect message type");
                     }
-                }),
-                Some(Opcode::RestartBulkRead) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    bulkread.from_offset = 0;
-                    xous::return_scalar(msg.sender, 0)
-                        .expect("couldn't ack that bulk read pointer was reset");
-                }),
-                Some(Opcode::BulkReadFonts) => {
+                }
+                GfxOpcode::QueryGlyphProps => {
+                    minigfx::handlers::query_glyph_props(msg);
+                }
+                GfxOpcode::DrawSleepScreen => {
+                    if let Some(_scalar) = msg.body.scalar_message() {
+                        display.blit_screen(&logo::LOGO_MAP);
+                        display.redraw();
+                    } else {
+                        panic!("Incorrect message type");
+                    }
+                }
+                GfxOpcode::DrawBootLogo => {
+                    if let Some(_scalar) = msg.body.scalar_message() {
+                        display.blit_screen(&poweron::LOGO_MAP);
+                        display.redraw();
+                    } else {
+                        panic!("Incorrect message type");
+                    }
+                }
+                GfxOpcode::Devboot => {
+                    if let Some(scalar) = msg.body.scalar_message() {
+                        let ena = scalar.arg1;
+                        if ena != 0 {
+                            display.set_devboot(true);
+                        } else {
+                            display.set_devboot(false);
+                        }
+                    } else {
+                        panic!("Incorrect message type");
+                    }
+                }
+                GfxOpcode::RestartBulkRead => {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
+                        bulkread.from_offset = 0;
+                        scalar.arg1 = 0;
+                    } else {
+                        panic!("Incorrect message type");
+                    }
+                }
+                GfxOpcode::BulkReadFonts => {
                     // this also needs to reflect in root-keys/src/implementation.rs @ sign_loader()
                     let fontlen = fontmap::FONT_TOTAL_LEN as u32
                         + 16  // minver
@@ -629,131 +347,140 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                     bulkread.from_offset += readlen as u32;
                     buf.replace(bulkread).unwrap();
                 }
-                Some(Opcode::TestPattern) => msg_blocking_scalar_unpack!(msg, duration, _, _, _, {
-                    let mut stashmem = xous::syscall::map_memory(
-                        None,
-                        None,
-                        ((backend::FB_SIZE * 4) + 4096) & !4095,
-                        xous::MemoryFlags::R | xous::MemoryFlags::W,
-                    )
-                    .expect("couldn't map stash frame buffer");
-                    // Safety: `u8` contains no undefined values
-                    let stash = unsafe { &mut stashmem.as_slice_mut()[..backend::FB_SIZE] };
-                    for (&src, dst) in display.as_slice().iter().zip(stash.iter_mut()) {
-                        *dst = src;
-                    }
-                    for lines in 0..backend::FB_LINES {
-                        // mark all lines dirty
-                        stash[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
-                    }
-
-                    let start_time = ticktimer.elapsed_ms();
-                    let mut testmem = xous::syscall::map_memory(
-                        None,
-                        None,
-                        ((backend::FB_SIZE * 4) + 4096) & !4095,
-                        xous::MemoryFlags::R | xous::MemoryFlags::W,
-                    )
-                    .expect("couldn't map stash frame buffer");
-                    // Safety: `u8` contains no undefined values
-                    let testpat = unsafe { &mut testmem.as_slice_mut()[..backend::FB_SIZE] };
-                    const DWELL: usize = 1000;
-                    while ticktimer.elapsed_ms() - start_time < duration as u64 {
-                        // all black
-                        for w in testpat.iter_mut() {
-                            *w = 0;
+                GfxOpcode::TestPattern => {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
+                        let duration = scalar.arg1;
+                        let mut stashmem = xous::syscall::map_memory(
+                            None,
+                            None,
+                            ((FB_SIZE * 4) + 4096) & !4095,
+                            xous::MemoryFlags::R | xous::MemoryFlags::W,
+                        )
+                        .expect("couldn't map stash frame buffer");
+                        // Safety: `u8` contains no undefined values
+                        let stash = unsafe { &mut stashmem.as_slice_mut()[..FB_SIZE] };
+                        for (&src, dst) in display.as_slice().iter().zip(stash.iter_mut()) {
+                            *dst = src;
                         }
-                        for lines in 0..backend::FB_LINES {
-                            // mark dirty bits
-                            testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |=
-                                0x1_0000;
+                        for lines in 0..FB_LINES {
+                            // mark all lines dirty
+                            stash[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
                         }
-                        display.blit_screen(testpat);
-                        display.redraw();
-                        ticktimer.sleep_ms(DWELL).unwrap();
 
-                        // all white
-                        for w in testpat.iter_mut() {
-                            *w = 0xFFFF_FFFF;
-                        }
-                        // dirty bits already set
-                        display.blit_screen(testpat);
-                        display.redraw();
-                        ticktimer.sleep_ms(DWELL).unwrap();
-
-                        // vertical bars
-                        for lines in 0..backend::FB_LINES {
-                            for words in 0..backend::FB_WIDTH_WORDS {
-                                testpat[lines * backend::FB_WIDTH_WORDS + words] = 0xaaaa_aaaa;
+                        let start_time = ticktimer.elapsed_ms();
+                        let mut testmem = xous::syscall::map_memory(
+                            None,
+                            None,
+                            ((FB_SIZE * 4) + 4096) & !4095,
+                            xous::MemoryFlags::R | xous::MemoryFlags::W,
+                        )
+                        .expect("couldn't map stash frame buffer");
+                        // Safety: `u8` contains no undefined values
+                        let testpat = unsafe { &mut testmem.as_slice_mut()[..FB_SIZE] };
+                        const DWELL: usize = 1000;
+                        while ticktimer.elapsed_ms() - start_time < duration as u64 {
+                            // all black
+                            for w in testpat.iter_mut() {
+                                *w = 0;
                             }
-                        }
-                        display.blit_screen(testpat);
-                        display.redraw();
-                        ticktimer.sleep_ms(DWELL).unwrap();
-
-                        for lines in 0..backend::FB_LINES {
-                            for words in 0..backend::FB_WIDTH_WORDS {
-                                testpat[lines * backend::FB_WIDTH_WORDS + words] = 0x5555_5555;
+                            for lines in 0..FB_LINES {
+                                // mark dirty bits
+                                testpat[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
                             }
-                        }
-                        display.blit_screen(testpat);
-                        display.redraw();
-                        ticktimer.sleep_ms(DWELL).unwrap();
+                            display.blit_screen(testpat);
+                            display.redraw();
+                            ticktimer.sleep_ms(DWELL).unwrap();
 
-                        // horiz bars
-                        for lines in 0..backend::FB_LINES {
-                            for words in 0..backend::FB_WIDTH_WORDS {
-                                if lines % 2 == 0 {
-                                    testpat[lines * backend::FB_WIDTH_WORDS + words] = 0x0;
-                                } else {
-                                    testpat[lines * backend::FB_WIDTH_WORDS + words] = 0xffff_ffff;
+                            // all white
+                            for w in testpat.iter_mut() {
+                                *w = 0xFFFF_FFFF;
+                            }
+                            // dirty bits already set
+                            display.blit_screen(testpat);
+                            display.redraw();
+                            ticktimer.sleep_ms(DWELL).unwrap();
+
+                            // vertical bars
+                            for lines in 0..FB_LINES {
+                                for words in 0..FB_WIDTH_WORDS {
+                                    testpat[lines * FB_WIDTH_WORDS + words] = 0xaaaa_aaaa;
                                 }
                             }
-                            testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |=
-                                0x1_0000;
-                        }
-                        display.blit_screen(testpat);
-                        display.redraw();
-                        ticktimer.sleep_ms(DWELL).unwrap();
+                            display.blit_screen(testpat);
+                            display.redraw();
+                            ticktimer.sleep_ms(DWELL).unwrap();
 
-                        for lines in 0..backend::FB_LINES {
-                            for words in 0..backend::FB_WIDTH_WORDS {
-                                if lines % 2 == 1 {
-                                    testpat[lines * backend::FB_WIDTH_WORDS + words] = 0x0;
-                                } else {
-                                    testpat[lines * backend::FB_WIDTH_WORDS + words] = 0xffff_ffff;
+                            for lines in 0..FB_LINES {
+                                for words in 0..FB_WIDTH_WORDS {
+                                    testpat[lines * FB_WIDTH_WORDS + words] = 0x5555_5555;
                                 }
                             }
-                            testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |=
-                                0x1_0000;
-                        }
-                        display.blit_screen(testpat);
-                        display.redraw();
-                        ticktimer.sleep_ms(DWELL).unwrap();
-                    }
-                    display.blit_screen(stash);
+                            display.blit_screen(testpat);
+                            display.redraw();
+                            ticktimer.sleep_ms(DWELL).unwrap();
 
-                    xous::return_scalar(msg.sender, duration).expect("couldn't ack test pattern");
-                }),
-                Some(Opcode::Stash) => {
+                            // horiz bars
+                            for lines in 0..FB_LINES {
+                                for words in 0..FB_WIDTH_WORDS {
+                                    if lines % 2 == 0 {
+                                        testpat[lines * FB_WIDTH_WORDS + words] = 0x0;
+                                    } else {
+                                        testpat[lines * FB_WIDTH_WORDS + words] = 0xffff_ffff;
+                                    }
+                                }
+                                testpat[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+                            }
+                            display.blit_screen(testpat);
+                            display.redraw();
+                            ticktimer.sleep_ms(DWELL).unwrap();
+
+                            for lines in 0..FB_LINES {
+                                for words in 0..FB_WIDTH_WORDS {
+                                    if lines % 2 == 1 {
+                                        testpat[lines * FB_WIDTH_WORDS + words] = 0x0;
+                                    } else {
+                                        testpat[lines * FB_WIDTH_WORDS + words] = 0xffff_ffff;
+                                    }
+                                }
+                                testpat[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+                            }
+                            display.blit_screen(testpat);
+                            display.redraw();
+                            ticktimer.sleep_ms(DWELL).unwrap();
+                        }
+                        display.blit_screen(stash);
+
+                        scalar.arg1 = duration;
+                    } else {
+                        panic!("Incorrect message type");
+                    }
+                }
+                GfxOpcode::Stash => {
                     display.stash();
-                    match msg.body {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
                         // ack the message if it's a blocking scalar
-                        xous::Message::BlockingScalar(_) => xous::return_scalar(msg.sender, 1).unwrap(),
-                        _ => (),
+                        scalar.arg1 = 1;
                     }
+                    // no failure if it's not
                 }
-                Some(Opcode::Pop) => {
+                GfxOpcode::Pop => {
                     display.pop();
-                    match msg.body {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
                         // ack the message if it's a blocking scalar
-                        xous::Message::BlockingScalar(_) => xous::return_scalar(msg.sender, 1).unwrap(),
-                        _ => (),
+                        scalar.arg1 = 1;
                     }
+                    // no failure if it's not
                 }
-                Some(Opcode::Quit) => break,
-                None => {
-                    log::error!("received opcode scalar that is not handled");
+                GfxOpcode::AcquireModal | GfxOpcode::ReleaseModal | GfxOpcode::UnclippedObjectList => {
+                    unimplemented!("{:?} is not supported for this target. Use the GAM instead.", op);
+                }
+                GfxOpcode::Quit => break,
+                GfxOpcode::InvalidCall => {
+                    log::error!("Received invalid GfxOpcode. Ignoring.");
+                }
+                _ => {
+                    // This is perfectly normal because not all opcodes are handled by all platforms.
+                    log::debug!("Invalid or unhandled opcode: {:?}", op);
                 }
             }
         } else {

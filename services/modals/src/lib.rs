@@ -2,7 +2,7 @@
 
 pub mod api;
 use api::*;
-#[cfg(feature = "ditherpunk")]
+#[cfg(any(feature = "ditherpunk", feature = "modal-testing"))]
 pub mod tests;
 
 use core::cell::Cell;
@@ -12,8 +12,17 @@ use std::cmp::max;
 use std::convert::TryInto;
 
 use bit_field::BitField;
+#[cfg(feature = "cramium-soc")]
+use cram_hal_service::trng::Trng;
+#[cfg(feature = "hosted-baosec")]
+use cramium_emu::trng::Trng;
+#[cfg(not(any(feature = "hosted-baosec", feature = "board-baosec")))]
 use gam::*;
 use num_traits::*;
+#[cfg(all(not(feature = "cramium-soc"), not(feature = "doc-deps"), not(feature = "hosted-baosec")))]
+use trng::Trng;
+#[cfg(any(feature = "hosted-baosec", feature = "board-baosec"))]
+use ux_api::widgets::*;
 use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;
 
@@ -180,11 +189,11 @@ impl Modals {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn =
             xns.request_connection_blocking(api::SERVER_NAME_MODALS).expect("Can't connect to Modals server");
-        #[cfg(feature = "cramium-soc")]
-        let trng = cram_hal_service::trng::Trng::new(&xns).unwrap();
-        #[cfg(not(feature = "cramium-soc"))]
-        let trng = trng::Trng::new(&xns).unwrap();
+        #[cfg(not(feature = "doc-deps"))]
+        let trng = Trng::new(&xns).unwrap();
+        #[allow(unused_mut)]
         let mut token = [0u32; 4];
+        #[cfg(not(feature = "doc-deps"))]
         trng.fill_buf(&mut token).unwrap();
         Ok(Modals { conn, token, have_lock: Cell::new(false) })
     }

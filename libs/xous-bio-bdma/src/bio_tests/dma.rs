@@ -216,6 +216,9 @@ pub fn dma_basic(concurrent: bool, clkmode: u8) -> usize {
     // setup clocking mode option
     bio_ss.bio.rmwf(SFR_CONFIG_CLOCKING_MODE, clkmode as u32);
 
+    // setup clocking mode option
+    bio_ss.bio.rmwf(SFR_CONFIG_CLOCKING_MODE, clkmode as u32);
+
     // These actually "don't matter" because there are no synchronization instructions in the code
     // Everything runs at "full tilt"
     bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x1_0000);

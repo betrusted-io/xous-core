@@ -19,21 +19,35 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
 ] }
-gam = { path = "../gam" }
+gam = { path = "../gam", optional = true }
 trng = { path = "../trng", optional = true }
 cram-hal-service = { path = "../cram-hal-service", optional = true } # provides trng for cramium-soc
-tts-frontend = { path = "../tts" }
+tts-frontend = { path = "../tts", optional = true }
 locales = { path = "../../locales" }
 bit_field = "0.9.0"
+cramium-hal = { path = "../../libs/cramium-hal", optional = true, features = [
+    "std",
+] }
+cramium-api = { path = "../../libs/cramium-api", optional = true }
+cramium-emu = { path = "../cramium-emu", optional = true }
+blitstr2 = { path = "../../libs/blitstr2" }
+ux-api = { path = "../../libs/ux-api", optional = true, features = ["std"] }
 
 utralib = { version = "0.1.25", optional = true, default-features = false }
 
 [features]
-precursor = ["utralib/precursor", "trng"]
-hosted = ["utralib/hosted", "trng"]
-renode = ["utralib/renode", "trng"]
+precursor = ["utralib/precursor", "trng", "gam", "tts-frontend"]
+hosted = ["utralib/hosted", "trng", "gam", "tts-frontend"]
+renode = ["utralib/renode", "trng", "gam", "tts-frontend"]
+
 cramium-soc = ["utralib/cramium-soc", "cram-hal-service"]
+hosted-baosec = ["ux-api/hosted-baosec", "cramium-emu", "cramium-api"]
+board-baosec = ["ux-api/board-baosec", "cramium-api"]
+doc-deps = ["gam", "ux-api/doc-deps"]
+modal-testing = []
+
 tts = []
 ditherpunk = []
 hazardous-debug = []
-default = ["trng"]
+# "gam" is required for cargo doc to run successfully
+default = []

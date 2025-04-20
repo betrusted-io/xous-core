@@ -1,4 +1,8 @@
-use cramium_hal::{minigfx::*, sh1107::Mono};
+#[cfg(feature = "hosted-baosec")]
+use cramium_emu::display::Mono;
+#[cfg(feature = "board-baosec")]
+use cramium_hal::sh1107::Mono;
+use ux_api::minigfx::*;
 
 // The discipline for all the APIs in this module are that they act on a FrameBuffer which is
 // passed to the function. This allows us to bind the drawing computation on the caller-side of
@@ -56,7 +60,7 @@ pub fn msg<'a>(fb: &mut dyn FrameBuffer, text: &'a str, ll_pos: Point, fg: Color
             let color = if FONT_IMAGE[bitmap_byte as usize] & (1 << bitmap_bit) != 0 { fg } else { bg };
 
             let x = ll_pos.x + CHAR_WIDTH * idx + char_walk_x;
-            let y = ll_pos.y + (CHAR_HEIGHT - char_walk_y);
+            let y = ll_pos.y + char_walk_y;
 
             // draw color at x, y
             if (current_char as u8 != 0xd) && (current_char as u8 != 0xa) {
@@ -95,7 +99,7 @@ pub fn msg<'a>(fb: &mut dyn FrameBuffer, text: &'a str, ll_pos: Point, fg: Color
 pub fn line(fb: &mut dyn FrameBuffer, l: Line, clip: Option<Rectangle>, xor: bool) {
     let color: ColorNative;
     if l.style.stroke_color.is_some() {
-        color = l.style.stroke_color.unwrap();
+        color = l.style.stroke_color.unwrap().into();
     } else {
         return;
     }

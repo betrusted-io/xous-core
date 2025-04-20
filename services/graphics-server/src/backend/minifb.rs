@@ -3,18 +3,12 @@
 use std::sync::{Arc, Mutex, mpsc};
 
 use minifb::{Key, Window, WindowOptions};
+use ux_api::minigfx::{ColorNative, FrameBuffer, PixelColor, Point};
+use ux_api::platform::*;
 
-use crate::api::Point;
-use crate::api::{LINES, WIDTH};
-
-const HEIGHT: i16 = LINES;
-
-/// Width of the screen in 32-bit words
-const WIDTH_WORDS: usize = 11;
-pub const FB_WIDTH_WORDS: usize = WIDTH_WORDS;
-pub const FB_WIDTH_PIXELS: usize = WIDTH as usize;
-pub const FB_LINES: usize = HEIGHT as usize;
-pub const FB_SIZE: usize = WIDTH_WORDS * HEIGHT as usize; // 44 bytes by 536 lines
+const LCD_WORDS_PER_LINE: usize = FB_WIDTH_WORDS;
+const LCD_PX_PER_LINE: isize = WIDTH as isize;
+const LCD_LINES: isize = FB_LINES as isize;
 
 const MAX_FPS: usize = 60;
 const DARK_COLOUR: u32 = 0xB5B5AD;
@@ -111,7 +105,7 @@ impl XousDisplay {
         self.redraw();
     }
 
-    pub fn screen_size(&self) -> Point { Point::new(WIDTH as i16, HEIGHT as i16) }
+    pub fn screen_size(&self) -> Point { Point::new(WIDTH as isize, HEIGHT as isize) }
 
     pub fn blit_screen(&mut self, bmp: &[u32]) {
         for (dest, src) in self.emulated_buffer.iter_mut().zip(bmp.iter()) {
@@ -131,7 +125,7 @@ impl XousDisplay {
         let mut native_buffer = self.native_buffer.lock().unwrap();
         let mut row = 0;
         for (dest_row, src_row) in
-            native_buffer.chunks_mut(WIDTH as _).zip(self.emulated_buffer.chunks(WIDTH_WORDS as _))
+            native_buffer.chunks_mut(WIDTH as _).zip(self.emulated_buffer.chunks(FB_WIDTH_WORDS as _))
         {
             for (dest_cell, src_cell) in dest_row.chunks_mut(32).zip(src_row) {
                 for (bit, dest) in dest_cell.iter_mut().enumerate() {
@@ -146,6 +140,112 @@ impl XousDisplay {
             row += 1;
         }
     }
+}
+
+impl FrameBuffer for XousDisplay {
+    /// Puts a pixel of ColorNative at x, y. (0, 0) is defined as the lower left corner.
+    fn put_pixel(&mut self, p: Point, color: ColorNative) {
+        let fb: &mut [u32] = &mut self.emulated_buffer;
+        let clip_y: usize;
+        if p.y >= LCD_LINES {
+            clip_y = LCD_LINES as usize - 1;
+        } else if p.y < 0 {
+            clip_y = 0;
+        } else {
+            clip_y = p.y as usize;
+        }
+
+        let clip_x: usize;
+        if p.x >= LCD_PX_PER_LINE {
+            clip_x = LCD_PX_PER_LINE as usize - 1;
+        } else if p.x < 0 {
+            clip_x = 0;
+        } else {
+            clip_x = p.x as usize;
+        }
+
+        let pc = PixelColor::from(color.0);
+
+        if pc == PixelColor::Light {
+            fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] |= 1 << (clip_x % 32)
+        } else {
+            fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] &= !(1 << (clip_x % 32))
+        }
+        // set the dirty bit on the line that contains the pixel
+        fb[clip_y * LCD_WORDS_PER_LINE + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
+    }
+
+    /// Retrieves a pixel value from the frame buffer; returns None if the point is out of bounds.
+    ///
+    /// Note: this has not be carefully tested as this API is not used by the legacy code base.
+    /// Anyone using this API for the first time may benefit in checking that it is correct.
+    fn get_pixel(&self, p: Point) -> Option<ColorNative> {
+        let fb: &[u32] = &self.emulated_buffer;
+        let clip_y: usize;
+        if p.y >= LCD_LINES {
+            return None;
+        } else if p.y < 0 {
+            return None;
+        } else {
+            clip_y = p.y as usize;
+        }
+
+        let clip_x: usize;
+        if p.x >= LCD_PX_PER_LINE {
+            return None;
+        } else if p.x < 0 {
+            return None;
+        } else {
+            clip_x = p.x as usize;
+        }
+        Some(ColorNative::from(
+            (fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] & (1 << (clip_x % 32))) as usize,
+        ));
+        todo!("Check that this API is implemented correctly before using it!");
+    }
+
+    /// XORs a pixel to what is in the existing frame buffer. The exact definition of "XOR" is somewhat
+    /// ambiguous for full color systems but is generally meant to imply a light/dark swap of foreground
+    /// and background colors for a color theme.
+    fn xor_pixel(&mut self, p: Point) {
+        let fb: &mut [u32] = &mut self.emulated_buffer;
+        let clip_y: usize;
+        if p.y >= LCD_LINES {
+            return;
+        } else if p.y < 0 {
+            return;
+        } else {
+            clip_y = p.y as usize;
+        }
+
+        let clip_x: usize;
+        if p.x >= LCD_PX_PER_LINE {
+            return;
+        } else if p.x < 0 {
+            return;
+        } else {
+            clip_x = p.x as usize;
+        }
+
+        fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] ^= 1 << (clip_x % 32);
+        // set the dirty bit on the line that contains the pixel
+        fb[clip_y * LCD_WORDS_PER_LINE + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
+    }
+
+    /// Swaps the drawable buffer to the screen and sends it to the hardware
+    fn draw(&mut self) { self.redraw(); }
+
+    /// Clears the drawable buffer
+    fn clear(&mut self) {
+        let fb: &mut [u32] = &mut self.emulated_buffer;
+        fb.fill(0xFFFF_FFFF);
+    }
+
+    /// Returns the size of the frame buffer as a Point
+    fn dimensions(&self) -> Point { self.screen_size() }
+
+    /// Returns a raw pointer to the frame buffer
+    unsafe fn raw_mut(&mut self) -> &mut ux_api::platform::FbRaw { self.native_buffer() }
 }
 
 impl MinifbThread {

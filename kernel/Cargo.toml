@@ -44,12 +44,17 @@ critical-section = "1.1.1"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(ci)', 'cfg(baremetal)'] }
 
 [features]
-cramium-soc = ["utralib/cramium-soc", "cramium-hal", "rand_chacha", "raw-trng"]
+cramium-soc = [
+    "utralib/cramium-soc",
+    "cramium-hal/cramium-soc",
+    "rand_chacha",
+    "raw-trng",
+]
 verilator-only = []
 cramium-fpga = ["utralib/cramium-fpga", "rand_chacha"]
-board-baosec = ["cramium-hal/board-baosec"]
-board-baosor = ["cramium-hal/board-baosor"]
-board-dabao = ["cramium-hal/board-dabao"]
+board-baosec = []
+board-baosor = []
+board-dabao = []
 
 atsama5d27 = ["utralib/atsama5d27"]
 precursor = ["utralib/precursor"]

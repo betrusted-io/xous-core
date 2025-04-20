@@ -1,10 +1,11 @@
 mod rkyv_enum;
 // note: many enums in the API are isolated to this file.
 use String;
-#[cfg(feature = "ditherpunk")]
-use graphics_server::api::Tile;
-use graphics_server::api::{Gid, Point};
 pub use rkyv_enum::*;
+#[cfg(feature = "ditherpunk")]
+use ux_api::minigfx::Tile;
+use ux_api::minigfx::*;
+use ux_api::service::api::*;
 
 pub(crate) const SERVER_NAME_GAM: &str = "_Graphical Abstraction Manager_";
 
@@ -231,7 +232,7 @@ pub(crate) enum Opcode {
 
 // small wart -- we have to reset the size of a modal to max size for resize computations
 // reveal the max size globally, since it's a constant
-pub const MODAL_Y_MAX: i16 = 350; // in absolute screen coords, not relative to top pad
+pub const MODAL_Y_MAX: isize = 350; // in absolute screen coords, not relative to top pad
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, PartialEq, Eq)]
 pub enum ActivationResult {

@@ -1,13 +1,14 @@
-#[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
-use cramium_hal::axp2101::Axp2101;
 #[cfg(not(feature = "verilator-only"))]
-use cramium_hal::iox::{Iox, IoxDir, IoxEnable, IoxFunction, IoxPort};
+use cramium_api::{
+    udma::{PeriphId, UdmaGlobalConfig},
+    *,
+};
+#[cfg(not(feature = "verilator-only"))]
+use cramium_hal::iox::Iox;
 #[cfg(feature = "cramium-soc")]
 use cramium_hal::udma;
 #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
-use cramium_hal::udma::PeriphId;
-#[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
-use cramium_hal::udma::UdmaGlobalConfig;
+use cramium_hal::{axp2101::Axp2101, udma::GlobalConfig};
 use utralib::generated::*;
 
 #[cfg(feature = "qr")]
@@ -58,20 +59,6 @@ use crate::platform::cramium::{homography, qr};
    break into the loader updater less able to get at any root keys?
 */
 
-/*
-    To-do:
-      -[x] Add dummy lifecycle gate call
-      -[x] New OLED base driver
-      -[x] I2C driver (axp2101 default setting as first item of use)
-      -[x] camera base driver (maybe loopback to OLED as demo?)
-      -[ ] USB stack into loader; debugging there. Present as bulk transfer to emulated disk on
-           PSRAM using ghostFS
-      -[ ] bring mbox routine into loader so we can have access to ReRAM write primitive; structure so
-           that we can improve this easily as the chip bugs are fixed
-      -[ ] Image validation & burning routine
-      -[ ] Loop back and fix USB in the Xous OS mode
-*/
-
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
@@ -81,7 +68,7 @@ pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 pub const KERNEL_OFFSET: usize = 0x6_0000;
 
 #[allow(dead_code)]
-pub(crate) fn delay(quantum: usize) {
+pub fn delay(quantum: usize) {
     use utralib::{CSR, utra};
     // abuse the d11ctime timer to create some time-out like thing
     let mut d11c = CSR::new(utra::d11ctime::HW_D11CTIME_BASE as *mut u32);
@@ -240,17 +227,17 @@ pub fn early_init() -> u32 {
 
     // Set up the UDMA_UART block to the correct baud rate and enable status
     #[allow(unused_mut)] // some configs require mut
-    let mut udma_global = udma::GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
-    udma_global.clock_on(udma::PeriphId::Uart1);
+    let mut udma_global = GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
+    udma_global.clock_on(PeriphId::Uart1);
     udma_global.map_event(
-        udma::PeriphId::Uart1,
-        udma::PeriphEventType::Uart(udma::EventUartOffset::Rx),
-        udma::EventChannel::Channel0,
+        PeriphId::Uart1,
+        PeriphEventType::Uart(EventUartOffset::Rx),
+        EventChannel::Channel0,
     );
     udma_global.map_event(
-        udma::PeriphId::Uart1,
-        udma::PeriphEventType::Uart(udma::EventUartOffset::Tx),
-        udma::EventChannel::Channel1,
+        PeriphId::Uart1,
+        PeriphEventType::Uart(EventUartOffset::Tx),
+        EventChannel::Channel1,
     );
 
     let baudrate: u32 = 115200;
@@ -342,6 +329,9 @@ pub fn early_init() -> u32 {
             };
         }
         if let Some(mut pmic) = pmic {
+            // disable CCM, force PWM on for DCDC2 - required for rail stability
+            pmic.set_pwm_mode(&mut i2c, cramium_hal::axp2101::WhichDcDc::Dcdc2, true).unwrap();
+
             pmic.set_ldo(&mut i2c, Some(2.5), cramium_hal::axp2101::WhichLdo::Aldo2).unwrap();
             pmic.set_dcdc(&mut i2c, Some((1.2, false)), cramium_hal::axp2101::WhichDcDc::Dcdc4).unwrap();
             crate::println!("AXP2101 configure: {:?}", pmic);
@@ -370,13 +360,42 @@ pub fn early_init() -> u32 {
     #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
     {
         // show the boot logo
-        use cramium_hal::minigfx::FrameBuffer;
+        use ux_api::minigfx::FrameBuffer;
 
-        let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(perclk, &mut iox, &mut udma_global);
+        let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(
+            cramium_hal::sh1107::MainThreadToken::new(),
+            perclk,
+            &mut iox,
+            &mut udma_global,
+        );
         sh1107.init();
         crate::platform::cramium::bootlogo::show_logo(&mut sh1107);
-        sh1107.buffer_swap();
         sh1107.draw();
+        #[cfg(feature = "sh1107-bringup")]
+        loop {
+            use core::fmt::Write;
+
+            use ux_api::minigfx::Point;
+            for i in 0..96 {
+                sh1107.buffer_mut().fill(0);
+                let native_buf = unsafe { sh1107.raw_mut() };
+                let p = if i < 64 { i } else { i - 64 + 128 };
+                native_buf[p / 32] = 1 << (p % 32);
+                native_buf[0] |= 1;
+                use crate::platform::cramium::gfx;
+                let mut usizestr = crate::platform::UsizeToString::new();
+                write!(usizestr, "{}:[{}]{}", p, p / 32, p % 32).ok();
+                gfx::msg(
+                    &mut sh1107,
+                    usizestr.as_str(),
+                    Point::new(20, 64),
+                    cramium_hal::sh1107::Mono::White.into(),
+                    cramium_hal::sh1107::Mono::Black.into(),
+                );
+                sh1107.draw();
+                delay(250);
+            }
+        }
     }
 
     // Board bring-up: send characters to confirm the UART is configured & ready to go for the logging crate!
@@ -384,8 +403,8 @@ pub fn early_init() -> u32 {
     // makes things a little bit cleaner for JTAG ops, it seems.
     #[cfg(feature = "board-bringup")]
     {
-        use cramium_hal::minigfx::{Line, Point};
         use cramium_hal::{iox::IoxValue, minigfx::ColorNative, sh1107::Mono, udma::Udma};
+        use ux_api::minigfx::{Line, Point};
 
         use crate::platform::cramium::gfx;
         //------------- test I2C ------------
@@ -594,9 +613,9 @@ pub fn early_init() -> u32 {
                     use crate::platform::cramium::homography::*;
                     if let Some(h) = find_homography(src_f, dst_f) {
                         if let Some(h_inv) = h.try_inverse() {
-                            crate::println!("{:?}", h_inv);
+                            // crate::println!("{:?}", h_inv);
                             let h_inv_fp = matrix3_to_fixp(h_inv);
-                            crate::println!("{:?}", h_inv_fp);
+                            // crate::println!("{:?}", h_inv_fp);
 
                             // apply homography to generate a new buffer for processing
                             let mut aligned = [0u8; QR_WIDTH * QR_HEIGHT];

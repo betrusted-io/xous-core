@@ -20,6 +20,8 @@ trng = { path = "../trng", optional = true }
 xous = "0.9.64"
 xous-ipc = "0.10.4"
 xous-names = { package = "xous-api-names", version = "0.9.65" }
+blitstr2 = { path = "../../libs/blitstr2" }
+ux-api = { path = "../../libs/ux-api", default-features = false }
 
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
@@ -54,9 +56,10 @@ precursor = [
     "keyboard",
     "trng",
     "susres",
+    "ux-api/precursor"
 ]
-hosted = ["utralib/hosted", "sha2/hosted", "keyboard", "trng", "susres"]
-renode = ["utralib/renode", "sha2/renode", "keyboard", "trng", "susres"]
+hosted = ["utralib/hosted", "sha2/hosted", "keyboard", "trng", "susres", "ux-api/hosted"]
+renode = ["utralib/renode", "sha2/renode", "keyboard", "trng", "susres", "ux-api/renode"]
 cramium-soc = ["utralib/cramium-soc", "cram-hal-service"]
 debugprint = []
 tts = []

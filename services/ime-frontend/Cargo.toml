@@ -8,7 +8,7 @@ version = "0.1.0"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 gam = { path = "../gam" }
-graphics-server = { path = "../graphics-server" }
+ux-api = { path = "../../libs/ux-api" }
 ime-plugin-api = { path = "../ime-plugin-api" }
 keyboard = { path = "../keyboard" }
 log = "0.4.14"

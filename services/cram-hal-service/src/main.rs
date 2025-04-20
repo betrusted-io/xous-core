@@ -1,12 +1,9 @@
 mod api;
 mod hw;
 
-use api::*;
 use bitfield::*;
-use cramium_hal::{
-    iox::{self, IoxPort, IoxValue},
-    udma::{EventChannel, GlobalConfig, I2cApi, PeriphId},
-};
+use cramium_api::*;
+use cramium_hal::{iox::Iox, udma::GlobalConfig};
 use num_traits::*;
 use utralib::CSR;
 #[cfg(feature = "quantum-timer")]
@@ -81,7 +78,7 @@ fn iox_irq_handler(_irq_no: usize, arg: *mut usize) {
     xous::try_send_message(
         handler.cid,
         xous::Message::Scalar(ScalarMessage::from_usize(
-            Opcode::IrqLocalHandler.to_usize().unwrap(),
+            HalOpcode::IrqLocalHandler.to_usize().unwrap(),
             pending as usize,
             0,
             0,
@@ -147,7 +144,7 @@ fn main() {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let sid = xns.register_name(cram_hal_service::SERVER_NAME_CRAM_HAL, None).expect("can't register server");
+    let sid = xns.register_name(cramium_api::SERVER_NAME_CRAM_HAL, None).expect("can't register server");
     let self_cid = xous::connect(sid).expect("couldn't create self-connection");
 
     let mut ifram_allocs = [Vec::new(), Vec::new()];
@@ -186,7 +183,7 @@ fn main() {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't claim the IOX hardware page");
-    let iox = iox::Iox::new(iox_page.as_ptr() as *mut u32);
+    let iox = Iox::new(iox_page.as_ptr() as *mut u32);
 
     let udma_global_csr = xous::syscall::map_memory(
         xous::MemoryAddress::new(utralib::generated::HW_UDMA_CTRL_BASE),
@@ -225,7 +222,7 @@ fn main() {
         cramium_hal::udma::I2c::new_with_ifram(
             i2c_channel,
             400_000,
-            cram_hal_service::PERCLK,
+            cramium_api::PERCLK,
             i2c_ifram,
             &udma_global,
         )
@@ -314,10 +311,10 @@ fn main() {
     loop {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();
-        let opcode = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(api::Opcode::InvalidCall);
+        let opcode = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(HalOpcode::InvalidCall);
         log::debug!("{:?}", opcode);
         match opcode {
-            Opcode::MapIfram => {
+            HalOpcode::MapIfram => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
                     let requested_size = scalar.arg1; // requested size
                     let requested_bank = scalar.arg2; // Specifies bank 0, 1, or don't care (any number but 0 or 1)
@@ -362,7 +359,7 @@ fn main() {
                     }
                 }
             }
-            Opcode::UnmapIfram => {
+            HalOpcode::UnmapIfram => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     let mapped_size = scalar.arg1;
                     let phys_addr = scalar.arg2;
@@ -393,7 +390,7 @@ fn main() {
                     }
                 }
             }
-            Opcode::ConfigureIox => {
+            HalOpcode::ConfigureIox => {
                 let buf =
                     unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let config = buf.to_original::<IoxConfigMessage, _>().unwrap();
@@ -416,7 +413,7 @@ fn main() {
                     iox.set_drive_strength(config.port, config.pin, s);
                 }
             }
-            Opcode::ConfigureIoxIrq => {
+            HalOpcode::ConfigureIoxIrq => {
                 let buf =
                     unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let registration = buf.to_original::<IoxIrqRegistration, _>().unwrap();
@@ -466,7 +463,7 @@ fn main() {
                     panic!("Ran out of Iox interrupt slots: maximum 8 available");
                 }
             }
-            Opcode::IrqLocalHandler => {
+            HalOpcode::IrqLocalHandler => {
                 // Figure out which port(s) caused the IRQ
                 let irq_flag = iox.csr.r(utralib::utra::iox::SFR_INTFR);
                 // clear the set bit by writing it back
@@ -499,23 +496,21 @@ fn main() {
                     );
                 }
             }
-            Opcode::SetGpioBank => {
+            HalOpcode::SetGpioBank => {
                 if let Some(scalar) = msg.body.scalar_message() {
-                    let port: cramium_hal::iox::IoxPort =
-                        num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
+                    let port: IoxPort = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     let value = scalar.arg2 as u16;
                     let bitmask = scalar.arg3 as u16;
                     iox.set_gpio_bank(port, value, bitmask);
                 }
             }
-            Opcode::GetGpioBank => {
+            HalOpcode::GetGpioBank => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
-                    let port: cramium_hal::iox::IoxPort =
-                        num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
+                    let port: IoxPort = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     scalar.arg1 = iox.get_gpio_bank(port) as usize;
                 }
             }
-            Opcode::ConfigureUdmaClock => {
+            HalOpcode::ConfigureUdmaClock => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     let enable = if scalar.arg2 != 0 { true } else { false };
@@ -526,7 +521,7 @@ fn main() {
                     }
                 }
             }
-            Opcode::ConfigureUdmaEvent => {
+            HalOpcode::ConfigureUdmaEvent => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     let event_offset = scalar.arg2 as u32;
@@ -538,13 +533,13 @@ fn main() {
                     udma_global.map_event_with_offset(periph, event_offset, to_channel);
                 }
             }
-            Opcode::PeriphReset => {
+            HalOpcode::PeriphReset => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     udma_global.reset(periph);
                 }
             }
-            Opcode::I2c => {
+            HalOpcode::I2c => {
                 let mut buf = unsafe {
                     xous_ipc::Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                 };
@@ -572,10 +567,10 @@ fn main() {
                 }
                 buf.replace(list).expect("I2c message format error");
             }
-            Opcode::InvalidCall => {
+            HalOpcode::InvalidCall => {
                 log::error!("Invalid opcode received: {:?}", msg);
             }
-            Opcode::Quit => {
+            HalOpcode::Quit => {
                 log::info!("Received quit opcode, exiting.");
                 break;
             }

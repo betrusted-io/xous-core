@@ -158,7 +158,7 @@ fn least_squares_fit(points: &[Point], axis: Axis) -> (f32, f32) {
 fn point_from_hv_lines(hline: &LineDerivation, vline: &LineDerivation) -> Option<Point> {
     if let Some((m1, b1)) = hline.equation {
         if let Some((m2v, b2v)) = vline.equation {
-            crate::println!("h: {}, {} | v: {}, {}", m1, b1, m2v, b2v);
+            // crate::println!("h: {}, {} | v: {}, {}", m1, b1, m2v, b2v);
             if m2v != 0.0 {
                 let m2 = 1.0 / m2v;
                 let b2 = -b2v / m2v;

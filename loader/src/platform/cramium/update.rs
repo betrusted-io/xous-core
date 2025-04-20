@@ -1,14 +1,14 @@
 use core::convert::TryInto;
 use core::fmt::Write;
 
+use cramium_api::*;
 use cramium_hal::board::SPIM_FLASH_IFRAM_ADDR;
 use cramium_hal::ifram::IframRange;
-use cramium_hal::iox::{IoGpio, IoSetup, Iox, IoxPort, IoxValue};
+use cramium_hal::iox::Iox;
 use cramium_hal::mbox::{
     MBOX_PROTOCOL_REV, Mbox, MboxError, MboxToCm7Pkt, PAYLOAD_LEN_WORDS, RERAM_PAGE_SIZE_BYTES, ToCm7Op,
     ToRvOp,
 };
-use cramium_hal::minigfx::{FrameBuffer, Point};
 use cramium_hal::sh1107::{Mono, Oled128x128};
 use cramium_hal::udma;
 use cramium_hal::udma::*;
@@ -17,6 +17,7 @@ use ed25519_dalek::{Digest, Signature, VerifyingKey};
 use sha2::Sha512;
 use simple_fatfs::PathBuf;
 use utralib::generated::*;
+use ux_api::minigfx::{FrameBuffer, Point};
 
 use crate::SIGBLOCK_SIZE;
 use crate::platform::cramium::gfx;
@@ -27,6 +28,8 @@ use crate::platform::delay;
 // TODO:
 //   - Port unicode font drawing into loader
 //   - Support localization
+
+const TEXT_MIDLINE: isize = 51;
 
 // Empirically measured PORTSC when the port is unplugged. This might be a brittle way
 // to detect if the device is unplugged.
@@ -108,12 +111,23 @@ pub fn process_update(perclk: u32) {
     let mut udma_global = udma::GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
 
     let iox_kbd = iox.clone();
-    let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(perclk, &mut iox, &mut udma_global);
+    let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(
+        cramium_hal::sh1107::MainThreadToken::new(),
+        perclk,
+        &mut iox,
+        &mut udma_global,
+    );
 
-    gfx::msg(&mut sh1107, "    START to boot", Point::new(0, 16), Mono::White.into(), Mono::Black.into());
-    gfx::msg(&mut sh1107, "   SELECT to update", Point::new(0, 0), Mono::White.into(), Mono::Black.into());
+    crate::platform::cramium::bootlogo::show_logo(&mut sh1107);
+    gfx::msg(
+        &mut sh1107,
+        "    START to boot",
+        Point::new(0, 115 - 16),
+        Mono::White.into(),
+        Mono::Black.into(),
+    );
+    gfx::msg(&mut sh1107, "   SELECT to update", Point::new(0, 115), Mono::White.into(), Mono::Black.into());
 
-    sh1107.buffer_swap();
     sh1107.draw();
 
     // setup IO pins to check for update viability
@@ -137,12 +151,22 @@ pub fn process_update(perclk: u32) {
     sh1107.clear();
 
     if do_update {
-        gfx::msg(&mut sh1107, "Connect to USB", Point::new(16, 64), Mono::White.into(), Mono::Black.into());
-        sh1107.buffer_swap();
+        gfx::msg(
+            &mut sh1107,
+            "Connect to USB",
+            Point::new(16, TEXT_MIDLINE),
+            Mono::White.into(),
+            Mono::Black.into(),
+        );
         sh1107.draw();
 
-        crate::platform::cramium::usb::init_usb();
-        // it's all unsafe because USB is global mutable state
+        // safety: this is safe because we're calling this before any access to `USB` static mut
+        // state, and we also understand that the .data section doesn't exist in the loader and
+        // we've taken countermeasures to initialize everything "from code", i.e. not relying
+        // on static compile-time assignments for the static mut state.
+        unsafe { crate::platform::cramium::usb::init_usb() };
+
+        // Below is all unsafe because USB is global mutable state
         unsafe {
             if let Some(ref mut usb_ref) = crate::platform::cramium::usb::USB {
                 let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
@@ -194,25 +218,24 @@ pub fn process_update(perclk: u32) {
                             gfx::msg(
                                 &mut sh1107,
                                 "Copy files to device",
-                                Point::new(6, 64),
+                                Point::new(6, TEXT_MIDLINE),
                                 Mono::White.into(),
                                 Mono::Black.into(),
                             );
                             gfx::msg(
                                 &mut sh1107,
                                 "Press SELECT",
-                                Point::new(22, 46),
+                                Point::new(22, TEXT_MIDLINE + 18),
                                 Mono::Black.into(),
                                 Mono::White.into(),
                             );
                             gfx::msg(
                                 &mut sh1107,
                                 "when finished!",
-                                Point::new(19, 32),
+                                Point::new(19, TEXT_MIDLINE + 32),
                                 Mono::Black.into(),
                                 Mono::White.into(),
                             );
-                            sh1107.buffer_swap();
                             sh1107.draw();
                             last_usb_state = new_usb_state;
                         }
@@ -269,11 +292,10 @@ pub fn process_update(perclk: u32) {
                                         gfx::msg(
                                             &mut sh1107,
                                             "Kernel invalid!",
-                                            Point::new(10, 64),
+                                            Point::new(10, TEXT_MIDLINE),
                                             Mono::White.into(),
                                             Mono::Black.into(),
                                         );
-                                        sh1107.buffer_swap();
                                         sh1107.draw();
                                         sh1107.clear();
                                         return;
@@ -457,11 +479,10 @@ pub fn process_update(perclk: u32) {
                                         gfx::msg(
                                             &mut sh1107,
                                             "Swap invalid!",
-                                            Point::new(6, 64),
+                                            Point::new(6, TEXT_MIDLINE),
                                             Mono::White.into(),
                                             Mono::Black.into(),
                                         );
-                                        sh1107.buffer_swap();
                                         sh1107.draw();
                                         sh1107.clear();
                                         return;
@@ -483,13 +504,18 @@ pub fn process_update(perclk: u32) {
         }
     }
 
-    gfx::msg(&mut sh1107, "   Booting Xous...", Point::new(0, 64), Mono::White.into(), Mono::Black.into());
-    sh1107.buffer_swap();
+    gfx::msg(
+        &mut sh1107,
+        "   Booting Xous...",
+        Point::new(0, TEXT_MIDLINE),
+        Mono::White.into(),
+        Mono::Black.into(),
+    );
     sh1107.draw();
     sh1107.clear();
 }
 
-struct UsizeToString {
+pub struct UsizeToString {
     buf: [u8; 16], // Enough space for a u32 decimal string
     pos: usize,
 }
@@ -513,13 +539,24 @@ impl Write for UsizeToString {
 }
 
 fn progress_bar(sh1107: &mut Oled128x128<'_>, percentage: usize) {
-    gfx::msg(sh1107, "Writing, do not", Point::new(8, 64), Mono::White.into(), Mono::Black.into());
-    gfx::msg(sh1107, "reset or turn off!", Point::new(4, 50), Mono::White.into(), Mono::Black.into());
+    gfx::msg(sh1107, "Writing, do not", Point::new(8, TEXT_MIDLINE), Mono::White.into(), Mono::Black.into());
+    gfx::msg(
+        sh1107,
+        "reset or turn off!",
+        Point::new(4, TEXT_MIDLINE + 14),
+        Mono::White.into(),
+        Mono::Black.into(),
+    );
 
     let mut usizestr = UsizeToString::new();
     write!(usizestr, "{}%", percentage).ok();
-    gfx::msg(sh1107, usizestr.as_str(), Point::new(55, 26), Mono::Black.into(), Mono::White.into());
-    sh1107.buffer_swap();
+    gfx::msg(
+        sh1107,
+        usizestr.as_str(),
+        Point::new(55, TEXT_MIDLINE + 38),
+        Mono::Black.into(),
+        Mono::White.into(),
+    );
     sh1107.draw();
     sh1107.clear();
 }

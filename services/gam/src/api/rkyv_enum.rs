@@ -12,7 +12,7 @@
 // As of now, the current version is 0.7.x and there isn't a timeline yet for 0.8.
 #![allow(dead_code)]
 
-use graphics_server::api::{Circle, Line, Rectangle, RoundedRectangle, TextView};
+use ux_api::minigfx::{Circle, Line, Rectangle, RoundedRectangle, TextView};
 
 use crate::*;
 

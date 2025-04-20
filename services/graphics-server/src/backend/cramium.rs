@@ -322,3 +322,5 @@ impl XousDisplay {
         }
     }
 }
+
+impl FrameBuffer for XousDisplay {}

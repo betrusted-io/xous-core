@@ -364,6 +364,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // .add_feature("test-rekey")
                 .add_apps(&get_cratespecs());
         }
+        Some("baosec-emu") => {
+            let bao_pkgs = [
+                "xous-ticktimer",
+                "xous-log",
+                "xous-names",
+                "modals",
+                "bao-video",
+                "cramium-emu",
+                "bao-console",
+            ];
+            builder
+                // hosted-baosec feature added below
+                .target_hosted_baosec()
+                .add_services(&bao_pkgs)
+                .add_apps(&get_cratespecs());
+        }
         Some("pddb-ci") => {
             builder
                 .target_hosted()
@@ -590,7 +606,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             //   - [planned] pddb server
             //   - [planned] vault application
             let bao_rram_pkgs = ["xous-ticktimer", "xous-log", "xous-names" /* "usb-cramium" */].to_vec(); /* "usb-cramium" */
-            let bao_swap_pkgs = ["cram-hal-service", "bao-console", "bao-video"].to_vec(); /* "bao-video" */
+            let bao_swap_pkgs = ["cram-hal-service", "bao-console", "bao-video", "modals"].to_vec(); /* "bao-video" */
             if !builder.is_swap_set() {
                 builder.set_swap(0, 8 * 1024 * 1024);
             }
@@ -804,6 +820,7 @@ Hardware images:
 
 Hosted emulation:
  run                     Run user image in hosted mode with release flags. [cratespecs] are apps
+ baosec-emu              Run user image in hosted mode but for the baosec target
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors). [cratespecs] ignored.
  pddb-btest              PDDB stress tester for secret basis creation/deletion [cratespecs] ignored.
  hosted-debug            Run user image in hosted mode with debug flags. [cratespecs] are apps

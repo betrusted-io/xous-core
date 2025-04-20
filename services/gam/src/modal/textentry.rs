@@ -2,15 +2,15 @@ use core::cell::Cell;
 use core::fmt::Write;
 use std::cell::RefCell;
 
-use graphics_server::api::GlyphStyle;
-use graphics_server::api::*;
+use blitstr2::*;
 use num_traits::*;
+use ux_api::minigfx::*;
 use xous_ipc::Buffer;
 
 use crate::*;
 
 // TODO: figure out this, do we really have to limit ourselves to 10?
-const MAX_FIELDS: i16 = 10;
+const MAX_FIELDS: isize = 10;
 
 pub type ValidatorErr = String;
 
@@ -47,8 +47,8 @@ pub struct TextEntry {
     pub action_payloads: Vec<TextEntryPayload>,
 
     max_field_amount: u32,
-    selected_field: i16,
-    field_height: Cell<i16>,
+    selected_field: isize,
+    field_height: Cell<isize>,
     /// track if keys were hit since initialized: this allows us to clear the default text,
     /// instead of having it re-appear every time the text area is cleared
     keys_hit: [bool; MAX_FIELDS as usize],
@@ -57,7 +57,7 @@ pub struct TextEntry {
     /// Stores the allowed height of a given text line, based on the contents and the space available
     /// in the box. The height of a given line may be limited to make sure there is enough space for
     /// later lines to be rendered.
-    action_payloads_allowed_heights: RefCell<Vec<i16>>,
+    action_payloads_allowed_heights: RefCell<Vec<isize>>,
 }
 
 impl Default for TextEntry {
@@ -87,7 +87,7 @@ impl TextEntry {
         action_payloads: Vec<TextEntryPayload>,
         validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr>>,
     ) -> Self {
-        if action_payloads.len() as i16 > MAX_FIELDS {
+        if action_payloads.len() as isize > MAX_FIELDS {
             panic!("can't have more than {} fields, found {}", MAX_FIELDS, action_payloads.len());
         }
 
@@ -123,7 +123,7 @@ impl TextEntry {
         self.keys_hit = [false; MAX_FIELDS as usize];
     }
 
-    fn get_bullet_margin(&self) -> i16 {
+    fn get_bullet_margin(&self) -> isize {
         if self.action_payloads.len() > 1 {
             17 // this is the margin for drawing the selection bullet
         } else {
@@ -139,7 +139,7 @@ impl ActionApi for TextEntry {
 
     /// The total canvas height is computed with this API call
     /// The canvas height is not dynamically adjustable for modals.
-    fn height(&self, glyph_height: i16, margin: i16, modal: &Modal) -> i16 {
+    fn height(&self, glyph_height: isize, margin: isize, modal: &Modal) -> isize {
         /*
             -------------------
             | ****            |    <-- glyph_height + 2*margin
@@ -177,7 +177,8 @@ impl ActionApi for TextEntry {
                 let growable_limit = modal.maximal_height;
                 // minimum size required to display exactly one line for every field.
                 // decrement this by a field_height.get() for every line of content computed.
-                let mut minimum_size_remaining = self.field_height.get() * self.action_payloads.len() as i16;
+                let mut minimum_size_remaining =
+                    self.field_height.get() * self.action_payloads.len() as isize;
                 if growable_limit < minimum_size_remaining + self.field_height.get() {
                     // if the user is dumb and specified a growable limit that allows no space for growth,
                     // "snap" the user spec to something big enough to actually show one line of each bit of
@@ -222,7 +223,7 @@ impl ActionApi for TextEntry {
                             log::debug!("computed height: {} for {}", computed_bounds.height(), content);
                             // see if we can "afford" to grow the text to accommodate the total height
                             let required_extra_height =
-                                (computed_bounds.height() as i16 // height of text as flowed, with no margins
+                                (computed_bounds.height() as isize // height of text as flowed, with no margins
                                 + 2*margin  // margin between boxes
                                 + minimum_size_remaining)
                                     .saturating_sub(self.field_height.get()); // subtract one line from the size remaining to account for the fact that we allocated one line for this field already
@@ -238,7 +239,7 @@ impl ActionApi for TextEntry {
                                     // heights based on one line each for the remainder...
                                 } else {
                                     // it can fit, move on to the next field
-                                    computed_bounds.height() as i16 + 2 * margin
+                                    computed_bounds.height() as isize + 2 * margin
                                 };
                             self.action_payloads_allowed_heights.borrow_mut().push(provisioned_height);
                             current_height += provisioned_height; // reset the current height to after the computed height
@@ -251,7 +252,7 @@ impl ActionApi for TextEntry {
                 }
             }
         } else {
-            self.field_height.get() * self.action_payloads.len() as i16
+            self.field_height.get() * self.action_payloads.len() as isize
         };
 
         // if we're a password, we add an extra glyph_height to the bottom for the text visibility items
@@ -262,7 +263,7 @@ impl ActionApi for TextEntry {
         overall_height
     }
 
-    fn redraw(&self, at_height: i16, modal: &Modal) {
+    fn redraw(&self, at_height: isize, modal: &Modal) {
         const MAX_CHARS: usize = 33;
         let color = if self.is_password { PixelColor::Light } else { PixelColor::Dark };
 
@@ -273,7 +274,7 @@ impl ActionApi for TextEntry {
 
         for (index, payload) in payloads.iter().enumerate() {
             log::debug!("{}: {}", index, current_height);
-            if index as i16 == self.selected_field && payloads.len() > 1 {
+            if index as isize == self.selected_field && payloads.len() > 1 {
                 // draw the dot
                 let mut tv = TextView::new(
                     modal.canvas,
@@ -443,7 +444,7 @@ impl ActionApi for TextEntry {
                     TextEntryVisibility::LastChars => 1,
                     TextEntryVisibility::Hidden => 2,
                 };
-                let prompt_width = glyph_to_height_hint(GlyphStyle::Monospace) as i16 * 4;
+                let prompt_width = glyph_to_height_hint(GlyphStyle::Monospace) as isize * 4;
                 let lr_margin = (modal.canvas_width - prompt_width * 3) / 2;
                 let left_edge = lr_margin;
 
@@ -453,7 +454,7 @@ impl ActionApi for TextEntry {
                         Point::new(
                             modal.margin,
                             at_height
-                                + glyph_to_height_hint(GlyphStyle::Monospace) as i16
+                                + glyph_to_height_hint(GlyphStyle::Monospace) as isize
                                 + modal.margin
                                 + aesthetic_margin,
                         ),
@@ -475,7 +476,7 @@ impl ActionApi for TextEntry {
                             Point::new(
                                 left_edge + i * prompt_width,
                                 at_height
-                                    + glyph_to_height_hint(GlyphStyle::Monospace) as i16
+                                    + glyph_to_height_hint(GlyphStyle::Monospace) as isize
                                     + modal.margin
                                     + aesthetic_margin,
                             ),
@@ -508,7 +509,7 @@ impl ActionApi for TextEntry {
                         Point::new(
                             modal.canvas_width - modal.margin,
                             at_height
-                                + glyph_to_height_hint(GlyphStyle::Monospace) as i16
+                                + glyph_to_height_hint(GlyphStyle::Monospace) as isize
                                 + modal.margin
                                 + aesthetic_margin,
                         ),
@@ -559,7 +560,7 @@ impl ActionApi for TextEntry {
         // needs to be a reference, otherwise we're operating on a copy of the payload!
         let payload = &mut self.action_payloads[self.selected_field as usize];
 
-        let can_move_downwards = !(self.selected_field + 1 == self.max_field_amount as i16);
+        let can_move_downwards = !(self.selected_field + 1 == self.max_field_amount as isize);
         let can_move_upwards = !(self.selected_field - 1 < 0);
 
         log::trace!("key_action: {}", k);

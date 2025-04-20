@@ -4,3 +4,16 @@ pub mod payload;
 pub use payload::*;
 pub mod action;
 pub use action::*;
+
+pub mod slider;
+pub use slider::*;
+pub mod modal;
+pub use modal::*;
+pub mod notification;
+pub use notification::*;
+pub mod bip39entry;
+pub use bip39entry::*;
+pub mod radiobuttons;
+pub use radiobuttons::*;
+pub mod checkboxes;
+pub use checkboxes::*;

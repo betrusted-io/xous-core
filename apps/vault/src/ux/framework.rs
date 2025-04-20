@@ -7,11 +7,12 @@ use std::sync::atomic::Ordering as AtomicOrdering;
 use std::sync::{Arc, Mutex};
 
 use gam::{GlyphStyle, MenuItem, MenuMatic, MenuPayload};
-use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextView};
 use locales::t;
 use num_traits::*;
 use pddb::Pddb;
 use usb_device_xous::UsbDeviceType;
+use ux_api::minigfx::*;
+use ux_api::service::api::*;
 use vault::{VaultOp, utc_now};
 
 use crate::actions::ActionOp;
@@ -53,8 +54,8 @@ pub struct VaultUx {
 
     /// current font style
     style: GlyphStyle,
-    item_height: i16,
-    items_per_screen: i16,
+    item_height: isize,
+    items_per_screen: isize,
 
     /// menu manager
     menu_mgr: MenuMatic,
@@ -97,7 +98,7 @@ fn style_to_name(style: &GlyphStyle) -> String {
     }
 }
 
-const TITLE_HEIGHT: i16 = 26;
+const TITLE_HEIGHT: isize = 26;
 const VAULT_CONFIG_DICT: &'static str = "vault.config";
 const VAULT_CONFIG_KEY_FONT: &'static str = "fontstyle";
 
@@ -123,7 +124,7 @@ impl VaultUx {
         let style = GlyphStyle::Regular;
         let available_height = screensize.y - TITLE_HEIGHT;
         let glyph_height = gam.glyph_height_hint(style).unwrap();
-        let item_height = (glyph_height * 2) as i16 + margin.y * 2 + 2; // +2 because of the border width
+        let item_height = (glyph_height * 2) as isize + margin.y * 2 + 2; // +2 because of the border width
         let items_per_screen = available_height / item_height;
         item_lists.lock().unwrap().set_items_per_screen(items_per_screen);
 
@@ -259,7 +260,7 @@ impl VaultUx {
         }
         let available_height = self.screensize.y - TITLE_HEIGHT;
         let glyph_height = self.gam.glyph_height_hint(self.style).unwrap();
-        self.item_height = (glyph_height * 2) as i16 + self.margin.y * 2 + 2; // +2 because of the border width
+        self.item_height = (glyph_height * 2) as isize + self.margin.y * 2 + 2; // +2 because of the border width
         self.items_per_screen = available_height / self.item_height;
         self.item_lists.lock().unwrap().set_items_per_screen(self.items_per_screen);
     }
@@ -445,7 +446,7 @@ impl VaultUx {
         if self.title_dirty || self.action_active.load(AtomicOrdering::SeqCst) {
             let mut title_text = TextView::new(
                 self.content,
-                graphics_server::TextBounds::CenteredTop(Rectangle::new(
+                TextBounds::CenteredTop(Rectangle::new(
                     Point::new(self.margin.x, 0),
                     Point::new(self.screensize.x - self.margin.x, TITLE_HEIGHT),
                 )),
@@ -460,8 +461,8 @@ impl VaultUx {
             };
             self.gam.post_textview(&mut title_text).expect("couldn't post title");
             if mode_at_entry == VaultMode::Totp {
-                const BAR_HEIGHT: i16 = 5;
-                const BAR_GAP: i16 = -10;
+                const BAR_HEIGHT: isize = 5;
+                const BAR_GAP: isize = -10;
                 // draw the duration bar
                 let delta = (self.current_time - (self.last_epoch * 30)) as i32;
                 let width = (self.screensize.x - (self.margin.x * 2)) as i32;
@@ -472,7 +473,7 @@ impl VaultUx {
                         Rectangle {
                             tl: Point::new(self.margin.x, TITLE_HEIGHT - (BAR_HEIGHT + BAR_GAP)),
                             br: Point::new(
-                                self.screensize.x - self.margin.x - delta_width as i16,
+                                self.screensize.x - self.margin.x - delta_width as isize,
                                 TITLE_HEIGHT - BAR_GAP,
                             ),
                             style: DrawStyle {
@@ -498,7 +499,7 @@ impl VaultUx {
         if self.item_lists.lock().unwrap().filter_len(mode_at_entry) == 0 {
             let mut box_text = TextView::new(
                 self.content,
-                graphics_server::TextBounds::CenteredBot(Rectangle::new(
+                TextBounds::CenteredBot(Rectangle::new(
                     Point::new(0, insert_at),
                     Point::new(self.screensize.x, insert_at + self.item_height),
                 )),
@@ -525,7 +526,7 @@ impl VaultUx {
                 log::debug!("drawing {}", item.name());
                 let mut box_text = TextView::new(
                     self.content,
-                    graphics_server::TextBounds::BoundingBox(Rectangle::new(
+                    TextBounds::BoundingBox(Rectangle::new(
                         Point::new(0, insert_at),
                         Point::new(self.screensize.x, insert_at + self.item_height),
                     )),

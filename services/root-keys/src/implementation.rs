@@ -13,7 +13,6 @@ use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::{EdwardsPoint, edwards::CompressedEdwardsY};
 use ed25519_dalek::{DigestSigner, Signature, Signer, SigningKey, VerifyingKey};
 use gam::modal::{ActionType, Modal, ProgressBar, Slider};
-use graphics_server::BulkRead;
 use keywrap::*;
 use locales::t;
 use num_traits::*;
@@ -22,6 +21,7 @@ use rand_core::RngCore;
 use root_keys::key2bits::*;
 use sha2::{Digest, Sha256, Sha512_256Sw, Sha512Hw, Sha512Sw};
 use utralib::generated::*;
+use ux_api::service::api::BulkRead;
 use xous::KERNEL_BACKUP_OFFSET;
 use xous_semver::SemVer;
 
@@ -169,7 +169,7 @@ pub(crate) struct RootKeys {
                                               * layer */
     susres: susres::Susres, // for disabling suspend/resume
     trng: trng::Trng,
-    gfx: graphics_server::Gfx, // for reading out font planes for signing verification
+    gfx: ux_api::service::gfx::Gfx, // for reading out font planes for signing verification
     spinor: spinor::Spinor,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
@@ -306,7 +306,7 @@ impl<'a> RootKeys {
             cur_password_type: None,
             susres: susres::Susres::new_without_hook(&xns).expect("couldn't connect to susres without hook"),
             trng,
-            gfx: graphics_server::Gfx::new(&xns).expect("couldn't connect to gfx"),
+            gfx: ux_api::service::gfx::Gfx::new(&xns).expect("couldn't connect to gfx"),
             spinor,
             ticktimer: ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer"),
             gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
@@ -2691,7 +2691,7 @@ impl<'a> RootKeys {
         });
         let loader_len = xous::LOADER_CODE_LEN
             - SIGBLOCK_SIZE
-            + graphics_server::fontmap::FONT_TOTAL_LEN as u32
+            + blitstr2::fontmap::FONT_TOTAL_LEN as u32
             // these also need to be updated in graphics-server/src/main.rs @ Some(Opcode::BulkReadfonts)
             + 16 // for the minimum compatible semver
             + 16 // for the current semver

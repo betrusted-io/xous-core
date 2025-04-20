@@ -1,21 +1,12 @@
 pub mod api;
 pub mod i2c_lib;
-pub mod iox_lib;
-pub mod keyboard;
 pub mod trng;
 
-use api::Opcode;
-use cramium_hal::udma::{EventChannel, PeriphEventType, PeriphId, UdmaGlobalConfig};
-pub use i2c_lib::*;
-pub use iox_lib::*;
-use num_traits::*;
-
-/// Do not change this constant, it is hard-coded into libraries in order to break
-/// circular dependencies on the IFRAM block.
-pub const SERVER_NAME_CRAM_HAL: &str = "_Cramium-SoC HAL_";
-pub const PERCLK: u32 = 100_000_000;
-
 use core::sync::atomic::{AtomicU32, Ordering};
+
+use cramium_api::*;
+pub use i2c_lib::*;
+use num_traits::*;
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
 pub struct UdmaGlobal {
@@ -35,7 +26,7 @@ impl UdmaGlobal {
         xous::send_message(
             self.conn,
             xous::Message::new_blocking_scalar(
-                Opcode::ConfigureUdmaClock.to_usize().unwrap(),
+                HalOpcode::ConfigureUdmaClock.to_usize().unwrap(),
                 peripheral as u32 as usize,
                 if enable { 1 } else { 0 },
                 0,
@@ -57,7 +48,7 @@ impl UdmaGlobal {
         xous::send_message(
             self.conn,
             xous::Message::new_blocking_scalar(
-                Opcode::ConfigureUdmaEvent.to_usize().unwrap(),
+                HalOpcode::ConfigureUdmaEvent.to_usize().unwrap(),
                 peripheral as u32 as usize,
                 et_u32 as usize,
                 to_channel as u32 as usize,
@@ -71,7 +62,7 @@ impl UdmaGlobal {
         xous::send_message(
             self.conn,
             xous::Message::new_blocking_scalar(
-                Opcode::PeriphReset.to_usize().unwrap(),
+                HalOpcode::PeriphReset.to_usize().unwrap(),
                 peripheral as u32 as usize,
                 0,
                 0,

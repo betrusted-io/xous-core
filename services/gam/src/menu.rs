@@ -1,10 +1,10 @@
 //! The main API entry point is the `Menu` struct. Click into the struct for more details.
 
-pub use graphics_server::api::{DrawStyle, PixelColor, TextBounds};
-pub use graphics_server::*;
 use num_traits::*;
 #[cfg(feature = "tts")]
 use tts_frontend::TtsFrontend;
+pub use ux_api::minigfx::*;
+pub use ux_api::service::api::Gid;
 use xous_ipc::Buffer;
 
 use crate::Gam;
@@ -19,10 +19,10 @@ pub struct Menu<'a> {
     pub index: usize, // currently selected item
     pub canvas: Gid,
     pub authtoken: [u32; 4],
-    pub margin: i16,
-    pub divider_margin: i16,
-    pub line_height: i16,
-    pub canvas_width: Option<i16>,
+    pub margin: isize,
+    pub divider_margin: isize,
+    pub line_height: isize,
+    pub canvas_width: Option<isize>,
     pub helper_data: Option<Buffer<'a>>,
     pub name: std::string::String,
     #[cfg(feature = "tts")]
@@ -64,7 +64,7 @@ impl<'a> Menu<'a> {
         let canvas =
             gam.request_content_canvas(authtoken.unwrap()).expect("couldn't get my content canvas from GAM");
         let line_height =
-            gam.glyph_height_hint(crate::SYSTEM_STYLE).expect("couldn't get glyph height hint") as i16 + 2;
+            gam.glyph_height_hint(crate::SYSTEM_STYLE).expect("couldn't get glyph height hint") as isize + 2;
         #[cfg(feature = "tts")]
         let tts = TtsFrontend::new(&xns).unwrap();
         Menu {
@@ -134,7 +134,10 @@ impl<'a> Menu<'a> {
         }
         let current_bounds = self.gam.get_canvas_bounds(self.canvas).expect("couldn't get current bounds");
         let mut new_bounds = SetCanvasBoundsRequest {
-            requested: Point::new(current_bounds.x, total_items as i16 * self.line_height + self.margin * 2),
+            requested: Point::new(
+                current_bounds.x,
+                total_items as isize * self.line_height + self.margin * 2,
+            ),
             granted: None,
             token_type: TokenType::App,
             token: self.authtoken,
@@ -166,7 +169,7 @@ impl<'a> Menu<'a> {
             let mut new_bounds = SetCanvasBoundsRequest {
                 requested: Point::new(
                     current_bounds.x,
-                    total_items as i16 * self.line_height + self.margin * 2,
+                    total_items as isize * self.line_height + self.margin * 2,
                 ),
                 granted: None,
                 token_type: TokenType::App,
@@ -193,7 +196,10 @@ impl<'a> Menu<'a> {
         }
         let current_bounds = self.gam.get_canvas_bounds(self.canvas).expect("couldn't get current bounds");
         let mut new_bounds = SetCanvasBoundsRequest {
-            requested: Point::new(current_bounds.x, total_items as i16 * self.line_height + self.margin * 2),
+            requested: Point::new(
+                current_bounds.x,
+                total_items as isize * self.line_height + self.margin * 2,
+            ),
             granted: None,
             token_type: TokenType::App,
             token: self.authtoken,
@@ -204,7 +210,7 @@ impl<'a> Menu<'a> {
         if len_before > self.items.len() { true } else { false }
     }
 
-    pub fn draw_item(&self, index: i16, with_marker: bool) {
+    pub fn draw_item(&self, index: isize, with_marker: bool) {
         use core::fmt::Write;
         let canvas_size = self.gam.get_canvas_bounds(self.canvas).unwrap();
 
@@ -234,7 +240,7 @@ impl<'a> Menu<'a> {
     }
 
     // draw a dividing line above the indexed item
-    pub fn draw_divider(&self, index: i16) {
+    pub fn draw_divider(&self, index: isize) {
         if false {
             // aesthetically, we don't need this
             if let Some(canvas_width) = self.canvas_width {
@@ -262,26 +268,26 @@ impl<'a> Menu<'a> {
     pub fn prev_item(&mut self) {
         if self.index > 0 {
             // wipe out the current marker
-            self.draw_item(self.index as i16, false);
+            self.draw_item(self.index as isize, false);
             self.index -= 1;
             // add the marker to the pervious item
-            self.draw_item(self.index as i16, true);
+            self.draw_item(self.index as isize, true);
 
             if self.index != 0 {
-                self.draw_divider(self.index as i16);
+                self.draw_divider(self.index as isize);
             }
             if self.index < self.num_items() - 1 {
-                self.draw_divider(self.index as i16 + 1);
+                self.draw_divider(self.index as isize + 1);
             }
             if self.index < self.num_items() - 2 {
-                self.draw_divider(self.index as i16 + 2);
+                self.draw_divider(self.index as isize + 2);
             }
         } else if self.index == 0 {
             // wipe out the current marker
-            self.draw_item(self.index as i16, false);
+            self.draw_item(self.index as isize, false);
             self.index = self.num_items() - 1;
             // add the marker to the last item
-            self.draw_item(self.index as i16, true);
+            self.draw_item(self.index as isize, true);
 
             // NOTE: if we bring back the dividers, we will need to add them to this edge case here as well.
         }
@@ -290,24 +296,24 @@ impl<'a> Menu<'a> {
     pub fn next_item(&mut self) {
         if self.index < (self.num_items() - 1) {
             // wipe out the current marker
-            self.draw_item(self.index as i16, false);
+            self.draw_item(self.index as isize, false);
             self.index += 1;
             // add the marker to the pervious item
-            self.draw_item(self.index as i16, true);
+            self.draw_item(self.index as isize, true);
 
             if self.index != 1 {
-                self.draw_divider(self.index as i16 - 1);
+                self.draw_divider(self.index as isize - 1);
             }
-            self.draw_divider(self.index as i16);
+            self.draw_divider(self.index as isize);
             if self.index < self.num_items() - 1 {
-                self.draw_divider(self.index as i16 + 1);
+                self.draw_divider(self.index as isize + 1);
             }
         } else if self.index == (self.num_items() - 1) {
             // wipe out the current marker
-            self.draw_item(self.index as i16, false);
+            self.draw_item(self.index as isize, false);
             self.index = 0;
             // add the marker to the first item
-            self.draw_item(self.index as i16, true);
+            self.draw_item(self.index as isize, true);
 
             // NOTE: if we bring back the dividers, we will need to add them to this edge case here as well.
         }
@@ -338,9 +344,9 @@ impl<'a> Menu<'a> {
         // we require that the items list be in index-order, with no holes: we abort at the first None item
         for cur_index in 0..self.items.len() {
             if self.index == cur_index as usize {
-                self.draw_item(cur_index as i16, true);
+                self.draw_item(cur_index as isize, true);
             } else {
-                self.draw_item(cur_index as i16, false);
+                self.draw_item(cur_index as isize, false);
             }
             if cur_index != 0 {
                 self.draw_divider(cur_index as _);
