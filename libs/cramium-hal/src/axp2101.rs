@@ -130,10 +130,10 @@ impl From<usize> for WhichDcDc {
 // which is +40k of code
 // #[derive(Debug)]
 pub struct Axp2101 {
-    pub dcdc_ena: [bool; 4],
+    pub dcdc_ena: [bool; 5],
     pub fast_ramp: bool,
     pub force_ccm: bool,
-    pub dcdc_v_dvm: [(f32, bool); 4],
+    pub dcdc_v_dvm: [(f32, bool); 5],
     pub ldo_ena: [bool; 9],
     pub ldo_v: [f32; 9],
 }
@@ -141,10 +141,10 @@ pub struct Axp2101 {
 impl Axp2101 {
     pub fn new(i2c: &mut dyn I2cApi) -> Result<Axp2101, xous::Error> {
         let mut s = Axp2101 {
-            dcdc_ena: [false; 4],
+            dcdc_ena: [false; 5],
             fast_ramp: false,
             force_ccm: false,
-            dcdc_v_dvm: [(0.0, false); 4],
+            dcdc_v_dvm: [(0.0, false); 5],
             ldo_ena: [false; 9],
             ldo_v: [0.0; 9],
         };
@@ -162,6 +162,7 @@ impl Axp2101 {
             parse_dcdc(buf[REG_DCDC2_V], WhichDcDc::Dcdc2),
             parse_dcdc(buf[REG_DCDC3_V], WhichDcDc::Dcdc3),
             parse_dcdc(buf[REG_DCDC4_V], WhichDcDc::Dcdc4),
+            parse_dcdc(buf[REG_DCDC5_V], WhichDcDc::Dcdc5),
         ];
         for (i, ena) in self.ldo_ena.iter_mut().enumerate() {
             if i < 8 {
@@ -319,8 +320,8 @@ impl Axp2101 {
     }
 }
 
-pub fn parse_dcdc_ena(d: u8) -> ([bool; 4], bool, bool) {
-    let mut enable = [false; 4];
+pub fn parse_dcdc_ena(d: u8) -> ([bool; 5], bool, bool) {
+    let mut enable = [false; 5];
     let mut fast_ramp = false;
     let mut force_ccm = false;
 
@@ -358,8 +359,13 @@ pub fn encode_dcdc(v: f32, dvm: bool, which: WhichDcDc) -> Option<u8> {
                     return None;
                 }
             } else {
-                // we haven't coded the DCDC5 path yet
-                return None;
+                // must be Dcdc5
+                if v < 1.4 || v > 3.7 {
+                    return None;
+                } else {
+                    let code = (v - 1.4) / 0.100;
+                    return Some(code as u8);
+                }
             }
             if v < 1.22 {
                 let code = (v - 0.5) / 0.010;

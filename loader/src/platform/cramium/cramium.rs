@@ -338,7 +338,7 @@ pub fn early_init() -> u32 {
 
             pmic.set_ldo(&mut i2c, Some(2.5), cramium_hal::axp2101::WhichLdo::Aldo2).unwrap();
             pmic.set_dcdc(&mut i2c, Some((1.2, false)), cramium_hal::axp2101::WhichDcDc::Dcdc4).unwrap();
-
+            pmic.set_dcdc(&mut i2c, Some((1.8, false)), cramium_hal::axp2101::WhichDcDc::Dcdc5).unwrap();
             // This debug print creates a lot of extra code...
             // crate::println!("AXP2101 configure: {:?}", pmic);
 
