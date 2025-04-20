@@ -318,13 +318,13 @@ pub fn host_fifo_tests() -> usize {
         //
         // finally, we're pegged at 15, because, backpressure caused us to miss the rest of
         // the entries, and we are stuck at the final written value of the output test
-        print!("rbk: {:x}\r", rbk);
+        print!("r {:x}\r", rbk);
         if i <= 9 {
             assert!(rbk == (0xF1F0_0000 + i));
         } else {
             assert!(rbk == (0xF1F0_0000 + 15));
         }
-        print!("backpressure {:x}\r", rbk);
+        print!("bp {:x}\r", rbk);
     }
 
     fn get_gpio_via_core(bio_ss: &mut BioSharedState) -> u32 {
@@ -390,7 +390,9 @@ pub fn host_fifo_tests() -> usize {
     // fifo2 should have the entire log of all values in it. make sure that's the case
     for i in 0..7 {
         let f2_val = bio_ss.bio.r(utra::bio_bdma::SFR_RXF2);
-        print!("f2_val {:x}\r", f2_val);
+        if i > 5 {
+            print!("f2_val {:x}\r", f2_val);
+        }
         assert!(f2_val == 0xf1f0_1000 + i);
     }
     let stop_check = bio_ss.bio.r(utra::bio_bdma::SFR_RXF2);
@@ -590,7 +592,7 @@ pub fn fifo_level_tests() -> usize {
             // reset all the fifos
             bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0xF);
             for test_level in 0..FIFO_MAX {
-                print!("test_level {:x} bank {:x}\r", test_level, bank);
+                // print!("test_level {:x} bank {:x}\r", test_level, bank);
                 // test eq at level
                 bio_ss.bio.wfo(level, test_level);
                 bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_EQ_MASK, mask);
@@ -886,7 +888,7 @@ pub fn fifo_alias_tests() -> usize {
             // reset all the fifos
             bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0xF);
             for test_level in 0..FIFO_MAX {
-                print!("test_level {:x} bank {:x}\r", test_level, bank);
+                // print!("test_level {:x} bank {:x}\r", test_level, bank);
                 // test eq at level
                 bio_ss.bio.wfo(level, test_level);
                 bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_EQ_MASK, mask);
@@ -1106,7 +1108,7 @@ pub fn event_aliases() -> usize {
 
     let mut passing = 1;
     for (i, config) in event_test_configs.iter_mut().enumerate() {
-        print!("  Checking bank {}...\r", i);
+        print!("  bnk{}\r", i);
         for _ in 0..3 {
             // clear all events
             bio_ss.bio.wfo(utra::bio_bdma::SFR_EVENT_CLR_SFR_EVENT_CLR, 0xFFFF_FF);
