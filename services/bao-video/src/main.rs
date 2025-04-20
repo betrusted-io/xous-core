@@ -28,6 +28,8 @@ use cramium_emu::{
     i2c::I2c,
     udma::UdmaGlobal,
 };
+// breadcrumb to future self:
+//   - For GC0308 drivers, look in code/esp32-camera for sample code/constants
 #[cfg(feature = "board-baosec")]
 use cramium_hal::{
     ov2640::Ov2640,
