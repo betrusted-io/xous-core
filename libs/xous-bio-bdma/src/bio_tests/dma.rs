@@ -200,7 +200,7 @@ pub fn dma_basic(concurrent: bool, clkmode: u8) -> usize {
     const TEST_LEN: usize = 64;
     let mut passing = 0;
     if !concurrent {
-        print!("DMA basic\r");
+        print!("DMA basic2w\r");
     } else {
         print!("DMA cpu+dma concurrent\r");
     }
@@ -211,7 +211,10 @@ pub fn dma_basic(concurrent: bool, clkmode: u8) -> usize {
     let mut bio_ss = BioSharedState::new();
     // stop all the machines, so that code can be loaded
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
-    bio_ss.load_code(dma_basic_code(), 0, BioCore::Core0);
+    bio_ss.load_code(dma_basic_code(), 0, BioCore::Core3);
+
+    // setup clocking mode option
+    bio_ss.bio.rmwf(SFR_CONFIG_CLOCKING_MODE, clkmode as u32);
 
     // setup clocking mode option
     bio_ss.bio.rmwf(SFR_CONFIG_CLOCKING_MODE, clkmode as u32);
@@ -223,7 +226,7 @@ pub fn dma_basic(concurrent: bool, clkmode: u8) -> usize {
     bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV2, 0x1_0000);
     bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV3, 0x1_0000);
     // start the machine
-    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x111);
+    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x888);
 
     let mut main_mem_src: [u32; TEST_LEN] = [0u32; TEST_LEN];
     let mut main_mem_dst: [u32; TEST_LEN] = [0u32; TEST_LEN];
@@ -235,19 +238,19 @@ pub fn dma_basic(concurrent: bool, clkmode: u8) -> usize {
         unsafe { core::slice::from_raw_parts_mut((utralib::HW_IFRAM1_MEM + 10000) as *mut u32, TEST_LEN) };
     ifram_src.fill(0);
     ifram_dst.fill(0);
-    passing += basic_u32(&mut bio_ss, &mut main_mem_src, &mut main_mem_dst, 0, "Main->main", concurrent);
+    passing += basic_u32(&mut bio_ss, &mut main_mem_src, &mut main_mem_dst, 0, "m->m", concurrent);
 
     main_mem_src.fill(0);
     main_mem_dst.fill(0);
-    passing += basic_u32(&mut bio_ss, ifram_src, &mut main_mem_dst, 0x40, "ifram0->main", concurrent);
+    passing += basic_u32(&mut bio_ss, ifram_src, &mut main_mem_dst, 0x40, "i0->m", concurrent);
 
     ifram_src.fill(0);
     main_mem_dst.fill(0);
-    passing += basic_u32(&mut bio_ss, &mut main_mem_src, ifram_dst, 0x80, "Main->ifram1", concurrent);
+    passing += basic_u32(&mut bio_ss, &mut main_mem_src, ifram_dst, 0x80, "m->i1", concurrent);
 
     main_mem_src.fill(0);
     ifram_dst.fill(0);
-    passing += basic_u32(&mut bio_ss, ifram_src, ifram_dst, 0xC0, "ifram0->ifram1", concurrent);
+    passing += basic_u32(&mut bio_ss, ifram_src, ifram_dst, 0xC0, "i0->i1", concurrent);
 
     if !concurrent {
         print!("DMA basic done.\r");
@@ -281,12 +284,24 @@ fn basic_u32(
         bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, (src.len() * size_of::<u32>()) as u32); // bytes to move
         while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0x1 == 0 {}
         cache_flush();
+        let mut errs = 0;
         for (i, &d) in src.iter().enumerate() {
             let rbk = unsafe { dst.as_ptr().add(i).read_volatile() };
             if rbk != d {
-                print!("{} DMA err @{}, {:x} rbk: {:x}\r", name, i, d, rbk);
+                if errs < 4 {
+                    unsafe {
+                        print!("{} @{:x}/{:x}, {:x} rb:{:x}\r", name, src.as_ptr().add(i) as usize, dst.as_ptr().add(i) as usize, d, rbk);
+                    }
+                } else {
+                    print!("x");
+                }
+                errs += 1;
                 pass = 0;
             }
+        }
+        if errs > 0 {
+            print!("\r");
+            // errs = 0;
         }
     } else {
         // this flushes any read data from the cache, so that the CPU copy is forced to fetch
@@ -322,12 +337,16 @@ bio_code!(dma_basic_code, DMA_BASIC_START, DMA_BASIC_END,
     "li x29, 0x1",      // clear event done flag - just before the last parameter arrives
     "mv a1, x16",       // wait for # of bytes to move
 
+    "sw  x0, 0(a2)",    // make sure write pipeline is in a good state
+    "sw  x0, 0(a2)",    // make sure write pipeline is in a good state
+
     "add a4, a1, a3",   // a4 <- end condition based on source address increment
 
   "30:",
     "lw  t0, 0(a3)",    // blocks until load responds
     "sw  t0, 0(a2)",    // blocks until store completes
     "addi a3, a3, 4",   // 3 cycles
+    "sw  t0, 0(a2)",    // blocks until store completes
     "addi a2, a2, 4",   // 3 cycles
     "bne  a3, a4, 30b", // 5 cycles
     "li x28, 0x1",      // flip event done flag
@@ -687,14 +706,14 @@ pub fn dma_coincident(clkmode: u8) -> usize {
     ifram_src.fill(0);
     ifram_dst.fill(0);
 
-    passing += coincident_u32(&mut bio_ss, &mut main_mem_src, &mut main_mem_dst, 0x200, "DMA coincident");
-    print!("m->m\r");
+    passing += coincident_u32(&mut bio_ss, &mut main_mem_src, &mut main_mem_dst, 0x200, "m->m");
+    print!("m->m coincident\r");
     // try other memory banks
-    passing += coincident_u32(&mut bio_ss, ifram_src, &mut main_mem_dst, 0x300, "ifram0->main");
+    passing += coincident_u32(&mut bio_ss, ifram_src, &mut main_mem_dst, 0x300, "i0->m");
     print!("0->m\r");
-    passing += coincident_u32(&mut bio_ss, &mut main_mem_src, ifram_dst, 0x400, "main->ifram1");
+    passing += coincident_u32(&mut bio_ss, &mut main_mem_src, ifram_dst, 0x400, "m->i1");
     print!("m->1\r");
-    passing += coincident_u32(&mut bio_ss, ifram_src, ifram_dst, 0x500, "ifram0->ifram1");
+    passing += coincident_u32(&mut bio_ss, ifram_src, ifram_dst, 0x500, "i0->i1");
     print!("0->1\r");
 
     print!("DMA coincident done.\r");
@@ -722,12 +741,21 @@ fn coincident_u32(
     while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0xF_0000 != 0xF_0000 {} // one bit per core is set on completion of bits 8:12
     cache_flush();
     let mut pass = 1;
+    let mut errs = 0;
     for (i, &d) in src.iter().enumerate() {
         let rbk = unsafe { dst.as_ptr().add(i).read_volatile() };
         if rbk != d {
-            print!("{} err @{}, {:x} rbk: {:x}\r", name, i, d, rbk);
+            if errs < 4 {
+                print!("{} err @{}, {:x} rbk: {:x}\r", name, i, d, rbk);
+            } else {
+                print!(".");
+            }
+            errs += 1;
             pass = 0;
         }
+    }
+    if errs >= 4 {
+        print!("\r");
     }
     pass
 }
@@ -826,7 +854,7 @@ pub fn dmareq_test() -> usize {
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, bit as u32);
     print!("starting search \r");
     for i in 1..15 {
-        print!("search iter {} \r", i);
+        print!("{}\r", i);
         // send the bit pattern into the event-set via core 0
         bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, i);
 
