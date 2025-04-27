@@ -26,7 +26,8 @@ pub enum Direction {
 /// as a scrollabel list. The number of columns rendered is equal
 /// to the dimensionality of the items passed; i.e., if two lists of
 /// strings are passed, two columns will be rendered.
-pub struct ScrollableList<'a> {
+#[derive(Debug)]
+pub struct ScrollableList {
     pub items: Vec<Vec<String>>,
     /// corresponds to the index into `items` that should be rendered as selected
     pub select_index: (usize, usize),
@@ -47,10 +48,9 @@ pub struct ScrollableList<'a> {
     /// Minimum column width for the list
     min_col_width: usize,
     gfx: Gfx,
-    _marker: PhantomData<&'a ()>,
 }
 
-impl<'a> ScrollableList<'a> {
+impl ScrollableList {
     pub fn default() -> Self {
         let xns = xous_names::XousNames::new().unwrap();
         let gfx = Gfx::new(&xns).unwrap();
@@ -68,22 +68,21 @@ impl<'a> ScrollableList<'a> {
             max_rows: 0,
             pane: Rectangle::new(Point::new(0, 0), gfx.screen_size().unwrap()),
             gfx,
-            _marker: PhantomData,
         }
     }
 
-    pub fn pane_size(&'a mut self, pane: Rectangle) -> &'a mut Self {
+    pub fn pane_size(mut self, pane: Rectangle) -> Self {
         self.pane = pane;
         self
     }
 
-    pub fn style(&'a mut self, style: GlyphStyle) -> &'a mut Self {
+    pub fn style(mut self, style: GlyphStyle) -> Self {
         self.style = style;
         self.height_hint = self.gfx.glyph_height_hint(style).unwrap();
         self
     }
 
-    pub fn add_item(&'a mut self, column: usize, item: &str) -> &'a mut Self {
+    pub fn add_item(&mut self, column: usize, item: &str) {
         if (column + 1) > self.items.len() {
             for _ in 0..(column + 1 - self.items.len()) {
                 self.items.push(vec![]);
@@ -95,20 +94,28 @@ impl<'a> ScrollableList<'a> {
         for col in self.items.iter() {
             self.max_rows = self.max_rows.max(col.len());
         }
-        self
     }
 
-    pub fn set_margin(&'a mut self, margin: Point) -> &'a mut Self {
+    pub fn clear(&mut self) {
+        self.items = vec![vec![]];
+        self.select_index = (0, 0);
+        self.scroll_offset = (0, 0);
+        self.max_rows = 0;
+    }
+
+    pub fn len(&self) -> usize { self.max_rows }
+
+    pub fn set_margin(mut self, margin: Point) -> Self {
         self.margin = margin;
         self
     }
 
-    pub fn set_min_col_width(&'a mut self, width: usize) -> &'a mut Self {
+    pub fn set_min_col_width(mut self, width: usize) -> Self {
         self.min_col_width = width;
         self
     }
 
-    pub fn set_with_scrollbars(&'a mut self, with_bars: bool) -> &'a mut Self {
+    pub fn set_with_scrollbars(mut self, with_bars: bool) -> Self {
         self.with_scrollbars = with_bars;
         self
     }
