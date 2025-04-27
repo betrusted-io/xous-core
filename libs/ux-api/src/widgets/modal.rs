@@ -138,9 +138,6 @@ impl<'a> Modal<'a> {
         }
 
         let action_height = self.action.height(self.line_height, self.margin, &self);
-        if !do_redraw {
-            self.gfx.clear().unwrap();
-        }
 
         let action_resolver: Box<&dyn ActionApi> = Box::new(&self.action);
         action_resolver.redraw(cur_height, &self);
