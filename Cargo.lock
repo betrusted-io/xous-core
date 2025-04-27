@@ -344,6 +344,7 @@ dependencies = [
  "num-traits",
  "usb-cramium",
  "utralib 0.1.25",
+ "ux-api",
  "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
