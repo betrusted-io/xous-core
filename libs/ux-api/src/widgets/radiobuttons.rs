@@ -1,3 +1,4 @@
+use crate::minigfx::*;
 use crate::widgets::*;
 
 #[derive(Debug)]
@@ -9,12 +10,11 @@ pub struct RadioButtons {
 }
 impl RadioButtons {
     pub fn new(action_conn: xous::CID, action_opcode: u32) -> Self {
-        RadioButtons {
-            items: ScrollableList::default(),
-            action_conn,
-            action_opcode,
-            action_payload: RadioButtonPayload::new(""),
-        }
+        let mut sl = ScrollableList::default().set_margin(Point::new(12, 0));
+        let br = sl.pane().br();
+        let row_height = sl.row_height();
+        sl = sl.pane_size(Rectangle::new(Point::new(0, row_height as isize + 2), br));
+        RadioButtons { items: sl, action_conn, action_opcode, action_payload: RadioButtonPayload::new("") }
     }
 
     pub fn add_item(&mut self, new_item: ItemName) {
@@ -33,12 +33,11 @@ impl RadioButtons {
 
 use crate::widgets::ActionApi;
 impl ActionApi for RadioButtons {
-    fn height(&self, glyph_height: isize, margin: isize, _modal: &Modal) -> isize {
-        // total items, then +1 for the "Okay" message
-        (self.items.len() as isize + 1) * glyph_height + margin * 2 + margin * 2 + 5 // +4 for some bottom margin slop
+    fn height(&self, _glyph_height: isize, _margin: isize, _modal: &Modal) -> isize {
+        (self.items.len() * self.items.row_height()) as isize
     }
 
-    fn redraw(&self, _at_height: isize, _modal: &Modal) { self.items.draw(); }
+    fn redraw(&self, at_height: isize, _modal: &Modal) { self.items.draw(at_height); }
 
     fn set_action_opcode(&mut self, op: u32) { self.action_opcode = op }
 
@@ -59,6 +58,7 @@ impl ActionApi for RadioButtons {
                 buf.send(self.action_conn, self.action_opcode)
                     .map(|_| ())
                     .expect("couldn't send action message");
+                self.items.release_modal();
                 return None;
             }
             '\u{0}' => {
