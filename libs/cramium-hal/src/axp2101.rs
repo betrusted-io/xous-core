@@ -2,6 +2,11 @@ use cramium_api::*;
 
 pub const AXP2101_DEV: u8 = 0x34;
 
+const REG_PWRON: u8 = 0x20;
+const REG_BATFET: u8 = 0x12;
+const REG_PMUCOMMON: u8 = 0x10;
+const REG_LEVELTIMES: u8 = 0x27;
+
 const REG_DCDC_ENA: usize = 0x80;
 const REG_DCDC_PWM: usize = 0x81;
 const REG_DCDC1_V: usize = 0x82;
@@ -308,7 +313,9 @@ impl Axp2101 {
     }
 
     pub fn debug(&mut self, i2c: &mut dyn I2cApi) {
+        /*
         let mut buf = [0u8, 0u8];
+        // setup dcdc2 for correct operation
         i2c.i2c_read(AXP2101_DEV, REG_DCDC_ENA as u8, &mut buf, false).unwrap();
         crate::println!("ena|pwm bef: {:x?}", buf);
         // force CCM mode
@@ -317,6 +324,19 @@ impl Axp2101 {
         i2c.i2c_write(AXP2101_DEV, REG_DCDC_PWM as u8, &[(buf[1] & 0b0011_1111) | 0b0000_1000]).unwrap();
         i2c.i2c_read(AXP2101_DEV, REG_DCDC_ENA as u8, &mut buf, false).unwrap();
         crate::println!("ena|pwm aft: {:x?}", buf);
+        */
+
+        // setup pwron status
+        crate::println!("setting up for baosec fused");
+        // set battery insert, vbus insert, and poweron pin as power on source
+        i2c.i2c_write(AXP2101_DEV, REG_PWRON, &[0b000_1_0_1_0_1]).unwrap();
+        // set batfet to disable on pwroff
+        i2c.i2c_write(AXP2101_DEV, REG_BATFET, &[0]).unwrap();
+        // pwron 16s to shut the enable
+        i2c.i2c_write(AXP2101_DEV, REG_PMUCOMMON, &[0b00110100]).unwrap();
+        // level timings: irq 1.5s, offlevel 6s, onlevel 1s
+        i2c.i2c_write(AXP2101_DEV, REG_LEVELTIMES, &[0b0_01_01_10]).unwrap();
+        crate::println!("misc regs set");
     }
 }
 
