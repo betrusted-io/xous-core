@@ -1,5 +1,5 @@
 use core::fmt::Write;
-use std::marker::PhantomData;
+use std::cell::RefCell;
 
 use blitstr2::GlyphStyle;
 
@@ -38,7 +38,7 @@ pub struct ScrollableList {
     /// the font to be used to render the list
     style: GlyphStyle,
     /// dimensions that the list needs to fit in
-    pane: Rectangle,
+    pane: RefCell<Rectangle>,
     /// use scrollbars?
     with_scrollbars: bool,
     /// keep track of the maximum length column
@@ -56,6 +56,8 @@ impl ScrollableList {
         let gfx = Gfx::new(&xns).unwrap();
         let default_style = GlyphStyle::Regular;
         let height_hint = gfx.glyph_height_hint(default_style).unwrap();
+        let mut pane = Rectangle::new(Point::new(0, 0), gfx.screen_size().unwrap());
+        pane.style = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
         Self {
             items: vec![vec![]],
             select_index: (0, 0),
@@ -66,15 +68,17 @@ impl ScrollableList {
             margin: Point::new(0, 0),
             with_scrollbars: true,
             max_rows: 0,
-            pane: Rectangle::new(Point::new(0, 0), gfx.screen_size().unwrap()),
+            pane: RefCell::new(pane),
             gfx,
         }
     }
 
     pub fn pane_size(mut self, pane: Rectangle) -> Self {
-        self.pane = pane;
+        self.pane = RefCell::new(pane);
         self
     }
+
+    pub fn pane(&self) -> Rectangle { self.pane.borrow().clone() }
 
     pub fn style(mut self, style: GlyphStyle) -> Self {
         self.style = style;
@@ -104,6 +108,10 @@ impl ScrollableList {
     }
 
     pub fn len(&self) -> usize { self.max_rows }
+
+    pub fn row_height(&self) -> usize { self.height_hint }
+
+    pub fn release_modal(&self) { self.gfx.release_modal().unwrap(); }
 
     pub fn set_margin(mut self, margin: Point) -> Self {
         self.margin = margin;
@@ -172,7 +180,7 @@ impl ScrollableList {
         }
     }
 
-    /// Returns the string of the selected item
+    /// Returns the string of the selected item.
     pub fn get_selected(&self) -> &str { &self.items[self.select_index.0][self.select_index.1] }
 
     /// Returns only the index into the list of items that is selected
@@ -181,36 +189,37 @@ impl ScrollableList {
     /// When called, side-effets the scroll-offset to ensure that the selection index is entirely within the
     /// pane.
     pub fn ensure_selection_visible(&mut self) {
-        let width = self.pane.width() as usize;
+        let width = self.pane.borrow().width() as usize;
         // let height = self.pane.height();
         let col_width = (width / self.items.len()).max(self.min_col_width);
 
         let select_tl = Point::new(
             col_width as isize * (self.select_index.0 as isize - self.scroll_offset.0 as isize),
             self.height_hint as isize * (self.select_index.1 as isize - self.scroll_offset.1 as isize),
-        );
+        ) + self.pane.borrow().tl();
         let select_br = select_tl + Point::new(col_width as _, self.height_hint as _);
-        if !(self.pane.intersects_point(select_tl) && self.pane.intersects_point(select_br)) {
+        if !(self.pane.borrow().intersects_point(select_tl) && self.pane.borrow().intersects_point(select_br))
+        {
             // easy cases: snap to top and left
-            if select_tl.x < self.pane.tl().x {
+            if select_tl.x < self.pane.borrow().tl().x {
                 self.scroll_offset.0 = self.select_index.0;
             }
-            if select_tl.y < self.pane.tl().y {
+            if select_tl.y < self.pane.borrow().tl().y {
                 self.scroll_offset.1 = self.select_index.1;
             }
             // hard cases: figure out where the bottom is and align the top to that
-            if select_br.y > self.pane.br().y {
+            if select_br.y > self.pane.borrow().br().y {
                 // how many selections in the height?
-                let mut y_selections = self.pane.height() as usize / self.height_hint;
+                let mut y_selections = self.pane.borrow().height() as usize / self.height_hint;
                 // if it doesn't divide evenly, subtract 1 because we don't want a partial selection
-                if self.pane.height() as usize % self.height_hint != 0 {
+                if self.pane.borrow().height() as usize % self.height_hint != 0 {
                     y_selections -= 1;
                 }
                 self.scroll_offset.1 = self.select_index.1.saturating_sub(y_selections);
             }
-            if select_br.x > self.pane.br().y {
-                let mut x_selections = self.pane.width() as usize / col_width;
-                if self.pane.width() as usize % col_width != 0 {
+            if select_br.x > self.pane.borrow().br().y {
+                let mut x_selections = self.pane.borrow().width() as usize / col_width;
+                if self.pane.borrow().width() as usize % col_width != 0 {
                     x_selections -= 1;
                 }
                 self.scroll_offset.0 = self.select_index.0.saturating_sub(x_selections);
@@ -219,8 +228,11 @@ impl ScrollableList {
     }
 
     /// Draws the scrollable list based on the current state params
-    pub fn draw(&self) {
-        let width = self.pane.width() as usize;
+    pub fn draw(&self, at_height: isize) {
+        // update the pane value with at_height, keeping the old bottom-right
+        self.pane.borrow_mut().tl = Point::new(0, at_height);
+
+        let width = self.pane.borrow().width() as usize;
         let col_width = (width / self.items.len()).max(self.min_col_width);
 
         let textbox =
@@ -231,7 +243,7 @@ impl ScrollableList {
         tv.draw_border = false;
         tv.insertion = None;
         tv.ellipsis = true;
-        self.gfx.clear().unwrap();
+        self.gfx.draw_rectangle(self.pane.borrow().clone()).unwrap();
 
         let mut items_shown = vec![];
         for (col_index, column) in self.items.iter().skip(self.scroll_offset.0).enumerate() {
@@ -257,12 +269,12 @@ impl ScrollableList {
                 let tl =
                     Point::new((col_width * col_index) as isize, (self.height_hint * row_index) as isize);
                 let mut textbox = Rectangle::new(
-                    self.pane.tl() + tl,
-                    self.pane.tl() + tl + Point::new(col_width as _, self.height_hint as _),
+                    self.pane.borrow().tl() + tl,
+                    self.pane.borrow().tl() + tl + Point::new(col_width as _, self.height_hint as _),
                 );
                 textbox.style.stroke_width = 0;
                 // don't draw if off screen
-                if textbox.tl().y > self.pane.br().y {
+                if textbox.tl().y > self.pane.borrow().br().y {
                     break;
                 }
                 tv.bounds_hint = TextBounds::BoundingBox(textbox);
@@ -270,7 +282,7 @@ impl ScrollableList {
                 self.gfx.draw_textview(&mut tv).unwrap();
                 rows_shown += 1;
             }
-            if textbox.br().x > self.pane.br().x {
+            if textbox.br().x > self.pane.borrow().br().x {
                 break;
             }
             items_shown.push(rows_shown);
@@ -280,16 +292,17 @@ impl ScrollableList {
             let mut ol = ObjectList::new();
             // more columns exist than displayed, draw horiz scrollbar
             if items_shown.len() < self.items.len() {
-                let length = ((items_shown.len() as f32 / self.items.len() as f32) * self.pane.width() as f32)
-                    as isize;
+                let length = ((items_shown.len() as f32 / self.items.len() as f32)
+                    * self.pane.borrow().width() as f32) as isize;
                 let offset = ((self.scroll_offset.0 as f32 / self.items.len() as f32)
-                    * self.pane.width() as f32) as isize;
-                let mut h_rect = Rectangle::new(Point::new(0, self.pane.br().y - 3), self.pane.br());
+                    * self.pane.borrow().width() as f32) as isize;
+                let mut h_rect =
+                    Rectangle::new(Point::new(0, self.pane.borrow().br().y - 3), self.pane.borrow().br());
                 h_rect.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
                 ol.push(ClipObjectType::Rect(h_rect)).unwrap();
                 let h_inner = Line::new_with_style(
-                    Point::new(offset, self.pane.br().y - 2),
-                    Point::new(offset + length, self.pane.br().y - 2),
+                    Point::new(offset, self.pane.borrow().br().y - 2),
+                    Point::new(offset + length, self.pane.borrow().br().y - 2),
                     DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1),
                 );
                 ol.push(ClipObjectType::Line(h_inner)).unwrap();
@@ -297,17 +310,19 @@ impl ScrollableList {
             // more rows exist than displayed, draw vert scrollbar
             let rows_shown = *items_shown.iter().max().unwrap_or(&0);
             if rows_shown < self.max_rows {
-                let length =
-                    ((rows_shown as f32 / self.max_rows as f32) * self.pane.height() as f32) as isize;
+                let length = ((rows_shown as f32 / self.max_rows as f32) * self.pane.borrow().height() as f32)
+                    as isize;
                 let offset = ((self.scroll_offset.1 as f32 / self.max_rows as f32)
-                    * self.pane.height() as f32) as isize;
-                let mut v_rect =
-                    Rectangle::new(Point::new(self.pane.br().x - 3, self.pane.tl().y), self.pane.br());
+                    * self.pane.borrow().height() as f32) as isize;
+                let mut v_rect = Rectangle::new(
+                    Point::new(self.pane.borrow().br().x - 3, self.pane.borrow().tl().y),
+                    self.pane.borrow().br(),
+                );
                 v_rect.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
                 ol.push(ClipObjectType::Rect(v_rect)).unwrap();
                 let v_inner = Line::new_with_style(
-                    Point::new(self.pane.br().x - 2, offset),
-                    Point::new(self.pane.br().x - 2, offset + length),
+                    Point::new(self.pane.borrow().br().x - 2, offset),
+                    Point::new(self.pane.borrow().br().x - 2, offset + length),
                     DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1),
                 );
                 ol.push(ClipObjectType::Line(v_inner)).unwrap();
