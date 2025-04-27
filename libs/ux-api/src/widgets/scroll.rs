@@ -3,9 +3,9 @@ use std::marker::PhantomData;
 
 use blitstr2::GlyphStyle;
 
-use crate::minigfx::TextBounds;
+use crate::minigfx::{DrawStyle, Line, ObjectList, TextBounds};
 use crate::{
-    minigfx::{Point, Rectangle, TextView},
+    minigfx::{ClipObjectType, PixelColor, Point, Rectangle, TextView},
     service::{api::Gid, gfx::Gfx},
 };
 
@@ -38,6 +38,11 @@ pub struct ScrollableList<'a> {
     style: GlyphStyle,
     /// dimensions that the list needs to fit in
     pane: Rectangle,
+    /// use scrollbars?
+    with_scrollbars: bool,
+    /// keep track of the maximum length column
+    max_rows: usize,
+    /// height of the glyph used
     height_hint: usize,
     /// Minimum column width for the list
     min_col_width: usize,
@@ -59,6 +64,8 @@ impl<'a> ScrollableList<'a> {
             height_hint,
             min_col_width: 16,
             margin: Point::new(0, 0),
+            with_scrollbars: true,
+            max_rows: 0,
             pane: Rectangle::new(Point::new(0, 0), gfx.screen_size().unwrap()),
             gfx,
             _marker: PhantomData,
@@ -83,6 +90,11 @@ impl<'a> ScrollableList<'a> {
             }
         }
         self.items[column].push(item.to_owned());
+        // recompute the maximum length row
+        self.max_rows = 0;
+        for col in self.items.iter() {
+            self.max_rows = self.max_rows.max(col.len());
+        }
         self
     }
 
@@ -93,6 +105,11 @@ impl<'a> ScrollableList<'a> {
 
     pub fn set_min_col_width(&'a mut self, width: usize) -> &'a mut Self {
         self.min_col_width = width;
+        self
+    }
+
+    pub fn set_with_scrollbars(&'a mut self, with_bars: bool) -> &'a mut Self {
+        self.with_scrollbars = with_bars;
         self
     }
 
@@ -209,7 +226,9 @@ impl<'a> ScrollableList<'a> {
         tv.ellipsis = true;
         self.gfx.clear().unwrap();
 
+        let mut items_shown = vec![];
         for (col_index, column) in self.items.iter().skip(self.scroll_offset.0).enumerate() {
+            let mut rows_shown = 0;
             for (row_index, item) in column.iter().skip(self.scroll_offset.1).enumerate() {
                 tv.clear_str();
                 tv.write_str(&item).unwrap();
@@ -242,9 +261,52 @@ impl<'a> ScrollableList<'a> {
                 tv.bounds_hint = TextBounds::BoundingBox(textbox);
 
                 self.gfx.draw_textview(&mut tv).unwrap();
+                rows_shown += 1;
             }
             if textbox.br().x > self.pane.br().x {
                 break;
+            }
+            items_shown.push(rows_shown);
+        }
+
+        if self.with_scrollbars {
+            let mut ol = ObjectList::new();
+            // more columns exist than displayed, draw horiz scrollbar
+            if items_shown.len() < self.items.len() {
+                let length = ((items_shown.len() as f32 / self.items.len() as f32) * self.pane.width() as f32)
+                    as isize;
+                let offset = ((self.scroll_offset.0 as f32 / self.items.len() as f32)
+                    * self.pane.width() as f32) as isize;
+                let mut h_rect = Rectangle::new(Point::new(0, self.pane.br().y - 3), self.pane.br());
+                h_rect.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
+                ol.push(ClipObjectType::Rect(h_rect)).unwrap();
+                let h_inner = Line::new_with_style(
+                    Point::new(offset, self.pane.br().y - 2),
+                    Point::new(offset + length, self.pane.br().y - 2),
+                    DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1),
+                );
+                ol.push(ClipObjectType::Line(h_inner)).unwrap();
+            }
+            // more rows exist than displayed, draw vert scrollbar
+            let rows_shown = *items_shown.iter().max().unwrap_or(&0);
+            if rows_shown < self.max_rows {
+                let length =
+                    ((rows_shown as f32 / self.max_rows as f32) * self.pane.height() as f32) as isize;
+                let offset = ((self.scroll_offset.1 as f32 / self.max_rows as f32)
+                    * self.pane.height() as f32) as isize;
+                let mut v_rect =
+                    Rectangle::new(Point::new(self.pane.br().x - 3, self.pane.tl().y), self.pane.br());
+                v_rect.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
+                ol.push(ClipObjectType::Rect(v_rect)).unwrap();
+                let v_inner = Line::new_with_style(
+                    Point::new(self.pane.br().x - 2, offset),
+                    Point::new(self.pane.br().x - 2, offset + length),
+                    DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1),
+                );
+                ol.push(ClipObjectType::Line(v_inner)).unwrap();
+            }
+            if ol.list.len() > 0 {
+                self.gfx.draw_object_list(ol).unwrap();
             }
         }
         self.gfx.flush().unwrap();
