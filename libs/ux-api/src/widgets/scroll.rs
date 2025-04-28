@@ -214,6 +214,18 @@ impl ScrollableList {
         }
     }
 
+    pub fn delete_selected(&mut self) -> String {
+        if self.items[self.select_index.0].len() > self.select_index.1 {
+            let removed = self.items[self.select_index.0].remove(self.select_index.1);
+            if self.select_index.1 >= self.items[self.select_index.0].len() {
+                self.select_index.1 = self.items.len().saturating_sub(1);
+            }
+            removed
+        } else {
+            "".to_owned()
+        }
+    }
+
     /// Set the scroll offset. The selected element is the start of list rendering, and
     /// it designates the top left element on the screen.
     ///
@@ -296,6 +308,23 @@ impl ScrollableList {
     /// but it will panic if you attempt to call it on an empty scrollable list.
     pub fn update_selected(&mut self, contents: &str) {
         self.items[self.select_index.0][self.select_index.1] = contents.to_owned();
+    }
+
+    /// Replaces every instance of a `original` string with `replacement` string in a given column
+    /// Returns the number of instances replaced.
+    pub fn replace_with(&mut self, column: usize, original: &str, replacement: &str) -> usize {
+        if column >= self.items.len() {
+            0
+        } else {
+            let mut count = 0;
+            for item in self.items[column].iter_mut() {
+                if item == original {
+                    *item = replacement.to_string();
+                    count += 1;
+                }
+            }
+            count
+        }
     }
 
     /// Returns all the items as a nested iterator.
