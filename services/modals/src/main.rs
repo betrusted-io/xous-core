@@ -717,6 +717,8 @@ fn wrapped_main() -> ! {
             Some(Opcode::FinishProgress) => msg_scalar_unpack!(msg, caller, _, _, _, {
                 #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
                 renderer_modal.gam.relinquish_focus().unwrap();
+                #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+                renderer_modal.gfx.release_modal().unwrap();
                 op = RendererState::None;
                 // unblock the caller, which was forwarded on as the first argument
                 xous::return_scalar(xous::sender::Sender::from_usize(caller), 0).ok();
@@ -769,6 +771,8 @@ fn wrapped_main() -> ! {
             Some(Opcode::DoCloseDynamicNotification) => {
                 #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
                 renderer_modal.gam.relinquish_focus().unwrap();
+                #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+                renderer_modal.gfx.release_modal().unwrap();
                 dynamic_notification_active = false;
                 op = RendererState::None;
                 if let Some(sender) = dynamic_notification_listener.take() {
