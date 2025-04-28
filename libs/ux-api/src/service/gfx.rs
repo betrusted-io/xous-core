@@ -11,6 +11,14 @@ use crate::service::api::*;
 pub struct Gfx {
     conn: xous::CID,
 }
+
+impl Clone for Gfx {
+    fn clone(&self) -> Self {
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
+        Gfx { conn: self.conn }
+    }
+}
+
 impl Gfx {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
