@@ -127,7 +127,11 @@ pub fn spawn_test() {
 
             // 2. test the modal dialog box function
             log::info!("test text input");
-            match modals.alert_builder("Test input").field(None, Some(test_validator)).build() {
+            match modals
+                .alert_builder("Enter a number")
+                .field(Some("-0.0".to_string()), Some(test_validator))
+                .build()
+            {
                 Ok(text) => {
                     log::info!("Input: {}", text.content()[0].content);
                 }
@@ -205,8 +209,8 @@ fn clifford() -> Img {
 
 fn test_validator(input: &TextEntryPayload) -> Option<String> {
     let text_str = input.as_str();
-    match text_str.parse::<u32>() {
+    match text_str.parse::<f32>() {
         Ok(_input_int) => None,
-        _ => return Some(String::from("enter an integer value")),
+        _ => return Some(String::from("enter a number")),
     }
 }
