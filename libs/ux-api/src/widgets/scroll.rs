@@ -22,6 +22,12 @@ pub enum Direction {
     Right,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum TextAlignment {
+    Left,
+    Center,
+}
+
 /// This object takes an array of strings and attempts to render them
 /// as a scrollabel list. The number of columns rendered is equal
 /// to the dimensionality of the items passed; i.e., if two lists of
@@ -47,6 +53,7 @@ pub struct ScrollableList {
     height_hint: usize,
     /// Minimum column width for the list
     min_col_width: usize,
+    text_alignment: TextAlignment,
     /// This is public so we can "reach around" the abstraction and fix up some
     /// abstraction barrier bodges. Ideally this would be private, but there is need
     /// for some global shared state to lock the UI for a given model which I haven't
@@ -61,7 +68,8 @@ impl Clone for ScrollableList {
             .set_min_col_width(self.min_col_width)
             .style(self.style)
             .set_with_scrollbars(self.with_scrollbars)
-            .set_margin(self.margin);
+            .set_margin(self.margin)
+            .set_alignment(self.text_alignment);
         let items = self.get_all();
         for (c, cols) in items.enumerate() {
             for row in cols {
@@ -92,9 +100,17 @@ impl ScrollableList {
             margin: Point::new(0, 0),
             with_scrollbars: true,
             max_rows: 0,
+            text_alignment: TextAlignment::Left,
             pane: RefCell::new(pane),
             gfx,
         }
+    }
+
+    pub fn get_alignment(&self) -> TextAlignment { self.text_alignment }
+
+    pub fn set_alignment(mut self, alignment: TextAlignment) -> Self {
+        self.text_alignment = alignment;
+        self
     }
 
     pub fn pane_size(mut self, pane: Rectangle) -> Self {
@@ -347,7 +363,10 @@ impl ScrollableList {
 
         let textbox =
             Rectangle::new(Point::new(0, 0), Point::new(col_width as isize, self.height_hint as isize));
-        let mut tv = TextView::new(Gid::dummy(), TextBounds::BoundingBox(textbox));
+        let mut tv = match self.text_alignment {
+            TextAlignment::Left => TextView::new(Gid::dummy(), TextBounds::BoundingBox(textbox)),
+            TextAlignment::Center => TextView::new(Gid::dummy(), TextBounds::CenteredTop(textbox)),
+        };
         tv.margin = self.margin;
         tv.invert = true;
         tv.draw_border = false;
@@ -387,7 +406,10 @@ impl ScrollableList {
                 if textbox.tl().y > self.pane.borrow().br().y {
                     break;
                 }
-                tv.bounds_hint = TextBounds::BoundingBox(textbox);
+                tv.bounds_hint = match self.text_alignment {
+                    TextAlignment::Left => TextBounds::BoundingBox(textbox),
+                    TextAlignment::Center => TextBounds::CenteredTop(textbox),
+                };
 
                 self.gfx.draw_textview(&mut tv).unwrap();
                 rows_shown += 1;

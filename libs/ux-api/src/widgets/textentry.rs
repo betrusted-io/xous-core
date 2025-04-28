@@ -57,7 +57,7 @@ impl Default for TextEntry {
         let row_height = sl.row_height();
         sl = sl.pane_size(Rectangle::new(Point::new(0, row_height as isize + 2), br));
 
-        let mut osk = ScrollableList::default();
+        let mut osk = ScrollableList::default().set_alignment(TextAlignment::Center);
         match locales::LANG {
             "en" => {
                 let osk_matrix = en::OSK_MATRIX;
