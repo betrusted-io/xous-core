@@ -58,7 +58,7 @@ impl ActionApi for RadioButtons {
                 buf.send(self.action_conn, self.action_opcode)
                     .map(|_| ())
                     .expect("couldn't send action message");
-                self.items.release_modal();
+                self.items.gfx.release_modal().unwrap();
                 return None;
             }
             '\u{0}' => {
