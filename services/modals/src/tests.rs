@@ -35,7 +35,7 @@ pub fn spawn_test() {
             log::info!(
                 "modal data: {:#?}",
                 modals
-                    .alert_builder("Four items with maybe defaults. Press select to close.")
+                    .alert_builder("Four items.")
                     .field(Some("first".to_string()), None)
                     .field(Some("second".to_string()), None)
                     .field(None, None)
