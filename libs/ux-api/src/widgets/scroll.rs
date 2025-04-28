@@ -28,13 +28,13 @@ pub enum Direction {
 /// strings are passed, two columns will be rendered.
 #[derive(Debug)]
 pub struct ScrollableList {
-    pub items: Vec<Vec<String>>,
+    items: Vec<Vec<String>>,
     /// corresponds to the index into `items` that should be rendered as selected
-    pub select_index: (usize, usize),
+    select_index: (usize, usize),
     /// offset in the list that represents the top left drawable item
-    pub scroll_offset: (usize, usize),
+    scroll_offset: (usize, usize),
     /// amount of white space to put around a list item. Defaults to (0,0)
-    pub margin: Point,
+    margin: Point,
     /// the font to be used to render the list
     style: GlyphStyle,
     /// dimensions that the list needs to fit in
@@ -47,7 +47,11 @@ pub struct ScrollableList {
     height_hint: usize,
     /// Minimum column width for the list
     min_col_width: usize,
-    gfx: Gfx,
+    /// This is public so we can "reach around" the abstraction and fix up some
+    /// abstraction barrier bodges. Ideally this would be private, but there is need
+    /// for some global shared state to lock the UI for a given model which I haven't
+    /// figured out how to handle any other way.
+    pub gfx: Gfx,
 }
 
 impl ScrollableList {
@@ -87,12 +91,38 @@ impl ScrollableList {
     }
 
     pub fn add_item(&mut self, column: usize, item: &str) {
+        // create columns, if they don't already exist
         if (column + 1) > self.items.len() {
             for _ in 0..(column + 1 - self.items.len()) {
                 self.items.push(vec![]);
             }
         }
         self.items[column].push(item.to_owned());
+        // recompute the maximum length row
+        self.max_rows = 0;
+        for col in self.items.iter() {
+            self.max_rows = self.max_rows.max(col.len());
+        }
+    }
+
+    /// Returns `None` if the column doesn't exist
+    pub fn col_length(&self, column: usize) -> Option<usize> {
+        if column < self.items.len() { Some(self.items[column].len()) } else { None }
+    }
+
+    /// If the index is out of bounds, this function will simply append the item
+    pub fn insert_item(&mut self, column: usize, index: usize, item: &str) {
+        // create columns, if they don't already exist
+        if (column + 1) > self.items.len() {
+            for _ in 0..(column + 1 - self.items.len()) {
+                self.items.push(vec![]);
+            }
+        }
+        if index < self.items[column].len() {
+            self.items[column].insert(index, item.to_owned());
+        } else {
+            self.items[column].push(item.to_owned());
+        }
         // recompute the maximum length row
         self.max_rows = 0;
         for col in self.items.iter() {
@@ -111,27 +141,62 @@ impl ScrollableList {
 
     pub fn row_height(&self) -> usize { self.height_hint }
 
-    pub fn release_modal(&self) { self.gfx.release_modal().unwrap(); }
-
+    /// Use this to add space around list items for aesthetic tuning.
     pub fn set_margin(mut self, margin: Point) -> Self {
         self.margin = margin;
         self
     }
 
+    /// Tunes the desired minimum width of a column.
     pub fn set_min_col_width(mut self, width: usize) -> Self {
         self.min_col_width = width;
         self
     }
 
+    /// When `with_bars` is `true`, scroll bars are rendered when only part
+    /// of the list is visible on the screen.
     pub fn set_with_scrollbars(mut self, with_bars: bool) -> Self {
         self.with_scrollbars = with_bars;
         self
     }
 
-    pub fn set_selected(&mut self, row: usize, col: usize) { self.select_index = (row, col); }
+    /// Set the selected element in the scrollable array
+    ///
+    /// Returns `Err(())` if the indices are out of range, without updating anything.
+    pub fn set_selected(&mut self, row: usize, col: usize) -> Result<(), ()> {
+        if col < self.items.len() {
+            if row < self.items[col].len() {
+                self.select_index = (row, col);
+                Ok(())
+            } else {
+                Err(())
+            }
+        } else {
+            Err(())
+        }
+    }
 
-    pub fn set_scroll_offset(&mut self, row: usize, col: usize) { self.scroll_offset = (row, col); }
+    /// Set the scroll offset. The selected element is the start of list rendering, and
+    /// it designates the top left element on the screen.
+    ///
+    /// Returns `Err(())` if the indices are out of range, without updating anything.
+    pub fn set_scroll_offset(&mut self, row: usize, col: usize) -> Result<(), ()> {
+        if col < self.items.len() {
+            if row < self.items[col].len() {
+                self.scroll_offset = (row, col);
+                Ok(())
+            } else {
+                Err(())
+            }
+        } else {
+            Err(())
+        }
+    }
 
+    /// Attempts to move the selection in the given direction. If the direction is not moveable,
+    /// the attempt does nothing. Also updates the scroll offset so that the selection is always in view.
+    ///
+    /// This is the intended primary pathway for interacting with the widget.
     pub fn move_selection(&mut self, dir: Direction) {
         self.select_index = match dir {
             Direction::Up => (self.select_index.0, self.select_index.1.saturating_sub(1)),
@@ -157,6 +222,11 @@ impl ScrollableList {
         self.ensure_selection_visible();
     }
 
+    /// Attempts to shift the entire pane of items by changing the rendering start point in the list.
+    /// Does not update the selection point, so it is possible to "lose" the selection point when updating
+    /// this.
+    ///
+    /// Will ignore any attempt to move to an invalid offset.
     pub fn move_scroll_offset(&mut self, dir: Direction) {
         self.scroll_offset = match dir {
             Direction::Up => (self.scroll_offset.0, self.scroll_offset.1.saturating_sub(1)),
@@ -180,8 +250,20 @@ impl ScrollableList {
         }
     }
 
-    /// Returns the string of the selected item.
+    /// Returns the string of the selected item. Panics if you attempt to call on an empty scrollable list.
     pub fn get_selected(&self) -> &str { &self.items[self.select_index.0][self.select_index.1] }
+
+    /// Updates the selected item with a new contents. This is useful for e.g. toggling text based on
+    /// a selection. This is infalliable because the selection is guaranteed to always be valid/in-bounds;
+    /// but it will panic if you attempt to call it on an empty scrollable list.
+    pub fn update_selected(&mut self, contents: &str) {
+        self.items[self.select_index.0][self.select_index.1] = contents.to_owned();
+    }
+
+    /// Returns all the items as a nested iterator.
+    pub fn get_all(&self) -> impl Iterator<Item = impl Iterator<Item = &str>> {
+        self.items.iter().map(|inner_vec| inner_vec.iter().map(|s| s.as_str()))
+    }
 
     /// Returns only the index into the list of items that is selected
     pub fn get_selected_index(&self) -> (usize, usize) { self.select_index }
