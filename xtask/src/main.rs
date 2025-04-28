@@ -684,7 +684,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "default = []",
         )
         .expect("couldn't patch AES");
-        builder::search_and_replace_in_file(WIP modals refactoring
+        builder::search_and_replace_in_file(
             "Cargo.toml",
             "# [patch.crates-io.curve25519-dalek]",
             "[patch.crates-io.curve25519-dalek]",
