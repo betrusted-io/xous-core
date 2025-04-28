@@ -43,7 +43,7 @@ fn replace_first_char(s: &str, replacement: char) -> String {
 use crate::widgets::ActionApi;
 impl ActionApi for CheckBoxes {
     fn height(&self, _glyph_height: isize, _margin: isize, _modal: &Modal) -> isize {
-        (self.items.len() * self.items.row_height()) as isize
+        ((self.items.len() + 1) * self.items.row_height()) as isize
     }
 
     fn redraw(&self, at_height: isize, _modal: &Modal) { self.items.draw(at_height); }

@@ -54,6 +54,26 @@ pub struct ScrollableList {
     pub gfx: Gfx,
 }
 
+impl Clone for ScrollableList {
+    fn clone(&self) -> Self {
+        let mut sl = ScrollableList::default()
+            .pane_size(self.pane())
+            .set_min_col_width(self.min_col_width)
+            .style(self.style)
+            .set_with_scrollbars(self.with_scrollbars)
+            .set_margin(self.margin);
+        let items = self.get_all();
+        for (c, cols) in items.enumerate() {
+            for row in cols {
+                sl.add_item(c, row);
+            }
+        }
+        sl.set_scroll_offset(self.scroll_offset.0, self.scroll_offset.1).ok();
+        sl.set_selected(self.select_index.0, self.select_index.1).ok();
+        sl
+    }
+}
+
 impl ScrollableList {
     pub fn default() -> Self {
         let xns = xous_names::XousNames::new().unwrap();
@@ -89,6 +109,8 @@ impl ScrollableList {
         self.height_hint = self.gfx.glyph_height_hint(style).unwrap();
         self
     }
+
+    pub fn get_style(&self) -> GlyphStyle { self.style }
 
     pub fn add_item(&mut self, column: usize, item: &str) {
         // create columns, if they don't already exist
@@ -163,7 +185,7 @@ impl ScrollableList {
     /// Set the selected element in the scrollable array
     ///
     /// Returns `Err(())` if the indices are out of range, without updating anything.
-    pub fn set_selected(&mut self, row: usize, col: usize) -> Result<(), ()> {
+    pub fn set_selected(&mut self, col: usize, row: usize) -> Result<(), ()> {
         if col < self.items.len() {
             if row < self.items[col].len() {
                 self.select_index = (row, col);
@@ -180,7 +202,7 @@ impl ScrollableList {
     /// it designates the top left element on the screen.
     ///
     /// Returns `Err(())` if the indices are out of range, without updating anything.
-    pub fn set_scroll_offset(&mut self, row: usize, col: usize) -> Result<(), ()> {
+    pub fn set_scroll_offset(&mut self, col: usize, row: usize) -> Result<(), ()> {
         if col < self.items.len() {
             if row < self.items[col].len() {
                 self.scroll_offset = (row, col);
@@ -263,6 +285,12 @@ impl ScrollableList {
     /// Returns all the items as a nested iterator.
     pub fn get_all(&self) -> impl Iterator<Item = impl Iterator<Item = &str>> {
         self.items.iter().map(|inner_vec| inner_vec.iter().map(|s| s.as_str()))
+    }
+
+    /// Returns a reference to the requested column; None if the column is out of range
+    pub fn get_column(&self, column: usize) -> Option<&Vec<String>> {
+        // create columns, if they don't already exist
+        if column < self.items.len() { Some(&self.items[column]) } else { None }
     }
 
     /// Returns only the index into the list of items that is selected

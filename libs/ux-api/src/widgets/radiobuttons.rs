@@ -52,13 +52,15 @@ impl ActionApi for RadioButtons {
             }
             '∴' | '\u{d}' => {
                 self.action_payload = RadioButtonPayload::new(self.items.get_selected());
+
+                self.items.gfx.release_modal().unwrap();
                 xous::yield_slice();
+
                 let buf = xous_ipc::Buffer::into_buf(self.action_payload.clone())
                     .expect("couldn't convert message to payload");
                 buf.send(self.action_conn, self.action_opcode)
                     .map(|_| ())
                     .expect("couldn't send action message");
-                self.items.gfx.release_modal().unwrap();
                 return None;
             }
             '\u{0}' => {
