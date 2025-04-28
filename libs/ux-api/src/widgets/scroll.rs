@@ -474,7 +474,8 @@ impl ScrollableList {
                 let length = ((rows_shown as f32 / self.max_rows as f32) * self.pane.borrow().height() as f32)
                     as isize;
                 let offset = ((self.scroll_offset.1 as f32 / self.max_rows as f32)
-                    * self.pane.borrow().height() as f32) as isize;
+                    * self.pane.borrow().height() as f32) as isize
+                    + self.pane.borrow().tl().y;
                 let mut v_rect = Rectangle::new(
                     Point::new(self.pane.borrow().br().x - 3, self.pane.borrow().tl().y),
                     self.pane.borrow().br(),
