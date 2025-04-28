@@ -28,6 +28,8 @@ use cramium_emu::{
     i2c::I2c,
     udma::UdmaGlobal,
 };
+// breadcrumb to future self:
+//   - For GC0308 drivers, look in code/esp32-camera for sample code/constants
 #[cfg(feature = "board-baosec")]
 use cramium_hal::{
     ov2640::Ov2640,
@@ -193,7 +195,7 @@ fn main() -> ! {
 
 pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     // ---- Xous setup

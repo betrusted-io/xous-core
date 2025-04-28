@@ -1,8 +1,11 @@
-use core::cell::Cell;
+mod en;
 use core::fmt::Write;
-use std::cell::RefCell;
+
+use locales::t;
 
 use super::*;
+use crate::minigfx::*;
+use crate::service::api::Gid;
 
 const MAX_FIELDS: i16 = 10;
 pub const MAX_ITEMS: usize = 8;
@@ -31,8 +34,9 @@ pub enum TextEntryVisibility {
 
 #[derive(Clone)]
 pub struct TextEntry {
-    pub is_password: bool,
-    pub visibility: TextEntryVisibility,
+    pub items: ScrollableList,
+    // on-screen keyboard implementation
+    pub osk: ScrollableList,
     pub action_conn: xous::CID,
     pub action_opcode: u32,
     // validator borrows the text entry payload, and returns an error message if something didn't go well.
@@ -40,42 +44,53 @@ pub struct TextEntry {
     pub validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr>>,
     pub action_payloads: Vec<TextEntryPayload>,
 
+    osk_active: bool,
+    osk_entry: String,
+    osk_cursor: usize,
+    osk_is_numeric: bool,
     max_field_amount: u32,
-    selected_field: i16,
-    field_height: Cell<i16>,
-    /// track if keys were hit since initialized: this allows us to clear the default text,
-    /// instead of having it re-appear every time the text area is cleared
-    keys_hit: [bool; MAX_FIELDS as usize],
-    // gam: crate::Gam, // no GAM field because this needs to be a clone-capable structure. We create a GAM
-    // handle when we need it.
-    /// Stores the allowed height of a given text line, based on the contents and the space available
-    /// in the box. The height of a given line may be limited to make sure there is enough space for
-    /// later lines to be rendered.
-    action_payloads_allowed_heights: RefCell<Vec<i16>>,
 }
 
 impl Default for TextEntry {
     fn default() -> Self {
+        let mut sl = ScrollableList::default().set_margin(Point::new(4, 0));
+        let br = sl.pane().br();
+        let row_height = sl.row_height();
+        sl = sl.pane_size(Rectangle::new(Point::new(0, row_height as isize + 2), br));
+
+        let mut osk = ScrollableList::default().set_alignment(TextAlignment::Center);
+        match locales::LANG {
+            "en" => {
+                let osk_matrix = en::OSK_MATRIX;
+                for (col_num, col) in osk_matrix.iter().enumerate() {
+                    for row in col {
+                        osk.add_item(col_num, row);
+                    }
+                }
+                // set the cursor on 't'
+                osk.set_selected(1, 1).ok();
+            }
+            _ => unimplemented!("OSK matrix not yet implemented for language target"),
+        }
         Self {
-            is_password: Default::default(),
-            visibility: TextEntryVisibility::Visible,
+            items: sl,
+            osk,
+            osk_entry: String::new(),
+            osk_cursor: 0,
+            osk_active: false,
+            osk_is_numeric: false,
             action_conn: Default::default(),
             action_opcode: Default::default(),
             validator: Default::default(),
-            selected_field: Default::default(),
             action_payloads: Default::default(),
             max_field_amount: 0,
-            field_height: Cell::new(0),
-            keys_hit: [false; MAX_FIELDS as usize],
-            action_payloads_allowed_heights: RefCell::new(Vec::new()),
         }
     }
 }
 
 impl TextEntry {
     pub fn new(
-        is_password: bool,
-        visibility: TextEntryVisibility,
+        _visibility: TextEntryVisibility,
         action_conn: xous::CID,
         action_opcode: u32,
         action_payloads: Vec<TextEntryPayload>,
@@ -85,14 +100,47 @@ impl TextEntry {
             panic!("can't have more than {} fields, found {}", MAX_FIELDS, action_payloads.len());
         }
 
-        Self {
-            is_password,
-            visibility,
-            action_conn,
-            action_opcode,
-            action_payloads,
-            validator,
-            ..Default::default()
+        let mut te = Self { action_conn, action_opcode, action_payloads, validator, ..Default::default() };
+
+        for payload in te.action_payloads.iter() {
+            te.items.add_item(0, payload.as_str());
+        }
+        te.items.add_item(0, t!("radio.select_and_close", locales::LANG));
+        te
+    }
+
+    fn set_osk_numeric(&mut self) {
+        self.osk_is_numeric = true;
+        self.osk.clear();
+        match locales::LANG {
+            "en" => {
+                let osk_matrix = en::OSK_NUM_MATRIX;
+                for (col_num, col) in osk_matrix.iter().enumerate() {
+                    for row in col {
+                        self.osk.add_item(col_num, row);
+                    }
+                }
+                self.osk.set_selected(1, 1).ok();
+            }
+            _ => unimplemented!("OSK matrix not yet implemented for language target"),
+        }
+    }
+
+    fn set_osk_regular(&mut self) {
+        self.osk_is_numeric = false;
+        self.osk.clear();
+        match locales::LANG {
+            "en" => {
+                let osk_matrix = en::OSK_MATRIX;
+                for (col_num, col) in osk_matrix.iter().enumerate() {
+                    for row in col {
+                        self.osk.add_item(col_num, row);
+                    }
+                }
+                // set the cursor on 't'
+                self.osk.set_selected(1, 1).ok();
+            }
+            _ => unimplemented!("OSK matrix not yet implemented for language target"),
         }
     }
 
@@ -114,17 +162,184 @@ impl TextEntry {
 
         self.action_payloads = payload;
         self.max_field_amount = fields;
-        self.keys_hit = [false; MAX_FIELDS as usize];
-    }
+        self.osk_entry.clear();
+        self.osk_cursor = 0;
 
-    fn get_bullet_margin(&self) -> i16 {
-        if self.action_payloads.len() > 1 {
-            17 // this is the margin for drawing the selection bullet
-        } else {
-            0 // no selection bullet
+        self.items.clear();
+        for payload in self.action_payloads.iter() {
+            if let Some(placeholder) = &payload.placeholder {
+                self.items.add_item(0, &placeholder);
+            } else {
+                self.items.add_item(0, "");
+            }
         }
+        self.items.add_item(0, t!("radio.select_and_close", locales::LANG));
     }
 }
 
 use crate::widgets::ActionApi;
-impl ActionApi for TextEntry {}
+impl ActionApi for TextEntry {
+    fn set_action_opcode(&mut self, op: u32) { self.action_opcode = op }
+
+    fn height(&self, _glyph_height: isize, _margin: isize, _modal: &Modal) -> isize {
+        ((1 + self.items.len()) * self.items.row_height()) as isize
+    }
+
+    fn redraw(&self, at_height: isize, _modal: &Modal) {
+        if !self.osk_active {
+            self.items.draw(at_height);
+        } else {
+            let pane = self.items.pane();
+            // draw the active text in entry
+            let mut tv = TextView::new(
+                Gid::dummy(),
+                TextBounds::BoundingBox(Rectangle::new(
+                    pane.tl(),
+                    pane.tl() + Point::new(pane.width() as isize, self.osk.row_height() as isize),
+                )),
+            );
+            tv.margin = Point::new(0, 0);
+            tv.style = self.osk.get_style();
+            tv.ellipsis = true;
+            tv.invert = false;
+            tv.draw_border = false;
+            tv.write_str(&self.osk_entry).ok();
+            tv.insertion = Some(self.osk_cursor as i32);
+            self.osk.gfx.draw_textview(&mut tv).ok();
+
+            // now draw the OSK
+            self.osk.draw(at_height + self.osk.row_height() as isize);
+        }
+    }
+
+    fn key_action(&mut self, k: char) -> Option<ValidatorErr> {
+        if !self.osk_active {
+            log::trace!("key_action: {}", k);
+            match k {
+                '←' | '→' | '↑' | '↓' => {
+                    self.items.key_action(k);
+                    None
+                }
+                '∴' | '\u{d}' => {
+                    if self.items.get_selected_index().1 == self.items.len() - 1 {
+                        // return and close - validate all fields and replace with defaults if 0-length
+                        self.items.gfx.release_modal().unwrap();
+                        xous::yield_slice();
+
+                        let mut payloads: TextEntryPayloads = Default::default();
+                        payloads.1 = self.max_field_amount as usize;
+                        for (i, (dst, src)) in payloads.0[..self.max_field_amount as usize]
+                            .iter_mut()
+                            .zip(self.items.get_column(0).unwrap().iter())
+                            .enumerate()
+                        {
+                            let mut payload = self.action_payloads[i].clone();
+                            payload.content = src.to_owned();
+                            *dst = payload;
+                        }
+
+                        let buf = xous_ipc::Buffer::into_buf(payloads)
+                            .expect("couldn't convert message to payload");
+                        buf.send(self.action_conn, self.action_opcode)
+                            .map(|_| ())
+                            .expect("couldn't send action message");
+
+                        for payload in self.action_payloads.iter_mut() {
+                            payload.volatile_clear();
+                        }
+
+                        None
+                    } else {
+                        // selected a field to go into osk mode
+                        self.osk_entry = self.items.get_selected().to_owned();
+                        self.osk_cursor = self.osk_entry.chars().count(); // park the cursor at the end
+                        // check what entry type to use
+                        let index = self.items.get_selected_index().1;
+                        if let Some(placeholder) = &self.action_payloads[index].placeholder {
+                            let is_float_chars =
+                                placeholder.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '-');
+                            if is_float_chars {
+                                if !self.osk_is_numeric {
+                                    self.set_osk_numeric();
+                                }
+                            } else {
+                                if self.osk_is_numeric {
+                                    self.set_osk_regular();
+                                }
+                            }
+                        } else {
+                            if self.osk_is_numeric {
+                                self.set_osk_regular();
+                            }
+                        }
+
+                        self.osk_active = true;
+                        None
+                    }
+                }
+                _ => None,
+            }
+        } else {
+            // OSK handler
+            match k {
+                '←' | '→' | '↑' | '↓' => {
+                    self.osk.key_action(k);
+                }
+                // select the character
+                '∴' => {
+                    let action = self.osk.get_selected();
+                    if action == "⬅" {
+                        if self.osk_cursor == 0 {
+                            // replace the field with the defaults if we try to backspace in an empty field
+                            self.osk_entry = self.items.get_selected().to_owned();
+                            self.osk_cursor = self.osk_entry.chars().count(); // park the cursor at the end
+                        } else {
+                            if let Some((byte_start, ch)) =
+                                self.osk_entry.char_indices().nth(self.osk_cursor.saturating_sub(1))
+                            {
+                                let byte_end = byte_start + ch.len_utf8();
+                                self.osk_entry.replace_range(byte_start..byte_end, "");
+                            }
+                            self.osk_cursor = self.osk_cursor.saturating_sub(1);
+                        }
+                    } else {
+                        if let Some(byte_pos) =
+                            self.osk_entry.char_indices().nth(self.osk_cursor).map(|(i, _)| i).or_else(|| {
+                                if self.osk_cursor == self.osk_entry.chars().count() {
+                                    Some(self.osk_entry.len())
+                                } else {
+                                    None
+                                }
+                            })
+                        {
+                            self.osk_entry.insert_str(byte_pos, action);
+                        } else {
+                            self.osk_entry.push_str(action);
+                        }
+                        // increment the cursor position
+                        self.osk_cursor = (self.osk_cursor + 1).min(self.osk_entry.chars().count());
+                    }
+                }
+                // end the session by pressing the middle screen button
+                '\u{d}' => {
+                    self.osk_active = false;
+
+                    // run the validator
+                    let validation_copy = TextEntryPayload::new_with_fields(self.osk_entry.to_owned(), None);
+                    if let Some(validator) = self.validator {
+                        if let Some(err_msg) = validator(validation_copy, self.action_opcode) {
+                            // return with error, and don't change the original fields
+                            return Some(err_msg);
+                        }
+                    }
+                    self.action_payloads[self.items.get_selected_index().1].dirty = true;
+                    self.items.update_selected(&self.osk_entry);
+                }
+                _ => {
+                    // ignore everything else
+                }
+            }
+            None
+        }
+    }
+}
