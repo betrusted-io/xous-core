@@ -1,6 +1,6 @@
-#[cfg(any(feature = "board-baosec", feature = "loader-baosec"))]
+#[cfg(any(feature = "board-baosec", feature = "loader-baosec", feature = "test-baosec"))]
 pub mod baosec;
-#[cfg(any(feature = "board-baosec", feature = "loader-baosec"))]
+#[cfg(any(feature = "board-baosec", feature = "loader-baosec", feature = "test-baosec"))]
 pub use baosec::*;
 #[cfg(any(feature = "board-baosor", feature = "loader-baosor"))]
 pub mod baosor;

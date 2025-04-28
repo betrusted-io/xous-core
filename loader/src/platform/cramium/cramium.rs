@@ -86,6 +86,10 @@ pub fn delay(quantum: usize) {
 
 #[cfg(all(feature = "cramium-soc", not(feature = "verilator-only")))]
 pub fn early_init() -> u32 {
+    // TODO: pull in the EMA settings from nto-tests
+    // *((volatile uint32_t*)0x40014000) = 0x3; //sramcfg.cach:ema[2:0]=0x4 (default for 0.8V), 0x3 for 0.9V
+    // *((volatile uint32_t*)0x40014014) = 0x1; //sramcfg.vexram:ema[2:0]=0x4 (default for 0.8V), 0x1 for 0.9V
+
     // Set up the initial clocks. This is done as a "poke array" into a table of addresses.
     // Why? because this is actually how it's done for the chip verification code. We can
     // make this nicer and more abstract with register meanings down the road, if necessary,
@@ -334,7 +338,46 @@ pub fn early_init() -> u32 {
 
             pmic.set_ldo(&mut i2c, Some(2.5), cramium_hal::axp2101::WhichLdo::Aldo2).unwrap();
             pmic.set_dcdc(&mut i2c, Some((1.2, false)), cramium_hal::axp2101::WhichDcDc::Dcdc4).unwrap();
-            crate::println!("AXP2101 configure: {:?}", pmic);
+            pmic.set_dcdc(&mut i2c, Some((1.8, false)), cramium_hal::axp2101::WhichDcDc::Dcdc5).unwrap();
+
+            // apply proposed baosec settings
+            pmic.debug(&mut i2c);
+
+            // This debug print creates a lot of extra code...
+            // crate::println!("AXP2101 configure: {:?}", pmic);
+
+            // test battery power off
+            /*
+            crate::println!("poweroff");
+            pmic.set_ldo(&mut i2c, None, cramium_hal::axp2101::WhichLdo::Aldo3).unwrap();
+            crate::println!("poweroff done");
+            */
+
+            // try to get the BATTFET disengaged on AXP2101
+            // the lowest current we can get is 3mA...
+            /*
+            let mut buf = [0u8, 0u8];
+            crate::println!("debug");
+            i2c.i2c_read(0x34, 0u8, &mut buf, false).unwrap();
+            crate::println!("0|1 bef: {:x?}", buf);
+
+            buf[0] = 0;
+            buf[1] = 0;
+            // force batfet off
+            i2c.i2c_write(0x34, 0x12u8, &buf[..1]).unwrap();
+            crate::println!("delay");
+            i2c.i2c_read(0x34, 0u8, &mut buf, false).unwrap();
+            crate::println!("0|1 aft: {:x?}", buf);
+
+            crate::println!("enable power off");
+            buf[0] = 0x2;
+            i2c.i2c_write(0x34, 0x22u8, &buf[..1]).unwrap();
+
+            crate::println!("poweroff");
+            buf[0] = 0x1;
+            i2c.i2c_write(0x34, 0x10u8, &buf[..1]).unwrap();
+            crate::println!("poweroff done");
+            */
 
             // Make this true to have the system shut down by disconnecting its own battery while on battery
             // power Note this does nothing if you have USB power plugged in.

@@ -116,7 +116,7 @@ impl<'a> Modal<'a> {
                 if let Some(bounds) = tv.bounds_computed {
                     let y = bounds.br.y - bounds.tl.y;
                     let y_clip = if y > HEIGHT - self.line_height * 3 {
-                        log::warn!("overside text, clipping back {}", HEIGHT - (self.line_height * 2));
+                        log::warn!("oversize text, clipping back {}", HEIGHT - (self.line_height * 2));
                         HEIGHT - (self.line_height * 2)
                     } else {
                         y
@@ -138,9 +138,6 @@ impl<'a> Modal<'a> {
         }
 
         let action_height = self.action.height(self.line_height, self.margin, &self);
-        if !do_redraw {
-            self.gfx.clear().unwrap();
-        }
 
         let action_resolver: Box<&dyn ActionApi> = Box::new(&self.action);
         action_resolver.redraw(cur_height, &self);

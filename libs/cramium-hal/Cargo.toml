@@ -39,7 +39,8 @@ board-baosec = [
     "utralib/cramium-soc",
     "ux-api/board-baosec",
 ] # USB form factor token
-loader-baosec = ["camera-ov2640", "display-sh1107", "axp2101", "ux-api"]
+loader-baosec = ["camera-ov2640", "display-sh1107", "axp2101", "ux-api/loader-baosec"]
+test-baosec = ["ux-api/loader-baosec", "camera-ov2640"]
 hosted-baosec = [] # emulated hardware on x86 platform
 board-baosor = [
     "camera-ov2640",

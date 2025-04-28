@@ -4,6 +4,7 @@ pub mod payload;
 pub use payload::*;
 pub mod action;
 pub use action::*;
+
 pub mod slider;
 pub use slider::*;
 pub mod modal;
@@ -16,3 +17,5 @@ pub mod radiobuttons;
 pub use radiobuttons::*;
 pub mod checkboxes;
 pub use checkboxes::*;
+pub mod scroll;
+pub use scroll::*;

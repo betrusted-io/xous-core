@@ -88,7 +88,9 @@ pub fn spi_test() -> usize {
     print!("dbg pc 2: {:x}\r", bio_ss.bio.r(utra::bio_bdma::SFR_DBG2));
     print!("dbg pc 3: {:x}\r", bio_ss.bio.r(utra::bio_bdma::SFR_DBG3));
     for (index, &val) in retvals.iter().enumerate() {
-        print!("SPI rbk {:x}\r", val);
+        if index < 4 {
+            print!("SPI rbk {:x}\r", val);
+        }
         // the XOR to 0xAAAA is just a mask we threw in to test immediate loads
         assert!(val == ((0xAA00 | index as u32) ^ 0xAAAA));
     }

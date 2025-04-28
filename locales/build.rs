@@ -37,18 +37,16 @@ fn read_locales() -> Translations {
     let external_directory = project_dir.to_str().unwrap();
     let external_locales = format!("{}/**/i18n.json", external_directory);
     build_debug!("Reading external {}", &external_locales);
-    let paths = glob(&locales).expect("Failed to read glob pattern for in tree fiels");
+    let paths = glob(&locales).expect("Failed to read glob pattern for in tree files");
     let external_paths = glob(&external_locales).expect("Filed to read glob pattern for external files");
     for entry in paths.chain(external_paths) {
         let entry = entry.unwrap();
-        build_debug!("{:?}",entry);
+        build_debug!("{:?}", entry);
         println!("cargo:rerun-if-changed={}", entry.display());
         let file = File::open(entry).expect("Failed to open the file");
         let mut reader = std::io::BufReader::new(file);
         let mut content = String::new();
-        reader
-            .read_to_string(&mut content)
-            .expect("Failed to read the file");
+        reader.read_to_string(&mut content).expect("Failed to read the file");
         let res: HashMap<String, HashMap<String, String>> =
             serde_json::from_str(&content).expect("Cannot parse locale file");
         translations.extend(res);
@@ -61,10 +59,7 @@ fn extract_vars(tr: &str) -> Vec<String> {
         static ref RE: Regex = Regex::new("\\$[a-zA-Z0-9_-]+").unwrap();
     }
 
-    let mut a = RE
-        .find_iter(tr)
-        .map(|mat| mat.as_str().to_owned())
-        .collect::<Vec<String>>();
+    let mut a = RE.find_iter(tr).map(|mat| mat.as_str().to_owned()).collect::<Vec<String>>();
     a.sort();
 
     //println!("-----\n{:?}\n-----", &a);
@@ -72,9 +67,7 @@ fn extract_vars(tr: &str) -> Vec<String> {
 }
 
 fn convert_vars_to_idents(vars: &Vec<String>) -> Vec<Ident> {
-    vars.iter()
-        .map(|var| Ident::new(&var[1..], Span::call_site()))
-        .collect()
+    vars.iter().map(|var| Ident::new(&var[1..], Span::call_site())).collect()
 }
 
 fn generate_code(translations: Translations) -> proc_macro2::TokenStream {
@@ -147,9 +140,7 @@ fn write_code(code: TokenStream) {
     dest.push("locales");
     dest.push("src");
     let mut output = File::create(&std::path::Path::new(&dest).join("generated.rs")).unwrap();
-    output
-        .write(code.to_string().as_bytes())
-        .expect("Cannot write generated i18n code");
+    output.write(code.to_string().as_bytes()).expect("Cannot write generated i18n code");
 }
 
 fn main() {
@@ -160,9 +151,5 @@ fn main() {
 }
 
 fn project_root() -> PathBuf {
-    Path::new(&env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(1)
-        .unwrap()
-        .to_path_buf()
+    Path::new(&env!("CARGO_MANIFEST_DIR")).ancestors().nth(1).unwrap().to_path_buf()
 }

@@ -2,6 +2,11 @@ use cramium_api::*;
 
 pub const AXP2101_DEV: u8 = 0x34;
 
+const REG_PWRON: u8 = 0x20;
+const REG_BATFET: u8 = 0x12;
+const REG_PMUCOMMON: u8 = 0x10;
+const REG_LEVELTIMES: u8 = 0x27;
+
 const REG_DCDC_ENA: usize = 0x80;
 const REG_DCDC_PWM: usize = 0x81;
 const REG_DCDC1_V: usize = 0x82;
@@ -126,12 +131,14 @@ impl From<usize> for WhichDcDc {
     }
 }
 
-#[derive(Debug)]
+// Deriving this causes floating point converters to be included in the output
+// which is +40k of code
+// #[derive(Debug)]
 pub struct Axp2101 {
-    pub dcdc_ena: [bool; 4],
+    pub dcdc_ena: [bool; 5],
     pub fast_ramp: bool,
     pub force_ccm: bool,
-    pub dcdc_v_dvm: [(f32, bool); 4],
+    pub dcdc_v_dvm: [(f32, bool); 5],
     pub ldo_ena: [bool; 9],
     pub ldo_v: [f32; 9],
 }
@@ -139,10 +146,10 @@ pub struct Axp2101 {
 impl Axp2101 {
     pub fn new(i2c: &mut dyn I2cApi) -> Result<Axp2101, xous::Error> {
         let mut s = Axp2101 {
-            dcdc_ena: [false; 4],
+            dcdc_ena: [false; 5],
             fast_ramp: false,
             force_ccm: false,
-            dcdc_v_dvm: [(0.0, false); 4],
+            dcdc_v_dvm: [(0.0, false); 5],
             ldo_ena: [false; 9],
             ldo_v: [0.0; 9],
         };
@@ -160,6 +167,7 @@ impl Axp2101 {
             parse_dcdc(buf[REG_DCDC2_V], WhichDcDc::Dcdc2),
             parse_dcdc(buf[REG_DCDC3_V], WhichDcDc::Dcdc3),
             parse_dcdc(buf[REG_DCDC4_V], WhichDcDc::Dcdc4),
+            parse_dcdc(buf[REG_DCDC5_V], WhichDcDc::Dcdc5),
         ];
         for (i, ena) in self.ldo_ena.iter_mut().enumerate() {
             if i < 8 {
@@ -305,7 +313,9 @@ impl Axp2101 {
     }
 
     pub fn debug(&mut self, i2c: &mut dyn I2cApi) {
+        /*
         let mut buf = [0u8, 0u8];
+        // setup dcdc2 for correct operation
         i2c.i2c_read(AXP2101_DEV, REG_DCDC_ENA as u8, &mut buf, false).unwrap();
         crate::println!("ena|pwm bef: {:x?}", buf);
         // force CCM mode
@@ -314,11 +324,24 @@ impl Axp2101 {
         i2c.i2c_write(AXP2101_DEV, REG_DCDC_PWM as u8, &[(buf[1] & 0b0011_1111) | 0b0000_1000]).unwrap();
         i2c.i2c_read(AXP2101_DEV, REG_DCDC_ENA as u8, &mut buf, false).unwrap();
         crate::println!("ena|pwm aft: {:x?}", buf);
+        */
+
+        // setup pwron status
+        crate::println!("setting up for baosec fused");
+        // set battery insert, vbus insert, and poweron pin as power on source
+        i2c.i2c_write(AXP2101_DEV, REG_PWRON, &[0b000_1_0_1_0_1]).unwrap();
+        // set batfet to disable on pwroff
+        i2c.i2c_write(AXP2101_DEV, REG_BATFET, &[0]).unwrap();
+        // pwron 16s to shut the enable
+        i2c.i2c_write(AXP2101_DEV, REG_PMUCOMMON, &[0b00110100]).unwrap();
+        // level timings: irq 1.5s, offlevel 6s, onlevel 1s
+        i2c.i2c_write(AXP2101_DEV, REG_LEVELTIMES, &[0b0_01_01_10]).unwrap();
+        crate::println!("misc regs set");
     }
 }
 
-pub fn parse_dcdc_ena(d: u8) -> ([bool; 4], bool, bool) {
-    let mut enable = [false; 4];
+pub fn parse_dcdc_ena(d: u8) -> ([bool; 5], bool, bool) {
+    let mut enable = [false; 5];
     let mut fast_ramp = false;
     let mut force_ccm = false;
 
@@ -356,8 +379,13 @@ pub fn encode_dcdc(v: f32, dvm: bool, which: WhichDcDc) -> Option<u8> {
                     return None;
                 }
             } else {
-                // we haven't coded the DCDC5 path yet
-                return None;
+                // must be Dcdc5
+                if v < 1.4 || v > 3.7 {
+                    return None;
+                } else {
+                    let code = (v - 1.4) / 0.100;
+                    return Some(code as u8);
+                }
             }
             if v < 1.22 {
                 let code = (v - 0.5) / 0.010;

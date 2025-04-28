@@ -344,6 +344,7 @@ dependencies = [
  "num-traits",
  "usb-cramium",
  "utralib 0.1.25",
+ "ux-api",
  "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
@@ -6096,6 +6097,7 @@ checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
 name = "ux-api"
 version = "0.1.0"
 dependencies = [
+ "base64 0.5.2",
  "blitstr2",
  "digest 0.9.0",
  "enum_dispatch",
