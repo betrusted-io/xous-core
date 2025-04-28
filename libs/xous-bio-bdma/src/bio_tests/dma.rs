@@ -290,7 +290,14 @@ fn basic_u32(
             if rbk != d {
                 if errs < 4 {
                     unsafe {
-                        print!("{} @{:x}/{:x}, {:x} rb:{:x}\r", name, src.as_ptr().add(i) as usize, dst.as_ptr().add(i) as usize, d, rbk);
+                        print!(
+                            "{} @{:x}/{:x}, {:x} rb:{:x}\r",
+                            name,
+                            src.as_ptr().add(i) as usize,
+                            dst.as_ptr().add(i) as usize,
+                            d,
+                            rbk
+                        );
                     }
                 } else {
                     print!("x");
