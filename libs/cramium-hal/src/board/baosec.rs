@@ -112,8 +112,8 @@ pub fn setup_memory_pins(iox: &dyn IoSetup) -> SpimChannel {
         Some(IoxFunction::AF1),
         None,
         None,
-        Some(IoxEnable::Enable),
-        Some(IoxDriveStrength::Drive4mA),
+        Some(IoxEnable::Disable),
+        Some(IoxDriveStrength::Drive12mA),
     );
     // SPIM_SD[0-3]_A[1]
     for i in 7..11 {
@@ -124,8 +124,8 @@ pub fn setup_memory_pins(iox: &dyn IoSetup) -> SpimChannel {
             Some(IoxFunction::AF1),
             None,
             None,
-            Some(IoxEnable::Enable),
-            Some(IoxDriveStrength::Drive2mA),
+            Some(IoxEnable::Disable),
+            Some(IoxDriveStrength::Drive8mA),
         );
     }
     // SPIM_CSN0_A[1]
@@ -136,8 +136,8 @@ pub fn setup_memory_pins(iox: &dyn IoSetup) -> SpimChannel {
         Some(IoxFunction::AF1),
         None,
         None,
-        Some(IoxEnable::Enable),
-        Some(IoxDriveStrength::Drive2mA),
+        Some(IoxEnable::Disable),
+        Some(IoxDriveStrength::Drive8mA),
     );
     // SPIM_CSN1_A[1]
     iox.setup_pin(
@@ -147,8 +147,8 @@ pub fn setup_memory_pins(iox: &dyn IoSetup) -> SpimChannel {
         Some(IoxFunction::AF1),
         None,
         None,
-        Some(IoxEnable::Enable),
-        Some(IoxDriveStrength::Drive2mA),
+        Some(IoxEnable::Disable),
+        Some(IoxDriveStrength::Drive8mA),
     );
     SpimChannel::Channel1
 }
