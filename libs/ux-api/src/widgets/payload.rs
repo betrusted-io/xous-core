@@ -21,7 +21,7 @@ pub struct Bip39EntryPayload {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct TextEntryPayload {
-    dirty: bool,
+    pub dirty: bool,
     pub content: String,
     pub placeholder: Option<String>,
     pub placeholder_persist: bool,

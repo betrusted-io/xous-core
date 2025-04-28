@@ -20,6 +20,7 @@ cram-hal-service = { path = "../cram-hal-service", optional = true }
 cramium-emu = { path = "../cramium-emu", optional = true }
 usb-cramium = { path = "../usb-cramium" }
 modals = { path = "../modals", default-features = false }
+ux-api = { path = "../../libs/ux-api", optional = true }
 
 [features]
 cramium-soc = [
@@ -39,5 +40,6 @@ hosted-baosec = [
     "cramium-emu",
 ]
 
-modal-testing = []
-default = []
+modal-testing = ["ux-api"]
+test-scrollbars = []
+default = ["modal-testing"]
