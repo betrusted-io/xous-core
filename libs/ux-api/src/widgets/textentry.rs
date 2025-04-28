@@ -47,6 +47,7 @@ pub struct TextEntry {
     osk_active: bool,
     osk_entry: String,
     osk_cursor: usize,
+    osk_is_numeric: bool,
     max_field_amount: u32,
 }
 
@@ -66,6 +67,8 @@ impl Default for TextEntry {
                         osk.add_item(col_num, row);
                     }
                 }
+                // set the cursor on 't'
+                osk.set_selected(1, 1).ok();
             }
             _ => unimplemented!("OSK matrix not yet implemented for language target"),
         }
@@ -75,6 +78,7 @@ impl Default for TextEntry {
             osk_entry: String::new(),
             osk_cursor: 0,
             osk_active: false,
+            osk_is_numeric: false,
             action_conn: Default::default(),
             action_opcode: Default::default(),
             validator: Default::default(),
@@ -103,6 +107,41 @@ impl TextEntry {
         }
         te.items.add_item(0, t!("radio.select_and_close", locales::LANG));
         te
+    }
+
+    fn set_osk_numeric(&mut self) {
+        self.osk_is_numeric = true;
+        self.osk.clear();
+        match locales::LANG {
+            "en" => {
+                let osk_matrix = en::OSK_NUM_MATRIX;
+                for (col_num, col) in osk_matrix.iter().enumerate() {
+                    for row in col {
+                        self.osk.add_item(col_num, row);
+                    }
+                }
+                self.osk.set_selected(1, 1).ok();
+            }
+            _ => unimplemented!("OSK matrix not yet implemented for language target"),
+        }
+    }
+
+    fn set_osk_regular(&mut self) {
+        self.osk_is_numeric = false;
+        self.osk.clear();
+        match locales::LANG {
+            "en" => {
+                let osk_matrix = en::OSK_MATRIX;
+                for (col_num, col) in osk_matrix.iter().enumerate() {
+                    for row in col {
+                        self.osk.add_item(col_num, row);
+                    }
+                }
+                // set the cursor on 't'
+                self.osk.set_selected(1, 1).ok();
+            }
+            _ => unimplemented!("OSK matrix not yet implemented for language target"),
+        }
     }
 
     pub fn reset_action_payloads(&mut self, fields: u32, placeholders: Option<[Option<(String, bool)>; 10]>) {
@@ -214,6 +253,26 @@ impl ActionApi for TextEntry {
                         // selected a field to go into osk mode
                         self.osk_entry = self.items.get_selected().to_owned();
                         self.osk_cursor = self.osk_entry.chars().count(); // park the cursor at the end
+                        // check what entry type to use
+                        let index = self.items.get_selected_index().1;
+                        if let Some(placeholder) = &self.action_payloads[index].placeholder {
+                            let is_float_chars =
+                                placeholder.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '-');
+                            if is_float_chars {
+                                if !self.osk_is_numeric {
+                                    self.set_osk_numeric();
+                                }
+                            } else {
+                                if self.osk_is_numeric {
+                                    self.set_osk_regular();
+                                }
+                            }
+                        } else {
+                            if self.osk_is_numeric {
+                                self.set_osk_regular();
+                            }
+                        }
+
                         self.osk_active = true;
                         None
                     }
