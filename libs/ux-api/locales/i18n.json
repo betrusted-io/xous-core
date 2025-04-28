@@ -1,0 +1,58 @@
+{
+    "bip39.pick_word": {
+        "en": "[ Pick word ]",
+        "en-tts": "Pick word",
+        "fr": "[ Choisir un mot ]",
+        "ja": "[ 単語を選ぶ ]",
+        "zh": "[ 選擇單字 ]"
+    },
+    "bip39.show_qr_code": {
+        "en": "[ Show QR code ]",
+        "en-tts": "Show QR code",
+        "fr": "[ Afficher QR code ]",
+        "ja": "[ QRコード表示 ]",
+        "zh": "[ 顯示QR碼 ]"
+    },
+    "bip39.scan_qr_code": {
+        "en": "[ Scan QR code ]",
+        "en-tts": "Scan QR code",
+        "fr": "[ Scanner QR code ]",
+        "ja": "[ QRコードをスキャン ]",
+        "zh": "[ 掃描QR碼 ]"
+    },
+    "bip39.cancel": {
+        "en": "[ Cancel ]",
+        "en-tts": "Cancel",
+        "fr": "[ Annuler ]",
+        "ja": "[ キャンセル ]",
+        "zh": "[ 取消 ]"
+    },
+    "bip39.done": {
+        "en": "[ Done ]",
+        "en-tts": "Done",
+        "fr": "[ Terminé ]",
+        "ja": "[ 完了 ]",
+        "zh": "[ 完成 ]"
+    },
+    "bip39.cancel_entry": {
+        "en": "Cancel entry",
+        "en-tts": "Cancel entry",
+        "fr": "Annuler saisie",
+        "ja": "入力取消",
+        "zh": "取消輸入"
+    },
+    "bip39.delete_word": {
+        "en": "Delete word",
+        "en-tts": "Delete word",
+        "fr": "Supprimer mot",
+        "ja": "単語を削除",
+        "zh": "刪除單字"
+    },
+    "bip39.insert_word": {
+        "en": "Insert new",
+        "en-tts": "Insert new",
+        "fr": "Insérer nouveau",
+        "ja": "新規挿入",
+        "zh": "插入新項"
+    }
+}
