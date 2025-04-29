@@ -51,6 +51,7 @@ pub struct Modal<'a> {
 
 impl<'a> Modal<'a> {
     pub fn new(
+        _compat_name: &str,
         action: ActionType,
         top_text: Option<&str>,
         bot_text: Option<&str>,

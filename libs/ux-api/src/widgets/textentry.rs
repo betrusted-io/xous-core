@@ -90,6 +90,7 @@ impl Default for TextEntry {
 
 impl TextEntry {
     pub fn new(
+        _is_password: bool,
         _visibility: TextEntryVisibility,
         action_conn: xous::CID,
         action_opcode: u32,
