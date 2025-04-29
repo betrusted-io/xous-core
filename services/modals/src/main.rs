@@ -142,8 +142,14 @@ fn wrapped_main() -> ! {
         8,
     );
     #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
-    let mut renderer_modal =
-        Modal::new(ActionType::TextEntry(text_action.clone()), Some("Placeholder"), None, DEFAULT_STYLE, 8);
+    let mut renderer_modal = Modal::new(
+        "dummy",
+        ActionType::TextEntry(text_action.clone()),
+        Some("Placeholder"),
+        None,
+        DEFAULT_STYLE,
+        8,
+    );
     #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
     {
         let kbd = cramium_api::keyboard::Keyboard::new(&xns).unwrap();
