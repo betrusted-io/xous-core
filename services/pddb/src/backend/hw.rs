@@ -15,7 +15,8 @@ use aes::{Aes256, BLOCK_SIZE, Block};
 use aes_gcm_siv::aead::{Aead, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
 use backend::bcrypt::*;
-#[cfg(feature = "gen1")]
+#[cfg(not(any(feature = "hosted-baosec", feature = "board-baosec")))]
+use gam::modal::*;
 use modals::Modals;
 #[cfg(feature = "gen1")]
 use root_keys::api::AesRootkeyType;
@@ -24,6 +25,8 @@ use root_keys::api::KeywrapError;
 use sha2::{Digest, Sha512_256Hw, Sha512_256Sw};
 use spinor::SPINOR_BULK_ERASE_SIZE;
 use subtle::ConstantTimeEq;
+#[cfg(any(feature = "hosted-baosec", feature = "board-baosec"))]
+use ux_api::widgets::*;
 
 use crate::*;
 

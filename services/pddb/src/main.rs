@@ -366,10 +366,8 @@ mod api;
 use api::*;
 mod backend;
 use backend::*;
-#[cfg(feature = "gen1")]
 mod ux;
 use rkyv::with::Identity;
-#[cfg(feature = "gen1")]
 use ux::*;
 #[cfg(feature = "gen1")]
 mod menu;
@@ -403,8 +401,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-#[cfg(feature = "gen1")]
+#[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
+use gam::*;
 use locales::t;
+use modals::Modals;
 use num_traits::*;
 use rkyv::{
     Archive, Place, Serialize,
@@ -413,6 +413,8 @@ use rkyv::{
     ser::{Positional, allocator::SubAllocator, writer::Buffer as RkyvBuffer},
     with::{ArchiveWith, SerializeWith},
 };
+#[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+use ux_api::widgets::*;
 use xous::{Message, msg_blocking_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 
@@ -509,16 +511,12 @@ fn wrapped_main() -> ! {
     let entropy = Rc::new(RefCell::new(TrngPool::new()));
 
     // for less-secured user prompts (everything but password entry)
-    #[cfg(feature = "gen1")]
-    let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
+    let modals = Modals::new(&xns).expect("can't connect to Modals server");
 
     // our very own password modal. Password modals are precious and privately owned, to avoid
     // other processes from crafting them.
-    #[cfg(feature = "gen1")]
     let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
-    #[cfg(feature = "gen1")]
     let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
-    #[cfg(feature = "gen1")]
     let pw_handle = thread::spawn({
         // this comment keeps rustfmt from flattening this block
         move || password_ux_manager(xous::connect(pddb_sid).unwrap(), pw_sid)
@@ -726,13 +724,10 @@ fn wrapped_main() -> ! {
             //      retries.
             // If we need more nuance out of this routine, consider creating a custom public enum type to help
             // marshall this.
-            #[cfg(feature = "gen2")]
             Opcode::TryMount => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                unimplemented!();
-            }),
-            #[cfg(feature = "gen1")]
-            Opcode::TryMount => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                #[cfg(feature = "gen1")]
                 let llio = llio::Llio::new(&xns);
+                #[cfg(feature = "gen1")]
                 while !llio.is_ec_ready() {
                     // spin-wait while the EC is not ready -- so that a PDDB mount does not interfere with
                     // on-going EC updates. Also causes the mount dialog to delay until the EC status has been
@@ -746,7 +741,9 @@ fn wrapped_main() -> ! {
                         // can't mount if we have no root keys
                         log::info!("{}PDDB.SKIPMOUNT,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                         // allow the main menu to be used in this case
+                        #[cfg(feature = "gen1")]
                         let gam = gam::Gam::new(&xns).unwrap();
+                        #[cfg(feature = "gen1")]
                         gam.allow_mainmenu().expect("couldn't allow main menu activation");
                         xous::return_scalar2(msg.sender, 1, 0).expect("could't return scalar");
                     } else {
@@ -816,7 +813,9 @@ fn wrapped_main() -> ! {
                         }
                         // get a handle to the GAM and inform it that main menu should be allowed. The handle
                         // is dropped when this routine finishes.
+                        #[cfg(feature = "gen1")]
                         let gam = gam::Gam::new(&xns).unwrap();
+                        #[cfg(feature = "gen1")]
                         gam.allow_mainmenu().expect("couldn't allow main menu activation");
                         // setup the heap
                         initial_heap = heap_usage();
@@ -2346,7 +2345,6 @@ fn wrapped_main() -> ! {
     xous::terminate_process(0)
 }
 
-#[cfg(feature = "gen1")]
 fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous::CID) -> PasswordState {
     log::info!("Requesting login password");
     loop {
@@ -2407,7 +2405,6 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
     }
 }
 
-#[cfg(feature = "gen1")]
 fn try_mount_or_format(
     modals: &modals::Modals,
     pddb_os: &mut PddbOs,

@@ -37,6 +37,8 @@ subtle = { version = "2.4.1", default-features = false }
 tts-frontend = { path = "../tts", optional = true }
 rand_core = "0.6.4"
 cram-hal-service = { path = "../cram-hal-service", optional = true }
+cramium-emu = { path = "../cramium-emu", optional = true }
+cramium-api = { path = "../../libs/cramium-api", optional = true }
 
 # passwords
 sha2 = { version = "0.10.8" }
@@ -52,6 +54,7 @@ blowfish = { version = "0.9.1", features = ["bcrypt"] }
 gam = { path = "../gam", optional = true }
 locales = { path = "../../locales", optional = true }
 modals = { path = "../modals", optional = true }
+ux-api = { path = "../../libs/ux-api", optional = true, features = ["std"] }
 
 utralib = { version = "0.1.25", optional = true, default-features = false }
 
@@ -71,6 +74,13 @@ precursor = ["utralib/precursor", "sha2/precursor", "gen1"]
 hosted = ["utralib/hosted", "sha2/hosted", "gen1"]
 renode = ["utralib/renode", "sha2/renode", "gen1"]
 cramium-soc = ["utralib/cramium-soc", "gen2", "cram-hal-service"]
+hosted-baosec = [
+    "gen2",
+    "modals/hosted-baosec",
+    "cramium-emu",
+    "ux-api/hosted-baosec",
+    "cramium-api",
+]
 
 # gen1 PDDB pulls in the graphical libraries for direct capture of passwords
 # from users. This gives maximum control over the flow of sensitive password data,
@@ -95,9 +105,9 @@ gen1 = [
 ]
 
 # gen-2 features
-gen2 = []
+gen2 = ["locales", "modals"]
 # gen-2 boards
-board-baosec = []
+board-baosec = ["ux-api/board-baosec", "cramium-api"]
 
 # when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.
 # 32 bit addressing is recommended for Precursor, as its disk is only 128MiB and it has limited RAM for bookkeeping.

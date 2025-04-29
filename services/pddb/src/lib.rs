@@ -21,8 +21,10 @@ use core::ops::DerefMut;
 use std::cell::RefCell;
 use std::convert::TryInto;
 
-#[cfg(feature = "gen2")]
+#[cfg(all(feature = "gen2", feature = "cramium-soc"))]
 use cram_hal_service::trng;
+#[cfg(all(feature = "gen2", feature = "hosted-baosec"))]
+use cramium_emu::trng;
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub enum CbOp {

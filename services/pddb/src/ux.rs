@@ -1,6 +1,9 @@
+#[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
 use gam::modal::*;
 use locales::t;
 use num_traits::*;
+#[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+use ux_api::widgets::*;
 use xous::msg_scalar_unpack;
 use xous::{CID, SID};
 use xous_ipc::Buffer;
@@ -116,7 +119,7 @@ pub(crate) fn password_ux_manager(
             }
             Some(PwManagerOpcode::PwReturn) => {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
+                let pw = buf.to_original::<TextEntryPayloads, _>().unwrap();
 
                 if let Some(mut response) = dr.take() {
                     let mut buffer = unsafe {
