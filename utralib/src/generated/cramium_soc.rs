@@ -2349,8 +2349,8 @@ pub mod utra {
         pub const SFR_CRFUNC_CR_FUNC: crate::Field = crate::Field::new(8, 0, SFR_CRFUNC);
         pub const SFR_CRFUNC_CR_PCOREIR: crate::Field = crate::Field::new(8, 8, SFR_CRFUNC);
 
-        pub const SFR_AR: crate::Register = crate::Register::new(1, 0xffffffff);
-        pub const SFR_AR_SFR_AR: crate::Field = crate::Field::new(32, 0, SFR_AR);
+        pub const SFR_AR2: crate::Register = crate::Register::new(1, 0xffffffff);
+        pub const SFR_AR2_SFR_AR2: crate::Field = crate::Field::new(32, 0, SFR_AR2);
 
         pub const SFR_SRMFSM: crate::Register = crate::Register::new(2, 0x1ff);
         pub const SFR_SRMFSM_MFSM: crate::Field = crate::Field::new(8, 0, SFR_SRMFSM);
@@ -2412,10 +2412,10 @@ pub mod utra {
     }
 
     pub mod trng {
-        pub const TRNG_NUMREGS: usize = 13;
+        pub const TRNG_NUMREGS: usize = 15;
 
-        pub const SFR_CRSRC: crate::Register = crate::Register::new(0, 0xfff);
-        pub const SFR_CRSRC_SFR_CRSRC: crate::Field = crate::Field::new(12, 0, SFR_CRSRC);
+        pub const SFR_CRSRC: crate::Register = crate::Register::new(0, 0x1fff);
+        pub const SFR_CRSRC_SFR_CRSRC: crate::Field = crate::Field::new(13, 0, SFR_CRSRC);
 
         pub const SFR_CRANA: crate::Register = crate::Register::new(1, 0xffff);
         pub const SFR_CRANA_SFR_CRANA: crate::Field = crate::Field::new(16, 0, SFR_CRANA);
@@ -2452,6 +2452,12 @@ pub mod utra {
 
         pub const SFR_CHAIN_RNGCHAINEN1: crate::Register = crate::Register::new(17, 0xffffffff);
         pub const SFR_CHAIN_RNGCHAINEN1_RNGCHAINEN1: crate::Field = crate::Field::new(32, 0, SFR_CHAIN_RNGCHAINEN1);
+
+        pub const SFR_CHAIN_RNGCHAINEN2: crate::Register = crate::Register::new(18, 0xffffffff);
+        pub const SFR_CHAIN_RNGCHAINEN2_RNGCHAINEN2: crate::Field = crate::Field::new(32, 0, SFR_CHAIN_RNGCHAINEN2);
+
+        pub const SFR_CHAIN_RNGCHAINEN3: crate::Register = crate::Register::new(19, 0xffffffff);
+        pub const SFR_CHAIN_RNGCHAINEN3_RNGCHAINEN3: crate::Field = crate::Field::new(32, 0, SFR_CHAIN_RNGCHAINEN3);
 
         pub const HW_TRNG_BASE: usize = 0x4002e000;
     }
@@ -2610,12 +2616,15 @@ pub mod utra {
     }
 
     pub mod rbist_wrp {
-        pub const RBIST_WRP_NUMREGS: usize = 2;
+        pub const RBIST_WRP_NUMREGS: usize = 3;
 
         pub const SFRCR_TRM: crate::Register = crate::Register::new(0, 0xffffff);
         pub const SFRCR_TRM_SFRCR_TRM: crate::Field = crate::Field::new(24, 0, SFRCR_TRM);
 
-        pub const SFRAR_TRM: crate::Register = crate::Register::new(1, 0xffffffff);
+        pub const SFRSR_TRM: crate::Register = crate::Register::new(1, 0xffffff);
+        pub const SFRSR_TRM_SFRSR_TRM: crate::Field = crate::Field::new(24, 0, SFRSR_TRM);
+
+        pub const SFRAR_TRM: crate::Register = crate::Register::new(2, 0xffffffff);
         pub const SFRAR_TRM_SFRAR_TRM: crate::Field = crate::Field::new(32, 0, SFRAR_TRM);
 
         pub const HW_RBIST_WRP_BASE: usize = 0x40045000;
@@ -4065,25 +4074,43 @@ pub mod utra {
     }
 
     pub mod mesh {
-        pub const MESH_NUMREGS: usize = 6;
+        pub const MESH_NUMREGS: usize = 12;
 
         pub const SFR_MLDRV_CR_MLDRV0: crate::Register = crate::Register::new(0, 0xffffffff);
         pub const SFR_MLDRV_CR_MLDRV0_CR_MLDRV0: crate::Field = crate::Field::new(32, 0, SFR_MLDRV_CR_MLDRV0);
 
-        pub const SFR_MLIE_CR_MLIE0: crate::Register = crate::Register::new(1, 0xffffffff);
+        pub const SFR_MLDRV_CR_MLDRV1: crate::Register = crate::Register::new(1, 0xffffffff);
+        pub const SFR_MLDRV_CR_MLDRV1_CR_MLDRV1: crate::Field = crate::Field::new(32, 0, SFR_MLDRV_CR_MLDRV1);
+
+        pub const SFR_MLIE_CR_MLIE0: crate::Register = crate::Register::new(4, 0xffffffff);
         pub const SFR_MLIE_CR_MLIE0_CR_MLIE0: crate::Field = crate::Field::new(32, 0, SFR_MLIE_CR_MLIE0);
 
-        pub const SFR_MLSR_SR_MLSR0: crate::Register = crate::Register::new(2, 0xffffffff);
+        pub const SFR_MLIE_CR_MLIE1: crate::Register = crate::Register::new(5, 0xffffffff);
+        pub const SFR_MLIE_CR_MLIE1_CR_MLIE1: crate::Field = crate::Field::new(32, 0, SFR_MLIE_CR_MLIE1);
+
+        pub const SFR_MLSR_SR_MLSR0: crate::Register = crate::Register::new(8, 0xffffffff);
         pub const SFR_MLSR_SR_MLSR0_SR_MLSR0: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR0);
 
-        pub const SFR_MLSR_SR_MLSR1: crate::Register = crate::Register::new(3, 0xffffffff);
+        pub const SFR_MLSR_SR_MLSR1: crate::Register = crate::Register::new(9, 0xffffffff);
         pub const SFR_MLSR_SR_MLSR1_SR_MLSR1: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR1);
 
-        pub const SFR_MLSR_SR_MLSR2: crate::Register = crate::Register::new(4, 0xffffffff);
+        pub const SFR_MLSR_SR_MLSR2: crate::Register = crate::Register::new(10, 0xffffffff);
         pub const SFR_MLSR_SR_MLSR2_SR_MLSR2: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR2);
 
-        pub const SFR_MLSR_SR_MLSR3: crate::Register = crate::Register::new(5, 0xffffffff);
+        pub const SFR_MLSR_SR_MLSR3: crate::Register = crate::Register::new(11, 0xffffffff);
         pub const SFR_MLSR_SR_MLSR3_SR_MLSR3: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR3);
+
+        pub const SFR_MLSR_SR_MLSR4: crate::Register = crate::Register::new(12, 0xffffffff);
+        pub const SFR_MLSR_SR_MLSR4_SR_MLSR4: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR4);
+
+        pub const SFR_MLSR_SR_MLSR5: crate::Register = crate::Register::new(13, 0xffffffff);
+        pub const SFR_MLSR_SR_MLSR5_SR_MLSR5: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR5);
+
+        pub const SFR_MLSR_SR_MLSR6: crate::Register = crate::Register::new(14, 0xffffffff);
+        pub const SFR_MLSR_SR_MLSR6_SR_MLSR6: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR6);
+
+        pub const SFR_MLSR_SR_MLSR7: crate::Register = crate::Register::new(15, 0xffffffff);
+        pub const SFR_MLSR_SR_MLSR7_SR_MLSR7: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR7);
 
         pub const HW_MESH_BASE: usize = 0x40052000;
     }
@@ -4892,10 +4919,10 @@ pub mod utra {
         pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
         pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
 
-        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x31);
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
         pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
         pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
-        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 5, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
 
         pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
         pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
@@ -4903,10 +4930,10 @@ pub mod utra {
         pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
         pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
 
-        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x31);
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
         pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
         pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
-        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 5, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
 
         pub const REG_CMD_OP: crate::Register = crate::Register::new(8, 0x33f07);
         pub const REG_CMD_OP_R_CMD_RSP_TYPE: crate::Field = crate::Field::new(3, 0, REG_CMD_OP);
@@ -12582,13 +12609,13 @@ mod tests {
         baz |= pke_csr.ms(utra::pke::SFR_CRFUNC_CR_PCOREIR, 1);
         pke_csr.wfo(utra::pke::SFR_CRFUNC_CR_PCOREIR, baz);
 
-        let foo = pke_csr.r(utra::pke::SFR_AR);
-        pke_csr.wo(utra::pke::SFR_AR, foo);
-        let bar = pke_csr.rf(utra::pke::SFR_AR_SFR_AR);
-        pke_csr.rmwf(utra::pke::SFR_AR_SFR_AR, bar);
-        let mut baz = pke_csr.zf(utra::pke::SFR_AR_SFR_AR, bar);
-        baz |= pke_csr.ms(utra::pke::SFR_AR_SFR_AR, 1);
-        pke_csr.wfo(utra::pke::SFR_AR_SFR_AR, baz);
+        let foo = pke_csr.r(utra::pke::SFR_AR2);
+        pke_csr.wo(utra::pke::SFR_AR2, foo);
+        let bar = pke_csr.rf(utra::pke::SFR_AR2_SFR_AR2);
+        pke_csr.rmwf(utra::pke::SFR_AR2_SFR_AR2, bar);
+        let mut baz = pke_csr.zf(utra::pke::SFR_AR2_SFR_AR2, bar);
+        baz |= pke_csr.ms(utra::pke::SFR_AR2_SFR_AR2, 1);
+        pke_csr.wfo(utra::pke::SFR_AR2_SFR_AR2, baz);
 
         let foo = pke_csr.r(utra::pke::SFR_SRMFSM);
         pke_csr.wo(utra::pke::SFR_SRMFSM, foo);
@@ -12861,6 +12888,22 @@ mod tests {
         let mut baz = trng_csr.zf(utra::trng::SFR_CHAIN_RNGCHAINEN1_RNGCHAINEN1, bar);
         baz |= trng_csr.ms(utra::trng::SFR_CHAIN_RNGCHAINEN1_RNGCHAINEN1, 1);
         trng_csr.wfo(utra::trng::SFR_CHAIN_RNGCHAINEN1_RNGCHAINEN1, baz);
+
+        let foo = trng_csr.r(utra::trng::SFR_CHAIN_RNGCHAINEN2);
+        trng_csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN2, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_CHAIN_RNGCHAINEN2_RNGCHAINEN2);
+        trng_csr.rmwf(utra::trng::SFR_CHAIN_RNGCHAINEN2_RNGCHAINEN2, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_CHAIN_RNGCHAINEN2_RNGCHAINEN2, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_CHAIN_RNGCHAINEN2_RNGCHAINEN2, 1);
+        trng_csr.wfo(utra::trng::SFR_CHAIN_RNGCHAINEN2_RNGCHAINEN2, baz);
+
+        let foo = trng_csr.r(utra::trng::SFR_CHAIN_RNGCHAINEN3);
+        trng_csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN3, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_CHAIN_RNGCHAINEN3_RNGCHAINEN3);
+        trng_csr.rmwf(utra::trng::SFR_CHAIN_RNGCHAINEN3_RNGCHAINEN3, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_CHAIN_RNGCHAINEN3_RNGCHAINEN3, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_CHAIN_RNGCHAINEN3_RNGCHAINEN3, 1);
+        trng_csr.wfo(utra::trng::SFR_CHAIN_RNGCHAINEN3_RNGCHAINEN3, baz);
   }
 
     #[test]
@@ -13257,6 +13300,14 @@ mod tests {
         let mut baz = rbist_wrp_csr.zf(utra::rbist_wrp::SFRCR_TRM_SFRCR_TRM, bar);
         baz |= rbist_wrp_csr.ms(utra::rbist_wrp::SFRCR_TRM_SFRCR_TRM, 1);
         rbist_wrp_csr.wfo(utra::rbist_wrp::SFRCR_TRM_SFRCR_TRM, baz);
+
+        let foo = rbist_wrp_csr.r(utra::rbist_wrp::SFRSR_TRM);
+        rbist_wrp_csr.wo(utra::rbist_wrp::SFRSR_TRM, foo);
+        let bar = rbist_wrp_csr.rf(utra::rbist_wrp::SFRSR_TRM_SFRSR_TRM);
+        rbist_wrp_csr.rmwf(utra::rbist_wrp::SFRSR_TRM_SFRSR_TRM, bar);
+        let mut baz = rbist_wrp_csr.zf(utra::rbist_wrp::SFRSR_TRM_SFRSR_TRM, bar);
+        baz |= rbist_wrp_csr.ms(utra::rbist_wrp::SFRSR_TRM_SFRSR_TRM, 1);
+        rbist_wrp_csr.wfo(utra::rbist_wrp::SFRSR_TRM_SFRSR_TRM, baz);
 
         let foo = rbist_wrp_csr.r(utra::rbist_wrp::SFRAR_TRM);
         rbist_wrp_csr.wo(utra::rbist_wrp::SFRAR_TRM, foo);
@@ -17260,6 +17311,14 @@ mod tests {
         baz |= mesh_csr.ms(utra::mesh::SFR_MLDRV_CR_MLDRV0_CR_MLDRV0, 1);
         mesh_csr.wfo(utra::mesh::SFR_MLDRV_CR_MLDRV0_CR_MLDRV0, baz);
 
+        let foo = mesh_csr.r(utra::mesh::SFR_MLDRV_CR_MLDRV1);
+        mesh_csr.wo(utra::mesh::SFR_MLDRV_CR_MLDRV1, foo);
+        let bar = mesh_csr.rf(utra::mesh::SFR_MLDRV_CR_MLDRV1_CR_MLDRV1);
+        mesh_csr.rmwf(utra::mesh::SFR_MLDRV_CR_MLDRV1_CR_MLDRV1, bar);
+        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLDRV_CR_MLDRV1_CR_MLDRV1, bar);
+        baz |= mesh_csr.ms(utra::mesh::SFR_MLDRV_CR_MLDRV1_CR_MLDRV1, 1);
+        mesh_csr.wfo(utra::mesh::SFR_MLDRV_CR_MLDRV1_CR_MLDRV1, baz);
+
         let foo = mesh_csr.r(utra::mesh::SFR_MLIE_CR_MLIE0);
         mesh_csr.wo(utra::mesh::SFR_MLIE_CR_MLIE0, foo);
         let bar = mesh_csr.rf(utra::mesh::SFR_MLIE_CR_MLIE0_CR_MLIE0);
@@ -17267,6 +17326,14 @@ mod tests {
         let mut baz = mesh_csr.zf(utra::mesh::SFR_MLIE_CR_MLIE0_CR_MLIE0, bar);
         baz |= mesh_csr.ms(utra::mesh::SFR_MLIE_CR_MLIE0_CR_MLIE0, 1);
         mesh_csr.wfo(utra::mesh::SFR_MLIE_CR_MLIE0_CR_MLIE0, baz);
+
+        let foo = mesh_csr.r(utra::mesh::SFR_MLIE_CR_MLIE1);
+        mesh_csr.wo(utra::mesh::SFR_MLIE_CR_MLIE1, foo);
+        let bar = mesh_csr.rf(utra::mesh::SFR_MLIE_CR_MLIE1_CR_MLIE1);
+        mesh_csr.rmwf(utra::mesh::SFR_MLIE_CR_MLIE1_CR_MLIE1, bar);
+        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLIE_CR_MLIE1_CR_MLIE1, bar);
+        baz |= mesh_csr.ms(utra::mesh::SFR_MLIE_CR_MLIE1_CR_MLIE1, 1);
+        mesh_csr.wfo(utra::mesh::SFR_MLIE_CR_MLIE1_CR_MLIE1, baz);
 
         let foo = mesh_csr.r(utra::mesh::SFR_MLSR_SR_MLSR0);
         mesh_csr.wo(utra::mesh::SFR_MLSR_SR_MLSR0, foo);
@@ -17299,6 +17366,38 @@ mod tests {
         let mut baz = mesh_csr.zf(utra::mesh::SFR_MLSR_SR_MLSR3_SR_MLSR3, bar);
         baz |= mesh_csr.ms(utra::mesh::SFR_MLSR_SR_MLSR3_SR_MLSR3, 1);
         mesh_csr.wfo(utra::mesh::SFR_MLSR_SR_MLSR3_SR_MLSR3, baz);
+
+        let foo = mesh_csr.r(utra::mesh::SFR_MLSR_SR_MLSR4);
+        mesh_csr.wo(utra::mesh::SFR_MLSR_SR_MLSR4, foo);
+        let bar = mesh_csr.rf(utra::mesh::SFR_MLSR_SR_MLSR4_SR_MLSR4);
+        mesh_csr.rmwf(utra::mesh::SFR_MLSR_SR_MLSR4_SR_MLSR4, bar);
+        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLSR_SR_MLSR4_SR_MLSR4, bar);
+        baz |= mesh_csr.ms(utra::mesh::SFR_MLSR_SR_MLSR4_SR_MLSR4, 1);
+        mesh_csr.wfo(utra::mesh::SFR_MLSR_SR_MLSR4_SR_MLSR4, baz);
+
+        let foo = mesh_csr.r(utra::mesh::SFR_MLSR_SR_MLSR5);
+        mesh_csr.wo(utra::mesh::SFR_MLSR_SR_MLSR5, foo);
+        let bar = mesh_csr.rf(utra::mesh::SFR_MLSR_SR_MLSR5_SR_MLSR5);
+        mesh_csr.rmwf(utra::mesh::SFR_MLSR_SR_MLSR5_SR_MLSR5, bar);
+        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLSR_SR_MLSR5_SR_MLSR5, bar);
+        baz |= mesh_csr.ms(utra::mesh::SFR_MLSR_SR_MLSR5_SR_MLSR5, 1);
+        mesh_csr.wfo(utra::mesh::SFR_MLSR_SR_MLSR5_SR_MLSR5, baz);
+
+        let foo = mesh_csr.r(utra::mesh::SFR_MLSR_SR_MLSR6);
+        mesh_csr.wo(utra::mesh::SFR_MLSR_SR_MLSR6, foo);
+        let bar = mesh_csr.rf(utra::mesh::SFR_MLSR_SR_MLSR6_SR_MLSR6);
+        mesh_csr.rmwf(utra::mesh::SFR_MLSR_SR_MLSR6_SR_MLSR6, bar);
+        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLSR_SR_MLSR6_SR_MLSR6, bar);
+        baz |= mesh_csr.ms(utra::mesh::SFR_MLSR_SR_MLSR6_SR_MLSR6, 1);
+        mesh_csr.wfo(utra::mesh::SFR_MLSR_SR_MLSR6_SR_MLSR6, baz);
+
+        let foo = mesh_csr.r(utra::mesh::SFR_MLSR_SR_MLSR7);
+        mesh_csr.wo(utra::mesh::SFR_MLSR_SR_MLSR7, foo);
+        let bar = mesh_csr.rf(utra::mesh::SFR_MLSR_SR_MLSR7_SR_MLSR7);
+        mesh_csr.rmwf(utra::mesh::SFR_MLSR_SR_MLSR7_SR_MLSR7, bar);
+        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLSR_SR_MLSR7_SR_MLSR7, bar);
+        baz |= mesh_csr.ms(utra::mesh::SFR_MLSR_SR_MLSR7_SR_MLSR7, 1);
+        mesh_csr.wfo(utra::mesh::SFR_MLSR_SR_MLSR7_SR_MLSR7, baz);
   }
 
     #[test]
