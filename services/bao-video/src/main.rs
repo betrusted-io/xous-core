@@ -23,7 +23,7 @@ use cram_hal_service::{I2c, UdmaGlobal};
 use cramium_api::*;
 #[cfg(feature = "hosted-baosec")]
 use cramium_emu::{
-    camera::Ov2640,
+    camera::Gc2145,
     display::{MainThreadToken, Mono, Oled128x128, claim_main_thread},
     i2c::I2c,
     udma::UdmaGlobal,
@@ -32,7 +32,7 @@ use cramium_emu::{
 //   - For GC0308 drivers, look in code/esp32-camera for sample code/constants
 #[cfg(feature = "board-baosec")]
 use cramium_hal::{
-    ov2640::Ov2640,
+    gc2145::Gc2145,
     sh1107::{MainThreadToken, Mono, Oled128x128, claim_main_thread},
 };
 #[cfg(feature = "board-baosec")]
@@ -235,21 +235,19 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     #[cfg(not(feature = "hosted-baosec"))]
     {
         // setup camera pins
-        let (cam_pdwn_bnk, cam_pdwn_pin) = cramium_hal::board::setup_ov2640_pins(&iox);
+        let (cam_pdwn_bnk, cam_pdwn_pin) = cramium_hal::board::setup_camera_pins(&iox);
         // disable camera powerdown
         iox.set_gpio_pin_value(cam_pdwn_bnk, cam_pdwn_pin, IoxValue::Low);
     }
     udma_global.udma_clock_config(PeriphId::Cam, true);
     // this is safe because we turned on the clocks before calling it
-    let mut cam = unsafe { Ov2640::new().expect("couldn't allocate camera") };
+    let mut cam = unsafe { Gc2145::new().expect("couldn't allocate camera") };
 
     tt.sleep_ms(100).ok();
 
     let (pid, mid) = cam.read_id(&mut i2c);
     log::info!("Camera pid {:x}, mid {:x}", pid, mid);
     cam.init(&mut i2c, cramium_api::camera::Resolution::Res320x240);
-    cam.poke(&mut i2c, 0xFF, 0x00);
-    cam.poke(&mut i2c, 0xDA, 0x01); // YUV LE
     tt.sleep_ms(1).ok();
 
     let (cols, _rows) = cam.resolution();
