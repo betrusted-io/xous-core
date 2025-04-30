@@ -155,6 +155,10 @@ impl Ov2640 {
         }
         self.resolution = resolution;
 
+        // Setup YUV output mode
+        self.poke(&mut i2c, 0xFF, 0x00);
+        self.poke(&mut i2c, 0xDA, 0x01); // YUV LE
+
         // set sync polarity
         let vsync_pol = 0;
         let hsync_pol = match resolution {
