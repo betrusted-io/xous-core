@@ -29,21 +29,27 @@ xous = { version = "0.9.64", features = ["v2p"] }
 
 [features]
 camera-ov2640 = []
+camera-gc2145 = []
 display-sh1107 = []
 axp2101 = []
 cramium-soc = ["utralib/cramium-soc"]
 board-baosec = [
-    "camera-ov2640",
+    "camera-gc2145",
     "display-sh1107",
     "axp2101",
     "utralib/cramium-soc",
     "ux-api/board-baosec",
 ] # USB form factor token
-loader-baosec = ["camera-ov2640", "display-sh1107", "axp2101", "ux-api/loader-baosec"]
-test-baosec = ["ux-api/loader-baosec", "camera-ov2640"]
+loader-baosec = [
+    "camera-gc2145",
+    "display-sh1107",
+    "axp2101",
+    "ux-api/loader-baosec",
+]
+test-baosec = ["ux-api/loader-baosec", "camera-gc2145"]
 hosted-baosec = [] # emulated hardware on x86 platform
 board-baosor = [
-    "camera-ov2640",
+    "camera-gc2145",
     "axp2101",
     "utralib/cramium-soc",
 ] # Precursor form factor
