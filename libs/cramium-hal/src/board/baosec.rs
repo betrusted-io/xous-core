@@ -192,7 +192,7 @@ pub fn setup_i2c_pins(iox: &dyn IoSetup) -> I2cChannel {
 }
 
 /// returns the power-down port and pin number
-pub fn setup_ov2640_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+pub fn setup_camera_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     // power-down pin - default to powered down
     iox.set_gpio_pin_value(IoxPort::PC, 14, IoxValue::High);
     iox.setup_pin(
