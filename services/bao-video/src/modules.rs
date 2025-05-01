@@ -107,6 +107,7 @@ pub fn stream_to_grid(
     qr_size_pixels: usize,
     qr_size_modules: usize,
     margin: usize,
+    bw_thresh: u8,
 ) -> Vec<bool> {
     let pix_per_module = ((qr_size_pixels - margin * 2) << FIXED_POINT_SHIFT) / qr_size_modules;
     let mut x_frac = FracIter::new(
@@ -128,9 +129,7 @@ pub fn stream_to_grid(
         while let Some(x) = x_frac.next() {
             if true {
                 // seems to work better with the simple threshold?
-                if image.data[(y + margin - FUDGE_Y) * image.width + (x + margin + FUDGE_X)]
-                    < crate::BW_THRESH
-                {
+                if image.data[(y + margin - FUDGE_Y) * image.width + (x + margin + FUDGE_X)] < bw_thresh {
                     grid.push(true);
                 } else {
                     grid.push(false);
@@ -139,7 +138,7 @@ pub fn stream_to_grid(
                 if image
                     .neighbor_luma(Point::new(x as isize + margin as isize, y as isize + margin as isize))
                     .unwrap()
-                    < crate::BW_THRESH
+                    < bw_thresh
                 {
                     grid.push(true);
                 } else {

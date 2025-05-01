@@ -64,7 +64,6 @@ use xous_ipc::Buffer;
 
 pub const IMAGE_WIDTH: usize = 256;
 pub const IMAGE_HEIGHT: usize = 240;
-pub const BW_THRESH: u8 = 128;
 
 // Next steps for performance improvement:
 //
@@ -77,25 +76,29 @@ pub const BW_THRESH: u8 = 128;
 
 /// This converts a frame of `[u8]` grayscale pixels that may be larger than the native
 /// frame buffer resolution into a black and white bitmap.
-pub fn blit_to_display(display: &mut Oled128x128, frame: &[u8], display_cleared: bool) {
+pub fn blit_to_display(display: &mut Oled128x128, frame: &[u8], display_cleared: bool, bw_thresh: &mut u8) {
+    let mut sum: u32 = 0;
+    let mut count: u32 = 0;
     for (y, row) in frame.chunks(IMAGE_WIDTH).enumerate() {
         if y & 1 == 0 {
             // skip every other line
             for (x, &pixval) in row.iter().enumerate() {
                 if x & 1 == 0 {
                     // skip every other pixel
-                    if x < display.dimensions().x as usize * 2
-                        && y < display.dimensions().y as usize * 2 - (gfx::CHAR_HEIGHT as usize + 1) * 2
+                    if y < display.dimensions().x as usize * 2
+                        && x < display.dimensions().y as usize * 2 - (gfx::CHAR_HEIGHT as usize + 1) * 2
                     {
                         let luminance = pixval & 0xff;
-                        if luminance > BW_THRESH {
-                            display.put_pixel(Point::new(x as isize / 2, y as isize / 2), Mono::White.into());
+                        sum += luminance as u32;
+                        count += 1;
+                        if luminance > *bw_thresh {
+                            display.put_pixel(Point::new(y as isize / 2, x as isize / 2), Mono::White.into());
                         } else {
                             // optimization to avoid some computation if we're blitting to an already-black
                             // buffer
                             if !display_cleared {
                                 display.put_pixel(
-                                    Point::new(x as isize / 2, y as isize / 2),
+                                    Point::new(y as isize / 2, x as isize / 2),
                                     Mono::Black.into(),
                                 );
                             }
@@ -107,6 +110,7 @@ pub fn blit_to_display(display: &mut Oled128x128, frame: &[u8], display_cleared:
             }
         }
     }
+    *bw_thresh = (sum / count) as u8;
 }
 
 #[repr(align(32))]
@@ -310,6 +314,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let mut msg_opt = None;
     #[cfg(feature = "gfx-testing")]
     testing::tests();
+    let mut bw_thresh: u8 = 128;
     loop {
         if !is_panic.load(Ordering::Relaxed) {
             xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
@@ -337,9 +342,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     for (y_src, line) in fb.chunks(IMAGE_WIDTH / 2).enumerate() {
                         for (x_src, &u32src) in line.iter().enumerate() {
                             frame[(IMAGE_HEIGHT - y_src - 1) * IMAGE_WIDTH + 2 * x_src] =
-                                (u32src & 0xff) as u8;
+                                ((u32src >> 8) & 0xff) as u8;
                             frame[(IMAGE_HEIGHT - y_src - 1) * IMAGE_WIDTH + 2 * x_src + 1] =
-                                ((u32src >> 16) & 0xff) as u8;
+                                ((u32src >> 24) & 0xff) as u8;
                         }
                     }
                     frames += 1;
@@ -348,7 +353,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     decode_success = false;
                     log::info!("------------- SEARCH {} -----------", frames);
                     let finder_width =
-                        qr::find_finders(&mut candidates, &frame, BW_THRESH, IMAGE_WIDTH) as isize;
+                        qr::find_finders(&mut candidates, &frame, bw_thresh, IMAGE_WIDTH) as isize;
                     if candidates.len() == 3 {
                         let candidates_orig = candidates.clone();
                         let mut x_candidates: [Point; 3] = [Point::new(0, 0); 3];
@@ -363,7 +368,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                 as usize,
                         ) {
                             let dims = Point::new(IMAGE_WIDTH as isize, IMAGE_HEIGHT as isize);
-                            let mut il = qr::ImageRoi::new(&mut frame, dims, BW_THRESH);
+                            let mut il = qr::ImageRoi::new(&mut frame, dims, bw_thresh);
                             let (src, dst) = qr_corners.mapping(&mut il, qr::HOMOGRAPHY_MARGIN);
                             let mut src_f: [(f32, f32); 4] = [(0.0, 0.0); 4];
                             let mut dst_f: [(f32, f32); 4] = [(0.0, 0.0); 4];
@@ -448,7 +453,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                     *dst = src;
                                 }
                             }
-                            blit_to_display(&mut display, &frame, true);
+                            blit_to_display(&mut display, &frame, true, &mut bw_thresh);
 
                             // we now have a QR code in "canonical" orientation, with a
                             // known width in pixels
@@ -459,7 +464,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                             // Confirm that the finders coordinates are valid
                             let mut checked_candidates = Vec::<Point>::new();
                             let x_finder_width =
-                                qr::find_finders(&mut checked_candidates, &aligned, BW_THRESH, qr_width as _)
+                                qr::find_finders(&mut checked_candidates, &aligned, bw_thresh, qr_width as _)
                                     as isize;
                             log::info!("x_finder width: {}", x_finder_width);
 
@@ -492,13 +497,14 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                 let qr = qr::ImageRoi::new(
                                     &mut aligned,
                                     Point::new(qr_width as _, qr_width as _),
-                                    BW_THRESH,
+                                    bw_thresh,
                                 );
                                 let grid = modules::stream_to_grid(
                                     &qr,
                                     qr_width,
                                     modules,
                                     qr::HOMOGRAPHY_MARGIN.abs() as usize,
+                                    bw_thresh,
                                 );
 
                                 println!("grid len {}", grid.len());
@@ -558,7 +564,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                 );
                             }
                         } else {
-                            blit_to_display(&mut display, &frame, true);
+                            blit_to_display(&mut display, &frame, true, &mut bw_thresh);
                             for c in candidates_orig.iter() {
                                 log::debug!("******    candidate: {}, {}    ******", c.x, c.y);
                                 // remap image to screen coordinates (it's 2:1)
@@ -577,7 +583,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         }
                     } else {
                         // blit raw camera fb to display
-                        blit_to_display(&mut display, &frame, true);
+                        blit_to_display(&mut display, &frame, true, &mut bw_thresh);
                         gfx::msg(
                             &mut display,
                             "Scan QR code...",
