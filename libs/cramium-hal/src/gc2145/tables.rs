@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /*
   The constant tables below are derived from https://github.com/zephyrproject-rtos/zephyr/blob/main/drivers/video/gc2145.c
   with the following license:

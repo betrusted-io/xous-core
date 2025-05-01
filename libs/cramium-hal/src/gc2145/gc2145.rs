@@ -180,9 +180,11 @@ impl Gc2145 {
 
         self.delay(30);
 
-        // divide the clock down
-        self.poke(i2c, 0xFA, 0x32);
-        // self.poke(i2c, 0xFA, 0x63);
+        // divide the clock down, so that the system can keep up.
+        // self.poke(i2c, 0xFA, 0x32); // this offers a higher frame rate, but a greater bus congestion -
+        // maybe available on NTO
+        // self.poke(i2c, 0xFA, 0x63); // this is necessary for MPW due to SPI backpressure bug
+        self.poke(i2c, 0xFA, 0x52); // this is necessary for MPW due to SPI backpressure bug
     }
 
     #[inline(never)]
@@ -191,11 +193,11 @@ impl Gc2145 {
         self.poke(i2c, GC2145_REG_RESET, GC2145_REG_SW_RESET);
         self.delay(300); // wait for reset
 
-        // do the init pokes
+        // do the init pokes, these settings are from the zephyr-OS reference code
         for &[adr, dat] in GC2145_INIT.iter() {
             self.poke(i2c, adr, dat);
         }
-        // setup AEC
+        // setup AEC, these settings are yanked out of the Linux kernel
         for &[adr, dat] in GC2145_AEC.iter() {
             self.poke(i2c, adr, dat);
         }
