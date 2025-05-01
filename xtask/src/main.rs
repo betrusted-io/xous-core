@@ -634,6 +634,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_loader_feature("sram-margin");
             builder.add_loader_feature("usb");
             builder.add_loader_feature("updates");
+            // builder.add_loader_feature("cam-test");
             match task.as_deref() {
                 Some("baosec") => builder.target_cramium_soc(),
                 _ => panic!("should be unreachable"),

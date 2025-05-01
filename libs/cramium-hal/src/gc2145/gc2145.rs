@@ -5,11 +5,12 @@ use utralib::utra;
 use utralib::utra::udma_camera::REG_CAM_CFG_GLOB;
 
 use super::constants::*;
+use super::tables::*;
 use crate::ifram::IframRange;
 use crate::udma::Udma;
 use crate::udma::*;
 
-pub const OV2640_DEV: u8 = 0x30;
+pub const GC2145_DEV: u8 = 0x3C;
 
 pub const CFG_FRAMEDROP_EN: utralib::Field = utralib::Field::new(1, 0, REG_CAM_CFG_GLOB);
 pub const CFG_FRAMEDROP_VAL: utralib::Field = utralib::Field::new(6, 1, REG_CAM_CFG_GLOB);
@@ -18,23 +19,20 @@ pub const CFG_FORMAT: utralib::Field = utralib::Field::new(3, 8, REG_CAM_CFG_GLO
 pub const CFG_SHIFT: utralib::Field = utralib::Field::new(4, 11, REG_CAM_CFG_GLOB);
 pub const CFG_GLOB_EN: utralib::Field = utralib::Field::new(1, 31, REG_CAM_CFG_GLOB);
 
-pub struct Ov2640 {
+pub struct Gc2145 {
     csr: CSR<u32>,
     ifram: Option<IframRange>,
-    contrast: Contrast,
-    brightness: Brightness,
-    color_mode: ColorMode,
     resolution: Resolution,
     slicing: Option<(usize, usize)>,
 }
 
-impl Udma for Ov2640 {
+impl Udma for Gc2145 {
     fn csr_mut(&mut self) -> &mut CSR<u32> { &mut self.csr }
 
     fn csr(&self) -> &CSR<u32> { &self.csr }
 }
 
-impl Ov2640 {
+impl Gc2145 {
     #[cfg(feature = "std")]
     /// Safety: clocks must be turned on before this is called
     pub unsafe fn new() -> Result<Self, xous::Error> {
@@ -49,7 +47,7 @@ impl Ov2640 {
             ifram_virt.as_ptr() as usize,
             ifram_virt.len(),
         );
-        Ok(Ov2640::new_with_ifram(ifram))
+        Ok(Gc2145::new_with_ifram(ifram))
     }
 
     pub unsafe fn new_with_ifram(ifram: IframRange) -> Self {
@@ -69,9 +67,6 @@ impl Ov2640 {
         Self {
             csr,
             ifram: Some(ifram),
-            color_mode: ColorMode::Normal,
-            contrast: Contrast::Level2,
-            brightness: Brightness::Level2,
             // bogus value
             resolution: Resolution::Res160x120,
             slicing: None,
@@ -107,58 +102,125 @@ impl Ov2640 {
     pub fn has_ifram(&self) -> bool { self.ifram.is_some() }
 
     pub fn poke(&self, i2c: &mut dyn I2cApi, adr: u8, dat: u8) {
-        i2c.i2c_write(OV2640_DEV, adr, &[dat]).expect("write failed");
+        i2c.i2c_write(GC2145_DEV, adr, &[dat]).expect("write failed");
     }
 
     // chip does not support sequential reads
     pub fn peek(&self, i2c: &mut dyn I2cApi, adr: u8, dat: &mut [u8]) {
         for (i, d) in dat.iter_mut().enumerate() {
             let mut one_byte = [0u8];
-            i2c.i2c_read(OV2640_DEV, adr + i as u8, &mut one_byte, false).expect("read failed");
+            i2c.i2c_read(GC2145_DEV, adr + i as u8, &mut one_byte, false).expect("read failed");
             *d = one_byte[0];
         }
     }
 
+    fn gc2145_set_window(&self, i2c: &mut dyn I2cApi, mut reg: u8, x: u16, y: u16, w: u16, h: u16) {
+        self.poke(i2c, GC2145_REG_RESET, GC2145_SET_P0_REGS);
+
+        /* Y/row offset */
+        self.poke(i2c, reg, (y >> 8) as u8);
+        reg += 1;
+        self.poke(i2c, reg, (y & 0xff) as u8);
+        reg += 1;
+
+        /* X/col offset */
+        self.poke(i2c, reg, (x >> 8) as u8);
+        reg += 1;
+        self.poke(i2c, reg, (x & 0xff) as u8);
+        reg += 1;
+
+        /* Window height */
+        self.poke(i2c, reg, (h >> 8) as u8);
+        reg += 1;
+        self.poke(i2c, reg, (h & 0xff) as u8);
+        reg += 1;
+
+        /* Window width */
+        self.poke(i2c, reg, (w >> 8) as u8);
+        reg += 1;
+        self.poke(i2c, reg, (w & 0xff) as u8);
+    }
+
+    fn set_resolution(&self, i2c: &mut dyn I2cApi, w: u16, h: u16) {
+        // TODO: figure out what this parameter even means in the context of an...unconstrained variable
+        // resolution? Maybe? It's not even clear to me that was the original intent from the C driver.
+
+        // 160x120 base scaling
+        // let c_ratio = 4u16;
+        // let r_ratio = 4u16;
+        // 320x240 base scaling
+        let c_ratio = 3u16;
+        let r_ratio = 3u16;
+        // 640x480 base scaling
+        // let c_ratio = 2u16;
+        // let r_ratio = 2u16;
+
+        /* Calculates the window boundaries to obtain the desired resolution */
+        let win_w = w * c_ratio;
+        let win_h = h * r_ratio;
+        let x = ((win_w / c_ratio) - w) / 2;
+        let y = ((win_h / r_ratio) - h) / 2;
+        let win_x = (UXGA_HSIZE - win_w) / 2;
+        let win_y = (UXGA_VSIZE - win_h) / 2;
+
+        /* Set readout window first. */
+        self.gc2145_set_window(i2c, GC2145_REG_BLANK_WINDOW_BASE, win_x, win_y, win_w + 16, win_h + 8);
+
+        /* Set cropping window next. */
+        self.gc2145_set_window(i2c, GC2145_REG_WINDOW_BASE, x, y, w, h);
+
+        /* Enable crop */
+        self.poke(i2c, GC2145_REG_CROP_ENABLE, GC2145_CROP_SET_ENABLE);
+        // self.poke(i2c, GC2145_REG_CROP_ENABLE, 0);
+
+        /* Set Sub-sampling ratio and mode */
+        self.poke(i2c, GC2145_REG_SUBSAMPLE, ((r_ratio << 4) | c_ratio) as u8);
+
+        self.poke(i2c, GC2145_REG_SUBSAMPLE_MODE, GC2145_SUBSAMPLE_MODE_SMOOTH);
+
+        self.delay(30);
+
+        // divide the clock down, so that the system can keep up.
+        // self.poke(i2c, 0xFA, 0x32); // this offers a higher frame rate, but a greater bus congestion -
+        // maybe available on NTO
+        // self.poke(i2c, 0xFA, 0x63); // this is necessary for MPW due to SPI backpressure bug
+        self.poke(i2c, 0xFA, 0x52); // this is necessary for MPW due to SPI backpressure bug
+    }
+
+    #[inline(never)]
     pub fn init(&mut self, i2c: &mut dyn I2cApi, resolution: Resolution) {
-        self.poke(i2c, OV2640_DSP_RA_DLMT, 0x1);
-        self.poke(i2c, OV2640_SENSOR_COM7, 0x80);
-        match resolution {
-            Resolution::Res480x272 => {
-                for poke_pair in super::tables::OV2640_480X272.iter() {
-                    self.poke(i2c, poke_pair[0], poke_pair[1]);
-                }
-            }
-            Resolution::Res640x480 => {
-                for poke_pair in super::tables::OV2640_VGA.iter() {
-                    self.poke(i2c, poke_pair[0], poke_pair[1]);
-                }
-            }
-            Resolution::Res320x240 => {
-                for poke_pair in super::tables::OV2640_QVGA.iter() {
-                    self.poke(i2c, poke_pair[0], poke_pair[1]);
-                }
-            }
-            Resolution::Res160x120 => {
-                for poke_pair in super::tables::OV2640_QQVGA.iter() {
-                    self.poke(i2c, poke_pair[0], poke_pair[1]);
-                }
-            }
-            Resolution::Res256x256 => {
-                // this does not work
-                for poke_pair in super::tables::OV2640_VGA.iter() {
-                    self.poke(i2c, poke_pair[0], poke_pair[1]);
-                }
-                // mode is in 0xFF == 0
-                self.poke(i2c, 0x5a, 0x40);
-                self.poke(i2c, 0x5b, 0x40);
-            }
+        // initiate a reset
+        self.poke(i2c, GC2145_REG_RESET, GC2145_REG_SW_RESET);
+        self.delay(300); // wait for reset
+
+        // do the init pokes, these settings are from the zephyr-OS reference code
+        for &[adr, dat] in GC2145_INIT.iter() {
+            self.poke(i2c, adr, dat);
         }
+        // setup AEC, these settings are yanked out of the Linux kernel
+        for &[adr, dat] in GC2145_AEC.iter() {
+            self.poke(i2c, adr, dat);
+        }
+
+        // set up YUV mode
+        self.poke(i2c, GC2145_REG_RESET, GC2145_SET_P0_REGS);
+        self.delay(30);
+        let mut buf = [0u8; 1];
+        self.peek(i2c, GC2145_REG_OUTPUT_FMT, &mut buf);
+        self.delay(30);
+        self.poke(
+            i2c,
+            GC2145_REG_OUTPUT_FMT,
+            (buf[0] & !GC2145_REG_OUTPUT_FMT_MASK) | GC2145_REG_OUTPUT_FMT_YCBYCR,
+        );
+        self.delay(30);
+
+        let (w, h) = resolution.into();
+        crate::println!("resolution set to {}x{}", w, h);
+        self.set_resolution(i2c, w as u16, h as u16);
         self.resolution = resolution;
 
-        // Setup YUV output mode
-        self.poke(&mut i2c, 0xFF, 0x00);
-        self.poke(&mut i2c, 0xDA, 0x01); // YUV LE
-
+        crate::println!("udma setup");
         // set sync polarity
         let vsync_pol = 0;
         let hsync_pol = match resolution {
@@ -230,49 +292,14 @@ impl Ov2640 {
         self.slicing = None;
     }
 
-    pub fn color_mode(&mut self, i2c: &mut dyn I2cApi, mode: ColorMode) {
-        self.poke(i2c, 0xff, 0x00);
-        self.poke(i2c, 0x7c, 0x00);
-        self.poke(i2c, 0x7d, mode as u8);
-        self.poke(i2c, 0x7c, 0x05);
-        self.poke(i2c, 0x7d, 0x80);
-        self.poke(i2c, 0x7d, 0x80);
-        self.color_mode = mode;
-    }
-
-    pub fn contrast_brightness(&mut self, i2c: &mut dyn I2cApi, contrast: Contrast, brightness: Brightness) {
-        self.contrast = contrast;
-        self.brightness = brightness;
-        let c = (contrast as u16).to_le_bytes();
-        self.poke(i2c, 0xff, 0x00);
-        self.poke(i2c, 0x7c, 0x00);
-        self.poke(i2c, 0x7d, 0x04);
-        self.poke(i2c, 0x7c, 0x07);
-        self.poke(i2c, 0x7d, brightness as u8);
-        self.poke(i2c, 0x7d, c[0]);
-        self.poke(i2c, 0x7d, c[1]);
-        self.poke(i2c, 0x7d, 0x06);
-    }
-
-    pub fn effect(&mut self, i2c: &mut dyn I2cApi, effect: Effect) {
-        let e = (effect as u16).to_le_bytes();
-        self.poke(i2c, 0xff, 0x00);
-        self.poke(i2c, 0x7c, 0x00);
-        self.poke(i2c, 0x7d, 0x18);
-        self.poke(i2c, 0x7c, 0x05);
-        self.poke(i2c, 0x7d, e[0]);
-        self.poke(i2c, 0x7d, e[1]);
-    }
-
     /// Returns (product ID, manufacturer ID)
+    /// Should be 0x2155, 0x0078
     pub fn read_id(&self, i2c: &mut dyn I2cApi) -> (u16, u16) {
         let mut pid = [0u8; 2];
-        let mut mid = [0u8; 2];
-        self.poke(i2c, 0xff, 0x01); // select the correct bank
-        self.delay(1);
-        self.peek(i2c, OV2640_SENSOR_PIDH, &mut pid);
-        self.peek(i2c, OV2640_SENSOR_MIDH, &mut mid);
-        (u16::from_be_bytes(pid), u16::from_be_bytes(mid))
+        let mut did = [0u8; 1];
+        self.peek(i2c, GC2145_PIDH, &mut pid); // should return 0x2155
+        self.peek(i2c, GC2145_I2C_ID, &mut did);
+        (u16::from_be_bytes(pid), did[0] as u16)
     }
 
     pub fn delay(&self, quantum: usize) {

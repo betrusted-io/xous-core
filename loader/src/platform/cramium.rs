@@ -16,9 +16,9 @@ mod verifier;
 
 #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
 mod gfx;
-#[cfg(feature = "qr")]
+#[cfg(any(feature = "qr", feature = "cam-test"))]
 mod homography;
-#[cfg(feature = "qr")]
+#[cfg(any(feature = "qr", feature = "cam-test"))]
 mod qr;
 #[cfg(feature = "usb")]
 mod usb;
