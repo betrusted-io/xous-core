@@ -116,6 +116,7 @@ members = [
   "libs/ux-api",
   "services/cramium-emu",
   "libs/cramium-api",
+  "services/keystore",
 ]
 resolver = "2"
 
