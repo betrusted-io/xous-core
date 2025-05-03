@@ -179,10 +179,10 @@ type EmuMemoryRange = xous::MemoryRange;
 #[cfg(any(feature = "precursor", feature = "renode"))]
 type EmuSpinor = spinor::Spinor;
 
-#[cfg(feature = "cramium-soc")]
+#[cfg(all(feature = "board-baosec", feature = "gen2"))]
 type EmuMemoryRange = xous::MemoryRange;
-#[cfg(feature = "cramium-soc")]
-type EmuSpinor = crate::hw::baosec::Spinor;
+#[cfg(all(feature = "board-baosec", feature = "gen2"))]
+type EmuSpinor = xous_swapper::Spinor;
 
 pub(crate) struct PddbOs {
     spinor: EmuSpinor,

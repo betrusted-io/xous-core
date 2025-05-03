@@ -374,9 +374,6 @@ mod menu;
 #[cfg(feature = "gen1")]
 use menu::*;
 
-#[cfg(feature = "gen2")]
-mod hw;
-
 mod libstd;
 
 #[cfg(not(target_os = "xous"))]

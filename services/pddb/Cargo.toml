@@ -69,6 +69,12 @@ hex = { version = "0.4.3", default-features = false, features = [
     "alloc",
 ], optional = true }
 
+# gen 2 dependencies
+keystore = { path = "../keystore", optional = true }
+xous-swapper = { path = "../xous-swapper", features = [
+    "spinor",
+], optional = true }
+
 [features]
 precursor = ["utralib/precursor", "sha2/precursor", "gen1"]
 hosted = ["utralib/hosted", "sha2/hosted", "gen1"]
@@ -105,9 +111,9 @@ gen1 = [
 ]
 
 # gen-2 features
-gen2 = ["locales", "modals"]
+gen2 = ["keystore", "xous-swapper"]
 # gen-2 boards
-board-baosec = ["ux-api/board-baosec", "cramium-api"]
+board-baosec = ["ux-api/board-baosec", "cramium-api", "gen2"]
 
 # when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.
 # 32 bit addressing is recommended for Precursor, as its disk is only 128MiB and it has limited RAM for bookkeeping.
