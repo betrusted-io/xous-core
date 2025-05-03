@@ -42,4 +42,4 @@ hosted-baosec = [
 
 modal-testing = ["ux-api"]
 test-scrollbars = []
-default = ["modal-testing"]
+default = []
