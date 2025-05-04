@@ -2,6 +2,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 use keystore_api::rootkeys_api::*;
+use keystore_api::*;
 
 mod backups;
 mod sha512_digest;
@@ -103,6 +104,7 @@ mod implementation {
     use gam::modal::{Modal, Slider};
     use gam::{ActionType, ProgressBar};
     use keystore_api::rootkeys_api::*;
+    use keystore_api::*;
     use locales::t;
     use num_traits::*;
     use xous_semver::SemVer;

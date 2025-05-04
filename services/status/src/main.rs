@@ -24,7 +24,8 @@ use chrono::prelude::*;
 use com::api::*;
 use crossbeam::channel::{Receiver, Sender, at, select, unbounded};
 use gam::{GamObjectList, GamObjectType};
-use keystore_api::rootkeys_api::{BackupKeyboardLayout, BackupOp};
+use keystore_api::rootkeys_api::*;
+use keystore_api::*;
 use locales::t;
 use num_traits::*;
 use ux_api::minigfx::*;
@@ -655,7 +656,7 @@ fn wrapped_main() -> ! {
         .expect("couldn't exit the gutter server");
     gutter.join().expect("status boot gutter server did not exit gracefully");
     // allocate some storage for backup checksums
-    let checksums: Arc<Mutex<Option<keystore_api::rootkeys_api::Checksums>>> = Arc::new(Mutex::new(None));
+    let checksums: Arc<Mutex<Option<Checksums>>> = Arc::new(Mutex::new(None));
 
     // --------------------------- graphical loop timing
     let mut stats_phase: usize = 0;

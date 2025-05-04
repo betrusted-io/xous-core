@@ -21,6 +21,8 @@ use core::ops::DerefMut;
 use std::cell::RefCell;
 use std::convert::TryInto;
 
+use keystore_api::Checksums;
+
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub enum CbOp {
     Change,
@@ -265,12 +267,12 @@ impl Pddb {
     /// Computes checksums on the entire PDDB database. This operation can take some time and causes a
     /// progress bar to pop up. This should be called only after the PDDB has been unmounted, to ensure
     /// that the disk contents do not change after the checksums have been computed.
-    pub fn compute_checksums(&self) -> keystore_api::rootkeys_api::Checksums {
-        let alloc = keystore_api::rootkeys_api::Checksums::default();
+    pub fn compute_checksums(&self) -> Checksums {
+        let alloc = Checksums::default();
         let mut buf = Buffer::into_buf(alloc).expect("Couldn't convert memory structure");
         buf.lend_mut(self.conn, Opcode::ComputeBackupHashes.to_u32().unwrap())
             .expect("Couldn't execute ComputeBackupHashes");
-        buf.to_original::<keystore_api::rootkeys_api::Checksums, _>().expect("Couldn't convert IPC structure")
+        buf.to_original::<Checksums, _>().expect("Couldn't convert IPC structure")
     }
 
     /// return a list of all open bases

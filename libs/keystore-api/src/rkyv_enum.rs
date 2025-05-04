@@ -14,7 +14,7 @@
 #![allow(dead_code)]
 use zeroize::Zeroize;
 
-use crate::rootkeys_api::PAR_BLOCKS;
+use crate::PAR_BLOCKS;
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
 #[zeroize(drop)]

@@ -15,8 +15,8 @@ use aes::{Aes256, BLOCK_SIZE, Block};
 use aes_gcm_siv::aead::{Aead, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
 use backend::bcrypt::*;
-use keystore_api::rootkeys_api::AesRootkeyType;
-use keystore_api::rootkeys_api::KeywrapError;
+use keystore_api::rootkeys_api::*;
+use keystore_api::*;
 use modals::Modals;
 use sha2::{Digest, Sha512_256Hw, Sha512_256Sw};
 use spinor::SPINOR_BULK_ERASE_SIZE;
@@ -2939,8 +2939,8 @@ impl PddbOs {
 
     pub(crate) fn reset_dont_ask_init(&self) { self.rootkeys.do_reset_dont_ask_init(); }
 
-    pub(crate) fn checksums(&self, modals: Option<&Modals>) -> keystore_api::rootkeys_api::Checksums {
-        let mut checksums = keystore_api::rootkeys_api::Checksums::default();
+    pub(crate) fn checksums(&self, modals: Option<&Modals>) -> Checksums {
+        let mut checksums = Checksums::default();
         let pddb = unsafe { self.pddb_mr.as_slice() };
         if let Some(m) = modals {
             m.start_progress(t!("pddb.checksums", locales::LANG), 0, checksums.checksums.len() as u32, 0)

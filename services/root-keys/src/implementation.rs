@@ -15,6 +15,7 @@ use ed25519_dalek::{DigestSigner, Signature, Signer, SigningKey, VerifyingKey};
 use gam::modal::{ActionType, Modal, ProgressBar, Slider};
 use keystore_api::rootkeys_api::PasswordType;
 use keystore_api::rootkeys_api::*;
+use keystore_api::*;
 use keywrap::*;
 use locales::t;
 use num_traits::*;

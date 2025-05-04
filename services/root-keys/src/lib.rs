@@ -1,7 +1,9 @@
 #![cfg_attr(all(target_os = "none", not(test)), no_std)]
 //! Detailed docs are parked under Structs/RootKeys down below
 
+use keystore_api::MAX_WRAP_DATA;
 use keystore_api::rootkeys_api::{self, *};
+use keystore_api::*;
 
 pub mod key2bits;
 
@@ -382,7 +384,7 @@ impl RootKeys {
     }
 
     pub fn wrap_key(&self, input: &[u8]) -> Result<Vec<u8>, KeywrapError> {
-        if input.len() > rootkeys_api::MAX_WRAP_DATA {
+        if input.len() > MAX_WRAP_DATA {
             // of course, the underlying crypto can handle a much larger piece of data,
             // but the intention of this API is to wrap crypto keys -- not bulk data. So for simplicity
             // we're going to limit the size of wrapped data to 2kiB (typically it's envisioned you're
@@ -420,7 +422,7 @@ impl RootKeys {
     }
 
     pub fn unwrap_key(&self, wrapped: &[u8], expected_len: usize) -> Result<Vec<u8>, KeywrapError> {
-        if wrapped.len() > rootkeys_api::MAX_WRAP_DATA + 8 {
+        if wrapped.len() > MAX_WRAP_DATA + 8 {
             return Err(KeywrapError::InvalidDataSize);
         }
         if !self.ensure_aes_password() {
