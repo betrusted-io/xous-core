@@ -2826,7 +2826,7 @@ impl PddbOs {
                         let mut buf = Buffer::into_buf(request).unwrap();
                         buf.lend_mut(self.pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap())
                             .unwrap();
-                        buf.to_original::<BasisRequestPassword, _>().unwrap().plaintext_pw.unwrap().as_str()
+                        &buf.to_original::<BasisRequestPassword, _>().unwrap().plaintext_pw.unwrap()
                     };
                     #[cfg(feature = "gen2")]
                     let retpass = match modals
