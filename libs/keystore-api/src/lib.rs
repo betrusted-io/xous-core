@@ -5,9 +5,9 @@ pub mod rootkeys_api;
 pub use rootkeys_api::*;
 // gen2 API
 #[cfg(feature = "gen2")]
-pub mod keystore_api;
+pub mod gen2_api;
 #[cfg(feature = "gen2")]
-pub use keystore_api::*;
+pub use gen2_api::*;
 
 pub mod common;
 pub use common::*;

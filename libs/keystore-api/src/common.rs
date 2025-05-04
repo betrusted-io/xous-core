@@ -33,7 +33,10 @@ pub enum AesOpType {
 #[zeroize(drop)]
 pub struct AesOp {
     /// the caller can try to request "any" index, but it's checked inside the oracle first.
+    #[cfg(feature = "gen1")]
     pub key_index: u8,
+    #[cfg(feature = "gen2")]
+    pub domain: String,
     pub block: AesBlockType,
     pub aes_op: AesOpType,
 }
@@ -65,7 +68,7 @@ pub enum KeyWrapOp {
 use std::error::Error;
 impl Error for KeywrapError {}
 
-use std::fmt;
+use std::{fmt, u64};
 
 impl fmt::Display for KeywrapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
@@ -91,7 +94,10 @@ pub struct KeyWrapper {
     pub data: [u8; MAX_WRAP_DATA + 8],
     // used to specify the length of the data used in the fixed-length array above
     pub len: u32,
+    #[cfg(feature = "gen1")]
     pub key_index: u8,
+    #[cfg(feature = "gen2")]
+    pub domain: String,
     pub op: KeyWrapOp,
     pub result: Option<KeywrapError>,
     // used by the unwrap side
@@ -137,6 +143,47 @@ impl DerefMut for Checksums {
         unsafe {
             core::slice::from_raw_parts_mut(self as *mut Checksums as *mut u8, size_of::<Checksums>())
                 as &mut [u8]
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum PasswordState {
+    /// Mounted successfully.
+    Correct,
+    /// User-initiated aborted. The main purpose for this path is to facilitate
+    /// developers who want shellchat access but don't want to mount the PDDB.
+    Incorrect(u64),
+    /// Abort initiated by system policy due to too many failed attempts
+    ForcedAbort(u64),
+    /// Failure because the PDDB hasn't been initialized yet (can't mount because nothing to mount)
+    Uninit,
+}
+
+impl From<(usize, usize, usize)> for PasswordState {
+    fn from(value: (usize, usize, usize)) -> Self {
+        let (arg1, arg2, arg3) = value;
+        match arg1 {
+            0 => PasswordState::Correct,
+            1 => PasswordState::Incorrect(arg2 as u64 | (arg3 as u64) << 32),
+            2 => PasswordState::ForcedAbort(arg2 as u64 | (arg3 as u64) << 32),
+            3 => PasswordState::Uninit,
+            _ => PasswordState::ForcedAbort(u64::MAX),
+        }
+    }
+}
+
+impl Into<(usize, usize, usize)> for PasswordState {
+    fn into(self) -> (usize, usize, usize) {
+        match self {
+            PasswordState::Correct => (0, 0, 0),
+            PasswordState::Incorrect(arg) => {
+                (1, (arg as usize) & 0xFFFF_FFFF, (arg >> 32) as usize & 0xFFFF_FFFF)
+            }
+            PasswordState::ForcedAbort(arg) => {
+                (2, (arg as usize) & 0xFFFF_FFFF, (arg >> 32) as usize & 0xFFFF_FFFF)
+            }
+            PasswordState::Uninit => (3, 0, 0),
         }
     }
 }
