@@ -22,12 +22,12 @@ cram-hal-service = { path = "../cram-hal-service", optional = true }
 ux-api = { path = "../../libs/ux-api" }
 cramium-emu = { path = "../cramium-emu", optional = true }
 cramium-api = { path = "../../libs/cramium-api" }
-blitstr2 = { path = "../../libs/blitstr2" }
 xous-ipc = "0.10.4"
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
 ] }
+keystore-api = { path = "../../libs/keystore-api" }
 
 zeroize = { version = "1.7.0", features = ["zeroize_derive"] }
 rand_core = "0.6.4"
