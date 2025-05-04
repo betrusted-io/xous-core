@@ -13,7 +13,7 @@ xous-ipc = "0.10.4"
 log-server = { package = "xous-api-log", version = "0.1.63" }
 ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.63" }
 xous-names = { package = "xous-api-names", version = "0.9.65" }
-susres = { package = "xous-api-susres", version = "0.9.63" }
+susres = { package = "xous-api-susres", version = "0.9.63", optional = true }
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
@@ -21,10 +21,10 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
 ] }
-trng = { path = "../trng" }
-spinor = { path = "../spinor" }
+trng = { path = "../trng", optional = true }
+spinor = { path = "../spinor", optional = true }
 aes = { path = "../aes" }
-root-keys = { path = "../root-keys" }
+root-keys = { path = "../root-keys", optional = true }
 cipher = "0.4.2"
 bitfield = "0.13.2"
 aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
@@ -32,9 +32,9 @@ aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
     "aes",
 ] }
 # aes-gcm-siv = {git="https://github.com/RustCrypto/AEADs.git", branch="master"}
-llio = { path = "../llio" }
+llio = { path = "../llio", optional = true }
 subtle = { version = "2.4.1", default-features = false }
-tts-frontend = { path = "../tts" }
+tts-frontend = { path = "../tts", optional = true }
 rand_core = "0.6.4"
 
 # passwords
@@ -48,9 +48,9 @@ zeroize_derive = "1.4.2"
 blowfish = { version = "0.9.1", features = ["bcrypt"] }
 
 # UX (for password entry and notifications)
-gam = { path = "../gam" }
-locales = { path = "../../locales" }
-modals = { path = "../modals" }
+gam = { path = "../gam", optional = true }
+locales = { path = "../../locales", optional = true }
+modals = { path = "../modals", optional = true }
 
 utralib = { version = "0.1.25", optional = true, default-features = false }
 
@@ -65,10 +65,34 @@ hex = { version = "0.4.3", default-features = false, features = [
     "alloc",
 ], optional = true }
 
+# Gen-2 dependencies
+keystore = { path = "../keystore", optional = true }         # contains all key handlers
+xous-swapper = { path = "../xous-swapper", optional = true } # contains spinor
+
 [features]
-precursor = ["utralib/precursor", "sha2/precursor"]
-hosted = ["utralib/hosted", "sha2/hosted"]
-renode = ["utralib/renode", "sha2/renode"]
+gen1 = [
+    "susres",
+    "trng",
+    "spinor",
+    "root-keys",
+    "llio",
+    "tts-frontend",
+    "gam",
+    "locales",
+    "modals",
+]
+gen2 = ["keystore"]
+# gen 1 targets
+precursor = ["utralib/precursor", "sha2/precursor", "gen1"]
+hosted = ["utralib/hosted", "sha2/hosted", "gen1"]
+renode = ["utralib/renode", "sha2/renode", "gen1"]
+
+# gen 2 targets
+board-baosec = ["gen2", "xous-swapper/board-baosec"] # USB form factor token
+hosted-baosec = ["gen2"]                             # emulated hardware on x86 platform
+board-baosor = ["gen2", "xous-swapper/board-baosor"] # Precursor form factor
+# board-dabao is not a valid target as it lacks external SPI flash
+
 # when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.
 # 32 bit addressing is recommended for Precursor, as its disk is only 128MiB and it has limited RAM for bookkeeping.
 u64_pa = []
