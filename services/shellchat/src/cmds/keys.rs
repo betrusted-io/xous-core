@@ -1,5 +1,5 @@
 use String;
-use root_keys::api::{AesRootkeyType, Block};
+use keystore_api::rootkeys_api::{AesRootkeyType, Block};
 
 use crate::{CommonEnv, ShellCmdApi};
 
