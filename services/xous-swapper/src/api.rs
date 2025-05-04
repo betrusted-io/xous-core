@@ -1,11 +1,5 @@
 pub const SERVER_NAME_SPINOR: &str = "_SPINOR Hardware Interface Server_";
 
-#[cfg_attr(not(target_os = "xous"), allow(dead_code))]
-pub const SPINOR_ERASE_SIZE: u32 = 0x1000; // this is the smallest sector size.
-
-#[allow(dead_code)]
-pub const SPINOR_BULK_ERASE_SIZE: u32 = 0x1_0000; // this is the bulk erase size.
-
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     /// writes are split into multiple transactions. Must acquire exclusive rights before initiation
