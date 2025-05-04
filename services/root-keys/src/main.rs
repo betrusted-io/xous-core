@@ -1,8 +1,8 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-mod api;
-use api::*;
+use keystore_api::rootkeys_api::*;
+
 mod backups;
 mod sha512_digest;
 
@@ -102,6 +102,7 @@ mod implementation {
     use ed25519_dalek::VerifyingKey;
     use gam::modal::{Modal, Slider};
     use gam::{ActionType, ProgressBar};
+    use keystore_api::rootkeys_api::*;
     use locales::t;
     use num_traits::*;
     use xous_semver::SemVer;
@@ -109,7 +110,6 @@ mod implementation {
     use crate::PasswordRetentionPolicy;
     use crate::PasswordType;
     use crate::UpdateType;
-    use crate::api::*;
     use crate::backups;
     use crate::{GatewareRegion, MetadataInFlash, SignatureResult};
 
@@ -587,7 +587,7 @@ fn main() -> ! {
           2. Main menu -> trigger initialization
           3. PDDB
     */
-    let keys_sid = xns.register_name(api::SERVER_NAME_KEYS, Some(3)).expect("can't register server");
+    let keys_sid = xns.register_name(SERVER_NAME_KEYS, Some(3)).expect("can't register server");
 
     let mut keys = RootKeys::new();
     log::info!("Boot FPGA key source: {:?}", keys.fpga_key_source());
@@ -601,7 +601,7 @@ fn main() -> ! {
 
     // register a suspend/resume listener
     let main_cid = xous::connect(keys_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, main_cid)
+    let mut susres = susres::Susres::new(None, &xns, Opcode::SuspendResume as u32, main_cid)
         .expect("couldn't create suspend/resume object");
 
     #[cfg(feature = "tts")]

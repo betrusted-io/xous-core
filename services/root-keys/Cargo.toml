@@ -20,6 +20,7 @@ com = { path = "../com" }
 xous-semver = "0.1.2"
 utralib = { version = "0.1.25", optional = true, default-features = false }
 blitstr2 = { path = "../../libs/blitstr2" }
+keystore-api = { path = "../../libs/keystore-api" }
 
 xous-ipc = "0.10.4"
 num-derive = { version = "0.4.1", default-features = false }
@@ -84,15 +85,16 @@ default-features = false
 features = ["rand_core", "digest"]
 
 [features]
-precursor = ["utralib/precursor", "sha2/precursor"]
-hosted = ["utralib/hosted", "sha2/hosted"]
-renode = ["utralib/renode", "sha2/renode"]
+precursor = ["utralib/precursor", "sha2/precursor", "keystore-api/precursor"]
+hosted = ["utralib/hosted", "sha2/hosted", "keystore-api/hosted"]
+renode = ["utralib/renode", "sha2/renode", "keystore-api/renode"]
 policy-menu = [
+    "keystore-api/policy-menu",
 ] # provisions for users to set their password retention policies (on the block for deprecation) (note: to re-enable you need to add "rootkeys menu" to the tokens.rs in the GAM)
 hazardous-debug = [
 ] # this feature enables the printing of secret materials for debug purposes
 tts = []
-efuse = []
+efuse = ["keystore-api/efuse"]
 default = []
 
 [lib]

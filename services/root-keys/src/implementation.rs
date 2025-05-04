@@ -13,6 +13,8 @@ use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::{EdwardsPoint, edwards::CompressedEdwardsY};
 use ed25519_dalek::{DigestSigner, Signature, Signer, SigningKey, VerifyingKey};
 use gam::modal::{ActionType, Modal, ProgressBar, Slider};
+use keystore_api::rootkeys_api::PasswordType;
+use keystore_api::rootkeys_api::*;
 use keywrap::*;
 use locales::t;
 use num_traits::*;
@@ -25,11 +27,10 @@ use ux_api::service::api::BulkRead;
 use xous::KERNEL_BACKUP_OFFSET;
 use xous_semver::SemVer;
 
-use crate::api::PasswordType;
+use crate::backups;
 use crate::bcrypt::*;
 use crate::sha512_digest::Sha512Prehash;
 use crate::{GatewareRegion, MetadataInFlash, SignatureResult, UpdateType};
-use crate::{api::*, backups};
 
 // TODO: add hardware acceleration for BCRYPT so we can hit the OWASP target without excessive UX delay
 const BCRYPT_COST: u32 = 7; // 10 is the minimum recommended by OWASP; takes 5696 ms to verify @ 10 rounds; 804 ms to verify 7 rounds
