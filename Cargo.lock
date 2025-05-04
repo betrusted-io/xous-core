@@ -2944,6 +2944,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "keystore-api"
+version = "0.1.0"
+dependencies = [
+ "cipher",
+ "keyboard",
+ "locales",
+ "num-derive 0.4.2",
+ "num-traits",
+ "rkyv 0.8.8",
+ "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-names",
+ "xous-ipc 0.10.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "zeroize",
+]
+
+[[package]]
 name = "lalrpop"
 version = "0.19.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3863,6 +3879,7 @@ dependencies = [
  "hex 0.4.3",
  "hkdf",
  "keystore",
+ "keystore-api",
  "llio",
  "locales",
  "log",
@@ -4655,6 +4672,7 @@ dependencies = [
  "hex 0.4.3",
  "jtag",
  "keyboard",
+ "keystore-api",
  "llio",
  "locales",
  "log",
@@ -5037,6 +5055,7 @@ dependencies = [
  "ime-plugin-tts",
  "jtag",
  "keyboard",
+ "keystore-api",
  "llio",
  "locales",
  "log",
@@ -5281,6 +5300,7 @@ dependencies = [
  "early_settings",
  "gam",
  "keyboard",
+ "keystore-api",
  "llio",
  "locales",
  "log",
