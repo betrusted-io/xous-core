@@ -4,9 +4,9 @@ use utralib::*;
 use crate::ifram::IframRange;
 use crate::udma::*;
 
-pub const FLASH_PAGE_LEN: usize = 256;
-pub const FLASH_SECTOR_LEN: usize = 4096;
-pub const BLOCK_ERASE_LEN: usize = 65536;
+pub const FLASH_PAGE_LEN: usize = crate::board::SPINOR_PAGE_LEN as usize;
+pub const FLASH_SECTOR_LEN: usize = crate::board::SPINOR_ERASE_SIZE as usize;
+pub const BLOCK_ERASE_LEN: usize = crate::board::SPINOR_BULK_ERASE_SIZE as usize;
 
 // ----------------------------------- SPIM ------------------------------------
 
