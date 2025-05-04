@@ -21,11 +21,6 @@ use core::ops::DerefMut;
 use std::cell::RefCell;
 use std::convert::TryInto;
 
-#[cfg(all(feature = "gen2", feature = "cramium-soc"))]
-use cram_hal_service::trng;
-#[cfg(all(feature = "gen2", feature = "hosted-baosec"))]
-use cramium_emu::trng;
-
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub enum CbOp {
     Change,
@@ -268,7 +263,6 @@ impl Pddb {
     /// Computes checksums on the entire PDDB database. This operation can take some time and causes a
     /// progress bar to pop up. This should be called only after the PDDB has been unmounted, to ensure
     /// that the disk contents do not change after the checksums have been computed.
-    #[cfg(feature = "gen1")]
     pub fn compute_checksums(&self) -> root_keys::api::Checksums {
         let alloc = root_keys::api::Checksums::default();
         let mut buf = Buffer::into_buf(alloc).expect("Couldn't convert memory structure");

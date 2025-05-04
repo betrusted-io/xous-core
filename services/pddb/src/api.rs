@@ -148,14 +148,12 @@ pub(crate) enum Opcode {
     KeyDrop = 20,
 
     /// Menu opcodes
-    #[cfg(feature = "gen1")]
     MenuListBasis = 21,
 
     /// Security state checks
     IsEfuseSecured = 22,
 
     /// Suspend/resume callback
-    #[cfg(feature = "gen1")]
     SuspendResume = 23,
     /// quit the server
     Quit = 24,
@@ -217,14 +215,12 @@ pub(crate) enum Opcode {
     ListKeyV2 = 45,
 
     /// change unlock PIN
-    #[cfg(feature = "gen1")]
     MenuChangePin = 46,
 
     /// run a test or diagnostic command (depends on the build)
     InternalTest = 47,
 
     /// Clear password cache and ask for it again
-    #[cfg(feature = "gen1")]
     UncacheAndAskPassword = 48,
 
     /// Unmount the PDDB.

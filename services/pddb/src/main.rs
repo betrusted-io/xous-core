@@ -1,3 +1,6 @@
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
+
 extern crate bitfield;
 /// # PDDB - Plausibly Deniable DataBase
 ///
@@ -369,9 +372,7 @@ use backend::*;
 mod ux;
 use rkyv::with::Identity;
 use ux::*;
-#[cfg(feature = "gen1")]
 mod menu;
-#[cfg(feature = "gen1")]
 use menu::*;
 
 mod libstd;
@@ -398,10 +399,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-#[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
-use gam::*;
 use locales::t;
-use modals::Modals;
 use num_traits::*;
 use rkyv::{
     Archive, Place, Serialize,
@@ -410,8 +408,6 @@ use rkyv::{
     ser::{Positional, allocator::SubAllocator, writer::Buffer as RkyvBuffer},
     with::{ArchiveWith, SerializeWith},
 };
-#[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
-use ux_api::widgets::*;
 use xous::{Message, msg_blocking_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 
@@ -508,7 +504,7 @@ fn wrapped_main() -> ! {
     let entropy = Rc::new(RefCell::new(TrngPool::new()));
 
     // for less-secured user prompts (everything but password entry)
-    let modals = Modals::new(&xns).expect("can't connect to Modals server");
+    let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
 
     // our very own password modal. Password modals are precious and privately owned, to avoid
     // other processes from crafting them.
@@ -559,9 +555,8 @@ fn wrapped_main() -> ! {
         }
     });
 
-    let my_cid = xous::connect(pddb_sid).unwrap();
     // our menu handler
-    #[cfg(feature = "gen1")]
+    let my_cid = xous::connect(pddb_sid).unwrap();
     let _ = thread::spawn({
         let my_cid = my_cid.clone();
         move || {
@@ -669,7 +664,6 @@ fn wrapped_main() -> ! {
     let mut scratch = [MaybeUninit::<u8>::uninit(); 256];
 
     // register a suspend/resume listener
-    #[cfg(feature = "gen1")]
     let mut susres =
         susres::Susres::new(Some(susres::SuspendOrder::Early), &xns, Opcode::SuspendResume as u32, my_cid)
             .expect("couldn't create suspend/resume object");
@@ -678,7 +672,6 @@ fn wrapped_main() -> ! {
         let op: Opcode = FromPrimitive::from_usize(msg.body.id() & 0xffff).unwrap_or(Opcode::InvalidOpcode);
         log::debug!("{:x?}", op);
         match op {
-            #[cfg(feature = "gen1")]
             Opcode::SuspendResume => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 basis_cache.suspend(&mut pddb_os);
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
@@ -722,9 +715,7 @@ fn wrapped_main() -> ! {
             // If we need more nuance out of this routine, consider creating a custom public enum type to help
             // marshall this.
             Opcode::TryMount => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                #[cfg(feature = "gen1")]
                 let llio = llio::Llio::new(&xns);
-                #[cfg(feature = "gen1")]
                 while !llio.is_ec_ready() {
                     // spin-wait while the EC is not ready -- so that a PDDB mount does not interfere with
                     // on-going EC updates. Also causes the mount dialog to delay until the EC status has been
@@ -738,9 +729,7 @@ fn wrapped_main() -> ! {
                         // can't mount if we have no root keys
                         log::info!("{}PDDB.SKIPMOUNT,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                         // allow the main menu to be used in this case
-                        #[cfg(feature = "gen1")]
                         let gam = gam::Gam::new(&xns).unwrap();
-                        #[cfg(feature = "gen1")]
                         gam.allow_mainmenu().expect("couldn't allow main menu activation");
                         xous::return_scalar2(msg.sender, 1, 0).expect("could't return scalar");
                     } else {
@@ -810,9 +799,7 @@ fn wrapped_main() -> ! {
                         }
                         // get a handle to the GAM and inform it that main menu should be allowed. The handle
                         // is dropped when this routine finishes.
-                        #[cfg(feature = "gen1")]
                         let gam = gam::Gam::new(&xns).unwrap();
-                        #[cfg(feature = "gen1")]
                         gam.allow_mainmenu().expect("couldn't allow main menu activation");
                         // setup the heap
                         initial_heap = heap_usage();
@@ -2401,7 +2388,6 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
         }
     }
 }
-
 fn try_mount_or_format(
     modals: &modals::Modals,
     pddb_os: &mut PddbOs,

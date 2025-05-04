@@ -15,87 +15,14 @@ use aes::{Aes256, BLOCK_SIZE, Block};
 use aes_gcm_siv::aead::{Aead, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
 use backend::bcrypt::*;
-#[cfg(not(any(feature = "hosted-baosec", feature = "board-baosec")))]
-use gam::modal::*;
 use modals::Modals;
-#[cfg(feature = "gen1")]
 use root_keys::api::AesRootkeyType;
-#[cfg(feature = "gen1")]
 use root_keys::api::KeywrapError;
 use sha2::{Digest, Sha512_256Hw, Sha512_256Sw};
 use spinor::SPINOR_BULK_ERASE_SIZE;
 use subtle::ConstantTimeEq;
-#[cfg(any(feature = "hosted-baosec", feature = "board-baosec"))]
-use ux_api::widgets::*;
 
 use crate::*;
-
-/*
-    Refactor notes --
-
-    What to do about rootkeys? The features used by this crate are:
-      - selection of an AES key at an index
-      - password entry to unlock key at index (this is handled inside rootkeys)
-      - key wrapping using the indexed key
-      - block decrypt/encrypt with the indexed key
-      - also queries are made with regards to the key box health and initialization status
-
-    What to do about modals?
-      - The work flow for many of the crates assumes we can have a blocking user I/O
-        via the modals crate
-      - I think that the modals crate should probably be the "right" layer for things
-        to talk to the UI.
-    Question:
-      - Can we adapt modals to a small (128x128) pixel display?
-      - Can we adapt modals to a console-like text interface?
-
-    Suggestion:
-      - Stop the refactor on PDDB at this moment and dig into modals/rootkeys
-        - Rootkeys can place the keys in RRAM at the "final" location according to ACRAM lock abilities
-          even if the lifecycle stuff is broken, the ability to read/write those keys are configured
-          "out of band"
-        - Modals should include an implementation directly inside the modals crate that pulls in
-          the mini-gfx library, so that there are no other dependencies to get user I/O going.
-
-    Observation: I could check in this partial, broken code right now into a branch, and come back
-    to it later. As long as I don't select the PDDB crate as a cramium target, it doesn't break
-    anything else in the code base?
-
-    Probably better just to branch this for now - let's make a branch, stick it in xous-core,
-    and put some notes around it in a WIP pull request. In fact let's put all this data in that
-    PR so we have some publicly trackable information about how this is progressing.
-
-    Xous-swapper refactor notes:
-
-    SPINOR shares the same interface as the swap SRAM, and therefore, the Spinor interface
-    has to live inside xous-swapper.
-
-    Xous also needs to be extended to implement Virtual Addresses that are not backed by
-    physical addresses, but are on-demand allocated by copying SPINOR contents into pages that
-    are allocated in SRAM. The general idea is something like this:
-    - A new flag is added that can be passed to xous::MapMemory(). This flag is the `Swapped` flag,
-        and it indicates to the kernel that the physical address should be `null` and marked as `swapped`
-        for the mapping in its initial page table map in the given process.
-    - A "special" range of virtual addresses needs to be carved out which is where the memory-mapped
-        FLASH memory would go to. Thus, a process would gain access to FLASH by simply calling MapMemory
-        with the FLASH memory VA range as the virtual address, `None` as the PA, and the Swapped flag
-        as one of the args in Memory Arguments
-    - When the virtual address is referenced, it will page fault; the page fault handler will pass
-        this to Xous-Swapper in the userspace, which will then add a check for the virtual address.
-        If the virtual address is in the magic range for SPINOR, the contents are fetched using the
-        SPINOR interface based on the linear mapping of the lower bits of the address onto the SPINOR
-        memory space.
-    - WHnever a write happens inside Xous-Swapper to a location in FLASH, the page table entry for
-        the mapped FLASH location needs to be marked as invalid and returned to the free pool. This
-        uses the swap system to keep the read-view of FLASH in sync with hte write-view. This also
-        means that Xous-Swapper's SPINOR map has to keep a scoreboard of what pages are mapped to
-        what processes, so that we can search for the mapping and clear it whenever a write comes in.
-    - Development of this can probably happen separately from the emu-layer version. The basic thing
-        would be to drill down into the kernel with the kernel and a simple test server that just
-        tries to map the SPINOR and read some contents out, and perhaps update a sector. This will
-        exercise the path in isolation and allow us to test this routine as a separate primitive
-        from the PDDB.
-*/
 
 #[cfg(not(feature = "deterministic"))]
 type FspaceSet = HashSet<PhysPage>;
@@ -210,14 +137,8 @@ type EmuMemoryRange = xous::MemoryRange;
 #[cfg(any(feature = "precursor", feature = "renode"))]
 type EmuSpinor = spinor::Spinor;
 
-#[cfg(all(feature = "board-baosec", feature = "gen2"))]
-type EmuMemoryRange = xous::MemoryRange;
-#[cfg(all(feature = "board-baosec", feature = "gen2"))]
-type EmuSpinor = xous_swapper::Spinor;
-
 pub(crate) struct PddbOs {
     spinor: EmuSpinor,
-    #[cfg(feature = "gen1")]
     rootkeys: root_keys::RootKeys,
     tt: ticktimer_server::Ticktimer,
     pddb_mr: EmuMemoryRange,
@@ -354,40 +275,6 @@ impl PddbOs {
             #[cfg(feature = "perfcounter")]
             use_perf: true,
         };
-        #[cfg(any(feature = "cramium-soc"))]
-        let ret = PddbOs {
-            spinor: crate::hw::Spinor::new(&xns).unwrap(),
-            tt: ticktimer_server::Ticktimer::new().unwrap(),
-            pddb_mr: pddb,
-            pt_phys_base: PageAlignedPa::from(0 as u32),
-            key_phys_base,
-            mbbb_phys_base,
-            fscb_phys_base,
-            data_phys_base: PageAlignedPa::from(
-                fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32,
-            ),
-            system_basis_key: None,
-            cipher_ecb: None,
-            fspace_cache: FspaceSet::new(),
-            fspace_log_addrs: Vec::<PageAlignedPa>::new(),
-            fspace_log_next_addr: None,
-            fspace_log_len: 0,
-            dna,
-            // default to our own DNA in this case
-            migration_dna: dna,
-            dna_mode: DnaMode::Normal,
-            entropy: trngpool,
-            pw_cid,
-            failed_logins: 0,
-            #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
-            testnames: HashSet::new(),
-            #[cfg(feature = "perfcounter")]
-            perfclient,
-            #[cfg(feature = "perfcounter")]
-            pc_id,
-            #[cfg(feature = "perfcounter")]
-            use_perf: true,
-        };
         // emulated
         #[cfg(not(target_os = "xous"))]
         let ret = {
@@ -475,13 +362,9 @@ impl PddbOs {
         self.pddb_mr.reset();
     }
 
-    #[cfg(feature = "gen1")]
     pub(crate) fn is_efuse_secured(&self) -> bool {
         self.rootkeys.is_efuse_secured().expect("couldn't query efuse security state") == Some(true)
     }
-
-    #[cfg(feature = "gen2")]
-    pub(crate) fn is_efuse_secured(&self) -> bool { unimplemented!() }
 
     pub(crate) fn nonce_gen(&self) -> Nonce {
         let nonce_array = self.entropy.borrow_mut().get_nonce();
@@ -500,14 +383,8 @@ impl PddbOs {
     pub(crate) fn timestamp_now(&self) -> u64 { self.tt.elapsed_ms() }
 
     /// checks if the root keys are initialized, which is a prerequisite to formatting and mounting
-    #[cfg(feature = "gen1")]
     pub(crate) fn rootkeys_initialized(&self) -> bool {
         self.rootkeys.is_initialized().expect("couldn't query initialization state of the rootkeys server")
-    }
-
-    #[cfg(feature = "gen2")]
-    pub(crate) fn rootkeys_initialized(&self) -> bool {
-        unimplemented!();
     }
 
     /// patches data at an offset starting from the data physical base address, which corresponds
@@ -894,11 +771,7 @@ impl PddbOs {
         self.cipher_ecb = None;
     }
 
-    #[cfg(feature = "gen1")]
     pub(crate) fn clear_password(&self) { self.rootkeys.clear_password(AesRootkeyType::User0); }
-
-    #[cfg(feature = "gen2")]
-    pub(crate) fn clear_password(&self) { todo!("implement password clearing") }
 
     pub(crate) fn try_login(&mut self) -> PasswordState {
         use aes::cipher::KeyInit;
@@ -938,49 +811,42 @@ impl PddbOs {
             // now try to populate our keys, and prep a migration if necessary
             let mut syskey_pt = [0u8; 32];
             let mut syskey = [0u8; 32];
-            #[cfg(feature = "gen1")]
-            {
-                let mut keys_updated = false;
-                match self.rootkeys.unwrap_key(&scd.system_key_pt, AES_KEYSIZE) {
-                    Ok(skpt) => syskey_pt.copy_from_slice(&skpt),
-                    Err(e) => match e {
-                        KeywrapError::UpgradeToNew((key, upgrade)) => {
-                            log::warn!("pt key migration required");
-                            syskey_pt.copy_from_slice(&key);
-                            new_crypto_keys.system_key_pt.copy_from_slice(&upgrade);
-                            keys_updated = true;
-                        }
-                        _ => {
-                            log::error!("Couldn't unwrap our system key: {:?}", e);
-                            self.failed_logins = self.failed_logins.saturating_add(1);
-                            return PasswordState::Incorrect(self.failed_logins);
-                        }
-                    },
-                }
-                match self.rootkeys.unwrap_key(&scd.system_key, AES_KEYSIZE) {
-                    Ok(sk) => syskey.copy_from_slice(&sk),
-                    Err(e) => match e {
-                        KeywrapError::UpgradeToNew((key, upgrade)) => {
-                            log::warn!("data key migration required");
-                            syskey.copy_from_slice(&key);
-                            new_crypto_keys.system_key.copy_from_slice(&upgrade);
-                            keys_updated = true;
-                        }
-                        _ => {
-                            log::error!("Couldn't unwrap our system key: {:?}", e);
-                            self.failed_logins = self.failed_logins.saturating_add(1);
-                            return PasswordState::Incorrect(self.failed_logins);
-                        }
-                    },
-                }
-                if keys_updated {
-                    log::warn!("Migration event from incorrectly wrapped key");
-                    self.patch_keys(new_crypto_keys.deref(), 0);
-                }
+            let mut keys_updated = false;
+            match self.rootkeys.unwrap_key(&scd.system_key_pt, AES_KEYSIZE) {
+                Ok(skpt) => syskey_pt.copy_from_slice(&skpt),
+                Err(e) => match e {
+                    KeywrapError::UpgradeToNew((key, upgrade)) => {
+                        log::warn!("pt key migration required");
+                        syskey_pt.copy_from_slice(&key);
+                        new_crypto_keys.system_key_pt.copy_from_slice(&upgrade);
+                        keys_updated = true;
+                    }
+                    _ => {
+                        log::error!("Couldn't unwrap our system key: {:?}", e);
+                        self.failed_logins = self.failed_logins.saturating_add(1);
+                        return PasswordState::Incorrect(self.failed_logins);
+                    }
+                },
             }
-            #[cfg(feature = "gen2")]
-            {
-                todo!("implement password entry")
+            match self.rootkeys.unwrap_key(&scd.system_key, AES_KEYSIZE) {
+                Ok(sk) => syskey.copy_from_slice(&sk),
+                Err(e) => match e {
+                    KeywrapError::UpgradeToNew((key, upgrade)) => {
+                        log::warn!("data key migration required");
+                        syskey.copy_from_slice(&key);
+                        new_crypto_keys.system_key.copy_from_slice(&upgrade);
+                        keys_updated = true;
+                    }
+                    _ => {
+                        log::error!("Couldn't unwrap our system key: {:?}", e);
+                        self.failed_logins = self.failed_logins.saturating_add(1);
+                        return PasswordState::Incorrect(self.failed_logins);
+                    }
+                },
+            }
+            if keys_updated {
+                log::warn!("Migration event from incorrectly wrapped key");
+                self.patch_keys(new_crypto_keys.deref(), 0);
             }
 
             let cipher = Aes256::new(GenericArray::from_slice(&syskey_pt));
@@ -1013,18 +879,11 @@ impl PddbOs {
     fn syskey_ensure(&mut self) {
         while self.try_login() != PasswordState::Correct {
             self.clear_password(); // clear the bad password entry
-            #[cfg(feature = "gen1")]
-            {
-                let xns = xous_names::XousNames::new().unwrap();
-                let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
-                modals
-                    .show_notification(t!("pddb.badpass_infallible", locales::LANG), None)
-                    .expect("notification failed");
-            }
-            #[cfg(feature = "gen2")]
-            {
-                todo!("implement feedback that syskey is not available");
-            }
+            let xns = xous_names::XousNames::new().unwrap();
+            let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
+            modals
+                .show_notification(t!("pddb.badpass_infallible", locales::LANG), None)
+                .expect("notification failed");
         }
     }
 
@@ -2117,7 +1976,6 @@ impl PddbOs {
         }
     }
 
-    #[cfg(feature = "gen1")]
     fn pw_check(&self, modals: &modals::Modals) -> Result<()> {
         let mut success = false;
         while !success {
@@ -2150,7 +2008,6 @@ impl PddbOs {
     }
 
     /// this function attempts to change the PIN. returns Ok() if changed, error if not.
-    #[cfg(feature = "gen1")]
     pub(crate) fn pddb_change_pin(&mut self, modals: &modals::Modals) -> Result<()> {
         if let Some(system_keys) = &self.system_basis_key {
             // get the new password
