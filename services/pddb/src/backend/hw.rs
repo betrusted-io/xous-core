@@ -15,9 +15,9 @@ use aes::{Aes256, BLOCK_SIZE, Block};
 use aes_gcm_siv::aead::{Aead, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
 use backend::bcrypt::*;
+use keystore_api::rootkeys_api::AesRootkeyType;
+use keystore_api::rootkeys_api::KeywrapError;
 use modals::Modals;
-use root_keys::api::AesRootkeyType;
-use root_keys::api::KeywrapError;
 use sha2::{Digest, Sha512_256Hw, Sha512_256Sw};
 use spinor::SPINOR_BULK_ERASE_SIZE;
 use subtle::ConstantTimeEq;
@@ -2939,18 +2939,18 @@ impl PddbOs {
 
     pub(crate) fn reset_dont_ask_init(&self) { self.rootkeys.do_reset_dont_ask_init(); }
 
-    pub(crate) fn checksums(&self, modals: Option<&Modals>) -> root_keys::api::Checksums {
-        let mut checksums = root_keys::api::Checksums::default();
+    pub(crate) fn checksums(&self, modals: Option<&Modals>) -> keystore_api::rootkeys_api::Checksums {
+        let mut checksums = keystore_api::rootkeys_api::Checksums::default();
         let pddb = unsafe { self.pddb_mr.as_slice() };
         if let Some(m) = modals {
             m.start_progress(t!("pddb.checksums", locales::LANG), 0, checksums.checksums.len() as u32, 0)
                 .ok();
         }
         for (index, region) in
-            pddb.chunks(root_keys::api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE).enumerate()
+            pddb.chunks(keystore_api::rootkeys_api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE).enumerate()
         {
             assert!(
-                region.len() == root_keys::api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE,
+                region.len() == keystore_api::rootkeys_api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE,
                 "CHECKSUM_BLOCKLEN_PAGE is not an even divisor of the PDDB size"
             );
             let mut hasher = Sha512_256Hw::new();

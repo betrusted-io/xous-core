@@ -97,6 +97,7 @@ pub struct Pddb {
     /// in the case of a basis change. Basis changes are thought to be rare; so, big changes
     /// like this are probably OK.
     keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send>>>>,
+    #[cfg(feature = "gen1")]
     trng: trng::Trng,
     /// These are temporary fields only to be used by the consistency check feature.
     key_count: RefCell<u32>,
@@ -115,6 +116,7 @@ impl Pddb {
             cb: RefCell::new(None),
             cb_handle: RefCell::new(None),
             keys,
+            #[cfg(feature = "gen1")]
             trng: trng::Trng::new(&xns).unwrap(),
             // These are record the result of the most recent call to list_keys()
             key_count: RefCell::new(0),
@@ -263,12 +265,12 @@ impl Pddb {
     /// Computes checksums on the entire PDDB database. This operation can take some time and causes a
     /// progress bar to pop up. This should be called only after the PDDB has been unmounted, to ensure
     /// that the disk contents do not change after the checksums have been computed.
-    pub fn compute_checksums(&self) -> root_keys::api::Checksums {
-        let alloc = root_keys::api::Checksums::default();
+    pub fn compute_checksums(&self) -> keystore_api::rootkeys_api::Checksums {
+        let alloc = keystore_api::rootkeys_api::Checksums::default();
         let mut buf = Buffer::into_buf(alloc).expect("Couldn't convert memory structure");
         buf.lend_mut(self.conn, Opcode::ComputeBackupHashes.to_u32().unwrap())
             .expect("Couldn't execute ComputeBackupHashes");
-        buf.to_original::<root_keys::api::Checksums, _>().expect("Couldn't convert IPC structure")
+        buf.to_original::<keystore_api::rootkeys_api::Checksums, _>().expect("Couldn't convert IPC structure")
     }
 
     /// return a list of all open bases
@@ -746,12 +748,15 @@ impl Pddb {
         };
         // this is a two-phase query, because it's quite likely that the number of keys can be very large in a
         // dict.
+        #[cfg(feature = "gen1")]
         let token = [
             self.trng.get_u32().unwrap(),
             self.trng.get_u32().unwrap(),
             self.trng.get_u32().unwrap(),
             self.trng.get_u32().unwrap(),
         ];
+        #[cfg(feature = "gen2")]
+        let token = xous::create_server_id().unwrap().to_array();
         let request = PddbDictRequest {
             basis_specified: basis_name.is_some(),
             basis: String::from(&bname),
@@ -859,12 +864,15 @@ impl Pddb {
         };
         // this is a two-phase query, because it's quite likely that the number of keys can be very large in a
         // dict.
+        #[cfg(feature = "gen1")]
         let token = [
             self.trng.get_u32().unwrap(),
             self.trng.get_u32().unwrap(),
             self.trng.get_u32().unwrap(),
             self.trng.get_u32().unwrap(),
         ];
+        #[cfg(feature = "gen2")]
+        let token = xous::create_server_id().unwrap().to_array();
         let request = PddbDictRequest {
             basis_specified: basis_name.is_some(),
             basis: String::from(&bname),

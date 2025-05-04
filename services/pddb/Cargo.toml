@@ -25,6 +25,7 @@ trng = { path = "../trng", optional = true }
 spinor = { path = "../spinor", optional = true }
 aes = { path = "../aes" }
 root-keys = { path = "../root-keys", optional = true }
+keystore-api = { path = "../../libs/keystore-api" }
 cipher = "0.4.2"
 bitfield = "0.13.2"
 aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
@@ -75,13 +76,14 @@ gen1 = [
     "trng",
     "spinor",
     "root-keys",
+    "keystore-api/gen1",
     "llio",
     "tts-frontend",
     "gam",
     "locales",
     "modals",
 ]
-gen2 = ["keystore"]
+gen2 = ["keystore", "keystore-api/gen2"]
 # gen 1 targets
 precursor = ["utralib/precursor", "sha2/precursor", "gen1"]
 hosted = ["utralib/hosted", "sha2/hosted", "gen1"]
