@@ -408,10 +408,15 @@ mod api;
 use api::*;
 mod backend;
 use backend::*;
+#[cfg(feature = "gen1")]
 mod ux;
 use rkyv::with::Identity;
+#[cfg(feature = "gen1")]
 use ux::*;
+#[cfg(feature = "gen1")]
 mod menu;
+use keystore_api::PasswordState;
+#[cfg(feature = "gen1")]
 use menu::*;
 
 mod libstd;
@@ -460,19 +465,6 @@ pub(crate) struct BasisRequestPassword {
     db_name: String,
     plaintext_pw: Option<String>,
 }
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum PasswordState {
-    /// Mounted successfully.
-    Correct,
-    /// User-initiated aborted. The main purpose for this path is to facilitate
-    /// developers who want shellchat access but don't want to mount the PDDB.
-    Incorrect(u64),
-    /// Abort initiated by system policy due to too many failed attempts
-    ForcedAbort(u64),
-    /// Failure because the PDDB hasn't been initialized yet (can't mount because nothing to mount)
-    Uninit,
-}
-
 #[derive(Debug)]
 struct TokenRecord {
     pub dict: String,
@@ -547,15 +539,22 @@ fn wrapped_main() -> ! {
 
     // our very own password modal. Password modals are precious and privately owned, to avoid
     // other processes from crafting them.
+    #[cfg(feature = "gen1")]
     let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
+    #[cfg(feature = "gen1")]
     let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
+    #[cfg(feature = "gen1")]
     let pw_handle = thread::spawn({
         // this comment keeps rustfmt from flattening this block
         move || password_ux_manager(xous::connect(pddb_sid).unwrap(), pw_sid)
     });
 
     // OS-specific PDDB driver
+    #[cfg(feature = "gen1")]
     let mut pddb_os = PddbOs::new(Rc::clone(&entropy), pw_cid);
+    #[cfg(feature = "gen2")]
+    // pw_cid is a dummy field in gen2
+    let mut pddb_os = PddbOs::new(Rc::clone(&entropy), 0);
     // storage for the basis cache
     let mut basis_cache = BasisCache::new();
     // storage for the token lookup: given an ApiToken, return a dict/key/basis set. Basis can be None or
@@ -596,6 +595,7 @@ fn wrapped_main() -> ! {
 
     // our menu handler
     let my_cid = xous::connect(pddb_sid).unwrap();
+    #[cfg(feature = "gen1")]
     let _ = thread::spawn({
         let my_cid = my_cid.clone();
         move || {
@@ -703,6 +703,7 @@ fn wrapped_main() -> ! {
     let mut scratch = [MaybeUninit::<u8>::uninit(); 256];
 
     // register a suspend/resume listener
+    #[cfg(feature = "gen1")]
     let mut susres =
         susres::Susres::new(Some(susres::SuspendOrder::Early), &xns, Opcode::SuspendResume as u32, my_cid)
             .expect("couldn't create suspend/resume object");
@@ -711,6 +712,7 @@ fn wrapped_main() -> ! {
         let op: Opcode = FromPrimitive::from_usize(msg.body.id() & 0xffff).unwrap_or(Opcode::InvalidOpcode);
         log::debug!("{:x?}", op);
         match op {
+            #[cfg(feature = "gen1")]
             Opcode::SuspendResume => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 basis_cache.suspend(&mut pddb_os);
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
@@ -753,6 +755,74 @@ fn wrapped_main() -> ! {
             //      retries.
             // If we need more nuance out of this routine, consider creating a custom public enum type to help
             // marshall this.
+            #[cfg(feature = "gen2")]
+            Opcode::TryMount => {
+                xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    match pddb_os.ensure_password() {
+                        PasswordState::Correct => {
+                            if try_mount_or_format(
+                                &modals,
+                                &mut pddb_os,
+                                &mut basis_cache,
+                                PasswordState::Correct,
+                                time_resetter,
+                                &mut basis_monitor_notifications,
+                            ) {
+                                is_mounted.store(true, Ordering::SeqCst);
+                                for requester in mount_notifications.drain(..) {
+                                    xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
+                                }
+                                assert!(
+                                    mount_notifications.len() == 0,
+                                    "apparently I don't understand what drain() does"
+                                );
+                                log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
+                            } else {
+                                xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
+                            }
+                        }
+                        PasswordState::Uninit => {
+                            if try_mount_or_format(
+                                &modals,
+                                &mut pddb_os,
+                                &mut basis_cache,
+                                PasswordState::Uninit,
+                                time_resetter,
+                                &mut basis_monitor_notifications,
+                            ) {
+                                for requester in mount_notifications.drain(..) {
+                                    xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
+                                }
+                                assert!(
+                                    mount_notifications.len() == 0,
+                                    "apparently I don't understand what drain() does"
+                                );
+                                log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
+                                is_mounted.store(true, Ordering::SeqCst);
+                            } else {
+                                xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
+                            }
+                        }
+                        PasswordState::ForcedAbort(failcount) => {
+                            xous::return_scalar2(
+                                msg.sender,
+                                2,
+                                // failcount is a u64, but on u32-archs, this gets truncated going to
+                                // usize. clip to u32::MAX.
+                                failcount.min(u32::MAX as u64) as usize,
+                            )
+                            .expect("couldn't return scalar");
+                        }
+                        PasswordState::Incorrect(failcount) => {
+                            xous::return_scalar2(msg.sender, 1, failcount.min(u32::MAX as u64) as usize)
+                                .expect("couldn't return scalar")
+                        }
+                    }
+                })
+            }
+            #[cfg(feature = "gen1")]
             Opcode::TryMount => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let llio = llio::Llio::new(&xns);
                 while !llio.is_ec_ready() {
@@ -964,12 +1034,26 @@ fn wrapped_main() -> ! {
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 match mgmt.code {
                     PddbRequestCode::Create => {
-                        let request =
-                            BasisRequestPassword { db_name: mgmt.name.to_string(), plaintext_pw: None };
-                        let mut buf = Buffer::into_buf(request).unwrap();
-                        buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
-                        let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
-                        if let Some(pw) = ret.plaintext_pw {
+                        #[cfg(feature = "gen1")]
+                        let ret = {
+                            let request =
+                                BasisRequestPassword { db_name: mgmt.name.to_string(), plaintext_pw: None };
+                            let mut buf = Buffer::into_buf(request).unwrap();
+                            buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
+                            buf.to_original::<BasisRequestPassword, _>().unwrap().plaintext_pw
+                        };
+                        #[cfg(feature = "gen2")]
+                        let ret = match modals
+                            .alert_builder(
+                                format!("{}'{}'", t!("pddb.password_for", locales::LANG), mgmt.name).as_str(),
+                            )
+                            .field(None, None)
+                            .build()
+                        {
+                            Ok(text) => Some(text.content()[0].content.clone()),
+                            _ => panic!("failure retrieving password"),
+                        };
+                        if let Some(pw) = ret {
                             match basis_cache.basis_create(&mut pddb_os, mgmt.name.as_str(), pw.as_str()) {
                                 Ok(_) => {
                                     log::info!(
@@ -1005,12 +1089,30 @@ fn wrapped_main() -> ! {
                     PddbRequestCode::Open => {
                         let mut finished = false;
                         while !finished {
-                            let request =
-                                BasisRequestPassword { db_name: mgmt.name.to_string(), plaintext_pw: None };
-                            let mut buf = Buffer::into_buf(request).unwrap();
-                            buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
-                            let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
-                            if let Some(pw) = ret.plaintext_pw {
+                            #[cfg(feature = "gen1")]
+                            let ret = {
+                                let request = BasisRequestPassword {
+                                    db_name: mgmt.name.to_string(),
+                                    plaintext_pw: None,
+                                };
+                                let mut buf = Buffer::into_buf(request).unwrap();
+                                buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap())
+                                    .unwrap();
+                                buf.to_original::<BasisRequestPassword, _>().unwrap().plaintext_pw
+                            };
+                            #[cfg(feature = "gen2")]
+                            let ret = match modals
+                                .alert_builder(
+                                    format!("{}'{}'", t!("pddb.password_for", locales::LANG), &mgmt.name)
+                                        .as_str(),
+                                )
+                                .field(None, None)
+                                .build()
+                            {
+                                Ok(text) => Some(text.content()[0].content.clone()),
+                                _ => panic!("failure retrieving password"),
+                            };
+                            if let Some(pw) = ret {
                                 if let Some(basis) = basis_cache.basis_unlock(
                                     &mut pddb_os,
                                     mgmt.name.as_str(),
@@ -2342,6 +2444,7 @@ fn wrapped_main() -> ! {
             }
             Opcode::Quit => {
                 log::warn!("quitting the PDDB server");
+                #[cfg(feature = "gen1")]
                 send_message(
                     pw_cid,
                     Message::new_blocking_scalar(PwManagerOpcode::Quit.to_usize().unwrap(), 0, 0, 0, 0),
@@ -2361,6 +2464,7 @@ fn wrapped_main() -> ! {
     }
     // clean up our program
     log::trace!("main loop exit, destroying servers");
+    #[cfg(feature = "gen1")]
     pw_handle.join().expect("password ux manager thread did not join as expected");
     xns.unregister_server(pddb_sid).unwrap();
     xous::destroy_server(pddb_sid).unwrap();
@@ -2368,6 +2472,13 @@ fn wrapped_main() -> ! {
     xous::terminate_process(0)
 }
 
+#[cfg(feature = "gen2")]
+fn ensure_password(_modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous::CID) -> PasswordState {
+    // delegate everything to the hw module
+    pddb_os.ensure_password()
+}
+
+#[cfg(feature = "gen1")]
 fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous::CID) -> PasswordState {
     log::info!("Requesting login password");
     loop {

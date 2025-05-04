@@ -3,11 +3,17 @@ use core::mem::size_of;
 use std::convert::TryInto;
 
 use aes_gcm_siv::Nonce;
+#[cfg(feature = "cramium-hal")]
+use cram_hal_service::trng::Trng;
+#[cfg(feature = "hosted-baosec")]
+use cramium_emu::trng::Trng;
 use rand_core::RngCore;
+#[cfg(all(not(feature = "cramium-hal"), not(feature = "hosted-baosec")))]
+use trng::Trng;
 
 /// Crate-shared resource for TRNGs.
 pub(crate) struct TrngPool {
-    trng: RefCell<trng::Trng>,
+    trng: RefCell<Trng>,
     /// The PDDB eats a lot of entropy. Keep a local pool of entropy, so we're not wasting a lot of
     /// overhead passing messages to the TRNG hardware server.
     e_cache: RefCell<Vec<u8>>,
@@ -15,7 +21,7 @@ pub(crate) struct TrngPool {
 impl TrngPool {
     pub fn new() -> Self {
         let xns = xous_names::XousNames::new().unwrap();
-        let mut trng = trng::Trng::new(&xns).unwrap();
+        let mut trng = Trng::new(&xns).unwrap();
         let mut cache: [u8; 8192] = [0; 8192];
         trng.fill_bytes(&mut cache);
         TrngPool { trng: RefCell::new(trng), e_cache: RefCell::new(cache.to_vec()) }

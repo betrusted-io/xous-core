@@ -50,7 +50,8 @@ blowfish = { version = "0.9.1", features = ["bcrypt"] }
 
 # UX (for password entry and notifications)
 gam = { path = "../gam", optional = true }
-locales = { path = "../../locales", optional = true }
+ux-api = { path = "../../libs/ux-api" }
+locales = { path = "../../locales" }
 modals = { path = "../modals", optional = true }
 
 utralib = { version = "0.1.25", optional = true, default-features = false }
@@ -67,8 +68,13 @@ hex = { version = "0.4.3", default-features = false, features = [
 ], optional = true }
 
 # Gen-2 dependencies
-keystore = { path = "../keystore", optional = true }         # contains all key handlers
+keystore = { path = "../keystore", optional = true } # contains all key handlers
 xous-swapper = { path = "../xous-swapper", optional = true } # contains spinor
+cram-hal-service = { path = "../cram-hal-service", optional = true }
+cramium-emu = { path = "../cramium-emu", optional = true }
+cramium-hal = { path = "../../libs/cramium-hal", features = [
+    "std",
+], optional = true }
 
 [features]
 gen1 = [
@@ -80,7 +86,6 @@ gen1 = [
     "llio",
     "tts-frontend",
     "gam",
-    "locales",
     "modals",
 ]
 gen2 = ["keystore", "keystore-api/gen2"]
@@ -90,9 +95,24 @@ hosted = ["utralib/hosted", "sha2/hosted", "gen1"]
 renode = ["utralib/renode", "sha2/renode", "gen1"]
 
 # gen 2 targets
-board-baosec = ["gen2", "xous-swapper/board-baosec"] # USB form factor token
-hosted-baosec = ["gen2"]                             # emulated hardware on x86 platform
-board-baosor = ["gen2", "xous-swapper/board-baosor"] # Precursor form factor
+board-baosec = [
+    "gen2",
+    "xous-swapper/board-baosec",
+    "cram-hal-service",
+    "cramium-hal",
+    "modals/board-baosec",
+] # USB form factor token
+hosted-baosec = [
+    "gen2",
+    "cramium-emu",
+    "modals/hosted-baosec",
+] # emulated hardware on x86 platform
+board-baosor = [
+    "gen2",
+    "xous-swapper/board-baosor",
+    "cram-hal-service",
+    "cramium-hal",
+] # Precursor form factor
 # board-dabao is not a valid target as it lacks external SPI flash
 
 # when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.

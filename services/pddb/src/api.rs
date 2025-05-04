@@ -154,6 +154,7 @@ pub(crate) enum Opcode {
     IsEfuseSecured = 22,
 
     /// Suspend/resume callback
+    #[cfg(feature = "gen1")]
     SuspendResume = 23,
     /// quit the server
     Quit = 24,
