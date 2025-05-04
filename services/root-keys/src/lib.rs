@@ -1,8 +1,6 @@
 #![cfg_attr(all(target_os = "none", not(test)), no_std)]
 //! Detailed docs are parked under Structs/RootKeys down below
 
-use keystore_api::MAX_WRAP_DATA;
-use keystore_api::rootkeys_api::{self, *};
 use keystore_api::*;
 
 pub mod key2bits;

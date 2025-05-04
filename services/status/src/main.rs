@@ -24,7 +24,6 @@ use chrono::prelude::*;
 use com::api::*;
 use crossbeam::channel::{Receiver, Sender, at, select, unbounded};
 use gam::{GamObjectList, GamObjectType};
-use keystore_api::rootkeys_api::*;
 use keystore_api::*;
 use locales::t;
 use num_traits::*;

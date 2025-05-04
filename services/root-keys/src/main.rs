@@ -1,7 +1,6 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-use keystore_api::rootkeys_api::*;
 use keystore_api::*;
 
 mod backups;
@@ -103,7 +102,6 @@ mod implementation {
     use ed25519_dalek::VerifyingKey;
     use gam::modal::{Modal, Slider};
     use gam::{ActionType, ProgressBar};
-    use keystore_api::rootkeys_api::*;
     use keystore_api::*;
     use locales::t;
     use num_traits::*;

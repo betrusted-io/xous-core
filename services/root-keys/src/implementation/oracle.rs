@@ -3,7 +3,7 @@ use core::convert::TryInto;
 use aes::Aes256;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 use cipher::generic_array::GenericArray;
-use keystore_api::rootkeys_api::*;
+use keystore_api::*;
 
 use crate::bitflip;
 
