@@ -56,4 +56,4 @@ oom-doom = []
 debug-print-swapper = []
 
 debug-verbose = []
-default = ["spinor"]
+default = []

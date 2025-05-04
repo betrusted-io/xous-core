@@ -47,7 +47,7 @@
 //! the current `MEMORY_ALLOCATIONS` table into a pre-allocated BinaryHeap in the shared state structure,
 //! indexed by the timestamp. At this point, the blocking userspace handler can work through a sorted vector
 //! of allocations to pick the pages it wants to remove.
-
+#[cfg(feature = "spinor")]
 mod api;
 mod debug;
 mod platform;
