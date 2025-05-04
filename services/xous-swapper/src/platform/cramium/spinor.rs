@@ -1,8 +1,6 @@
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use cramium_api::SpimChannel;
-use cramium_hal::board::SPIM_FLASH_IFRAM_ADDR;
-use cramium_hal::ifram::IframRange;
 use cramium_hal::udma::*;
 use xous_ipc::Buffer;
 
