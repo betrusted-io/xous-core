@@ -115,6 +115,8 @@ board-baosor = [
 ] # Precursor form factor
 # board-dabao is not a valid target as it lacks external SPI flash
 
+doc-deps = []
+
 # when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.
 # 32 bit addressing is recommended for Precursor, as its disk is only 128MiB and it has limited RAM for bookkeeping.
 u64_pa = []

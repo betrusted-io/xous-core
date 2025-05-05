@@ -750,14 +750,14 @@ impl Pddb {
         };
         // this is a two-phase query, because it's quite likely that the number of keys can be very large in a
         // dict.
-        #[cfg(feature = "gen1")]
+        #[cfg(any(feature = "gen1"))]
         let token = [
             self.trng.get_u32().unwrap(),
             self.trng.get_u32().unwrap(),
             self.trng.get_u32().unwrap(),
             self.trng.get_u32().unwrap(),
         ];
-        #[cfg(feature = "gen2")]
+        #[cfg(any(feature = "gen2", feature = "doc-deps"))]
         let token = xous::create_server_id().unwrap().to_array();
         let request = PddbDictRequest {
             basis_specified: basis_name.is_some(),
@@ -873,7 +873,7 @@ impl Pddb {
             self.trng.get_u32().unwrap(),
             self.trng.get_u32().unwrap(),
         ];
-        #[cfg(feature = "gen2")]
+        #[cfg(any(feature = "gen2", feature = "doc-deps"))]
         let token = xous::create_server_id().unwrap().to_array();
         let request = PddbDictRequest {
             basis_specified: basis_name.is_some(),
