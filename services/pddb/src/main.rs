@@ -368,8 +368,12 @@ extern crate bitfield;
   Gen2 porting notes:
 
   Todo list:
+  -[x] Rewrite pddb to use 'keystore' server instead of rootkeys/modals/ux integrations.
+  -[x] Fill in 'keystore' server for hosted mode emulation
+  -[x] Make a simple PDDB test in the baosec console app
+  -[ ] Fix the bugs in hosted mode
   -[ ] Rewrite xous-swapper/swap layer to understand virtual pages mapped to SPI flash (see notes below)
-  -[ ] Rewrite pddb to use 'keystore' server instead of rootkeys/modals/ux integrations.
+  -[ ] Fix the bugs in real hardware
 
     Xous-swapper refactor notes:
 
@@ -662,7 +666,10 @@ fn wrapped_main() -> ! {
 
     // the PDDB resets the hardware RTC to a new random starting point every time it is reformatted
     // it is the only server capable of doing this.
+    #[cfg(feature = "gen1")]
     let time_resetter = xns.request_connection_blocking(crate::TIME_SERVER_PDDB).unwrap();
+    #[cfg(feature = "gen2")]
+    let time_resetter = 0; // dummy
 
     // track processes that want a notification of a mount event
     let mut mount_notifications = Vec::<xous::MessageSender>::new();
@@ -2562,7 +2569,13 @@ fn try_mount_or_format(
     }
     // correct password but no mount -> offer to format; uninit -> offer to format
     if pw_state == PasswordState::Correct || pw_state == PasswordState::Uninit {
-        #[cfg(any(feature = "precursor", feature = "renode", feature = "test-rekey"))]
+        #[cfg(any(
+            feature = "precursor",
+            feature = "renode",
+            feature = "test-rekey",
+            feature = "board-baosec",
+            feature = "board-baosor"
+        ))]
         {
             log::debug!("PDDB did not mount; requesting format");
             modals.add_list_item(t!("pddb.okay", locales::LANG)).expect("couldn't build radio item list");
@@ -2614,6 +2627,7 @@ fn try_mount_or_format(
                 // hygiene we want to restart our RTC counter from a random duration between
                 // epoch and 10 years to give some deniability about how long the device has
                 // been in use.
+                #[cfg(feature = "gen1")]
                 let _ = xous::send_message(
                     time_resetter,
                     xous::Message::new_blocking_scalar(
@@ -2643,9 +2657,16 @@ fn try_mount_or_format(
                 false
             }
         }
-        #[cfg(not(any(feature = "precursor", feature = "renode", feature = "test-rekey")))]
+        #[cfg(not(any(
+            feature = "precursor",
+            feature = "renode",
+            feature = "test-rekey",
+            feature = "board-baosec",
+            feature = "board-baosor"
+        )))]
         {
             pddb_os.pddb_format(false, Some(&modals)).expect("couldn't format PDDB");
+            #[cfg(feature = "gen1")]
             let _ = xous::send_message(
                 time_resetter,
                 xous::Message::new_blocking_scalar(
