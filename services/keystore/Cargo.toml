@@ -60,6 +60,7 @@ aes = { path = "../aes" }
 byteorder = "1.4.3" # used by keywrap
 # hardware acceleration adaptations are inserted into a fork of the main branch.
 hex = { version = "0.4.3", default-features = false, features = [] }
+hkdf = "0.12.4"
 
 #[dependencies.curve25519-dalek]
 #version = "=4.1.2"                           # note this is patched to our fork in ./Cargo.toml
@@ -77,13 +78,24 @@ cramium-soc = ["utralib/cramium-soc"]
 board-baosec = [
     "utralib/cramium-soc",
     "ux-api/board-baosec",
+    "keystore-api/gen2",
+    "modals/no-gam",
 ] # USB form factor token
 loader-baosec = ["ux-api/loader-baosec"]
 test-baosec = ["ux-api/loader-baosec"]
-hosted-baosec = [] # emulated hardware on x86 platform
-board-baosor = ["utralib/cramium-soc"] # Precursor form factor
+hosted-baosec = [
+    "keystore-api/gen2",
+    "modals/no-gam",
+] # emulated hardware on x86 platform
+board-baosor = [
+    "utralib/cramium-soc",
+    "keystore-api/gen2",
+] # Precursor form factor
 loader-baosor = []
-board-dabao = ["utralib/cramium-soc"] # Dev board form factor
+board-dabao = [
+    "utralib/cramium-soc",
+    "keystore-api/gen2",
+] # Dev board form factor
 loader-dabao = []
 
 policy-menu = [

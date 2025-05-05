@@ -1,5 +1,7 @@
 use keystore_api::*;
 
+mod platform;
+
 fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -9,5 +11,5 @@ fn main() -> ! {
     // TODO: limit connections to this server?? once we know all that will connect
     let keys_sid = xns.register_name(SERVER_NAME_KEYS, None).expect("can't register server");
 
-    loop {}
+    platform::keystore(keys_sid);
 }

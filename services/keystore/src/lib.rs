@@ -46,7 +46,7 @@ impl Keystore {
             Message::new_blocking_scalar(Opcode::GetDna.to_usize().unwrap(), 0, 0, 0, 0),
         )
         .unwrap();
-        if let xous::Result::Scalar2(val1, val2) = response {
+        if let xous::Result::Scalar5(val1, val2, _, _, _) = response {
             (val1 as u64) | ((val2 as u64) << 32)
         } else {
             panic!("get_dna() failed with internal error");
