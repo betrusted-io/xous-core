@@ -527,7 +527,7 @@ where
 
 fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -673,12 +673,14 @@ fn wrapped_main() -> ! {
 
     // track processes that want a notification of a mount event
     let mut mount_notifications = Vec::<xous::MessageSender>::new();
+    #[cfg(feature = "gen1")]
     let mut attempt_notifications = Vec::<xous::MessageSender>::new();
 
     // track the basis monitor requester.
     let mut basis_monitor_notifications = Vec::<xous::MessageEnvelope>::new();
 
     // track heap usage
+    #[allow(unused_mut)]
     let mut initial_heap: usize = 0;
     let mut latest_heap: usize = 0;
     let mut latest_cache: usize = 0;
@@ -767,6 +769,7 @@ fn wrapped_main() -> ! {
                 xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                     match pddb_os.ensure_password() {
                         PasswordState::Correct => {
+                            log::info!("pw correct");
                             if try_mount_or_format(
                                 &modals,
                                 &mut pddb_os,
@@ -790,6 +793,7 @@ fn wrapped_main() -> ! {
                             }
                         }
                         PasswordState::Uninit => {
+                            log::info!("uninit");
                             if try_mount_or_format(
                                 &modals,
                                 &mut pddb_os,
@@ -813,6 +817,7 @@ fn wrapped_main() -> ! {
                             }
                         }
                         PasswordState::ForcedAbort(failcount) => {
+                            log::info!("forced abort");
                             xous::return_scalar2(
                                 msg.sender,
                                 2,
@@ -2479,12 +2484,6 @@ fn wrapped_main() -> ! {
     xous::terminate_process(0)
 }
 
-#[cfg(feature = "gen2")]
-fn ensure_password(_modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous::CID) -> PasswordState {
-    // delegate everything to the hw module
-    pddb_os.ensure_password()
-}
-
 #[cfg(feature = "gen1")]
 fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous::CID) -> PasswordState {
     log::info!("Requesting login password");
@@ -2545,6 +2544,7 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
         }
     }
 }
+#[allow(unused_variables)]
 fn try_mount_or_format(
     modals: &modals::Modals,
     pddb_os: &mut PddbOs,
