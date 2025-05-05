@@ -186,6 +186,7 @@ pub(crate) struct PddbOs {
     /// reference to a TrngPool object that's shared among all the hardware functions
     entropy: Rc<RefCell<TrngPool>>,
     /// connection to the password request manager
+    #[cfg(feature = "gen1")]
     pw_cid: xous::CID,
     /// Number of consecutive failed login attempts
     failed_logins: u64,
@@ -279,6 +280,7 @@ impl PddbOs {
             migration_dna: dna,
             dna_mode: DnaMode::Normal,
             entropy: trngpool,
+            #[cfg(feature = "gen1")]
             pw_cid,
             failed_logins: 0,
             #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
@@ -320,6 +322,7 @@ impl PddbOs {
                 migration_dna: dna,
                 dna_mode: DnaMode::Normal,
                 entropy: trngpool,
+                #[cfg(feature = "gen1")]
                 pw_cid,
                 failed_logins: 0,
                 #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
@@ -406,17 +409,9 @@ impl PddbOs {
     pub(crate) fn timestamp_now(&self) -> u64 { self.tt.elapsed_ms() }
 
     /// checks if the root keys are initialized, which is a prerequisite to formatting and mounting
+    #[cfg(feature = "gen1")]
     pub(crate) fn rootkeys_initialized(&self) -> bool {
-        #[cfg(feature = "gen1")]
-        {
-            self.rootkeys
-                .is_initialized()
-                .expect("couldn't query initialization state of the rootkeys server")
-        }
-        // on gen-2 devices, the key is automatically filled in. We don't have to go through a user-mixing
-        // password step because we don't have the Starbleed vulnerability.
-        #[cfg(feature = "gen2")]
-        true
+        self.rootkeys.is_initialized().expect("couldn't query initialization state of the rootkeys server")
     }
 
     /// patches data at an offset starting from the data physical base address, which corresponds
