@@ -20,6 +20,7 @@ pub(crate) const SERVER_NAME_PDDB_POLLER: &str = "_PDDB Mount Poller_";
 /// This is the registered name for a dedicated private API channel to the PDDB for doing the time reset
 /// Even though nobody but the PDDB should connect to this, we have to share it publicly so the PDDB can
 /// depend upon this constant.
+#[cfg(feature = "gen1")]
 pub const TIME_SERVER_PDDB: &'static str = "_dedicated pddb timeserver connection_";
 
 #[allow(dead_code)]

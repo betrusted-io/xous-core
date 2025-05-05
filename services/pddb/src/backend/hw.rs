@@ -203,6 +203,7 @@ pub(crate) struct PddbOs {
 }
 
 impl PddbOs {
+    #[allow(unused_variables)]
     pub fn new(trngpool: Rc<RefCell<TrngPool>>, pw_cid: xous::CID) -> PddbOs {
         let xns = xous_names::XousNames::new().unwrap();
         #[cfg(any(feature = "precursor", feature = "renode"))]
