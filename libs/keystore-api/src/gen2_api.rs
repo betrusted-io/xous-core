@@ -22,4 +22,7 @@ pub enum Opcode {
     /// Get a non-secret 64-bit random identifier
     GetDna = 256,
     EnsurePassword = 257,
+
+    /// Used to map unknown opcodes
+    InvalidCall = 65535,
 }
