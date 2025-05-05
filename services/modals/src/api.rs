@@ -170,4 +170,9 @@ pub(crate) enum Opcode {
     Gutter = 29,
 
     Quit = 30,
+
+    #[cfg(feature = "no-gam")]
+    ReleaseFocus = 1024,
+    #[cfg(feature = "no-gam")]
+    AcquireFocus = 1025,
 }

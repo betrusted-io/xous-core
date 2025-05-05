@@ -36,13 +36,14 @@ ux-api = { path = "../../libs/ux-api", optional = true, features = ["std"] }
 utralib = { version = "0.1.25", optional = true, default-features = false }
 
 [features]
+no-gam = []
 precursor = ["utralib/precursor", "trng", "gam", "tts-frontend"]
 hosted = ["utralib/hosted", "trng", "gam", "tts-frontend"]
 renode = ["utralib/renode", "trng", "gam", "tts-frontend"]
 
-cramium-soc = ["utralib/cramium-soc", "cram-hal-service"]
-hosted-baosec = ["ux-api/hosted-baosec", "cramium-emu", "cramium-api"]
-board-baosec = ["ux-api/board-baosec", "cramium-api"]
+cramium-soc = ["utralib/cramium-soc", "cram-hal-service", "no-gam"]
+hosted-baosec = ["ux-api/hosted-baosec", "cramium-emu", "cramium-api", "no-gam"]
+board-baosec = ["ux-api/board-baosec", "cramium-api", "no-gam"]
 doc-deps = ["gam", "ux-api/doc-deps"]
 modal-testing = []
 

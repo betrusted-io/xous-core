@@ -176,6 +176,8 @@ fn wrapped_main() -> ! {
 
     let mut dynamic_notification_listener: Option<xous::MessageSender> = None;
     let mut dynamic_notification_active: bool = false;
+    #[cfg(feature = "no-gam")]
+    let mut has_focus = false;
 
     loop {
         let mut msg = xous::receive_message(modals_sid).unwrap();
@@ -1021,13 +1023,22 @@ fn wrapped_main() -> ! {
                     core::char::from_u32(k3 as u32).unwrap_or('\u{0000}'),
                     core::char::from_u32(k4 as u32).unwrap_or('\u{0000}'),
                 ];
-                renderer_modal.key_event(keys);
+                if has_focus {
+                    renderer_modal.key_event(keys);
+                }
             }),
             Some(Opcode::ModalDrop) => {
                 // this guy should never quit, it's a core OS service
                 panic!("Password modal for PDDB quit unexpectedly");
             }
-
+            #[cfg(feature = "no-gam")]
+            Some(Opcode::AcquireFocus) => msg_scalar_unpack!(msg, _, _, _, _, {
+                has_focus = true;
+            }),
+            #[cfg(feature = "no-gam")]
+            Some(Opcode::ReleaseFocus) => msg_scalar_unpack!(msg, _, _, _, _, {
+                has_focus = false;
+            }),
             Some(Opcode::Quit) => {
                 log::warn!("Shared modal UX handler exiting.");
                 break;
