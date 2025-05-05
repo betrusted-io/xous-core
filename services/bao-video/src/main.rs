@@ -307,6 +307,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
         cam.capture_async();
     }
 
+    #[cfg(feature = "no-gam")]
+    let modals = modals::Modals::new(&xns).unwrap();
     let mut modal_queue = VecDeque::<Sender>::new();
     let mut frames = 0;
     let mut frame = [0u8; IMAGE_WIDTH * IMAGE_HEIGHT];
@@ -650,6 +652,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 // ---- v2 graphics API
                 GfxOpcode::AcquireModal => {
                     if let Some(scalar) = msg.body.scalar_message_mut() {
+                        #[cfg(feature = "no-gam")]
+                        modals.acquire_focus(); // relay this to the modals crate so it knows to ignore key presses
                         let sender = msg.sender;
                         log::debug!("Acquirer Sender: {:x?}", sender);
                         modal_queue.push_back(sender);
@@ -665,6 +669,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 }
                 GfxOpcode::ReleaseModal => {
                     if let Some(_scalar) = msg.body.scalar_message() {
+                        #[cfg(feature = "no-gam")]
+                        modals.release_focus(); // relay this to the modals crate so it knows to ignore key presses
                         let sender = msg.sender;
                         log::debug!("Release Sender: {:x?}", sender);
                         if let Some(pos) = modal_queue

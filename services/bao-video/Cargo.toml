@@ -25,6 +25,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
 ] }
+modals = { path = "../modals", optional = true }
 
 # QR decoding
 libm = { version = "0.2.8" }
@@ -34,6 +35,7 @@ rqrr = "0.8.0"
 locales = { path = "../../locales" }
 
 [features]
+no-gam = ["modals/no-gam"]
 gfx-testing = []
 ditherpunk = []
 
@@ -45,8 +47,9 @@ board-baosec = [
     "cramium-hal",
     "ux-api/board-baosec",
     "blitstr2/board-baosec",
+    "no-gam",
 ]
-hosted-baosec = ["cramium-emu", "ux-api/hosted-baosec"]
+hosted-baosec = ["cramium-emu", "ux-api/hosted-baosec", "no-gam"]
 
 # temporary feature - remove after we have properly created a camera control API
 autotest = []
