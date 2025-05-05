@@ -14,7 +14,11 @@ pub struct PddbCmd {
     pddb: pddb::Pddb,
 }
 impl PddbCmd {
-    pub fn new() -> Self { PddbCmd { pddb: pddb::Pddb::new() } }
+    pub fn new() -> Self {
+        let pddb = pddb::Pddb::new();
+        log::info!("PDDB mount result: {:?}", pddb.try_mount());
+        PddbCmd { pddb }
+    }
 }
 
 impl<'a> ShellCmdApi<'a> for PddbCmd {
