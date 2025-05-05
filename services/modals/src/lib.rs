@@ -915,6 +915,18 @@ impl Modals {
     /// - needed for use with `dynamic_notification_blocking_listener`
     /// - see `dynamic_notification_blocking_listener` for a code example.
     pub fn token(&self) -> [u32; 4] { self.token }
+
+    #[cfg(feature = "no-gam")]
+    pub fn release_focus(&self) {
+        send_message(self.conn, Message::new_scalar(Opcode::ReleaseFocus.to_usize().unwrap(), 0, 0, 0, 0))
+            .unwrap();
+    }
+
+    #[cfg(feature = "no-gam")]
+    pub fn acquire_focus(&self) {
+        send_message(self.conn, Message::new_scalar(Opcode::AcquireFocus.to_usize().unwrap(), 0, 0, 0, 0))
+            .unwrap();
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

@@ -22,6 +22,7 @@ gam = { path = "../gam" }
 locales = { path = "../../locales" }
 susres = { package = "xous-api-susres", version = "0.9.63" }
 root-keys = { path = "../root-keys" }
+keystore-api = { path = "../../libs/keystore-api", features = ["gen1"] }
 modals = { path = "../modals" }
 pddb = { path = "../pddb" }
 net = { path = "../net" }

@@ -21,6 +21,7 @@ cramium-emu = { path = "../cramium-emu", optional = true }
 usb-cramium = { path = "../usb-cramium" }
 modals = { path = "../modals", default-features = false }
 ux-api = { path = "../../libs/ux-api", optional = true }
+pddb = { path = "../pddb", features = ["gen2"] }
 
 [features]
 cramium-soc = [
@@ -33,13 +34,18 @@ board-baosec = [
     "cram-hal-service",
     "cramium-hal",
     "usb-cramium/board-baosec",
+    "pddb/board-baosec",
 ]
 hosted-baosec = [
     "modals/hosted-baosec",
     "usb-cramium/hosted-baosec",
     "cramium-emu",
+    "pddb/hosted-baosec",
 ]
-
-modal-testing = ["ux-api"]
+usb = []
+pddbtest = []
+test-rekey = []
+autobasis = []
+modal-testing = ["ux-api", "modals/modal-testing"]
 test-scrollbars = []
-default = ["modal-testing"]
+default = []

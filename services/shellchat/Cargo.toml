@@ -31,6 +31,7 @@ aes = { path = "../aes" }
 cipher = "0.4.4"
 spinor = { path = "../spinor" }
 root-keys = { path = "../root-keys" }
+keystore-api = { path = "../../libs/keystore-api", features = ["gen1"] }
 jtag = { path = "../jtag" }
 net = { path = "../net" }
 dns = { path = "../dns" }

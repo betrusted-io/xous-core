@@ -15,11 +15,17 @@ use aes::{Aes256, BLOCK_SIZE, Block};
 use aes_gcm_siv::aead::{Aead, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
 use backend::bcrypt::*;
+#[cfg(all(feature = "gen2", feature = "cramium-emu"))]
+use cramium_emu::{SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
+#[cfg(all(feature = "gen2", not(feature = "cramium-emu")))]
+use cramium_hal::board::{SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
+#[cfg(feature = "gen1")]
+use keystore_api::AesRootkeyType;
+use keystore_api::{Checksums, KeywrapError};
 use modals::Modals;
-use root_keys::api::AesRootkeyType;
-use root_keys::api::KeywrapError;
 use sha2::{Digest, Sha512_256Hw, Sha512_256Sw};
-use spinor::SPINOR_BULK_ERASE_SIZE;
+#[cfg(feature = "gen1")]
+use spinor::{SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
 use subtle::ConstantTimeEq;
 
 use crate::*;
@@ -43,7 +49,7 @@ pub(crate) const MBBB_PAGES: usize = 10;
 pub(crate) const FSCB_PAGES: usize = 16;
 
 /// size of a physical page
-pub const PAGE_SIZE: usize = spinor::SPINOR_ERASE_SIZE as usize;
+pub const PAGE_SIZE: usize = SPINOR_ERASE_SIZE as usize;
 /// size of a virtual page -- after the AES encryption and journaling overhead is subtracted
 pub const VPAGE_SIZE: usize = PAGE_SIZE - size_of::<Nonce>() - size_of::<Tag>() - size_of::<JournalType>();
 
@@ -139,7 +145,10 @@ type EmuSpinor = spinor::Spinor;
 
 pub(crate) struct PddbOs {
     spinor: EmuSpinor,
+    #[cfg(feature = "gen1")]
     rootkeys: root_keys::RootKeys,
+    #[cfg(feature = "gen2")]
+    rootkeys: keystore::Keystore,
     tt: ticktimer_server::Ticktimer,
     pddb_mr: EmuMemoryRange,
     /// page table base -- location in FLASH, offset from physical bottom of pddb_mr
@@ -177,6 +186,7 @@ pub(crate) struct PddbOs {
     /// reference to a TrngPool object that's shared among all the hardware functions
     entropy: Rc<RefCell<TrngPool>>,
     /// connection to the password request manager
+    #[cfg(feature = "gen1")]
     pw_cid: xous::CID,
     /// Number of consecutive failed login attempts
     failed_logins: u64,
@@ -193,6 +203,7 @@ pub(crate) struct PddbOs {
 }
 
 impl PddbOs {
+    #[allow(unused_variables)]
     pub fn new(trngpool: Rc<RefCell<TrngPool>>, pw_cid: xous::CID) -> PddbOs {
         let xns = xous_names::XousNames::new().unwrap();
         #[cfg(any(feature = "precursor", feature = "renode"))]
@@ -221,8 +232,14 @@ impl PddbOs {
             PageAlignedPa::from(mbbb_phys_base.as_u32() + MBBB_PAGES as u32 * PAGE_SIZE as u32);
         log::debug!("fscb_phys_base: {:x?}", fscb_phys_base);
 
+        #[cfg(feature = "gen1")]
         let llio = llio::Llio::new(&xns);
+        #[cfg(feature = "gen1")]
         let dna = llio.soc_dna().unwrap();
+        #[cfg(feature = "gen2")]
+        let keystore = keystore::Keystore::new(&xns);
+        #[cfg(feature = "gen2")]
+        let dna = keystore.get_dna();
 
         // performance counter infrastructure, if selected
         #[cfg(feature = "perfcounter")]
@@ -264,6 +281,7 @@ impl PddbOs {
             migration_dna: dna,
             dna_mode: DnaMode::Normal,
             entropy: trngpool,
+            #[cfg(feature = "gen1")]
             pw_cid,
             failed_logins: 0,
             #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
@@ -280,8 +298,11 @@ impl PddbOs {
         let ret = {
             PddbOs {
                 spinor: HostedSpinor::new(),
+                #[cfg(feature = "gen1")]
                 rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0))
                     .expect("FATAL: couldn't access RootKeys!"),
+                #[cfg(feature = "gen2")]
+                rootkeys: keystore::Keystore::new_key(&xns, "pddb"),
                 tt: ticktimer_server::Ticktimer::new().unwrap(),
                 pddb_mr: EmuStorage::new(),
                 pt_phys_base: PageAlignedPa::from(0 as u32),
@@ -302,6 +323,7 @@ impl PddbOs {
                 migration_dna: dna,
                 dna_mode: DnaMode::Normal,
                 entropy: trngpool,
+                #[cfg(feature = "gen1")]
                 pw_cid,
                 failed_logins: 0,
                 #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
@@ -363,7 +385,12 @@ impl PddbOs {
     }
 
     pub(crate) fn is_efuse_secured(&self) -> bool {
-        self.rootkeys.is_efuse_secured().expect("couldn't query efuse security state") == Some(true)
+        #[cfg(feature = "gen1")]
+        {
+            self.rootkeys.is_efuse_secured().expect("couldn't query efuse security state") == Some(true)
+        }
+        #[cfg(feature = "gen2")]
+        true
     }
 
     pub(crate) fn nonce_gen(&self) -> Nonce {
@@ -383,6 +410,7 @@ impl PddbOs {
     pub(crate) fn timestamp_now(&self) -> u64 { self.tt.elapsed_ms() }
 
     /// checks if the root keys are initialized, which is a prerequisite to formatting and mounting
+    #[cfg(feature = "gen1")]
     pub(crate) fn rootkeys_initialized(&self) -> bool {
         self.rootkeys.is_initialized().expect("couldn't query initialization state of the rootkeys server")
     }
@@ -771,7 +799,15 @@ impl PddbOs {
         self.cipher_ecb = None;
     }
 
-    pub(crate) fn clear_password(&self) { self.rootkeys.clear_password(AesRootkeyType::User0); }
+    pub(crate) fn clear_password(&self) {
+        #[cfg(feature = "gen1")]
+        self.rootkeys.clear_password(AesRootkeyType::User0);
+        #[cfg(feature = "gen2")]
+        self.rootkeys.clear_password();
+    }
+
+    #[cfg(feature = "gen2")]
+    pub(crate) fn ensure_password(&self) -> PasswordState { self.rootkeys.ensure_password() }
 
     pub(crate) fn try_login(&mut self) -> PasswordState {
         use aes::cipher::KeyInit;
@@ -2043,6 +2079,7 @@ impl PddbOs {
     /// reference to the Spinor object allocated to the PDDB implementation for this operation.
     pub(crate) fn pddb_format(&mut self, fast: bool, progress: Option<&modals::Modals>) -> Result<()> {
         use aes::cipher::KeyInit;
+        #[cfg(feature = "gen1")]
         if !self.rootkeys.is_initialized().unwrap() {
             return Err(Error::new(
                 ErrorKind::Unsupported,
@@ -2776,13 +2813,30 @@ impl PddbOs {
             match modals.alert_builder(t!("pddb.freespace.name", locales::LANG)).field(None, None).build() {
                 Ok(bname) => {
                     let name = bname.first().as_str().to_string();
-                    let request =
-                        BasisRequestPassword { db_name: String::from(name.to_string()), plaintext_pw: None };
-                    let mut buf = Buffer::into_buf(request).unwrap();
-                    buf.lend_mut(self.pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
-                    let retpass = buf.to_original::<BasisRequestPassword, _>().unwrap();
+                    #[cfg(feature = "gen1")]
+                    let retpass = {
+                        let request = BasisRequestPassword {
+                            db_name: String::from(name.to_string()),
+                            plaintext_pw: None,
+                        };
+                        let mut buf = Buffer::into_buf(request).unwrap();
+                        buf.lend_mut(self.pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap())
+                            .unwrap();
+                        &buf.to_original::<BasisRequestPassword, _>().unwrap().plaintext_pw.unwrap()
+                    };
+                    #[cfg(feature = "gen2")]
+                    let retpass = match modals
+                        .alert_builder(
+                            format!("{}'{}'", t!("pddb.password_for", locales::LANG), &name).as_str(),
+                        )
+                        .field(None, None)
+                        .build()
+                    {
+                        Ok(text) => &text.content()[0].content,
+                        _ => panic!("failure retrieving password"),
+                    };
                     // 2. validate the name/password combo
-                    let basis_key = self.basis_derive_key(&name, retpass.plaintext_pw.unwrap().as_str());
+                    let basis_key = self.basis_derive_key(&name, retpass);
                     // validate the password by finding the root block of the basis. We rely entirely
                     // upon the AEAD with key commit to ensure the password is correct.
                     let maybe_entry = if let Some(basis_map) =
@@ -2937,20 +2991,23 @@ impl PddbOs {
         BasisKeys { pt: okm_pt, data: okm_data }
     }
 
-    pub(crate) fn reset_dont_ask_init(&self) { self.rootkeys.do_reset_dont_ask_init(); }
+    pub(crate) fn reset_dont_ask_init(&self) {
+        #[cfg(feature = "gen1")]
+        self.rootkeys.do_reset_dont_ask_init();
+    }
 
-    pub(crate) fn checksums(&self, modals: Option<&Modals>) -> root_keys::api::Checksums {
-        let mut checksums = root_keys::api::Checksums::default();
+    pub(crate) fn checksums(&self, modals: Option<&Modals>) -> Checksums {
+        let mut checksums = Checksums::default();
         let pddb = unsafe { self.pddb_mr.as_slice() };
         if let Some(m) = modals {
             m.start_progress(t!("pddb.checksums", locales::LANG), 0, checksums.checksums.len() as u32, 0)
                 .ok();
         }
         for (index, region) in
-            pddb.chunks(root_keys::api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE).enumerate()
+            pddb.chunks(keystore_api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE).enumerate()
         {
             assert!(
-                region.len() == root_keys::api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE,
+                region.len() == keystore_api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE,
                 "CHECKSUM_BLOCKLEN_PAGE is not an even divisor of the PDDB size"
             );
             let mut hasher = Sha512_256Hw::new();

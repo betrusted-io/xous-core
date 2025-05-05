@@ -4,8 +4,9 @@ use utralib::*;
 use crate::ifram::IframRange;
 use crate::udma::*;
 
-pub const FLASH_PAGE_LEN: usize = 256;
-pub const FLASH_SECTOR_LEN: usize = 4096;
+pub const FLASH_PAGE_LEN: usize = crate::board::SPINOR_PAGE_LEN as usize;
+pub const FLASH_SECTOR_LEN: usize = crate::board::SPINOR_ERASE_SIZE as usize;
+pub const BLOCK_ERASE_LEN: usize = crate::board::SPINOR_BULK_ERASE_SIZE as usize;
 
 // ----------------------------------- SPIM ------------------------------------
 
@@ -1223,6 +1224,70 @@ impl Spim {
             }
         }
         result
+    }
+
+    fn flash_be(&mut self, block_address: u32) {
+        self.mem_cs(true);
+        self.mem_send_cmd(0xd8);
+        let cmd_list =
+            [SpimCmd::TxData(self.mode, SpimWordsPerXfer::Words1, 8 as u8, SpimEndian::MsbFirst, 3 as u32)];
+        self.tx_buf_mut()[..3].copy_from_slice(&block_address.to_be_bytes()[1..]);
+        // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
+        unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..3], CFG_EN | CFG_SIZE_8) }
+        self.send_cmd_list(&cmd_list);
+
+        while self.udma_busy(Bank::Tx) {
+            #[cfg(feature = "std")]
+            xous::yield_slice();
+        }
+        self.mem_cs(false);
+    }
+
+    pub fn flash_erase_block(&mut self, start: usize, len: usize) -> bool {
+        if (start & (BLOCK_ERASE_LEN - 1)) != 0 {
+            // log::warn!("Bulk erase start address is not block-aligned. Aborting.");
+            return false;
+        }
+        if (len & (BLOCK_ERASE_LEN - 1)) != 0 {
+            // log::warn!("Bulk erase end address is not block-aligned. Aborting.");
+            return false;
+        }
+        for block_addr in (start..start + len).step_by(BLOCK_ERASE_LEN as usize) {
+            // enable writes: set wren mode
+            // crate::println!("flash_erase_sector: {:x}", sector_address);
+            loop {
+                self.flash_wren();
+                let status = self.flash_rdsr();
+                // crate::println!("wren status: {:x}", status);
+                if status & 0x02 != 0 {
+                    break;
+                }
+            }
+            // issue erase command
+            self.flash_be(block_addr as u32);
+            // wait for WIP bit to drop
+            loop {
+                let status = self.flash_rdsr();
+                // crate::println!("WIP status: {:x}", status);
+                if status & 0x01 == 0 {
+                    break;
+                }
+            }
+            // get the success code for return
+            // let result = self.flash_rdscur();
+            // disable writes: send wrdi
+            if self.flash_rdsr() & 0x02 != 0 {
+                loop {
+                    self.flash_wrdi();
+                    let status = self.flash_rdsr();
+                    // crate::println!("WRDI status: {:x}", status);
+                    if status & 0x02 == 0 {
+                        break;
+                    }
+                }
+            }
+        }
+        true
     }
 
     /// This routine can data that is strictly a multiple of a page length (256 bytes)

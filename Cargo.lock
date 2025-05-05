@@ -342,6 +342,7 @@ dependencies = [
  "modals",
  "num-derive 0.4.2",
  "num-traits",
+ "pddb",
  "usb-cramium",
  "utralib 0.1.25",
  "ux-api",
@@ -363,6 +364,7 @@ dependencies = [
  "libm 0.2.8",
  "locales",
  "log",
+ "modals",
  "nalgebra",
  "num-derive 0.4.2",
  "num-traits",
@@ -2908,6 +2910,59 @@ dependencies = [
 ]
 
 [[package]]
+name = "keystore"
+version = "0.1.0"
+dependencies = [
+ "aes 0.8.3",
+ "aes-gcm-siv",
+ "aes-kw",
+ "blowfish",
+ "byteorder",
+ "cipher",
+ "cram-hal-service",
+ "cramium-api",
+ "cramium-emu",
+ "cramium-hal",
+ "digest 0.10.7",
+ "hex 0.4.3",
+ "hkdf",
+ "keystore-api",
+ "locales",
+ "log",
+ "modals",
+ "num-derive 0.4.2",
+ "num-traits",
+ "rand_core 0.6.4",
+ "rkyv 0.8.8",
+ "sha2",
+ "subtle",
+ "utralib 0.1.25",
+ "ux-api",
+ "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+ "xous-ipc 0.10.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "zeroize",
+]
+
+[[package]]
+name = "keystore-api"
+version = "0.1.0"
+dependencies = [
+ "cipher",
+ "keyboard",
+ "locales",
+ "num-derive 0.4.2",
+ "num-traits",
+ "rkyv 0.8.8",
+ "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-names",
+ "xous-ipc 0.10.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "zeroize",
+]
+
+[[package]]
 name = "lalrpop"
 version = "0.19.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3822,10 +3877,15 @@ dependencies = [
  "bitflags 1.3.2",
  "blowfish",
  "cipher",
+ "cram-hal-service",
+ "cramium-emu",
+ "cramium-hal",
  "digest 0.10.7",
  "gam",
  "hex 0.4.3",
  "hkdf",
+ "keystore",
+ "keystore-api",
  "llio",
  "locales",
  "log",
@@ -3844,12 +3904,14 @@ dependencies = [
  "trng",
  "tts-frontend",
  "utralib 0.1.25",
+ "ux-api",
  "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
  "xous-ipc 0.10.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-swapper",
  "zeroize",
  "zeroize_derive",
 ]
@@ -4617,6 +4679,7 @@ dependencies = [
  "hex 0.4.3",
  "jtag",
  "keyboard",
+ "keystore-api",
  "llio",
  "locales",
  "log",
@@ -4999,6 +5062,7 @@ dependencies = [
  "ime-plugin-tts",
  "jtag",
  "keyboard",
+ "keystore-api",
  "llio",
  "locales",
  "log",
@@ -5243,6 +5307,7 @@ dependencies = [
  "early_settings",
  "gam",
  "keyboard",
+ "keystore-api",
  "llio",
  "locales",
  "log",
@@ -6947,6 +7012,7 @@ dependencies = [
  "log",
  "num-derive 0.4.2",
  "num-traits",
+ "rkyv 0.8.8",
  "utralib 0.1.25",
  "xous 0.9.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",

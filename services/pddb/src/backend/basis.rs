@@ -1192,6 +1192,7 @@ impl BasisCache {
         Ok(())
     }
 
+    #[cfg(feature = "gen1")]
     pub(crate) fn suspend(&mut self, hw: &mut PddbOs) {
         self.sync(hw, None, false).expect("couldn't sync on suspend");
         let mut lock_list = Vec::<String>::new();
@@ -1313,6 +1314,7 @@ impl PartialEq for KeyAge {
 impl Eq for KeyAge {}
 
 /// This is the RAM cached copy of a basis as maintained in the PDDB.
+#[allow(dead_code)] // because gen1/gen2 differences
 pub(crate) struct BasisCacheEntry {
     /// the name of this basis
     pub name: String,

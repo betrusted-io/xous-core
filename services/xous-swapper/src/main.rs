@@ -47,7 +47,8 @@
 //! the current `MEMORY_ALLOCATIONS` table into a pre-allocated BinaryHeap in the shared state structure,
 //! indexed by the timestamp. At this point, the blocking userspace handler can work through a sorted vector
 //! of allocations to pick the pages it wants to remove.
-
+#[cfg(feature = "spinor")]
+mod api;
 mod debug;
 mod platform;
 use core::fmt::Write;
@@ -725,6 +726,13 @@ fn main() {
 
     let xns = xous_api_names::XousNames::new().unwrap();
     let sid = xns.register_name(xous_swapper::SWAPPER_PUBLIC_NAME, None).unwrap();
+
+    #[cfg(feature = "spinor")]
+    std::thread::spawn({
+        move || {
+            crate::platform::cramium::spinor::spinor_handler();
+        }
+    });
 
     let mut msg_opt = None;
     loop {

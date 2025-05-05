@@ -24,9 +24,9 @@ use chrono::prelude::*;
 use com::api::*;
 use crossbeam::channel::{Receiver, Sender, at, select, unbounded};
 use gam::{GamObjectList, GamObjectType};
+use keystore_api::*;
 use locales::t;
 use num_traits::*;
-use root_keys::api::{BackupKeyboardLayout, BackupOp};
 use ux_api::minigfx::*;
 use ux_api::service::api::*;
 use xous::{CID, Message, msg_scalar_unpack, send_message};
@@ -655,7 +655,7 @@ fn wrapped_main() -> ! {
         .expect("couldn't exit the gutter server");
     gutter.join().expect("status boot gutter server did not exit gracefully");
     // allocate some storage for backup checksums
-    let checksums: Arc<Mutex<Option<root_keys::api::Checksums>>> = Arc::new(Mutex::new(None));
+    let checksums: Arc<Mutex<Option<Checksums>>> = Arc::new(Mutex::new(None));
 
     // --------------------------- graphical loop timing
     let mut stats_phase: usize = 0;
@@ -1590,7 +1590,7 @@ fn wrapped_main() -> ! {
                 });
             }
             Some(StatusOpcode::PrepareBackupPhase2) => {
-                let mut metadata = root_keys::api::BackupHeader::default();
+                let mut metadata = keystore_api::rootkeys_api::BackupHeader::default();
                 // note: default() should set the language correctly by default since it's a systemwide
                 // constant
                 metadata.timestamp = localtime.get_local_time_ms().unwrap_or(0);

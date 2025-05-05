@@ -39,8 +39,7 @@ fn keyboard_service() {
     let xns = xous_names::XousNames::new().unwrap();
     let kbd_sid = xns.register_name(cramium_api::SERVER_NAME_KBD, None).expect("can't register server");
 
-    let mut listener_conn: Option<CID> = None;
-    let mut listener_op: Option<usize> = None;
+    let mut listeners: Vec<(CID, usize)> = Vec::new();
     let mut observer_conn: Option<CID> = None;
     let mut observer_op: Option<usize> = None;
 
@@ -62,13 +61,10 @@ fn keyboard_service() {
                 let kr = buffer.as_flat::<KeyboardRegistration, _>().unwrap();
                 match xns.request_connection_blocking(kr.server_name.as_str()) {
                     Ok(cid) => {
-                        listener_conn = Some(cid);
-                        listener_op = Some(<u32 as From<u32>>::from(kr.listener_op_id.into()) as usize);
+                        listeners.push((cid, <u32 as From<u32>>::from(kr.listener_op_id.into()) as usize));
                     }
                     Err(e) => {
                         log::error!("couldn't connect to listener: {:?}", e);
-                        listener_conn = None;
-                        listener_op = None;
                     }
                 }
             }
@@ -152,16 +148,16 @@ fn keyboard_service() {
                     }
                 };
 
-                if let Some(conn) = listener_conn {
+                for &(conn, listener_op) in listeners.iter() {
                     if key != '\u{0000}' {
                         if key >= '\u{f700}' && key <= '\u{f8ff}' {
                             log::info!("ignoring key '{}'({:x})", key, key as u32); // ignore Apple PUA characters
                         } else {
-                            log::debug!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
+                            log::debug!("injecting key '{}'({:x}) to {}", key, key as u32, conn); // always be noisy about this, it's an exploit path
                             xous::try_send_message(
                                 conn,
                                 xous::Message::new_scalar(
-                                    listener_op.unwrap(),
+                                    listener_op,
                                     key as u32 as usize,
                                     '\u{0000}' as u32 as usize,
                                     '\u{0000}' as u32 as usize,

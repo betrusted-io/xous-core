@@ -1,0 +1,107 @@
+[package]
+name = "keystore"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "Keystore server for compact devices"
+
+# Dependency versions enforced by Cargo.lock.
+[dependencies]
+utralib = { version = "0.1.25", optional = true, default-features = false }
+xous-names = { package = "xous-api-names", version = "0.9.65" }
+ticktimer = { package = "xous-api-ticktimer", version = "0.9.63" }
+xous = "0.9.64"
+log-server = { package = "xous-api-log", version = "0.1.63" }
+log = "0.4.14"
+num-derive = { version = "0.4.2", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+cramium-hal = { path = "../../libs/cramium-hal", features = [
+    "std",
+], optional = true }
+cram-hal-service = { path = "../cram-hal-service", optional = true }
+ux-api = { path = "../../libs/ux-api" }
+cramium-emu = { path = "../cramium-emu", optional = true }
+cramium-api = { path = "../../libs/cramium-api" }
+xous-ipc = "0.10.4"
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+] }
+keystore-api = { path = "../../libs/keystore-api" }
+
+zeroize = { version = "1.7.0", features = ["zeroize_derive"] }
+rand_core = "0.6.4"
+
+aes-kw = { version = "0.2.1", features = ["alloc"] }
+
+# bcrypt
+cipher = "0.4.3"
+blowfish = { version = "0.9.1", features = ["bcrypt"] }
+
+# password modals - keep them in this crate to minimize plaintext password manipulations
+locales = { path = "../../locales" }
+# non-password modals are outsourced to a common crate
+modals = { path = "../modals" }
+
+# backups
+aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
+    "alloc",
+    "aes",
+] }
+#aes-gcm-siv = {git="https://github.com/RustCrypto/AEADs.git", branch="master"}
+subtle = { version = "2.4.1", default-features = false }
+
+# private keys
+#sha2 = {version = "0.9.5", default-features = false, features = []}
+sha2 = { version = "0.10.8" }
+digest = "0.10.7"
+aes = { path = "../aes" }
+# engine-25519 = { path = "../engine-25519" }
+byteorder = "1.4.3" # used by keywrap
+# hardware acceleration adaptations are inserted into a fork of the main branch.
+hex = { version = "0.4.3", default-features = false, features = [] }
+hkdf = "0.12.4"
+
+#[dependencies.curve25519-dalek]
+#version = "=4.1.2"                           # note this is patched to our fork in ./Cargo.toml
+#default-features = false
+#features = ["auto-release", "warn-fallback"]
+
+#[dependencies.ed25519-dalek]
+#version = "2.1.0"
+#path = "../../../ed25519-dalek"
+#default-features = false
+#features = ["rand_core", "digest"]
+
+[features]
+cramium-soc = ["utralib/cramium-soc"]
+board-baosec = [
+    "utralib/cramium-soc",
+    "ux-api/board-baosec",
+    "keystore-api/gen2",
+    "modals/no-gam",
+] # USB form factor token
+loader-baosec = ["ux-api/loader-baosec"]
+test-baosec = ["ux-api/loader-baosec"]
+hosted-baosec = [
+    "keystore-api/gen2",
+    "modals/no-gam",
+] # emulated hardware on x86 platform
+board-baosor = [
+    "utralib/cramium-soc",
+    "keystore-api/gen2",
+] # Precursor form factor
+loader-baosor = []
+board-dabao = [
+    "utralib/cramium-soc",
+    "keystore-api/gen2",
+] # Dev board form factor
+loader-dabao = []
+
+policy-menu = [
+] # provisions for users to set their password retention policies (on the block for deprecation) (note: to re-enable you need to add "rootkeys menu" to the tokens.rs in the GAM)
+hazardous-debug = [
+] # this feature enables the printing of secret materials for debug purposes
+tts = []
+efuse = []
+default = []

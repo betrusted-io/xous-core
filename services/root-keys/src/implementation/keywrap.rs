@@ -37,8 +37,7 @@ use aes::Aes256;
 use aes::cipher::generic_array::GenericArray;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 use byteorder::{BigEndian, ByteOrder};
-
-use crate::api::KeywrapError;
+use keystore_api::KeywrapError;
 
 const FEISTEL_ROUNDS: usize = 5;
 

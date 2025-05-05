@@ -5,6 +5,15 @@ pub const I2C_AXP2101_ADR: u8 = 0x34;
 pub const I2C_TUSB320_ADR: u8 = 0x47;
 pub const I2C_BQ27427_ADR: u8 = 0x55;
 
+// location and organization of SPINOR should be board-specific
+pub const SPINOR_PAGE_LEN: u32 = 0x100;
+pub const SPINOR_ERASE_SIZE: u32 = 0x1000; // this is the smallest sector size.
+pub const SPINOR_BULK_ERASE_SIZE: u32 = 0x1_0000; // this is the bulk erase size.
+pub const SPINOR_LEN: u32 = 16384 * 1024;
+pub const PDDB_LOC: u32 = 4096 * 1024; // located 4MiB in, after the swap image
+pub const PDDB_LEN: u32 = 4096 * 1024; // 4MiB data for the PDDB total
+// top 8 megs are reserved for staging updates, backups, etc.
+
 // console uart buffer
 pub const UART_DMA_TX_BUF_PHYS: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096;
 
@@ -192,7 +201,7 @@ pub fn setup_i2c_pins(iox: &dyn IoSetup) -> I2cChannel {
 }
 
 /// returns the power-down port and pin number
-pub fn setup_ov2640_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+pub fn setup_camera_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     // power-down pin - default to powered down
     iox.set_gpio_pin_value(IoxPort::PC, 14, IoxValue::High);
     iox.setup_pin(

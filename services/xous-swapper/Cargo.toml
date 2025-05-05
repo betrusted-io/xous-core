@@ -23,12 +23,17 @@ aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
 ] }
 cramium-hal = { path = "../../libs/cramium-hal", optional = true, default-features = false }
 cramium-api = { path = "../../libs/cramium-api", optional = true, default-features = false }
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+], optional = true }
 
 utralib = { version = "0.1.25", optional = true, default-features = false }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 
 [features]
+spinor = ["rkyv"]
 cramium-soc = [
     "utralib/cramium-soc",
     "cramium-hal/std",

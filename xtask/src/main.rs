@@ -373,7 +373,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "bao-video",
                 "cramium-emu",
                 "bao-console",
+                "pddb",
+                "keystore",
             ];
+            builder.add_feature("pddbtest");
             builder
                 // hosted-baosec feature added below
                 .target_hosted_baosec()
@@ -606,13 +609,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             //   - [planned] pddb server
             //   - [planned] vault application
             let bao_rram_pkgs = ["xous-ticktimer", "xous-log", "xous-names" /* "usb-cramium" */].to_vec(); /* "usb-cramium" */
-            let bao_swap_pkgs = ["cram-hal-service", "bao-console", "bao-video", "modals"].to_vec(); /* "bao-video" */
+            let bao_swap_pkgs =
+                ["cram-hal-service", "bao-console", "bao-video", "modals", "pddb", "keystore"].to_vec(); /* "bao-video" */
             if !builder.is_swap_set() {
                 builder.set_swap(0, 8 * 1024 * 1024);
             }
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
             builder.add_feature("swap");
+            builder.add_feature("spinor"); // required for PDDB builds - affects xous-swapper
 
             builder.add_loader_feature("debug-print");
             // the following feature needs to be uncommented if we also enable
@@ -632,6 +637,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_loader_feature("sram-margin");
             builder.add_loader_feature("usb");
             builder.add_loader_feature("updates");
+            // builder.add_loader_feature("cam-test");
             match task.as_deref() {
                 Some("baosec") => builder.target_cramium_soc(),
                 _ => panic!("should be unreachable"),

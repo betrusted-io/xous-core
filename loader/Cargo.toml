@@ -114,7 +114,7 @@ swap = ["aes-gcm-siv"]
 
 # cramium target flags
 board-bringup = []
-sh1107-bringup = []                      # used to discover FB parameters
+sh1107-bringup = []                                            # used to discover FB parameters
 sram-margin = []
 boot-delay = []
 simulation-only = []
@@ -128,11 +128,12 @@ dump-trng = []
 fast-fclk = []
 clock-tests = []
 reset-debug = []
+cam-test = ["nalgebra", "libm", "cramium-hal/debug-print-usb"]
 usb = []
 qr = ["nalgebra", "libm"]
 updates = []
 cramium-mpw = ["cramium-hal/mpw"]
-userspace-swap-debug = []                # sets up app UART mapping.
+userspace-swap-debug = []                                      # sets up app UART mapping.
 
 # general flags
 debug-print = []
