@@ -376,6 +376,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "pddb",
                 "keystore",
             ];
+            builder.add_feature("pddbtest");
             builder
                 // hosted-baosec feature added below
                 .target_hosted_baosec()
