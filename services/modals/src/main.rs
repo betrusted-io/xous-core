@@ -1023,9 +1023,12 @@ fn wrapped_main() -> ! {
                     core::char::from_u32(k3 as u32).unwrap_or('\u{0000}'),
                     core::char::from_u32(k4 as u32).unwrap_or('\u{0000}'),
                 ];
+                #[cfg(feature = "no-gam")]
                 if has_focus {
                     renderer_modal.key_event(keys);
                 }
+                #[cfg(not(feature = "no-gam"))]
+                renderer_modal.key_event(keys);
             }),
             Some(Opcode::ModalDrop) => {
                 // this guy should never quit, it's a core OS service
