@@ -2,51 +2,60 @@ use cramium_api::*;
 
 pub const AXP2101_DEV: u8 = 0x34;
 
-const REG_PWRON: u8 = 0x20;
-const REG_BATFET: u8 = 0x12;
-const REG_PMUCOMMON: u8 = 0x10;
-const REG_LEVELTIMES: u8 = 0x27;
+pub const REG_PWRON: u8 = 0x20;
+pub const REG_BATFET: u8 = 0x12;
+pub const REG_PMUCOMMON: u8 = 0x10;
+pub const REG_LEVELTIMES: u8 = 0x27;
 
-const REG_DCDC_ENA: usize = 0x80;
-const REG_DCDC_PWM: usize = 0x81;
-const REG_DCDC1_V: usize = 0x82;
-const REG_DCDC2_V: usize = 0x83;
-const REG_DCDC3_V: usize = 0x84;
-const REG_DCDC4_V: usize = 0x85;
-#[allow(dead_code)]
-const REG_DCDC5_V: usize = 0x86;
-const REG_LDO1_ENA: usize = 0x90;
-const REG_LDO2_ENA: usize = 0x91;
-#[allow(dead_code)]
-const REG_ALDO1_V: usize = 0x92;
-#[allow(dead_code)]
-const REG_ALDO2_V: usize = 0x93;
-#[allow(dead_code)]
-const REG_ALDO3_V: usize = 0x94;
-#[allow(dead_code)]
-const REG_ALDO4_V: usize = 0x95;
-#[allow(dead_code)]
-const REG_BLDO1_V: usize = 0x96;
-#[allow(dead_code)]
-const REG_BLDO2_V: usize = 0x97;
-#[allow(dead_code)]
-const REG_CPUSLDO_V: usize = 0x98;
-#[allow(dead_code)]
-const REG_DLDO1_V: usize = 0x99;
-#[allow(dead_code)]
-const REG_DLDO2_V: usize = 0x9A;
+pub const REG_GAUGE_ON: u8 = 0x18;
+pub const REG_ADC_ENA: u8 = 0x30;
+pub const REG_VBAT_H: u8 = 0x34;
+pub const REG_VBAT_L: u8 = 0x35;
+pub const REG_TS_H: u8 = 0x36;
+pub const REG_TS_L: u8 = 0x37;
+pub const REG_VBUS_H: u8 = 0x38;
+pub const REG_VBUS_L: u8 = 0x39;
+pub const REG_VSYS_H: u8 = 0x3A;
+pub const REG_VSYS_L: u8 = 0x3B;
+pub const REG_TDIE_H: u8 = 0x3C;
+pub const REG_TDIE_L: u8 = 0x3D;
+pub const REG_TS_CTL: u8 = 0x50;
+pub const REG_JEITA_EN: u8 = 0x58;
+pub const REG_IPRECHG: u8 = 0x61;
+pub const REG_ICC: u8 = 0x62;
+pub const REG_ITERM: u8 = 0x63;
+pub const REG_CV: u8 = 0x64;
+pub const REG_CHGSAFE: u8 = 0x67;
+pub const REG_GAUGE_CTL: u8 = 0xA2;
+pub const REG_SOC: u8 = 0xA4;
 
-const REG_IRQ_ENABLE0: u8 = 0x40;
-#[allow(dead_code)]
-const REG_IRQ_ENABLE1: u8 = 0x41;
-#[allow(dead_code)]
-const REG_IRQ_ENABLE2: u8 = 0x42;
-const REG_IRQ_STATUS0: u8 = 0x48;
-const REG_IRQ_STATUS1: u8 = 0x49;
-#[allow(dead_code)]
-const REG_IRQ_STATUS2: u8 = 0x4A;
-const VBUS_INSERT_MASK: u8 = 0x80;
-const VBUS_REMOVE_MASK: u8 = 0x40;
+pub const REG_DCDC_ENA: usize = 0x80;
+pub const REG_DCDC_PWM: usize = 0x81;
+pub const REG_DCDC1_V: usize = 0x82;
+pub const REG_DCDC2_V: usize = 0x83;
+pub const REG_DCDC3_V: usize = 0x84;
+pub const REG_DCDC4_V: usize = 0x85;
+pub const REG_DCDC5_V: usize = 0x86;
+pub const REG_LDO1_ENA: usize = 0x90;
+pub const REG_LDO2_ENA: usize = 0x91;
+pub const REG_ALDO1_V: usize = 0x92;
+pub const REG_ALDO2_V: usize = 0x93;
+pub const REG_ALDO3_V: usize = 0x94;
+pub const REG_ALDO4_V: usize = 0x95;
+pub const REG_BLDO1_V: usize = 0x96;
+pub const REG_BLDO2_V: usize = 0x97;
+pub const REG_CPUSLDO_V: usize = 0x98;
+pub const REG_DLDO1_V: usize = 0x99;
+pub const REG_DLDO2_V: usize = 0x9A;
+
+pub const REG_IRQ_ENABLE0: u8 = 0x40;
+pub const REG_IRQ_ENABLE1: u8 = 0x41;
+pub const REG_IRQ_ENABLE2: u8 = 0x42;
+pub const REG_IRQ_STATUS0: u8 = 0x48;
+pub const REG_IRQ_STATUS1: u8 = 0x49;
+pub const REG_IRQ_STATUS2: u8 = 0x4A;
+pub const VBUS_INSERT_MASK: u8 = 0x80;
+pub const VBUS_REMOVE_MASK: u8 = 0x40;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum VbusIrq {
@@ -337,6 +346,84 @@ impl Axp2101 {
         // level timings: irq 1.5s, offlevel 6s, onlevel 1s
         i2c.i2c_write(AXP2101_DEV, REG_LEVELTIMES, &[0b0_01_01_10]).unwrap();
         crate::println!("misc regs set");
+
+        crate::println!("Setting up charger");
+        // general purpose off; die temp, sys v, vbus, ts, battv on
+        i2c.i2c_write(AXP2101_DEV, REG_ADC_ENA, &[0b00_0_1_1_1_1_1]).unwrap();
+        // gauge on, battery charge on, no watchdog, no button charger
+        i2c.i2c_write(AXP2101_DEV, REG_GAUGE_ON, &[0b00001010]).unwrap();
+        // ts affects charger, on with adc, 50uA
+        i2c.i2c_write(AXP2101_DEV, REG_TS_CTL, &[0b000_0_01_10]).unwrap();
+        // jeita enable
+        i2c.i2c_write(AXP2101_DEV, REG_JEITA_EN, &[0b1]).unwrap();
+        // precharge - 25mA
+        i2c.i2c_write(AXP2101_DEV, REG_IPRECHG, &[0b0001]).unwrap();
+        // charge - 75mA
+        i2c.i2c_write(AXP2101_DEV, REG_ICC, &[0b000_00011]).unwrap();
+        // iterm - 25mA
+        i2c.i2c_write(AXP2101_DEV, REG_ITERM, &[0b000_1_0001]).unwrap();
+        // vterm - 4.2v
+        i2c.i2c_write(AXP2101_DEV, REG_CV, &[0b00000_011]).unwrap();
+
+        // charger safety - enabled, slowed down with DPM, 8 hour done safey, 60 mins precharge safety
+        i2c.i2c_write(AXP2101_DEV, REG_CHGSAFE, &[0b1_1_01_0_1_10]).unwrap();
+        crate::println!("Charger setup done");
+
+        let mut buf = [0u8, 0u8];
+        let measurements = [("VBAT", REG_VBAT_H), ("VBUS", REG_VBUS_H), ("VSYS", REG_VSYS_H)];
+        for (name, offset) in measurements {
+            i2c.i2c_read(AXP2101_DEV, offset, &mut buf, false).unwrap();
+            let v: u32 = (((buf[0] as u32) & 0x3F) << 8) | buf[1] as u32;
+            crate::println!("{}: {:0.3}V", name, v as f32 / 1000.0);
+        }
+        i2c.i2c_read(AXP2101_DEV, REG_TS_H, &mut buf, false).unwrap();
+        let v: u32 = (((buf[0] as u32) & 0x3F) << 8) | buf[1] as u32;
+        crate::println!("TS code: {:x} units", v);
+
+        i2c.i2c_read(AXP2101_DEV, REG_TDIE_H, &mut buf, false).unwrap();
+        let v: u32 = (((buf[0] as u32) & 0x3F) << 8) | buf[1] as u32;
+        crate::println!("Die temp: {:0.2}C", 22.0 + (7274.0 - v as f32) / 20.0);
+
+        i2c.i2c_read(AXP2101_DEV, REG_SOC, &mut buf[0..1], false).unwrap();
+        crate::println!("SOC: {}%", buf[0]);
+
+        crate::println!("rbk confirmation");
+        let mut confirmation = [0u8; 0xb0];
+        i2c.i2c_read(AXP2101_DEV, 0, &mut confirmation, false).unwrap();
+        for (i, &val) in confirmation.iter().enumerate() {
+            if i % 16 == 0 {
+                crate::println!("");
+            }
+            crate::print!("{:02x} ", val);
+        }
+        crate::println!("");
+        /*
+           setting up for baosec fused
+           misc regs set
+           Setting up charger
+           Charger setup done
+           VBAT: 4.178V
+           VBUS: 4.945V
+           VSYS: 4.947V
+           TS code: 383 units
+           Die temp: 37.10C
+           SOC: 100%
+           rbk confirmation
+
+           28 14 00 4a 00 00 00 00 04 00 00 00 00 00 00 00
+           34 00 00 03 65 06 04 00 0a 06 a1 00 00 00 09 00
+           04 00 06 3f 00 18 08 16 00 00 00 00 00 00 00 00
+           1f 00 00 00 10 52 83 83 13 51 13 53 1b 3c 00 00
+           ff fc 5f 00 00 00 00 00 10 a0 10 00 00 00 00 00
+           06 00 02 01 29 58 3e 4c 01 14 37 1e 02 58 00 00
+           02 01 03 11 03 02 01 d6 01 01 03 00 00 00 00 00
+           00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+           1f 08 12 28 28 62 03 00 00 00 00 00 00 00 00 00
+           57 00 0d 16 1c 18 0d 17 08 00 0e 00 00 00 00 00
+           00 1a 00 1c 64 00 00 53 00 00 00 03 00 00 00 00
+           entering process_update
+           waiting for button press
+        */
     }
 }
 
