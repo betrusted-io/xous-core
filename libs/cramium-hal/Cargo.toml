@@ -46,6 +46,7 @@ loader-baosec = [
     "axp2101",
     "ux-api/loader-baosec",
 ]
+kernel-baosec = []
 test-baosec = ["ux-api/loader-baosec", "camera-gc2145"]
 hosted-baosec = [] # emulated hardware on x86 platform
 board-baosor = [

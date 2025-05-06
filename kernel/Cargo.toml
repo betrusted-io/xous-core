@@ -52,7 +52,7 @@ cramium-soc = [
 ]
 verilator-only = []
 cramium-fpga = ["utralib/cramium-fpga", "rand_chacha"]
-board-baosec = []
+board-baosec = ["cramium-hal/kernel-baosec"]
 board-baosor = []
 board-dabao = []
 

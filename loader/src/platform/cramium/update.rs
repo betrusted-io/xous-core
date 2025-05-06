@@ -80,9 +80,10 @@ pub fn scan_keyboard<T: IoSetup + IoGpio>(
             if iox.get_gpio_pin_value(*col_port, *col_pin) == IoxValue::Low {
                 if key_press_index < key_presses.len() {
                     key_presses[key_press_index] = match (row, col) {
-                        (0, 2) => KeyPress::Select,
+                        (0, 2) => KeyPress::None, // KeyPress::Select, None due to broken hardware
                         (2, 1) => KeyPress::Start,
-                        (1, 2) => KeyPress::Left,
+                        (1, 2) => KeyPress::None, // KeyPress::Left, None due to broken hardware
+                        (2, 2) => KeyPress::None, // None due to broken hardware
                         (1, 1) => KeyPress::Up,
                         (0, 1) => KeyPress::Down,
                         (2, 0) => KeyPress::Right,
@@ -126,7 +127,7 @@ pub fn process_update(perclk: u32) {
         Mono::White.into(),
         Mono::Black.into(),
     );
-    gfx::msg(&mut sh1107, "   SELECT to update", Point::new(0, 115), Mono::White.into(), Mono::Black.into());
+    gfx::msg(&mut sh1107, "   DOWN to update", Point::new(0, 115), Mono::White.into(), Mono::Black.into());
 
     sh1107.draw();
 
@@ -142,7 +143,7 @@ pub fn process_update(perclk: u32) {
                 crate::println!("Got key: {:?}", kp);
                 key_pressed = true;
             }
-            if kp == KeyPress::Select {
+            if kp == KeyPress::Down {
                 do_update = true;
             }
         }
@@ -196,7 +197,7 @@ pub fn process_update(perclk: u32) {
                 loop {
                     let kps = scan_keyboard(&iox_kbd, &rows, &cols);
                     // only consider the first key returned in case of multi-key hit, for simplicity
-                    if kps[0] == KeyPress::Select {
+                    if kps[0] == KeyPress::Down {
                         break;
                     } else if kps[0] != KeyPress::None {
                         crate::println!("Got key {:?}; ignoring", kps[0]);
@@ -224,7 +225,7 @@ pub fn process_update(perclk: u32) {
                             );
                             gfx::msg(
                                 &mut sh1107,
-                                "Press SELECT",
+                                "Press DOWN",
                                 Point::new(22, TEXT_MIDLINE + 18),
                                 Mono::Black.into(),
                                 Mono::White.into(),
