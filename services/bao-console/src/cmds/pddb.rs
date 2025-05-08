@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use String;
 #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
-const PDDB_A_LEN: usize = cramium_emu::PDDB_LEN as usize;
+const PDDB_A_LEN: usize = cramium_hal::board::PDDB_LEN as usize;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -1184,7 +1184,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     for i in 0..20 {
                         let mut testkey = self
                             .pddb
-                            .get("wlan.networks", "testkey", None, false, true, None, None::<fn()>)
+                            .get("wlan.networks", "testkey", None, true, true, None, None::<fn()>)
                             .expect("couldn't make test key");
                         testdata.push_str(&i.to_string());
                         // testkey.seek(SeekFrom::Start(0)).ok();
@@ -1248,4 +1248,54 @@ fn join_tokens<'a>(buf: &mut String, tokens: impl Iterator<Item = &'a str>) {
             write!(buf, " {}", tok).unwrap();
         }
     }
+}
+
+#[cfg(all(feature = "pddbtest", feature = "autobasis"))]
+enum VectorType {
+    Small(usize),
+    Large(usize),
+    Junk,
+}
+#[cfg(all(feature = "pddbtest", feature = "autobasis"))]
+const SMALL_SIZE: usize = 2011;
+#[cfg(all(feature = "pddbtest", feature = "autobasis"))]
+const LARGE_SIZE: usize = 28813;
+#[cfg(all(feature = "pddbtest", feature = "autobasis"))]
+const JUNK_SIZE: usize = 128 * 1024 - 2;
+#[cfg(all(feature = "pddbtest", feature = "autobasis"))]
+fn make_vector(basis_number: usize, vtype: VectorType) -> Vec<u8> {
+    use rand::prelude::*;
+    use rand_chacha::ChaCha8Rng;
+
+    let mut vector = Vec::<u8>::new();
+    // seed format:
+    // bottom 0xFFFF is reserved for the basis_number
+    // next 0xFFF is resrved for the vector number
+    // 0x8000_0000 when set means small, not set means large
+    let typemod = match vtype {
+        VectorType::Small(n) => 0x1_0000 * (n as u64) + 0x8000_0000,
+        VectorType::Large(n) => 0x1_0000 * (n as u64) + 0x0000_0000,
+        VectorType::Junk => 0x1_0000_000,
+    };
+    let mut rng = ChaCha8Rng::seed_from_u64(basis_number as u64 + typemod);
+    match vtype {
+        VectorType::Small(n) => {
+            // multiply the vector number by some odd value so the vectors are not same-sized
+            for _ in 0..SMALL_SIZE + 7 * n + basis_number {
+                vector.push(rng.gen());
+            }
+        }
+        VectorType::Large(n) => {
+            // multiply the vector number by some odd value so the vectors are not same-sized
+            for _ in 0..LARGE_SIZE + 1117 * n + basis_number {
+                vector.push(rng.gen());
+            }
+        }
+        VectorType::Junk => {
+            for _ in 0..JUNK_SIZE + basis_number {
+                vector.push(rng.gen());
+            }
+        }
+    }
+    vector
 }
