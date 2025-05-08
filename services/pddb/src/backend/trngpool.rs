@@ -3,7 +3,7 @@ use core::mem::size_of;
 use std::convert::TryInto;
 
 use aes_gcm_siv::Nonce;
-#[cfg(feature = "cramium-hal")]
+#[cfg(all(feature = "cramium-hal", not(feature = "hosted-baosec")))]
 use cram_hal_service::trng::Trng;
 #[cfg(feature = "hosted-baosec")]
 use cramium_emu::trng::Trng;
