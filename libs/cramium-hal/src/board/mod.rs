@@ -20,3 +20,7 @@ pub use baosor::*;
 pub mod dabao;
 #[cfg(any(feature = "board-dabao", feature = "loader-dabao"))]
 pub use dabao::*;
+#[cfg(feature = "hosted-baosec")]
+pub mod hosted;
+#[cfg(feature = "hosted-baosec")]
+pub use hosted::*;
