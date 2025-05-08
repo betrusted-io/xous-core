@@ -106,6 +106,7 @@ hosted-baosec = [
     "gen2",
     "cramium-emu",
     "modals/hosted-baosec",
+    "cramium-hal/hosted-baosec",
 ] # emulated hardware on x86 platform
 board-baosor = [
     "gen2",
