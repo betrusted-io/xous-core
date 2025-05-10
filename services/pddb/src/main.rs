@@ -371,7 +371,7 @@ extern crate bitfield;
   -[x] Rewrite pddb to use 'keystore' server instead of rootkeys/modals/ux integrations.
   -[x] Fill in 'keystore' server for hosted mode emulation
   -[x] Make a simple PDDB test in the baosec console app
-  -[ ] Fix the bugs in hosted mode
+  -[x] Fix the bugs in hosted mode
   -[ ] Rewrite xous-swapper/swap layer to understand virtual pages mapped to SPI flash (see notes below)
   -[ ] Fix the bugs in real hardware
 
@@ -395,7 +395,7 @@ extern crate bitfield;
     If the virtual address is in the magic range for SPINOR, the contents are fetched using the
     SPINOR interface based on the linear mapping of the lower bits of the address onto the SPINOR
     memory space.
-    - WHnever a write happens inside Xous-Swapper to a location in FLASH, the page table entry for
+    - Whenever a write happens inside Xous-Swapper to a location in FLASH, the page table entry for
     the mapped FLASH location needs to be marked as invalid and returned to the free pool. This
     uses the swap system to keep the read-view of FLASH in sync with hte write-view. This also
     means that Xous-Swapper's SPINOR map has to keep a scoreboard of what pages are mapped to
@@ -405,6 +405,29 @@ extern crate bitfield;
     tries to map the SPINOR and read some contents out, and perhaps update a sector. This will
     exercise the path in isolation and allow us to test this routine as a separate primitive
     from the PDDB.
+
+    - Development takes an incremental strategy:
+    1. Write the code that maps the proposed space with the proposed flags; need to implement
+    (a) "swap" flag which indicates the page is allocated in VM but not physically; and
+    (b) also make sure that the "dirty" flag is implemented correctly as it will actually
+    take on meaning for flushing pages to SPINOR
+    2. implement the kernel hooks to catch it, and test that
+    3. Attempt a read on the space, show the page fault, and hand-off to the swapper
+    4. implement the swapper hardware read interface
+    5. test reading to a range of data
+    6. implement the swapper *write* interface (with "patching" of unaligned writes)
+    7. add SwapOp to sync an in-memory page to FLASH
+    8. implement flush-on-release semantics for in-memory flash pages
+    9. test writing to a ranges of data (aligned, unaligned)
+    10. redo the 10 instances of spinor.patch() in pddb/backend/hw.rs to use straight-up
+    page writes as the method for writing. If we always sync after write, we can skip 11.
+    11. add swap flush call to the sync() method in PDDB
+
+    The merit of sync after write is we reduce the chance of inconsistent device state
+    on power loss. The downside is we end up writing a lot more? on the other hand,
+    writes aren't *that* common in this implementation, we may update a key record with
+    a timestamp every time it's accessed. Anyways, keep it flexible, I think this is
+    something we can tune later.
 */
 extern crate bitflags;
 
