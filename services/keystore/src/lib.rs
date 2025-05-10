@@ -46,7 +46,7 @@ impl Keystore {
             Message::new_blocking_scalar(Opcode::GetDna.to_usize().unwrap(), 0, 0, 0, 0),
         )
         .unwrap();
-        if let xous::Result::Scalar5(val1, val2, _, _, _) = response {
+        if let xous::Result::Scalar5(_, val1, val2, _, _) = response {
             (val1 as u64) | ((val2 as u64) << 32)
         } else {
             panic!("get_dna() failed with internal error");
@@ -71,7 +71,10 @@ impl Keystore {
             self.conn,
             Message::new_blocking_scalar(Opcode::EnsurePassword.to_usize().unwrap(), 0, 0, 0, 0),
         ) {
-            Ok(xous::Result::Scalar5(arg1, arg2, arg3, _arg4, _arg5)) => (arg1, arg2, arg3).into(),
+            Ok(xous::Result::Scalar5(_arg0, arg1, arg2, arg3, _arg4)) => {
+                log::info!("got {:x}, {:x}, {:x}", arg1, arg2, arg3);
+                (arg1, arg2, arg3).into()
+            }
             _ => panic!("ensure_password() failed with internal error"),
         }
     }

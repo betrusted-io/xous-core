@@ -15,9 +15,7 @@ use aes::{Aes256, BLOCK_SIZE, Block};
 use aes_gcm_siv::aead::{Aead, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
 use backend::bcrypt::*;
-#[cfg(all(feature = "gen2", feature = "cramium-emu"))]
-use cramium_emu::{SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
-#[cfg(all(feature = "gen2", not(feature = "cramium-emu")))]
+#[cfg(all(feature = "gen2"))]
 use cramium_hal::board::{SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
 #[cfg(feature = "gen1")]
 use keystore_api::AesRootkeyType;
@@ -28,6 +26,7 @@ use sha2::{Digest, Sha512_256Hw, Sha512_256Sw};
 use spinor::{SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
 use subtle::ConstantTimeEq;
 
+use crate::api::PDDB_A_LOC;
 use crate::*;
 
 #[cfg(not(feature = "deterministic"))]
@@ -208,7 +207,7 @@ impl PddbOs {
         let xns = xous_names::XousNames::new().unwrap();
         #[cfg(any(feature = "precursor", feature = "renode"))]
         let pddb = xous::syscall::map_memory(
-            xous::MemoryAddress::new(xous::PDDB_LOC as usize + xous::FLASH_PHYS_BASE as usize),
+            xous::MemoryAddress::new(PDDB_A_LOC as usize + xous::FLASH_PHYS_BASE as usize),
             None,
             PDDB_A_LEN as usize,
             xous::MemoryFlags::R | xous::MemoryFlags::RESERVE,
@@ -428,7 +427,7 @@ impl PddbOs {
         self.spinor
             .patch(
                 unsafe { self.pddb_mr.as_slice() },
-                xous::PDDB_LOC,
+                PDDB_A_LOC,
                 &data,
                 offset + self.data_phys_base.as_u32(),
             )
@@ -452,7 +451,7 @@ impl PddbOs {
                     self.spinor
                         .patch(
                             unsafe { self.pddb_mr.as_slice() },
-                            xous::PDDB_LOC,
+                            PDDB_A_LOC,
                             &mbbb,
                             self.pt_phys_base.as_u32() + erased_offset,
                         )
@@ -490,7 +489,7 @@ impl PddbOs {
             self.spinor
                 .patch(
                     unsafe { self.pddb_mr.as_slice() },
-                    xous::PDDB_LOC,
+                    PDDB_A_LOC,
                     &blank,
                     self.pt_phys_base.as_u32() + base_page as u32,
                 )
@@ -507,12 +506,7 @@ impl PddbOs {
             "attempt to patch past page table end"
         );
         self.spinor
-            .patch(
-                unsafe { self.pddb_mr.as_slice() },
-                xous::PDDB_LOC,
-                &data,
-                self.pt_phys_base.as_u32() + offset,
-            )
+            .patch(unsafe { self.pddb_mr.as_slice() }, PDDB_A_LOC, &data, self.pt_phys_base.as_u32() + offset)
             .expect("couldn't write to page table");
     }
 
@@ -523,12 +517,7 @@ impl PddbOs {
         );
         log::info!("patching keys area with {} bytes", data.len());
         self.spinor
-            .patch(
-                unsafe { self.pddb_mr.as_slice() },
-                xous::PDDB_LOC,
-                data,
-                self.key_phys_base.as_u32() + offset,
-            )
+            .patch(unsafe { self.pddb_mr.as_slice() }, PDDB_A_LOC, data, self.key_phys_base.as_u32() + offset)
             .expect("couldn't burn keys");
     }
 
@@ -537,7 +526,7 @@ impl PddbOs {
         self.spinor
             .patch(
                 unsafe { self.pddb_mr.as_slice() },
-                xous::PDDB_LOC,
+                PDDB_A_LOC,
                 data,
                 self.mbbb_phys_base.as_u32() + offset,
             )
@@ -551,7 +540,7 @@ impl PddbOs {
         self.spinor
             .patch(
                 unsafe { self.pddb_mr.as_slice() },
-                xous::PDDB_LOC,
+                PDDB_A_LOC,
                 data,
                 self.fscb_phys_base.as_u32() + offset,
             )
@@ -807,7 +796,10 @@ impl PddbOs {
     }
 
     #[cfg(feature = "gen2")]
-    pub(crate) fn ensure_password(&self) -> PasswordState { self.rootkeys.ensure_password() }
+    pub(crate) fn ensure_password(&mut self) -> PasswordState {
+        self.rootkeys.ensure_password();
+        self.try_login()
+    }
 
     pub(crate) fn try_login(&mut self) -> PasswordState {
         use aes::cipher::KeyInit;
@@ -2098,27 +2090,27 @@ impl PddbOs {
                 modals
                     .start_progress(
                         t!("pddb.erase", locales::LANG),
-                        xous::PDDB_LOC,
-                        xous::PDDB_LOC + PDDB_A_LEN as u32,
-                        xous::PDDB_LOC,
+                        PDDB_A_LOC,
+                        PDDB_A_LOC + PDDB_A_LEN as u32,
+                        PDDB_A_LOC,
                     )
                     .expect("couldn't raise progress bar");
                 // retain this delay, because the next section is so compute-intensive, it may take a
                 // while for the GAM to catch up.
                 self.tt.sleep_ms(100).unwrap();
             }
-            for offset in (xous::PDDB_LOC..(xous::PDDB_LOC + PDDB_A_LEN as u32))
-                .step_by(SPINOR_BULK_ERASE_SIZE as usize)
+            for offset in
+                (PDDB_A_LOC..(PDDB_A_LOC + PDDB_A_LEN as u32)).step_by(SPINOR_BULK_ERASE_SIZE as usize)
             {
                 if (offset / SPINOR_BULK_ERASE_SIZE) % 4 == 0 {
-                    log::info!("Initial erase: {}/{}", offset - xous::PDDB_LOC, PDDB_A_LEN as u32);
+                    log::info!("Initial erase: {}/{}", offset - PDDB_A_LOC, PDDB_A_LEN as u32);
                     if let Some(modals) = progress {
                         modals.update_progress(offset as u32).expect("couldn't update progress bar");
                     }
                 }
                 // do a blank check first to see if the sector really needs erasing
                 let mut blank = true;
-                let slice_start = (offset - xous::PDDB_LOC) as usize / size_of::<u32>();
+                let slice_start = (offset - PDDB_A_LOC) as usize / size_of::<u32>();
                 for word in unsafe {
                     self.pddb_mr.as_slice::<u32>()
                         [slice_start..slice_start + SPINOR_BULK_ERASE_SIZE as usize / size_of::<u32>()]
@@ -2134,9 +2126,7 @@ impl PddbOs {
                 }
             }
             if let Some(modals) = progress {
-                modals
-                    .update_progress(xous::PDDB_LOC + PDDB_A_LEN as u32)
-                    .expect("couldn't update progress bar");
+                modals.update_progress(PDDB_A_LOC + PDDB_A_LEN as u32).expect("couldn't update progress bar");
                 modals.finish_progress().expect("couldn't dismiss progress bar");
                 #[cfg(feature = "ux-swap-delay")]
                 self.tt.sleep_ms(100).unwrap();
@@ -2332,7 +2322,7 @@ impl PddbOs {
                 }
             }
             self.spinor
-                .patch(unsafe { self.pddb_mr.as_slice() }, xous::PDDB_LOC, &temp, offset as u32)
+                .patch(unsafe { self.pddb_mr.as_slice() }, PDDB_A_LOC, &temp, offset as u32)
                 .expect("couldn't fill in disk with random datax");
         }
         if let Some(modals) = progress {
@@ -2503,7 +2493,7 @@ impl PddbOs {
                 self.spinor
                     .patch(
                         unsafe { self.pddb_mr.as_slice() },
-                        xous::PDDB_LOC,
+                        PDDB_A_LOC,
                         &mbbb,
                         self.pt_phys_base.as_u32() + erased_offset,
                     )
@@ -3087,7 +3077,7 @@ impl PddbOs {
     pub(crate) fn pddb_get_all_keys<'a>(
         &'a self,
         cache: &'a Vec<BasisCacheEntry>,
-        _op: GetKeyOp,
+        // _op: GetKeyOp,
     ) -> Option<Vec<(BasisKeys, String)>> {
         // populate the "known" entries
         let mut ret = Vec::<(BasisKeys, String)>::new();
@@ -3240,7 +3230,7 @@ impl PddbOs {
                     self.spinor
                         .patch(
                             self.pddb_mr.as_slice(),
-                            xous::PDDB_LOC,
+                            PDDB_A_LOC,
                             &page,
                             self.pt_phys_base.as_u32() + (page_index * PAGE_SIZE) as u32,
                         )

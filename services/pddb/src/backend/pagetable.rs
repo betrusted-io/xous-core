@@ -150,7 +150,7 @@ impl DerefMut for Pte {
 
 pub const PDDB_SIZE_PAGES: usize = crate::PDDB_A_LEN as usize / PAGE_SIZE;
 /// This structure is mapped into the top of FLASH memory, starting at
-/// xous::PDDB_LOC. This actually slightly over-sizes the page table,
+/// PDDB_A_LOC. This actually slightly over-sizes the page table,
 /// because the page table does not map the locations for the page table
 /// itself, the MBBB, or the FSCB. However, the 0th entry of the page table
 /// always corresponds to the base of data in FLASH, which means the excess

@@ -138,7 +138,7 @@ impl HostedSpinor {
 
     pub fn bulk_erase(&self, start: u32, len: u32) -> Result<(), xous::Error> {
         for b in flashmem().memory.as_mut_slice()
-            [(start - xous::PDDB_LOC) as usize..(start - xous::PDDB_LOC + len) as usize]
+            [(start - PDDB_A_LOC) as usize..(start - PDDB_A_LOC + len) as usize]
             .iter_mut()
         {
             *b = 0xFF;

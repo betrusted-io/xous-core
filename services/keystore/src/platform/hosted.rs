@@ -32,7 +32,7 @@ pub fn keystore(sid: SID) -> ! {
                     AesOpType::Encrypt => AesOpType::Encrypt,
                 };
                 let mut ikm = [0u8; 32];
-                hex::encode_to_slice(WELL_KNOWN_KEY, &mut ikm).unwrap();
+                ikm.copy_from_slice(&hex::decode(WELL_KNOWN_KEY).unwrap());
                 let hk = Hkdf::<Sha256>::new(None, &ikm);
                 let mut okm = [0u8; 32];
                 hk.expand(&aes_op.domain.as_bytes(), &mut okm)
@@ -68,7 +68,7 @@ pub fn keystore(sid: SID) -> ! {
             }
             Opcode::AesKwp => {
                 let mut ikm = [0u8; 32];
-                hex::encode_to_slice(WELL_KNOWN_KEY, &mut ikm).unwrap();
+                ikm.copy_from_slice(&hex::decode(WELL_KNOWN_KEY).unwrap());
                 let mut buffer =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut kwp = buffer.to_original::<KeyWrapper, _>().unwrap();
@@ -149,8 +149,8 @@ pub fn keystore(sid: SID) -> ! {
             Opcode::GetDna => {
                 // dummy DNA value
                 if let Some(scalar) = msg.body.scalar_message_mut() {
-                    scalar.arg1 = 0x1234_5678;
-                    scalar.arg2 = 0xface_cafe;
+                    scalar.arg1 = 0;
+                    scalar.arg2 = 0;
                 }
             }
             Opcode::InvalidCall => {

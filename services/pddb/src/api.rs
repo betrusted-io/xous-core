@@ -44,11 +44,23 @@ pub(crate) const PDDB_VERSION: u32 = 0x00_00_02_01;
 #[allow(dead_code)]
 // PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing.
 #[allow(dead_code)]
-#[cfg(not(any(feature = "pddbtest", feature = "autobasis", feature = "ci", feature = "smalldb")))]
+#[cfg(all(
+    not(any(feature = "pddbtest", feature = "autobasis", feature = "ci", feature = "smalldb")),
+    not(feature = "gen2")
+))]
 pub(crate) const PDDB_A_LEN: usize = xous::PDDB_LEN as usize;
 #[allow(dead_code)]
-#[cfg(any(feature = "pddbtest", feature = "autobasis", feature = "ci", feature = "smalldb"))]
+#[cfg(all(
+    any(feature = "pddbtest", feature = "autobasis", feature = "ci", feature = "smalldb"),
+    not(feature = "gen2")
+))]
 pub const PDDB_A_LEN: usize = 4 * 1024 * 1024;
+#[cfg(feature = "gen2")]
+pub const PDDB_A_LEN: usize = cramium_hal::board::PDDB_LEN as usize;
+#[cfg(feature = "gen1")]
+pub const PDDB_A_LOC: u32 = xous::PDDB_LOC as u32;
+#[cfg(feature = "gen2")]
+pub const PDDB_A_LOC: u32 = cramium_hal::board::PDDB_LOC as u32;
 
 /// range for the starting point of a journal number, picked from a random seed
 /// the goal is to reduce info leakage about the age of structures relative to each other
@@ -163,7 +175,7 @@ pub(crate) enum Opcode {
     #[cfg(not(target_os = "xous"))]
     DangerousDebug = 25,
     #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
-    BasisTesting = 26,
+    BasisTesting = 65536,
 
     ListBasisStd = 26,
     CreateBasisStd = 27,
