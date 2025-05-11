@@ -35,7 +35,7 @@ mod implementation {
     use crate::murmur3::murmur3_32;
 
     const SYSTEM_CLOCK_FREQUENCY: u32 = 12_000_000; // timer0 is now in the always-on domain
-    const SYSTEM_TICK_INTERVAL_MS: u32 = xous::BASE_QUANTA_MS;
+    const SYSTEM_TICK_INTERVAL_MS: u32 = precursor_hal::board::BASE_QUANTA_MS;
 
     fn timer_tick(_irq_no: usize, arg: *mut usize) {
         let mut timer = CSR::new(arg as *mut u32);

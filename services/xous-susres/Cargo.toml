@@ -16,6 +16,7 @@ log-server = { package = "xous-api-log", version = "0.1.63" }
 xous = "0.9.64"
 xous-ipc = "0.10.4"
 log = "0.4.14"
+precursor-hal = { path = "../../libs/precursor-hal" }
 
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
