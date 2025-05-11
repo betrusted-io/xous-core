@@ -8,9 +8,9 @@ pub const EXCEPTION_TID: TID = 1;
 pub const INITIAL_TID: TID = 2;
 pub const IRQ_TID: TID = 0;
 
+use xous_kernel::arch::PAGE_SIZE;
 use xous_kernel::{PID, ProcessInit, ProcessStartup, TID, ThreadInit};
 
-use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
 
 // use crate::args::KernelArguments;
@@ -89,7 +89,7 @@ struct ProcessImpl {
 /// is a multiple of the page size.
 fn _assert_processimpl_is_page_sized() {
     unsafe {
-        mem::transmute::<ProcessImpl, [u8; crate::mem::PAGE_SIZE]>(ProcessImpl {
+        mem::transmute::<ProcessImpl, [u8; xous_kernel::arch::PAGE_SIZE]>(ProcessImpl {
             scratch: 0,
             hardware_thread: 0,
             inner: Default::default(),

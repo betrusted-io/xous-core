@@ -19,7 +19,7 @@ pub const DEFAULT_HEAP_BASE: usize = 0x3000_0000;
 pub const DEFAULT_MESSAGE_BASE: usize = 0x4000_0000;
 pub const DEFAULT_BASE: usize = 0x6000_0000;
 
-pub const PAGE_SIZE: usize = 4096;
+pub const PAGE_SIZE: usize = xous_kernel::arch::PAGE_SIZE;
 pub const PAGE_TABLE_OFFSET: usize = 0xfefe_0000;
 pub const PAGE_TABLE_ROOT_OFFSET: usize = 0xff80_0000;
 pub const THREAD_CONTEXT_AREA: usize = 0xff80_4000;

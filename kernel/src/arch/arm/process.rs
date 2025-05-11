@@ -3,10 +3,10 @@
 
 use core::mem;
 
+use xous_kernel::arch::PAGE_SIZE;
 use xous_kernel::{PID, ProcessInit, ProcessStartup, TID, ThreadInit, arch::Arguments};
 
 use crate::arch::mem::THREAD_CONTEXT_AREA;
-use crate::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
 
 static mut PROCESS: *mut ProcessImpl = THREAD_CONTEXT_AREA as *mut ProcessImpl;
