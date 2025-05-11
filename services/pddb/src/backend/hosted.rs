@@ -6,7 +6,7 @@ use std::io::prelude::*;
 use std::mem::MaybeUninit;
 use std::sync::Once;
 
-use crate::api::*;
+use crate::{PDDB_A_LEN, PDDB_A_LOC};
 
 // This is considered bad practice for Rust to use a global singleton.
 // However, this hack puts the burden of emulation on the emulator, while

@@ -91,7 +91,7 @@ gen1 = [
     "modals",
     "precursor-hal",
 ]
-gen2 = ["keystore", "keystore-api/gen2", "cramium-hal"]
+gen2 = ["keystore", "keystore-api/gen2"]
 # gen 1 targets
 precursor = ["utralib/precursor", "sha2/precursor", "gen1"]
 hosted = ["utralib/hosted", "sha2/hosted", "gen1"]
@@ -119,7 +119,7 @@ board-baosor = [
 ] # Precursor form factor
 # board-dabao is not a valid target as it lacks external SPI flash
 
-doc-deps = []
+doc-deps = ["precursor-hal"]
 
 # when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.
 # 32 bit addressing is recommended for Precursor, as its disk is only 128MiB and it has limited RAM for bookkeeping.

@@ -28,7 +28,7 @@ use sha2::{Digest, Sha512_256Hw, Sha512_256Sw};
 use spinor::{SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
 use subtle::ConstantTimeEq;
 
-use crate::api::PDDB_A_LOC;
+use crate::PDDB_A_LOC;
 use crate::*;
 
 #[cfg(not(feature = "deterministic"))]

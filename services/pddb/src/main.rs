@@ -485,6 +485,11 @@ use rkyv::{
 use xous::{Message, msg_blocking_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 
+#[cfg(feature = "gen2")]
+pub const PDDB_A_LEN: usize = PDDB_LEN as usize;
+#[cfg(feature = "gen2")]
+pub const PDDB_A_LOC: u32 = PDDB_LOC as u32;
+
 #[cfg(feature = "perfcounter")]
 const FILE_ID_SERVICES_PDDB_SRC_MAIN: u32 = 0;
 #[cfg(feature = "perfcounter")]
