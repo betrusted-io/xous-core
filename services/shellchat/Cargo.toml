@@ -17,13 +17,13 @@ ime-plugin-shell = { path = "../ime-plugin-shell" }
 ime-plugin-tts = { path = "../ime-plugin-tts" }
 llio = { path = "../llio" }
 log = "0.4.14"
-log-server = { package = "xous-api-log", version = "0.1.63" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.63" }
-xous = "0.9.64"
-xous-ipc = "0.10.4"
-xous-names = { package = "xous-api-names", version = "0.9.65" }
+log-server = { package = "xous-api-log", version = "0.1.64" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.64" }
+xous = "0.9.65"
+xous-ipc = "0.10.5"
+xous-names = { package = "xous-api-names", version = "0.9.66" }
 keyboard = { path = "../keyboard" }
-susres = { package = "xous-api-susres", version = "0.9.63" }
+susres = { package = "xous-api-susres", version = "0.9.64" }
 codec = { path = "../codec" }
 sha2 = { version = "0.10.8" }
 digest = "0.10.7"

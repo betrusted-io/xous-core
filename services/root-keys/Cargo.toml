@@ -7,12 +7,12 @@ description = "Xous root keys server"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.64"
-log-server = { package = "xous-api-log", version = "0.1.63" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.63" }
-xous-names = { package = "xous-api-names", version = "0.9.65" }
+xous = "0.9.65"
+log-server = { package = "xous-api-log", version = "0.1.64" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.64" }
+xous-names = { package = "xous-api-names", version = "0.9.66" }
 log = "0.4.14"
-susres = { package = "xous-api-susres", version = "0.9.63" }
+susres = { package = "xous-api-susres", version = "0.9.64" }
 trng = { path = "../trng" }
 spinor = { path = "../spinor" }
 llio = { path = "../llio" }
@@ -23,7 +23,7 @@ blitstr2 = { path = "../../libs/blitstr2" }
 keystore-api = { path = "../../libs/keystore-api" }
 precursor-hal = { path = "../../libs/precursor-hal" }
 
-xous-ipc = "0.10.4"
+xous-ipc = "0.10.5"
 num-derive = { version = "0.4.1", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [
