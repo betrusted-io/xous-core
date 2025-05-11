@@ -21,11 +21,7 @@ cramium-emu = { path = "../cramium-emu", optional = true }
 usb-cramium = { path = "../usb-cramium" }
 modals = { path = "../modals", default-features = false }
 ux-api = { path = "../../libs/ux-api", optional = true }
-pddb = { path = "../pddb", features = [
-    "gen2",
-    "board-baosec",
-    "cramium-hal",
-], optional = true }
+pddb = { path = "../pddb", optional = true }
 
 # pddb testing
 rand = { version = "0.8.5", features = ["getrandom"], optional = true }
@@ -43,7 +39,6 @@ board-baosec = [
     "cramium-hal",
     "usb-cramium/board-baosec",
     "pddb/board-baosec",
-    "pddb/gen2",
 ]
 hosted-baosec = [
     "modals/hosted-baosec",
@@ -58,4 +53,4 @@ test-rekey = []
 autobasis = ["rand_chacha", "rand"]
 modal-testing = ["ux-api", "modals/modal-testing"]
 test-scrollbars = []
-default = ["pddbtest"]
+default = []
