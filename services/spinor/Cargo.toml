@@ -16,6 +16,7 @@ susres = { package = "xous-api-susres", version = "0.9.63" }
 trng = { path = "../trng" }
 com = { path = "../com" }
 llio = { path = "../llio" }
+precursor-hal = { path = "../../libs/precursor-hal" }
 
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",

@@ -7,6 +7,7 @@ use std::collections::HashSet;
 
 use api::*;
 use num_traits::*;
+use precursor_hal::board::*;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
@@ -929,10 +930,9 @@ fn main() -> ! {
                 let mut wr = buffer.to_original::<WriteRegion, _>().unwrap();
                 let mut authorized = true;
                 if let Some(st) = soc_token {
-                    if staging_write_protect
-                        && ((wr.start >= xous::SOC_REGION_LOC) && (wr.start < xous::LOADER_LOC))
+                    if staging_write_protect && ((wr.start >= SOC_REGION_LOC) && (wr.start < LOADER_LOC))
                         || !staging_write_protect
-                            && ((wr.start >= xous::SOC_REGION_LOC) && (wr.start < xous::SOC_STAGING_GW_LOC))
+                            && ((wr.start >= SOC_REGION_LOC) && (wr.start < SOC_STAGING_GW_LOC))
                     {
                         // if only the holder of the ID that matches the SoC token can write to the SOC flash
                         // area other areas are not as strictly controlled because
@@ -972,9 +972,7 @@ fn main() -> ! {
                 let mut wr = buffer.to_original::<BulkErase, _>().unwrap();
                 // bounds check to within the PDDB region for bulk erases. Please use standard patching for
                 // other regions.
-                let authorized = if (wr.start >= xous::PDDB_LOC)
-                    && ((wr.start + wr.len) <= (xous::PDDB_LOC + xous::PDDB_LEN))
-                {
+                let authorized = if (wr.start >= PDDB_LOC) && ((wr.start + wr.len) <= (PDDB_LOC + PDDB_LEN)) {
                     true
                 } else {
                     false
