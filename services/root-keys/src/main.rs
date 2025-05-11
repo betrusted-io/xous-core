@@ -18,11 +18,11 @@ use gam::modal::*;
 use gam::{MenuItem, MenuPayload};
 use locales::t;
 use num_traits::*;
+use precursor_hal::board::*;
 #[cfg(feature = "tts")]
 use tts_frontend::*;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message};
 use xous_ipc::Buffer;
-
 #[cfg(any(feature = "precursor", feature = "renode"))]
 mod implementation;
 #[cfg(any(feature = "precursor", feature = "renode"))]
@@ -794,9 +794,9 @@ fn main() -> ! {
                             modals
                                 .add_list_item(t!("rootkeys.confirm.dont_ask", locales::LANG))
                                 .expect("modals error");
-                            log::info!("{}ROOTKEY.INITQ3,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                            log::info!("{}ROOTKEY.INITQ3,{}", BOOKEND_START, BOOKEND_END);
                         } else {
-                            log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                            log::info!("{}ROOTKEY.CONFIRM,{}", BOOKEND_START, BOOKEND_END);
                         }
                         match modals.get_radiobutton(t!("rootkeys.confirm", locales::LANG)) {
                             Ok(response) => {
@@ -842,7 +842,7 @@ fn main() -> ! {
                     );
                     #[cfg(feature = "tts")]
                     tts.tts_blocking(t!("rootkeys.updatefirstpass", locales::LANG)).unwrap();
-                    log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    log::info!("{}ROOTKEY.UPDPW,{}", BOOKEND_START, BOOKEND_END);
                     rootkeys_modal.activate();
                 }
             }
@@ -870,7 +870,7 @@ fn main() -> ! {
                 );
                 #[cfg(feature = "tts")]
                 tts.tts_blocking(t!("rootkeys.updatepass", locales::LANG)).unwrap();
-                log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                log::info!("{}ROOTKEY.UPDPW,{}", BOOKEND_START, BOOKEND_END);
                 rootkeys_modal.activate();
             }
             Some(Opcode::UxInitUpdatePasswordReturn) => {
@@ -901,7 +901,7 @@ fn main() -> ! {
                                 );
                                 #[cfg(feature = "tts")]
                                 tts.tts_blocking(t!("rootkeys.updatefirstpass", locales::LANG)).unwrap();
-                                log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                log::info!("{}ROOTKEY.UPDPW,{}", BOOKEND_START, BOOKEND_END);
                                 rootkeys_modal.activate();
                                 continue;
                             } else {
@@ -989,7 +989,7 @@ fn main() -> ! {
                 }
             }
             Some(Opcode::UxTryReboot) => {
-                log::info!("{}ROOTKEY.INITDONE,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                log::info!("{}ROOTKEY.INITDONE,{}", BOOKEND_START, BOOKEND_END);
                 log::info!("entering reboot handler");
                 // ensure the boost is off so that the reboot will not fail
                 com.set_boost(false).unwrap();
@@ -1187,7 +1187,7 @@ fn main() -> ! {
                 };
 
                 let mut skip_confirmation = false;
-                log::info!("{}ROOTKEY.GWUP,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                log::info!("{}ROOTKEY.GWUP,{}", BOOKEND_START, BOOKEND_END);
                 match modals.get_radiobutton(prompt) {
                     Ok(response) => {
                         if response == t!("rootkeys.gwup.short", locales::LANG) {
@@ -1274,7 +1274,7 @@ fn main() -> ! {
                     );
                     #[cfg(feature = "tts")]
                     tts.tts_blocking(t!("rootkeys.get_update_password", locales::LANG)).unwrap();
-                    log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    log::info!("{}ROOTKEY.UPDPW,{}", BOOKEND_START, BOOKEND_END);
                     rootkeys_modal.activate();
                 }
             }
@@ -1383,7 +1383,7 @@ fn main() -> ! {
                     );
                     #[cfg(feature = "tts")]
                     tts.tts_blocking(t!("rootkeys.get_signing_password", locales::LANG)).unwrap();
-                    log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    log::info!("{}ROOTKEY.UPDPW,{}", BOOKEND_START, BOOKEND_END);
                     rootkeys_modal.activate();
                 }
             }
@@ -1486,7 +1486,7 @@ fn main() -> ! {
                     );
                     #[cfg(feature = "tts")]
                     tts.tts_blocking(t!("rootkeys.get_login_password", locales::LANG)).unwrap();
-                    log::info!("{}ROOTKEY.BOOTPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    log::info!("{}ROOTKEY.BOOTPW,{}", BOOKEND_START, BOOKEND_END);
                     rootkeys_modal.activate();
                     // note that the scalar is *not* yet returned, it will be returned by the opcode called by
                     // the password assurance
@@ -1800,7 +1800,7 @@ fn main() -> ! {
                 );
                 #[cfg(feature = "tts")]
                 tts.tts_blocking(t!("rootkeys.get_update_password_backup", locales::LANG)).unwrap();
-                log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                log::info!("{}ROOTKEY.UPDPW,{}", BOOKEND_START, BOOKEND_END);
                 rootkeys_modal.activate();
             }
             Some(Opcode::UxCreateBackupPwReturn) => {
@@ -1823,7 +1823,7 @@ fn main() -> ! {
                     loop {
                         modals.add_list_item(t!("rootkeys.gwup.yes", locales::LANG)).expect("modals error");
                         modals.add_list_item(t!("rootkeys.gwup.no", locales::LANG)).expect("modals error");
-                        log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        log::info!("{}ROOTKEY.CONFIRM,{}", BOOKEND_START, BOOKEND_END);
                         match modals.get_radiobutton(t!("rootkeys.backup_verify", locales::LANG)) {
                             Ok(response) => {
                                 if response == t!("rootkeys.gwup.yes", locales::LANG) {
@@ -1889,7 +1889,7 @@ fn main() -> ! {
                             modals.dynamic_notification_close().ok();
                             // there will be a bit of a pause while the QR text renders, but we'll have to fix
                             // that with other optimizations...
-                            log::info!("{}BACKUP.STAGED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                            log::info!("{}BACKUP.STAGED,{}", BOOKEND_START, BOOKEND_END);
                             modals
                                 .show_notification(
                                     t!("rootkeys.backup_staged", locales::LANG),
@@ -1924,7 +1924,7 @@ fn main() -> ! {
                     );
                     #[cfg(feature = "tts")]
                     tts.tts_blocking(t!("rootkeys.get_update_password_backup", locales::LANG)).unwrap();
-                    log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    log::info!("{}ROOTKEY.UPDPW,{}", BOOKEND_START, BOOKEND_END);
                     rootkeys_modal.activate();
                 }
             }
@@ -1934,7 +1934,7 @@ fn main() -> ! {
                 if keys.is_initialized() {
                     modals.add_list_item(t!("rootkeys.confirm.yes", locales::LANG)).expect("modals error");
                     modals.add_list_item(t!("rootkeys.confirm.no", locales::LANG)).expect("modals error");
-                    log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    log::info!("{}ROOTKEY.CONFIRM,{}", BOOKEND_START, BOOKEND_END);
                     match modals.get_radiobutton(t!("rootkeys.restore_already_init", locales::LANG)) {
                         Ok(response) => {
                             if response == t!("rootkeys.confirm.no", locales::LANG) {
@@ -2052,7 +2052,7 @@ fn main() -> ! {
                         );
                         #[cfg(feature = "tts")]
                         tts.tts_blocking(t!("rootkeys.get_update_password_restore", locales::LANG)).unwrap();
-                        log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        log::info!("{}ROOTKEY.UPDPW,{}", BOOKEND_START, BOOKEND_END);
                         rootkeys_modal.activate();
                     } else {
                         // decryption error
@@ -2153,7 +2153,7 @@ fn main() -> ! {
                                         locales::LANG
                                     ))
                                     .unwrap();
-                                    log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    log::info!("{}ROOTKEY.UPDPW,{}", BOOKEND_START, BOOKEND_END);
                                     rootkeys_modal.activate();
                                 } else {
                                     // clear all the state, re-enable suspend/resume
@@ -2239,7 +2239,7 @@ fn main() -> ! {
                 //   5. seal the device using seal_device_forever() [first device don't call this so we can
                 //      debug the flow; on second device, call this and confirm we can't re-burn or readout]
                 //   6. force a reboot
-                log::info!("{}EFUSE.START,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                log::info!("{}EFUSE.START,{}", BOOKEND_START, BOOKEND_END);
                 // confirm that we can read out our JTAG ID.
                 if !keys.is_jtag_working() {
                     modals
@@ -2299,7 +2299,7 @@ fn main() -> ! {
 
                 match result {
                     Ok(_) => {
-                        log::info!("{}EFUSE.OK,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        log::info!("{}EFUSE.OK,{}", BOOKEND_START, BOOKEND_END);
                         modals
                             .show_notification(t!("rootkeys.efuse_finished", locales::LANG), None)
                             .expect("modals error");

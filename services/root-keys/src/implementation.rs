@@ -18,12 +18,12 @@ use keywrap::*;
 use locales::t;
 use num_traits::*;
 pub use oracle::FpgaKeySource;
+use precursor_hal::board::*;
 use rand_core::RngCore;
 use root_keys::key2bits::*;
 use sha2::{Digest, Sha256, Sha512_256Sw, Sha512Hw, Sha512Sw};
 use utralib::generated::*;
 use ux_api::service::api::BulkRead;
-use xous::KERNEL_BACKUP_OFFSET;
 use xous_semver::SemVer;
 
 use crate::backups;
@@ -193,38 +193,35 @@ impl<'a> RootKeys {
         // read-only memory maps. even if we don't refer to them, we map them into our process
         // so that no other processes can claim them
         let gateware = xous::syscall::map_memory(
-            Some(NonZeroUsize::new((xous::SOC_MAIN_GW_LOC + xous::FLASH_PHYS_BASE) as usize).unwrap()),
+            Some(NonZeroUsize::new((SOC_MAIN_GW_LOC + FLASH_PHYS_BASE) as usize).unwrap()),
             None,
-            xous::SOC_MAIN_GW_LEN as usize,
+            SOC_MAIN_GW_LEN as usize,
             xous::MemoryFlags::R,
         )
         .expect("couldn't map in the SoC gateware region");
         let staging = xous::syscall::map_memory(
-            Some(NonZeroUsize::new((xous::SOC_STAGING_GW_LOC + xous::FLASH_PHYS_BASE) as usize).unwrap()),
+            Some(NonZeroUsize::new((SOC_STAGING_GW_LOC + FLASH_PHYS_BASE) as usize).unwrap()),
             None,
-            xous::SOC_STAGING_GW_LEN as usize,
+            SOC_STAGING_GW_LEN as usize,
             xous::MemoryFlags::R,
         )
         .expect("couldn't map in the SoC staging region");
         let loader_code = xous::syscall::map_memory(
-            Some(NonZeroUsize::new((xous::LOADER_LOC + xous::FLASH_PHYS_BASE) as usize).unwrap()),
+            Some(NonZeroUsize::new((LOADER_LOC + FLASH_PHYS_BASE) as usize).unwrap()),
             None,
-            xous::LOADER_CODE_LEN as usize,
+            LOADER_CODE_LEN as usize,
             xous::MemoryFlags::R,
         )
         .expect("couldn't map in the loader code region");
         let kernel_sig = xous::syscall::map_memory(
-            Some(NonZeroUsize::new((xous::KERNEL_LOC + xous::FLASH_PHYS_BASE) as usize).unwrap()),
+            Some(NonZeroUsize::new((KERNEL_LOC + FLASH_PHYS_BASE) as usize).unwrap()),
             None,
             4096, // map just the signature header region, so we can use it to check values
             xous::MemoryFlags::R,
         )
         .expect("couldn't map in the kernel signature region");
         let kernel_backup = xous::syscall::map_memory(
-            Some(
-                NonZeroUsize::new((xous::KERNEL_LOC + xous::FLASH_PHYS_BASE + KERNEL_BACKUP_OFFSET) as usize)
-                    .unwrap(),
-            ),
+            Some(NonZeroUsize::new((KERNEL_LOC + FLASH_PHYS_BASE + KERNEL_BACKUP_OFFSET) as usize).unwrap()),
             None,
             4096, // map just the backup block
             xous::MemoryFlags::R,
@@ -248,10 +245,7 @@ impl<'a> RootKeys {
         let kernel_end_base_offset = (kernel_len + SIGBLOCK_SIZE as usize - 8) & !(map_len - 1);
         let kernel_end_mr = xous::syscall::map_memory(
             Some(
-                NonZeroUsize::new(
-                    (xous::KERNEL_LOC + xous::FLASH_PHYS_BASE) as usize + kernel_end_base_offset,
-                )
-                .unwrap(),
+                NonZeroUsize::new((KERNEL_LOC + FLASH_PHYS_BASE) as usize + kernel_end_base_offset).unwrap(),
             ),
             None,
             map_len,
@@ -289,16 +283,16 @@ impl<'a> RootKeys {
         let keys = RootKeys {
             keyrom: CSR::new(keyrom.as_mut_ptr() as *mut u32),
             gateware_mr: gateware,
-            gateware_base: xous::SOC_MAIN_GW_LOC,
+            gateware_base: SOC_MAIN_GW_LOC,
             staging_mr: staging,
-            staging_base: xous::SOC_STAGING_GW_LOC,
+            staging_base: SOC_STAGING_GW_LOC,
             loader_code_mr: loader_code,
-            loader_code_base: xous::LOADER_LOC,
+            loader_code_base: LOADER_LOC,
             kernel_sig_mr: kernel_sig,
             kernel_backup_mr: kernel_backup,
             kernel_end_mr,
             kernel_end_base_offset: kernel_end_base_offset as u32,
-            kernel_base: xous::KERNEL_LOC,
+            kernel_base: KERNEL_LOC,
             sensitive_data: RefCell::new(sensitive_data),
             pass_cache,
             update_password_policy: PasswordRetentionPolicy::AlwaysPurge,
@@ -1054,7 +1048,7 @@ impl<'a> RootKeys {
     /// used to recycle a PDDB after a key init event
     pub fn pddb_recycle(&mut self) {
         // erase the page table, which should effectively trigger a reformat on the next boot
-        self.spinor.bulk_erase(xous::PDDB_LOC, 512 * 1024).expect("couldn't erase page table");
+        self.spinor.bulk_erase(PDDB_LOC, 512 * 1024).expect("couldn't erase page table");
     }
 
     /// Core of the key initialization routine. Requires a `progress_modal` dialog box that has been set
@@ -1639,7 +1633,7 @@ impl<'a> RootKeys {
                     loop {
                         modals.add_list_item(t!("rootkeys.gwup.yes", locales::LANG)).expect("modals error");
                         modals.add_list_item(t!("rootkeys.gwup.no", locales::LANG)).expect("modals error");
-                        log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        log::info!("{}ROOTKEY.CONFIRM,{}", BOOKEND_START, BOOKEND_END);
                         match modals.get_radiobutton(t!("rootkeys.backup_verify", locales::LANG)) {
                             Ok(response) => {
                                 if response == t!("rootkeys.gwup.yes", locales::LANG) {
@@ -1914,7 +1908,7 @@ impl<'a> RootKeys {
                     return Err(RootkeyResult::IntegrityError);
                 }
             }
-            log::info!("{}EFUSE.BURN,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+            log::info!("{}EFUSE.BURN,{}", BOOKEND_START, BOOKEND_END);
             // burn the key here to eFuses
             match self.jtag.efuse_key_burn(pcache.fpga_key) {
                 Ok(result) => {
@@ -1923,7 +1917,7 @@ impl<'a> RootKeys {
                         self.ticktimer.sleep_ms(2000).ok();
                         return Err(RootkeyResult::KeyError);
                     } else {
-                        log::info!("{}EFUSE.BURN_OK,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        log::info!("{}EFUSE.BURN_OK,{}", BOOKEND_START, BOOKEND_END);
                     }
                 }
                 Err(e) => {
@@ -1936,7 +1930,7 @@ impl<'a> RootKeys {
                     return Err(RootkeyResult::StateError);
                 }
             }
-            log::info!("{}EFUSE.BURN_DONE,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+            log::info!("{}EFUSE.BURN_DONE,{}", BOOKEND_START, BOOKEND_END);
 
             #[cfg(feature = "hazardous-debug")]
             match self.jtag.efuse_fetch() {
@@ -1952,7 +1946,7 @@ impl<'a> RootKeys {
             // seal the device from key readout, force encrypted boot
             pb.update_text(t!("rootkeys.efuse_sealing", locales::LANG));
             pb.set_percentage(96);
-            log::info!("{}EFUSE.SEAL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+            log::info!("{}EFUSE.SEAL,{}", BOOKEND_START, BOOKEND_END);
             match self.jtag.seal_device() {
                 Ok(result) => {
                     if !result {
@@ -1971,7 +1965,7 @@ impl<'a> RootKeys {
                     return Err(RootkeyResult::StateError);
                 }
             }
-            log::info!("{}EFUSE.SEAL_OK,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+            log::info!("{}EFUSE.SEAL_OK,{}", BOOKEND_START, BOOKEND_END);
 
             #[cfg(feature = "hazardous-debug")]
             match self.jtag.efuse_fetch() {
@@ -2598,7 +2592,7 @@ impl<'a> RootKeys {
         const PATCH_CHUNK: usize = 65536; // this controls the granularity of the erase operation
         let mut prog_ctr = 0;
         if let Some(ref mut pb) = maybe_pb {
-            pb.rebase_subtask_work(0, xous::SOC_STAGING_GW_LEN);
+            pb.rebase_subtask_work(0, SOC_STAGING_GW_LEN);
         }
 
         for (dst, src) in gateware_dest.chunks(PATCH_CHUNK).into_iter().zip(gateware_src.chunks(PATCH_CHUNK))
@@ -2689,7 +2683,7 @@ impl<'a> RootKeys {
             pb.rebase_subtask_work(0, 2);
             pb
         });
-        let loader_len = xous::LOADER_CODE_LEN
+        let loader_len = LOADER_CODE_LEN
             - SIGBLOCK_SIZE
             + blitstr2::fontmap::FONT_TOTAL_LEN as u32
             // these also need to be updated in graphics-server/src/main.rs @ Some(Opcode::BulkReadfonts)
