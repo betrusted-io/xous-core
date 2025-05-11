@@ -10,6 +10,8 @@ pub use syscall::*;
 pub mod process;
 pub use process::*;
 
+pub const PAGE_SIZE: usize = 4096;
+
 pub struct ProcessHandle {
     pub pid: crate::PID,
     pub cid: crate::CID,
