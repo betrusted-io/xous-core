@@ -9,6 +9,6 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "alloc",
     "bytecheck",
 ] }
-xous = { version = "0.9.65", features = ["forget-memory-messages"] }
+xous = { version = "0.9.66", features = ["forget-memory-messages"] }
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }

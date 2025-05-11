@@ -9,9 +9,9 @@ version = "0.1.0"
 [dependencies]
 ux-api = { path = "../../libs/ux-api" }
 log = "0.4.14"
-xous = "0.9.65"
-xous-ipc = "0.10.5"
-xous-names = { package = "xous-api-names", version = "0.9.66" } # used by the IMEF for registering listeners
+xous = "0.9.66"
+xous-ipc = "0.10.6"
+xous-names = { package = "xous-api-names", version = "0.9.67" } # used by the IMEF for registering listeners
 
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }

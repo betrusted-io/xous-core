@@ -7,16 +7,16 @@ description = "JTAG port server"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.65"
-log-server = { package = "xous-api-log", version = "0.1.64" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.64" }
-xous-names = { package = "xous-api-names", version = "0.9.66" }
+xous = "0.9.66"
+log-server = { package = "xous-api-log", version = "0.1.65" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.65" }
+xous-names = { package = "xous-api-names", version = "0.9.67" }
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-susres = { package = "xous-api-susres", version = "0.9.64" }
+susres = { package = "xous-api-susres", version = "0.9.65" }
 
-xous-ipc = "0.10.5"
+xous-ipc = "0.10.6"
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
