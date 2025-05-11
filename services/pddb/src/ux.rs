@@ -1,6 +1,7 @@
 use gam::modal::*;
 use locales::t;
 use num_traits::*;
+use precursor_hal::board::*;
 use xous::msg_scalar_unpack;
 use xous::{CID, SID};
 use xous_ipc::Buffer;
@@ -110,7 +111,7 @@ pub(crate) fn password_ux_manager(
                     false,
                     None,
                 );
-                log::info!("{}PDDB.REQPW,{},{}", xous::BOOKEND_START, db_name.as_str(), xous::BOOKEND_END);
+                log::info!("{}PDDB.REQPW,{},{}", BOOKEND_START, db_name.as_str(), BOOKEND_END);
                 pddb_modal.activate();
                 dr = Some(msg);
             }

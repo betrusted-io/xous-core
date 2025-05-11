@@ -16,11 +16,13 @@ use aes_gcm_siv::aead::{Aead, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
 use backend::bcrypt::*;
 #[cfg(all(feature = "gen2"))]
-use cramium_hal::board::{SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
+use cramium_hal::board::{BOOKEND_END, BOOKEND_START, SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
 #[cfg(feature = "gen1")]
 use keystore_api::AesRootkeyType;
 use keystore_api::{Checksums, KeywrapError};
 use modals::Modals;
+#[cfg(feature = "gen1")]
+use precursor_hal::board::{BOOKEND_END, BOOKEND_START};
 use sha2::{Digest, Sha512_256Hw, Sha512_256Sw};
 #[cfg(feature = "gen1")]
 use spinor::{SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
@@ -207,7 +209,7 @@ impl PddbOs {
         let xns = xous_names::XousNames::new().unwrap();
         #[cfg(any(feature = "precursor", feature = "renode"))]
         let pddb = xous::syscall::map_memory(
-            xous::MemoryAddress::new(PDDB_A_LOC as usize + xous::FLASH_PHYS_BASE as usize),
+            xous::MemoryAddress::new(PDDB_A_LOC as usize + precursor_hal::board::FLASH_PHYS_BASE as usize),
             None,
             PDDB_A_LEN as usize,
             xous::MemoryFlags::R | xous::MemoryFlags::RESERVE,
@@ -2014,7 +2016,7 @@ impl PddbOs {
             let mut checkblock_a = [0u8; BLOCK_SIZE];
             self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_a));
 
-            log::info!("{}PDDB.CHECKPASS,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+            log::info!("{}PDDB.CHECKPASS,{}", BOOKEND_START, BOOKEND_END);
             #[cfg(any(feature = "precursor", feature = "renode"))] // skip this dialog in hosted mode
             modals.show_notification(t!("pddb.checkpass", locales::LANG), None).expect("notification failed");
 
@@ -2025,7 +2027,7 @@ impl PddbOs {
             if checkblock_a == checkblock_b {
                 success = true;
             } else {
-                log::info!("{}PDDB.PWFAIL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                log::info!("{}PDDB.PWFAIL,{}", BOOKEND_START, BOOKEND_END);
                 modals
                     .show_notification(t!("pddb.checkpass_fail", locales::LANG), None)
                     .expect("notification failed");

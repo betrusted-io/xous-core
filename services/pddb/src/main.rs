@@ -456,7 +456,6 @@ use tests::*;
 
 #[cfg(feature = "pddb-flamegraph")]
 mod profiling;
-
 use core::cell::RefCell;
 use core::fmt::Write;
 use core::mem::size_of;
@@ -470,8 +469,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
+#[cfg(feature = "gen2")]
+use cramium_hal::board::*;
 use locales::t;
 use num_traits::*;
+#[cfg(feature = "gen1")]
+use precursor_hal::board::*;
 use rkyv::{
     Archive, Place, Serialize,
     api::low::LowSerializer,
@@ -809,7 +812,7 @@ fn wrapped_main() -> ! {
                                     mount_notifications.len() == 0,
                                     "apparently I don't understand what drain() does"
                                 );
-                                log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                log::info!("{}PDDB.MOUNTED,{}", BOOKEND_START, BOOKEND_END);
                                 xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                             } else {
                                 xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
@@ -832,7 +835,7 @@ fn wrapped_main() -> ! {
                                     mount_notifications.len() == 0,
                                     "apparently I don't understand what drain() does"
                                 );
-                                log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                log::info!("{}PDDB.MOUNTED,{}", BOOKEND_START, BOOKEND_END);
                                 xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                                 is_mounted.store(true, Ordering::SeqCst);
                             } else {
@@ -871,7 +874,7 @@ fn wrapped_main() -> ! {
                 } else {
                     if !pddb_os.rootkeys_initialized() {
                         // can't mount if we have no root keys
-                        log::info!("{}PDDB.SKIPMOUNT,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        log::info!("{}PDDB.SKIPMOUNT,{}", BOOKEND_START, BOOKEND_END);
                         // allow the main menu to be used in this case
                         let gam = gam::Gam::new(&xns).unwrap();
                         gam.allow_mainmenu().expect("couldn't allow main menu activation");
@@ -896,7 +899,7 @@ fn wrapped_main() -> ! {
                                         mount_notifications.len() == 0,
                                         "apparently I don't understand what drain() does"
                                     );
-                                    log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    log::info!("{}PDDB.MOUNTED,{}", BOOKEND_START, BOOKEND_END);
                                     xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                                 } else {
                                     xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
@@ -919,7 +922,7 @@ fn wrapped_main() -> ! {
                                         mount_notifications.len() == 0,
                                         "apparently I don't understand what drain() does"
                                     );
-                                    log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    log::info!("{}PDDB.MOUNTED,{}", BOOKEND_START, BOOKEND_END);
                                     xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                                     is_mounted.store(true, Ordering::SeqCst);
                                 } else {
@@ -1093,9 +1096,9 @@ fn wrapped_main() -> ! {
                                 Ok(_) => {
                                     log::info!(
                                         "{}PDDB.CREATEOK,{},{}",
-                                        xous::BOOKEND_START,
+                                        BOOKEND_START,
                                         mgmt.name.as_str(),
-                                        xous::BOOKEND_END
+                                        BOOKEND_END
                                     );
                                     mgmt.code = PddbRequestCode::NoErr
                                 }
@@ -1169,9 +1172,9 @@ fn wrapped_main() -> ! {
                                     finished = true;
                                     log::info!(
                                         "{}PDDB.UNLOCKOK,{},{}",
-                                        xous::BOOKEND_START,
+                                        BOOKEND_START,
                                         mgmt.name.as_str(),
-                                        xous::BOOKEND_END
+                                        BOOKEND_END
                                     );
                                     if basis_monitor_notifications.len() > 0 {
                                         notify_basis_change(
@@ -1183,9 +1186,9 @@ fn wrapped_main() -> ! {
                                 } else {
                                     log::info!(
                                         "{}PDDB.BADPASS,{},{}",
-                                        xous::BOOKEND_START,
+                                        BOOKEND_START,
                                         mgmt.name.as_str(),
-                                        xous::BOOKEND_END
+                                        BOOKEND_END
                                     );
                                     modals
                                         .add_list_item(t!("pddb.yes", locales::LANG))
@@ -2515,7 +2518,7 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
             PasswordState::Correct => return PasswordState::Correct,
             PasswordState::Incorrect(failcount) => {
                 pddb_os.clear_password(); // clear the bad password entry
-                log::info!("{}PDDB.BADPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                log::info!("{}PDDB.BADPW,{}", BOOKEND_START, BOOKEND_END);
                 if failcount % 3 == 0 {
                     // every three failures kick the failure back up the stack
                     return PasswordState::ForcedAbort(failcount);
@@ -2604,7 +2607,7 @@ fn try_mount_or_format(
             modals.add_list_item(t!("pddb.okay", locales::LANG)).expect("couldn't build radio item list");
             modals.add_list_item(t!("pddb.cancel", locales::LANG)).expect("couldn't build radio item list");
             let do_format: bool;
-            log::info!("{}PDDB.REQFMT,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+            log::info!("{}PDDB.REQFMT,{}", BOOKEND_START, BOOKEND_END);
             match modals.get_radiobutton(t!("pddb.requestformat", locales::LANG)) {
                 Ok(response) => {
                     if response.as_str() == t!("pddb.okay", locales::LANG) {

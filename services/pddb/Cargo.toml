@@ -34,6 +34,8 @@ aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
 ] }
 # aes-gcm-siv = {git="https://github.com/RustCrypto/AEADs.git", branch="master"}
 llio = { path = "../llio", optional = true }
+precursor-hal = { path = "../../libs/precursor-hal", optional = true }
+
 subtle = { version = "2.4.1", default-features = false }
 tts-frontend = { path = "../tts", optional = true }
 rand_core = "0.6.4"
@@ -87,8 +89,9 @@ gen1 = [
     "tts-frontend",
     "gam",
     "modals",
+    "precursor-hal",
 ]
-gen2 = ["keystore", "keystore-api/gen2"]
+gen2 = ["keystore", "keystore-api/gen2", "cramium-hal"]
 # gen 1 targets
 precursor = ["utralib/precursor", "sha2/precursor", "gen1"]
 hosted = ["utralib/hosted", "sha2/hosted", "gen1"]
@@ -99,7 +102,7 @@ board-baosec = [
     "gen2",
     "xous-swapper/board-baosec",
     "cram-hal-service",
-    "cramium-hal",
+    "cramium-hal/board-baosec",
     "modals/board-baosec",
 ] # USB form factor token
 hosted-baosec = [
