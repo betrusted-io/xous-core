@@ -18,6 +18,7 @@ cipher = "0.4.3"
 locales = { path = "../../locales", optional = true }
 # needed for backups to save/restore keymaps
 keyboard = { path = "../../services/keyboard", optional = true }
+precursor-hal = { path = "../../libs/precursor-hal" }
 
 [features]
 gen1 = ["keyboard"]

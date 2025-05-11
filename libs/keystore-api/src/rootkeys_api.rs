@@ -1,6 +1,7 @@
 use core::mem::size_of;
 use core::ops::{Deref, DerefMut};
 
+use precursor_hal::board::*;
 pub use rkyv_enum::*;
 
 use crate::rkyv_enum;
@@ -278,7 +279,7 @@ pub const CHECKSUM_BLOCKLEN_PAGE: u32 = 0x100;
 /// plaintext + ciphertext header itself.
 ///
 /// Total number of checksums has to divide evenly into the size of the PDDB region
-pub const TOTAL_CHECKSUMS: u32 = xous::PDDB_LEN / (CHECKSUM_BLOCKLEN_PAGE * 4096);
+pub const TOTAL_CHECKSUMS: u32 = PDDB_LEN / (CHECKSUM_BLOCKLEN_PAGE * 4096);
 
 #[repr(C, align(8))]
 #[derive(Copy, Clone, Debug)]
@@ -313,7 +314,7 @@ pub struct BackupHeader {
 impl Default for BackupHeader {
     fn default() -> Self {
         assert!(
-            xous::PDDB_LEN & ((CHECKSUM_BLOCKLEN_PAGE * 0x1000) - 1) == 0,
+            PDDB_LEN & ((CHECKSUM_BLOCKLEN_PAGE * 0x1000) - 1) == 0,
             "PDDB_LEN is not an integer multiple of CHECKSUM_LEN_PAGE"
         );
         BackupHeader {
