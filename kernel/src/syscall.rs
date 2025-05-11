@@ -3,12 +3,13 @@
 
 use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering::Relaxed};
 
+use xous_kernel::arch::PAGE_SIZE;
 use xous_kernel::*;
 
 use crate::arch;
 use crate::arch::process::Process as ArchProcess;
 use crate::irq::{interrupt_claim, interrupt_free};
-use crate::mem::{MemoryManager, PAGE_SIZE};
+use crate::mem::MemoryManager;
 use crate::server::{SenderID, WaitingMessage};
 use crate::services::SystemServices;
 #[cfg(feature = "swap")]
@@ -696,7 +697,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 let virt_ptr = virt.map(|x| x.get() as *mut u8).unwrap_or(core::ptr::null_mut());
 
                 // Don't let the address exceed the user area (unless it's PID 1)
-                if pid.get() != 1 && virt.map(|x| x.get() >= arch::mem::USER_AREA_END).unwrap_or(false) {
+                if pid.get() != 1
+                    && virt.map(|x| x.get() >= xous_kernel::arch::USER_AREA_END).unwrap_or(false)
+                {
                     klog!("Exceeded user area");
                     return Err(xous_kernel::Error::BadAddress);
 
@@ -709,6 +712,21 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 //     "Mapping {:08x} -> {:08x} ({} bytes, flags: {:?})",
                 //     phys_ptr as u32, virt_ptr as u32, size, req_flags
                 // );
+
+                #[cfg(feature = "memmap-flash")]
+                if phys_ptr.is_null() && mm.is_mapped_flash(virt_ptr) {
+                    // handle mapped flash case
+                    let range = mm.map_range(
+                        phys_ptr,
+                        virt_ptr,
+                        size.get(),
+                        pid,
+                        req_flags | MemoryFlags::VIRT,
+                        MemoryType::Default,
+                    )?;
+                    return Ok(xous_kernel::Result::MemoryRange(range));
+                }
+
                 let range =
                     mm.map_range(phys_ptr, virt_ptr, size.get(), pid, req_flags, MemoryType::Default)?;
 
@@ -802,7 +820,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
 
             // Unmap the pages from the heap
             MemoryManager::with_mut(|mm| {
-                for page in ((end - delta)..end).step_by(crate::arch::mem::PAGE_SIZE) {
+                for page in ((end - delta)..end).step_by(xous_kernel::arch::PAGE_SIZE) {
                     mm.unmap_page(page as *mut usize).expect("unable to unmap page");
                 }
             });
