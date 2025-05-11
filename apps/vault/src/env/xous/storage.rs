@@ -37,7 +37,7 @@ impl Storage for XousStorage {
     }
 
     fn num_pages(&self) -> usize {
-        xous::PDDB_LEN as usize / 4096
+        precursor_hal::board::PDDB_LEN as usize / 4096
     }
 
     fn max_word_writes(&self) -> usize {

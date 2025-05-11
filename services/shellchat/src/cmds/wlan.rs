@@ -176,9 +176,9 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                         Ok(msg) => {
                             log::info!(
                                 "{}WLAN.STATUS,{:?},{}",
-                                xous::BOOKEND_START,
+                                precursor_hal::board::BOOKEND_START,
                                 std::net::IpAddr::from(msg.ipv4.addr),
-                                xous::BOOKEND_END
+                                precursor_hal::board::BOOKEND_END
                             );
                             write!(ret, "{:?}\n{:x?}", msg, msg)
                         }

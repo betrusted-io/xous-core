@@ -320,7 +320,11 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 }
                 "sync" => {
                     write!(ret, "Sync result code: {:?}\n", self.pddb.sync()).ok();
-                    log::info!("{}PDDB.SYNCDONE,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    log::info!(
+                        "{}PDDB.SYNCDONE,{}",
+                        cramium_hal::board::BOOKEND_START,
+                        cramium_hal::board::BOOKEND_END
+                    );
                 }
                 "hwtest" => {
                     let mut args = [0u32; 4];

@@ -110,7 +110,9 @@ impl<'a> ShellCmdApi<'a> for Keys {
                 }
                 "pddbrecycle" => {
                     // erase the page table, which should effectively trigger a reformat on the next boot
-                    self.spinor.bulk_erase(xous::PDDB_LOC, 1024 * 1024).expect("couldn't erase page table");
+                    self.spinor
+                        .bulk_erase(precursor_hal::board::PDDB_LOC, 1024 * 1024)
+                        .expect("couldn't erase page table");
                     write!(ret, "PDDB page table erased").unwrap();
                 }
                 #[cfg(feature = "spinortest")]

@@ -2,6 +2,7 @@ use std::ops::Range;
 
 use early_settings::{Opcode, SERVER_NAME_ES};
 use num_traits::FromPrimitive;
+use precursor_hal::board::*;
 use spinor::Spinor;
 use xous::{MemoryRange, msg_blocking_scalar_unpack};
 
@@ -50,9 +51,7 @@ impl State {
             return;
         }
 
-        self.spinor
-            .patch(settings, xous::EARLY_SETTINGS, &data, slot.offset)
-            .expect("couldn't patch slot data");
+        self.spinor.patch(settings, EARLY_SETTINGS, &data, slot.offset).expect("couldn't patch slot data");
     }
 
     fn get(&self, slot: &Slot) -> u32 {
@@ -111,7 +110,7 @@ fn page_provider() -> Option<xous::MemoryRange> {
     #[cfg(target_os = "xous")]
     return Some(
         xous::syscall::map_memory(
-            xous::MemoryAddress::new((xous::EARLY_SETTINGS + xous::FLASH_PHYS_BASE) as usize),
+            xous::MemoryAddress::new((EARLY_SETTINGS + FLASH_PHYS_BASE) as usize),
             None,
             4096,
             xous::MemoryFlags::R,

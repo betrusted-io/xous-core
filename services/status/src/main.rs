@@ -27,6 +27,7 @@ use gam::{GamObjectList, GamObjectType};
 use keystore_api::*;
 use locales::t;
 use num_traits::*;
+use precursor_hal::board::*;
 use ux_api::minigfx::*;
 use ux_api::service::api::*;
 use xous::{CID, Message, msg_scalar_unpack, send_message};
@@ -1448,7 +1449,7 @@ fn wrapped_main() -> ! {
             }
             #[cfg(feature = "efuse")]
             Some(StatusOpcode::BurnBackupKey) => {
-                log::info!("{}BURNKEY.TYPE,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                log::info!("{}BURNKEY.TYPE,{}", BOOKEND_START, BOOKEND_END);
                 thread::spawn({
                     let keys = keys.clone();
                     move || {
@@ -1467,14 +1468,14 @@ fn wrapped_main() -> ! {
                             Ok(response) => {
                                 if response.as_str() == t!("burnkey.bbram", locales::LANG) {
                                     // do BBRAM flow
-                                    log::info!("{}BBRAM.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    log::info!("{}BBRAM.CONFIRM,{}", BOOKEND_START, BOOKEND_END);
                                     // punts to a script-driven flow on the pi
                                     modals.show_notification(
                                         t!("burnkey.bbram_exec", locales::LANG),
                                         Some("https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM)"),
                                     ).ok();
                                 } else if response.as_str() == t!("burnkey.efuse", locales::LANG) {
-                                    log::info!("{}EFUSE.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    log::info!("{}EFUSE.CONFIRM,{}", BOOKEND_START, BOOKEND_END);
                                     // do eFuse flow
                                     modals
                                         .add_list_item(t!("rootkeys.gwup.yes", locales::LANG))
@@ -1514,7 +1515,7 @@ fn wrapped_main() -> ! {
                         modals
                             .add_list_item(t!("rootkeys.gwup.no", locales::LANG))
                             .expect("couldn't build radio item list");
-                        log::info!("{}BACKUP.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        log::info!("{}BACKUP.CONFIRM,{}", BOOKEND_START, BOOKEND_END);
                         match modals.get_radiobutton(t!("backup.confirm", locales::LANG)) {
                             Ok(response) => {
                                 if response.as_str() == t!("rootkeys.gwup.yes", locales::LANG) {
@@ -1573,7 +1574,7 @@ fn wrapped_main() -> ! {
                             pddb.pddb_halt();
 
                             // now trigger phase 2 of the backup
-                            log::info!("{}BACKUP.PHASE2,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                            log::info!("{}BACKUP.PHASE2,{}", BOOKEND_START, BOOKEND_END);
                             send_message(
                                 cb_cid,
                                 Message::new_scalar(

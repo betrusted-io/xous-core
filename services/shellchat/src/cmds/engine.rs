@@ -555,12 +555,16 @@ impl<'a> ShellCmdApi<'a> for Engine {
                         }
                         log::info!(
                             "{}BENCH,WYCHEPROOF,FAIL,{},{}",
-                            xous::BOOKEND_START,
+                            precursor_hal::board::BOOKEND_START,
                             num_failures,
-                            xous::BOOKEND_END
+                            precursor_hal::board::BOOKEND_END
                         );
                     } else {
-                        log::info!("{}BENCH,WYCHEPROOF,PASS,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        log::info!(
+                            "{}BENCH,WYCHEPROOF,PASS,{}",
+                            precursor_hal::board::BOOKEND_START,
+                            precursor_hal::board::BOOKEND_END
+                        );
                     }
                 }
                 _ => {
@@ -601,9 +605,17 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     write!(ret, "{}ms/DH_iter; Passed {} ops, failed {} ops", elapsed, passes, fails)
                         .unwrap();
                     if fails == 0 {
-                        log::info!("{}BENCH,DH,PASS,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        log::info!(
+                            "{}BENCH,DH,PASS,{}",
+                            precursor_hal::board::BOOKEND_START,
+                            precursor_hal::board::BOOKEND_END
+                        );
                     } else {
-                        log::info!("{}BENCH,DH,FAIL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        log::info!(
+                            "{}BENCH,DH,FAIL,{}",
+                            precursor_hal::board::BOOKEND_START,
+                            precursor_hal::board::BOOKEND_END
+                        );
                     }
                 }
                 _ => {

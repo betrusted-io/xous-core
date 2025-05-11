@@ -23,9 +23,9 @@ impl<'a> ShellCmdApi<'a> for Ver {
                     write!(ret, "Xous version: {}", env.ticktimer.get_version()).unwrap();
                     log::info!(
                         "{}VER.XOUS,{},{}",
-                        xous::BOOKEND_START,
+                        cramium_hal::board::BOOKEND_START,
                         env.ticktimer.get_version(),
-                        xous::BOOKEND_END
+                        cramium_hal::board::BOOKEND_END
                     );
                 }
                 _ => {

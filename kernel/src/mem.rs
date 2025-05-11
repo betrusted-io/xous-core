@@ -3,9 +3,9 @@
 
 use core::fmt;
 
-use xous_kernel::{MemoryFlags, MemoryRange, PID};
+use xous_kernel::{MemoryFlags, MemoryRange, PID, arch::*};
 
-pub use crate::arch::mem::{MemoryMapping, PAGE_SIZE};
+pub use crate::arch::mem::MemoryMapping;
 use crate::arch::process::Process;
 #[cfg(feature = "swap")]
 use crate::swap::SwapAlloc;
@@ -582,6 +582,12 @@ impl MemoryManager {
         (phys as usize) >= self.ram_start && (phys as usize) < self.ram_start + self.ram_size
     }
 
+    #[cfg(feature = "memmap-flash")]
+    pub fn is_mapped_flash(&self, virt: *mut u8) -> bool {
+        // true if the address starts with the bitmask of the virtual start of the MMAP region
+        (virt as usize & xous_kernel::arch::MMAP_VIRT_BASE) == xous_kernel::arch::MMAP_VIRT_BASE
+    }
+
     /// Attempt to map the given physical address into the virtual address space
     /// of this process.
     ///
@@ -608,6 +614,32 @@ impl MemoryManager {
         // flag.
         let device_ram = (flags & MemoryFlags::DEV == MemoryFlags::DEV) && (phys == 0);
 
+        // If no physical address is specified and the range is in the pure virtual mapping request,
+        // just allocate the region as "swapped". No further checks is done on the validity of the requested
+        // range - if the range is out of bounds, it will be caught as a runtime error in the resolver
+        // that attempts to find the physical page that corresponds to a virtual mapping.
+        if phys == 0
+            && (flags & MemoryFlags::VIRT == MemoryFlags::VIRT)
+            && ((virt_ptr as usize & MMAP_VIRT_BASE) == MMAP_VIRT_BASE)
+        {
+            let mut mm = MemoryMapping::current();
+            // round down any virtual address to the next page
+            let start = virt_ptr as usize & !(PAGE_SIZE - 1);
+            // round up to the nearest page boundary
+            let end = (virt_ptr as usize + size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+            for virt in (start..end).step_by(PAGE_SIZE) {
+                // read/write is provisionally allowed - this allows us to cache writeable
+                // data using the swap mechanism and only do built write-outs when the page is
+                // retired. However this is somewhat dangerous because it means we could lose
+                // data on power-down or if we screw up the tracking of dirty pages (dirty bit is
+                // not automatically set on write/update). Valid is not set, because it's not
+                // wired into memory, and "P" (swap) is set to indicate this is a swapper managed page.
+                mm.reserve_address(self, virt, MemoryFlags::R | MemoryFlags::W | MemoryFlags::P)?;
+            }
+            // note that the region returned is snapped to the nearest page boundary, even if
+            // the use called us with unaligned addresses.
+            return unsafe { xous_kernel::MemoryRange::new(start as usize, end - start) };
+        }
         // If no physical address is specified, give the user the next available pages
         if phys == 0 && !device_ram {
             return self.reserve_range(virt, size, flags);

@@ -3,33 +3,13 @@
 
 use core::fmt;
 
-use riscv::register::satp;
+use ::riscv::register::satp;
 #[cfg(feature = "gdb-stub")]
-use riscv::register::sstatus;
-use xous_kernel::{MemoryFlags, PID};
+use ::riscv::register::sstatus;
+use xous_kernel::{MemoryFlags, PID, arch::*};
 
 use crate::arch::process::InitialProcess;
 use crate::mem::MemoryManager;
-
-// pub const DEFAULT_STACK_TOP: usize = 0x8000_0000;
-pub const DEFAULT_HEAP_BASE: usize = 0x2000_0000;
-pub const DEFAULT_MESSAGE_BASE: usize = 0x4000_0000;
-pub const DEFAULT_BASE: usize = 0x6000_0000;
-
-pub const USER_AREA_END: usize = 0xff00_0000;
-pub const EXCEPTION_STACK_TOP: usize = 0xffff_0000;
-pub const PAGE_SIZE: usize = 4096;
-pub const PAGE_TABLE_OFFSET: usize = 0xff40_0000;
-pub const PAGE_TABLE_ROOT_OFFSET: usize = 0xff80_0000;
-pub const THREAD_CONTEXT_AREA: usize = 0xff80_1000;
-
-pub const FLG_VALID: usize = 0x1;
-pub const FLG_R: usize = 0x2;
-pub const FLG_W: usize = 0x4;
-// pub const FLG_X: usize = 0x8;
-pub const FLG_U: usize = 0x10;
-pub const FLG_A: usize = 0x40;
-pub const FLG_D: usize = 0x80;
 
 extern "C" {
     pub fn flush_mmu();

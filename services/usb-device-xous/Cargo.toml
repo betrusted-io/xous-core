@@ -7,11 +7,11 @@ description = "Xous USB device drivers"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.64"
-xous-ipc = "0.10.4"
-log-server = { package = "xous-api-log", version = "0.1.63" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.63" }
-xous-names = { package = "xous-api-names", version = "0.9.65" }
+xous = "0.9.65"
+xous-ipc = "0.10.5"
+log-server = { package = "xous-api-log", version = "0.1.64" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.64" }
+xous-names = { package = "xous-api-names", version = "0.9.66" }
 log = "0.4.14"
 llio = { path = "../llio" }
 num-derive = { version = "0.4.2", default-features = false }
@@ -20,7 +20,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
 ] }
-susres = { package = "xous-api-susres", version = "0.9.63" }
+susres = { package = "xous-api-susres", version = "0.9.64" }
 modals = { path = "../modals", optional = true }
 keyboard = { path = "../keyboard", features = ["inject-api"], optional = true }
 bitfield = "0.13.2"
@@ -28,6 +28,7 @@ vcell = "0.1.3"
 xous-semver = "0.1.2"
 utralib = { version = "0.1.25", optional = true, default-features = false }
 trng = { path = "../trng", optional = true }
+precursor-hal = { path = "../../libs/precursor-hal" }
 
 xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main" }
 embedded-time = "0.12.1"                                                                     # required by the keyboard interface

@@ -617,7 +617,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
             builder.add_feature("swap");
-            builder.add_feature("spinor"); // required for PDDB builds - affects xous-swapper
 
             builder.add_loader_feature("debug-print");
             // the following feature needs to be uncommented if we also enable

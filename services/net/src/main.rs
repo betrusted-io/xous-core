@@ -1098,9 +1098,9 @@ fn main() -> ! {
                                     log::info!("Network config acquired: {:?}", config);
                                     log::info!(
                                         "{}NET.OK,{:?},{}",
-                                        xous::BOOKEND_START,
+                                        precursor_hal::board::BOOKEND_START,
                                         std::net::IpAddr::from(config.addr),
-                                        xous::BOOKEND_END
+                                        precursor_hal::board::BOOKEND_END
                                     );
                                     net_config = Some(config);
                                     // update a static variable that tracks this, useful for e.g. UDP bind

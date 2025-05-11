@@ -13,6 +13,7 @@ use net::XousServerId;
 use num_traits::*;
 #[cfg(feature = "shellperf")]
 use perflib::*;
+use precursor_hal::board::*;
 use xous::MessageEnvelope;
 use xous_ipc::Buffer;
 #[cfg(feature = "ditherpunk")]
@@ -157,11 +158,11 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                 .ok(); // let it run off the end
                                                 log::info!(
                                                     "{}NET.TCPGET,{},{}",
-                                                    xous::BOOKEND_START,
+                                                    BOOKEND_START,
                                                     std::string::String::from_utf8_lossy(
                                                         &buf[..len.min(buf.len())]
                                                     ),
-                                                    xous::BOOKEND_END
+                                                    BOOKEND_END
                                                 );
                                             }
                                             Err(e) => {
@@ -211,7 +212,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
                     });
                     write!(ret, "TCP listener started on port 80").unwrap();
-                    log::info!("{}NET.SERVER,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    log::info!("{}NET.SERVER,{}", BOOKEND_START, BOOKEND_END);
                 }
                 "fountain" => {
                     // anything typed after fountain will cause this to be a short test
@@ -818,11 +819,11 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                     .unwrap();
                                     log::info!(
                                         "{}NET.PONG,{:?},{},{},{}",
-                                        xous::BOOKEND_START,
+                                        BOOKEND_START,
                                         addr,
                                         seq_or_addr,
                                         timestamp,
-                                        xous::BOOKEND_END
+                                        BOOKEND_END
                                     );
                                 }
                                 IpAddr::V6(_) => {

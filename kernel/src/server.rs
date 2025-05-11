@@ -276,7 +276,7 @@ impl Server {
         let queue = {
             let mut queue = vec![];
             // TODO: Replace this with a direct operation on a passed-in page
-            queue.resize_with(crate::arch::mem::PAGE_SIZE / mem::size_of::<QueuedMessage>(), || {
+            queue.resize_with(xous_kernel::arch::PAGE_SIZE / mem::size_of::<QueuedMessage>(), || {
                 QueuedMessage::Empty
             });
             queue
@@ -343,7 +343,7 @@ impl Server {
                         if !cfg!(baremetal) && virt & 0xfff != 0 {
                             return Err(xous_kernel::Error::BadAlignment);
                         }
-                        for addr in (virt..(virt + size)).step_by(crate::mem::PAGE_SIZE) {
+                        for addr in (virt..(virt + size)).step_by(xous_kernel::arch::PAGE_SIZE) {
                             if let Err(e) = mm.unmap_page(addr as *mut usize) {
                                 if result.is_ok() {
                                     result = Err(e);
@@ -460,7 +460,7 @@ impl Server {
         MemoryManager::with_mut(|mm| {
             let virt = self.queue.as_mut_ptr() as usize;
             let size = self.queue.len();
-            for addr in (virt..(virt + size)).step_by(crate::arch::mem::PAGE_SIZE) {
+            for addr in (virt..(virt + size)).step_by(xous_kernel::arch::PAGE_SIZE) {
                 mm.unmap_page(addr as *mut usize).unwrap();
             }
         });

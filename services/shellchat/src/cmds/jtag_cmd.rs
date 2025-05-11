@@ -67,7 +67,7 @@ impl<'a> ShellCmdApi<'a> for JtagCmd {
                 /* // for testing sealing only -- does not make sense for any normal context, but essential for debugging efuse issues.
                 "seal" => {
                     use locales::t;
-                    log::info!("{}EFUSE.SEAL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    log::info!("{}EFUSE.SEAL,{}", precursor_hal::board::BOOKEND_START, precursor_hal::board::BOOKEND_END);
                     match self.jtag.seal_device() {
                         Ok(result) => {
                             if !result {
@@ -80,7 +80,7 @@ impl<'a> ShellCmdApi<'a> for JtagCmd {
                             log::info!("{}", &format!("{}\n{:?}", t!("rootkeys.efuse_internal_error", locales::LANG), e));
                         }
                     }
-                    log::info!("{}EFUSE.SEAL_OK,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    log::info!("{}EFUSE.SEAL_OK,{}", precursor_hal::board::BOOKEND_START, precursor_hal::board::BOOKEND_END);
                 }
                 */
                 _ => {

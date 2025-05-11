@@ -4,6 +4,7 @@ use core::mem::size_of;
 use aes_gcm_siv::Tag;
 
 use crate::PAGE_SIZE;
+use crate::SWAP_FLG_WIRED;
 use crate::SWAPPER_PID;
 
 /// Virtual address fields:
@@ -58,18 +59,6 @@ pub struct RawPage {
     pub data: [u8; 4096],
 }
 
-pub const SWAP_PT_VADDR: usize = 0xE000_0000;
-// E000_0000 - E100_0000 => 16 MiB of vaddr space for page tables; should be more than enough
-pub const SWAP_CFG_VADDR: usize = 0xE100_0000;
-pub const SWAP_RPT_VADDR: usize = 0xE100_1000;
-pub const SWAP_COUNT_VADDR: usize = 0xE110_0000;
-pub const SWAP_APP_UART_VADDR: usize = 0xE180_0000;
-#[cfg(feature = "cramium-soc")]
-pub const SWAP_APP_UART_IFRAM_VADDR: usize = 0xE180_1000;
-// open a large aperture from A000-E000 for a potential RAM-mapped swap area: this gives us up to 1GiB swap
-// space. Please don't actually use all of it: performance will be unimaginably bad.
-pub const SWAP_HAL_VADDR: usize = 0xA000_0000;
-
 /// Structure passed by the loader into this process at SWAP_RPT_VADDR
 #[cfg(feature = "swap")]
 #[repr(C)]
@@ -112,9 +101,6 @@ pub fn derive_usable_swap(swap_len: usize) -> usize {
 }
 
 pub fn derive_mac_size(swap_len: usize) -> usize { (swap_len / 4096) * size_of::<Tag>() }
-
-/// This needs to be synchronized with what's in kernel/src/mem.rs
-pub const SWAP_FLG_WIRED: u32 = 0x1_00;
 
 #[repr(C)]
 #[derive(Copy, Clone)]

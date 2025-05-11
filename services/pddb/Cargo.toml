@@ -8,12 +8,12 @@ description = "Plausibly Deniable Database"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 bitflags = { version = "1" }
-xous = "0.9.64"
-xous-ipc = "0.10.4"
-log-server = { package = "xous-api-log", version = "0.1.63" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.63" }
-xous-names = { package = "xous-api-names", version = "0.9.65" }
-susres = { package = "xous-api-susres", version = "0.9.63", optional = true }
+xous = "0.9.65"
+xous-ipc = "0.10.5"
+log-server = { package = "xous-api-log", version = "0.1.64" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.64" }
+xous-names = { package = "xous-api-names", version = "0.9.66" }
+susres = { package = "xous-api-susres", version = "0.9.64", optional = true }
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
@@ -34,6 +34,8 @@ aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
 ] }
 # aes-gcm-siv = {git="https://github.com/RustCrypto/AEADs.git", branch="master"}
 llio = { path = "../llio", optional = true }
+precursor-hal = { path = "../../libs/precursor-hal", optional = true }
+
 subtle = { version = "2.4.1", default-features = false }
 tts-frontend = { path = "../tts", optional = true }
 rand_core = "0.6.4"
@@ -87,6 +89,7 @@ gen1 = [
     "tts-frontend",
     "gam",
     "modals",
+    "precursor-hal",
 ]
 gen2 = ["keystore", "keystore-api/gen2"]
 # gen 1 targets
@@ -99,7 +102,7 @@ board-baosec = [
     "gen2",
     "xous-swapper/board-baosec",
     "cram-hal-service",
-    "cramium-hal",
+    "cramium-hal/board-baosec",
     "modals/board-baosec",
 ] # USB form factor token
 hosted-baosec = [
@@ -116,7 +119,7 @@ board-baosor = [
 ] # Precursor form factor
 # board-dabao is not a valid target as it lacks external SPI flash
 
-doc-deps = []
+doc-deps = ["precursor-hal"]
 
 # when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.
 # 32 bit addressing is recommended for Precursor, as its disk is only 128MiB and it has limited RAM for bookkeeping.

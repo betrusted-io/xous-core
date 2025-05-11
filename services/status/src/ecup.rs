@@ -3,6 +3,7 @@ use std::convert::TryInto;
 use locales::t;
 use modals::Modals;
 use num_traits::*;
+use precursor_hal::board::*;
 use sha2::Digest;
 use xous::msg_blocking_scalar_unpack;
 use xous_semver::SemVer;
@@ -60,17 +61,17 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
 
     #[cfg(any(feature = "precursor", feature = "renode"))]
     let ec_package = xous::syscall::map_memory(
-        xous::MemoryAddress::new((xous::EC_FW_PKG_LOC + xous::FLASH_PHYS_BASE) as usize),
+        xous::MemoryAddress::new((EC_FW_PKG_LOC + FLASH_PHYS_BASE) as usize),
         None,
-        xous::EC_FW_PKG_LEN as usize,
+        EC_FW_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't map EC firmware package memory range");
     #[cfg(any(feature = "precursor", feature = "renode"))]
     let wf_package = xous::syscall::map_memory(
-        xous::MemoryAddress::new((xous::EC_WF200_PKG_LOC + xous::FLASH_PHYS_BASE) as usize),
+        xous::MemoryAddress::new((EC_WF200_PKG_LOC + FLASH_PHYS_BASE) as usize),
         None,
-        xous::EC_WF200_PKG_LEN as usize,
+        EC_WF200_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't map EC wf200 package memory range");
@@ -78,7 +79,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
     let mut ec_package = xous::syscall::map_memory(
         None,
         None,
-        xous::EC_FW_PKG_LEN as usize,
+        EC_FW_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't map EC firmware package memory range");
@@ -90,7 +91,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
     let mut wf_package = xous::syscall::map_memory(
         None,
         None,
-        xous::EC_WF200_PKG_LEN as usize,
+        EC_WF200_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't map EC wf200 package memory range");
@@ -107,10 +108,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
             Some(UpdateOp::UpdateGateware) => {
                 // blocking scalar
                 let package = unsafe {
-                    core::slice::from_raw_parts(
-                        ec_package.as_ptr() as *const u8,
-                        xous::EC_FW_PKG_LEN as usize,
-                    )
+                    core::slice::from_raw_parts(ec_package.as_ptr() as *const u8, EC_FW_PKG_LEN as usize)
                 };
                 if !validate_package(package, PackageType::Ec) {
                     log::error!("firmware package did not pass validation");
@@ -142,10 +140,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
             Some(UpdateOp::UpdateFirmware) => {
                 // blocking scalar
                 let package = unsafe {
-                    core::slice::from_raw_parts(
-                        ec_package.as_ptr() as *const u8,
-                        xous::EC_FW_PKG_LEN as usize,
-                    )
+                    core::slice::from_raw_parts(ec_package.as_ptr() as *const u8, EC_FW_PKG_LEN as usize)
                 };
                 if !validate_package(package, PackageType::Ec) {
                     log::error!("firmware package did not pass validation");
@@ -184,10 +179,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
             Some(UpdateOp::UpdateWf200) => {
                 // blocking scalar
                 let package = unsafe {
-                    core::slice::from_raw_parts(
-                        wf_package.as_ptr() as *const u8,
-                        xous::EC_WF200_PKG_LEN as usize,
-                    )
+                    core::slice::from_raw_parts(wf_package.as_ptr() as *const u8, EC_WF200_PKG_LEN as usize)
                 };
                 if validate_package(package, PackageType::Wf200) {
                     log::info!("updating Wf200");
@@ -281,17 +273,14 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
 
                 let mut did_something = false;
                 let package = unsafe {
-                    core::slice::from_raw_parts(
-                        ec_package.as_ptr() as *const u8,
-                        xous::EC_FW_PKG_LEN as usize,
-                    )
+                    core::slice::from_raw_parts(ec_package.as_ptr() as *const u8, EC_FW_PKG_LEN as usize)
                 };
 
                 // the semver *could* be bogus at this point, but we'll validate the package (which contains
                 // the semver) before we use it. however, this check is much less
                 // computationally expensive than the package validation.
                 let length = u32::from_le_bytes(package[0x28..0x2c].try_into().unwrap());
-                if length > xous::EC_FW_PKG_LEN {
+                if length > EC_FW_PKG_LEN {
                     // nothing was staged, or it is bogus (blank FLASH is 0xFFFF_FFFF "length")
                     // only show the warning if the update was forced; otherwise we shouldn't show the warning
                     // because it'll pop up every time on a new unit
@@ -409,10 +398,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 }
 
                 let package = unsafe {
-                    core::slice::from_raw_parts(
-                        wf_package.as_ptr() as *const u8,
-                        xous::EC_WF200_PKG_LEN as usize,
-                    )
+                    core::slice::from_raw_parts(wf_package.as_ptr() as *const u8, EC_WF200_PKG_LEN as usize)
                 };
                 let mut run_wf200_update = false;
                 // check to see if we need to do an update. For the WF200, we can only say if the hash is

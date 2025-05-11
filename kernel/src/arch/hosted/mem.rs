@@ -1,16 +1,9 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-pub const PAGE_SIZE: usize = 4096;
 use xous_kernel::{Error, MemoryFlags, PID};
 
 use crate::mem::MemoryManager;
-
-pub const DEFAULT_HEAP_BASE: usize = 0x2000_0000;
-pub const DEFAULT_MESSAGE_BASE: usize = 0x4000_0000;
-pub const DEFAULT_BASE: usize = 0x6000_0000;
-
-pub const USER_AREA_END: usize = 0xff00_0000;
 
 #[derive(Copy, Clone, Default, Debug, PartialEq)]
 pub struct MemoryMapping {

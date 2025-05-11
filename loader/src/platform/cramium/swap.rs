@@ -11,6 +11,7 @@ use cramium_hal::udma::{GlobalConfig, Spim, SpimClkPha, SpimClkPol, SpimCs};
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::RngCore;
 use rand_chacha::rand_core::SeedableRng;
+use xous::arch::SWAP_HAL_VADDR;
 
 use crate::bootconfig::BootConfig;
 use crate::swap::*;

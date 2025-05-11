@@ -9,15 +9,19 @@ pub struct MemoryFlags {
 impl MemoryFlags {
     /// Marks the page as the 'device' page for on-chip peripherals.
     pub const DEV: Self = Self { bits: 0b0001_0000 };
-    const FLAGS_ALL: usize = 0b111111;
+    const FLAGS_ALL: usize = 0b11_1111;
     /// Free this memory
     pub const FREE: Self = Self { bits: 0b0000_0000 };
+    /// Page is swapped
+    pub const P: Self = Self { bits: 0b10_0000_0000 };
     /// Allow the CPU to read from this page.
     pub const R: Self = Self { bits: 0b0000_0010 };
     /// Immediately allocate this memory.  Otherwise it will
     /// be demand-paged.  This is implicitly set when `phys`
     /// is not 0.
     pub const RESERVE: Self = Self { bits: 0b0000_0001 };
+    /// Marks the page as pure virtual; i.e., memory mapped SPI FLASH
+    pub const VIRT: Self = Self { bits: 0b0010_0000 };
     /// Allow the CPU to write to this page.
     pub const W: Self = Self { bits: 0b0000_0100 };
     /// Allow the CPU to execute from this page.

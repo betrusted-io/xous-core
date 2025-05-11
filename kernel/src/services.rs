@@ -4,7 +4,7 @@
 use core::num::NonZeroU8;
 
 use xous_kernel::MemoryRange;
-use xous_kernel::arch::ProcessStartup;
+use xous_kernel::arch::*;
 // use core::mem;
 use xous_kernel::{
     CID, Error, MemoryAddress, Message, PID, ProcessInit, SID, TID, ThreadInit, pid_from_usize,
@@ -219,11 +219,11 @@ pub struct ProcessInner {
 impl Default for ProcessInner {
     fn default() -> Self {
         ProcessInner {
-            mem_default_base: arch::mem::DEFAULT_BASE,
-            mem_default_last: arch::mem::DEFAULT_BASE,
-            mem_message_base: arch::mem::DEFAULT_MESSAGE_BASE,
-            mem_message_last: arch::mem::DEFAULT_MESSAGE_BASE,
-            mem_heap_base: arch::mem::DEFAULT_HEAP_BASE,
+            mem_default_base: DEFAULT_BASE,
+            mem_default_last: DEFAULT_BASE,
+            mem_message_base: DEFAULT_MESSAGE_BASE,
+            mem_message_last: DEFAULT_MESSAGE_BASE,
+            mem_heap_base: DEFAULT_HEAP_BASE,
             mem_heap_size: 0,
             mem_heap_max: if cfg!(feature = "big-heap") { 1024 * 1024 * 12 } else { 1024 * 512 },
             connection_map: [None; 32],
@@ -713,7 +713,7 @@ impl SystemServices {
         // causing an instruction fault and exiting the interrupt.
         ArchProcess::with_current_mut(|arch_process| {
             let sp = if pid.get() == 1 {
-                arch::mem::EXCEPTION_STACK_TOP
+                EXCEPTION_STACK_TOP
             } else {
                 arch_process.current_thread().stack_pointer()
             };
@@ -1304,7 +1304,7 @@ impl SystemServices {
         if dest_virt as usize & 0xfff != 0 {
             return Err(xous_kernel::Error::BadAddress);
         }
-        if (dest_virt as usize) + len > crate::arch::mem::USER_AREA_END {
+        if (dest_virt as usize) + len > USER_AREA_END {
             return Err(xous_kernel::Error::BadAddress);
         }
 
@@ -1313,7 +1313,7 @@ impl SystemServices {
         // Iterators and `ptr.wrapping_add()` operate on `usize` types,
         // which effectively lowers the `len`.
         let usize_len = len / core::mem::size_of::<usize>();
-        let usize_page = crate::mem::PAGE_SIZE / core::mem::size_of::<usize>();
+        let usize_page = PAGE_SIZE / core::mem::size_of::<usize>();
 
         // If the dest and src PID is the same, do nothing.
         if current_pid == dest_pid {
@@ -1420,7 +1420,7 @@ impl SystemServices {
         // Iterators and `ptr.wrapping_add()` operate on `usize` types,
         // which effectively lowers the `len`.
         let usize_len = len / core::mem::size_of::<usize>();
-        let usize_page = crate::mem::PAGE_SIZE / core::mem::size_of::<usize>();
+        let usize_page = xous_kernel::arch::PAGE_SIZE / core::mem::size_of::<usize>();
 
         let current_pid = self.current_pid();
         // If it's within the same process, ignore the move operation and
@@ -1551,7 +1551,7 @@ impl SystemServices {
         // Iterators and `ptr.wrapping_add()` operate on `usize` types,
         // which effectively lowers the `len`.
         let usize_len = len / core::mem::size_of::<usize>();
-        let usize_page = crate::mem::PAGE_SIZE / core::mem::size_of::<usize>();
+        let usize_page = PAGE_SIZE / core::mem::size_of::<usize>();
 
         let current_pid = self.current_pid();
         // If it's within the same process, ignore the operation.
@@ -1765,7 +1765,7 @@ impl SystemServices {
                 #[cfg(baremetal)]
                 // Allocate a single page for the server queue
                 let backing = crate::mem::MemoryManager::with_mut(|mm| unsafe {
-                    MemoryRange::new(mm.map_zeroed_page(pid, false)? as _, crate::arch::mem::PAGE_SIZE)
+                    MemoryRange::new(mm.map_zeroed_page(pid, false)? as _, PAGE_SIZE)
                 })?;
 
                 #[cfg(not(baremetal))]

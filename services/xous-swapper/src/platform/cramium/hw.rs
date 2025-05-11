@@ -6,11 +6,12 @@ use cramium_api::*;
 use cramium_hal::board::SPIM_RAM_IFRAM_ADDR;
 use cramium_hal::ifram::IframRange;
 use cramium_hal::udma::*;
-use loader::swap::{SWAP_HAL_VADDR, SwapSpec};
+use loader::swap::SwapSpec;
+use xous::arch::SWAP_HAL_VADDR;
 
 use crate::debug::*;
 
-pub const PAGE_SIZE: usize = 4096;
+pub const PAGE_SIZE: usize = xous::arch::PAGE_SIZE;
 
 /// This is an implementation for SMTs that are accessible only through a SPI
 /// register interface. The base and bounds must be translated to SPI accesses
