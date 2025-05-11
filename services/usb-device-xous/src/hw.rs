@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 
+use precursor_hal::board::{BOOKEND_END, BOOKEND_START};
 use usb_device::bus::PollResult;
 use usb_device::{Result, UsbDirection, class_prelude::*};
 use utralib::generated::*;
@@ -1205,14 +1206,14 @@ impl UsbBus for SpinalUsbDevice {
     /// continue be polled, and it shall return a value other than `Suspend` from `poll` when it no
     /// longer detects the suspend condition.
     fn suspend(&self) {
-        log::info!("{}USB.SUSPEND,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+        log::info!("{}USB.SUSPEND,{}", BOOKEND_START, BOOKEND_END);
         log::warn!("USB suspend called; this implementation does nothing.");
     }
 
     /// Resumes from suspend mode. This may only be called after the peripheral has been previously
     /// suspended.
     fn resume(&self) {
-        log::info!("{}USB.RESUME,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+        log::info!("{}USB.RESUME,{}", BOOKEND_START, BOOKEND_END);
         log::info!("USB resume called.");
     }
 
