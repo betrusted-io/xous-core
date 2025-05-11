@@ -12,7 +12,11 @@ pub const SPINOR_BULK_ERASE_SIZE: u32 = 0x1_0000; // this is the bulk erase size
 pub const SPINOR_LEN: u32 = 16384 * 1024;
 pub const PDDB_LOC: u32 = 4096 * 1024; // located 4MiB in, after the swap image
 pub const PDDB_LEN: u32 = 4096 * 1024; // 4MiB data for the PDDB total
+
+// Define the virtual region that memory-mapped FLASH should go to
 // top 8 megs are reserved for staging updates, backups, etc.
+pub const MMAP_VIRT_LEN: usize = SPINOR_LEN as usize;
+pub const MMAP_VIRT_END: usize = xous::arch::MMAP_VIRT_BASE + SPINOR_LEN as usize;
 
 // console uart buffer
 pub const UART_DMA_TX_BUF_PHYS: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096;
@@ -287,3 +291,12 @@ pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 3], [(Iox
 pub fn setup_pmic_irq<T: IoIrq>(iox: &T, server: &str, opcode: usize) {
     iox.set_irq_pin(IoxPort::PB, 13, IoxValue::Low, server, opcode);
 }
+
+// sentinel used by test infrastructure to assist with parsing
+// The format of any test infrastructure output to recover is as follows:
+// _|TT|_<ident>,<data separated by commas>,_|TE|_
+// where _|TT|_ and _|TE|_ are bookends around the data to be reported
+// <ident> is a single-word identifier that routes the data to a given parser
+// <data> is free-form data, which will be split at comma boundaries by the parser
+pub const BOOKEND_START: &str = "_|TT|_";
+pub const BOOKEND_END: &str = "_|TE|_";
