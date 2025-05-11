@@ -1,4 +1,7 @@
 #[cfg(feature = "swap")]
+use xous::arch::{SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR};
+
+#[cfg(feature = "swap")]
 use crate::swap::*;
 use crate::*;
 
