@@ -34,6 +34,7 @@ gam = { path = "../gam" }
 susres = { package = "xous-api-susres", version = "0.9.63" }
 userprefs = { path = "../../libs/userprefs" }
 modals = { path = "../modals" }
+precursor-hal = { path = "../../libs/precursor-hal" }
 
 utralib = { version = "0.1.25", optional = true, default-features = false }
 

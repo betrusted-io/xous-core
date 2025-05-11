@@ -608,7 +608,11 @@ pub(crate) fn start_time_ux() {
                         // note that we don't do an "else" here because we also want to catch the case of
                         // a key exists, but nothing was written to it (length of key was 0 or inappropriate)
                         if !tz_set {
-                            log::info!("{}RTC.TZ,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                            log::info!(
+                                "{}RTC.TZ,{}",
+                                precursor_hal::board::BOOKEND_START,
+                                precursor_hal::board::BOOKEND_END
+                            );
                             let tz_str = modals
                                 .alert_builder(t!("rtc.timezone", locales::LANG))
                                 .field(None, Some(tz_ux_validator))
@@ -633,7 +637,11 @@ pub(crate) fn start_time_ux() {
                         }
 
                         // see if we want to try to use NTP or not
-                        log::info!("{}RTC.NTP,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        log::info!(
+                            "{}RTC.NTP,{}",
+                            precursor_hal::board::BOOKEND_START,
+                            precursor_hal::board::BOOKEND_END
+                        );
                         modals
                             .add_list_item(t!("pddb.yes", locales::LANG))
                             .expect("couldn't build radio item list");
@@ -680,12 +688,20 @@ pub(crate) fn start_time_ux() {
                                         ),
                                     )
                                     .expect("couldn't set time");
-                                    log::info!("{}RTC.NTPOK,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    log::info!(
+                                        "{}RTC.NTPOK,{}",
+                                        precursor_hal::board::BOOKEND_START,
+                                        precursor_hal::board::BOOKEND_END
+                                    );
                                     continue;
                                 }
                                 Err(err) => {
                                     log::info!("Err: {:?}", err);
-                                    log::info!("{}RTC.NTPFAIL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    log::info!(
+                                        "{}RTC.NTPFAIL,{}",
+                                        precursor_hal::board::BOOKEND_START,
+                                        precursor_hal::board::BOOKEND_END
+                                    );
                                     modals
                                         .show_notification(t!("rtc.ntp_fail", locales::LANG), None)
                                         .expect("couldn't show NTP error");
