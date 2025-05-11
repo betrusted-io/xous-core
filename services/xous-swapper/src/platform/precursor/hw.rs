@@ -6,7 +6,7 @@ use loader::swap::{SWAP_HAL_VADDR, SwapSpec};
 
 use crate::debug::DebugUart;
 
-pub const PAGE_SIZE: usize = 4096;
+pub const PAGE_SIZE: usize = xous::arch::PAGE_SIZE;
 
 /// This defines a set of functions to get and receive MACs (message
 /// authentication codes, also referred to as the tag in AES-GCM-SIV.

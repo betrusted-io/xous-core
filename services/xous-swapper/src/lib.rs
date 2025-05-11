@@ -3,7 +3,7 @@ pub mod api;
 #[cfg(feature = "spinor")]
 pub mod spinor;
 
-pub const PAGE_SIZE: usize = 4096;
+pub const PAGE_SIZE: usize = xous::arch::PAGE_SIZE;
 
 /// public userspace & swapper handler -> swapper userspace ABI
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]

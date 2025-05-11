@@ -56,9 +56,10 @@ use std::collections::BinaryHeap;
 use std::fmt::Debug;
 
 use debug::*;
-use loader::swap::{SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR, SwapAlloc, SwapSpec};
+use loader::swap::{SwapAlloc, SwapSpec};
 use num_traits::*;
 use platform::{PAGE_SIZE, SwapHal};
+use xous::arch::{SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
 use xous::{MemoryFlags, MemoryRange, PID, Result};
 use xous_swapper::Opcode;
 
