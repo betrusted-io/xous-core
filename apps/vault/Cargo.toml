@@ -34,6 +34,7 @@ rand_core = "0.6.3"
 ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.63" }
 userprefs = { path = "../../libs/userprefs" }
 ux-api = { path = "../../libs/ux-api", default-features = false }
+precursor-hal = { path = "../../libs/precursor-hal" }
 
 # opensk
 ctap-crypto = { path = "libraries/crypto" }
