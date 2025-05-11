@@ -40,13 +40,17 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
                         write!(ret, "Local time is {}", timestr).unwrap();
                         log::info!(
                             "{}RTC.LOCAL,{},{}",
-                            xous::BOOKEND_START,
+                            precursor_hal::board::BOOKEND_START,
                             dt.format("%H,%M,%m,%d,%Y").to_string(),
-                            xous::BOOKEND_END
+                            precursor_hal::board::BOOKEND_END
                         );
                     } else {
                         write!(ret, "Local time has not been set up").unwrap();
-                        log::info!("{}RTC.FAIL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        log::info!(
+                            "{}RTC.FAIL,{}",
+                            precursor_hal::board::BOOKEND_START,
+                            precursor_hal::board::BOOKEND_END
+                        );
                     }
                 }
                 _ => {

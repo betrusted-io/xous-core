@@ -8,7 +8,7 @@ version = "0.1.0"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 com = { path = "../com" }
-content-plugin-api = { path = "../content-plugin-api" }                     # all content canvas providers must provide this API
+content-plugin-api = { path = "../content-plugin-api" }                   # all content canvas providers must provide this API
 gam = { path = "../gam" }
 blitstr2 = { path = "../../libs/blitstr2" }
 ux-api = { path = "../../libs/ux-api" }
@@ -38,6 +38,8 @@ dns = { path = "../dns" }
 pddb = { path = "../pddb" }
 modals = { path = "../modals" }
 usb-device-xous = { path = "../usb-device-xous" }
+precursor-hal = { path = "../../libs/precursor-hal" }
+
 utralib = { version = "0.1.25", optional = true, default-features = false }
 
 tts-frontend = { path = "../tts" }
@@ -105,7 +107,7 @@ hex = { version = "0.4.3", default-features = false, features = [] }
 [dependencies.curve25519-dalek]
 version = "=4.1.2"                           # note this is patched to our fork in ./Cargo.toml
 default-features = false
-features = ["auto-release", "warn-fallback"]
+# features = ["auto-release", "warn-fallback"]
 
 [dependencies.x25519-dalek]
 version = "=2.0.1"

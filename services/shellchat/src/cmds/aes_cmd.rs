@@ -391,9 +391,9 @@ impl<'a> ShellCmdApi<'a> for Aes {
                     .unwrap();
                 log::info!(
                     "{}BENCH,AES,PASS,{}us/block,{}",
-                    xous::BOOKEND_START,
+                    precursor_hal::board::BOOKEND_START,
                     elapsed * 1000.0,
-                    xous::BOOKEND_END
+                    precursor_hal::board::BOOKEND_END
                 );
             } else {
                 // pass was 0, we failed
@@ -401,9 +401,9 @@ impl<'a> ShellCmdApi<'a> for Aes {
                     .unwrap();
                 log::info!(
                     "{}BENCH,AES,FAIL,{}us/block,{}",
-                    xous::BOOKEND_START,
+                    precursor_hal::board::BOOKEND_START,
                     elapsed * 1000.0,
-                    xous::BOOKEND_END
+                    precursor_hal::board::BOOKEND_END
                 );
             }
         });

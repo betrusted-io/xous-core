@@ -2,6 +2,7 @@ use core::fmt::Write;
 use std::collections::HashMap;
 
 use String;
+use precursor_hal::board::*;
 #[cfg(feature = "shellperf")]
 use utralib::generated::*;
 use xous::MessageEnvelope;
@@ -236,12 +237,7 @@ impl CmdEnv {
         // print our version info
         let soc_ver = _common.llio.soc_gitrev().unwrap();
         log::info!("SoC git rev {}", soc_ver.to_string());
-        log::info!(
-            "{}PDDB.DNA,{:x},{}",
-            xous::BOOKEND_START,
-            _common.llio.soc_dna().unwrap(),
-            xous::BOOKEND_END
-        );
+        log::info!("{}PDDB.DNA,{:x},{}", BOOKEND_START, _common.llio.soc_dna().unwrap(), BOOKEND_END);
         let (rev, dirty) = _common.com.get_ec_git_rev().unwrap();
         let dirtystr = if dirty { "dirty" } else { "clean" };
         log::info!("EC gateware git commit: {:x}, {}", rev, dirtystr);

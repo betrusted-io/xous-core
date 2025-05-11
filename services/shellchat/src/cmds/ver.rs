@@ -26,12 +26,12 @@ impl<'a> ShellCmdApi<'a> for Ver {
                     let ec_ver = env.com.get_ec_sw_tag().unwrap();
                     log::info!(
                         "{}VER.EC,{},{},{},{},{}",
-                        xous::BOOKEND_START,
+                        precursor_hal::board::BOOKEND_START,
                         ec_ver.maj,
                         ec_ver.min,
                         ec_ver.rev,
                         ec_ver.extra,
-                        xous::BOOKEND_END
+                        precursor_hal::board::BOOKEND_END
                     );
                     write!(ret, "EC sw tag: {}", ec_ver.to_string()).unwrap();
                 }
@@ -44,12 +44,12 @@ impl<'a> ShellCmdApi<'a> for Ver {
                     write!(ret, "SoC git rev {}", soc_rev.to_string()).unwrap();
                     log::info!(
                         "{}VER.SOC,{},{},{},{},{}",
-                        xous::BOOKEND_START,
+                        precursor_hal::board::BOOKEND_START,
                         soc_rev.maj,
                         soc_rev.min,
                         soc_rev.rev,
                         soc_rev.extra,
-                        xous::BOOKEND_END
+                        precursor_hal::board::BOOKEND_END
                     );
                 }
                 "dna" => {
@@ -59,9 +59,9 @@ impl<'a> ShellCmdApi<'a> for Ver {
                     write!(ret, "Xous version: {}", env.ticktimer.get_version()).unwrap();
                     log::info!(
                         "{}VER.XOUS,{},{}",
-                        xous::BOOKEND_START,
+                        precursor_hal::board::BOOKEND_START,
                         env.ticktimer.get_version(),
-                        xous::BOOKEND_END
+                        precursor_hal::board::BOOKEND_END
                     );
                 }
                 "ecreset" => {
