@@ -33,6 +33,7 @@ userprefs = { path = "../../libs/userprefs" }
 dns = { path = "../dns" }
 early_settings = { path = "../early_settings" }
 blitstr2 = { path = "../../libs/blitstr2" }
+precursor-hal = { path = "../../libs/precursor-hal" }
 
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
