@@ -6,7 +6,10 @@ use core::fmt;
 use xous_kernel::{MemoryFlags, MemoryRange, PID, arch::*};
 
 pub use crate::arch::mem::MemoryMapping;
-use crate::arch::process::Process;
+use crate::arch::{
+    mem::{MMUFlags, flush_mmu, pagetable_entry},
+    process::Process,
+};
 #[cfg(feature = "swap")]
 use crate::swap::SwapAlloc;
 
@@ -635,6 +638,13 @@ impl MemoryManager {
                 // not automatically set on write/update). Valid is not set, because it's not
                 // wired into memory, and "P" (swap) is set to indicate this is a swapper managed page.
                 mm.reserve_address(self, virt, MemoryFlags::R | MemoryFlags::W | MemoryFlags::P)?;
+
+                // now mark the page as USER
+                let pte = pagetable_entry(virt)?;
+                unsafe {
+                    pte.write_volatile(pte.read_volatile() | MMUFlags::USER.bits());
+                    flush_mmu();
+                }
             }
             // note that the region returned is snapped to the nearest page boundary, even if
             // the use called us with unaligned addresses.
