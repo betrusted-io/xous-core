@@ -28,6 +28,26 @@ fn main() -> ! {
         panic!("Unsupported syscall!");
     }
 
+    log::info!("start spi flash map test");
+    let spimap = xous::map_memory(
+        None,
+        xous::MemoryAddress::new(xous::arch::MMAP_VIRT_BASE),
+        16 * 1024 * 1024,
+        xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::VIRT,
+    )
+    .expect("couldn't map spi range");
+    log::info!("spimap: {:x?}", spimap);
+    // cache_flush();
+    // we have the mapping, now try to dereference it and read something to test it
+    let spislice: &[u32] = unsafe { spimap.as_slice() };
+    log::info!("spislice ptr: {:x}", spislice.as_ptr() as usize);
+    // this should trigger the page fault and thus the handler
+    log::info!("spislice @ 0: {:x?}", &spislice[..32]);
+    log::info!("spislice @ 16384: {:x?}", &spislice[16384..16384 + 32]);
+    log::info!("spislice @ 8190: {:x?}", &spislice[8190..8190 + 32]);
+    log::info!("end spi flash map test");
+
+    loop {}
     const DELAY_MS: u64 = 1000;
 
     for i in 0.. {
@@ -71,4 +91,24 @@ fn main() -> ! {
     }
 
     panic!("Finished endless loop");
+}
+
+#[allow(dead_code)]
+fn cache_flush() {
+    unsafe {
+        // let the write go through before continuing
+        #[rustfmt::skip]
+        core::arch::asm!(
+            ".word 0x500F",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+            "fence",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+        );
+    }
 }
