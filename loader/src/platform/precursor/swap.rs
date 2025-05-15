@@ -24,7 +24,7 @@ pub struct SwapHal {
 }
 
 impl SwapHal {
-    pub fn new(cfg: &BootConfig) -> Option<SwapHal> {
+    pub fn new(cfg: &BootConfig, _perclk_freq: u32) -> Option<SwapHal> {
         if let Some(swap) = cfg.swap {
             // safety: the swap source header is guaranteed to be aligned and initialized in memory
             // by the image creator.
@@ -220,7 +220,7 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
         cfg.map_page_32(
             root,
             addr,
-            SWAP_HAL_VADDR + PAGE_SIZE * i,
+            xous::arch::SWAP_HAL_VADDR + PAGE_SIZE * i,
             FLG_R | FLG_W | FLG_U | FLG_VALID,
             SWAPPER_PID,
         );
@@ -230,7 +230,7 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
     cfg.map_page_32(
         root,
         utra::app_uart::HW_APP_UART_BASE,
-        SWAP_APP_UART_VADDR,
+        xous::arch::SWAP_APP_UART_VADDR,
         FLG_R | FLG_W | FLG_U | FLG_VALID,
         SWAPPER_PID,
     )
