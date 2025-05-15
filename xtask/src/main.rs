@@ -342,8 +342,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "modals",
                 "ime-plugin-shell",
                 "ime-frontend",
-                // "test-swapper",
-                "cram-console",
+                "test-swapper",
+                // "cram-console",
             ]
             .to_vec();
             for service in swap_pkgs {
