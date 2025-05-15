@@ -5,7 +5,7 @@ impl DebugUart {
     #[cfg(all(feature = "debug-print-swapper", any(feature = "precursor", feature = "renode")))]
     pub fn putc(&mut self, c: u8) {
         use utralib::generated::*;
-        let mut csr = CSR::new(loader::swap::SWAP_APP_UART_VADDR as *mut u32);
+        let mut csr = CSR::new(xous::arch::SWAP_APP_UART_VADDR as *mut u32);
 
         // Wait until TXFULL is `0`
         while csr.r(utra::app_uart::TXFULL) != 0 {}
@@ -21,9 +21,9 @@ impl DebugUart {
         // we just have to not bungle.
         let mut uart = unsafe {
             udma::Uart::get_handle(
-                loader::swap::SWAP_APP_UART_VADDR as usize,
+                xous::arch::SWAP_APP_UART_VADDR as usize,
                 cramium_hal::board::APP_UART_IFRAM_ADDR as usize,
-                loader::swap::SWAP_APP_UART_IFRAM_VADDR as usize,
+                xous::arch::SWAP_APP_UART_IFRAM_VADDR as usize,
             )
         };
         // enqueue our character to send via DMA
