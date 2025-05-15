@@ -383,24 +383,24 @@ extern crate bitfield;
     Xous also needs to be extended to implement Virtual Addresses that are not backed by
     physical addresses, but are on-demand allocated by copying SPINOR contents into pages that
     are allocated in SRAM. The general idea is something like this:
-    - A new flag is added that can be passed to xous::MapMemory(). This flag is the `Swapped` flag,
+    -[x] A new flag is added that can be passed to xous::MapMemory(). This flag is the `Swapped` flag,
     and it indicates to the kernel that the physical address should be `null` and marked as `swapped`
     for the mapping in its initial page table map in the given process.
-    - A "special" range of virtual addresses needs to be carved out which is where the memory-mapped
+    -[x] A "special" range of virtual addresses needs to be carved out which is where the memory-mapped
     FLASH memory would go to. Thus, a process would gain access to FLASH by simply calling MapMemory
     with the FLASH memory VA range as the virtual address, `None` as the PA, and the Swapped flag
     as one of the args in Memory Arguments
-    - When the virtual address is referenced, it will page fault; the page fault handler will pass
+    -[/] When the virtual address is referenced, it will page fault; the page fault handler will pass
     this to Xous-Swapper in the userspace, which will then add a check for the virtual address.
     If the virtual address is in the magic range for SPINOR, the contents are fetched using the
     SPINOR interface based on the linear mapping of the lower bits of the address onto the SPINOR
     memory space.
-    - Whenever a write happens inside Xous-Swapper to a location in FLASH, the page table entry for
+    -[ ] Whenever a write happens inside Xous-Swapper to a location in FLASH, the page table entry for
     the mapped FLASH location needs to be marked as invalid and returned to the free pool. This
     uses the swap system to keep the read-view of FLASH in sync with hte write-view. This also
     means that Xous-Swapper's SPINOR map has to keep a scoreboard of what pages are mapped to
     what processes, so that we can search for the mapping and clear it whenever a write comes in.
-    - Development of this can probably happen separately from the emu-layer version. The basic thing
+    -[ ] Development of this can probably happen separately from the emu-layer version. The basic thing
     would be to drill down into the kernel with the kernel and a simple test server that just
     tries to map the SPINOR and read some contents out, and perhaps update a sector. This will
     exercise the path in isolation and allow us to test this routine as a separate primitive
