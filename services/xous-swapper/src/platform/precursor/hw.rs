@@ -2,7 +2,8 @@ use core::mem::size_of;
 use std::fmt::Write;
 
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, Error, KeyInit, Nonce, Tag};
-use loader::swap::{SWAP_HAL_VADDR, SwapSpec};
+use loader::swap::SwapSpec;
+use xous::arch::SWAP_HAL_VADDR;
 
 use crate::debug::DebugUart;
 
