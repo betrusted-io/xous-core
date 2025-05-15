@@ -498,65 +498,83 @@ fn swap_handler(
             let pid = a2 as u8;
             let vaddr_in_pid = a3;
             let vaddr_in_swap = a4;
-            // walk the PT to find the swap data, and remove it from the swap PT
-            let paddr_in_swap = match ss.pt_walk(pid as u8, vaddr_in_pid, true) {
-                Some(paddr) => paddr,
-                None => {
-                    writeln!(DebugUart {}, "Couldn't resolve swapped data. Was the page actually swapped?")
-                        .ok();
-                    panic!("Couldn't resolve swapped data. Was the page actually swapped?")
-                }
-            };
-            // clear the used bit in swap
-            ss.sct.counts[paddr_in_swap / PAGE_SIZE] &= !loader::FLG_SWAP_USED;
-            #[cfg(feature = "debug-print-swapper")]
-            writeln!(
-                DebugUart {},
-                "RFS PID{} VA {:x} PA {:x} counts {:x}",
-                pid,
-                vaddr_in_pid,
-                paddr_in_swap,
-                ss.sct.counts[paddr_in_swap / PAGE_SIZE]
-            )
-            .ok();
 
-            // safety: this is only safe because the pointer we're passed from the kernel is guaranteed to be
-            // a valid u8-page in memory
-            let buf = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
-            // this is in a retry loop because the SPIM interface can timeout during high bus congestion
-            // periods.
-            const TIMEOUT_RETRIES: usize = 3;
-            let mut retries = 0;
-            while retries < TIMEOUT_RETRIES {
-                match ss.hal.decrypt_swap_from(
-                    buf,
-                    ss.sct.counts[paddr_in_swap / PAGE_SIZE],
-                    paddr_in_swap,
-                    vaddr_in_pid,
-                    pid,
-                ) {
-                    Ok(_) => {
-                        break;
-                    }
-                    Err(e) => {
-                        retries += 1;
+            if (vaddr_in_pid & xous::arch::MMAP_VIRT_BASE) == xous::arch::MMAP_VIRT_BASE {
+                // data is in the SPINOR, which is by definition located at exactly the offset
+                // indicated by the offset from MMAP_VIRT_BASE
+                // safety: this is only safe because the pointer we're passed from the kernel is guaranteed to
+                // be a valid u8-page in memory
+                let buf = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u32, PAGE_SIZE) };
+
+                // return some dummy data
+                let indicator = vaddr_in_pid as usize & 0xF_F000;
+                for (i, d) in buf[0..32].iter_mut().enumerate() {
+                    *d = i as u32 | (0xf00f_0000 + indicator as u32);
+                }
+            } else {
+                // walk the PT to find the swap data, and remove it from the swap PT
+                let paddr_in_swap = match ss.pt_walk(pid as u8, vaddr_in_pid, true) {
+                    Some(paddr) => paddr,
+                    None => {
                         writeln!(
                             DebugUart {},
-                            "Decryption error: swap image corrupted, the tag does not match the data! {:?} (try {}/{})",
-                            e,
-                            retries,
-                            TIMEOUT_RETRIES
+                            "Couldn't resolve swapped data. Was the page actually swapped?"
                         )
                         .ok();
-                        if retries >= TIMEOUT_RETRIES {
-                            panic!(
-                                "Decryption error: swap image corrupted, the tag does not match the data; retry count exceeded!"
-                            );
+                        panic!("Couldn't resolve swapped data. Was the page actually swapped?")
+                    }
+                };
+                // clear the used bit in swap
+                ss.sct.counts[paddr_in_swap / PAGE_SIZE] &= !loader::FLG_SWAP_USED;
+                #[cfg(feature = "debug-print-swapper")]
+                writeln!(
+                    DebugUart {},
+                    "RFS PID{} VA {:x} PA {:x} counts {:x}",
+                    pid,
+                    vaddr_in_pid,
+                    paddr_in_swap,
+                    ss.sct.counts[paddr_in_swap / PAGE_SIZE]
+                )
+                .ok();
+
+                // safety: this is only safe because the pointer we're passed from the kernel is guaranteed to
+                // be a valid u8-page in memory
+                let buf = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
+                // this is in a retry loop because the SPIM interface can timeout during high bus congestion
+                // periods.
+                const TIMEOUT_RETRIES: usize = 3;
+                let mut retries = 0;
+                while retries < TIMEOUT_RETRIES {
+                    match ss.hal.decrypt_swap_from(
+                        buf,
+                        ss.sct.counts[paddr_in_swap / PAGE_SIZE],
+                        paddr_in_swap,
+                        vaddr_in_pid,
+                        pid,
+                    ) {
+                        Ok(_) => {
+                            break;
+                        }
+                        Err(e) => {
+                            retries += 1;
+                            writeln!(
+                                DebugUart {},
+                                "Decryption error: swap image corrupted, the tag does not match the data! {:?} (try {}/{})",
+                                e,
+                                retries,
+                                TIMEOUT_RETRIES
+                            )
+                            .ok();
+                            if retries >= TIMEOUT_RETRIES {
+                                panic!(
+                                    "Decryption error: swap image corrupted, the tag does not match the data; retry count exceeded!"
+                                );
+                            }
                         }
                     }
                 }
+                // at this point, the `buf` has our desired data, we're done, modulo updating the count.
             }
-            // at this point, the `buf` has our desired data, we're done, modulo updating the count.
         }
         // HardOom handling will evict any and all pages that it can -- it does no filtering.
         Some(KernelOp::HardOom) => {
