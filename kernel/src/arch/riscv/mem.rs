@@ -65,6 +65,9 @@ fn translate_flags(req_flags: MemoryFlags) -> MMUFlags {
     if req_flags & xous_kernel::MemoryFlags::X == xous_kernel::MemoryFlags::X {
         flags |= MMUFlags::X;
     }
+    if req_flags & xous_kernel::MemoryFlags::P == xous_kernel::MemoryFlags::P {
+        flags |= MMUFlags::P;
+    }
     flags
 }
 
@@ -79,6 +82,9 @@ fn untranslate_flags(req_flags: usize) -> MemoryFlags {
     }
     if req_flags & MMUFlags::X == MMUFlags::X {
         flags |= xous_kernel::MemoryFlags::X;
+    }
+    if req_flags & MMUFlags::P == MMUFlags::P {
+        flags |= xous_kernel::MemoryFlags::P;
     }
     flags
 }
