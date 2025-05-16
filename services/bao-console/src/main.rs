@@ -12,6 +12,29 @@ fn main() {
     let tt = ticktimer::Ticktimer::new().unwrap();
     shell::start_shell();
 
+    log::info!("start spi flash map test");
+    let spimap = xous::map_memory(
+        None,
+        xous::MemoryAddress::new(xous::arch::MMAP_VIRT_BASE),
+        cramium_hal::board::SPINOR_LEN as usize,
+        xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::VIRT,
+    )
+    .expect("couldn't map spi range");
+    log::info!("spimap: {:x?}", spimap);
+    // we have the mapping, now try to dereference it and read something to test it
+    let spislice: &[u32] = unsafe { spimap.as_slice() };
+    // this should trigger the page fault and thus the handler
+    log::info!("spislice: {:x?}", &spislice[..32]);
+
+    // marks modified pages as dirty.
+    xous_swapper::mark_dirty(&spislice[..32]);
+
+    // Calls sync to explicitly flush the dirty pages now
+    xous_swapper::sync(Some(&spislice[..32]));
+    // xous_swapper::sync::<u8>(None);
+
+    log::info!("end spi flash map test");
+
     #[cfg(feature = "test-scrollbars")]
     {
         let mut sl_binding = ux_api::widgets::ScrollableList::default();
