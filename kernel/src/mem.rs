@@ -391,6 +391,40 @@ impl MemoryManager {
 
     #[cfg(baremetal)]
     #[cfg(feature = "swap")]
+    pub fn mark_rpt_dirty(&mut self, paddr: usize) -> Result<(), xous_kernel::Error> {
+        unsafe {
+            let offset = (paddr - self.ram_start) / PAGE_SIZE;
+            if MEMORY_ALLOCATIONS[offset].is_none() {
+                Err(xous_kernel::Error::BadAddress)
+            } else {
+                MEMORY_ALLOCATIONS[offset].set_dirty();
+                Ok(())
+            }
+        }
+    }
+
+    #[cfg(baremetal)]
+    #[cfg(feature = "swap")]
+    pub fn mark_rpt_clean(&mut self, paddr: usize) -> Result<(), xous_kernel::Error> {
+        unsafe {
+            let offset = (paddr - self.ram_start) / PAGE_SIZE;
+            if MEMORY_ALLOCATIONS[offset].is_none() {
+                Err(xous_kernel::Error::BadAddress)
+            } else {
+                MEMORY_ALLOCATIONS[offset].clear_dirty();
+                Ok(())
+            }
+        }
+    }
+
+    #[cfg(baremetal)]
+    #[cfg(feature = "swap")]
+    pub fn rpt_is_dirty(&self, paddr: usize) -> bool {
+        unsafe { MEMORY_ALLOCATIONS[(paddr - self.ram_start) / PAGE_SIZE].is_dirty() }
+    }
+
+    #[cfg(baremetal)]
+    #[cfg(feature = "swap")]
     /// Similar to alloc_page(), but this implementation takes the vaddr being allocated so we
     /// can do more detailed bookkeeping on least recently used pages.
     pub fn alloc_page_oomable(
