@@ -30,8 +30,7 @@ pub const APP_UART_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRA
 // display buffer: 1 page for double-buffering, rounded up to 1 page for commands
 pub const DISPLAY_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 5 * 4096;
 
-// Flash needs 4096 bytes for Rx, and 0 bytes for Tx + 16 bytes for cmd for 2 pages total. This is released
-// after boot.
+// Flash needs 4096 bytes for Rx, and 0 or 256 bytes for Tx + 16 bytes for cmd for 2 pages total.
 pub const SPIM_FLASH_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 7 * 4096;
 
 // one page for the I2C driver
