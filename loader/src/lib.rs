@@ -22,6 +22,7 @@ pub const FLG_D: usize = 0x80;
 pub const FLG_P: usize = 0x200;
 
 pub const SWAP_FLG_WIRED: u32 = 0x1_00;
+pub const SWAP_FLG_DIRTY: u32 = 0x2_00;
 pub const FLG_SWAP_USED: u32 = 0x8000_0000;
 
 // Locate the hard-wired IFRAM allocations for UDMA
