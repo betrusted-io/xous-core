@@ -7034,7 +7034,6 @@ dependencies = [
  "num-derive 0.4.2",
  "num-traits",
  "precursor-hal",
- "rkyv 0.8.8",
  "utralib 0.1.25",
  "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
