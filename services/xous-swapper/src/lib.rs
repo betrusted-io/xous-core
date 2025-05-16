@@ -5,6 +5,42 @@ pub mod spinor;
 
 pub const PAGE_SIZE: usize = xous::arch::PAGE_SIZE;
 
+/// userspace swapper -> kernel ABI
+/// This ABI is copy-paste synchronized with what's in the kernel. It's left out of
+/// xous-rs so that we can change it without having to push crates to crates.io.
+/// Since there is only one place the ABI could be used, we're going to stick with
+/// this primitive method of synchronization because it reduces the activation barrier
+/// to fix bugs.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum SwapAbi {
+    Invalid = 0,
+    ClearMemoryNow = 1,
+    GetFreePages = 2,
+    // RetrievePage = 3, // meant to be initiated within the kernel to itself
+    // HardOom = 4, // meant to be initiated within the kernel to itself
+    StealPage = 5,
+    ReleaseMemory = 6,
+    MarkDirty = 7,
+    Sync = 8,
+}
+/// SYNC WITH `kernel/src/swap.rs`
+impl SwapAbi {
+    pub fn from(val: usize) -> SwapAbi {
+        use SwapAbi::*;
+        match val {
+            1 => ClearMemoryNow,
+            2 => GetFreePages,
+            // 3 => RetrievePage,
+            // 4 => HardOom,
+            5 => StealPage,
+            6 => ReleaseMemory,
+            7 => MarkDirty,
+            8 => Sync,
+            _ => Invalid,
+        }
+    }
+}
+
 /// public userspace & swapper handler -> swapper userspace ABI
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 #[repr(usize)]
@@ -58,5 +94,36 @@ impl Drop for Swapper {
                 xous::disconnect(self.conn).unwrap();
             }
         }
+    }
+}
+
+pub fn mark_dirty<T>(region: &[T]) {
+    let base = region.as_ptr() as usize;
+    let len_bytes = region.len() * core::mem::size_of::<T>();
+    xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::MarkDirty as usize, base, len_bytes, 0, 0, 0, 0))
+        .expect("Couldn't mark region as dirty");
+}
+
+pub fn sync<T>(region: Option<&[T]>) {
+    #[cfg(any(feature = "precursor", feature = "renode"))]
+    let region_len = precursor_hal::board::PDDB_LEN;
+    #[cfg(feature = "cramium-soc")]
+    let region_len = cramium_hal::board::SPINOR_LEN;
+    if let Some(region) = region {
+        let base = region.as_ptr() as usize;
+        let len_bytes = region.len() * core::mem::size_of::<T>();
+        xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::Sync as usize, base, len_bytes, 0, 0, 0, 0))
+            .expect("Couldn't mark region as dirty");
+    } else {
+        xous::rsyscall(xous::SysCall::SwapOp(
+            SwapAbi::Sync as usize,
+            xous::arch::MMAP_VIRT_BASE,
+            region_len as usize,
+            0,
+            0,
+            0,
+            0,
+        ))
+        .expect("Couldn't mark region as dirty");
     }
 }
