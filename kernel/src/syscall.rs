@@ -7,6 +7,7 @@ use xous_kernel::arch::PAGE_SIZE;
 use xous_kernel::*;
 
 use crate::arch;
+use crate::arch::mem::MMUFlags;
 use crate::arch::process::Process as ArchProcess;
 use crate::irq::{interrupt_claim, interrupt_free};
 use crate::mem::MemoryManager;
@@ -1113,6 +1114,75 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     } else {
                         Err(xous_kernel::Error::AccessDenied)
                     }
+                }
+                SwapAbi::MarkDirty => {
+                    // Any process can request a page to be marked as dirty. Note that simply
+                    // writing to a page does *not* mark it as dirty. The updating process *must*
+                    // manually mark pages as dirty.
+                    let vaddr_start = a1;
+                    let len_to_mark = a2;
+                    MemoryManager::with_mut(|mm| {
+                        let page_start = vaddr_start & !(PAGE_SIZE - 1);
+                        let page_end = ((vaddr_start + len_to_mark) + (PAGE_SIZE - 1)) & !(PAGE_SIZE - 1);
+                        for page in (page_start..page_end).step_by(PAGE_SIZE) {
+                            let pte = crate::arch::mem::pagetable_entry(page)
+                                .expect("couldn't retrieve PTE for dirty mark");
+                            unsafe {
+                                pte.write_volatile(pte.read_volatile() | MMUFlags::D.bits());
+                            }
+                            // figure out the paddr corresponding to the vaddr above, and mark it dirty in the
+                            // RPT
+                            match crate::arch::mem::virt_to_phys(page) {
+                                Ok(paddr) => {
+                                    mm.mark_rpt_dirty(paddr).expect("couldn't mark swap page as dirty")
+                                }
+                                _ => {
+                                    // if it happens to be swapped out, don't error on this
+                                    ()
+                                }
+                            }
+                        }
+
+                        Ok(xous_kernel::Result::Ok)
+                    })
+                }
+                SwapAbi::Sync => {
+                    // This will only affect the current PID's mapped pages; it also does not de-allocate
+                    // the pages from RAM, it merely syncs to disk and clears the dirty bit.
+                    let vaddr_start = a1;
+                    let len_to_sync = a2;
+                    // Any process can request a sync of dirty pages to FLASH
+                    MemoryManager::with_mut(|mm| {
+                        let vaddr_start_aligned = vaddr_start & !(PAGE_SIZE - 1);
+                        let vaddr_end_aligned =
+                            ((vaddr_start_aligned + (vaddr_start - vaddr_start_aligned) + len_to_sync)
+                                + (PAGE_SIZE - 1))
+                                & !(PAGE_SIZE - 1);
+                        for vpage in (vaddr_start_aligned..vaddr_end_aligned).step_by(PAGE_SIZE) {
+                            match crate::arch::mem::virt_to_phys(vpage) {
+                                Ok(paddr) => {
+                                    if mm.rpt_is_dirty(paddr) {
+                                        #[cfg(feature = "debug-swap-verbose")]
+                                        println!(
+                                            "*********** Flushing dirty page: {:x}v {:x}p",
+                                            vpage, paddr
+                                        );
+                                        Swap::with_mut(|swap| swap.flush_page_syscall(vpage, paddr))
+                                    } else {
+                                        #[cfg(feature = "debug-swap-verbose")]
+                                        println!("********** {:x}v is clean", vpage);
+                                    }
+                                }
+                                _ => {
+                                    // keep this hint around because this may be indicative
+                                    // of an error.
+                                    println!("*********** Sync encountered unmapped page: {:x}v", vpage);
+                                    ()
+                                }
+                            }
+                        }
+                        Ok(xous_kernel::Result::Ok)
+                    })
                 }
                 SwapAbi::Invalid => {
                     println!(
