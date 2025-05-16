@@ -3,10 +3,11 @@
 
 use core::cmp::Ordering;
 
+use loader::SWAP_FLG_DIRTY;
+use loader::SWAP_FLG_WIRED;
 use xous_kernel::SWAPPER_PID;
 use xous_kernel::arch::EXCEPTION_STACK_TOP;
 use xous_kernel::arch::PAGE_SIZE;
-use xous_kernel::arch::SWAP_FLG_WIRED;
 use xous_kernel::arch::SWAP_RPT_VADDR;
 use xous_kernel::{PID, SysCallResult, TID};
 
@@ -39,6 +40,8 @@ pub enum SwapAbi {
     HardOom = 4,
     StealPage = 5,
     ReleaseMemory = 6,
+    MarkDirty = 7,
+    Sync = 8,
 }
 /// SYNC WITH `xous-swapper/src/main.rs`
 impl SwapAbi {
@@ -51,6 +54,8 @@ impl SwapAbi {
             4 => HardOom,
             5 => StealPage,
             6 => ReleaseMemory,
+            7 => MarkDirty,
+            8 => Sync,
             _ => Invalid,
         }
     }
@@ -64,6 +69,9 @@ pub enum BlockingSwapOp {
     /// PID of the target block, current paddr of block, original vaddr in the space of target block PID,
     /// physical address of block. Returns to PID of the target block.
     ReadFromSwap(PID, TID, usize, usize, usize),
+    /// PID of the target block, current paddr of block, original vaddr in the space of target block PID,
+    /// physical address of block. Returns to PID of the target block.
+    WriteToFlash(PID, TID, usize, usize, usize),
     /// Immediate OOM. Drop everything and try to recover; from here until exit, everything runs in
     /// an un-interruptable context, no progress allowed. This currently can only originate from one
     /// location, if we need multi-location origin then we have to also track the re-entry point in the
@@ -145,6 +153,12 @@ impl SwapAlloc {
     }
 
     pub fn set_wired(&mut self) { self.vpn |= SWAP_FLG_WIRED; }
+
+    pub fn set_dirty(&mut self) { self.vpn |= SWAP_FLG_DIRTY; }
+
+    pub fn clear_dirty(&mut self) { self.vpn &= !SWAP_FLG_DIRTY; }
+
+    pub fn is_dirty(&self) -> bool { self.vpn & SWAP_FLG_DIRTY == SWAP_FLG_DIRTY }
 
     #[cfg(feature = "debug-swap-verbose")]
     pub fn get_raw_vpn(&self) -> u32 { self.vpn }
@@ -644,7 +658,7 @@ impl Swap {
     /// evict_page)
     ///
     /// This call diverges into the userspace swapper.
-    /// Divergent calls must turn of IRQs before memory spaces are changed.
+    /// Divergent calls must turn off IRQs before memory spaces are changed.
     pub fn retrieve_page_syscall(&mut self, target_vaddr_in_pid: usize, paddr: usize) -> ! {
         let target_pid = crate::arch::process::current_pid();
         let target_tid = crate::arch::process::current_tid();
@@ -670,6 +684,34 @@ impl Swap {
         }
     }
 
+    /// This passes on to the userspace handler a page that needs to be written to SPI flash.
+    pub fn flush_page_syscall(&mut self, target_vaddr_in_pid: usize, paddr: usize) -> ! {
+        let target_pid = crate::arch::process::current_pid();
+        let target_tid = crate::arch::process::current_tid();
+
+        let block_vaddr_in_swap =
+            crate::arch::mem::map_page_to_swapper(paddr).expect("couldn't map target page to swapper");
+        // we are now in the swapper's memory space
+
+        // #[cfg(feature = "debug-swap-verbose")]
+        println!(
+            "flush_page - userspace activate from pid{:?}/tid{:?} for vaddr {:x?} -> paddr {:x?}",
+            target_pid, target_tid, target_vaddr_in_pid, paddr
+        );
+        // prevent context switching to avoid re-entrant calls while handling a call
+        self.swap_stop_irq();
+        // this is safe because map_page_to_swapper() leaves us in the swapper memory context
+        unsafe {
+            self.blocking_activate_swapper(BlockingSwapOp::WriteToFlash(
+                target_pid,
+                target_tid,
+                target_vaddr_in_pid,
+                block_vaddr_in_swap,
+                paddr,
+            ));
+        }
+    }
+
     /// Safety:
     ///   - the current page table mapping context must be PID 2 (the swapper's PID) for this to work
     ///   - interrupts must have been disabled prior to setting the context to PID 2
@@ -681,6 +723,13 @@ impl Swap {
             BlockingSwapOp::ReadFromSwap(pid, _tid, vaddr_in_pid, vaddr_in_swap, _paddr) => {
                 self.swapper_args[0] = self.swapper_state;
                 self.swapper_args[1] = 1; // ReadFromSwap
+                self.swapper_args[2] = pid.get() as usize;
+                self.swapper_args[3] = vaddr_in_pid;
+                self.swapper_args[4] = vaddr_in_swap;
+            }
+            BlockingSwapOp::WriteToFlash(pid, _tid, vaddr_in_pid, vaddr_in_swap, _paddr) => {
+                self.swapper_args[0] = self.swapper_state;
+                self.swapper_args[1] = 4; // WriteToFlash
                 self.swapper_args[2] = pid.get() as usize;
                 self.swapper_args[3] = vaddr_in_pid;
                 self.swapper_args[4] = vaddr_in_swap;
@@ -749,6 +798,23 @@ impl Swap {
                         .expect("couldn't unmap page lent to swapper");
                     // the page map into the target space happens after the syscall returns
                 });
+                (pid, tid)
+            }
+            // Called from any process. Clear the dirty bit on the RPT when exiting. No pages are unmapped
+            // by this routine, that would be handled by the OOMer, if at all.
+            Some(BlockingSwapOp::WriteToFlash(pid, tid, _vaddr_in_pid, vaddr_in_swap, paddr)) => {
+                MemoryManager::with_mut(|mm| {
+                    // we are in the swapper's memory space a this point
+                    // unmap the page from the swapper
+                    crate::arch::mem::unmap_page_inner(mm, vaddr_in_swap)
+                        .expect("couldn't unmap page lent to swapper");
+                    // the page map into the target space happens after the syscall returns
+                });
+
+                // mark the physical page as clean
+                MemoryManager::with_mut(|mm| mm.mark_rpt_clean(paddr).expect("couldn't mark RPT as clean"));
+                // Unhalt IRQs
+                self.swap_restore_irq();
                 (pid, tid)
             }
             Some(BlockingSwapOp::HardOomSyscall(tid, pid)) => {
