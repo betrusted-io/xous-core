@@ -4,6 +4,7 @@ use core::mem::size_of;
 use aes_gcm_siv::Tag;
 
 use crate::PAGE_SIZE;
+use crate::SWAP_FLG_DIRTY;
 use crate::SWAP_FLG_WIRED;
 use crate::SWAPPER_PID;
 
@@ -131,6 +132,12 @@ impl SwapAlloc {
     pub fn to_le(&self) -> u8 { self.vpn as u8 }
 
     pub fn is_wired(&self) -> bool { (self.vpn & SWAP_FLG_WIRED) != 0 }
+
+    pub fn set_dirty(&mut self) { self.vpn |= SWAP_FLG_DIRTY; }
+
+    pub fn clear_dirty(&mut self) { self.vpn &= !SWAP_FLG_DIRTY; }
+
+    pub fn is_dirty(&self) -> bool { self.vpn & SWAP_FLG_DIRTY == SWAP_FLG_DIRTY }
 
     pub fn is_valid(&self) -> bool { self.vpn != 0 }
 
