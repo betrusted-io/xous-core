@@ -122,4 +122,12 @@ impl SwapHal {
         // writeln!(DebugUart {}, "result: {:?}, buf: {:x?}", result, &buf[..16]).ok();
         result
     }
+
+    pub fn flash_write(&mut self, _buf: &[u8], _offset: usize) {
+        // dummy
+    }
+
+    pub fn flash_read(&mut self, _buf: &mut [u8], _offset: usize) {
+        // dummy
+    }
 }
