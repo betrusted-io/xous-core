@@ -1,8 +1,3 @@
-#[cfg(feature = "spinor")]
-pub mod api;
-#[cfg(feature = "spinor")]
-pub mod spinor;
-
 pub const PAGE_SIZE: usize = xous::arch::PAGE_SIZE;
 
 /// userspace swapper -> kernel ABI
