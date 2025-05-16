@@ -1290,7 +1290,7 @@ impl Spim {
         true
     }
 
-    /// This routine can data that is strictly a multiple of a page length (256 bytes)
+    /// This routine can write data that is strictly a multiple of a page length (256 bytes)
     pub fn mem_flash_write_page(&mut self, addr: u32, buf: &[u8; FLASH_PAGE_LEN]) -> bool {
         // crate::println!("write_page: {:x}, {:x?}", addr, &buf[..8]);
         // enable writes: set wren mode
