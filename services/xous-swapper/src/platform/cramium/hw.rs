@@ -1,9 +1,11 @@
 use core::fmt::Write;
 use core::mem::size_of;
+use std::cell::RefCell;
+use std::convert::TryInto;
 
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, Error, KeyInit, Nonce, Tag};
 use cramium_api::*;
-use cramium_hal::board::SPIM_RAM_IFRAM_ADDR;
+use cramium_hal::board::{SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR};
 use cramium_hal::ifram::IframRange;
 use cramium_hal::udma::*;
 use loader::swap::SwapSpec;
@@ -20,6 +22,9 @@ pub struct SwapHal {
     swap_mac_start: usize,
     cipher: Aes256GcmSiv,
     ram_spim: Spim,
+    flash_spim: RefCell<Spim>,
+    // pre-allocate space for merging writes to SPI erase sectors
+    buffer: RefCell<[u8; FLASH_SECTOR_LEN]>,
 }
 impl SwapHal {
     pub fn new(spec: &SwapSpec) -> Self {
@@ -54,6 +59,25 @@ impl SwapHal {
                     IframRange::from_raw_parts(SPIM_RAM_IFRAM_ADDR, SWAP_HAL_VADDR, PAGE_SIZE),
                 )
             },
+            flash_spim: RefCell::new(unsafe {
+                Spim::new_with_ifram(
+                    channel,
+                    25_000_000,
+                    50_000_000,
+                    SpimClkPol::LeadingEdgeRise,
+                    SpimClkPha::CaptureOnLeading,
+                    SpimCs::Cs0,
+                    0,
+                    0,
+                    None,
+                    1024, // this is limited by the page length
+                    4096,
+                    Some(6),
+                    Some(SpimMode::Quad), // we're in quad because the loader put us here
+                    IframRange::from_raw_parts(SPIM_FLASH_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, PAGE_SIZE * 2),
+                )
+            }),
+            buffer: RefCell::new([0u8; PAGE_SIZE]),
         }
     }
 
@@ -143,5 +167,97 @@ impl SwapHal {
             }
         }
         self.cipher.decrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf, (&tag).into())
+    }
+
+    /// This wrapper handles arbitrary alignments of `offset` nad sizes of `buf`
+    pub fn flash_read(&self, buf: &mut [u8], offset: usize) {
+        let mut retries = 0;
+        while !self.flash_spim.borrow_mut().mem_read(offset as u32, buf, false) {
+            writeln!(
+                DebugUart {},
+                "FLASH read timeout of data at offset {:x}; data result: {:x?} .. {:x?}",
+                offset,
+                &buf[..16],
+                &buf[buf.len() - 16..]
+            )
+            .ok();
+            retries += 1;
+            if retries > 2 {
+                break;
+            }
+        }
+    }
+
+    /// This wrapper handles arbitrary alignments of `offset` and sizes of `buf`
+    /// `offset` is the offset from the start of FLASH in bytes.
+    pub fn flash_write(&mut self, buf: &[u8], offset: usize) {
+        let mut written = 0;
+
+        // compute amount of data in the FLASH sector buffer to preserve: everything up to the offset
+        let preserve_to = offset & (FLASH_SECTOR_LEN - 1);
+        // 1. check for misaligned page starts
+        if preserve_to != 0 {
+            let replace_end = if buf.len() + preserve_to >= FLASH_SECTOR_LEN {
+                FLASH_SECTOR_LEN
+            } else {
+                buf.len() + preserve_to
+            };
+            let preserve_start = offset & !(FLASH_SECTOR_LEN - 1);
+            {
+                // read in the ROM contents for the page in question. This fully replaces self.buffer,
+                // so we don't need to zeroize it.
+                let mut buff_mut = self.buffer.borrow_mut();
+                self.flash_read(&mut buff_mut[..], preserve_start);
+            }
+            self.buffer.borrow_mut()[preserve_to..replace_end]
+                .copy_from_slice(&buf[..replace_end - preserve_to]);
+            // erase the containing sector
+            self.flash_spim.borrow_mut().flash_erase_sector((offset & !(FLASH_SECTOR_LEN - 1)) as u32);
+            // program the sector: we can use write_page because we're strictly aligned and page-length
+            for (page, addr) in self
+                .buffer
+                .borrow()
+                .chunks_exact(FLASH_PAGE_LEN)
+                .zip((preserve_start..(preserve_start + FLASH_SECTOR_LEN)).step_by(FLASH_PAGE_LEN))
+            {
+                self.flash_spim.borrow_mut().mem_flash_write_page(addr as u32, page.try_into().unwrap());
+            }
+            written += replace_end - preserve_to;
+        }
+        if written == buf.len() {
+            return;
+        }
+        // 2. write remaining pages
+        let remaining_len = buf.len() - written;
+        // this is OK here because we took care of any misaligned start data in step 1.
+        let aligned_start = (offset + (FLASH_SECTOR_LEN - 1)) & !(FLASH_SECTOR_LEN);
+        for sector in (aligned_start
+            ..(aligned_start + (remaining_len + (FLASH_SECTOR_LEN - 1)) & !(FLASH_SECTOR_LEN - 1)))
+            .step_by(FLASH_SECTOR_LEN)
+        {
+            assert!(buf.len() >= written);
+            let remaining_chunk = buf.len() - written;
+            {
+                let mut buff_mut = self.buffer.borrow_mut();
+                if remaining_chunk < FLASH_SECTOR_LEN {
+                    // this full replaces self.buffer, so we don't need to zeroize it
+                    self.flash_read(&mut buff_mut[..], sector);
+                    buff_mut[..remaining_chunk].copy_from_slice(&buf[written..]);
+                    written += remaining_chunk;
+                } else {
+                    buff_mut.copy_from_slice(&buf[written..(written + FLASH_SECTOR_LEN)]);
+                    written += FLASH_SECTOR_LEN;
+                }
+            }
+            self.flash_spim.borrow_mut().flash_erase_sector((sector & !(FLASH_SECTOR_LEN - 1)) as u32);
+            for (page, addr) in self
+                .buffer
+                .borrow()
+                .chunks_exact(FLASH_PAGE_LEN)
+                .zip((sector..(sector + FLASH_SECTOR_LEN)).step_by(FLASH_PAGE_LEN))
+            {
+                self.flash_spim.borrow_mut().mem_flash_write_page(addr as u32, page.try_into().unwrap());
+            }
+        }
     }
 }
