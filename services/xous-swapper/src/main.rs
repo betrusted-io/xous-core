@@ -62,6 +62,10 @@ use platform::{PAGE_SIZE, SwapHal};
 use xous::arch::{SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
 use xous::{MemoryFlags, MemoryRange, PID, Result};
 use xous_swapper::Opcode;
+use xous_swapper::SwapAbi;
+
+/// Patch over SPI calls with prints, for testing in renode
+const RENODE_TESTING: bool = false;
 
 /// Target of pages to free in case of a Hard OOM. Note that the PAGE_TARGET numbers
 /// are imprecise, in that there is a chance that one target is active during another
@@ -76,38 +80,6 @@ const OOM_DOOM_PAGE_TARGET: usize = 48;
 #[cfg(feature = "oom-doom")]
 const OOM_DOOM_POLL_INTERVAL_MS: u64 = 1057;
 
-/// userspace swapper -> kernel ABI
-/// This ABI is copy-paste synchronized with what's in the kernel. It's left out of
-/// xous-rs so that we can change it without having to push crates to crates.io.
-/// Since there is only one place the ABI could be used, we're going to stick with
-/// this primitive method of synchronization because it reduces the activation barrier
-/// to fix bugs.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum SwapAbi {
-    Invalid = 0,
-    ClearMemoryNow = 1,
-    GetFreePages = 2,
-    // RetrievePage = 3, // meant to be initiated within the kernel to itself
-    // HardOom = 4, // meant to be initiated within the kernel to itself
-    StealPage = 5,
-    ReleaseMemory = 6,
-}
-/// SYNC WITH `kernel/src/swap.rs`
-impl SwapAbi {
-    pub fn from(val: usize) -> SwapAbi {
-        use SwapAbi::*;
-        match val {
-            1 => ClearMemoryNow,
-            2 => GetFreePages,
-            // 3 => RetrievePage,
-            // 4 => HardOom,
-            5 => StealPage,
-            6 => ReleaseMemory,
-            _ => Invalid,
-        }
-    }
-}
-
 /// kernel -> swapper handler ABI
 /// This structure mirrors the BlockingSwapOp's that the kernel can issue to userspace.
 /// The actual numbers for the opcode are transcribed manually into the kernel, as the
@@ -119,6 +91,8 @@ pub enum KernelOp {
     ReadFromSwap = 1,
     /// Hard OOM invocation - stop everything and free memory!
     HardOom = 3,
+    /// Take the requested page and write it to SPI
+    WriteToFlash = 4,
 }
 
 pub struct PtPage {
@@ -303,6 +277,60 @@ fn get_free_pages() -> usize {
         Ok(Result::Scalar5(free_pages, _total_memory, _, _, _)) => free_pages,
         _ => panic!("GetFreeMem syscall failed"),
     }
+}
+
+/// De-allocate dirty SPI FLASH pages: write to SPI, then dispose of the page
+fn dealloc_dirty(
+    ss: &mut SwapperSharedState,
+    candidate: SwapAlloc,
+    errs: &mut usize,
+    pages_to_free: &mut usize,
+) -> core::result::Result<(), xous::Error> {
+    // step 1: steal the page from the other process. Its data gets mapped into the
+    // swapper as `local_ptr`. This will also unmap the page from memory.
+    let vaddr_in_swap = match xous::rsyscall(xous::SysCall::SwapOp(
+        SwapAbi::StealPage as usize,
+        candidate.raw_pid() as usize,
+        candidate.vaddr(),
+        0,
+        0,
+        0,
+        0,
+    )) {
+        Ok(Result::Scalar5(page_ptr, _, _, _, _)) => page_ptr,
+        Ok(_) => panic!("Malformed return value"),
+        Err(_e) => {
+            *errs += 1;
+            return Err(xous::Error::ShareViolation); // try another page
+        }
+    };
+
+    // step 2: write the data to memory
+    let buf = unsafe { core::slice::from_raw_parts(vaddr_in_swap as *const u8, PAGE_SIZE) };
+    let offset = vaddr_in_swap & 0x0FFF_FFFF;
+    #[cfg(feature = "debug-print-swapper")]
+    writeln!(DebugUart {}, "DAD: PID{} VA {:x} buf {:x?}", candidate.raw_pid(), offset, &buf[..8]).ok();
+
+    if !RENODE_TESTING {
+        ss.hal.flash_write(buf, offset);
+    }
+
+    // step 3: release the page (currently mapped into the swapper's memory space). Need
+    // to demonstrate to the memory system that we know what we are
+    // doing by also presenting the original PID that owned the page.
+    xous::rsyscall(xous::SysCall::SwapOp(
+        SwapAbi::ReleaseMemory as usize,
+        vaddr_in_swap,
+        candidate.raw_pid() as usize,
+        0,
+        0,
+        0,
+        0,
+    ))
+    .expect("Unexpected error: couldn't release a page that was mapped into the swapper's space");
+    *pages_to_free -= 1;
+
+    Ok(())
 }
 
 /// Core of write_to_swap.
@@ -491,7 +519,7 @@ fn swap_handler(
     let ss = sss.inner.as_mut().expect("Shared state should be initialized");
 
     let op: Option<KernelOp> = FromPrimitive::from_usize(opcode);
-    #[cfg(feature = "debug-verbose")]
+    // #[cfg(feature = "debug-verbose")]
     writeln!(DebugUart {}, "got Opcode: {:?}", op).ok();
     match op {
         Some(KernelOp::ReadFromSwap) => {
@@ -504,12 +532,26 @@ fn swap_handler(
                 // indicated by the offset from MMAP_VIRT_BASE
                 // safety: this is only safe because the pointer we're passed from the kernel is guaranteed to
                 // be a valid u8-page in memory
-                let buf = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u32, PAGE_SIZE) };
 
-                // return some dummy data
-                let indicator = vaddr_in_pid as usize & 0xF_F000;
-                for (i, d) in buf[0..32].iter_mut().enumerate() {
-                    *d = i as u32 | (0xf00f_0000 + indicator as u32);
+                if RENODE_TESTING {
+                    let buf = unsafe {
+                        core::slice::from_raw_parts_mut(
+                            vaddr_in_swap as *mut u32,
+                            PAGE_SIZE / core::mem::size_of::<u32>(),
+                        )
+                    };
+                    // return some dummy data for testing
+                    writeln!(DebugUart {}, "********** returning dummy data to: {:x}", vaddr_in_pid).ok();
+                    let indicator = vaddr_in_pid as usize & 0xF_F000;
+                    for (i, d) in buf[0..32].iter_mut().enumerate() {
+                        *d = i as u32 | (0xf00f_0000 + indicator as u32);
+                    }
+                } else {
+                    // `buf` is also exactly one PAGE_SIZE in length, so we don't have to zero-ize it before
+                    // using it, as all of it will be overwritten.
+                    let buf = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
+                    let offset = vaddr_in_pid & 0x0FFF_FFFF; // mask out the top nibble to derive the offset in SPI flash
+                    ss.hal.flash_read(buf, offset);
                 }
             } else {
                 // walk the PT to find the swap data, and remove it from the swap PT
@@ -632,8 +674,16 @@ fn swap_handler(
                     {
                         wired += 1;
                     } else {
-                        // error is ignored because the correct behavior on error is to try another page
-                        write_to_swap_inner(ss, candidate, &mut errs, &mut pages_to_free).ok();
+                        if candidate.is_dirty() {
+                            // handles the case of "dirty" pages waiting to be committed to SPI FLASH
+                            writeln!(DebugUart {}, "OOM found dirty FLASH @ {:x?}", candidate).ok();
+                            dealloc_dirty(ss, candidate, &mut errs, &mut pages_to_free).ok();
+                        } else {
+                            // this is the typical case of pages of internal RAM destined for external RAM
+
+                            // errors are ignored because the correct behavior on error is to try another page
+                            write_to_swap_inner(ss, candidate, &mut errs, &mut pages_to_free).ok();
+                        }
                     }
                 } else {
                     writeln!(
@@ -668,6 +718,20 @@ fn swap_handler(
             ss.hard_oom_reserved_page = Some(reserved);
             if ss.report_full_rpt {
                 ss.report_full_rpt = false;
+            }
+        }
+        // This just writes data to FLASH, but does not de-allocate the page
+        Some(KernelOp::WriteToFlash) => {
+            let _pid = a2 as u8;
+            let _vaddr_in_pid = a3;
+            let vaddr_in_swap = a4;
+
+            let buf = unsafe { core::slice::from_raw_parts(vaddr_in_swap as *const u8, PAGE_SIZE) };
+            let offset = vaddr_in_swap & 0x0FFF_FFFF;
+            if !RENODE_TESTING {
+                #[cfg(feature = "debug-print-swapper")]
+                writeln!(DebugUart {}, "WT*F*: PID{} VA {:x} buf {:x?}", _pid, offset, &buf[..8]).ok();
+                ss.hal.flash_write(buf, offset);
             }
         }
         _ => {
