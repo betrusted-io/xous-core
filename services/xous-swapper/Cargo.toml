@@ -22,6 +22,7 @@ aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
     "aes",
 ] }
 cramium-hal = { path = "../../libs/cramium-hal", optional = true, default-features = false }
+precursor-hal = { path = "../../libs/precursor-hal", optional = true, default-features = false }
 cramium-api = { path = "../../libs/cramium-api", optional = true, default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
@@ -45,9 +46,9 @@ board-baosec = ["cramium-hal/board-baosec"]
 board-baosor = ["cramium-hal/board-baosor"]
 board-dabao = ["cramium-hal/board-dabao"]
 
-precursor = ["utralib/precursor"]
+precursor = ["utralib/precursor", "precursor-hal"]
 hosted = ["utralib/hosted"]
-renode = ["utralib/renode"]
+renode = ["utralib/renode", "precursor-hal"]
 swap-userspace-testing = []
 oom-doom = []
 
@@ -56,4 +57,4 @@ oom-doom = []
 debug-print-swapper = []
 
 debug-verbose = []
-default = []
+default = ["debug-print-swapper"]
