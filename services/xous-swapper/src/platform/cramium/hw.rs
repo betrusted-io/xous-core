@@ -191,6 +191,8 @@ impl SwapHal {
     /// This wrapper handles arbitrary alignments of `offset` and sizes of `buf`
     /// `offset` is the offset from the start of FLASH in bytes.
     pub fn flash_write(&mut self, buf: &[u8], offset: usize) {
+        #[cfg(feature = "debug-verbose")]
+        writeln!(DebugUart {}, "flash_write offset: {:x}", offset).ok();
         let mut written = 0;
 
         // compute amount of data in the FLASH sector buffer to preserve: everything up to the offset
@@ -230,7 +232,15 @@ impl SwapHal {
         // 2. write remaining pages
         let remaining_len = buf.len() - written;
         // this is OK here because we took care of any misaligned start data in step 1.
-        let aligned_start = (offset + (FLASH_SECTOR_LEN - 1)) & !(FLASH_SECTOR_LEN);
+        let aligned_start = (offset + (FLASH_SECTOR_LEN - 1)) & !(FLASH_SECTOR_LEN - 1);
+        #[cfg(feature = "debug-verbose")]
+        writeln!(
+            DebugUart {},
+            "aligned_start {:x} end {:x}",
+            aligned_start,
+            (aligned_start + (remaining_len + (FLASH_SECTOR_LEN - 1)) & !(FLASH_SECTOR_LEN - 1))
+        )
+        .ok();
         for sector in (aligned_start
             ..(aligned_start + (remaining_len + (FLASH_SECTOR_LEN - 1)) & !(FLASH_SECTOR_LEN - 1)))
             .step_by(FLASH_SECTOR_LEN)
@@ -256,6 +266,8 @@ impl SwapHal {
                 .chunks_exact(FLASH_PAGE_LEN)
                 .zip((sector..(sector + FLASH_SECTOR_LEN)).step_by(FLASH_PAGE_LEN))
             {
+                #[cfg(feature = "debug-verbose")]
+                writeln!(DebugUart {}, "write_page {:x} {:x?}", addr, &page[..8]).ok();
                 self.flash_spim.borrow_mut().mem_flash_write_page(addr as u32, page.try_into().unwrap());
             }
         }

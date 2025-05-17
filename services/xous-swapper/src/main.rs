@@ -277,60 +277,6 @@ fn get_free_pages() -> usize {
     }
 }
 
-/// De-allocate dirty SPI FLASH pages: write to SPI, then dispose of the page
-fn dealloc_dirty(
-    ss: &mut SwapperSharedState,
-    candidate: SwapAlloc,
-    errs: &mut usize,
-    pages_to_free: &mut usize,
-) -> core::result::Result<(), xous::Error> {
-    // step 1: steal the page from the other process. Its data gets mapped into the
-    // swapper as `local_ptr`. This will also unmap the page from memory.
-    let vaddr_in_swap = match xous::rsyscall(xous::SysCall::SwapOp(
-        SwapAbi::StealPage as usize,
-        candidate.raw_pid() as usize,
-        candidate.vaddr(),
-        0,
-        0,
-        0,
-        0,
-    )) {
-        Ok(Result::Scalar5(page_ptr, _, _, _, _)) => page_ptr,
-        Ok(_) => panic!("Malformed return value"),
-        Err(_e) => {
-            *errs += 1;
-            return Err(xous::Error::ShareViolation); // try another page
-        }
-    };
-
-    // step 2: write the data to memory
-    let buf = unsafe { core::slice::from_raw_parts(vaddr_in_swap as *const u8, PAGE_SIZE) };
-    let offset = vaddr_in_swap & 0x0FFF_FFFF;
-    #[cfg(feature = "debug-print-swapper")]
-    writeln!(DebugUart {}, "DAD: PID{} VA {:x} buf {:x?}", candidate.raw_pid(), offset, &buf[..8]).ok();
-
-    if !RENODE_TESTING {
-        ss.hal.flash_write(buf, offset);
-    }
-
-    // step 3: release the page (currently mapped into the swapper's memory space). Need
-    // to demonstrate to the memory system that we know what we are
-    // doing by also presenting the original PID that owned the page.
-    xous::rsyscall(xous::SysCall::SwapOp(
-        SwapAbi::ReleaseMemory as usize,
-        vaddr_in_swap,
-        candidate.raw_pid() as usize,
-        0,
-        0,
-        0,
-        0,
-    ))
-    .expect("Unexpected error: couldn't release a page that was mapped into the swapper's space");
-    *pages_to_free -= 1;
-
-    Ok(())
-}
-
 /// Core of write_to_swap.
 fn write_to_swap_inner(
     ss: &mut SwapperSharedState,
@@ -550,6 +496,8 @@ fn swap_handler(
                     let buf = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
                     let offset = vaddr_in_pid & 0x0FFF_FFFF; // mask out the top nibble to derive the offset in SPI flash
                     ss.hal.flash_read(buf, offset);
+                    #[cfg(feature = "debug-print-swapper")]
+                    writeln!(DebugUart {}, "RF*F* PID{} VA {:x}, {:x?}", pid, vaddr_in_pid, &buf[..8]).ok();
                 }
             } else {
                 // walk the PT to find the swap data, and remove it from the swap PT
@@ -672,16 +620,8 @@ fn swap_handler(
                     {
                         wired += 1;
                     } else {
-                        if candidate.is_dirty() {
-                            // handles the case of "dirty" pages waiting to be committed to SPI FLASH
-                            writeln!(DebugUart {}, "OOM found dirty FLASH @ {:x?}", candidate).ok();
-                            dealloc_dirty(ss, candidate, &mut errs, &mut pages_to_free).ok();
-                        } else {
-                            // this is the typical case of pages of internal RAM destined for external RAM
-
-                            // errors are ignored because the correct behavior on error is to try another page
-                            write_to_swap_inner(ss, candidate, &mut errs, &mut pages_to_free).ok();
-                        }
+                        // errors are ignored because the correct behavior on error is to try another page
+                        write_to_swap_inner(ss, candidate, &mut errs, &mut pages_to_free).ok();
                     }
                 } else {
                     writeln!(
@@ -720,15 +660,14 @@ fn swap_handler(
         }
         // This just writes data to FLASH, but does not de-allocate the page
         Some(KernelOp::WriteToFlash) => {
-            let _pid = a2 as u8;
-            let _vaddr_in_pid = a3;
-            let vaddr_in_swap = a4;
+            let vaddr_in_swap = a2;
+            let flash_offset = a3;
 
             let buf = unsafe { core::slice::from_raw_parts(vaddr_in_swap as *const u8, PAGE_SIZE) };
-            let offset = vaddr_in_swap & 0x0FFF_FFFF;
+            let offset = flash_offset & 0x0FFF_FFFF;
             if !RENODE_TESTING {
                 #[cfg(feature = "debug-print-swapper")]
-                writeln!(DebugUart {}, "WT*F*: PID{} VA {:x} buf {:x?}", _pid, offset, &buf[..8]).ok();
+                writeln!(DebugUart {}, "WT*F*: VA {:x} buf {:x?}", offset, &buf[..8]).ok();
                 ss.hal.flash_write(buf, offset);
             }
         }
@@ -834,42 +773,25 @@ fn main() {
                     scalar.arg1 = free_pages;
                 }
             }
-            Some(Opcode::FlashSync) => {
-                if let Some(scalar) = msg.body.scalar_message_mut() {
-                    let specified = scalar.arg1 != 0;
-                    let base = scalar.arg2;
-                    let len_bytes = scalar.arg3;
-                    let sender_pid = msg.sender.pid().unwrap().get();
-                    if specified {
-                        xous::rsyscall(xous::SysCall::SwapOp(
-                            SwapAbi::Sync as usize,
-                            base,
-                            len_bytes,
-                            sender_pid as usize,
-                            0,
-                            0,
-                            0,
-                        ))
-                        .expect("Couldn't mark region as dirty");
-                    } else {
-                        #[cfg(any(feature = "precursor", feature = "renode"))]
-                        let region_len = precursor_hal::board::PDDB_LEN;
-                        #[cfg(feature = "cramium-soc")]
-                        let region_len = cramium_hal::board::SPINOR_LEN;
-
-                        xous::rsyscall(xous::SysCall::SwapOp(
-                            SwapAbi::Sync as usize,
-                            xous::arch::MMAP_VIRT_BASE,
-                            region_len as usize,
-                            sender_pid as usize,
-                            0,
-                            0,
-                            0,
-                        ))
-                        .expect("Couldn't mark region as dirty");
-                    }
-                    scalar.arg1 = 0;
-                }
+            Some(Opcode::WritePage) => {
+                let mem_msg = msg.body.memory_message().unwrap();
+                let offset = mem_msg.offset.expect("malformed WritePage").get();
+                log::info!(
+                    "WritePage: PID{}, offset {:x}, vaddr_buf {:x}",
+                    msg.sender.pid().unwrap().get() as usize,
+                    offset,
+                    mem_msg.buf.as_ptr() as usize
+                );
+                xous::rsyscall(xous::SysCall::SwapOp(
+                    SwapAbi::WritePage as usize,
+                    msg.sender.pid().unwrap().get() as usize,
+                    offset,
+                    mem_msg.buf.as_ptr() as usize,
+                    0,
+                    0,
+                    0,
+                ))
+                .expect("couldn't WritePage");
             }
             #[cfg(feature = "swap-userspace-testing")]
             Some(Opcode::Test0) => {
