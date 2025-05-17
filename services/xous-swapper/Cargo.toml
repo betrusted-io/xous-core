@@ -52,4 +52,4 @@ oom-doom = []
 debug-print-swapper = []
 
 debug-verbose = []
-default = ["debug-print-swapper"]
+default = []
