@@ -42,6 +42,8 @@ impl SwapAbi {
 pub enum Opcode {
     /// Userspace request to GC some physical pages
     GarbageCollect,
+    /// Userspace request to sync FLASH memory to disk
+    FlashSync,
     /// Test messages
     #[cfg(feature = "swap-userspace-testing")]
     Test0,
@@ -76,9 +78,37 @@ impl Swapper {
         }
         // no result is given, but the call blocks until the GC call has completed in the swapper.
     }
+
+    /// Sync needs to be called from within the context of the Swapper to allow for proper locking
+    /// of the system while the sync happens.
+    pub fn sync<T>(&self, region: Option<&[T]>) {
+        if let Some(region) = region {
+            let base = region.as_ptr() as usize;
+            let len_bytes = region.len() * core::mem::size_of::<T>();
+            xous::send_message(
+                self.conn,
+                xous::Message::new_blocking_scalar(
+                    Opcode::FlashSync.to_usize().unwrap(),
+                    1,
+                    base,
+                    len_bytes,
+                    0,
+                ),
+            )
+            .expect("Couldn't call sync on swapper");
+        } else {
+            xous::send_message(
+                self.conn,
+                xous::Message::new_blocking_scalar(Opcode::FlashSync.to_usize().unwrap(), 0, 0, 0, 0),
+            )
+            .expect("Couldn't call sync on swapper");
+        }
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
+
+use num_traits::ToPrimitive;
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Swapper {
     fn drop(&mut self) {
@@ -92,33 +122,11 @@ impl Drop for Swapper {
     }
 }
 
+/// This is safe to call from any context because the kernel call completes without activating
+/// the swapper process - the pages are immediately marked dirty within the context of the calling process.
 pub fn mark_dirty<T>(region: &[T]) {
     let base = region.as_ptr() as usize;
     let len_bytes = region.len() * core::mem::size_of::<T>();
     xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::MarkDirty as usize, base, len_bytes, 0, 0, 0, 0))
         .expect("Couldn't mark region as dirty");
-}
-
-pub fn sync<T>(region: Option<&[T]>) {
-    #[cfg(any(feature = "precursor", feature = "renode"))]
-    let region_len = precursor_hal::board::PDDB_LEN;
-    #[cfg(feature = "cramium-soc")]
-    let region_len = cramium_hal::board::SPINOR_LEN;
-    if let Some(region) = region {
-        let base = region.as_ptr() as usize;
-        let len_bytes = region.len() * core::mem::size_of::<T>();
-        xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::Sync as usize, base, len_bytes, 0, 0, 0, 0))
-            .expect("Couldn't mark region as dirty");
-    } else {
-        xous::rsyscall(xous::SysCall::SwapOp(
-            SwapAbi::Sync as usize,
-            xous::arch::MMAP_VIRT_BASE,
-            region_len as usize,
-            0,
-            0,
-            0,
-            0,
-        ))
-        .expect("Couldn't mark region as dirty");
-    }
 }

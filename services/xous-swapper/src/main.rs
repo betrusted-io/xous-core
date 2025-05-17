@@ -813,7 +813,7 @@ fn main() {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();
         let op: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
-        log::debug!("Swapper got {:x?}", op);
+        log::info!("Swapper got {:x?}", op);
         match op {
             Some(Opcode::GarbageCollect) => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
@@ -832,6 +832,43 @@ fn main() {
                     log::info!("Free pages after GC: {}", free_pages);
                     // return the current free page count
                     scalar.arg1 = free_pages;
+                }
+            }
+            Some(Opcode::FlashSync) => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let specified = scalar.arg1 != 0;
+                    let base = scalar.arg2;
+                    let len_bytes = scalar.arg3;
+                    let sender_pid = msg.sender.pid().unwrap().get();
+                    if specified {
+                        xous::rsyscall(xous::SysCall::SwapOp(
+                            SwapAbi::Sync as usize,
+                            base,
+                            len_bytes,
+                            sender_pid as usize,
+                            0,
+                            0,
+                            0,
+                        ))
+                        .expect("Couldn't mark region as dirty");
+                    } else {
+                        #[cfg(any(feature = "precursor", feature = "renode"))]
+                        let region_len = precursor_hal::board::PDDB_LEN;
+                        #[cfg(feature = "cramium-soc")]
+                        let region_len = cramium_hal::board::SPINOR_LEN;
+
+                        xous::rsyscall(xous::SysCall::SwapOp(
+                            SwapAbi::Sync as usize,
+                            xous::arch::MMAP_VIRT_BASE,
+                            region_len as usize,
+                            sender_pid as usize,
+                            0,
+                            0,
+                            0,
+                        ))
+                        .expect("Couldn't mark region as dirty");
+                    }
+                    scalar.arg1 = 0;
                 }
             }
             #[cfg(feature = "swap-userspace-testing")]
