@@ -22,6 +22,10 @@ pub const FLG_D: usize = 0x80;
 pub const FLG_P: usize = 0x200;
 
 pub const SWAP_FLG_WIRED: u32 = 0x1_00;
+// Note: this flag is currently not used. It was an aborted attempt to do
+// auto-write on dirty page but due to lack of hw synchronization we couldn't
+// guarantee atomicity. Flag can be removed or re-used in the future if another
+// attempt is tried on a system that has hardware dirty page updating.
 pub const SWAP_FLG_DIRTY: u32 = 0x2_00;
 pub const FLG_SWAP_USED: u32 = 0x8000_0000;
 

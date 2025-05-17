@@ -52,6 +52,7 @@ struct SignatureInFlash {
     pub signature: [u8; 64],
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum KeyPress {
     Up,
