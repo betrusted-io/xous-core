@@ -685,7 +685,7 @@ impl Swap {
         let target_pid = crate::arch::process::current_pid();
         let target_tid = crate::arch::process::current_tid();
 
-        // #[cfg(feature = "debug-swap-verbose")]
+        #[cfg(feature = "debug-swap-verbose")]
         println!(
             "write_page - userspace activate for pid{:?}/tid{:?} for vaddr {:x?} -> offset {:x?}",
             target_pid, target_tid, page_vaddr_in_swapper, flash_offset
@@ -803,7 +803,7 @@ impl Swap {
                 // release the page from the swapper's address space
                 MemoryManager::with_mut(|mm| {
                     let paddr = crate::arch::mem::virt_to_phys(swap_vaddr).unwrap() as usize;
-                    // #[cfg(feature = "debug-swap-verbose")]
+                    #[cfg(feature = "debug-swap-verbose")]
                     println!("Release flash backing page - paddr {:x}", paddr);
                     // this call unmaps the virtual page from the page table
                     crate::arch::mem::unmap_page_inner(mm, swap_vaddr).expect("couldn't unmap page");
@@ -815,7 +815,6 @@ impl Swap {
                 });
 
                 // Unhalt IRQs
-                println!("WriteToFlash exit - restore IRQ");
                 self.swap_restore_irq();
                 (pid, tid)
             }
