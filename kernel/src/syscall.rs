@@ -1138,6 +1138,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                                 }
                                 _ => {
                                     // if it happens to be swapped out, don't error on this
+                                    println!("MarkDirty: page does not exist in memory {:x}(v)", page);
                                     ()
                                 }
                             }
@@ -1147,40 +1148,57 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     })
                 }
                 SwapAbi::Sync => {
+                    if pid.get() != xous_kernel::SWAPPER_PID {
+                        return Err(xous_kernel::Error::AccessDenied);
+                    }
+
                     // This will only affect the current PID's mapped pages; it also does not de-allocate
                     // the pages from RAM, it merely syncs to disk and clears the dirty bit.
                     let vaddr_start = a1;
                     let len_to_sync = a2;
-                    // Any process can request a sync of dirty pages to FLASH
-                    MemoryManager::with_mut(|mm| {
-                        let vaddr_start_aligned = vaddr_start & !(PAGE_SIZE - 1);
-                        let vaddr_end_aligned =
-                            ((vaddr_start_aligned + (vaddr_start - vaddr_start_aligned) + len_to_sync)
-                                + (PAGE_SIZE - 1))
-                                & !(PAGE_SIZE - 1);
-                        for vpage in (vaddr_start_aligned..vaddr_end_aligned).step_by(PAGE_SIZE) {
-                            match crate::arch::mem::virt_to_phys(vpage) {
-                                Ok(paddr) => {
-                                    if mm.rpt_is_dirty(paddr) {
-                                        #[cfg(feature = "debug-swap-verbose")]
-                                        println!(
-                                            "*********** Flushing dirty page: {:x}v {:x}p",
-                                            vpage, paddr
-                                        );
-                                        Swap::with_mut(|swap| swap.flush_page_syscall(vpage, paddr))
-                                    } else {
-                                        #[cfg(feature = "debug-swap-verbose")]
-                                        println!("********** {:x}v is clean", vpage);
+                    let target_pid_usize = a3;
+                    let target_tid = crate::arch::process::current_tid();
+
+                    use crate::services::SystemServices;
+                    SystemServices::with(|system_services| {
+                        let target_pid = PID::new(target_pid_usize as u8).unwrap();
+                        // get a handle to the target memory space
+                        let target_map = system_services.get_process(target_pid).unwrap().mapping;
+
+                        let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
+                        let swapper_map = system_services.get_process(swapper_pid).unwrap().mapping;
+                        // Any process can request a sync of dirty pages to FLASH
+                        MemoryManager::with_mut(|mm| {
+                            let vaddr_start_aligned = vaddr_start & !(PAGE_SIZE - 1);
+                            let vaddr_end_aligned =
+                                ((vaddr_start_aligned + (vaddr_start - vaddr_start_aligned) + len_to_sync)
+                                    + (PAGE_SIZE - 1))
+                                    & !(PAGE_SIZE - 1);
+                            for vpage in (vaddr_start_aligned..vaddr_end_aligned).step_by(PAGE_SIZE) {
+                                // swap to target memory space
+                                target_map.activate().unwrap();
+                                let paddr = match crate::arch::mem::virt_to_phys(vpage) {
+                                    Ok(paddr) => paddr,
+                                    _ => {
+                                        // keep this hint around because this may be indicative
+                                        // of an error.
+                                        println!("*********** Sync encountered unmapped page: {:x}v", vpage);
+                                        continue;
                                     }
-                                }
-                                _ => {
-                                    // keep this hint around because this may be indicative
-                                    // of an error.
-                                    println!("*********** Sync encountered unmapped page: {:x}v", vpage);
-                                    ()
+                                };
+                                swapper_map.activate().unwrap();
+                                if mm.rpt_is_dirty(paddr) {
+                                    #[cfg(feature = "debug-swap-verbose")]
+                                    println!("*********** Flushing dirty page: {:x}v {:x}p", vpage, paddr);
+                                    Swap::with_mut(|swap| {
+                                        swap.flush_page_syscall(vpage, paddr, target_pid, target_tid)
+                                    })
+                                } else {
+                                    #[cfg(feature = "debug-swap-verbose")]
+                                    println!("********** {:x}v is clean", vpage);
                                 }
                             }
-                        }
+                        });
                         Ok(xous_kernel::Result::Ok)
                     })
                 }
