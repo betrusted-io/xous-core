@@ -685,10 +685,13 @@ impl Swap {
     }
 
     /// This passes on to the userspace handler a page that needs to be written to SPI flash.
-    pub fn flush_page_syscall(&mut self, target_vaddr_in_pid: usize, paddr: usize) -> ! {
-        let target_pid = crate::arch::process::current_pid();
-        let target_tid = crate::arch::process::current_tid();
-
+    pub fn flush_page_syscall(
+        &mut self,
+        target_vaddr_in_pid: usize,
+        paddr: usize,
+        target_pid: PID,
+        target_tid: usize,
+    ) -> ! {
         let block_vaddr_in_swap =
             crate::arch::mem::map_page_to_swapper(paddr).expect("couldn't map target page to swapper");
         // we are now in the swapper's memory space
