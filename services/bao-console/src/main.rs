@@ -3,6 +3,7 @@ mod repl;
 mod shell;
 
 use cmds::*;
+use xous_swapper::FlashPage;
 
 fn main() {
     log_server::init_wait().unwrap();
@@ -30,16 +31,18 @@ fn main() {
     // this should trigger the page fault and thus the handler
     log::info!("spislice read 0..64: {:x?}", &spislice[..64]);
     log::info!("spislice read 256..264: {:x?}", &spislice[256..264]);
+    let test_start = 8192 * 1024 + 4096;
+    log::info!("spislice read 8M: {:x?}", &spislice[test_start..test_start + 16]);
 
-    for (i, d) in spislice[256..264].iter_mut().enumerate() {
-        *d = i as u8;
+    let mut fp = FlashPage::new();
+    fp.data.copy_from_slice(&spislice[test_start..test_start + 4096]);
+    for (i, d) in fp.data[..32].iter_mut().enumerate() {
+        *d = 128u8 - i as u8;
     }
-    // marks modified pages as dirty.
-    xous_swapper::mark_dirty(&spislice[256..264]);
-
-    // Calls sync to explicitly flush the dirty pages now
-    swapper.sync(Some(&spislice[256..264]));
-    // xous_swapper::sync::<u8>(None);
+    swapper
+        .write_page(spislice[test_start..test_start + 32].as_ptr() as usize, fp)
+        .expect("couldn't write page");
+    log::info!("spislice read 8M (again): {:x?}", &spislice[test_start..test_start + 16]);
 
     log::info!("end spi flash map test");
 
