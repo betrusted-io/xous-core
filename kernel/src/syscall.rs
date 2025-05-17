@@ -1114,6 +1114,20 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                         Err(xous_kernel::Error::AccessDenied)
                     }
                 }
+                SwapAbi::WritePage => {
+                    if pid.get() != xous_kernel::SWAPPER_PID {
+                        return Err(xous_kernel::Error::AccessDenied);
+                    }
+                    let src_pid = PID::new(a1 as u8).unwrap();
+                    // strip off the virtual addres prefix: by definition this region is 1:1 mapped in the
+                    // LSBs
+                    let flash_offset = a2 & 0x0FFF_FFFF;
+                    let page_vaddr_in_swapper = a3;
+                    Swap::with_mut(|swap| {
+                        swap.write_page_syscall(src_pid, flash_offset, page_vaddr_in_swapper);
+                    });
+                    Ok(xous_kernel::Result::Ok)
+                }
                 SwapAbi::Invalid => {
                     println!(
                         "Invalid SwapOp: {:x} {:x} {:x} {:x} {:x} {:x} {:x}",

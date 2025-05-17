@@ -28,6 +28,42 @@ fn main() -> ! {
         panic!("Unsupported syscall!");
     }
 
+    log::info!("start spi flash map test");
+    let mut spimap = xous::map_memory(
+        None,
+        xous::MemoryAddress::new(xous::arch::MMAP_VIRT_BASE),
+        // should normally be cramium_hal::board::SPINOR_LEN
+        16 * 1024 * 1024,
+        xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::VIRT,
+    )
+    .expect("couldn't map spi range");
+    log::info!("spimap: {:x?}", spimap);
+    // cache_flush();
+    // we have the mapping, now try to dereference it and read something to test it
+    let spislice: &mut [u32] = unsafe { spimap.as_slice_mut() };
+    log::info!("spislice ptr: {:x}", spislice.as_ptr() as usize);
+    // this should trigger the page fault and thus the handler
+    log::info!("spislice @ 0: {:x?}", &spislice[..32]);
+    log::info!("spislice @ 16384: {:x?}", &spislice[16384..16384 + 32]);
+    log::info!("spislice @ 8190: {:x?}", &spislice[8190..8190 + 32]);
+
+    // poke some data into the slice for flushing
+    log::info!("writing data");
+    for (i, d) in spislice[4096 / size_of::<u32>()..(4096 / size_of::<u32>()) + 4].iter_mut().enumerate() {
+        *d = i as u32 | 0x1111_0000;
+    }
+    log::info!("wrote: {:x?}", &spislice[4096 / size_of::<u32>()..(4096 / size_of::<u32>()) + 4]);
+    // marks modified pages as dirty.
+    xous_swapper::mark_dirty(&spislice[4096 / size_of::<u32>()..(4096 / size_of::<u32>()) + 4]);
+    log::info!("pages marked as dirty; now doing sync");
+
+    // Calls sync to explicitly flush the dirty pages now
+    xous_swapper::sync(Some(&spislice[4096 / size_of::<u32>()..(4096 / size_of::<u32>()) + 4]));
+    // xous_swapper::sync::<u8>(None);
+    log::info!("sync call done");
+
+    log::info!("end spi flash map test");
+
     const DELAY_MS: u64 = 1000;
 
     for i in 0.. {
@@ -71,4 +107,24 @@ fn main() -> ! {
     }
 
     panic!("Finished endless loop");
+}
+
+#[allow(dead_code)]
+fn cache_flush() {
+    unsafe {
+        // let the write go through before continuing
+        #[rustfmt::skip]
+        core::arch::asm!(
+            ".word 0x500F",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+            "fence",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+        );
+    }
 }

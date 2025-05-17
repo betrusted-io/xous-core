@@ -3,6 +3,7 @@ mod repl;
 mod shell;
 
 use cmds::*;
+use xous_swapper::FlashPage;
 
 fn main() {
     log_server::init_wait().unwrap();
@@ -11,6 +12,39 @@ fn main() {
 
     let tt = ticktimer::Ticktimer::new().unwrap();
     shell::start_shell();
+
+    tt.sleep_ms(4000).ok();
+
+    log::info!("start spi flash map test");
+    let swapper = xous_swapper::Swapper::new().unwrap();
+    log::info!("got handle on swapper object");
+    let mut spimap = xous::map_memory(
+        None,
+        xous::MemoryAddress::new(xous::arch::MMAP_VIRT_BASE),
+        cramium_hal::board::SPINOR_LEN as usize,
+        xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::VIRT,
+    )
+    .expect("couldn't map spi range");
+    log::info!("spimap: {:x?}", spimap);
+    // we have the mapping, now try to dereference it and read something to test it
+    let spislice: &mut [u8] = unsafe { spimap.as_slice_mut() };
+    // this should trigger the page fault and thus the handler
+    log::info!("spislice read 0..64: {:x?}", &spislice[..64]);
+    log::info!("spislice read 256..264: {:x?}", &spislice[256..264]);
+    let test_start = 8192 * 1024 + 4096;
+    log::info!("spislice read 8M: {:x?}", &spislice[test_start..test_start + 16]);
+
+    let mut fp = FlashPage::new();
+    fp.data.copy_from_slice(&spislice[test_start..test_start + 4096]);
+    for (i, d) in fp.data[..32].iter_mut().enumerate() {
+        *d = 128u8 - i as u8;
+    }
+    swapper
+        .write_page(spislice[test_start..test_start + 32].as_ptr() as usize, fp)
+        .expect("couldn't write page");
+    log::info!("spislice read 8M (again): {:x?}", &spislice[test_start..test_start + 16]);
+
+    log::info!("end spi flash map test");
 
     #[cfg(feature = "test-scrollbars")]
     {

@@ -342,8 +342,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "modals",
                 "ime-plugin-shell",
                 "ime-frontend",
-                // "test-swapper",
-                "cram-console",
+                "test-swapper",
+                // "cram-console",
             ]
             .to_vec();
             for service in swap_pkgs {
@@ -610,7 +610,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             //   - [planned] vault application
             let bao_rram_pkgs = ["xous-ticktimer", "xous-log", "xous-names" /* "usb-cramium" */].to_vec(); /* "usb-cramium" */
             let bao_swap_pkgs =
-                ["cram-hal-service", "bao-console", "bao-video", "modals" /* "pddb", "keystore" */].to_vec(); /* "bao-video" */
+                ["cram-hal-service", "bao-console" /* "bao-video", "modals", "pddb", "keystore" */].to_vec(); /* "bao-video" */
             if !builder.is_swap_set() {
                 builder.set_swap(0, 8 * 1024 * 1024);
             }
@@ -625,10 +625,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 builder.add_loader_feature("userspace-swap-debug");
                 builder.add_feature("debug-print-swapper");
                 // use this to enable debug in USB, when the package is selected
-                builder.add_feature("debug-print-usb");
+                // builder.add_feature("debug-print-usb");
             } else {
             }
-            builder.add_kernel_feature("debug-swap");
+            // builder.add_kernel_feature("debug-swap");
             // builder.add_kernel_feature("debug-print");
             // builder.add_kernel_feature("debug-swap-verbose");
             // builder.add_feature("quantum-timer"); // this isn't in NTO..

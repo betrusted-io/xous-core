@@ -512,6 +512,9 @@ fn clear_ram(cfg: &mut BootConfig) {
     // stay there forever, if not explicitly cleared. This clear adds a couple seconds
     // to a cold boot, but it's probably worth it. Note that it doesn't happen on a suspend/resume.
     let ram: *mut u32 = cfg.sram_start as *mut u32;
+    #[cfg(feature = "swap")]
+    let clear_limit = ((2 * 4096 + core::mem::size_of::<BootConfig>()) + 4095) & !4095;
+    #[cfg(not(feature = "swap"))]
     let clear_limit = ((4096 + core::mem::size_of::<BootConfig>()) + 4095) & !4095;
     if VDBG {
         println!("Stack clearing limit: {:x}", clear_limit);

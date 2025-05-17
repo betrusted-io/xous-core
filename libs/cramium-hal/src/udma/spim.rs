@@ -584,8 +584,8 @@ impl Spim {
             // last iteration falls through without waiting...
             if words_sent < total_words {
                 while self.udma_busy(Bank::Tx) {
-                    #[cfg(feature = "std")]
-                    xous::yield_slice();
+                    // #[cfg(feature = "std")]
+                    // xous::yield_slice();
                 }
             }
         }
@@ -842,8 +842,8 @@ impl Spim {
         let cmd_list = [SpimCmd::SendCmd(self.mode, 8, cmd as u16)];
         self.send_cmd_list(&cmd_list);
         while self.udma_busy(Bank::Custom) {
-            #[cfg(feature = "std")]
-            xous::yield_slice();
+            // #[cfg(feature = "std")]
+            // xous::yield_slice();
         }
     }
 
@@ -868,8 +868,8 @@ impl Spim {
         };
         self.send_cmd_list(&cmd_list);
         while self.udma_busy(Bank::Rx) {
-            #[cfg(feature = "std")]
-            xous::yield_slice();
+            // #[cfg(feature = "std")]
+            // xous::yield_slice();
         }
 
         let ret = u32::from_le_bytes([self.rx_buf()[0], self.rx_buf()[1], self.rx_buf()[2], 0x0]);
@@ -899,8 +899,8 @@ impl Spim {
         };
         self.send_cmd_list(&cmd_list);
         while self.udma_busy(Bank::Rx) {
-            #[cfg(feature = "std")]
-            xous::yield_slice();
+            // #[cfg(feature = "std")]
+            // xous::yield_slice();
         }
 
         let ret =
@@ -947,8 +947,8 @@ impl Spim {
         self.send_cmd_list(&cmd_list);
 
         while self.udma_busy(Bank::Tx) {
-            #[cfg(feature = "std")]
-            xous::yield_slice();
+            // #[cfg(feature = "std")]
+            // xous::yield_slice();
         }
         self.mem_cs(false);
     }
@@ -1140,8 +1140,8 @@ impl Spim {
         };
         self.send_cmd_list(&cmd_list);
         while self.udma_busy(Bank::Rx) {
-            #[cfg(feature = "std")]
-            xous::yield_slice();
+            // #[cfg(feature = "std")]
+            // xous::yield_slice();
         }
         let ret = self.rx_buf()[0];
 
@@ -1163,8 +1163,8 @@ impl Spim {
         };
         self.send_cmd_list(&cmd_list);
         while self.udma_busy(Bank::Rx) {
-            #[cfg(feature = "std")]
-            xous::yield_slice();
+            // #[cfg(feature = "std")]
+            // xous::yield_slice();
         }
         let ret = self.rx_buf()[0];
 
@@ -1183,8 +1183,8 @@ impl Spim {
         self.send_cmd_list(&cmd_list);
 
         while self.udma_busy(Bank::Tx) {
-            #[cfg(feature = "std")]
-            xous::yield_slice();
+            // #[cfg(feature = "std")]
+            // xous::yield_slice();
         }
         self.mem_cs(false);
     }
@@ -1237,8 +1237,8 @@ impl Spim {
         self.send_cmd_list(&cmd_list);
 
         while self.udma_busy(Bank::Tx) {
-            #[cfg(feature = "std")]
-            xous::yield_slice();
+            // #[cfg(feature = "std")]
+            // xous::yield_slice();
         }
         self.mem_cs(false);
     }
@@ -1290,7 +1290,7 @@ impl Spim {
         true
     }
 
-    /// This routine can data that is strictly a multiple of a page length (256 bytes)
+    /// This routine can write data that is strictly a multiple of a page length (256 bytes)
     pub fn mem_flash_write_page(&mut self, addr: u32, buf: &[u8; FLASH_PAGE_LEN]) -> bool {
         // crate::println!("write_page: {:x}, {:x?}", addr, &buf[..8]);
         // enable writes: set wren mode
@@ -1321,8 +1321,8 @@ impl Spim {
         self.send_cmd_list(&cmd_list);
 
         while self.udma_busy(Bank::Tx) {
-            #[cfg(feature = "std")]
-            xous::yield_slice();
+            // #[cfg(feature = "std")]
+            // xous::yield_slice();
         }
         self.mem_cs(false);
 

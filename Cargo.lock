@@ -352,6 +352,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
+ "xous-swapper",
 ]
 
 [[package]]
@@ -5498,6 +5499,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-ipc 0.10.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-swapper",
 ]
 
 [[package]]
@@ -7031,7 +7033,7 @@ dependencies = [
  "log",
  "num-derive 0.4.2",
  "num-traits",
- "rkyv 0.8.8",
+ "precursor-hal",
  "utralib 0.1.25",
  "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",

@@ -3,10 +3,11 @@
 
 use core::cmp::Ordering;
 
+use loader::SWAP_FLG_WIRED;
 use xous_kernel::SWAPPER_PID;
 use xous_kernel::arch::EXCEPTION_STACK_TOP;
+use xous_kernel::arch::MMAP_VIRT_BASE;
 use xous_kernel::arch::PAGE_SIZE;
-use xous_kernel::arch::SWAP_FLG_WIRED;
 use xous_kernel::arch::SWAP_RPT_VADDR;
 use xous_kernel::{PID, SysCallResult, TID};
 
@@ -39,6 +40,7 @@ pub enum SwapAbi {
     HardOom = 4,
     StealPage = 5,
     ReleaseMemory = 6,
+    WritePage = 7,
 }
 /// SYNC WITH `xous-swapper/src/main.rs`
 impl SwapAbi {
@@ -51,6 +53,7 @@ impl SwapAbi {
             4 => HardOom,
             5 => StealPage,
             6 => ReleaseMemory,
+            7 => WritePage,
             _ => Invalid,
         }
     }
@@ -64,6 +67,9 @@ pub enum BlockingSwapOp {
     /// PID of the target block, current paddr of block, original vaddr in the space of target block PID,
     /// physical address of block. Returns to PID of the target block.
     ReadFromSwap(PID, TID, usize, usize, usize),
+    /// PID of the target block, current paddr of block, original vaddr in the space of target block PID,
+    /// physical address of block. Returns to PID of the target block.
+    WriteToFlash(PID, TID, PID, usize, usize),
     /// Immediate OOM. Drop everything and try to recover; from here until exit, everything runs in
     /// an un-interruptable context, no progress allowed. This currently can only originate from one
     /// location, if we need multi-location origin then we have to also track the re-entry point in the
@@ -644,7 +650,7 @@ impl Swap {
     /// evict_page)
     ///
     /// This call diverges into the userspace swapper.
-    /// Divergent calls must turn of IRQs before memory spaces are changed.
+    /// Divergent calls must turn off IRQs before memory spaces are changed.
     pub fn retrieve_page_syscall(&mut self, target_vaddr_in_pid: usize, paddr: usize) -> ! {
         let target_pid = crate::arch::process::current_pid();
         let target_tid = crate::arch::process::current_tid();
@@ -670,6 +676,34 @@ impl Swap {
         }
     }
 
+    pub fn write_page_syscall(
+        &mut self,
+        src_pid: PID,
+        flash_offset: usize,
+        page_vaddr_in_swapper: usize,
+    ) -> ! {
+        let target_pid = crate::arch::process::current_pid();
+        let target_tid = crate::arch::process::current_tid();
+
+        #[cfg(feature = "debug-swap-verbose")]
+        println!(
+            "write_page - userspace activate for pid{:?}/tid{:?} for vaddr {:x?} -> offset {:x?}",
+            target_pid, target_tid, page_vaddr_in_swapper, flash_offset
+        );
+        // prevent context switching to avoid re-entrant calls while handling a call
+        self.swap_stop_irq();
+        // this is safe because the syscall pre-amble checks that we're in the swapper context
+        unsafe {
+            self.blocking_activate_swapper(BlockingSwapOp::WriteToFlash(
+                target_pid,
+                target_tid,
+                src_pid,
+                page_vaddr_in_swapper,
+                flash_offset,
+            ));
+        }
+    }
+
     /// Safety:
     ///   - the current page table mapping context must be PID 2 (the swapper's PID) for this to work
     ///   - interrupts must have been disabled prior to setting the context to PID 2
@@ -684,6 +718,12 @@ impl Swap {
                 self.swapper_args[2] = pid.get() as usize;
                 self.swapper_args[3] = vaddr_in_pid;
                 self.swapper_args[4] = vaddr_in_swap;
+            }
+            BlockingSwapOp::WriteToFlash(_pid, _tid, _src_pid, vaddr_in_swap, flash_offset) => {
+                self.swapper_args[0] = self.swapper_state;
+                self.swapper_args[1] = 4; // WriteToFlash
+                self.swapper_args[2] = vaddr_in_swap;
+                self.swapper_args[3] = flash_offset;
             }
             BlockingSwapOp::HardOomSyscall(_tid, _pid) => {
                 self.swapper_args[0] = self.swapper_state;
@@ -749,6 +789,33 @@ impl Swap {
                         .expect("couldn't unmap page lent to swapper");
                     // the page map into the target space happens after the syscall returns
                 });
+                (pid, tid)
+            }
+            // Called from any process. Clear the dirty bit on the RPT when exiting. No pages are unmapped
+            // by this routine, that would be handled by the OOMer, if at all.
+            Some(BlockingSwapOp::WriteToFlash(pid, tid, src_pid, _vpage_addr_in_swapper, flash_offset)) => {
+                // this works because the V:P mapping for the flash memory is 1:1 for the LSBs
+                let flash_vaddr = MMAP_VIRT_BASE + flash_offset;
+                // evict_page_inner marks the page as swapped/invalid in src_pid, but also maps the page
+                // into the swapper's address space
+                let swap_vaddr = crate::arch::mem::evict_page_inner(src_pid, flash_vaddr).unwrap();
+
+                // release the page from the swapper's address space
+                MemoryManager::with_mut(|mm| {
+                    let paddr = crate::arch::mem::virt_to_phys(swap_vaddr).unwrap() as usize;
+                    #[cfg(feature = "debug-swap-verbose")]
+                    println!("Release flash backing page - paddr {:x}", paddr);
+                    // this call unmaps the virtual page from the page table
+                    crate::arch::mem::unmap_page_inner(mm, swap_vaddr).expect("couldn't unmap page");
+                    // This call releases the physical page from the RPT - the pid has to match that of
+                    // the original owner. This is the "pointy end" of the stick;
+                    // after this call, the memory is now back into the free pool.
+                    mm.release_page_swap(paddr as *mut usize, src_pid)
+                        .expect("couldn't free page that was swapped out");
+                });
+
+                // Unhalt IRQs
+                self.swap_restore_irq();
                 (pid, tid)
             }
             Some(BlockingSwapOp::HardOomSyscall(tid, pid)) => {

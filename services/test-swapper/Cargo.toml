@@ -23,7 +23,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
 ] }
-
+xous-swapper = { path = "../xous-swapper" }
 
 utralib = { version = "0.1.25", optional = true, default-features = false }
 

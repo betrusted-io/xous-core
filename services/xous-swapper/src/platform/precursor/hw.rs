@@ -2,7 +2,8 @@ use core::mem::size_of;
 use std::fmt::Write;
 
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, Error, KeyInit, Nonce, Tag};
-use loader::swap::{SWAP_HAL_VADDR, SwapSpec};
+use loader::swap::SwapSpec;
+use xous::arch::SWAP_HAL_VADDR;
 
 use crate::debug::DebugUart;
 
@@ -120,5 +121,13 @@ impl SwapHal {
             self.cipher.decrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf, (&tag).into());
         // writeln!(DebugUart {}, "result: {:?}, buf: {:x?}", result, &buf[..16]).ok();
         result
+    }
+
+    pub fn flash_write(&mut self, _buf: &[u8], _offset: usize) {
+        // dummy
+    }
+
+    pub fn flash_read(&mut self, _buf: &mut [u8], _offset: usize) {
+        // dummy
     }
 }

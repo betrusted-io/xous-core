@@ -22,6 +22,7 @@ usb-cramium = { path = "../usb-cramium" }
 modals = { path = "../modals", default-features = false }
 ux-api = { path = "../../libs/ux-api", optional = true }
 pddb = { path = "../pddb", optional = true }
+xous-swapper = { path = "../xous-swapper" }
 
 # pddb testing
 rand = { version = "0.8.5", features = ["getrandom"], optional = true }

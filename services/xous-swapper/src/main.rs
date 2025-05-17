@@ -47,8 +47,6 @@
 //! the current `MEMORY_ALLOCATIONS` table into a pre-allocated BinaryHeap in the shared state structure,
 //! indexed by the timestamp. At this point, the blocking userspace handler can work through a sorted vector
 //! of allocations to pick the pages it wants to remove.
-#[cfg(feature = "spinor")]
-mod api;
 mod debug;
 mod platform;
 use core::fmt::Write;
@@ -62,6 +60,10 @@ use platform::{PAGE_SIZE, SwapHal};
 use xous::arch::{SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR, SWAP_RPT_VADDR};
 use xous::{MemoryFlags, MemoryRange, PID, Result};
 use xous_swapper::Opcode;
+use xous_swapper::SwapAbi;
+
+/// Patch over SPI calls with prints, for testing in renode
+const RENODE_TESTING: bool = false;
 
 /// Target of pages to free in case of a Hard OOM. Note that the PAGE_TARGET numbers
 /// are imprecise, in that there is a chance that one target is active during another
@@ -76,38 +78,6 @@ const OOM_DOOM_PAGE_TARGET: usize = 48;
 #[cfg(feature = "oom-doom")]
 const OOM_DOOM_POLL_INTERVAL_MS: u64 = 1057;
 
-/// userspace swapper -> kernel ABI
-/// This ABI is copy-paste synchronized with what's in the kernel. It's left out of
-/// xous-rs so that we can change it without having to push crates to crates.io.
-/// Since there is only one place the ABI could be used, we're going to stick with
-/// this primitive method of synchronization because it reduces the activation barrier
-/// to fix bugs.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum SwapAbi {
-    Invalid = 0,
-    ClearMemoryNow = 1,
-    GetFreePages = 2,
-    // RetrievePage = 3, // meant to be initiated within the kernel to itself
-    // HardOom = 4, // meant to be initiated within the kernel to itself
-    StealPage = 5,
-    ReleaseMemory = 6,
-}
-/// SYNC WITH `kernel/src/swap.rs`
-impl SwapAbi {
-    pub fn from(val: usize) -> SwapAbi {
-        use SwapAbi::*;
-        match val {
-            1 => ClearMemoryNow,
-            2 => GetFreePages,
-            // 3 => RetrievePage,
-            // 4 => HardOom,
-            5 => StealPage,
-            6 => ReleaseMemory,
-            _ => Invalid,
-        }
-    }
-}
-
 /// kernel -> swapper handler ABI
 /// This structure mirrors the BlockingSwapOp's that the kernel can issue to userspace.
 /// The actual numbers for the opcode are transcribed manually into the kernel, as the
@@ -119,6 +89,8 @@ pub enum KernelOp {
     ReadFromSwap = 1,
     /// Hard OOM invocation - stop everything and free memory!
     HardOom = 3,
+    /// Take the requested page and write it to SPI
+    WriteToFlash = 4,
 }
 
 pub struct PtPage {
@@ -491,72 +463,106 @@ fn swap_handler(
     let ss = sss.inner.as_mut().expect("Shared state should be initialized");
 
     let op: Option<KernelOp> = FromPrimitive::from_usize(opcode);
-    #[cfg(feature = "debug-verbose")]
+    // #[cfg(feature = "debug-verbose")]
     writeln!(DebugUart {}, "got Opcode: {:?}", op).ok();
     match op {
         Some(KernelOp::ReadFromSwap) => {
             let pid = a2 as u8;
             let vaddr_in_pid = a3;
             let vaddr_in_swap = a4;
-            // walk the PT to find the swap data, and remove it from the swap PT
-            let paddr_in_swap = match ss.pt_walk(pid as u8, vaddr_in_pid, true) {
-                Some(paddr) => paddr,
-                None => {
-                    writeln!(DebugUart {}, "Couldn't resolve swapped data. Was the page actually swapped?")
-                        .ok();
-                    panic!("Couldn't resolve swapped data. Was the page actually swapped?")
-                }
-            };
-            // clear the used bit in swap
-            ss.sct.counts[paddr_in_swap / PAGE_SIZE] &= !loader::FLG_SWAP_USED;
-            #[cfg(feature = "debug-print-swapper")]
-            writeln!(
-                DebugUart {},
-                "RFS PID{} VA {:x} PA {:x} counts {:x}",
-                pid,
-                vaddr_in_pid,
-                paddr_in_swap,
-                ss.sct.counts[paddr_in_swap / PAGE_SIZE]
-            )
-            .ok();
 
-            // safety: this is only safe because the pointer we're passed from the kernel is guaranteed to be
-            // a valid u8-page in memory
-            let buf = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
-            // this is in a retry loop because the SPIM interface can timeout during high bus congestion
-            // periods.
-            const TIMEOUT_RETRIES: usize = 3;
-            let mut retries = 0;
-            while retries < TIMEOUT_RETRIES {
-                match ss.hal.decrypt_swap_from(
-                    buf,
-                    ss.sct.counts[paddr_in_swap / PAGE_SIZE],
-                    paddr_in_swap,
-                    vaddr_in_pid,
-                    pid,
-                ) {
-                    Ok(_) => {
-                        break;
+            if (vaddr_in_pid & xous::arch::MMAP_VIRT_BASE) == xous::arch::MMAP_VIRT_BASE {
+                // data is in the SPINOR, which is by definition located at exactly the offset
+                // indicated by the offset from MMAP_VIRT_BASE
+                // safety: this is only safe because the pointer we're passed from the kernel is guaranteed to
+                // be a valid u8-page in memory
+
+                if RENODE_TESTING {
+                    let buf = unsafe {
+                        core::slice::from_raw_parts_mut(
+                            vaddr_in_swap as *mut u32,
+                            PAGE_SIZE / core::mem::size_of::<u32>(),
+                        )
+                    };
+                    // return some dummy data for testing
+                    writeln!(DebugUart {}, "********** returning dummy data to: {:x}", vaddr_in_pid).ok();
+                    let indicator = vaddr_in_pid as usize & 0xF_F000;
+                    for (i, d) in buf[0..32].iter_mut().enumerate() {
+                        *d = i as u32 | (0xf00f_0000 + indicator as u32);
                     }
-                    Err(e) => {
-                        retries += 1;
+                } else {
+                    // `buf` is also exactly one PAGE_SIZE in length, so we don't have to zero-ize it before
+                    // using it, as all of it will be overwritten.
+                    let buf = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
+                    let offset = vaddr_in_pid & 0x0FFF_FFFF; // mask out the top nibble to derive the offset in SPI flash
+                    ss.hal.flash_read(buf, offset);
+                    #[cfg(feature = "debug-print-swapper")]
+                    writeln!(DebugUart {}, "RF*F* PID{} VA {:x}, {:x?}", pid, vaddr_in_pid, &buf[..8]).ok();
+                }
+            } else {
+                // walk the PT to find the swap data, and remove it from the swap PT
+                let paddr_in_swap = match ss.pt_walk(pid as u8, vaddr_in_pid, true) {
+                    Some(paddr) => paddr,
+                    None => {
                         writeln!(
                             DebugUart {},
-                            "Decryption error: swap image corrupted, the tag does not match the data! {:?} (try {}/{})",
-                            e,
-                            retries,
-                            TIMEOUT_RETRIES
+                            "Couldn't resolve swapped data. Was the page actually swapped?"
                         )
                         .ok();
-                        if retries >= TIMEOUT_RETRIES {
-                            panic!(
-                                "Decryption error: swap image corrupted, the tag does not match the data; retry count exceeded!"
-                            );
+                        panic!("Couldn't resolve swapped data. Was the page actually swapped?")
+                    }
+                };
+                // clear the used bit in swap
+                ss.sct.counts[paddr_in_swap / PAGE_SIZE] &= !loader::FLG_SWAP_USED;
+                #[cfg(feature = "debug-print-swapper")]
+                writeln!(
+                    DebugUart {},
+                    "RFS PID{} VA {:x} PA {:x} counts {:x}",
+                    pid,
+                    vaddr_in_pid,
+                    paddr_in_swap,
+                    ss.sct.counts[paddr_in_swap / PAGE_SIZE]
+                )
+                .ok();
+
+                // safety: this is only safe because the pointer we're passed from the kernel is guaranteed to
+                // be a valid u8-page in memory
+                let buf = unsafe { core::slice::from_raw_parts_mut(vaddr_in_swap as *mut u8, PAGE_SIZE) };
+                // this is in a retry loop because the SPIM interface can timeout during high bus congestion
+                // periods.
+                const TIMEOUT_RETRIES: usize = 3;
+                let mut retries = 0;
+                while retries < TIMEOUT_RETRIES {
+                    match ss.hal.decrypt_swap_from(
+                        buf,
+                        ss.sct.counts[paddr_in_swap / PAGE_SIZE],
+                        paddr_in_swap,
+                        vaddr_in_pid,
+                        pid,
+                    ) {
+                        Ok(_) => {
+                            break;
+                        }
+                        Err(e) => {
+                            retries += 1;
+                            writeln!(
+                                DebugUart {},
+                                "Decryption error: swap image corrupted, the tag does not match the data! {:?} (try {}/{})",
+                                e,
+                                retries,
+                                TIMEOUT_RETRIES
+                            )
+                            .ok();
+                            if retries >= TIMEOUT_RETRIES {
+                                panic!(
+                                    "Decryption error: swap image corrupted, the tag does not match the data; retry count exceeded!"
+                                );
+                            }
                         }
                     }
                 }
+                // at this point, the `buf` has our desired data, we're done, modulo updating the count.
             }
-            // at this point, the `buf` has our desired data, we're done, modulo updating the count.
         }
         // HardOom handling will evict any and all pages that it can -- it does no filtering.
         Some(KernelOp::HardOom) => {
@@ -614,7 +620,7 @@ fn swap_handler(
                     {
                         wired += 1;
                     } else {
-                        // error is ignored because the correct behavior on error is to try another page
+                        // errors are ignored because the correct behavior on error is to try another page
                         write_to_swap_inner(ss, candidate, &mut errs, &mut pages_to_free).ok();
                     }
                 } else {
@@ -650,6 +656,19 @@ fn swap_handler(
             ss.hard_oom_reserved_page = Some(reserved);
             if ss.report_full_rpt {
                 ss.report_full_rpt = false;
+            }
+        }
+        // This just writes data to FLASH, but does not de-allocate the page
+        Some(KernelOp::WriteToFlash) => {
+            let vaddr_in_swap = a2;
+            let flash_offset = a3;
+
+            let buf = unsafe { core::slice::from_raw_parts(vaddr_in_swap as *const u8, PAGE_SIZE) };
+            let offset = flash_offset & 0x0FFF_FFFF;
+            if !RENODE_TESTING {
+                #[cfg(feature = "debug-print-swapper")]
+                writeln!(DebugUart {}, "WT*F*: VA {:x} buf {:x?}", offset, &buf[..8]).ok();
+                ss.hal.flash_write(buf, offset);
             }
         }
         _ => {
@@ -728,19 +747,12 @@ fn main() {
     let xns = xous_api_names::XousNames::new().unwrap();
     let sid = xns.register_name(xous_swapper::SWAPPER_PUBLIC_NAME, None).unwrap();
 
-    #[cfg(feature = "spinor")]
-    std::thread::spawn({
-        move || {
-            crate::platform::cramium::spinor::spinor_handler();
-        }
-    });
-
     let mut msg_opt = None;
     loop {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();
         let op: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
-        log::debug!("Swapper got {:x?}", op);
+        log::info!("Swapper got {:x?}", op);
         match op {
             Some(Opcode::GarbageCollect) => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
@@ -760,6 +772,26 @@ fn main() {
                     // return the current free page count
                     scalar.arg1 = free_pages;
                 }
+            }
+            Some(Opcode::WritePage) => {
+                let mem_msg = msg.body.memory_message().unwrap();
+                let offset = mem_msg.offset.expect("malformed WritePage").get();
+                log::info!(
+                    "WritePage: PID{}, offset {:x}, vaddr_buf {:x}",
+                    msg.sender.pid().unwrap().get() as usize,
+                    offset,
+                    mem_msg.buf.as_ptr() as usize
+                );
+                xous::rsyscall(xous::SysCall::SwapOp(
+                    SwapAbi::WritePage as usize,
+                    msg.sender.pid().unwrap().get() as usize,
+                    offset,
+                    mem_msg.buf.as_ptr() as usize,
+                    0,
+                    0,
+                    0,
+                ))
+                .expect("couldn't WritePage");
             }
             #[cfg(feature = "swap-userspace-testing")]
             Some(Opcode::Test0) => {

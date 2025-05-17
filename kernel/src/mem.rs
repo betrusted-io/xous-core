@@ -6,7 +6,10 @@ use core::fmt;
 use xous_kernel::{MemoryFlags, MemoryRange, PID, arch::*};
 
 pub use crate::arch::mem::MemoryMapping;
-use crate::arch::process::Process;
+use crate::arch::{
+    mem::{MMUFlags, flush_mmu, pagetable_entry},
+    process::Process,
+};
 #[cfg(feature = "swap")]
 use crate::swap::SwapAlloc;
 
@@ -628,13 +631,17 @@ impl MemoryManager {
             // round up to the nearest page boundary
             let end = (virt_ptr as usize + size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
             for virt in (start..end).step_by(PAGE_SIZE) {
-                // read/write is provisionally allowed - this allows us to cache writeable
-                // data using the swap mechanism and only do built write-outs when the page is
-                // retired. However this is somewhat dangerous because it means we could lose
-                // data on power-down or if we screw up the tracking of dirty pages (dirty bit is
-                // not automatically set on write/update). Valid is not set, because it's not
+                // Pages are read-only. Writes take a special call to ensure atomicity of write
+                // updates (and subsequent page unmap). Valid is not set, because it's not
                 // wired into memory, and "P" (swap) is set to indicate this is a swapper managed page.
-                mm.reserve_address(self, virt, MemoryFlags::R | MemoryFlags::W | MemoryFlags::P)?;
+                mm.reserve_address(self, virt, MemoryFlags::R | MemoryFlags::P)?;
+
+                // now mark the page as USER
+                let pte = pagetable_entry(virt)?;
+                unsafe {
+                    pte.write_volatile(pte.read_volatile() | MMUFlags::USER.bits());
+                    flush_mmu();
+                }
             }
             // note that the region returned is snapped to the nearest page boundary, even if
             // the use called us with unaligned addresses.
