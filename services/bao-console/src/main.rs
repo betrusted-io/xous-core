@@ -12,8 +12,12 @@ fn main() {
     let tt = ticktimer::Ticktimer::new().unwrap();
     shell::start_shell();
 
+    tt.sleep_ms(4000).ok();
+
     log::info!("start spi flash map test");
-    let spimap = xous::map_memory(
+    let swapper = xous_swapper::Swapper::new().unwrap();
+    log::info!("got handle on swapper object");
+    let mut spimap = xous::map_memory(
         None,
         xous::MemoryAddress::new(xous::arch::MMAP_VIRT_BASE),
         cramium_hal::board::SPINOR_LEN as usize,
@@ -22,15 +26,19 @@ fn main() {
     .expect("couldn't map spi range");
     log::info!("spimap: {:x?}", spimap);
     // we have the mapping, now try to dereference it and read something to test it
-    let spislice: &[u32] = unsafe { spimap.as_slice() };
+    let spislice: &mut [u8] = unsafe { spimap.as_slice_mut() };
     // this should trigger the page fault and thus the handler
-    log::info!("spislice: {:x?}", &spislice[..32]);
+    log::info!("spislice read 0..64: {:x?}", &spislice[..64]);
+    log::info!("spislice read 256..264: {:x?}", &spislice[256..264]);
 
+    for (i, d) in spislice[256..264].iter_mut().enumerate() {
+        *d = i as u8;
+    }
     // marks modified pages as dirty.
-    xous_swapper::mark_dirty(&spislice[..32]);
+    xous_swapper::mark_dirty(&spislice[256..264]);
 
     // Calls sync to explicitly flush the dirty pages now
-    xous_swapper::sync(Some(&spislice[..32]));
+    swapper.sync(Some(&spislice[256..264]));
     // xous_swapper::sync::<u8>(None);
 
     log::info!("end spi flash map test");
