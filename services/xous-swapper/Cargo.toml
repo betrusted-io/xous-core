@@ -47,9 +47,9 @@ renode = ["utralib/renode", "precursor-hal"]
 swap-userspace-testing = []
 oom-doom = []
 
-# mutually exclusive feature with other crates that use the app UART
-# requires "userspace-debug" to be passed to the loader for this to work.
-debug-print-swapper = []
-
 debug-verbose = []
+
+# mutually exclusive feature with other crates that use the app UART
+# *** requires "userspace-debug" to be passed to the loader for this to work. ***
+debug-print-swapper = []
 default = []
