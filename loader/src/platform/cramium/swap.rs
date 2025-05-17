@@ -387,6 +387,22 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
         SWAPPER_PID,
     );
 
+    // Map the SPIM FLASH handlers into the swapper's memory space (2 pages)
+    cfg.map_page_32(
+        root,
+        SPIM_FLASH_IFRAM_ADDR,
+        SPIM_FLASH_IFRAM_ADDR,
+        FLG_R | FLG_W | FLG_U | FLG_VALID,
+        SWAPPER_PID,
+    );
+    cfg.map_page_32(
+        root,
+        SPIM_FLASH_IFRAM_ADDR + PAGE_SIZE,
+        SPIM_FLASH_IFRAM_ADDR + PAGE_SIZE,
+        FLG_R | FLG_W | FLG_U | FLG_VALID,
+        SWAPPER_PID,
+    );
+
     let iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
     iox.set_alternate_function(IoxPort::PD, 2, IoxFunction::AF2);
     iox.set_alternate_function(IoxPort::PD, 3, IoxFunction::AF2);
@@ -439,7 +455,7 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
             root,
             // TODO: use PD2/3 AF2 for this UART; set up the IOs for this
             utralib::utra::udma_uart_0::HW_UDMA_UART_0_BASE,
-            SWAP_APP_UART_VADDR,
+            xous::arch::SWAP_APP_UART_VADDR,
             FLG_R | FLG_W | FLG_U | FLG_VALID,
             SWAPPER_PID,
         );
@@ -448,7 +464,7 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
             root,
             // TODO: use PD2/3 AF2 for this UART; set up the IOs for this
             APP_UART_IFRAM_ADDR,
-            SWAP_APP_UART_IFRAM_VADDR,
+            xous::arch::SWAP_APP_UART_IFRAM_VADDR,
             FLG_R | FLG_W | FLG_U | FLG_VALID,
             SWAPPER_PID,
         );
