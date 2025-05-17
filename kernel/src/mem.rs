@@ -391,40 +391,6 @@ impl MemoryManager {
 
     #[cfg(baremetal)]
     #[cfg(feature = "swap")]
-    pub fn mark_rpt_dirty(&mut self, paddr: usize) -> Result<(), xous_kernel::Error> {
-        unsafe {
-            let offset = (paddr - self.ram_start) / PAGE_SIZE;
-            if MEMORY_ALLOCATIONS[offset].is_none() {
-                Err(xous_kernel::Error::BadAddress)
-            } else {
-                MEMORY_ALLOCATIONS[offset].set_dirty();
-                Ok(())
-            }
-        }
-    }
-
-    #[cfg(baremetal)]
-    #[cfg(feature = "swap")]
-    pub fn mark_rpt_clean(&mut self, paddr: usize) -> Result<(), xous_kernel::Error> {
-        unsafe {
-            let offset = (paddr - self.ram_start) / PAGE_SIZE;
-            if MEMORY_ALLOCATIONS[offset].is_none() {
-                Err(xous_kernel::Error::BadAddress)
-            } else {
-                MEMORY_ALLOCATIONS[offset].clear_dirty();
-                Ok(())
-            }
-        }
-    }
-
-    #[cfg(baremetal)]
-    #[cfg(feature = "swap")]
-    pub fn rpt_is_dirty(&self, paddr: usize) -> bool {
-        unsafe { MEMORY_ALLOCATIONS[(paddr - self.ram_start) / PAGE_SIZE].is_dirty() }
-    }
-
-    #[cfg(baremetal)]
-    #[cfg(feature = "swap")]
     /// Similar to alloc_page(), but this implementation takes the vaddr being allocated so we
     /// can do more detailed bookkeeping on least recently used pages.
     pub fn alloc_page_oomable(
@@ -665,13 +631,10 @@ impl MemoryManager {
             // round up to the nearest page boundary
             let end = (virt_ptr as usize + size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
             for virt in (start..end).step_by(PAGE_SIZE) {
-                // read/write is provisionally allowed - this allows us to cache writeable
-                // data using the swap mechanism and only do built write-outs when the page is
-                // retired. However this is somewhat dangerous because it means we could lose
-                // data on power-down or if we screw up the tracking of dirty pages (dirty bit is
-                // not automatically set on write/update). Valid is not set, because it's not
+                // Pages are read-only. Writes take a special call to ensure atomicity of write
+                // updates (and subsequent page unmap). Valid is not set, because it's not
                 // wired into memory, and "P" (swap) is set to indicate this is a swapper managed page.
-                mm.reserve_address(self, virt, MemoryFlags::R | MemoryFlags::W | MemoryFlags::P)?;
+                mm.reserve_address(self, virt, MemoryFlags::R | MemoryFlags::P)?;
 
                 // now mark the page as USER
                 let pte = pagetable_entry(virt)?;
