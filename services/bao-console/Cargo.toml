@@ -22,7 +22,7 @@ usb-cramium = { path = "../usb-cramium" }
 modals = { path = "../modals", default-features = false }
 ux-api = { path = "../../libs/ux-api", optional = true }
 pddb = { path = "../pddb", optional = true }
-xous-swapper = { path = "../xous-swapper" }
+xous-swapper = { path = "../xous-swapper", optional = true }
 
 # pddb testing
 rand = { version = "0.8.5", features = ["getrandom"], optional = true }
@@ -40,6 +40,7 @@ board-baosec = [
     "cramium-hal",
     "usb-cramium/board-baosec",
     "pddb/board-baosec",
+    "xous-swapper",
 ]
 hosted-baosec = [
     "modals/hosted-baosec",
@@ -54,4 +55,5 @@ test-rekey = []
 autobasis = ["rand_chacha", "rand"]
 modal-testing = ["ux-api", "modals/modal-testing"]
 test-scrollbars = []
-default = []
+test-flash = []
+default = ["test-flash"]

@@ -1,3 +1,8 @@
+#[cfg(feature = "cramium-soc")]
+use cramium_hal::board::SPINOR_ERASE_SIZE;
+#[cfg(any(feature = "precursor", feature = "renode"))]
+use precursor_hal::board::SPINOR_ERASE_SIZE;
+
 pub const PAGE_SIZE: usize = xous::arch::PAGE_SIZE;
 
 /// userspace swapper -> kernel ABI
@@ -116,7 +121,6 @@ impl Swapper {
 use core::sync::atomic::{AtomicU32, Ordering};
 use std::num::NonZero;
 
-use cramium_hal::board::SPINOR_ERASE_SIZE;
 use num_traits::ToPrimitive;
 use xous::{MemoryMessage, MemoryRange};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);

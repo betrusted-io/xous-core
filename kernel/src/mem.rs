@@ -6,10 +6,9 @@ use core::fmt;
 use xous_kernel::{MemoryFlags, MemoryRange, PID, arch::*};
 
 pub use crate::arch::mem::MemoryMapping;
-use crate::arch::{
-    mem::{MMUFlags, flush_mmu, pagetable_entry},
-    process::Process,
-};
+#[cfg(baremetal)]
+use crate::arch::mem::{MMUFlags, flush_mmu, pagetable_entry};
+use crate::arch::process::Process;
 #[cfg(feature = "swap")]
 use crate::swap::SwapAlloc;
 
@@ -621,6 +620,7 @@ impl MemoryManager {
         // just allocate the region as "swapped". No further checks is done on the validity of the requested
         // range - if the range is out of bounds, it will be caught as a runtime error in the resolver
         // that attempts to find the physical page that corresponds to a virtual mapping.
+        #[cfg(baremetal)]
         if phys == 0
             && (flags & MemoryFlags::VIRT == MemoryFlags::VIRT)
             && ((virt_ptr as usize & MMAP_VIRT_BASE) == MMAP_VIRT_BASE)
