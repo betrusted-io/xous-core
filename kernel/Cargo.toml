@@ -55,6 +55,7 @@ cramium-fpga = ["utralib/cramium-fpga", "rand_chacha"]
 board-baosec = ["cramium-hal/kernel-baosec", "memmap-flash", "swap"]
 board-baosor = ["cramium-hal/kernel-baosor"]
 board-dabao = ["cramium-hal/kernel-dabao"]
+hosted-baosec = []
 
 atsama5d27 = ["utralib/atsama5d27"]
 precursor = ["utralib/precursor"]
