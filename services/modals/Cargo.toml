@@ -25,25 +25,27 @@ cram-hal-service = { path = "../cram-hal-service", optional = true } # provides 
 tts-frontend = { path = "../tts", optional = true }
 locales = { path = "../../locales" }
 bit_field = "0.9.0"
-cramium-hal = { path = "../../libs/cramium-hal", optional = true, features = [
-    "std",
-] }
 cramium-api = { path = "../../libs/cramium-api", optional = true }
 cramium-emu = { path = "../cramium-emu", optional = true }
 blitstr2 = { path = "../../libs/blitstr2" }
 ux-api = { path = "../../libs/ux-api", optional = true, features = ["std"] }
 
-utralib = { version = "0.1.25", optional = true, default-features = false }
 
 [features]
 no-gam = []
-precursor = ["utralib/precursor", "trng", "gam", "tts-frontend"]
-hosted = ["utralib/hosted", "trng", "gam", "tts-frontend"]
-renode = ["utralib/renode", "trng", "gam", "tts-frontend"]
+precursor = ["trng", "gam", "tts-frontend"]
+hosted = ["trng", "gam", "tts-frontend"]
+renode = ["trng", "gam", "tts-frontend"]
 
-cramium-soc = ["utralib/cramium-soc", "cram-hal-service", "no-gam"]
+cramium-soc = ["cram-hal-service", "no-gam"]
 hosted-baosec = ["ux-api/hosted-baosec", "cramium-emu", "cramium-api", "no-gam"]
-board-baosec = ["ux-api/board-baosec", "cramium-api", "no-gam"]
+board-baosec = [
+    "ux-api/board-baosec",
+    "cramium-api",
+    "no-gam",
+    "cram-hal-service/board-baosec",
+    "cramium-soc",
+]
 doc-deps = ["gam", "ux-api/doc-deps"]
 modal-testing = []
 
