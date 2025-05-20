@@ -82,7 +82,7 @@ renode = [
 cramium-soc = [
     "utralib/cramium-soc",
     "debug-print",
-    "cramium-hal/cramium-soc",
+    "cramium-hal",
     "cramium-api",
     "rand_chacha",
     "sram-margin",

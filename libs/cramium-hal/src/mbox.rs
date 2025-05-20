@@ -67,9 +67,9 @@ pub struct MboxToCm7Pkt<'a> {
 pub struct MboxToRvPkt {
     pub version: u32,
     pub opcode: ToRvOp,
-    #[cfg(target_os = "xous")]
+    #[cfg(feature = "std")]
     pub data: Vec<u32>,
-    #[cfg(not(target_os = "xous"))]
+    #[cfg(not(feature = "std"))]
     pub len: usize,
 }
 
@@ -78,7 +78,7 @@ pub struct Mbox {
 }
 impl Mbox {
     pub fn new() -> Mbox {
-        #[cfg(target_os = "xous")]
+        #[cfg(feature = "std")]
         let csr_mem = xous::syscall::map_memory(
             xous::MemoryAddress::new(mailbox::HW_MAILBOX_BASE),
             None,
@@ -86,9 +86,9 @@ impl Mbox {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("couldn't map mailbox CSR range");
-        #[cfg(target_os = "xous")]
+        #[cfg(feature = "std")]
         let mut csr = CSR::new(csr_mem.as_mut_ptr() as *mut u32);
-        #[cfg(not(target_os = "xous"))]
+        #[cfg(not(feature = "std"))]
         let mut csr = CSR::new(mailbox::HW_MAILBOX_BASE as *mut u32);
         csr.wfo(mailbox::LOOPBACK_LOOPBACK, 0); // ensure we're not in loopback mode
         // generate available events - not hooked up to IRQ, but we'll poll for now
@@ -129,7 +129,7 @@ impl Mbox {
         }
     }
 
-    #[cfg(target_os = "xous")]
+    #[cfg(feature = "std")]
     pub fn try_rx(&mut self) -> Result<MboxToRvPkt, MboxError> {
         let version = self.expect_rx()?;
         let op_and_len = self.expect_rx()?;
@@ -142,7 +142,7 @@ impl Mbox {
         Ok(MboxToRvPkt { version, opcode, data })
     }
 
-    #[cfg(not(target_os = "xous"))]
+    #[cfg(not(feature = "std"))]
     pub fn try_rx(&mut self, data: &mut [u32]) -> Result<MboxToRvPkt, MboxError> {
         let version = self.expect_rx()?;
         let op_and_len = self.expect_rx()?;

@@ -606,14 +606,14 @@ impl Spim {
 
     /// Wait for the pending tx/rx cycle to finish, returns a pointer to the Rx buffer when done.
     pub fn txrx_await(&mut self, _use_yield: bool) -> Result<&[u8], xous::Error> {
-        #[cfg(not(target_os = "xous"))]
+        #[cfg(not(feature = "std"))]
         if let Some(pending) = self.pending_txrx.take() {
             while self.udma_busy(Bank::Tx) || self.udma_busy(Bank::Rx) || self.udma_busy(Bank::Custom) {}
             Ok(&self.rx_buf()[..pending])
         } else {
             Err(xous::Error::UseBeforeInit)
         }
-        #[cfg(target_os = "xous")]
+        #[cfg(feature = "std")]
         {
             if let Some(pending) = self.pending_txrx.take() {
                 let tt = xous_api_ticktimer::Ticktimer::new().unwrap();
