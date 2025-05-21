@@ -222,7 +222,11 @@ impl SwapHal {
                 .chunks_exact(FLASH_PAGE_LEN)
                 .zip((preserve_start..(preserve_start + FLASH_SECTOR_LEN)).step_by(FLASH_PAGE_LEN))
             {
-                self.flash_spim.borrow_mut().mem_flash_write_page(addr as u32, page.try_into().unwrap());
+                // only do the write-page if something is not in the erased state
+                // this allows us to re-use flash_write as a "slow erase" for things smaller than a block
+                if !page.iter().all(|&b| b == 0xff) {
+                    self.flash_spim.borrow_mut().mem_flash_write_page(addr as u32, page.try_into().unwrap());
+                }
             }
             written += replace_end - preserve_to;
         }
@@ -271,5 +275,9 @@ impl SwapHal {
                 self.flash_spim.borrow_mut().mem_flash_write_page(addr as u32, page.try_into().unwrap());
             }
         }
+    }
+
+    pub fn block_erase(&mut self, block: usize, len: usize) -> bool {
+        self.flash_spim.borrow_mut().flash_erase_block(block, len)
     }
 }

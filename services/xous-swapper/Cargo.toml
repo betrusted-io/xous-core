@@ -30,16 +30,11 @@ utralib = { version = "0.1.25", optional = true, default-features = false }
 [target.'cfg(any(windows,unix))'.dependencies]
 
 [features]
-cramium-soc = [
-    "utralib/cramium-soc",
-    "cramium-hal/std",
-    "loader/cramium-soc",
-    "cramium-api/std",
-]
+cramium-soc = ["utralib/cramium-soc", "loader/cramium-soc", "cramium-api/std"]
 cramium-fpga = ["utralib/cramium-fpga"]
-board-baosec = ["cramium-hal/board-baosec"]
-board-baosor = ["cramium-hal/board-baosor"]
-board-dabao = ["cramium-hal/board-dabao"]
+board-baosec = ["cramium-hal/board-baosec", "cramium-soc"]
+board-baosor = ["cramium-hal/board-baosor", "cramium-soc"]
+board-dabao = ["cramium-hal/board-dabao", "cramium-soc"]
 
 precursor = ["utralib/precursor", "precursor-hal"]
 hosted = ["utralib/hosted"]
