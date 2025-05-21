@@ -46,9 +46,9 @@ loader-baosec = [
     "axp2101",
     "ux-api/loader-baosec",
 ]
-kernel-baosec = []
-kernel-baosor = []
-kernel-dabao = []
+kernel-baosec = ["utralib/cramium-soc"]
+kernel-baosor = ["utralib/cramium-soc"]
+kernel-dabao = ["utralib/cramium-soc"]
 test-baosec = ["ux-api/loader-baosec", "camera-gc2145"]
 hosted-baosec = [] # emulated hardware on x86 platform
 board-baosor = [
