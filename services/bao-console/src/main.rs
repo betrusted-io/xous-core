@@ -6,7 +6,7 @@ use cmds::*;
 
 fn main() {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let tt = ticktimer::Ticktimer::new().unwrap();
@@ -102,11 +102,14 @@ fn main() {
         tt.sleep_ms(500).ok();
     }
 
+    // why is this feature not being de-activated when it is not selected???
+    /*
     #[cfg(feature = "modal-testing")]
     {
         log::set_max_level(log::LevelFilter::Debug);
         modals::tests::spawn_test();
     }
+    */
     #[cfg(not(feature = "hosted-baosec"))]
     {
         use cramium_api::I2cApi;
