@@ -870,21 +870,34 @@ impl Swap {
                 let flash_vaddr = MMAP_VIRT_BASE + flash_offset;
                 // evict_page_inner marks the page as swapped/invalid in src_pid, but also maps the page
                 // into the swapper's address space
-                let swap_vaddr = crate::arch::mem::evict_page_inner(src_pid, flash_vaddr).unwrap();
-
-                // release the page from the swapper's address space
-                MemoryManager::with_mut(|mm| {
-                    let paddr = crate::arch::mem::virt_to_phys(swap_vaddr).unwrap() as usize;
-                    #[cfg(feature = "debug-swap-verbose")]
-                    println!("Release flash backing page - paddr {:x}", paddr);
-                    // this call unmaps the virtual page from the page table
-                    crate::arch::mem::unmap_page_inner(mm, swap_vaddr).expect("couldn't unmap page");
-                    // This call releases the physical page from the RPT - the pid has to match that of
-                    // the original owner. This is the "pointy end" of the stick;
-                    // after this call, the memory is now back into the free pool.
-                    mm.release_page_swap(paddr as *mut usize, src_pid)
-                        .expect("couldn't free page that was swapped out");
-                });
+                match crate::arch::mem::evict_page_inner(src_pid, flash_vaddr) {
+                    Ok(swap_vaddr) => {
+                        // release the page from the swapper's address space
+                        MemoryManager::with_mut(|mm| {
+                            let paddr = crate::arch::mem::virt_to_phys(swap_vaddr).unwrap() as usize;
+                            #[cfg(feature = "debug-swap-verbose")]
+                            println!("Release flash backing page - paddr {:x}", paddr);
+                            // this call unmaps the virtual page from the page table
+                            crate::arch::mem::unmap_page_inner(mm, swap_vaddr).expect("couldn't unmap page");
+                            // This call releases the physical page from the RPT - the pid has to match that
+                            // of the original owner. This is the "pointy end" of
+                            // the stick; after this call, the memory is now back
+                            // into the free pool.
+                            mm.release_page_swap(paddr as *mut usize, src_pid)
+                                .expect("couldn't free page that was swapped out");
+                        });
+                    }
+                    Err(xous_kernel::Error::BadAddress) => {
+                        #[cfg(feature = "debug-swap")]
+                        println!("Written page wasn't mapped {:x}", flash_vaddr);
+                        // in this case, it wasn't mapped into memory. We have been returned to the
+                        // swapper's memory space, and we can just move to
+                        // checking the next page
+                    }
+                    _ => {
+                        panic!("Unexpected error in WriteToFlash page free")
+                    }
+                }
 
                 // Unhalt IRQs
                 self.swap_restore_irq();
