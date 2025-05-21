@@ -66,6 +66,9 @@ const SCD_VERSION: u32 = 2;
 #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
 pub const BASIS_TEST_ROOTNAME: &'static str = "test";
 
+#[cfg(feature = "gen2")]
+const DOMAIN_SEPERATOR: &'static str = "PDDB's key";
+
 #[derive(Zeroize)]
 #[zeroize(drop)]
 #[repr(C)] // this can map directly into Flash
@@ -315,7 +318,7 @@ impl PddbOs {
         #[cfg(any(feature = "gen2"))]
         let ret = PddbOs {
             swapper: xous_swapper::Swapper::new().expect("couldn't connect to swapper"),
-            rootkeys: keystore::Keystore::new(&xns),
+            rootkeys: keystore::Keystore::new_key(&xns, DOMAIN_SEPERATOR),
             flash_page: RefCell::new(xous_swapper::FlashPage::new()),
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             pddb_mr: pddb,
