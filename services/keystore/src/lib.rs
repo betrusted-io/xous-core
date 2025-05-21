@@ -116,7 +116,7 @@ impl Keystore {
             }
         } else {
             // no domain separator was specified
-            Err(KeywrapError::IntegrityCheckFailed)
+            Err(KeywrapError::NoDomainSeperator)
         }
     }
 
@@ -182,7 +182,7 @@ impl Keystore {
             }
         } else {
             // no domain separator was specified
-            Err(KeywrapError::IntegrityCheckFailed)
+            Err(KeywrapError::NoDomainSeperator)
         }
     }
 
