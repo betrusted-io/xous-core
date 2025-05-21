@@ -77,6 +77,7 @@ impl fmt::Display for KeywrapError {
             KeywrapError::InvalidKekSize => f.write_str("Invalid key size"),
             KeywrapError::InvalidOutputSize => f.write_str("Invalid output size"),
             KeywrapError::IntegrityCheckFailed => f.write_str("Authentication failed"),
+            KeywrapError::NoDomainSeperator => f.write_str("Missing domain separator"),
             KeywrapError::UpgradeToNew((_k, _wk)) => {
                 f.write_str("Legacy migration detected! New wrapped key transmitted to caller")
             }

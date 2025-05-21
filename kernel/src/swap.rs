@@ -3,6 +3,7 @@
 
 use core::cmp::Ordering;
 
+use cramium_hal::udma::FLASH_SECTOR_LEN;
 use loader::SWAP_FLG_WIRED;
 use xous_kernel::SWAPPER_PID;
 use xous_kernel::arch::EXCEPTION_STACK_TOP;
@@ -41,6 +42,7 @@ pub enum SwapAbi {
     StealPage = 5,
     ReleaseMemory = 6,
     WritePage = 7,
+    BlockErase = 8,
 }
 /// SYNC WITH `xous-swapper/src/main.rs`
 impl SwapAbi {
@@ -54,6 +56,7 @@ impl SwapAbi {
             5 => StealPage,
             6 => ReleaseMemory,
             7 => WritePage,
+            8 => BlockErase,
             _ => Invalid,
         }
     }
@@ -70,6 +73,9 @@ pub enum BlockingSwapOp {
     /// PID of the target block, current paddr of block, original vaddr in the space of target block PID,
     /// physical address of block. Returns to PID of the target block.
     WriteToFlash(PID, TID, PID, usize, usize),
+    /// PID/TID tuple; PID of the caller; block offset (with vaddr prefix stripped) and length in bytes, but
+    /// the length must be a multiple of block length
+    BulkErase(PID, TID, PID, usize, usize),
     /// Immediate OOM. Drop everything and try to recover; from here until exit, everything runs in
     /// an un-interruptable context, no progress allowed. This currently can only originate from one
     /// location, if we need multi-location origin then we have to also track the re-entry point in the
@@ -685,7 +691,7 @@ impl Swap {
         let target_pid = crate::arch::process::current_pid();
         let target_tid = crate::arch::process::current_tid();
 
-        #[cfg(feature = "debug-swap-verbose")]
+        #[cfg(feature = "debug-swap")]
         println!(
             "write_page - userspace activate for pid{:?}/tid{:?} for vaddr {:x?} -> offset {:x?}",
             target_pid, target_tid, page_vaddr_in_swapper, flash_offset
@@ -700,6 +706,25 @@ impl Swap {
                 src_pid,
                 page_vaddr_in_swapper,
                 flash_offset,
+            ));
+        }
+    }
+
+    pub fn block_erase_syscall(&mut self, src_pid: PID, offset: usize, len: usize) -> ! {
+        let target_pid = crate::arch::process::current_pid();
+        let target_tid = crate::arch::process::current_tid();
+
+        #[cfg(feature = "debug-swap")]
+        println!(
+            "block_erase - userspace activate for pid{:?}/tid{:?} for offset {:x?}",
+            target_pid, target_tid, offset
+        );
+        // prevent context switching to avoid re-entrant calls while handling a call
+        self.swap_stop_irq();
+        // this is safe because the syscall pre-amble checks that we're in the swapper context
+        unsafe {
+            self.blocking_activate_swapper(BlockingSwapOp::BulkErase(
+                target_pid, target_tid, src_pid, offset, len,
             ));
         }
     }
@@ -724,6 +749,12 @@ impl Swap {
                 self.swapper_args[1] = 4; // WriteToFlash
                 self.swapper_args[2] = vaddr_in_swap;
                 self.swapper_args[3] = flash_offset;
+            }
+            BlockingSwapOp::BulkErase(_pid, _tid, _src_pid, offset, len) => {
+                self.swapper_args[0] = self.swapper_state;
+                self.swapper_args[1] = 5; // BulkErase
+                self.swapper_args[2] = offset;
+                self.swapper_args[3] = len;
             }
             BlockingSwapOp::HardOomSyscall(_tid, _pid) => {
                 self.swapper_args[0] = self.swapper_state;
@@ -791,6 +822,47 @@ impl Swap {
                 });
                 (pid, tid)
             }
+            Some(BlockingSwapOp::BulkErase(pid, tid, src_pid, offset, len)) => {
+                for page in (offset..offset + len).step_by(FLASH_SECTOR_LEN) {
+                    // this works because the V:P mapping for the flash memory is 1:1 for the LSBs
+                    let flash_vaddr = MMAP_VIRT_BASE + page;
+                    // evict_page_inner marks the page as swapped/invalid in src_pid, but also maps the page
+                    // into the swapper's address space
+                    match crate::arch::mem::evict_page_inner(src_pid, flash_vaddr) {
+                        Ok(swap_vaddr) => {
+                            // release the page from the swapper's address space
+                            MemoryManager::with_mut(|mm| {
+                                let paddr = crate::arch::mem::virt_to_phys(swap_vaddr).unwrap() as usize;
+                                #[cfg(feature = "debug-swap")]
+                                println!("BulkErase releasing flash backing page - paddr {:x}", paddr);
+                                // this call unmaps the virtual page from the page table
+                                crate::arch::mem::unmap_page_inner(mm, swap_vaddr)
+                                    .expect("couldn't unmap page");
+                                // This call releases the physical page from the RPT - the pid has to match
+                                // that of the original owner. This is the
+                                // "pointy end" of the stick; after this call,
+                                // the memory is now back into the free pool.
+                                mm.release_page_swap(paddr as *mut usize, src_pid)
+                                    .expect("couldn't free page that was swapped out");
+                            });
+                        }
+                        Err(xous_kernel::Error::BadAddress) => {
+                            #[cfg(feature = "debug-swap")]
+                            println!("BulkErase page wasn't mapped {:x}", page);
+                            // in this case, it wasn't mapped into memory. We have been returned to the
+                            // swapper's memroy space, and we can just move to
+                            // checking the next page
+                        }
+                        _ => {
+                            panic!("Unexpected error in BulkErase page free")
+                        }
+                    }
+                }
+
+                // Unhalt IRQs
+                self.swap_restore_irq();
+                (pid, tid)
+            }
             // Called from any process. Clear the dirty bit on the RPT when exiting. No pages are unmapped
             // by this routine, that would be handled by the OOMer, if at all.
             Some(BlockingSwapOp::WriteToFlash(pid, tid, src_pid, _vpage_addr_in_swapper, flash_offset)) => {
@@ -798,21 +870,34 @@ impl Swap {
                 let flash_vaddr = MMAP_VIRT_BASE + flash_offset;
                 // evict_page_inner marks the page as swapped/invalid in src_pid, but also maps the page
                 // into the swapper's address space
-                let swap_vaddr = crate::arch::mem::evict_page_inner(src_pid, flash_vaddr).unwrap();
-
-                // release the page from the swapper's address space
-                MemoryManager::with_mut(|mm| {
-                    let paddr = crate::arch::mem::virt_to_phys(swap_vaddr).unwrap() as usize;
-                    #[cfg(feature = "debug-swap-verbose")]
-                    println!("Release flash backing page - paddr {:x}", paddr);
-                    // this call unmaps the virtual page from the page table
-                    crate::arch::mem::unmap_page_inner(mm, swap_vaddr).expect("couldn't unmap page");
-                    // This call releases the physical page from the RPT - the pid has to match that of
-                    // the original owner. This is the "pointy end" of the stick;
-                    // after this call, the memory is now back into the free pool.
-                    mm.release_page_swap(paddr as *mut usize, src_pid)
-                        .expect("couldn't free page that was swapped out");
-                });
+                match crate::arch::mem::evict_page_inner(src_pid, flash_vaddr) {
+                    Ok(swap_vaddr) => {
+                        // release the page from the swapper's address space
+                        MemoryManager::with_mut(|mm| {
+                            let paddr = crate::arch::mem::virt_to_phys(swap_vaddr).unwrap() as usize;
+                            #[cfg(feature = "debug-swap-verbose")]
+                            println!("Release flash backing page - paddr {:x}", paddr);
+                            // this call unmaps the virtual page from the page table
+                            crate::arch::mem::unmap_page_inner(mm, swap_vaddr).expect("couldn't unmap page");
+                            // This call releases the physical page from the RPT - the pid has to match that
+                            // of the original owner. This is the "pointy end" of
+                            // the stick; after this call, the memory is now back
+                            // into the free pool.
+                            mm.release_page_swap(paddr as *mut usize, src_pid)
+                                .expect("couldn't free page that was swapped out");
+                        });
+                    }
+                    Err(xous_kernel::Error::BadAddress) => {
+                        #[cfg(feature = "debug-swap")]
+                        println!("Written page wasn't mapped {:x}", flash_vaddr);
+                        // in this case, it wasn't mapped into memory. We have been returned to the
+                        // swapper's memory space, and we can just move to
+                        // checking the next page
+                    }
+                    _ => {
+                        panic!("Unexpected error in WriteToFlash page free")
+                    }
+                }
 
                 // Unhalt IRQs
                 self.swap_restore_irq();

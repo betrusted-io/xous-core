@@ -27,6 +27,7 @@ use sha2::{Digest, Sha512_256Hw, Sha512_256Sw};
 #[cfg(feature = "gen1")]
 use spinor::{SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
 use subtle::ConstantTimeEq;
+use xous::arch::MMAP_VIRT_BASE;
 
 use crate::PDDB_A_LOC;
 use crate::*;
@@ -64,6 +65,9 @@ const SCD_VERSION: u32 = 2;
 
 #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
 pub const BASIS_TEST_ROOTNAME: &'static str = "test";
+
+#[cfg(feature = "gen2")]
+const DOMAIN_SEPERATOR: &'static str = "PDDB's key";
 
 #[derive(Zeroize)]
 #[zeroize(drop)]
@@ -139,13 +143,18 @@ type EmuMemoryRange = EmuStorage;
 type EmuSpinor = HostedSpinor;
 
 // native hardware
-#[cfg(any(feature = "precursor", feature = "renode"))]
+#[cfg(any(feature = "precursor", feature = "renode", feature = "board-baosec", feature = "board-baosor"))]
 type EmuMemoryRange = xous::MemoryRange;
 #[cfg(any(feature = "precursor", feature = "renode"))]
 type EmuSpinor = spinor::Spinor;
 
 pub(crate) struct PddbOs {
+    #[cfg(feature = "gen1")]
     spinor: EmuSpinor,
+    #[cfg(feature = "gen2")]
+    swapper: xous_swapper::Swapper,
+    #[cfg(feature = "gen2")]
+    flash_page: RefCell<xous_swapper::FlashPage>,
     #[cfg(feature = "gen1")]
     rootkeys: root_keys::RootKeys,
     #[cfg(feature = "gen2")]
@@ -215,6 +224,18 @@ impl PddbOs {
             xous::MemoryFlags::R | xous::MemoryFlags::RESERVE,
         )
         .expect("Couldn't map the PDDB memory range");
+        #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
+        let pddb = xous::syscall::map_memory(
+            None,
+            // by requesting the offset into MMAP_VIRT_BASE, we (a) ensure the offset of the virtual
+            // pages maintain a 1:1 correspondence with the offsets in SPI flash and (b)
+            // by simply dereferencing any slices derived from virtual area we get a correct pointer
+            // that we can pass directly into the swapper to update the correct sector of memory.
+            xous::MemoryAddress::new(xous::arch::MMAP_VIRT_BASE + cramium_hal::board::PDDB_LOC as usize),
+            cramium_hal::board::PDDB_LEN as usize,
+            xous::MemoryFlags::R | xous::MemoryFlags::VIRT,
+        )
+        .expect("Couldn't map the PDDB memory range");
         #[cfg(any(feature = "precursor", feature = "renode"))]
         // Safety: all u8 values are valid
         log::info!(
@@ -256,12 +277,49 @@ impl PddbOs {
         #[cfg(feature = "perfcounter")]
         let pc_id = xous::process::id() as u32;
 
-        // native hardware
+        // native hardware target
         #[cfg(any(feature = "precursor", feature = "renode"))]
         let ret = PddbOs {
             spinor: spinor::Spinor::new(&xns).unwrap(),
             rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0))
                 .expect("FATAL: couldn't access RootKeys!"),
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
+            pddb_mr: pddb,
+            pt_phys_base: PageAlignedPa::from(0 as u32),
+            key_phys_base,
+            mbbb_phys_base,
+            fscb_phys_base,
+            data_phys_base: PageAlignedPa::from(
+                fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32,
+            ),
+            system_basis_key: None,
+            cipher_ecb: None,
+            fspace_cache: FspaceSet::new(),
+            fspace_log_addrs: Vec::<PageAlignedPa>::new(),
+            fspace_log_next_addr: None,
+            fspace_log_len: 0,
+            dna,
+            // default to our own DNA in this case
+            migration_dna: dna,
+            dna_mode: DnaMode::Normal,
+            entropy: trngpool,
+            #[cfg(feature = "gen1")]
+            pw_cid,
+            failed_logins: 0,
+            #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
+            testnames: HashSet::new(),
+            #[cfg(feature = "perfcounter")]
+            perfclient,
+            #[cfg(feature = "perfcounter")]
+            pc_id,
+            #[cfg(feature = "perfcounter")]
+            use_perf: true,
+        };
+        #[cfg(any(feature = "gen2"))]
+        let ret = PddbOs {
+            swapper: xous_swapper::Swapper::new().expect("couldn't connect to swapper"),
+            rootkeys: keystore::Keystore::new_key(&xns, DOMAIN_SEPERATOR),
+            flash_page: RefCell::new(xous_swapper::FlashPage::new()),
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             pddb_mr: pddb,
             pt_phys_base: PageAlignedPa::from(0 as u32),
@@ -416,6 +474,96 @@ impl PddbOs {
         self.rootkeys.is_initialized().expect("couldn't query initialization state of the rootkeys server")
     }
 
+    /// In "gen2" targets, we pass on page-sized chunks that contain the updated data already
+    /// overlaid into the old data so any ragged edges are already taken care of here.
+    ///
+    /// `buf` is the slice of data to be patched
+    /// `offset` is the offset from the start of the PDDB region. Note that `self.pddb_mr` is already
+    /// mapped to a location which includes the VMEM offset + offset into the SPI memory, so we don't
+    /// have to re-add that in to this offset so long as we resolve the pointer to update by extracting
+    /// it out of the slice as a pointer.
+    #[cfg(feature = "gen2")]
+    pub(crate) fn patch(&self, buf: &[u8], offset: usize) {
+        use cramium_hal::board::SPINOR_ERASE_SIZE;
+
+        let mut written = 0;
+
+        // compute amount of data in the FLASH sector buffer to preserve: everything up to the offset
+        let preserve_to = offset & (SPINOR_ERASE_SIZE as usize - 1);
+        // 1. check for misaligned page starts
+        if preserve_to != 0 {
+            let replace_end = if buf.len() + preserve_to >= SPINOR_ERASE_SIZE as usize {
+                SPINOR_ERASE_SIZE as usize
+            } else {
+                buf.len() + preserve_to
+            };
+            let preserve_start = offset & !(SPINOR_ERASE_SIZE as usize - 1);
+            // safety: all data within u8 slice representation is representable
+            unsafe {
+                // read in the ROM contents for the page in question. This fully replaces self.buffer,
+                // so we don't need to zeroize it.
+                let buff_mut = &mut self.flash_page.borrow_mut().data;
+                buff_mut.copy_from_slice(
+                    &self.pddb_mr.as_slice()[preserve_start..preserve_start + SPINOR_ERASE_SIZE as usize],
+                );
+            }
+            self.flash_page.borrow_mut().data[preserve_to..replace_end]
+                .copy_from_slice(&buf[..replace_end - preserve_to]);
+            self.swapper
+                .write_page(
+                    unsafe {
+                        self.pddb_mr.as_slice::<u8>()[preserve_start..preserve_start].as_ptr() as usize
+                    },
+                    &self.flash_page.borrow(),
+                )
+                .expect("couldn't patch spinor");
+            written += replace_end - preserve_to;
+        }
+        if written == buf.len() {
+            return;
+        }
+        // 2. write remaining pages
+        let remaining_len = buf.len() - written;
+        // this is OK here because we took care of any misaligned start data in step 1.
+        let aligned_start = (offset + (SPINOR_ERASE_SIZE as usize - 1)) & !(SPINOR_ERASE_SIZE as usize - 1);
+        log::info!(
+            "aligned_start {:x} end {:x}",
+            aligned_start,
+            (aligned_start + (remaining_len + (SPINOR_ERASE_SIZE as usize - 1))
+                & !(SPINOR_ERASE_SIZE as usize - 1))
+        );
+        for sector in (aligned_start
+            ..(aligned_start + (remaining_len + (SPINOR_ERASE_SIZE as usize - 1))
+                & !(SPINOR_ERASE_SIZE as usize - 1)))
+            .step_by(SPINOR_ERASE_SIZE as usize)
+        {
+            assert!(buf.len() >= written);
+            let remaining_chunk = buf.len() - written;
+            // safety: this allows us to access pddb_mr.as_slice() - it's safe because all u8 values are valid
+            unsafe {
+                let buff_mut = &mut self.flash_page.borrow_mut().data;
+                if remaining_chunk < SPINOR_ERASE_SIZE as usize {
+                    // this full replaces self.buffer, so we don't need to zeroize it
+                    buff_mut.copy_from_slice(
+                        &self.pddb_mr.as_slice()[sector..sector + SPINOR_ERASE_SIZE as usize],
+                    );
+                    buff_mut[..remaining_chunk].copy_from_slice(&buf[written..]);
+                    written += remaining_chunk;
+                } else {
+                    // no need to read in the buffer as it will be fully replaced
+                    buff_mut.copy_from_slice(&buf[written..(written + SPINOR_ERASE_SIZE as usize)]);
+                    written += SPINOR_ERASE_SIZE as usize;
+                }
+            }
+            self.swapper
+                .write_page(
+                    unsafe { self.pddb_mr.as_slice::<u8>()[sector..sector].as_ptr() as usize },
+                    &self.flash_page.borrow(),
+                )
+                .expect("couldn't patch spinor");
+        }
+    }
+
     /// patches data at an offset starting from the data physical base address, which corresponds
     /// exactly to the first entry in the page table
     pub(crate) fn patch_data(&self, data: &[u8], offset: u32) {
@@ -426,6 +574,7 @@ impl PddbOs {
             data.len() + offset as usize <= PDDB_A_LEN - self.data_phys_base.as_usize(),
             "attempt to store past disk boundary"
         );
+        #[cfg(feature = "gen1")]
         self.spinor
             .patch(
                 unsafe { self.pddb_mr.as_slice() },
@@ -434,6 +583,8 @@ impl PddbOs {
                 offset + self.data_phys_base.as_u32(),
             )
             .expect("couldn't write to data region in the PDDB");
+        #[cfg(feature = "gen2")]
+        self.patch(&data, (offset + self.data_phys_base.as_u32()) as usize);
         //log::trace!("patch aft: {:x?}", &self.pddb_mr.as_slice::<u8>()[offset as usize +
         // self.data_phys_base.as_usize()..offset as usize + self.data_phys_base.as_usize() + 48]);
         // log::trace!("patch end: {:x?}", &self.pddb_mr.as_slice::<u8>()[offset as usize +
@@ -450,6 +601,7 @@ impl PddbOs {
             //    table, then erase the mbbb.
             if let Some(mbbb) = self.mbbb_retrieve() {
                 if let Some(erased_offset) = self.pt_find_erased_slot() {
+                    #[cfg(feature = "gen1")]
                     self.spinor
                         .patch(
                             unsafe { self.pddb_mr.as_slice() },
@@ -458,6 +610,8 @@ impl PddbOs {
                             self.pt_phys_base.as_u32() + erased_offset,
                         )
                         .expect("couldn't write to page table");
+                    #[cfg(feature = "gen2")]
+                    self.patch(&mbbb, (self.pt_phys_base.as_u32() + erased_offset) as usize);
                 }
                 // if there *isn't* an erased slot, we still want to get rid of the MBBB structure. A lack of
                 // an erased slot would indicate we lost power after we copied the previous
@@ -488,6 +642,7 @@ impl PddbOs {
             self.patch_mbbb(&mbbb_page, offset);
             // 6. erase the original page area, thus making the MBBB the authorative location
             let blank = [0xffu8; PAGE_SIZE];
+            #[cfg(feature = "gen1")]
             self.spinor
                 .patch(
                     unsafe { self.pddb_mr.as_slice() },
@@ -496,6 +651,8 @@ impl PddbOs {
                     self.pt_phys_base.as_u32() + base_page as u32,
                 )
                 .expect("couldn't write to page table");
+            #[cfg(feature = "gen2")]
+            self.patch(&blank, self.pt_phys_base.as_usize() + base_page);
         } else {
             self.patch_pagetable_raw(data, offset);
         }
@@ -507,9 +664,12 @@ impl PddbOs {
             data.len() + offset as usize <= size_of::<PageTableInFlash>(),
             "attempt to patch past page table end"
         );
+        #[cfg(feature = "gen1")]
         self.spinor
             .patch(unsafe { self.pddb_mr.as_slice() }, PDDB_A_LOC, &data, self.pt_phys_base.as_u32() + offset)
             .expect("couldn't write to page table");
+        #[cfg(feature = "gen2")]
+        self.patch(&data, self.pt_phys_base.as_usize() + offset as usize);
     }
 
     fn patch_keys(&self, data: &[u8], offset: u32) {
@@ -518,13 +678,17 @@ impl PddbOs {
             "attempt to burn key data that is outside the key region"
         );
         log::info!("patching keys area with {} bytes", data.len());
+        #[cfg(feature = "gen1")]
         self.spinor
             .patch(unsafe { self.pddb_mr.as_slice() }, PDDB_A_LOC, data, self.key_phys_base.as_u32() + offset)
             .expect("couldn't burn keys");
+        #[cfg(feature = "gen2")]
+        self.patch(data, self.key_phys_base.as_usize() + offset as usize);
     }
 
     fn patch_mbbb(&self, data: &[u8], offset: u32) {
         assert!(data.len() + offset as usize <= PAGE_SIZE * MBBB_PAGES, "mbbb patch would go out of bounds");
+        #[cfg(feature = "gen1")]
         self.spinor
             .patch(
                 unsafe { self.pddb_mr.as_slice() },
@@ -533,12 +697,15 @@ impl PddbOs {
                 self.mbbb_phys_base.as_u32() + offset,
             )
             .expect("couldn't burn mbbb");
+        #[cfg(feature = "gen2")]
+        self.patch(&data, self.mbbb_phys_base.as_usize() + offset as usize);
     }
 
     /// raw patch is provided for 128-bit incremental updates to the FLASH. For FastSpace master record
     /// writes, see fast_space_write()
     fn patch_fscb(&self, data: &[u8], offset: u32) {
         assert!(data.len() + offset as usize <= PAGE_SIZE * FSCB_PAGES, "fscb patch would go out of bounds");
+        #[cfg(feature = "gen1")]
         self.spinor
             .patch(
                 unsafe { self.pddb_mr.as_slice() },
@@ -547,6 +714,8 @@ impl PddbOs {
                 self.fscb_phys_base.as_u32() + offset,
             )
             .expect("couldn't burn fscb");
+        #[cfg(feature = "gen2")]
+        self.patch(data, self.fscb_phys_base.as_usize() + offset as usize);
     }
 
     /// Public function that "does the right thing" for patching in a page table entry based on a virtual to
@@ -2124,7 +2293,17 @@ impl PddbOs {
                     }
                 }
                 if !blank {
+                    #[cfg(feature = "gen1")]
                     self.spinor.bulk_erase(offset, SPINOR_BULK_ERASE_SIZE).expect("couldn't erase memory");
+                    #[cfg(feature = "gen2")]
+                    {
+                        self.swapper
+                            .block_erase(
+                                offset as usize + MMAP_VIRT_BASE as usize,
+                                SPINOR_BULK_ERASE_SIZE as usize,
+                            )
+                            .expect("couldn't erase memory");
+                    }
                 }
             }
             if let Some(modals) = progress {
@@ -2323,9 +2502,12 @@ impl PddbOs {
                     modals.update_progress(offset as u32).expect("couldn't update progress bar");
                 }
             }
+            #[cfg(feature = "gen1")]
             self.spinor
                 .patch(unsafe { self.pddb_mr.as_slice() }, PDDB_A_LOC, &temp, offset as u32)
                 .expect("couldn't fill in disk with random datax");
+            #[cfg(feature = "gen2")]
+            self.patch(&temp, offset);
         }
         if let Some(modals) = progress {
             modals.update_progress(PDDB_A_LEN as u32).expect("couldn't update progress bar");
@@ -2492,6 +2674,7 @@ impl PddbOs {
         // clean up any MBBB, as it will mess up our algorithm
         if let Some(mbbb) = self.mbbb_retrieve() {
             if let Some(erased_offset) = self.pt_find_erased_slot() {
+                #[cfg(feature = "gen1")]
                 self.spinor
                     .patch(
                         unsafe { self.pddb_mr.as_slice() },
@@ -2500,6 +2683,8 @@ impl PddbOs {
                         self.pt_phys_base.as_u32() + erased_offset,
                     )
                     .expect("couldn't write to page table");
+                #[cfg(feature = "gen2")]
+                self.patch(&mbbb, self.pt_phys_base.as_usize() + erased_offset as usize);
             }
             self.mbbb_erase();
         }

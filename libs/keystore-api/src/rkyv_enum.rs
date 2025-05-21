@@ -29,6 +29,7 @@ pub enum KeywrapError {
     InvalidKekSize,
     InvalidOutputSize,
     IntegrityCheckFailed,
+    NoDomainSeperator,
     /// this is a bodge to return an error code that upgrades from a faulty early version of AES-KWP
     /// only works for 256-bit keys, but that is also all we used.
     /// The return tuple is: (unwrapped key, correctly wrapped key)

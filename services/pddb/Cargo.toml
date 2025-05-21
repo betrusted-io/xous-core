@@ -61,21 +61,19 @@ utralib = { version = "0.1.25", optional = true, default-features = false }
 # performance profiling
 perflib = { path = "../../libs/perflib", optional = true }
 
+# Gen-2 dependencies
+keystore = { path = "../keystore", optional = true }                                 # contains all key handlers
+xous-swapper = { path = "../xous-swapper", optional = true }                         # contains spinor
+cram-hal-service = { path = "../cram-hal-service", optional = true }
+cramium-emu = { path = "../cramium-emu", optional = true, default-features = false }
+cramium-hal = { path = "../../libs/cramium-hal", optional = true }
+
 [target.'cfg(any(windows,unix))'.dependencies]
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 
 hex = { version = "0.4.3", default-features = false, features = [
     "alloc",
-], optional = true }
-
-# Gen-2 dependencies
-keystore = { path = "../keystore", optional = true } # contains all key handlers
-xous-swapper = { path = "../xous-swapper", optional = true } # contains spinor
-cram-hal-service = { path = "../cram-hal-service", optional = true }
-cramium-emu = { path = "../cramium-emu", optional = true }
-cramium-hal = { path = "../../libs/cramium-hal", features = [
-    "std",
 ], optional = true }
 
 [features]
@@ -101,9 +99,10 @@ renode = ["utralib/renode", "sha2/renode", "gen1"]
 board-baosec = [
     "gen2",
     "xous-swapper/board-baosec",
-    "cram-hal-service",
+    "cram-hal-service/board-baosec",
     "cramium-hal/board-baosec",
     "modals/board-baosec",
+    "keystore/board-baosec",
 ] # USB form factor token
 hosted-baosec = [
     "gen2",
@@ -114,8 +113,9 @@ hosted-baosec = [
 board-baosor = [
     "gen2",
     "xous-swapper/board-baosor",
-    "cram-hal-service",
-    "cramium-hal",
+    "cram-hal-service/board-baosor",
+    "cramium-hal/board-baosor",
+    "keystore/board-baosor",
 ] # Precursor form factor
 # board-dabao is not a valid target as it lacks external SPI flash
 

@@ -91,6 +91,8 @@ pub enum KernelOp {
     HardOom = 3,
     /// Take the requested page and write it to SPI
     WriteToFlash = 4,
+    /// Bulk erase
+    BulkErase = 5,
 }
 
 pub struct PtPage {
@@ -637,7 +639,7 @@ fn swap_handler(
             writeln!(
                 DebugUart {},
                 "Exiting HARD OOM swap free loop: freed {} pages; {} requests rejected, {} wired",
-                target_pages - pages_to_free - HARD_OOM_RESERVED_PAGES,
+                target_pages - pages_to_free,
                 errs,
                 wired
             )
@@ -669,6 +671,15 @@ fn swap_handler(
                 #[cfg(feature = "debug-print-swapper")]
                 writeln!(DebugUart {}, "WT*F*: VA {:x} buf {:x?}", offset, &buf[..8]).ok();
                 ss.hal.flash_write(buf, offset);
+            }
+        }
+        Some(KernelOp::BulkErase) => {
+            let offset = a2;
+            let len = a3;
+            if !RENODE_TESTING {
+                #[cfg(feature = "debug-print-swapper")]
+                writeln!(DebugUart {}, "BE: PA {:x} len {:x}", offset, len).ok();
+                ss.hal.block_erase(offset, len);
             }
         }
         _ => {
@@ -752,7 +763,7 @@ fn main() {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();
         let op: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
-        log::info!("Swapper got {:x?}", op);
+        log::debug!("Swapper got {:x?}", op);
         match op {
             Some(Opcode::GarbageCollect) => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
@@ -776,12 +787,14 @@ fn main() {
             Some(Opcode::WritePage) => {
                 let mem_msg = msg.body.memory_message().unwrap();
                 let offset = mem_msg.offset.expect("malformed WritePage").get();
-                log::info!(
+                // eliminate the code path entirely to speed things up a bit
+                /*
+                log::debug!(
                     "WritePage: PID{}, offset {:x}, vaddr_buf {:x}",
                     msg.sender.pid().unwrap().get() as usize,
                     offset,
                     mem_msg.buf.as_ptr() as usize
-                );
+                ); */
                 xous::rsyscall(xous::SysCall::SwapOp(
                     SwapAbi::WritePage as usize,
                     msg.sender.pid().unwrap().get() as usize,
@@ -792,6 +805,22 @@ fn main() {
                     0,
                 ))
                 .expect("couldn't WritePage");
+            }
+            Some(Opcode::BulkErase) => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let block = scalar.arg1;
+                    let len = scalar.arg2;
+                    xous::rsyscall(xous::SysCall::SwapOp(
+                        SwapAbi::BlockErase as usize,
+                        msg.sender.pid().unwrap().get() as usize,
+                        block,
+                        len,
+                        0,
+                        0,
+                        0,
+                    ))
+                    .expect("couldn't Block Erase region");
+                }
             }
             #[cfg(feature = "swap-userspace-testing")]
             Some(Opcode::Test0) => {

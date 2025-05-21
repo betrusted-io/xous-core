@@ -24,7 +24,7 @@ fn main() {
             None,
             xous::MemoryAddress::new(xous::arch::MMAP_VIRT_BASE),
             cramium_hal::board::SPINOR_LEN as usize,
-            xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::VIRT,
+            xous::MemoryFlags::R | xous::MemoryFlags::VIRT,
         )
         .expect("couldn't map spi range");
         log::info!("spimap: {:x?}", spimap);
@@ -42,7 +42,7 @@ fn main() {
             *d = 128u8 - i as u8;
         }
         swapper
-            .write_page(spislice[test_start..test_start + 32].as_ptr() as usize, fp)
+            .write_page(spislice[test_start..test_start + 32].as_ptr() as usize, &fp)
             .expect("couldn't write page");
         log::info!("spislice read 8M (again): {:x?}", &spislice[test_start..test_start + 16]);
 
@@ -102,11 +102,14 @@ fn main() {
         tt.sleep_ms(500).ok();
     }
 
+    // why is this feature not being de-activated when it is not selected???
+    /*
     #[cfg(feature = "modal-testing")]
     {
         log::set_max_level(log::LevelFilter::Debug);
         modals::tests::spawn_test();
     }
+    */
     #[cfg(not(feature = "hosted-baosec"))]
     {
         use cramium_api::I2cApi;

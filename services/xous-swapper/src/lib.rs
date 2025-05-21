@@ -21,6 +21,7 @@ pub enum SwapAbi {
     StealPage = 5,
     ReleaseMemory = 6,
     WritePage = 7,
+    BlockErase = 8,
 }
 /// SYNC WITH `kernel/src/swap.rs`
 impl SwapAbi {
@@ -34,6 +35,7 @@ impl SwapAbi {
             5 => StealPage,
             6 => ReleaseMemory,
             7 => WritePage,
+            8 => BlockErase,
             _ => Invalid,
         }
     }
@@ -51,6 +53,7 @@ pub enum Opcode {
     /// anyways because the page was read in and mapped into the caller's space at some
     /// point in time.
     WritePage,
+    BulkErase,
     /// Test messages
     #[cfg(feature = "swap-userspace-testing")]
     Test0,
@@ -98,7 +101,7 @@ impl Swapper {
 
     /// `offset` is transmitted with the address bank mask for MMAP_VIRT attached to avoid
     /// the first sector falling foul of the NonZero requirement.
-    pub fn write_page(&self, offset: usize, page: FlashPage) -> Result<xous::Result, xous::Error> {
+    pub fn write_page(&self, offset: usize, page: &FlashPage) -> Result<xous::Result, xous::Error> {
         if (offset & (cramium_hal::board::SPINOR_ERASE_SIZE as usize - 1)) != 0 {
             return Err(xous::Error::BadAddress);
         }
@@ -115,6 +118,19 @@ impl Swapper {
         // we do a Borrow instead of a Move not because we care about the return value,
         // but because we care that the call finished before proceeding.
         xous::send_message(self.conn, xous::Message::Borrow(msg))
+    }
+
+    pub fn block_erase(&self, offset: usize, len: usize) -> Result<xous::Result, xous::Error> {
+        if (offset & (cramium_hal::board::SPINOR_BULK_ERASE_SIZE as usize - 1) != 0)
+            || len == 0
+            || (len & (cramium_hal::board::SPINOR_BULK_ERASE_SIZE as usize - 1)) != 0
+        {
+            return Err(xous::Error::BadAddress);
+        }
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(Opcode::BulkErase as usize, offset, len, 0, 0),
+        )
     }
 }
 

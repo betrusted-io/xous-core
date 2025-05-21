@@ -1128,6 +1128,18 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     });
                     Ok(xous_kernel::Result::Ok)
                 }
+                SwapAbi::BlockErase => {
+                    if pid.get() != xous_kernel::SWAPPER_PID {
+                        return Err(xous_kernel::Error::AccessDenied);
+                    }
+                    let src_pid = PID::new(a1 as u8).unwrap();
+                    let flash_offset = a2 & 0x0FFF_FFFF;
+                    let len = a3;
+                    Swap::with_mut(|swap| {
+                        swap.block_erase_syscall(src_pid, flash_offset, len);
+                    });
+                    Ok(xous_kernel::Result::Ok)
+                }
                 SwapAbi::Invalid => {
                     println!(
                         "Invalid SwapOp: {:x} {:x} {:x} {:x} {:x} {:x} {:x}",

@@ -58,7 +58,7 @@ cramium-soc = ["utralib/cramium-soc", "blitstr2/cramium-soc"]
 decongest-udma = []
 default = [
     "decongest-udma",
-    "autotest",
+    # "autotest",
     # "gfx-testing",
     # "hosted-baosec",
 ] # hosted-baosec should be removed for commit, this is only here to make vscode happy

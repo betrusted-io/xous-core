@@ -1182,7 +1182,7 @@ pub fn evict_page_inner(target_pid: PID, vaddr: usize) -> Result<usize, xous_ker
             // return us to the swapper PID -- this call can only originate in the swapper
             #[cfg(feature = "debug-swap")]
             {
-                crate::arch::mem::MemoryMapping::current().print_map();
+                // crate::arch::mem::MemoryMapping::current().print_map();
                 println!(
                     "evict_page_inner() failed sanity check. PTE: {:x?} paddr: {:x} vaddr in PID{}: {:x}",
                     target_pte,

@@ -80,6 +80,7 @@ board-baosec = [
     "ux-api/board-baosec",
     "keystore-api/gen2",
     "modals/no-gam",
+    "modals/cramium-soc",
 ] # USB form factor token
 loader-baosec = ["ux-api/loader-baosec"]
 test-baosec = ["ux-api/loader-baosec"]
@@ -90,6 +91,7 @@ hosted-baosec = [
 board-baosor = [
     "utralib/cramium-soc",
     "keystore-api/gen2",
+    "modals/cramium-soc",
 ] # Precursor form factor
 loader-baosor = []
 board-dabao = [
