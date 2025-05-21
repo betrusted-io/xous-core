@@ -763,7 +763,7 @@ fn main() {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();
         let op: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
-        log::info!("Swapper got {:x?}", op);
+        log::debug!("Swapper got {:x?}", op);
         match op {
             Some(Opcode::GarbageCollect) => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
@@ -787,12 +787,14 @@ fn main() {
             Some(Opcode::WritePage) => {
                 let mem_msg = msg.body.memory_message().unwrap();
                 let offset = mem_msg.offset.expect("malformed WritePage").get();
-                log::info!(
+                // eliminate the code path entirely to speed things up a bit
+                /*
+                log::debug!(
                     "WritePage: PID{}, offset {:x}, vaddr_buf {:x}",
                     msg.sender.pid().unwrap().get() as usize,
                     offset,
                     mem_msg.buf.as_ptr() as usize
-                );
+                ); */
                 xous::rsyscall(xous::SysCall::SwapOp(
                     SwapAbi::WritePage as usize,
                     msg.sender.pid().unwrap().get() as usize,
