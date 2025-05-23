@@ -715,10 +715,13 @@ impl Gfx {
     }
 
     /// V2-only API
-    pub fn draw_object_list(&self, list: ObjectList) -> Result<(), xous::Error> {
+    pub fn draw_object_list(&self, mut list: ObjectList) -> Result<(), xous::Error> {
+        list.list.shrink_to_fit();
+        let size = list.list.capacity() * size_of::<ClipObjectType>() + size_of::<Vec<ClipObjectType>>();
         let buf = match Buffer::into_buf(list) {
             Ok(b) => b,
             Err(e) => {
+                log::info!("size {}", size);
                 log::error!("err: {:?}", e);
                 panic!("error")
             }
