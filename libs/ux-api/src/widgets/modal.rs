@@ -111,6 +111,7 @@ impl<'a> Modal<'a> {
             self.gfx.clear().unwrap();
         }
         let mut cur_height = self.margin;
+        log::debug!("start {}", cur_height);
         if let Some(mut tv) = self.top_text.as_mut() {
             if do_redraw {
                 self.gfx.draw_textview(&mut tv).expect("couldn't draw text");
@@ -123,7 +124,7 @@ impl<'a> Modal<'a> {
                         y
                     };
                     cur_height += y_clip;
-                    log::trace!("top_tv height: {}", y_clip);
+                    log::debug!("  top_tv height: {}", y_clip);
                     self.top_memoized_height = Some(y_clip);
                 } else {
                     log::warn!("text bounds didn't compute setting to max");
@@ -138,6 +139,7 @@ impl<'a> Modal<'a> {
             self.top_dirty = false;
         }
 
+        log::debug!("  action @ {}", self.line_height);
         let action_height = self.action.height(self.line_height, self.margin, &self);
 
         let action_resolver: Box<&dyn ActionApi> = Box::new(&self.action);

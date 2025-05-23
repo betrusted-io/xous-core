@@ -102,14 +102,12 @@ fn main() {
         tt.sleep_ms(500).ok();
     }
 
-    // why is this feature not being de-activated when it is not selected???
-    /*
     #[cfg(feature = "modal-testing")]
     {
         log::set_max_level(log::LevelFilter::Debug);
         modals::tests::spawn_test();
     }
-    */
+
     #[cfg(not(feature = "hosted-baosec"))]
     {
         use cramium_api::I2cApi;

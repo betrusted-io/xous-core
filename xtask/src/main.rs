@@ -382,6 +382,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .target_hosted_baosec()
                 .add_services(&bao_pkgs)
                 .add_apps(&get_cratespecs());
+
+            // builder.add_feature("modal-testing");
         }
         Some("pddb-ci") => {
             builder
@@ -653,6 +655,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for service in bao_swap_pkgs {
                 builder.add_service(service, LoaderRegion::Swap);
             }
+            // builder.add_feature("modal-testing");
         }
 
         // ------ ARM hardware image configs ------

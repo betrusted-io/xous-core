@@ -196,7 +196,7 @@ pub fn draw_text_view<T: FrameBuffer>(display: &mut T, msg: &mut xous::envelope:
     if tv.clip_rect.is_none() {
         if cfg!(feature = "hosted-baosec") || cfg!(feature = "cramium-soc") || cfg!(feature = "board-baosec")
         {
-            tv.clip_rect = Some(Rectangle::new(Point::new(0, 0), display.dimensions()));
+            tv.clip_rect = Some(Rectangle::new(Point::new(0, 0), display.dimensions() - Point::new(1, 1)));
         } else {
             return;
         }

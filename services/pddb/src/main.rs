@@ -704,6 +704,7 @@ fn wrapped_main() -> ! {
 
     // track processes that want a notification of a mount event
     let mut mount_notifications = Vec::<xous::MessageSender>::new();
+    #[cfg(target_os = "xous")]
     let mut attempt_notifications = Vec::<xous::MessageSender>::new();
 
     // track the basis monitor requester.

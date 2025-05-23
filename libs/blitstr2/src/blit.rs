@@ -111,10 +111,13 @@ pub fn xor_glyph(fb: &mut FrBuf, p: (isize, isize), gs: &GlyphSprite, xor: bool,
                             0xffff_ffff ^ ((pattern >> px_in_dest_low_word) & partial_mask_hi);
                     }
                 }
+                #[cfg(any(feature = "hosted", feature = "renode", feature = "precursor"))]
+                {
+                    fb[(row_base as usize + WORDS_PER_LINE - 1) as usize] |= 0x1_0000; // set the dirty bit on the line
+                }
             } else {
                 log::trace!("absolute x/y fail");
             }
-            fb[(row_base as usize + WORDS_PER_LINE - 1) as usize] |= 0x1_0000; // set the dirty bit on the line
         } else {
             log::trace!("off the top");
         }
@@ -205,6 +208,10 @@ pub fn xor_glyph_large(fb: &mut FrBuf, p: (isize, isize), gs: &GlyphSprite, xor:
                         fb[(row_base + dest_high_word) as usize] &=
                             0xffff_ffff ^ ((src >> px_in_dest_low_word) & partial_mask_hi);
                     }
+                }
+                #[cfg(any(feature = "hosted", feature = "renode", feature = "precursor"))]
+                {
+                    fb[(row_base as usize + WORDS_PER_LINE - 1) as usize] |= 0x1_0000; // set the dirty bit on the line
                 }
             }
         }
@@ -306,6 +313,10 @@ pub fn xor_glyph_2x(fb: &mut FrBuf, p: (isize, isize), gs: &GlyphSprite, xor: bo
                         fb[(row_base + dest_high_word) as usize] &=
                             0xffff_ffff ^ ((src >> px_in_dest_low_word) & partial_mask_hi);
                     }
+                }
+                #[cfg(any(feature = "hosted", feature = "renode", feature = "precursor"))]
+                {
+                    fb[(row_base as usize + WORDS_PER_LINE - 1) as usize] |= 0x1_0000; // set the dirty bit on the line
                 }
             }
         }
