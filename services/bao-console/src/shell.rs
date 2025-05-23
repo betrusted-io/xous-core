@@ -69,9 +69,11 @@ fn shell() {
                         print!("\r{}", spaces);
                     }
                     input.clear();
-                    input.push_str(repl.get_history(history_index));
-                    // print the new input
-                    println!("{}", &input);
+                    if let Some(s) = repl.get_history(history_index) {
+                        input.push_str(s);
+                        // print the new input
+                        println!("{}", &input);
+                    }
                 } else if k != '\u{0000}' && k != '\n' && k != '\r' {
                     input.push(k);
                 } else if k == '\n' || k == '\r' {

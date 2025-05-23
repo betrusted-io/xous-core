@@ -55,11 +55,18 @@ impl Repl {
 
     // An index of -1 gives the most recent command.
     // -2 would give the second most recent command
-    pub(crate) fn get_history(&mut self, index: isize) -> &str {
-        &self.history[(self.history.len() as isize + index)
-            .max(0)
-            .min(self.history.len().saturating_sub(1) as isize) as usize]
-            .text
+    pub(crate) fn get_history(&mut self, index: isize) -> Option<&str> {
+        if self.history.len() != 0 {
+            Some(
+                &self.history[(self.history.len() as isize + index)
+                    .max(0)
+                    .min(self.history.len().saturating_sub(1) as isize)
+                    as usize]
+                    .text,
+            )
+        } else {
+            None
+        }
     }
 
     /// update the loop, in response to various inputs
