@@ -61,7 +61,6 @@ pub struct AppHIDConfig<'a> {
 }
 
 impl<'a> Default for AppHIDConfig<'a> {
-    #[must_use]
     fn default() -> Self {
         let iface = HeapInterfaceBuilder::new(vec![0])
             .unwrap()
