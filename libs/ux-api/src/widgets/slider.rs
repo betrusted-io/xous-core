@@ -91,6 +91,7 @@ impl ActionApi for Slider {
     fn set_action_opcode(&mut self, op: u32) { self.action_opcode = op }
 
     fn redraw(&self, at_height: isize, modal: &Modal) {
+        log::debug!("    slider @ {}", at_height);
         let color = PixelColor::Light;
         let fill_color = PixelColor::Dark;
 
@@ -130,7 +131,7 @@ impl ActionApi for Slider {
             // render current setting
             tv.bounds_computed = None;
             tv.bounds_hint = TextBounds::GrowableFromTl(
-                Point::new(offset, at_height + modal.margin + modal.line_height * 2 + modal.margin),
+                Point::new(offset, at_height + modal.margin + modal.line_height * 1),
                 maxwidth,
             );
             modal.gfx.draw_textview(&mut tv).expect("couldn't draw legend");
@@ -139,10 +140,10 @@ impl ActionApi for Slider {
         // the actual slider
         let mut draw_list = ObjectList::new();
         let outer_rect = Rectangle::new_with_style(
-            Point::new(modal.margin * 2, modal.margin + modal.line_height + at_height),
+            Point::new(modal.margin * 2, modal.margin + modal.line_height * 0 + at_height),
             Point::new(
                 modal.canvas_width - modal.margin * 2,
-                modal.margin + modal.line_height * 2 + at_height,
+                modal.margin + modal.line_height * 1 + at_height,
             ),
             DrawStyle::new(fill_color, color, 2),
         );
@@ -151,8 +152,8 @@ impl ActionApi for Slider {
         let slider_point =
             (total_width * (self.action_payload - self.min) as isize) / (self.max - self.min) as isize;
         let inner_rect = Rectangle::new_with_style(
-            Point::new(modal.margin * 2, modal.margin + modal.line_height + at_height),
-            Point::new(modal.margin * 2 + slider_point, modal.margin + modal.line_height * 2 + at_height),
+            Point::new(modal.margin * 2, modal.margin + modal.line_height * 0 + at_height),
+            Point::new(modal.margin * 2 + slider_point, modal.margin + modal.line_height * 1 + at_height),
             DrawStyle::new(color, color, 1),
         );
         draw_list.push(ClipObjectType::Rect(inner_rect)).unwrap();

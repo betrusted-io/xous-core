@@ -721,7 +721,7 @@ impl Gfx {
         let buf = match Buffer::into_buf(list) {
             Ok(b) => b,
             Err(e) => {
-                log::info!("size {}", size);
+                log::info!("Size {} won't fit", size);
                 log::error!("err: {:?}", e);
                 panic!("error")
             }
