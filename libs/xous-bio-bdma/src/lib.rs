@@ -222,7 +222,7 @@ impl BioSharedState {
 macro_rules! bio_code {
     ($fn_name:ident, $name_start:ident, $name_end:ident, $($item:expr),*) => {
         pub fn $fn_name() -> &'static [u8] {
-            extern {
+            extern "C" {
                 static $name_start: *const u8;
                 static $name_end: *const u8;
             }
