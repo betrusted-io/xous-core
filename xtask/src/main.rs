@@ -374,7 +374,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "cramium-emu",
                 "bao-console",
                 "pddb",
-                "usb-cramium",
+                // "usb-cramium",
                 "keystore",
             ];
             builder.add_feature("pddbtest");

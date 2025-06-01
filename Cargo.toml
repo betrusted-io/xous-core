@@ -118,6 +118,7 @@ members = [
   "libs/cramium-api",
   "services/keystore",
   "libs/precursor-hal",
+  "apps/vault2",
 ]
 resolver = "2"
 
