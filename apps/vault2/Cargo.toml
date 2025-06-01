@@ -18,7 +18,7 @@ xous-names = { package = "xous-api-names", version = "0.9.67" }
 locales = { path = "../../locales" }
 pddb = { path = "../../services/pddb" }
 modals = { path = "../../services/modals", features = ["no-gam"] }
-backup = { path = "libraries/backup" }
+# backup = { path = "libraries/backup" }
 byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
 subtle = { version = "2.5.0", features = ["core_hint_black_box"] }
@@ -26,17 +26,17 @@ rand_core = "0.6.3"
 ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.65" }
 userprefs = { path = "../../libs/userprefs" }
 ux-api = { path = "../../libs/ux-api" }
-cram-hal-service = { path = "../cram-hal-service", optional = true }
-cramium-emu = { path = "../cramium-emu", optional = true }
+cram-hal-service = { path = "../../services/cram-hal-service", optional = true }
+cramium-emu = { path = "../../services/cramium-emu", optional = true }
 blitstr2 = { path = "../../libs/blitstr2" }
-usb-cramium = { path = "../services/usb-cramium" }
+usb-cramium = { path = "../../services/usb-cramium" }
 
 # opensk
-ctap-crypto = { path = "libraries/crypto" }
-cbor = { path = "libraries/cbor" }
-persistent_store = { path = "libraries/persistent_store" }
-ed25519-compact = { version = "1", default-features = false, optional = true }
-rand = { version = "0.8.5", optional = true }
+# ctap-crypto = { path = "libraries/crypto" }
+# cbor = { path = "libraries/cbor" }
+# persistent_store = { path = "libraries/persistent_store" }
+# ed25519-compact = { version = "1", default-features = false, optional = true }
+# rand = { version = "0.8.5", optional = true }
 
 # ux formatting
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
@@ -52,8 +52,8 @@ digest = "0.9.0"
 base32 = "0.4.0"
 sha2 = { version = "0.10.8" }
 sntpc = { version = "0.3.1" }
-net = { path = "../../services/net" }
-com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
+# net = { path = "../../services/net" }
+# com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 
 # testing
 random-pick = { version = "1.2.15", optional = true }
@@ -74,13 +74,13 @@ hosted-baosec = [
     "usb-cramium/hosted-baosec",
 ]
 
-with_ctap1 = ["ctap-crypto/with_ctap1"]
+# with_ctap1 = ["ctap-crypto/with_ctap1"]
 vendor_hid = []
 std = []
 fuzz = []
 debug_ctap = []
 autotest = []
-multireset = []                         # allows credential reset more than once per boot
+multireset = []                 # allows credential reset more than once per boot
 vault-testing = ["random-pick"]
 # introduce a slight delay after UX boxes swap, in case of race conditions. Shouldn't be necessary anymore, but kept around in case there's a new edge case we missed.
 ux-swap-delay = []
@@ -88,5 +88,5 @@ osk-upgrade = [
 ] # placeholder to select out OpenSK's "vendor upgrade" over HID, which we don't use because we have our own upgrade path.
 xous = [
 ] # marks xous-specific code segments deep inside the CTAP crate. Mostly to help evaluate if a patch is even feasible in the future.
-ed25519 = ["ed25519-compact"]
-default = ["with_ctap1", "ed25519", "xous"] # testing removed for release tag
+# ed25519 = ["ed25519-compact"]
+default = [] # testing removed for release tag
