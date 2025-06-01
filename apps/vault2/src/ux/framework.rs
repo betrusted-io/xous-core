@@ -19,13 +19,6 @@ use crate::actions::ActionOp;
 use crate::totp::{TotpAlgorithm, TotpEntry, generate_totp_code, get_current_unix_time};
 use crate::{ItemLists, SelectedEntry, VaultMode};
 
-pub enum NavDir {
-    Up,
-    Down,
-    PageUp,
-    PageDown,
-}
-
 #[allow(dead_code)]
 pub struct VaultUx {
     /// the content area

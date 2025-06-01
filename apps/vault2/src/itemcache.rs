@@ -2,7 +2,7 @@ use core::num::NonZeroUsize;
 use std::cmp::Ordering;
 use std::ops::Range;
 
-use crate::ux::framework::NavDir;
+use crate::ux::NavDir;
 use crate::{SelectedEntry, VaultMode};
 
 pub struct ListKey {
@@ -140,6 +140,7 @@ pub struct FilteredListView {
     items_per_screen: NonZeroUsize,
     filter_range: Option<Range<usize>>,
 }
+#[allow(dead_code)]
 impl FilteredListView {
     pub fn new() -> Self {
         Self {
@@ -429,24 +430,17 @@ impl FilteredListView {
     }
 }
 pub struct ItemLists {
-    fido: FilteredListView,
     totp: FilteredListView,
     pw: FilteredListView,
 }
+#[allow(dead_code)]
 impl ItemLists {
-    pub fn new() -> Self {
-        ItemLists {
-            fido: FilteredListView::new(),
-            totp: FilteredListView::new(),
-            pw: FilteredListView::new(),
-        }
-    }
+    pub fn new() -> Self { ItemLists { totp: FilteredListView::new(), pw: FilteredListView::new() } }
 
     pub fn is_db_empty(&self, list_type: VaultMode) -> bool { self.li(list_type).is_db_empty() }
 
     fn li_mut(&mut self, list_type: VaultMode) -> &mut FilteredListView {
         match list_type {
-            VaultMode::Fido => &mut self.fido,
             VaultMode::Totp => &mut self.totp,
             VaultMode::Password => &mut self.pw,
         }
@@ -454,7 +448,6 @@ impl ItemLists {
 
     fn li(&self, list_type: VaultMode) -> &FilteredListView {
         match list_type {
-            VaultMode::Fido => &self.fido,
             VaultMode::Totp => &self.totp,
             VaultMode::Password => &self.pw,
         }
@@ -479,13 +472,11 @@ impl ItemLists {
     }
 
     pub fn set_items_per_screen(&mut self, ips: isize) {
-        self.fido.set_items_per_screen(ips as usize);
         self.totp.set_items_per_screen(ips as usize);
         self.pw.set_items_per_screen(ips as usize);
     }
 
     pub fn mark_all_dirty(&mut self) {
-        self.fido.mark_all_dirty();
         self.totp.mark_all_dirty();
         self.pw.mark_all_dirty();
     }
@@ -495,7 +486,6 @@ impl ItemLists {
     pub fn clear(&mut self, list_type: VaultMode) { self.li_mut(list_type).clear(); }
 
     pub fn clear_all(&mut self) {
-        self.fido.clear();
         self.pw.clear();
         self.totp.clear();
     }

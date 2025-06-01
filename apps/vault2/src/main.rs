@@ -1,11 +1,12 @@
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use num_traits::*;
-
-mod ux;
 use totp::PumpOp;
+mod ux;
 use ux::*;
+mod itemcache;
+use itemcache::*;
 mod totp;
 
 pub(crate) const SERVER_NAME_VAULT2: &str = "_Vault2_";
@@ -24,6 +25,13 @@ pub enum VaultMode {
     Password,
 }
 
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
+pub struct SelectedEntry {
+    pub key_guid: String,
+    pub description: String,
+    pub mode: VaultMode,
+}
+
 fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -35,11 +43,12 @@ fn main() -> ! {
     let sid = xns.register_name(SERVER_NAME_VAULT2, None).expect("can't register server");
     let conn = xous::connect(sid).unwrap();
 
-    let mut vault_ui = VaultUi::new(&xns, conn);
-
     // global shared state
     let mode = Arc::new(Mutex::new(VaultMode::Totp));
     let allow_totp_rendering = Arc::new(AtomicBool::new(true));
+    let item_lists = Arc::new(Mutex::new(ItemLists::new()));
+
+    let mut vault_ui = VaultUi::new(&xns, conn, item_lists.clone());
 
     // spawn the TOTP pumper
     let pump_sid = xous::create_server().unwrap();

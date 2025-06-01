@@ -1,15 +1,22 @@
 use core::fmt::Write;
+use std::sync::{Arc, Mutex};
 
 use blitstr2::GlyphStyle;
-use locales::t;
-use num_traits::*;
 use ux_api::minigfx::*;
 use ux_api::service::api::Gid;
 use ux_api::service::gfx::Gfx;
 use ux_api::widgets::ScrollableList;
 use xous::CID;
 
-use crate::VaultOp;
+use crate::ItemLists;
+use crate::VaultMode;
+
+pub enum NavDir {
+    Up,
+    Down,
+    PageUp,
+    PageDown,
+}
 
 /// Centralizes tunable UI parameters for TOTP
 struct TotpLayout {}
@@ -37,14 +44,15 @@ pub struct VaultUi {
     main_cid: CID,
     gfx: Gfx,
     totp_list: ScrollableList,
+    item_lists: Arc<Mutex<ItemLists>>,
 
     /// totp redraw state
-    totp_code: Option<u32>,
+    totp_code: Option<String>,
     last_epoch: u64,
 }
 
 impl VaultUi {
-    pub fn new(xns: &xous_names::XousNames, cid: xous::CID) -> Self {
+    pub fn new(xns: &xous_names::XousNames, cid: xous::CID, item_lists: Arc<Mutex<ItemLists>>) -> Self {
         let mut totp_list = ScrollableList::default()
             .set_margin(TotpLayout::totp_margin())
             .pane_size(TotpLayout::list_box())
@@ -56,6 +64,7 @@ impl VaultUi {
             main_cid: cid,
             gfx: Gfx::new(&xns).unwrap(),
             totp_list,
+            item_lists,
             totp_code: None,
             last_epoch: crate::totp::get_current_unix_time().expect("couldn't get current time") / 30,
         }
@@ -85,12 +94,12 @@ impl VaultUi {
         tv.style = TotpLayout::totp_font();
         tv.draw_border = false;
 
-        match self.totp_code {
+        match &self.totp_code {
             Some(code) => {
-                write!(tv, "{} {}", code / 1000, code % 1000).ok();
+                write!(tv, "{}", code).ok();
             }
             _ => {
-                write!(tv, "*** ***").ok();
+                write!(tv, "******").ok();
             }
         }
         self.gfx.draw_textview(&mut tv).expect("couldn't draw text");
@@ -113,6 +122,14 @@ impl VaultUi {
         let epoch = (current_time / (30 * 1000)) as u64;
         if self.last_epoch != epoch {
             self.last_epoch = epoch;
+            if !self.item_lists.lock().unwrap().is_db_empty(VaultMode::Totp) {
+                match crate::totp::db_str_to_code(
+                    &self.item_lists.lock().unwrap().selected_extra(VaultMode::Totp),
+                ) {
+                    Ok(s) => self.totp_code = Some(s),
+                    _ => self.totp_code = None,
+                }
+            }
         }
 
         let mut timer_remaining = TotpLayout::timer_box();

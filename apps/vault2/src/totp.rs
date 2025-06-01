@@ -6,6 +6,7 @@ use std::{
 };
 
 use hmac::{Hmac, Mac};
+use locales::t;
 use num_traits::*;
 use sha1::Sha1;
 use xous::{Message, send_message};
@@ -19,6 +20,11 @@ pub enum TotpAlgorithm {
     HmacSha256,
     HmacSha512,
     None,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum TotpError {
+    BadRecord,
 }
 
 impl Default for TotpAlgorithm {
@@ -193,4 +199,33 @@ pub(crate) fn pumper(
             xous::destroy_server(sid).ok();
         }
     });
+}
+
+pub(crate) fn db_str_to_code(db_str: &str) -> Result<String, TotpError> {
+    let fields = db_str.split(':').collect::<Vec<&str>>();
+    if fields.len() == 5 {
+        let shared_secret =
+            base32::decode(base32::Alphabet::RFC4648 { padding: false }, fields[0]).unwrap_or(vec![]);
+        let digit_count = u8::from_str_radix(fields[1], 10).unwrap_or(6);
+        let step_seconds = u64::from_str_radix(fields[2], 10).unwrap_or(30);
+        let algorithm = TotpAlgorithm::try_from(fields[3]).unwrap_or(TotpAlgorithm::HmacSha1);
+        let is_hotp = fields[4].to_uppercase() == "HOTP";
+        let totp = TotpEntry {
+            step_seconds: if !is_hotp { step_seconds } else { 1 }, /* step_seconds is re-used
+                                                                    * by hotp as the code. */
+            shared_secret,
+            digit_count,
+            algorithm,
+        };
+        let code = if !is_hotp {
+            generate_totp_code(get_current_unix_time().unwrap_or(0), &totp)
+                .unwrap_or(t!("vault.error.record_error", locales::LANG).to_string())
+        } else {
+            generate_totp_code(step_seconds, &totp)
+                .unwrap_or(t!("vault.error.record_error", locales::LANG).to_string())
+        };
+        Ok(code)
+    } else {
+        Err(TotpError::BadRecord)
+    }
 }
