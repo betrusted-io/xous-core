@@ -173,7 +173,7 @@ pub(crate) fn pumper(
                         {
                             // we really want mode.lock() to be in a different scope so...
                             if mode_cache == VaultMode::Totp {
-                                tt.sleep_ms(2000).unwrap();
+                                tt.sleep_ms(50).unwrap();
                                 send_message(
                                     self_conn,
                                     Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0),

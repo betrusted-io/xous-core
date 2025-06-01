@@ -26,6 +26,7 @@ rand_core = "0.6.3"
 ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.65" }
 userprefs = { path = "../../libs/userprefs" }
 ux-api = { path = "../../libs/ux-api" }
+cramium-api = { path = "../../libs/cramium-api" }
 cram-hal-service = { path = "../../services/cram-hal-service", optional = true }
 cramium-emu = { path = "../../services/cramium-emu", optional = true }
 blitstr2 = { path = "../../libs/blitstr2" }

@@ -1,11 +1,12 @@
-use core::fmt::Write;
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 
-use blitstr2::GlyphStyle;
-use locales::t;
 use num_traits::*;
-use ux_api::minigfx::*;
-use ux_api::service::api::Gid;
-use ux_api::service::gfx::Gfx;
+
+mod ux;
+use totp::PumpOp;
+use ux::*;
+mod totp;
 
 pub(crate) const SERVER_NAME_VAULT2: &str = "_Vault2_";
 
@@ -14,31 +15,13 @@ pub(crate) const SERVER_NAME_VAULT2: &str = "_Vault2_";
 pub(crate) enum VaultOp {
     /// Redraw the screen
     Redraw = 0,
-
-    /// Quit the application
-    Quit,
+    KeyPress,
 }
 
-struct VaultUi {
-    pub gfx: Gfx,
-}
-
-impl VaultUi {
-    fn new(xns: &xous_names::XousNames, sid: xous::SID) -> Self { Self { gfx: Gfx::new(&xns).unwrap() } }
-
-    /// Clear the entire screen.
-    fn clear_area(&self) { self.gfx.clear().ok(); }
-
-    /// Redraw the text view onto the screen.
-    fn redraw(&mut self) {
-        let mut tv = TextView::new(
-            Gid::dummy(),
-            TextBounds::CenteredTop(Rectangle::new(Point::new(0, 0), Point::new(127, 12))),
-        );
-        write!(tv, "hello world").ok();
-        self.gfx.draw_textview(&mut tv).expect("couldn't draw text");
-        self.gfx.flush().ok();
-    }
+#[derive(Copy, Clone, PartialEq, Eq, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub enum VaultMode {
+    Totp,
+    Password,
 }
 
 fn main() -> ! {
@@ -50,26 +33,26 @@ fn main() -> ! {
 
     // Register the server with xous
     let sid = xns.register_name(SERVER_NAME_VAULT2, None).expect("can't register server");
+    let conn = xous::connect(sid).unwrap();
 
-    let mut vault_ui = VaultUi::new(&xns, sid);
+    let mut vault_ui = VaultUi::new(&xns, conn);
 
-    std::thread::spawn({
-        let sid = sid.clone();
-        move || {
-            let tt = ticktimer_server::Ticktimer::new().unwrap();
-            let cid_to_self = xous::connect(sid).unwrap();
-            loop {
-                tt.sleep_ms(500).ok();
-                log::info!("ping");
-                xous::send_message(
-                    cid_to_self,
-                    xous::Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0),
-                )
-                .expect("couldn't pump the main loop event thread");
-            }
-        }
-    });
+    // global shared state
+    let mode = Arc::new(Mutex::new(VaultMode::Totp));
+    let allow_totp_rendering = Arc::new(AtomicBool::new(true));
 
+    // spawn the TOTP pumper
+    let pump_sid = xous::create_server().unwrap();
+    crate::totp::pumper(mode.clone(), pump_sid, conn, allow_totp_rendering.clone());
+    let pump_conn = xous::connect(pump_sid).unwrap();
+
+    // respond to keyboard events
+    let kbd = cramium_api::keyboard::Keyboard::new(&xns).unwrap();
+    kbd.register_listener(SERVER_NAME_VAULT2, VaultOp::KeyPress.to_u32().unwrap() as usize);
+
+    // kickstart the pumper
+    xous::send_message(pump_conn, xous::Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0))
+        .expect("couldn't start the pumper");
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("Got message: {:?}", msg);
@@ -77,18 +60,22 @@ fn main() -> ! {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(VaultOp::Redraw) => {
                 log::debug!("Got redraw");
-                vault_ui.redraw();
+                match *mode.lock().unwrap() {
+                    VaultMode::Totp => {
+                        vault_ui.redraw_totp();
+                    }
+                    _ => {
+                        unimplemented!()
+                    }
+                }
             }
-            Some(VaultOp::Quit) => {
-                log::info!("Quitting application");
-                break;
-            }
+            Some(VaultOp::KeyPress) => xous::msg_scalar_unpack!(msg, k1, _k2, _k3, _k4, {
+                let k = char::from_u32(k1 as u32).unwrap_or('\u{0000}');
+                log::info!("got key {}", k);
+            }),
             _ => {
                 log::error!("Got unknown message");
             }
         }
     }
-
-    log::info!("Quitting");
-    xous::terminate_process(0)
 }
