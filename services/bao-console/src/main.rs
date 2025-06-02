@@ -117,13 +117,13 @@ fn main() {
         let mut buf = [0u8, 0u8];
         loop {
             tt.sleep_ms(2_000).ok();
-            for (name, offset) in measurements {
-                i2c.i2c_read(AXP2101_DEV, offset, &mut buf, false).unwrap();
-                let v: u32 = (((buf[0] as u32) & 0x3F) << 8) | buf[1] as u32;
-                log::info!("{}: {:0.3}V", name, v as f32 / 1000.0);
-                i2c.i2c_read(AXP2101_DEV, REG_SOC, &mut buf[0..1], false).unwrap();
-                log::info!("SOC: {}%", buf[0]);
-            }
+            // for (name, offset) in measurements {
+            //     i2c.i2c_read(AXP2101_DEV, offset, &mut buf, false).unwrap();
+            //     let v: u32 = (((buf[0] as u32) & 0x3F) << 8) | buf[1] as u32;
+            //     log::info!("{}: {:0.3}V", name, v as f32 / 1000.0);
+            //     i2c.i2c_read(AXP2101_DEV, REG_SOC, &mut buf[0..1], false).unwrap();
+            //     log::info!("SOC: {}%", buf[0]);
+            // }
         }
     }
     #[cfg(any(feature = "hosted-baosec", not(feature = "battery-readout")))]
