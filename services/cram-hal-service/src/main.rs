@@ -185,14 +185,7 @@ fn main() {
     .expect("couldn't claim the IOX hardware page");
     let iox = Iox::new(iox_page.as_ptr() as *mut u32);
 
-    let udma_global_csr = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utralib::generated::HW_UDMA_CTRL_BASE),
-        None,
-        4096,
-        xous::MemoryFlags::R | xous::MemoryFlags::W,
-    )
-    .expect("couldn't map UDMA global control");
-    let udma_global = GlobalConfig::new(udma_global_csr.as_mut_ptr() as *mut u32);
+    let udma_global = GlobalConfig::new();
 
     // Note: the I2C handler can be put into a separate thread if we need the main
     // HAL server to not block while a large I2C transaction is being handled. For

@@ -37,9 +37,36 @@ impl Into<usize> for GlobalReg {
 
 pub struct GlobalConfig {
     csr: SharedCsr<u32>,
+    i2c_irq: SharedCsr<u32>,
 }
 impl GlobalConfig {
-    pub fn new(base_addr: *mut u32) -> Self { GlobalConfig { csr: SharedCsr::new(base_addr) } }
+    pub fn new() -> Self {
+        #[cfg(target_os = "xous")]
+        let base_addr = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utralib::generated::HW_UDMA_CTRL_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map UDMA global control")
+        .as_mut_ptr() as *mut u32;
+        #[cfg(not(target_os = "xous"))]
+        let base_addr = utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32;
+
+        #[cfg(target_os = "xous")]
+        let i2c_irq_addr = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utralib::generated::HW_IRQARRAY7_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map I2C IRQ range")
+        .as_mut_ptr() as *mut u32;
+        #[cfg(not(target_os = "xous"))]
+        let i2c_irq_addr = utralib::generated::HW_IRQARRAY7_BASE as *mut u32;
+
+        GlobalConfig { csr: SharedCsr::new(base_addr), i2c_irq: SharedCsr::new(i2c_irq_addr) }
+    }
 
     pub fn clock_on(&self, peripheral: PeriphId) {
         // Safety: only safe when used in the context of UDMA registers.
