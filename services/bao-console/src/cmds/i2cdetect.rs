@@ -6,15 +6,15 @@ use crate::{CommonEnv, ShellCmdApi};
 pub struct I2cDetect {}
 
 impl<'a> ShellCmdApi<'a> for I2cDetect {
-    cmd_api!(cui;
+    cmd_api!(i2cdetect);
 
     fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
     use core::fmt::Write;
     let mut ret = String::new();
     let helpstring = "Usage:
-  i2cdetect cat       - prints cat ascii art
-   i2cdetect bread     - prints bread ascii art
-  i2cdetect breadcat  - prints breadcat ascii art";
+    i2cdetect cat       - prints cat ascii art
+    i2cdetect bread     - prints bread ascii art
+    i2cdetect breadcat  - prints breadcat ascii art";
 
     let mut tokens = args.split_whitespace();
 
