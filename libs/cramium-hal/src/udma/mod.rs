@@ -165,6 +165,12 @@ impl UdmaGlobalConfig for GlobalConfig {
     }
 
     fn reset(&self, peripheral: PeriphId) { self.reset(peripheral); }
+
+    fn irq_status_bits(&self, bank: IrqBank) -> u32 {
+        match bank {
+            IrqBank::I2c => self.i2c_irq.r(utralib::utra::irqarray7::EV_STATUS),
+        }
+    }
 }
 // --------------------------------- DMA channel ------------------------------------
 pub(crate) const CFG_EN: u32 = 0b01_0000; // start a transfer
