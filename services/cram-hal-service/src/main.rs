@@ -5,6 +5,7 @@ use bitfield::*;
 use cramium_api::*;
 use cramium_hal::{iox::Iox, udma::GlobalConfig};
 use num_traits::*;
+use udma::UdmaGlobalConfig;
 use utralib::CSR;
 #[cfg(feature = "quantum-timer")]
 use utralib::utra;
@@ -524,6 +525,13 @@ fn main() {
                     // events. Maybe this should be done? but for now, let's leave it
                     // as bare iron.
                     udma_global.map_event_with_offset(periph, event_offset, to_channel);
+                }
+            }
+            HalOpcode::UdmaIrqStatusBits => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let bank = num_traits::FromPrimitive::from_usize(scalar.arg1)
+                        .expect("Bad argument to UdmaIrqStatusBits");
+                    scalar.arg1 = udma_global.irq_status_bits(bank) as usize;
                 }
             }
             HalOpcode::PeriphReset => {
