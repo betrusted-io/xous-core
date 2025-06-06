@@ -152,6 +152,36 @@ impl VaultUi {
                 self.gfx.draw_rectangle(timer_remaining).ok();
             }
             VaultMode::Password => {
+                /*
+                Password UI --
+
+                Home menu:
+
+                > Search by QR code
+                > Search by text entry
+                > Enter new by QR code
+                > Enter new by text entry
+
+                Prefix entered:
+
+                ---------------------
+                | Selected Domain   |
+                | Selected Username |
+                ---------------------
+                > Domain short 1
+                > Domain short 2
+                > Domain short 3
+                > Domain short 4
+                > search prefix <
+
+                - Scrolling down to search prefix and hitting home brings up keyboard UI
+                - Left-right would page through prefixed entries
+                - Up down would page through just the current page of entries (allowing selection of search prefix region)
+                - Selecting search prefix brings up the alphabetic entry UI
+                - Pressing in on scroll button raises a new menu for "autotype password" + "delete passsword" + "edit password" options
+                - Pressing on circle middle button just does autotype
+
+                 */
                 todo!()
             }
         }

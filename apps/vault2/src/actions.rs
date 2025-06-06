@@ -7,13 +7,10 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-use gam::TextEntryPayload;
 use locales::t;
 use num_traits::*;
 use passwords::PasswordGenerator;
 use pddb::BasisRetentionPolicy;
-#[cfg(feature = "vaultperf")]
-use perflib::*;
 use persistent_store::store::OPENSK2_DICT;
 use vault::env::xous::U2F_APP_DICT;
 use vault::{
@@ -26,24 +23,12 @@ use crate::storage::{self, PasswordRecord, StorageContent};
 use crate::totp::TotpAlgorithm;
 use crate::{ItemLists, SelectedEntry, VaultMode};
 use crate::{ListItem, ListKey, storage::TotpRecord};
-#[cfg(feature = "vaultperf")]
-const FILE_ID_APPS_VAULT_SRC_ACTIONS: u32 = 1;
 
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
 const VAULT_TOTP_REC_VERSION: u32 = 1;
-/// time allowed between dialog box swaps for background operations to redraw
-#[cfg(feature = "ux-swap-delay")]
-const SWAP_DELAY_MS: usize = 300;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum ActionOp {
-    /// Menu items
-    MenuAddnew,
-    MenuEditStage2,
-    MenuDeleteStage2,
-    MenuClose,
-    MenuUnlockBasis,
-    MenuManageBasis,
     /// Internal ops
     UpdateMode,
     UpdateOneItem,
@@ -69,14 +54,6 @@ pub struct ActionManager<'a> {
     opensk_mutex: Arc<Mutex<i32>>,
     mode_cache: VaultMode,
     main_conn: xous::CID,
-    #[cfg(feature = "vaultperf")]
-    perfbuf: xous::MemoryRange,
-    #[cfg(feature = "vaultperf")]
-    pm: PerfMgr<'a>,
-    #[cfg(feature = "vaultperf")]
-    pid: u32,
-    // this is necessary to keep rustc quiet when not using `vaultperf` build option...
-    phantom: core::marker::PhantomData<&'a u32>,
 }
 impl<'a> ActionManager<'a> {
     pub fn new(
@@ -88,20 +65,6 @@ impl<'a> ActionManager<'a> {
     ) -> ActionManager<'a> {
         let xns = xous_names::XousNames::new().unwrap();
         let storage_manager = storage::Manager::new(&xns);
-
-        // notes: to use vault as the performance manager, build with `cargo xtask perf-image vault --feature
-        // vaultperf`. this will override shellchat as the performance manager, while enabling all the
-        // other performance reporting agents
-        #[cfg(feature = "vaultperf")]
-        let perfbuf = xous::syscall::map_memory(
-            None,
-            None,
-            BUFLEN,
-            xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
-        )
-        .expect("couldn't map in the performance buffer");
-        #[cfg(feature = "vaultperf")]
-        let pm = build_perf_mgr(perfbuf.as_mut_ptr());
 
         let mc = (*mode.lock().unwrap()).clone();
         ActionManager {
@@ -119,13 +82,6 @@ impl<'a> ActionManager<'a> {
             action_active,
             opensk_mutex,
             main_conn,
-            #[cfg(feature = "vaultperf")]
-            perfbuf,
-            #[cfg(feature = "vaultperf")]
-            pm,
-            #[cfg(feature = "vaultperf")]
-            pid: xous::process::id() as u32,
-            phantom: core::marker::PhantomData,
         }
     }
 
@@ -507,89 +463,42 @@ impl<'a> ActionManager<'a> {
             let choice = match entry.mode {
                 VaultMode::Password => Some(storage::ContentKind::Password),
                 VaultMode::Totp => Some(storage::ContentKind::TOTP),
-                VaultMode::Fido => None,
             };
 
-            if choice.is_none() {
-                // we're dealing with FIDO stuff, use the custom code path
-                let dictionary = match usize::from_str_radix(entry.key_guid.as_str(), 10) {
-                    Ok(fido_key) => {
-                        if vault::ctap::storage::key::CREDENTIALS.contains(&fido_key) {
-                            persistent_store::store::OPENSK2_DICT // heuristic: all fido2 keys are simple integers
-                        } else {
-                            U2F_APP_DICT
-                        }
+            // we're deleting either a password, or a totp
+            let choice = choice.unwrap();
+            let guid = entry.key_guid.as_str();
+            if entry.mode == VaultMode::Password {
+                // self.modals.show_notification(&format!("deleting key {}", guid), None).ok();
+                // if it's a password, we have to pull the full record, and then reconstitute the
+                // item_lists index key so we can remove it from the UX cache
+                let storage = self.storage.borrow_mut();
+                let pw: storage::PasswordRecord = match storage.get_record(&choice, guid) {
+                    Ok(record) => record,
+                    Err(error) => {
+                        self.report_err(t!("vault.error.internal_error", locales::LANG), Some(error));
+                        return;
                     }
-                    Err(_) => U2F_APP_DICT, // u2f keys are long hex strings
                 };
-                match self.pddb.borrow().get(
-                    dictionary,
-                    entry.key_guid.as_str(),
-                    None,
-                    false,
-                    false,
-                    None,
-                    None::<fn()>,
-                ) {
-                    Ok(candidate) => {
-                        let attr = candidate.attributes().expect("couldn't get key attributes");
-                        match self.pddb.borrow().delete_key(
-                            dictionary,
-                            entry.key_guid.as_str(),
-                            Some(&attr.basis),
-                        ) {
-                            Ok(_) => {
-                                self.modals
-                                    .show_notification(t!("vault.completed", locales::LANG), None)
-                                    .ok();
-                            }
-                            Err(e) => {
-                                self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e))
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        self.report_err(t!("vault.error.not_found", locales::LANG), Some(e));
-                    }
+                let mut desc = String::with_capacity(256);
+                make_pw_name(&pw.description, &pw.username, &mut desc);
+                let key = ListKey::key_from_parts(&desc, guid);
+                assert!(
+                    self.item_lists.lock().unwrap().remove(entry.mode, key).is_some(),
+                    "requested to delete item, but it wasn't found!"
+                );
+                /*
+                if self.item_lists.lock().unwrap().pw.remove(&key).is_some() {
+                    self.modals.show_notification(&format!("deleted UX {}", &key), None).ok();
+                } else {
+                    self.modals.show_notification(&format!("could not delete UX {}", &key), None).ok();
+                }; */
+            }
+            match self.storage.borrow_mut().delete(choice, guid) {
+                Ok(_) => {
+                    self.modals.show_notification(t!("vault.completed", locales::LANG), None).ok().unwrap()
                 }
-            } else {
-                // we're deleting either a password, or a totp
-                let choice = choice.unwrap();
-                let guid = entry.key_guid.as_str();
-                if entry.mode == VaultMode::Password {
-                    // self.modals.show_notification(&format!("deleting key {}", guid), None).ok();
-                    // if it's a password, we have to pull the full record, and then reconstitute the
-                    // item_lists index key so we can remove it from the UX cache
-                    let storage = self.storage.borrow_mut();
-                    let pw: storage::PasswordRecord = match storage.get_record(&choice, guid) {
-                        Ok(record) => record,
-                        Err(error) => {
-                            self.report_err(t!("vault.error.internal_error", locales::LANG), Some(error));
-                            return;
-                        }
-                    };
-                    let mut desc = String::with_capacity(256);
-                    make_pw_name(&pw.description, &pw.username, &mut desc);
-                    let key = ListKey::key_from_parts(&desc, guid);
-                    assert!(
-                        self.item_lists.lock().unwrap().remove(entry.mode, key).is_some(),
-                        "requested to delete item, but it wasn't found!"
-                    );
-                    /*
-                    if self.item_lists.lock().unwrap().pw.remove(&key).is_some() {
-                        self.modals.show_notification(&format!("deleted UX {}", &key), None).ok();
-                    } else {
-                        self.modals.show_notification(&format!("could not delete UX {}", &key), None).ok();
-                    }; */
-                }
-                match self.storage.borrow_mut().delete(choice, guid) {
-                    Ok(_) => self
-                        .modals
-                        .show_notification(t!("vault.completed", locales::LANG), None)
-                        .ok()
-                        .unwrap(),
-                    Err(e) => self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e)),
-                }
+                Err(e) => self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e)),
             }
             self.pddb.borrow().sync().ok();
         }
