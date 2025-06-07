@@ -236,6 +236,7 @@ pub enum EventChannel {
 #[derive(Debug, Copy, Clone, num_derive::FromPrimitive)]
 pub enum IrqBank {
     I2c,
+    I2cErr,
 }
 
 /// Use a trait that will allow us to share code between both `std` and `no-std` implementations

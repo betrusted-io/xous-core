@@ -1,5 +1,5 @@
 pub trait I2cApi {
-    fn i2c_write(&mut self, dev: u8, adr: u8, data: &[u8]) -> Result<usize, xous::Error>;
+    fn i2c_write(&mut self, dev: u8, adr: u8, data: &[u8]) -> Result<I2cResult, xous::Error>;
 
     /// initiate an i2c read. The read buffer is passed during the await.
     fn i2c_read(
@@ -8,7 +8,7 @@ pub trait I2cApi {
         adr: u8,
         buf: &mut [u8],
         repeated_start: bool,
-    ) -> Result<usize, xous::Error>;
+    ) -> Result<I2cResult, xous::Error>;
 }
 
 #[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
@@ -20,7 +20,7 @@ pub enum I2cTransactionType {
 }
 
 #[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum I2cResult {
     /// For the outbound message holder
     Pending,
@@ -28,6 +28,8 @@ pub enum I2cResult {
     Ack(usize),
     /// An error occurred.
     Nack,
+    /// An unhandled error has occurred.
+    InternalError,
 }
 #[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 #[cfg(feature = "std")]
