@@ -549,7 +549,7 @@ fn main() {
                     match transaction.i2c_type {
                         I2cTransactionType::Write => {
                             match i2c.i2c_write(transaction.device, transaction.address, &transaction.data) {
-                                Ok(b) => transaction.result = I2cResult::Ack(b),
+                                Ok(result) => transaction.result = result,
                                 _ => transaction.result = I2cResult::Nack,
                             }
                         }
@@ -560,7 +560,7 @@ fn main() {
                                 &mut transaction.data,
                                 transaction.i2c_type == I2cTransactionType::ReadRepeatedStart,
                             ) {
-                                Ok(b) => transaction.result = I2cResult::Ack(b),
+                                Ok(result) => transaction.result = result,
                                 _ => transaction.result = I2cResult::Nack,
                             }
                         }
