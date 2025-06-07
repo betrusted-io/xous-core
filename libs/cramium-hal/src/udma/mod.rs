@@ -38,6 +38,7 @@ impl Into<usize> for GlobalReg {
 pub struct GlobalConfig {
     csr: SharedCsr<u32>,
     i2c_irq: SharedCsr<u32>,
+    i2c_err_irq: SharedCsr<u32>,
 }
 impl GlobalConfig {
     pub fn new() -> Self {
@@ -65,7 +66,23 @@ impl GlobalConfig {
         #[cfg(not(target_os = "xous"))]
         let i2c_irq_addr = utralib::generated::HW_IRQARRAY7_BASE as *mut u32;
 
-        GlobalConfig { csr: SharedCsr::new(base_addr), i2c_irq: SharedCsr::new(i2c_irq_addr) }
+        #[cfg(target_os = "xous")]
+        let i2c_err_irq_addr = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utralib::generated::HW_IRQARRAY12_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map I2C IRQ range")
+        .as_mut_ptr() as *mut u32;
+        #[cfg(not(target_os = "xous"))]
+        let i2c_err_irq_addr = utralib::generated::HW_IRQARRAY12_BASE as *mut u32;
+
+        GlobalConfig {
+            csr: SharedCsr::new(base_addr),
+            i2c_irq: SharedCsr::new(i2c_irq_addr),
+            i2c_err_irq: SharedCsr::new(i2c_err_irq_addr),
+        }
     }
 
     pub fn clock_on(&self, peripheral: PeriphId) {
@@ -168,7 +185,16 @@ impl UdmaGlobalConfig for GlobalConfig {
 
     fn irq_status_bits(&self, bank: IrqBank) -> u32 {
         match bank {
-            IrqBank::I2c => self.i2c_irq.r(utralib::utra::irqarray7::EV_STATUS),
+            IrqBank::I2c => {
+                let pending = self.i2c_irq.r(utralib::utra::irqarray7::EV_PENDING);
+                self.i2c_irq.wo(utralib::utra::irqarray7::EV_PENDING, pending);
+                pending
+            }
+            IrqBank::I2cErr => {
+                let pending = self.i2c_err_irq.r(utralib::utra::irqarray12::EV_PENDING);
+                self.i2c_err_irq.wo(utralib::utra::irqarray12::EV_PENDING, pending);
+                pending
+            }
         }
     }
 }
