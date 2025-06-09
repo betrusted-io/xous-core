@@ -108,7 +108,7 @@ fn main() {
         modals::tests::spawn_test();
     }
 
-    #[cfg(not(feature = "hosted-baosec"))]
+    #[cfg(feature = "battery-readout")]
     {
         use cramium_api::I2cApi;
         let mut i2c = cram_hal_service::I2c::new();
@@ -126,7 +126,7 @@ fn main() {
             }
         }
     }
-    #[cfg(feature = "hosted-baosec")]
+    #[cfg(any(feature = "hosted-baosec", not(feature = "battery-readout")))]
     loop {
         tt.sleep_ms(2_000).ok();
     }

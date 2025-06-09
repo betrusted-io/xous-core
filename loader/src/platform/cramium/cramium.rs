@@ -235,7 +235,7 @@ pub fn early_init() -> u32 {
 
     // Set up the UDMA_UART block to the correct baud rate and enable status
     #[allow(unused_mut)] // some configs require mut
-    let mut udma_global = GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
+    let mut udma_global = GlobalConfig::new();
     udma_global.clock_on(PeriphId::Uart1);
     udma_global.map_event(
         PeriphId::Uart1,
@@ -409,7 +409,7 @@ pub fn early_init() -> u32 {
         // show the boot logo
         use ux_api::minigfx::FrameBuffer;
 
-        let mut udma_global = GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
+        let mut udma_global = GlobalConfig::new();
         let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(
             cramium_hal::sh1107::MainThreadToken::new(),
             perclk,
@@ -456,7 +456,7 @@ pub fn early_init() -> u32 {
             use crate::platform::cramium::qr;
 
             let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-            let udma_global = GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
+            let udma_global = GlobalConfig::new();
 
             // setup camera pins
             let (cam_pdwn_bnk, cam_pdwn_pin) = cramium_hal::board::setup_camera_pins(&iox);
@@ -962,7 +962,7 @@ pub fn early_init() -> u32 {
 
             // setup the I/O pins
             let mut iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
-            let mut udma_global = GlobalConfig::new(utralib::generated::HW_UDMA_CTRL_BASE as *mut u32);
+            let mut udma_global = GlobalConfig::new();
             let channel = cramium_hal::board::setup_memory_pins(&iox);
             udma_global.clock_off(PeriphId::from(channel));
 

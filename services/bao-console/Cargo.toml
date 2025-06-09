@@ -50,7 +50,9 @@ hosted-baosec = [
     "cramium-hal/hosted-baosec",
 ]
 usb = []
-pddbtest = []
+battery-readout = []
+with-pddb = []
+pddbtest = ["with-pddb"]
 test-rekey = []
 autobasis = ["rand_chacha", "rand"]
 modal-testing = ["ux-api", "modals/modal-testing"]

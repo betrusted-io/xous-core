@@ -33,7 +33,7 @@ impl I2cApi for I2c {
         adr: u8,
         buf: &mut [u8],
         repeated_start: bool,
-    ) -> Result<usize, xous::Error> {
+    ) -> Result<I2cResult, xous::Error> {
         let r = I2cTransaction {
             i2c_type: if repeated_start {
                 I2cTransactionType::ReadRepeatedStart
@@ -46,16 +46,14 @@ impl I2cApi for I2c {
             result: I2cResult::Pending,
         };
         let result = self.i2c_transactions(I2cTransactions::from(vec![r]))?;
-        match result.transactions[0].result {
-            I2cResult::Ack(b) => {
-                buf.copy_from_slice(&result.transactions[0].data);
-                Ok(b)
-            }
-            _ => Err(xous::Error::InternalError),
+        if result.transactions[0].result == I2cResult::InternalError {
+            Err(xous::Error::InternalError)
+        } else {
+            Ok(result.transactions[0].result)
         }
     }
 
-    fn i2c_write(&mut self, dev: u8, adr: u8, data: &[u8]) -> Result<usize, xous::Error> {
+    fn i2c_write(&mut self, dev: u8, adr: u8, data: &[u8]) -> Result<I2cResult, xous::Error> {
         let w = I2cTransaction {
             i2c_type: I2cTransactionType::Write,
             device: dev,
@@ -64,9 +62,10 @@ impl I2cApi for I2c {
             result: I2cResult::Pending,
         };
         let result = self.i2c_transactions(I2cTransactions::from(vec![w]))?;
-        match result.transactions[0].result {
-            I2cResult::Ack(b) => Ok(b),
-            _ => Err(xous::Error::InternalError),
+        if result.transactions[0].result == I2cResult::InternalError {
+            Err(xous::Error::InternalError)
+        } else {
+            Ok(result.transactions[0].result)
         }
     }
 }

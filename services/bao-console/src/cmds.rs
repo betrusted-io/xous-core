@@ -87,8 +87,14 @@ use trng_cmd::*;
 mod usb;
 #[cfg(feature = "usb")]
 use usb::*;
+#[cfg(feature = "with-pddb")]
 mod pddb;
+#[cfg(feature = "with-pddb")]
 use pddb::*;
+mod i2cdetect;
+use i2cdetect::*;
+mod cute;
+use cute::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
@@ -97,6 +103,7 @@ pub struct CmdEnv {
     trng_cmd: TrngCmd,
     #[cfg(feature = "usb")]
     usb: Usb,
+    #[cfg(feature = "with-pddb")]
     pddb_cmd: PddbCmd,
 }
 impl CmdEnv {
@@ -120,6 +127,7 @@ impl CmdEnv {
             },
             #[cfg(feature = "usb")]
             usb: Usb::new(),
+            #[cfg(feature = "with-pddb")]
             pddb_cmd: PddbCmd::new(),
         }
     }
@@ -134,14 +142,20 @@ impl CmdEnv {
         let mut echo_cmd = Echo {}; // this command has no persistent storage, so we can "create" it every time we call dispatch (but it's a zero-cost absraction so this doesn't actually create any instructions)
         let mut ver_cmd = Ver {};
         let mut console_cmd = Test {};
+        let mut i2cdetect_cmd = I2cDetect {};
+        let mut cute_cmd = Cute {};
+
         let commands: &mut [&mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
             &mut echo_cmd,
             &mut ver_cmd,
             &mut self.trng_cmd,
+            &mut i2cdetect_cmd,
+            &mut cute_cmd,
             &mut console_cmd,
             #[cfg(feature = "usb")]
             &mut self.usb,
+            #[cfg(feature = "with-pddb")]
             &mut self.pddb_cmd,
         ];
 

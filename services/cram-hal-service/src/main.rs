@@ -5,6 +5,7 @@ use bitfield::*;
 use cramium_api::*;
 use cramium_hal::{iox::Iox, udma::GlobalConfig};
 use num_traits::*;
+use udma::UdmaGlobalConfig;
 use utralib::CSR;
 #[cfg(feature = "quantum-timer")]
 use utralib::utra;
@@ -185,14 +186,7 @@ fn main() {
     .expect("couldn't claim the IOX hardware page");
     let iox = Iox::new(iox_page.as_ptr() as *mut u32);
 
-    let udma_global_csr = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utralib::generated::HW_UDMA_CTRL_BASE),
-        None,
-        4096,
-        xous::MemoryFlags::R | xous::MemoryFlags::W,
-    )
-    .expect("couldn't map UDMA global control");
-    let udma_global = GlobalConfig::new(udma_global_csr.as_mut_ptr() as *mut u32);
+    let udma_global = GlobalConfig::new();
 
     // Note: the I2C handler can be put into a separate thread if we need the main
     // HAL server to not block while a large I2C transaction is being handled. For
@@ -533,6 +527,13 @@ fn main() {
                     udma_global.map_event_with_offset(periph, event_offset, to_channel);
                 }
             }
+            HalOpcode::UdmaIrqStatusBits => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let bank = num_traits::FromPrimitive::from_usize(scalar.arg1)
+                        .expect("Bad argument to UdmaIrqStatusBits");
+                    scalar.arg1 = udma_global.irq_status_bits(bank) as usize;
+                }
+            }
             HalOpcode::PeriphReset => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
@@ -548,7 +549,7 @@ fn main() {
                     match transaction.i2c_type {
                         I2cTransactionType::Write => {
                             match i2c.i2c_write(transaction.device, transaction.address, &transaction.data) {
-                                Ok(b) => transaction.result = I2cResult::Ack(b),
+                                Ok(result) => transaction.result = result,
                                 _ => transaction.result = I2cResult::Nack,
                             }
                         }
@@ -559,7 +560,7 @@ fn main() {
                                 &mut transaction.data,
                                 transaction.i2c_type == I2cTransactionType::ReadRepeatedStart,
                             ) {
-                                Ok(b) => transaction.result = I2cResult::Ack(b),
+                                Ok(result) => transaction.result = result,
                                 _ => transaction.result = I2cResult::Nack,
                             }
                         }

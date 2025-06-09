@@ -233,6 +233,12 @@ pub enum EventChannel {
     Channel3 = 24,
 }
 
+#[derive(Debug, Copy, Clone, num_derive::FromPrimitive)]
+pub enum IrqBank {
+    I2c,
+    I2cErr,
+}
+
 /// Use a trait that will allow us to share code between both `std` and `no-std` implementations
 pub trait UdmaGlobalConfig {
     fn clock(&self, peripheral: PeriphId, enable: bool);
@@ -243,4 +249,5 @@ pub trait UdmaGlobalConfig {
         to_channel: EventChannel,
     );
     fn reset(&self, peripheral: PeriphId);
+    fn irq_status_bits(&self, bank: IrqBank) -> u32;
 }

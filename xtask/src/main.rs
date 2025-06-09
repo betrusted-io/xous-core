@@ -614,7 +614,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             //   - [planned] vault application
             let bao_rram_pkgs =
                 ["xous-ticktimer", "xous-log", "xous-names", "keystore" /* "usb-cramium" */].to_vec(); /* "usb-cramium" */
-            let bao_swap_pkgs = ["cram-hal-service", "bao-console", "modals", "pddb", "bao-video"].to_vec(); /* "bao-video" */
+            let bao_swap_pkgs =
+                ["cram-hal-service", "bao-console", /* "modals", "pddb", */ "bao-video"].to_vec(); /* "bao-video" */
             if !builder.is_swap_set() {
                 builder.set_swap(0, 8 * 1024 * 1024);
             }
