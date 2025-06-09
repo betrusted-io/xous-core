@@ -110,11 +110,11 @@ fn main() {
 
     #[cfg(feature = "battery-readout")]
     {
-        use cramium_api::I2cApi;
-        let mut i2c = cram_hal_service::I2c::new();
-        use cramium_hal::axp2101::*;
-        let measurements = [("VBAT", REG_VBAT_H), ("VBUS", REG_VBUS_H), ("VSYS", REG_VSYS_H)];
-        let mut buf = [0u8, 0u8];
+        // use cramium_api::I2cApi;
+        // let mut i2c = cram_hal_service::I2c::new();
+        // use cramium_hal::axp2101::*;
+        // let measurements = [("VBAT", REG_VBAT_H), ("VBUS", REG_VBUS_H), ("VSYS", REG_VSYS_H)];
+        // let mut buf = [0u8, 0u8];
         loop {
             tt.sleep_ms(2_000).ok();
             // for (name, offset) in measurements {
