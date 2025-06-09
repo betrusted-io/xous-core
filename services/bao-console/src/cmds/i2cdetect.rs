@@ -1,7 +1,7 @@
 use String;
+use cram_hal_service::I2c;
 use cramium_api::I2cApi;
 use cramium_api::I2cResult;
-use cram_hal_service::I2c;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -23,37 +23,46 @@ fn probe_address(i2c: &mut I2c, addr: u8) -> ProbeStatus {
     }
 }
 
-
 pub struct I2cDetect {}
 
 impl<'a> ShellCmdApi<'a> for I2cDetect {
     cmd_api!(i2cdetect);
 
     fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
-    use core::fmt::Write;
-    let mut ret = String::new();
-    let helpstring = "Usage:
+        use core::fmt::Write;
+        let mut ret = String::new();
+        let helpstring = "Usage:
     i2cdetect probe <hex>        - probes a single I2C address (e.g. 34)
     i2cdetect scan               - reads
     i2cdetect bmp180_temp        - reads raw temperature from BMP180";
 
-    let mut tokens = args.split_whitespace();
+        let mut tokens = args.split_whitespace();
 
-    if let Some(sub_cmd) = tokens.next() {
-        match sub_cmd {
-           "probe" => {
+        if let Some(sub_cmd) = tokens.next() {
+            match sub_cmd {
+                "probe" => {
                     if let Some(addr_str) = tokens.next() {
                         match u8::from_str_radix(addr_str, 16) {
                             Ok(addr) => {
                                 let mut i2c = I2c::new();
                                 let status = probe_address(&mut i2c, addr);
                                 match status {
-                                    ProbeStatus::Ack => write!(ret, "Device found at address {:02X}\n", addr).unwrap(),
-                                    ProbeStatus::Nack => write!(ret, "Device at address {:02X} responded with NACK\n", addr).unwrap(),
+                                    ProbeStatus::Ack => {
+                                        write!(ret, "Device found at address {:02X}\n", addr).unwrap()
+                                    }
+                                    ProbeStatus::Nack => {
+                                        write!(ret, "Device at address {:02X} responded with NACK\n", addr)
+                                            .unwrap()
+                                    }
                                 };
                             }
                             Err(_) => {
-                                write!(ret, "Invalid hex address '{}'. Example: i2cdetect probe 3C\n", addr_str).unwrap();
+                                write!(
+                                    ret,
+                                    "Invalid hex address '{}'. Example: i2cdetect probe 3C\n",
+                                    addr_str
+                                )
+                                .unwrap();
                             }
                         }
                     } else {
@@ -82,18 +91,14 @@ impl<'a> ShellCmdApi<'a> for I2cDetect {
                     }
                 }
 
-
-
-            _ => {
-                write!(ret, "{}\n", helpstring).unwrap();
+                _ => {
+                    write!(ret, "{}\n", helpstring).unwrap();
+                }
             }
+        } else {
+            write!(ret, "{}\n", helpstring).unwrap();
         }
-    } else {
-        write!(ret, "{}\n", helpstring).unwrap();
+
+        Ok(Some(ret))
     }
-
-    Ok(Some(ret))
-    }
-
-
 }

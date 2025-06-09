@@ -9,19 +9,19 @@ impl<'a> ShellCmdApi<'a> for Cute {
     cmd_api!(cute);
 
     fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
-    use core::fmt::Write;
-    let mut ret = String::new();
-    let helpstring = "Usage:
+        use core::fmt::Write;
+        let mut ret = String::new();
+        let helpstring = "Usage:
   cute cat       - prints cat ascii art
   cute bread     - prints bread ascii art
   cute breadcat  - prints breadcat ascii art";
 
-    let mut tokens = args.split_whitespace();
+        let mut tokens = args.split_whitespace();
 
-    if let Some(sub_cmd) = tokens.next() {
-        match sub_cmd {
-            "cat" => {
-                let cat_art = r#"
+        if let Some(sub_cmd) = tokens.next() {
+            match sub_cmd {
+                "cat" => {
+                    let cat_art = r#"
 ⠀⠀⠀⠀⢀⠠⠤⠀⢀⣿⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠐⠀⠐⠀⠀⢀⣾⣿⡇⠀⠀⠀⠀⠀⢀⣼⡇⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⣸⣿⣿⣿⠀⠀⠀⠀⣴⣿⣿⠇⠀⠀⠀⠀
@@ -34,10 +34,10 @@ impl<'a> ShellCmdApi<'a> for Cute {
 ⠨⠠⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠑⠀⠀⠀⠀⠀⠀
 ⠁⠃⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 "#;
-                write!(ret, "{}", cat_art).unwrap();
-            }
-            "bread" => {
-                let bread_art = r#"
+                    write!(ret, "{}", cat_art).unwrap();
+                }
+                "bread" => {
+                    let bread_art = r#"
 ⠀⠀⠀⠀⣀⣠⣤⣤⣤⣤⣤⣄⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⣴⣿⣿⠿⠛⣉⣁⣠⣤⣤⣤⣬⣀⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⢸⣿⣿⣿⣿⣿⣿⡿⠛⣉⣁⣠⣤⣤⣤⣬⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -54,10 +54,10 @@ impl<'a> ShellCmdApi<'a> for Cute {
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠛⠛⠛⠛⠻⠶⣶⣤⣈⣉⣉⣉⣁⣤⣴⠾⠛⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠙⠛⠉⠉⠉⠀⠀⠀⠀
 "#;
-                write!(ret, "{}", bread_art).unwrap();
-            }
-            "breadcat" => {
-                let breadcat_art = r#"
+                    write!(ret, "{}", bread_art).unwrap();
+                }
+                "breadcat" => {
+                    let breadcat_art = r#"
 ⠀⠀⠀⠰⣦⣤⣤⣀⠀⠀⡀⠀⠀⠀⠀⣀⣀⠀⠠⢤⣶⣶⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⢿⣿⢋⣵⣾⣿⣿⡿⣥⣮⢻⣿⣿⣿⣿⣶⣌⢿⣿⢰⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣦⣤⡀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠘⢡⣿⣿⣿⣿⣿⣷⡹⠟⣵⣿⣿⣿⣿⣿⣿⣦⢃⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀
@@ -75,18 +75,16 @@ impl<'a> ShellCmdApi<'a> for Cute {
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢿⣿⣿⣿⣿⣿⠿⠟⠋⠁⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 "#;
-                write!(ret, "{}", breadcat_art).unwrap();
+                    write!(ret, "{}", breadcat_art).unwrap();
+                }
+                _ => {
+                    write!(ret, "{}\n", helpstring).unwrap();
+                }
             }
-            _ => {
-                write!(ret, "{}\n", helpstring).unwrap();
-            }
+        } else {
+            write!(ret, "{}\n", helpstring).unwrap();
         }
-    } else {
-        write!(ret, "{}\n", helpstring).unwrap();
+
+        Ok(Some(ret))
     }
-
-    Ok(Some(ret))
-}
-
-
 }
