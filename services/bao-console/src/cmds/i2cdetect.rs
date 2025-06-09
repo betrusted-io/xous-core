@@ -33,8 +33,7 @@ impl<'a> ShellCmdApi<'a> for I2cDetect {
         let mut ret = String::new();
         let helpstring = "Usage:
     i2cdetect probe <hex>        - probes a single I2C address (e.g. 34)
-    i2cdetect scan               - reads
-    i2cdetect bmp180_temp        - reads raw temperature from BMP180";
+    i2cdetect scan               - reads all addresses on the bus (use with caution!)"
 
         let mut tokens = args.split_whitespace();
 
