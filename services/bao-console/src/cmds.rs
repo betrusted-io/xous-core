@@ -87,7 +87,9 @@ use trng_cmd::*;
 mod usb;
 #[cfg(feature = "usb")]
 use usb::*;
+#[cfg(feature = "with-pddb")]
 mod pddb;
+#[cfg(feature = "with-pddb")]
 use pddb::*;
 
 pub struct CmdEnv {
@@ -97,6 +99,7 @@ pub struct CmdEnv {
     trng_cmd: TrngCmd,
     #[cfg(feature = "usb")]
     usb: Usb,
+    #[cfg(feature = "with-pddb")]
     pddb_cmd: PddbCmd,
 }
 impl CmdEnv {
@@ -120,6 +123,7 @@ impl CmdEnv {
             },
             #[cfg(feature = "usb")]
             usb: Usb::new(),
+            #[cfg(feature = "with-pddb")]
             pddb_cmd: PddbCmd::new(),
         }
     }
@@ -142,6 +146,7 @@ impl CmdEnv {
             &mut console_cmd,
             #[cfg(feature = "usb")]
             &mut self.usb,
+            #[cfg(feature = "with-pddb")]
             &mut self.pddb_cmd,
         ];
 
