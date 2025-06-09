@@ -110,7 +110,7 @@ pub fn process_update(perclk: u32) {
 
     crate::println!("waiting for button press");
     let mut iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-    let mut udma_global = udma::GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
+    let mut udma_global = udma::GlobalConfig::new();
 
     let iox_kbd = iox.clone();
     let mut sh1107 = cramium_hal::sh1107::Oled128x128::new(
@@ -394,9 +394,7 @@ pub fn process_update(perclk: u32) {
                                         );
                                         progress_bar(&mut sh1107, 0);
 
-                                        let udma_global = GlobalConfig::new(
-                                            utralib::generated::HW_UDMA_CTRL_BASE as *mut u32,
-                                        );
+                                        let udma_global = GlobalConfig::new();
 
                                         // setup the I/O pins
                                         let iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);

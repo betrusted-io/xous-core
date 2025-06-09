@@ -263,6 +263,50 @@ impl<'a> I2c<'a> {
                 xous::yield_slice();
             }
         }
+        let nack_bits = self.udma_global.irq_status_bits(IrqBank::I2cErr);
+        match self.channel {
+            I2cChannel::Channel0 => {
+                if (nack_bits
+                    & (utralib::utra::irqarray12::EV_STATUS_I2C0_NACK.mask()
+                        << utralib::utra::irqarray12::EV_STATUS_I2C0_NACK.offset())
+                        as u32)
+                    != 0
+                {
+                    return Err(xous::Error::Timeout);
+                }
+            }
+            I2cChannel::Channel1 => {
+                if (nack_bits
+                    & (utralib::utra::irqarray12::EV_STATUS_I2C1_NACK.mask()
+                        << utralib::utra::irqarray12::EV_STATUS_I2C1_NACK.offset())
+                        as u32)
+                    != 0
+                {
+                    return Err(xous::Error::Timeout);
+                }
+            }
+            I2cChannel::Channel2 => {
+                if (nack_bits
+                    & (utralib::utra::irqarray12::EV_STATUS_I2C2_NACK.mask()
+                        << utralib::utra::irqarray12::EV_STATUS_I2C2_NACK.offset())
+                        as u32)
+                    != 0
+                {
+                    return Err(xous::Error::Timeout);
+                }
+            }
+            I2cChannel::Channel3 => {
+                if (nack_bits
+                    & (utralib::utra::irqarray12::EV_STATUS_I2C3_NACK.mask()
+                        << utralib::utra::irqarray12::EV_STATUS_I2C3_NACK.offset())
+                        as u32)
+                    != 0
+                {
+                    return Err(xous::Error::Timeout);
+                }
+            }
+        }
+
         let ret = match self.pending.take() {
             I2cPending::Read(len) => {
                 if let Some(buf) = rx_buf {
@@ -458,13 +502,25 @@ impl I2cApi for I2c<'_> {
         adr: u8,
         buf: &mut [u8],
         repeated_start: bool,
-    ) -> Result<usize, xous::Error> {
-        self.i2c_read_async(dev, adr, buf.len(), repeated_start)?;
-        self.i2c_await(Some(buf), true)
+    ) -> Result<I2cResult, xous::Error> {
+        match self.i2c_read_async(dev, adr, buf.len(), repeated_start) {
+            Err(_) => return Err(xous::Error::InternalError),
+            _ => (),
+        };
+        match self.i2c_await(Some(buf), true) {
+            Ok(b) => Ok(I2cResult::Ack(b)),
+            _ => Ok(I2cResult::Nack),
+        }
     }
 
-    fn i2c_write(&mut self, dev: u8, adr: u8, data: &[u8]) -> Result<usize, xous::Error> {
-        self.i2c_write_async(dev, adr, data)?;
-        self.i2c_await(None, true)
+    fn i2c_write(&mut self, dev: u8, adr: u8, data: &[u8]) -> Result<I2cResult, xous::Error> {
+        match self.i2c_write_async(dev, adr, data) {
+            Err(_) => return Err(xous::Error::InternalError),
+            _ => (),
+        };
+        match self.i2c_await(None, true) {
+            Ok(b) => Ok(I2cResult::Ack(b)),
+            _ => Ok(I2cResult::Nack),
+        }
     }
 }

@@ -86,4 +86,20 @@ impl UdmaGlobalConfig for UdmaGlobal {
     }
 
     fn reset(&self, peripheral: PeriphId) { self.reset(peripheral); }
+
+    fn irq_status_bits(&self, bank: IrqBank) -> u32 {
+        match xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                HalOpcode::UdmaIrqStatusBits.to_usize().unwrap(),
+                bank as u32 as usize,
+                0,
+                0,
+                0,
+            ),
+        ) {
+            Ok(xous::Result::Scalar5(_, value, _, _, _)) => value as u32,
+            _ => panic!("Unhandled response on irq_status_bits"),
+        }
+    }
 }

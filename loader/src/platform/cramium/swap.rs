@@ -41,7 +41,7 @@ pub struct SwapHal {
 impl SwapHal {
     pub fn new(cfg: &BootConfig, perclk_freq: u32) -> Option<SwapHal> {
         if let Some(swap) = cfg.swap {
-            let udma_global = GlobalConfig::new(utralib::generated::HW_UDMA_CTRL_BASE as *mut u32);
+            let udma_global = GlobalConfig::new();
 
             // setup the I/O pins
             let iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
@@ -413,8 +413,7 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
     iox.set_gpio_dir(IoxPort::PD, 3, IoxDir::Output);
 
     // Set up the UDMA_UART block to the correct baud rate and enable status
-    let udma_global =
-        cramium_hal::udma::GlobalConfig::new(utralib::utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
+    let udma_global = cramium_hal::udma::GlobalConfig::new();
     udma_global.clock_on(PeriphId::Uart0);
     udma_global.map_event(
         PeriphId::Uart0,

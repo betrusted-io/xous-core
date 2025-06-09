@@ -213,6 +213,8 @@ impl Axp2101 {
         }
     }
 
+    pub fn get_dcdc(&mut self, which: WhichDcDc) -> (f32, bool) { self.dcdc_v_dvm[which as usize] }
+
     pub fn set_ldo(
         &mut self,
         i2c: &mut dyn I2cApi,
@@ -235,6 +237,10 @@ impl Axp2101 {
             let ctl = self.encode_ldo_ena();
             i2c.i2c_write(AXP2101_DEV, REG_LDO1_ENA as u8, &ctl).map(|_| ())
         }
+    }
+
+    pub fn get_ldo(&mut self, which: WhichLdo) -> (f32, bool) {
+        (self.ldo_v[which as usize], self.ldo_ena[which as usize])
     }
 
     fn encode_dcdc_ena(&self) -> u8 {

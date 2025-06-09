@@ -36,6 +36,8 @@ pub enum HalOpcode {
     ConfigureUdmaClock = 7,
     // blocking scalar
     ConfigureUdmaEvent = 8,
+    // blocking scalar
+    UdmaIrqStatusBits = 16,
 
     /// I2C operations
     I2c = 9,
