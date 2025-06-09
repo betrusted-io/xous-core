@@ -15,7 +15,6 @@ pub struct PddbCmd {
 }
 impl PddbCmd {
     pub fn new() -> Self {
-        log::info!("here");
         let pddb = pddb::Pddb::new();
         log::info!("PDDB mount result: {:?}", pddb.try_mount());
         PddbCmd { pddb }
