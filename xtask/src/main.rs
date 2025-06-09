@@ -620,7 +620,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
             builder.add_feature("swap");
-            // builder.add_feature("autotest");
 
             builder.add_loader_feature("debug-print");
             // the following feature needs to be uncommented if we also enable
