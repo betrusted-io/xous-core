@@ -1,6 +1,7 @@
 use cramium_api::{I2cApi, I2cResult};
 
 pub const BMP180_ADDR: u8 = 0x77;
+#[cfg(feature = "std")]
 const REG_CALIB_START: u8 = 0xAA;
 const REG_CTRL: u8 = 0xF4;
 const REG_DATA_START: u8 = 0xF6;
@@ -8,11 +9,19 @@ const CMD_READ_TEMP: u8 = 0x2E;
 
 #[derive(Debug, Clone, Copy)]
 
+#[allow(dead_code)]
 struct Bmp180Calibration {
-    ac1: i16, ac2: i16, ac3: i16,
-    ac4: u16, ac5: u16, ac6: u16,
-    b1: i16,  b2: i16,
-    mb: i16,  mc: i16,  md: i16,
+    ac1: i16,
+    ac2: i16,
+    ac3: i16,
+    ac4: u16,
+    ac5: u16,
+    ac6: u16,
+    b1: i16,
+    b2: i16,
+    mb: i16,
+    mc: i16,
+    md: i16,
 }
 
 pub struct Bmp180 {
@@ -32,6 +41,7 @@ impl Bmp180 {
             Err(_) => return Err(I2cResult::InternalError),
         }
 
+        // note: calibration data is Big Endian, hence the from_be_bytes
         let calibration = Bmp180Calibration {
             ac1: i16::from_be_bytes([cal_buf[0], cal_buf[1]]),
             ac2: i16::from_be_bytes([cal_buf[2], cal_buf[3]]),
@@ -39,19 +49,26 @@ impl Bmp180 {
             ac4: u16::from_be_bytes([cal_buf[6], cal_buf[7]]),
             ac5: u16::from_be_bytes([cal_buf[8], cal_buf[9]]),
             ac6: u16::from_be_bytes([cal_buf[10], cal_buf[11]]),
-            b1:  i16::from_be_bytes([cal_buf[12], cal_buf[13]]),
-            b2:  i16::from_be_bytes([cal_buf[14], cal_buf[15]]),
-            mb:  i16::from_be_bytes([cal_buf[16], cal_buf[17]]),
-            mc:  i16::from_be_bytes([cal_buf[18], cal_buf[19]]),
-            md:  i16::from_be_bytes([cal_buf[20], cal_buf[21]]),
+            b1: i16::from_be_bytes([cal_buf[12], cal_buf[13]]),
+            b2: i16::from_be_bytes([cal_buf[14], cal_buf[15]]),
+            mb: i16::from_be_bytes([cal_buf[16], cal_buf[17]]),
+            mc: i16::from_be_bytes([cal_buf[18], cal_buf[19]]),
+            md: i16::from_be_bytes([cal_buf[20], cal_buf[21]]),
         };
 
-        if calibration.ac1 == 0 || calibration.ac2 == 0 || calibration.ac3 == 0 ||
-           calibration.ac4 == 0 || calibration.ac5 == 0 || calibration.ac6 == 0 ||
-           calibration.b1 == 0  || calibration.b2 == 0  ||
-           calibration.mb == 0  || calibration.mc == 0  || calibration.md == 0 ||
-           calibration.ac1 == -1 {
-            // Return an error indicating the data from the sensor is invalid.
+        if calibration.ac1 == 0
+            || calibration.ac2 == 0
+            || calibration.ac3 == 0
+            || calibration.ac4 == 0
+            || calibration.ac5 == 0
+            || calibration.ac6 == 0
+            || calibration.b1 == 0
+            || calibration.b2 == 0
+            || calibration.mb == 0
+            || calibration.mc == 0
+            || calibration.md == 0
+            || calibration.ac1 == -1
+        {
             return Err(I2cResult::InternalError);
         }
 
