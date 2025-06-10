@@ -49,6 +49,7 @@ impl I2cApi for I2c {
         if result.transactions[0].result == I2cResult::InternalError {
             Err(xous::Error::InternalError)
         } else {
+            buf.copy_from_slice(&result.transactions[0].data);
             Ok(result.transactions[0].result)
         }
     }
