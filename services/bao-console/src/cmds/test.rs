@@ -1,5 +1,8 @@
 use String;
 
+use cram_hal_service::I2c;
+use cramium_hal::bmp180::Bmp180; // Correctly import from the library
+
 use crate::{CommonEnv, ShellCmdApi};
 
 #[derive(Debug)]
@@ -19,6 +22,28 @@ impl<'a> ShellCmdApi<'a> for Test {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "temp" => {
+                    // Initialize I2C connection
+                    let mut i2c = I2c::new();
+
+                    // Attempt to initialize the BMP180 sensor
+                    match Bmp180::new(&mut i2c) {
+                        Ok(sensor) => {
+                            // If successful, attempt to read the temperature
+                            match sensor.read_temperature(&mut i2c) {
+                                Ok(temp) => {
+                                    write!(ret, "BMP180 Temperature: {:.1}°C", temp).unwrap();
+                                }
+                                Err(e) => {
+                                    write!(ret, "Failed to read temperature: {:?}", e).unwrap();
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            write!(ret, "Failed to initialize BMP180 sensor: {:?}", e).unwrap();
+                        }
+                    }
+                }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
                 }

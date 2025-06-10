@@ -33,6 +33,7 @@ camera-gc2145 = []
 display-sh1107 = []
 axp2101 = []
 board-baosec = [
+    "std",
     "camera-gc2145",
     "display-sh1107",
     "axp2101",
@@ -50,7 +51,9 @@ kernel-baosec = ["utralib/cramium-soc"]
 kernel-baosor = ["utralib/cramium-soc"]
 kernel-dabao = ["utralib/cramium-soc"]
 test-baosec = ["ux-api/loader-baosec", "camera-gc2145"]
-hosted-baosec = [] # emulated hardware on x86 platform
+hosted-baosec = [
+    "std"
+] # emulated hardware on x86 platform
 board-baosor = [
     "camera-gc2145",
     "axp2101",

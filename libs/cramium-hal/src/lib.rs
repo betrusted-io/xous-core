@@ -5,6 +5,7 @@
 pub mod debug;
 #[cfg(feature = "axp2101")]
 pub mod axp2101;
+pub mod bmp180;
 pub mod board;
 #[cfg(feature = "camera-gc2145")]
 pub mod gc2145;
