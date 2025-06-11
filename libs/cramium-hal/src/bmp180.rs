@@ -1,15 +1,14 @@
 use cramium_api::{I2cApi, I2cResult};
 
 pub const BMP180_ADDR: u8 = 0x77;
-#[cfg(feature = "std")]
 const REG_CALIB_START: u8 = 0xAA;
 const REG_CTRL: u8 = 0xF4;
 const REG_DATA_START: u8 = 0xF6;
 const CMD_READ_TEMP: u8 = 0x2E;
+const REG_CHIP_ID: u8 = 0xD0;
 
 #[derive(Debug, Clone, Copy)]
 
-#[allow(dead_code)]
 struct Bmp180Calibration {
     ac1: i16,
     ac2: i16,
@@ -29,10 +28,17 @@ pub struct Bmp180 {
 }
 
 impl Bmp180 {
-    #[cfg(feature = "std")]
     pub fn new(i2c: &mut dyn I2cApi) -> Result<Self, I2cResult> {
-        let mut cal_buf = [0u8; 22];
+        // dummy read to wake the chip
+        let mut chip_id_buf = [0u8; 1];
+        match i2c.i2c_read(BMP180_ADDR, REG_CHIP_ID, &mut chip_id_buf, true) {
+            Ok(I2cResult::Ack(_)) => (),
+            Ok(I2cResult::Nack) => (),
+            Ok(other) => return Err(other),
+            Err(_) => return Err(I2cResult::InternalError),
+        }
 
+        let mut cal_buf = [0u8; 22];
         match i2c.i2c_read(BMP180_ADDR, REG_CALIB_START, &mut cal_buf, true) {
             Ok(i2c_result) => match i2c_result {
                 I2cResult::Ack(_) => (),

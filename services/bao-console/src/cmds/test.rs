@@ -1,6 +1,4 @@
 use String;
-use cram_hal_service::I2c;
-use cramium_hal::bmp180::Bmp180;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -15,13 +13,22 @@ impl<'a> ShellCmdApi<'a> for Test {
     fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::new();
+
+        #[allow(unused_variables)]
         let helpstring = "Test commands. See code for options.";
+
+        #[cfg(feature = "bmp180")]
+        let helpstring = "Usage:
+        temp     - reads temperature from bmp180.";
 
         let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                #[cfg(feature = "bmp180")]
                 "temp" => {
+                    use cram_hal_service::I2c;
+                    use cramium_hal::bmp180::Bmp180;
                     let mut i2c = I2c::new();
 
                     match Bmp180::new(&mut i2c) {

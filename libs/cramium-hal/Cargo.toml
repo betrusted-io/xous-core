@@ -32,11 +32,13 @@ camera-ov2640 = []
 camera-gc2145 = []
 display-sh1107 = []
 axp2101 = []
+bmp180 = []
 board-baosec = [
     "std",
     "camera-gc2145",
     "display-sh1107",
     "axp2101",
+    "bmp180",
     "utralib/cramium-soc",
     "ux-api/board-baosec",
 ] # USB form factor token
@@ -45,6 +47,7 @@ loader-baosec = [
     "camera-gc2145",
     "display-sh1107",
     "axp2101",
+    "bmp180",
     "ux-api/loader-baosec",
 ]
 kernel-baosec = ["utralib/cramium-soc"]
