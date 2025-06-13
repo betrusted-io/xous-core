@@ -588,6 +588,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
+        Some("baremetal") => {
+            builder.set_baremetal(true);
+            builder.target_artybio();
+
+            /*
+            let existing_lto = env::var("CARGO_PROFILE_RELEASE_LTO").map(Some).unwrap_or(None);
+            let existing_codegen_units =
+                env::var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS").map(Some).unwrap_or(None);
+            // these settings will generate the most compact code (but also the hardest to debug)
+            env::set_var("CARGO_PROFILE_RELEASE_LTO", "true");
+            env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", "1");
+
+            let mut local_args = vec!["build"];
+            /*
+            let output_root = format!(
+                "{}/target/{}{}/",
+                project_root().into_os_string().into_string().unwrap(),
+                crate::TARGET_TRIPLE_RISCV32_KERNEL,
+                stream.as_str(),
+            );
+            local_args.push(&output_root); */
+
+            local_args.push("--target");
+            local_args.push(crate::TARGET_TRIPLE_RISCV32_KERNEL);
+
+            local_args.push("--features");
+            local_args.push("artybio");
+
+            let status =
+                std::process::Command::new(cargo()).current_dir(project_root()).args(&local_args).status()?;
+            if !status.success() {
+                return Err("Baremetal build failed".into());
+            }
+
+            // restore the LTO settings
+            if let Some(existing) = existing_lto {
+                env::set_var("CARGO_PROFILE_RELEASE_LTO", existing);
+            }
+            if let Some(existing) = existing_codegen_units {
+                env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", existing);
+            }*/
+        }
+
         Some("baosec") => {
             let board = "board-baosec";
             // select the board
