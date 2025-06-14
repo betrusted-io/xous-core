@@ -10,15 +10,13 @@ use utralib::*;
 use xous_bio_bdma::*;
 
 /// Entrypoint
-/// This makes the program self-sufficient by setting up memory page assignment
-/// and copying the arguments to RAM.
-/// Assume the bootloader has already set up the stack to point to the end of RAM.
 ///
 /// # Safety
 ///
 /// This function is safe to call exactly once.
 #[export_name = "rust_entry"]
 pub unsafe extern "C" fn rust_entry() -> ! {
+    // Initialize the timer, which is needed by the delay() function.
     let mut timer = CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
     const SYSTEM_CLOCK_FREQUENCY: u32 = 40_000_000;
     const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
@@ -30,11 +28,17 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // enable the timer
     timer.wfo(utra::timer0::EN_EN, 0b1);
 
-    let mut count = 0;
-    let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
+    // select a BIO test to run
     fifo_basic();
     // hello_world();
+
     let bio_ss = BioSharedState::new();
+    // The green LEDs flash whenever the FPGA is configured with the Arty BIO design.
+    // The RGB LEDs flash when the CPU is running this code.
+    let mut count = 0;
+    let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
+    // provide some feedback on the run state of the BIO by peeking at the program counter
+    // value, and provide feedback on the CPU operation by flashing the RGB LEDs.
     loop {
         crate::println!(
             "pc: {:04x} {:04x} {:04x} {:04x}",
@@ -60,6 +64,7 @@ mod panic_handler {
     }
 }
 
+/// Delay function that delays a given number of milliseconds.
 pub fn delay(ms: usize) {
     let mut timer = CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
     timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
@@ -130,6 +135,15 @@ pub fn fifo_basic() -> usize {
     bio_ss.load_code(fifo_basic1_code(), 0, BioCore::Core1);
     bio_ss.load_code(fifo_basic2_code(), 0, BioCore::Core2);
     bio_ss.load_code(fifo_basic3_code(), 0, BioCore::Core3);
+
+    // The code readback is broken on the Arty BIO target due to a pipeline stage
+    // in the code readback path that causes the previous read's data to show up
+    // on the current read access. On the NTO-BIO (full chip version), the BIO runs
+    // at a much higher speed than the bus framework and thus the data is returned
+    // on time for the read. However in the FPGA for simplicity the BIO is geared
+    // at 2:1 BIO speed to CPU core speed, and the bus fabric runs at a single speed
+    // with no CDCs and also a fully OSS AXI to AHB bridge that I think could also
+    // be contributing to this bug.
 
     /*
     // expect no error
