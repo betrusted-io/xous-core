@@ -12,9 +12,15 @@ cramium-hal = { path = "../libs/cramium-hal", optional = true, default-features 
 cramium-api = { path = "../libs/cramium-api", optional = true, default-features = false }
 riscv = { version = "0.5.6", package = "xous-riscv" }
 linked_list_allocator = { version = "0.10.5", optional = true }
+xous-bio-bdma = { path = "../libs/xous-bio-bdma", optional = true, default-features = false }
 
 [features]
-artybio = ["utralib/artybio", "linked_list_allocator"]
+artybio = [
+    "utralib/artybio",
+    "linked_list_allocator",
+    "xous-bio-bdma/artybio",
+    "xous-bio-bdma/baremetal",
+]
 cramium-soc = ["utralib/cramium-soc"]
 
 verilator-only = []
