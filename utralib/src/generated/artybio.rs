@@ -249,7 +249,7 @@ pub const HW_VEXRISCV_DEBUG_MEM_LEN: usize = 256;
 pub const HW_SRAM_MEM:     usize = 0x10000000;
 pub const HW_SRAM_MEM_LEN: usize = 8192;
 pub const HW_MAIN_RAM_MEM:     usize = 0x40000000;
-pub const HW_MAIN_RAM_MEM_LEN: usize = 268435456;
+pub const HW_MAIN_RAM_MEM_LEN: usize = 409600;
 pub const HW_BIO_MEM:     usize = 0x90000000;
 pub const HW_BIO_MEM_LEN: usize = 65536;
 pub const HW_CSR_MEM:     usize = 0xf0000000;
@@ -276,12 +276,10 @@ pub const HW_BIO_FIFO3_MEM_LEN: usize = 4096;
 // Physical base addresses of registers
 pub const HW_RGB_BASE :   usize = 0xf0000000;
 pub const HW_CTRL_BASE :   usize = 0xf0000800;
-pub const HW_DDRPHY_BASE :   usize = 0xf0001000;
-pub const HW_IDENTIFIER_MEM_BASE :   usize = 0xf0001800;
-pub const HW_LEDS_BASE :   usize = 0xf0002000;
-pub const HW_SDRAM_BASE :   usize = 0xf0002800;
-pub const HW_TIMER0_BASE :   usize = 0xf0003000;
-pub const HW_UART_BASE :   usize = 0xf0003800;
+pub const HW_IDENTIFIER_MEM_BASE :   usize = 0xf0001000;
+pub const HW_LEDS_BASE :   usize = 0xf0001800;
+pub const HW_TIMER0_BASE :   usize = 0xf0002000;
+pub const HW_UART_BASE :   usize = 0xf0002800;
 pub const HW_BIO_BDMA_BASE :   usize = 0x90000000;
 
 
@@ -312,58 +310,13 @@ pub mod utra {
         pub const HW_CTRL_BASE: usize = 0xf0000800;
     }
 
-    pub mod ddrphy {
-        pub const DDRPHY_NUMREGS: usize = 13;
-
-        pub const RST: crate::Register = crate::Register::new(0, 0x1);
-        pub const RST_RST: crate::Field = crate::Field::new(1, 0, RST);
-
-        pub const DLY_SEL: crate::Register = crate::Register::new(1, 0x3);
-        pub const DLY_SEL_DLY_SEL: crate::Field = crate::Field::new(2, 0, DLY_SEL);
-
-        pub const HALF_SYS8X_TAPS: crate::Register = crate::Register::new(2, 0x1f);
-        pub const HALF_SYS8X_TAPS_HALF_SYS8X_TAPS: crate::Field = crate::Field::new(5, 0, HALF_SYS8X_TAPS);
-
-        pub const WLEVEL_EN: crate::Register = crate::Register::new(3, 0x1);
-        pub const WLEVEL_EN_WLEVEL_EN: crate::Field = crate::Field::new(1, 0, WLEVEL_EN);
-
-        pub const WLEVEL_STROBE: crate::Register = crate::Register::new(4, 0x1);
-        pub const WLEVEL_STROBE_WLEVEL_STROBE: crate::Field = crate::Field::new(1, 0, WLEVEL_STROBE);
-
-        pub const RDLY_DQ_RST: crate::Register = crate::Register::new(5, 0x1);
-        pub const RDLY_DQ_RST_RDLY_DQ_RST: crate::Field = crate::Field::new(1, 0, RDLY_DQ_RST);
-
-        pub const RDLY_DQ_INC: crate::Register = crate::Register::new(6, 0x1);
-        pub const RDLY_DQ_INC_RDLY_DQ_INC: crate::Field = crate::Field::new(1, 0, RDLY_DQ_INC);
-
-        pub const RDLY_DQ_BITSLIP_RST: crate::Register = crate::Register::new(7, 0x1);
-        pub const RDLY_DQ_BITSLIP_RST_RDLY_DQ_BITSLIP_RST: crate::Field = crate::Field::new(1, 0, RDLY_DQ_BITSLIP_RST);
-
-        pub const RDLY_DQ_BITSLIP: crate::Register = crate::Register::new(8, 0x1);
-        pub const RDLY_DQ_BITSLIP_RDLY_DQ_BITSLIP: crate::Field = crate::Field::new(1, 0, RDLY_DQ_BITSLIP);
-
-        pub const WDLY_DQ_BITSLIP_RST: crate::Register = crate::Register::new(9, 0x1);
-        pub const WDLY_DQ_BITSLIP_RST_WDLY_DQ_BITSLIP_RST: crate::Field = crate::Field::new(1, 0, WDLY_DQ_BITSLIP_RST);
-
-        pub const WDLY_DQ_BITSLIP: crate::Register = crate::Register::new(10, 0x1);
-        pub const WDLY_DQ_BITSLIP_WDLY_DQ_BITSLIP: crate::Field = crate::Field::new(1, 0, WDLY_DQ_BITSLIP);
-
-        pub const RDPHASE: crate::Register = crate::Register::new(11, 0x3);
-        pub const RDPHASE_RDPHASE: crate::Field = crate::Field::new(2, 0, RDPHASE);
-
-        pub const WRPHASE: crate::Register = crate::Register::new(12, 0x3);
-        pub const WRPHASE_WRPHASE: crate::Field = crate::Field::new(2, 0, WRPHASE);
-
-        pub const HW_DDRPHY_BASE: usize = 0xf0001000;
-    }
-
     pub mod identifier_mem {
         pub const IDENTIFIER_MEM_NUMREGS: usize = 1;
 
         pub const IDENTIFIER_MEM: crate::Register = crate::Register::new(0, 0xff);
         pub const IDENTIFIER_MEM_IDENTIFIER_MEM: crate::Field = crate::Field::new(8, 0, IDENTIFIER_MEM);
 
-        pub const HW_IDENTIFIER_MEM_BASE: usize = 0xf0001800;
+        pub const HW_IDENTIFIER_MEM_BASE: usize = 0xf0001000;
     }
 
     pub mod leds {
@@ -372,119 +325,7 @@ pub mod utra {
         pub const OUT: crate::Register = crate::Register::new(0, 0xf);
         pub const OUT_OUT: crate::Field = crate::Field::new(4, 0, OUT);
 
-        pub const HW_LEDS_BASE: usize = 0xf0002000;
-    }
-
-    pub mod sdram {
-        pub const SDRAM_NUMREGS: usize = 25;
-
-        pub const DFII_CONTROL: crate::Register = crate::Register::new(0, 0xf);
-        pub const DFII_CONTROL_SEL: crate::Field = crate::Field::new(1, 0, DFII_CONTROL);
-        pub const DFII_CONTROL_CKE: crate::Field = crate::Field::new(1, 1, DFII_CONTROL);
-        pub const DFII_CONTROL_ODT: crate::Field = crate::Field::new(1, 2, DFII_CONTROL);
-        pub const DFII_CONTROL_RESET_N: crate::Field = crate::Field::new(1, 3, DFII_CONTROL);
-
-        pub const DFII_PI0_COMMAND: crate::Register = crate::Register::new(1, 0xff);
-        pub const DFII_PI0_COMMAND_CS: crate::Field = crate::Field::new(1, 0, DFII_PI0_COMMAND);
-        pub const DFII_PI0_COMMAND_WE: crate::Field = crate::Field::new(1, 1, DFII_PI0_COMMAND);
-        pub const DFII_PI0_COMMAND_CAS: crate::Field = crate::Field::new(1, 2, DFII_PI0_COMMAND);
-        pub const DFII_PI0_COMMAND_RAS: crate::Field = crate::Field::new(1, 3, DFII_PI0_COMMAND);
-        pub const DFII_PI0_COMMAND_WREN: crate::Field = crate::Field::new(1, 4, DFII_PI0_COMMAND);
-        pub const DFII_PI0_COMMAND_RDEN: crate::Field = crate::Field::new(1, 5, DFII_PI0_COMMAND);
-        pub const DFII_PI0_COMMAND_CS_TOP: crate::Field = crate::Field::new(1, 6, DFII_PI0_COMMAND);
-        pub const DFII_PI0_COMMAND_CS_BOTTOM: crate::Field = crate::Field::new(1, 7, DFII_PI0_COMMAND);
-
-        pub const DFII_PI0_COMMAND_ISSUE: crate::Register = crate::Register::new(2, 0x1);
-        pub const DFII_PI0_COMMAND_ISSUE_DFII_PI0_COMMAND_ISSUE: crate::Field = crate::Field::new(1, 0, DFII_PI0_COMMAND_ISSUE);
-
-        pub const DFII_PI0_ADDRESS: crate::Register = crate::Register::new(3, 0x3fff);
-        pub const DFII_PI0_ADDRESS_DFII_PI0_ADDRESS: crate::Field = crate::Field::new(14, 0, DFII_PI0_ADDRESS);
-
-        pub const DFII_PI0_BADDRESS: crate::Register = crate::Register::new(4, 0x7);
-        pub const DFII_PI0_BADDRESS_DFII_PI0_BADDRESS: crate::Field = crate::Field::new(3, 0, DFII_PI0_BADDRESS);
-
-        pub const DFII_PI0_WRDATA: crate::Register = crate::Register::new(5, 0xffffffff);
-        pub const DFII_PI0_WRDATA_DFII_PI0_WRDATA: crate::Field = crate::Field::new(32, 0, DFII_PI0_WRDATA);
-
-        pub const DFII_PI0_RDDATA: crate::Register = crate::Register::new(6, 0xffffffff);
-        pub const DFII_PI0_RDDATA_DFII_PI0_RDDATA: crate::Field = crate::Field::new(32, 0, DFII_PI0_RDDATA);
-
-        pub const DFII_PI1_COMMAND: crate::Register = crate::Register::new(7, 0xff);
-        pub const DFII_PI1_COMMAND_CS: crate::Field = crate::Field::new(1, 0, DFII_PI1_COMMAND);
-        pub const DFII_PI1_COMMAND_WE: crate::Field = crate::Field::new(1, 1, DFII_PI1_COMMAND);
-        pub const DFII_PI1_COMMAND_CAS: crate::Field = crate::Field::new(1, 2, DFII_PI1_COMMAND);
-        pub const DFII_PI1_COMMAND_RAS: crate::Field = crate::Field::new(1, 3, DFII_PI1_COMMAND);
-        pub const DFII_PI1_COMMAND_WREN: crate::Field = crate::Field::new(1, 4, DFII_PI1_COMMAND);
-        pub const DFII_PI1_COMMAND_RDEN: crate::Field = crate::Field::new(1, 5, DFII_PI1_COMMAND);
-        pub const DFII_PI1_COMMAND_CS_TOP: crate::Field = crate::Field::new(1, 6, DFII_PI1_COMMAND);
-        pub const DFII_PI1_COMMAND_CS_BOTTOM: crate::Field = crate::Field::new(1, 7, DFII_PI1_COMMAND);
-
-        pub const DFII_PI1_COMMAND_ISSUE: crate::Register = crate::Register::new(8, 0x1);
-        pub const DFII_PI1_COMMAND_ISSUE_DFII_PI1_COMMAND_ISSUE: crate::Field = crate::Field::new(1, 0, DFII_PI1_COMMAND_ISSUE);
-
-        pub const DFII_PI1_ADDRESS: crate::Register = crate::Register::new(9, 0x3fff);
-        pub const DFII_PI1_ADDRESS_DFII_PI1_ADDRESS: crate::Field = crate::Field::new(14, 0, DFII_PI1_ADDRESS);
-
-        pub const DFII_PI1_BADDRESS: crate::Register = crate::Register::new(10, 0x7);
-        pub const DFII_PI1_BADDRESS_DFII_PI1_BADDRESS: crate::Field = crate::Field::new(3, 0, DFII_PI1_BADDRESS);
-
-        pub const DFII_PI1_WRDATA: crate::Register = crate::Register::new(11, 0xffffffff);
-        pub const DFII_PI1_WRDATA_DFII_PI1_WRDATA: crate::Field = crate::Field::new(32, 0, DFII_PI1_WRDATA);
-
-        pub const DFII_PI1_RDDATA: crate::Register = crate::Register::new(12, 0xffffffff);
-        pub const DFII_PI1_RDDATA_DFII_PI1_RDDATA: crate::Field = crate::Field::new(32, 0, DFII_PI1_RDDATA);
-
-        pub const DFII_PI2_COMMAND: crate::Register = crate::Register::new(13, 0xff);
-        pub const DFII_PI2_COMMAND_CS: crate::Field = crate::Field::new(1, 0, DFII_PI2_COMMAND);
-        pub const DFII_PI2_COMMAND_WE: crate::Field = crate::Field::new(1, 1, DFII_PI2_COMMAND);
-        pub const DFII_PI2_COMMAND_CAS: crate::Field = crate::Field::new(1, 2, DFII_PI2_COMMAND);
-        pub const DFII_PI2_COMMAND_RAS: crate::Field = crate::Field::new(1, 3, DFII_PI2_COMMAND);
-        pub const DFII_PI2_COMMAND_WREN: crate::Field = crate::Field::new(1, 4, DFII_PI2_COMMAND);
-        pub const DFII_PI2_COMMAND_RDEN: crate::Field = crate::Field::new(1, 5, DFII_PI2_COMMAND);
-        pub const DFII_PI2_COMMAND_CS_TOP: crate::Field = crate::Field::new(1, 6, DFII_PI2_COMMAND);
-        pub const DFII_PI2_COMMAND_CS_BOTTOM: crate::Field = crate::Field::new(1, 7, DFII_PI2_COMMAND);
-
-        pub const DFII_PI2_COMMAND_ISSUE: crate::Register = crate::Register::new(14, 0x1);
-        pub const DFII_PI2_COMMAND_ISSUE_DFII_PI2_COMMAND_ISSUE: crate::Field = crate::Field::new(1, 0, DFII_PI2_COMMAND_ISSUE);
-
-        pub const DFII_PI2_ADDRESS: crate::Register = crate::Register::new(15, 0x3fff);
-        pub const DFII_PI2_ADDRESS_DFII_PI2_ADDRESS: crate::Field = crate::Field::new(14, 0, DFII_PI2_ADDRESS);
-
-        pub const DFII_PI2_BADDRESS: crate::Register = crate::Register::new(16, 0x7);
-        pub const DFII_PI2_BADDRESS_DFII_PI2_BADDRESS: crate::Field = crate::Field::new(3, 0, DFII_PI2_BADDRESS);
-
-        pub const DFII_PI2_WRDATA: crate::Register = crate::Register::new(17, 0xffffffff);
-        pub const DFII_PI2_WRDATA_DFII_PI2_WRDATA: crate::Field = crate::Field::new(32, 0, DFII_PI2_WRDATA);
-
-        pub const DFII_PI2_RDDATA: crate::Register = crate::Register::new(18, 0xffffffff);
-        pub const DFII_PI2_RDDATA_DFII_PI2_RDDATA: crate::Field = crate::Field::new(32, 0, DFII_PI2_RDDATA);
-
-        pub const DFII_PI3_COMMAND: crate::Register = crate::Register::new(19, 0xff);
-        pub const DFII_PI3_COMMAND_CS: crate::Field = crate::Field::new(1, 0, DFII_PI3_COMMAND);
-        pub const DFII_PI3_COMMAND_WE: crate::Field = crate::Field::new(1, 1, DFII_PI3_COMMAND);
-        pub const DFII_PI3_COMMAND_CAS: crate::Field = crate::Field::new(1, 2, DFII_PI3_COMMAND);
-        pub const DFII_PI3_COMMAND_RAS: crate::Field = crate::Field::new(1, 3, DFII_PI3_COMMAND);
-        pub const DFII_PI3_COMMAND_WREN: crate::Field = crate::Field::new(1, 4, DFII_PI3_COMMAND);
-        pub const DFII_PI3_COMMAND_RDEN: crate::Field = crate::Field::new(1, 5, DFII_PI3_COMMAND);
-        pub const DFII_PI3_COMMAND_CS_TOP: crate::Field = crate::Field::new(1, 6, DFII_PI3_COMMAND);
-        pub const DFII_PI3_COMMAND_CS_BOTTOM: crate::Field = crate::Field::new(1, 7, DFII_PI3_COMMAND);
-
-        pub const DFII_PI3_COMMAND_ISSUE: crate::Register = crate::Register::new(20, 0x1);
-        pub const DFII_PI3_COMMAND_ISSUE_DFII_PI3_COMMAND_ISSUE: crate::Field = crate::Field::new(1, 0, DFII_PI3_COMMAND_ISSUE);
-
-        pub const DFII_PI3_ADDRESS: crate::Register = crate::Register::new(21, 0x3fff);
-        pub const DFII_PI3_ADDRESS_DFII_PI3_ADDRESS: crate::Field = crate::Field::new(14, 0, DFII_PI3_ADDRESS);
-
-        pub const DFII_PI3_BADDRESS: crate::Register = crate::Register::new(22, 0x7);
-        pub const DFII_PI3_BADDRESS_DFII_PI3_BADDRESS: crate::Field = crate::Field::new(3, 0, DFII_PI3_BADDRESS);
-
-        pub const DFII_PI3_WRDATA: crate::Register = crate::Register::new(23, 0xffffffff);
-        pub const DFII_PI3_WRDATA_DFII_PI3_WRDATA: crate::Field = crate::Field::new(32, 0, DFII_PI3_WRDATA);
-
-        pub const DFII_PI3_RDDATA: crate::Register = crate::Register::new(24, 0xffffffff);
-        pub const DFII_PI3_RDDATA_DFII_PI3_RDDATA: crate::Field = crate::Field::new(32, 0, DFII_PI3_RDDATA);
-
-        pub const HW_SDRAM_BASE: usize = 0xf0002800;
+        pub const HW_LEDS_BASE: usize = 0xf0001800;
     }
 
     pub mod timer0 {
@@ -515,7 +356,7 @@ pub mod utra {
         pub const EV_ENABLE_ZERO: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
 
         pub const TIMER0_IRQ: usize = 0;
-        pub const HW_TIMER0_BASE: usize = 0xf0003000;
+        pub const HW_TIMER0_BASE: usize = 0xf0002000;
     }
 
     pub mod uart {
@@ -549,7 +390,7 @@ pub mod utra {
         pub const RXFULL_RXFULL: crate::Field = crate::Field::new(1, 0, RXFULL);
 
         pub const UART_IRQ: usize = 1;
-        pub const HW_UART_BASE: usize = 0xf0003800;
+        pub const HW_UART_BASE: usize = 0xf0002800;
     }
 
     pub mod bio_bdma {
@@ -778,16 +619,15 @@ pub mod utra {
 }
 
 // Litex auto-generated constants
-pub const LITEX_CONFIG_CLOCK_FREQUENCY: usize = 50000000;
+pub const LITEX_CONFIG_CLOCK_FREQUENCY: usize = 40000000;
 pub const LITEX_CONFIG_CPU_HAS_INTERRUPT: &str = "None";
-pub const LITEX_CONFIG_CPU_RESET_ADDR: usize = 1073741824;
+pub const LITEX_CONFIG_CPU_RESET_ADDR: usize = 268435456;
 pub const LITEX_CONFIG_CPU_HAS_DCACHE: &str = "None";
 pub const LITEX_CONFIG_CPU_HAS_ICACHE: &str = "None";
 pub const LITEX_CONFIG_CPU_TYPE_VEXRISCV: &str = "None";
 pub const LITEX_CONFIG_CPU_VARIANT_IMAC: &str = "None";
 pub const LITEX_CONFIG_CPU_HUMAN_NAME: &str = "VexRiscv_IMACDebug";
 pub const LITEX_CONFIG_CPU_NOP: &str = "nop";
-pub const LITEX_CONFIG_L2_SIZE: usize = 8192;
 pub const LITEX_CONFIG_CSR_DATA_WIDTH: usize = 32;
 pub const LITEX_CONFIG_CSR_ALIGNMENT: usize = 32;
 pub const LITEX_CONFIG_BUS_STANDARD: &str = "WISHBONE";
@@ -854,117 +694,6 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn compile_check_ddrphy_csr() {
-        use super::*;
-        let mut ddrphy_csr = CSR::new(HW_DDRPHY_BASE as *mut u32);
-
-        let foo = ddrphy_csr.r(utra::ddrphy::RST);
-        ddrphy_csr.wo(utra::ddrphy::RST, foo);
-        let bar = ddrphy_csr.rf(utra::ddrphy::RST_RST);
-        ddrphy_csr.rmwf(utra::ddrphy::RST_RST, bar);
-        let mut baz = ddrphy_csr.zf(utra::ddrphy::RST_RST, bar);
-        baz |= ddrphy_csr.ms(utra::ddrphy::RST_RST, 1);
-        ddrphy_csr.wfo(utra::ddrphy::RST_RST, baz);
-
-        let foo = ddrphy_csr.r(utra::ddrphy::DLY_SEL);
-        ddrphy_csr.wo(utra::ddrphy::DLY_SEL, foo);
-        let bar = ddrphy_csr.rf(utra::ddrphy::DLY_SEL_DLY_SEL);
-        ddrphy_csr.rmwf(utra::ddrphy::DLY_SEL_DLY_SEL, bar);
-        let mut baz = ddrphy_csr.zf(utra::ddrphy::DLY_SEL_DLY_SEL, bar);
-        baz |= ddrphy_csr.ms(utra::ddrphy::DLY_SEL_DLY_SEL, 1);
-        ddrphy_csr.wfo(utra::ddrphy::DLY_SEL_DLY_SEL, baz);
-
-        let foo = ddrphy_csr.r(utra::ddrphy::HALF_SYS8X_TAPS);
-        ddrphy_csr.wo(utra::ddrphy::HALF_SYS8X_TAPS, foo);
-        let bar = ddrphy_csr.rf(utra::ddrphy::HALF_SYS8X_TAPS_HALF_SYS8X_TAPS);
-        ddrphy_csr.rmwf(utra::ddrphy::HALF_SYS8X_TAPS_HALF_SYS8X_TAPS, bar);
-        let mut baz = ddrphy_csr.zf(utra::ddrphy::HALF_SYS8X_TAPS_HALF_SYS8X_TAPS, bar);
-        baz |= ddrphy_csr.ms(utra::ddrphy::HALF_SYS8X_TAPS_HALF_SYS8X_TAPS, 1);
-        ddrphy_csr.wfo(utra::ddrphy::HALF_SYS8X_TAPS_HALF_SYS8X_TAPS, baz);
-
-        let foo = ddrphy_csr.r(utra::ddrphy::WLEVEL_EN);
-        ddrphy_csr.wo(utra::ddrphy::WLEVEL_EN, foo);
-        let bar = ddrphy_csr.rf(utra::ddrphy::WLEVEL_EN_WLEVEL_EN);
-        ddrphy_csr.rmwf(utra::ddrphy::WLEVEL_EN_WLEVEL_EN, bar);
-        let mut baz = ddrphy_csr.zf(utra::ddrphy::WLEVEL_EN_WLEVEL_EN, bar);
-        baz |= ddrphy_csr.ms(utra::ddrphy::WLEVEL_EN_WLEVEL_EN, 1);
-        ddrphy_csr.wfo(utra::ddrphy::WLEVEL_EN_WLEVEL_EN, baz);
-
-        let foo = ddrphy_csr.r(utra::ddrphy::WLEVEL_STROBE);
-        ddrphy_csr.wo(utra::ddrphy::WLEVEL_STROBE, foo);
-        let bar = ddrphy_csr.rf(utra::ddrphy::WLEVEL_STROBE_WLEVEL_STROBE);
-        ddrphy_csr.rmwf(utra::ddrphy::WLEVEL_STROBE_WLEVEL_STROBE, bar);
-        let mut baz = ddrphy_csr.zf(utra::ddrphy::WLEVEL_STROBE_WLEVEL_STROBE, bar);
-        baz |= ddrphy_csr.ms(utra::ddrphy::WLEVEL_STROBE_WLEVEL_STROBE, 1);
-        ddrphy_csr.wfo(utra::ddrphy::WLEVEL_STROBE_WLEVEL_STROBE, baz);
-
-        let foo = ddrphy_csr.r(utra::ddrphy::RDLY_DQ_RST);
-        ddrphy_csr.wo(utra::ddrphy::RDLY_DQ_RST, foo);
-        let bar = ddrphy_csr.rf(utra::ddrphy::RDLY_DQ_RST_RDLY_DQ_RST);
-        ddrphy_csr.rmwf(utra::ddrphy::RDLY_DQ_RST_RDLY_DQ_RST, bar);
-        let mut baz = ddrphy_csr.zf(utra::ddrphy::RDLY_DQ_RST_RDLY_DQ_RST, bar);
-        baz |= ddrphy_csr.ms(utra::ddrphy::RDLY_DQ_RST_RDLY_DQ_RST, 1);
-        ddrphy_csr.wfo(utra::ddrphy::RDLY_DQ_RST_RDLY_DQ_RST, baz);
-
-        let foo = ddrphy_csr.r(utra::ddrphy::RDLY_DQ_INC);
-        ddrphy_csr.wo(utra::ddrphy::RDLY_DQ_INC, foo);
-        let bar = ddrphy_csr.rf(utra::ddrphy::RDLY_DQ_INC_RDLY_DQ_INC);
-        ddrphy_csr.rmwf(utra::ddrphy::RDLY_DQ_INC_RDLY_DQ_INC, bar);
-        let mut baz = ddrphy_csr.zf(utra::ddrphy::RDLY_DQ_INC_RDLY_DQ_INC, bar);
-        baz |= ddrphy_csr.ms(utra::ddrphy::RDLY_DQ_INC_RDLY_DQ_INC, 1);
-        ddrphy_csr.wfo(utra::ddrphy::RDLY_DQ_INC_RDLY_DQ_INC, baz);
-
-        let foo = ddrphy_csr.r(utra::ddrphy::RDLY_DQ_BITSLIP_RST);
-        ddrphy_csr.wo(utra::ddrphy::RDLY_DQ_BITSLIP_RST, foo);
-        let bar = ddrphy_csr.rf(utra::ddrphy::RDLY_DQ_BITSLIP_RST_RDLY_DQ_BITSLIP_RST);
-        ddrphy_csr.rmwf(utra::ddrphy::RDLY_DQ_BITSLIP_RST_RDLY_DQ_BITSLIP_RST, bar);
-        let mut baz = ddrphy_csr.zf(utra::ddrphy::RDLY_DQ_BITSLIP_RST_RDLY_DQ_BITSLIP_RST, bar);
-        baz |= ddrphy_csr.ms(utra::ddrphy::RDLY_DQ_BITSLIP_RST_RDLY_DQ_BITSLIP_RST, 1);
-        ddrphy_csr.wfo(utra::ddrphy::RDLY_DQ_BITSLIP_RST_RDLY_DQ_BITSLIP_RST, baz);
-
-        let foo = ddrphy_csr.r(utra::ddrphy::RDLY_DQ_BITSLIP);
-        ddrphy_csr.wo(utra::ddrphy::RDLY_DQ_BITSLIP, foo);
-        let bar = ddrphy_csr.rf(utra::ddrphy::RDLY_DQ_BITSLIP_RDLY_DQ_BITSLIP);
-        ddrphy_csr.rmwf(utra::ddrphy::RDLY_DQ_BITSLIP_RDLY_DQ_BITSLIP, bar);
-        let mut baz = ddrphy_csr.zf(utra::ddrphy::RDLY_DQ_BITSLIP_RDLY_DQ_BITSLIP, bar);
-        baz |= ddrphy_csr.ms(utra::ddrphy::RDLY_DQ_BITSLIP_RDLY_DQ_BITSLIP, 1);
-        ddrphy_csr.wfo(utra::ddrphy::RDLY_DQ_BITSLIP_RDLY_DQ_BITSLIP, baz);
-
-        let foo = ddrphy_csr.r(utra::ddrphy::WDLY_DQ_BITSLIP_RST);
-        ddrphy_csr.wo(utra::ddrphy::WDLY_DQ_BITSLIP_RST, foo);
-        let bar = ddrphy_csr.rf(utra::ddrphy::WDLY_DQ_BITSLIP_RST_WDLY_DQ_BITSLIP_RST);
-        ddrphy_csr.rmwf(utra::ddrphy::WDLY_DQ_BITSLIP_RST_WDLY_DQ_BITSLIP_RST, bar);
-        let mut baz = ddrphy_csr.zf(utra::ddrphy::WDLY_DQ_BITSLIP_RST_WDLY_DQ_BITSLIP_RST, bar);
-        baz |= ddrphy_csr.ms(utra::ddrphy::WDLY_DQ_BITSLIP_RST_WDLY_DQ_BITSLIP_RST, 1);
-        ddrphy_csr.wfo(utra::ddrphy::WDLY_DQ_BITSLIP_RST_WDLY_DQ_BITSLIP_RST, baz);
-
-        let foo = ddrphy_csr.r(utra::ddrphy::WDLY_DQ_BITSLIP);
-        ddrphy_csr.wo(utra::ddrphy::WDLY_DQ_BITSLIP, foo);
-        let bar = ddrphy_csr.rf(utra::ddrphy::WDLY_DQ_BITSLIP_WDLY_DQ_BITSLIP);
-        ddrphy_csr.rmwf(utra::ddrphy::WDLY_DQ_BITSLIP_WDLY_DQ_BITSLIP, bar);
-        let mut baz = ddrphy_csr.zf(utra::ddrphy::WDLY_DQ_BITSLIP_WDLY_DQ_BITSLIP, bar);
-        baz |= ddrphy_csr.ms(utra::ddrphy::WDLY_DQ_BITSLIP_WDLY_DQ_BITSLIP, 1);
-        ddrphy_csr.wfo(utra::ddrphy::WDLY_DQ_BITSLIP_WDLY_DQ_BITSLIP, baz);
-
-        let foo = ddrphy_csr.r(utra::ddrphy::RDPHASE);
-        ddrphy_csr.wo(utra::ddrphy::RDPHASE, foo);
-        let bar = ddrphy_csr.rf(utra::ddrphy::RDPHASE_RDPHASE);
-        ddrphy_csr.rmwf(utra::ddrphy::RDPHASE_RDPHASE, bar);
-        let mut baz = ddrphy_csr.zf(utra::ddrphy::RDPHASE_RDPHASE, bar);
-        baz |= ddrphy_csr.ms(utra::ddrphy::RDPHASE_RDPHASE, 1);
-        ddrphy_csr.wfo(utra::ddrphy::RDPHASE_RDPHASE, baz);
-
-        let foo = ddrphy_csr.r(utra::ddrphy::WRPHASE);
-        ddrphy_csr.wo(utra::ddrphy::WRPHASE, foo);
-        let bar = ddrphy_csr.rf(utra::ddrphy::WRPHASE_WRPHASE);
-        ddrphy_csr.rmwf(utra::ddrphy::WRPHASE_WRPHASE, bar);
-        let mut baz = ddrphy_csr.zf(utra::ddrphy::WRPHASE_WRPHASE, bar);
-        baz |= ddrphy_csr.ms(utra::ddrphy::WRPHASE_WRPHASE, 1);
-        ddrphy_csr.wfo(utra::ddrphy::WRPHASE_WRPHASE, baz);
-  }
-
-    #[test]
-    #[ignore]
     fn compile_check_identifier_mem_csr() {
         use super::*;
         let mut identifier_mem_csr = CSR::new(HW_IDENTIFIER_MEM_BASE as *mut u32);
@@ -991,368 +720,6 @@ mod tests {
         let mut baz = leds_csr.zf(utra::leds::OUT_OUT, bar);
         baz |= leds_csr.ms(utra::leds::OUT_OUT, 1);
         leds_csr.wfo(utra::leds::OUT_OUT, baz);
-  }
-
-    #[test]
-    #[ignore]
-    fn compile_check_sdram_csr() {
-        use super::*;
-        let mut sdram_csr = CSR::new(HW_SDRAM_BASE as *mut u32);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_CONTROL);
-        sdram_csr.wo(utra::sdram::DFII_CONTROL, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_CONTROL_SEL);
-        sdram_csr.rmwf(utra::sdram::DFII_CONTROL_SEL, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_CONTROL_SEL, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_CONTROL_SEL, 1);
-        sdram_csr.wfo(utra::sdram::DFII_CONTROL_SEL, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_CONTROL_CKE);
-        sdram_csr.rmwf(utra::sdram::DFII_CONTROL_CKE, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_CONTROL_CKE, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_CONTROL_CKE, 1);
-        sdram_csr.wfo(utra::sdram::DFII_CONTROL_CKE, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_CONTROL_ODT);
-        sdram_csr.rmwf(utra::sdram::DFII_CONTROL_ODT, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_CONTROL_ODT, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_CONTROL_ODT, 1);
-        sdram_csr.wfo(utra::sdram::DFII_CONTROL_ODT, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_CONTROL_RESET_N);
-        sdram_csr.rmwf(utra::sdram::DFII_CONTROL_RESET_N, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_CONTROL_RESET_N, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_CONTROL_RESET_N, 1);
-        sdram_csr.wfo(utra::sdram::DFII_CONTROL_RESET_N, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI0_COMMAND);
-        sdram_csr.wo(utra::sdram::DFII_PI0_COMMAND, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI0_COMMAND_CS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI0_COMMAND_CS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI0_COMMAND_CS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI0_COMMAND_CS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI0_COMMAND_CS, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI0_COMMAND_WE);
-        sdram_csr.rmwf(utra::sdram::DFII_PI0_COMMAND_WE, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI0_COMMAND_WE, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI0_COMMAND_WE, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI0_COMMAND_WE, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI0_COMMAND_CAS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI0_COMMAND_CAS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI0_COMMAND_CAS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI0_COMMAND_CAS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI0_COMMAND_CAS, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI0_COMMAND_RAS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI0_COMMAND_RAS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI0_COMMAND_RAS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI0_COMMAND_RAS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI0_COMMAND_RAS, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI0_COMMAND_WREN);
-        sdram_csr.rmwf(utra::sdram::DFII_PI0_COMMAND_WREN, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI0_COMMAND_WREN, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI0_COMMAND_WREN, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI0_COMMAND_WREN, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI0_COMMAND_RDEN);
-        sdram_csr.rmwf(utra::sdram::DFII_PI0_COMMAND_RDEN, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI0_COMMAND_RDEN, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI0_COMMAND_RDEN, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI0_COMMAND_RDEN, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI0_COMMAND_CS_TOP);
-        sdram_csr.rmwf(utra::sdram::DFII_PI0_COMMAND_CS_TOP, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI0_COMMAND_CS_TOP, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI0_COMMAND_CS_TOP, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI0_COMMAND_CS_TOP, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI0_COMMAND_CS_BOTTOM);
-        sdram_csr.rmwf(utra::sdram::DFII_PI0_COMMAND_CS_BOTTOM, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI0_COMMAND_CS_BOTTOM, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI0_COMMAND_CS_BOTTOM, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI0_COMMAND_CS_BOTTOM, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI0_COMMAND_ISSUE);
-        sdram_csr.wo(utra::sdram::DFII_PI0_COMMAND_ISSUE, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI0_COMMAND_ISSUE_DFII_PI0_COMMAND_ISSUE);
-        sdram_csr.rmwf(utra::sdram::DFII_PI0_COMMAND_ISSUE_DFII_PI0_COMMAND_ISSUE, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI0_COMMAND_ISSUE_DFII_PI0_COMMAND_ISSUE, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI0_COMMAND_ISSUE_DFII_PI0_COMMAND_ISSUE, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI0_COMMAND_ISSUE_DFII_PI0_COMMAND_ISSUE, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI0_ADDRESS);
-        sdram_csr.wo(utra::sdram::DFII_PI0_ADDRESS, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI0_ADDRESS_DFII_PI0_ADDRESS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI0_ADDRESS_DFII_PI0_ADDRESS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI0_ADDRESS_DFII_PI0_ADDRESS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI0_ADDRESS_DFII_PI0_ADDRESS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI0_ADDRESS_DFII_PI0_ADDRESS, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI0_BADDRESS);
-        sdram_csr.wo(utra::sdram::DFII_PI0_BADDRESS, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI0_BADDRESS_DFII_PI0_BADDRESS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI0_BADDRESS_DFII_PI0_BADDRESS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI0_BADDRESS_DFII_PI0_BADDRESS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI0_BADDRESS_DFII_PI0_BADDRESS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI0_BADDRESS_DFII_PI0_BADDRESS, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI0_WRDATA);
-        sdram_csr.wo(utra::sdram::DFII_PI0_WRDATA, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI0_WRDATA_DFII_PI0_WRDATA);
-        sdram_csr.rmwf(utra::sdram::DFII_PI0_WRDATA_DFII_PI0_WRDATA, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI0_WRDATA_DFII_PI0_WRDATA, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI0_WRDATA_DFII_PI0_WRDATA, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI0_WRDATA_DFII_PI0_WRDATA, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI0_RDDATA);
-        sdram_csr.wo(utra::sdram::DFII_PI0_RDDATA, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI0_RDDATA_DFII_PI0_RDDATA);
-        sdram_csr.rmwf(utra::sdram::DFII_PI0_RDDATA_DFII_PI0_RDDATA, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI0_RDDATA_DFII_PI0_RDDATA, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI0_RDDATA_DFII_PI0_RDDATA, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI0_RDDATA_DFII_PI0_RDDATA, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI1_COMMAND);
-        sdram_csr.wo(utra::sdram::DFII_PI1_COMMAND, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI1_COMMAND_CS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI1_COMMAND_CS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI1_COMMAND_CS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI1_COMMAND_CS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI1_COMMAND_CS, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI1_COMMAND_WE);
-        sdram_csr.rmwf(utra::sdram::DFII_PI1_COMMAND_WE, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI1_COMMAND_WE, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI1_COMMAND_WE, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI1_COMMAND_WE, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI1_COMMAND_CAS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI1_COMMAND_CAS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI1_COMMAND_CAS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI1_COMMAND_CAS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI1_COMMAND_CAS, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI1_COMMAND_RAS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI1_COMMAND_RAS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI1_COMMAND_RAS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI1_COMMAND_RAS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI1_COMMAND_RAS, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI1_COMMAND_WREN);
-        sdram_csr.rmwf(utra::sdram::DFII_PI1_COMMAND_WREN, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI1_COMMAND_WREN, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI1_COMMAND_WREN, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI1_COMMAND_WREN, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI1_COMMAND_RDEN);
-        sdram_csr.rmwf(utra::sdram::DFII_PI1_COMMAND_RDEN, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI1_COMMAND_RDEN, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI1_COMMAND_RDEN, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI1_COMMAND_RDEN, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI1_COMMAND_CS_TOP);
-        sdram_csr.rmwf(utra::sdram::DFII_PI1_COMMAND_CS_TOP, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI1_COMMAND_CS_TOP, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI1_COMMAND_CS_TOP, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI1_COMMAND_CS_TOP, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI1_COMMAND_CS_BOTTOM);
-        sdram_csr.rmwf(utra::sdram::DFII_PI1_COMMAND_CS_BOTTOM, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI1_COMMAND_CS_BOTTOM, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI1_COMMAND_CS_BOTTOM, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI1_COMMAND_CS_BOTTOM, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI1_COMMAND_ISSUE);
-        sdram_csr.wo(utra::sdram::DFII_PI1_COMMAND_ISSUE, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI1_COMMAND_ISSUE_DFII_PI1_COMMAND_ISSUE);
-        sdram_csr.rmwf(utra::sdram::DFII_PI1_COMMAND_ISSUE_DFII_PI1_COMMAND_ISSUE, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI1_COMMAND_ISSUE_DFII_PI1_COMMAND_ISSUE, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI1_COMMAND_ISSUE_DFII_PI1_COMMAND_ISSUE, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI1_COMMAND_ISSUE_DFII_PI1_COMMAND_ISSUE, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI1_ADDRESS);
-        sdram_csr.wo(utra::sdram::DFII_PI1_ADDRESS, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI1_ADDRESS_DFII_PI1_ADDRESS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI1_ADDRESS_DFII_PI1_ADDRESS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI1_ADDRESS_DFII_PI1_ADDRESS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI1_ADDRESS_DFII_PI1_ADDRESS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI1_ADDRESS_DFII_PI1_ADDRESS, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI1_BADDRESS);
-        sdram_csr.wo(utra::sdram::DFII_PI1_BADDRESS, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI1_BADDRESS_DFII_PI1_BADDRESS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI1_BADDRESS_DFII_PI1_BADDRESS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI1_BADDRESS_DFII_PI1_BADDRESS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI1_BADDRESS_DFII_PI1_BADDRESS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI1_BADDRESS_DFII_PI1_BADDRESS, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI1_WRDATA);
-        sdram_csr.wo(utra::sdram::DFII_PI1_WRDATA, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI1_WRDATA_DFII_PI1_WRDATA);
-        sdram_csr.rmwf(utra::sdram::DFII_PI1_WRDATA_DFII_PI1_WRDATA, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI1_WRDATA_DFII_PI1_WRDATA, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI1_WRDATA_DFII_PI1_WRDATA, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI1_WRDATA_DFII_PI1_WRDATA, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI1_RDDATA);
-        sdram_csr.wo(utra::sdram::DFII_PI1_RDDATA, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI1_RDDATA_DFII_PI1_RDDATA);
-        sdram_csr.rmwf(utra::sdram::DFII_PI1_RDDATA_DFII_PI1_RDDATA, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI1_RDDATA_DFII_PI1_RDDATA, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI1_RDDATA_DFII_PI1_RDDATA, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI1_RDDATA_DFII_PI1_RDDATA, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI2_COMMAND);
-        sdram_csr.wo(utra::sdram::DFII_PI2_COMMAND, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI2_COMMAND_CS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI2_COMMAND_CS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI2_COMMAND_CS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI2_COMMAND_CS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI2_COMMAND_CS, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI2_COMMAND_WE);
-        sdram_csr.rmwf(utra::sdram::DFII_PI2_COMMAND_WE, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI2_COMMAND_WE, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI2_COMMAND_WE, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI2_COMMAND_WE, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI2_COMMAND_CAS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI2_COMMAND_CAS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI2_COMMAND_CAS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI2_COMMAND_CAS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI2_COMMAND_CAS, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI2_COMMAND_RAS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI2_COMMAND_RAS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI2_COMMAND_RAS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI2_COMMAND_RAS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI2_COMMAND_RAS, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI2_COMMAND_WREN);
-        sdram_csr.rmwf(utra::sdram::DFII_PI2_COMMAND_WREN, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI2_COMMAND_WREN, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI2_COMMAND_WREN, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI2_COMMAND_WREN, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI2_COMMAND_RDEN);
-        sdram_csr.rmwf(utra::sdram::DFII_PI2_COMMAND_RDEN, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI2_COMMAND_RDEN, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI2_COMMAND_RDEN, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI2_COMMAND_RDEN, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI2_COMMAND_CS_TOP);
-        sdram_csr.rmwf(utra::sdram::DFII_PI2_COMMAND_CS_TOP, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI2_COMMAND_CS_TOP, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI2_COMMAND_CS_TOP, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI2_COMMAND_CS_TOP, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI2_COMMAND_CS_BOTTOM);
-        sdram_csr.rmwf(utra::sdram::DFII_PI2_COMMAND_CS_BOTTOM, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI2_COMMAND_CS_BOTTOM, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI2_COMMAND_CS_BOTTOM, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI2_COMMAND_CS_BOTTOM, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI2_COMMAND_ISSUE);
-        sdram_csr.wo(utra::sdram::DFII_PI2_COMMAND_ISSUE, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI2_COMMAND_ISSUE_DFII_PI2_COMMAND_ISSUE);
-        sdram_csr.rmwf(utra::sdram::DFII_PI2_COMMAND_ISSUE_DFII_PI2_COMMAND_ISSUE, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI2_COMMAND_ISSUE_DFII_PI2_COMMAND_ISSUE, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI2_COMMAND_ISSUE_DFII_PI2_COMMAND_ISSUE, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI2_COMMAND_ISSUE_DFII_PI2_COMMAND_ISSUE, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI2_ADDRESS);
-        sdram_csr.wo(utra::sdram::DFII_PI2_ADDRESS, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI2_ADDRESS_DFII_PI2_ADDRESS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI2_ADDRESS_DFII_PI2_ADDRESS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI2_ADDRESS_DFII_PI2_ADDRESS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI2_ADDRESS_DFII_PI2_ADDRESS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI2_ADDRESS_DFII_PI2_ADDRESS, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI2_BADDRESS);
-        sdram_csr.wo(utra::sdram::DFII_PI2_BADDRESS, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI2_BADDRESS_DFII_PI2_BADDRESS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI2_BADDRESS_DFII_PI2_BADDRESS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI2_BADDRESS_DFII_PI2_BADDRESS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI2_BADDRESS_DFII_PI2_BADDRESS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI2_BADDRESS_DFII_PI2_BADDRESS, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI2_WRDATA);
-        sdram_csr.wo(utra::sdram::DFII_PI2_WRDATA, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI2_WRDATA_DFII_PI2_WRDATA);
-        sdram_csr.rmwf(utra::sdram::DFII_PI2_WRDATA_DFII_PI2_WRDATA, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI2_WRDATA_DFII_PI2_WRDATA, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI2_WRDATA_DFII_PI2_WRDATA, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI2_WRDATA_DFII_PI2_WRDATA, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI2_RDDATA);
-        sdram_csr.wo(utra::sdram::DFII_PI2_RDDATA, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI2_RDDATA_DFII_PI2_RDDATA);
-        sdram_csr.rmwf(utra::sdram::DFII_PI2_RDDATA_DFII_PI2_RDDATA, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI2_RDDATA_DFII_PI2_RDDATA, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI2_RDDATA_DFII_PI2_RDDATA, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI2_RDDATA_DFII_PI2_RDDATA, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI3_COMMAND);
-        sdram_csr.wo(utra::sdram::DFII_PI3_COMMAND, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI3_COMMAND_CS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI3_COMMAND_CS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI3_COMMAND_CS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI3_COMMAND_CS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI3_COMMAND_CS, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI3_COMMAND_WE);
-        sdram_csr.rmwf(utra::sdram::DFII_PI3_COMMAND_WE, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI3_COMMAND_WE, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI3_COMMAND_WE, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI3_COMMAND_WE, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI3_COMMAND_CAS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI3_COMMAND_CAS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI3_COMMAND_CAS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI3_COMMAND_CAS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI3_COMMAND_CAS, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI3_COMMAND_RAS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI3_COMMAND_RAS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI3_COMMAND_RAS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI3_COMMAND_RAS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI3_COMMAND_RAS, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI3_COMMAND_WREN);
-        sdram_csr.rmwf(utra::sdram::DFII_PI3_COMMAND_WREN, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI3_COMMAND_WREN, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI3_COMMAND_WREN, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI3_COMMAND_WREN, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI3_COMMAND_RDEN);
-        sdram_csr.rmwf(utra::sdram::DFII_PI3_COMMAND_RDEN, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI3_COMMAND_RDEN, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI3_COMMAND_RDEN, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI3_COMMAND_RDEN, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI3_COMMAND_CS_TOP);
-        sdram_csr.rmwf(utra::sdram::DFII_PI3_COMMAND_CS_TOP, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI3_COMMAND_CS_TOP, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI3_COMMAND_CS_TOP, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI3_COMMAND_CS_TOP, baz);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI3_COMMAND_CS_BOTTOM);
-        sdram_csr.rmwf(utra::sdram::DFII_PI3_COMMAND_CS_BOTTOM, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI3_COMMAND_CS_BOTTOM, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI3_COMMAND_CS_BOTTOM, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI3_COMMAND_CS_BOTTOM, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI3_COMMAND_ISSUE);
-        sdram_csr.wo(utra::sdram::DFII_PI3_COMMAND_ISSUE, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI3_COMMAND_ISSUE_DFII_PI3_COMMAND_ISSUE);
-        sdram_csr.rmwf(utra::sdram::DFII_PI3_COMMAND_ISSUE_DFII_PI3_COMMAND_ISSUE, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI3_COMMAND_ISSUE_DFII_PI3_COMMAND_ISSUE, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI3_COMMAND_ISSUE_DFII_PI3_COMMAND_ISSUE, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI3_COMMAND_ISSUE_DFII_PI3_COMMAND_ISSUE, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI3_ADDRESS);
-        sdram_csr.wo(utra::sdram::DFII_PI3_ADDRESS, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI3_ADDRESS_DFII_PI3_ADDRESS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI3_ADDRESS_DFII_PI3_ADDRESS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI3_ADDRESS_DFII_PI3_ADDRESS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI3_ADDRESS_DFII_PI3_ADDRESS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI3_ADDRESS_DFII_PI3_ADDRESS, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI3_BADDRESS);
-        sdram_csr.wo(utra::sdram::DFII_PI3_BADDRESS, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI3_BADDRESS_DFII_PI3_BADDRESS);
-        sdram_csr.rmwf(utra::sdram::DFII_PI3_BADDRESS_DFII_PI3_BADDRESS, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI3_BADDRESS_DFII_PI3_BADDRESS, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI3_BADDRESS_DFII_PI3_BADDRESS, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI3_BADDRESS_DFII_PI3_BADDRESS, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI3_WRDATA);
-        sdram_csr.wo(utra::sdram::DFII_PI3_WRDATA, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI3_WRDATA_DFII_PI3_WRDATA);
-        sdram_csr.rmwf(utra::sdram::DFII_PI3_WRDATA_DFII_PI3_WRDATA, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI3_WRDATA_DFII_PI3_WRDATA, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI3_WRDATA_DFII_PI3_WRDATA, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI3_WRDATA_DFII_PI3_WRDATA, baz);
-
-        let foo = sdram_csr.r(utra::sdram::DFII_PI3_RDDATA);
-        sdram_csr.wo(utra::sdram::DFII_PI3_RDDATA, foo);
-        let bar = sdram_csr.rf(utra::sdram::DFII_PI3_RDDATA_DFII_PI3_RDDATA);
-        sdram_csr.rmwf(utra::sdram::DFII_PI3_RDDATA_DFII_PI3_RDDATA, bar);
-        let mut baz = sdram_csr.zf(utra::sdram::DFII_PI3_RDDATA_DFII_PI3_RDDATA, bar);
-        baz |= sdram_csr.ms(utra::sdram::DFII_PI3_RDDATA_DFII_PI3_RDDATA, 1);
-        sdram_csr.wfo(utra::sdram::DFII_PI3_RDDATA_DFII_PI3_RDDATA, baz);
   }
 
     #[test]
