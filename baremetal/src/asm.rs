@@ -35,7 +35,12 @@ pub extern "C" fn abort() -> ! {
     unsafe {
         #[rustfmt::skip]
         asm!(
-            "300:", // abort
+            "li t0, 0xf0000000",
+            "li t1, 0x00f",
+            "li t2, 0xf00",
+        "300:", // abort
+            "sw t1, 0(t0)",
+            "sw t2, 0(t0)",
             "j 300b",
             options(noreturn)
         );

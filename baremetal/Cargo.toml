@@ -10,9 +10,11 @@ xous = "0.9.66"
 utralib = { version = "0.1.25", optional = true, default-features = false }
 cramium-hal = { path = "../libs/cramium-hal", optional = true, default-features = false }
 cramium-api = { path = "../libs/cramium-api", optional = true, default-features = false }
-riscv = { version = "0.5.6", package = "xous-riscv" }
+vexriscv = { version = "0.5.6", package = "xous-riscv" }
+riscv = { version = "0.14.0", features = ["critical-section-single-hart"] }
 linked_list_allocator = { version = "0.10.5", optional = true }
 xous-bio-bdma = { path = "../libs/xous-bio-bdma", optional = true, default-features = false }
+critical-section = "1.2.0"
 
 [features]
 artybio = [

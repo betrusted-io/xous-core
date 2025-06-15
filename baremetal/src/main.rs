@@ -1,13 +1,38 @@
 #![cfg_attr(not(test), no_main)]
 #![cfg_attr(not(test), no_std)]
 
+extern crate alloc;
 // contains runtime setup
 mod asm;
 
 mod platform;
+use alloc::collections::VecDeque;
+use core::cell::RefCell;
+
+use critical_section::Mutex;
 use platform::*;
 use utralib::*;
 use xous_bio_bdma::*;
+
+use crate::delay;
+
+static UART_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
+
+pub fn uart_irq_handler() {
+    use crate::debug::SerialRead;
+    let mut uart = crate::debug::Uart {};
+
+    loop {
+        match uart.getc() {
+            Some(c) => {
+                critical_section::with(|cs| {
+                    UART_RX.borrow(cs).borrow_mut().push_back(c);
+                });
+            }
+            _ => break,
+        }
+    }
+}
 
 /// Entrypoint
 ///
@@ -16,17 +41,11 @@ use xous_bio_bdma::*;
 /// This function is safe to call exactly once.
 #[export_name = "rust_entry"]
 pub unsafe extern "C" fn rust_entry() -> ! {
-    // Initialize the timer, which is needed by the delay() function.
-    let mut timer = CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
-    const SYSTEM_CLOCK_FREQUENCY: u32 = 40_000_000;
-    const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
-    let ms = SYSTEM_TICK_INTERVAL_MS;
-    timer.wfo(utra::timer0::EN_EN, 0b0); // disable the timer
-    // load its values
-    timer.wfo(utra::timer0::LOAD_LOAD, 0);
-    timer.wfo(utra::timer0::RELOAD_RELOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
-    // enable the timer
-    timer.wfo(utra::timer0::EN_EN, 0b1);
+    // turn on a green LED to indicate boot
+    let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
+    rgb.wfo(utra::rgb::OUT_OUT, 0x002);
+
+    crate::platform::early_init();
 
     // select a BIO test to run
     fifo_basic();
@@ -37,6 +56,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // The RGB LEDs flash when the CPU is running this code.
     let mut count = 0;
     let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
+
     // provide some feedback on the run state of the BIO by peeking at the program counter
     // value, and provide feedback on the CPU operation by flashing the RGB LEDs.
     loop {
@@ -50,27 +70,14 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         rgb.wfo(utra::rgb::OUT_OUT, count);
         delay(500);
         count += 1;
-    }
-}
 
-// Install a panic handler when not running tests.
-#[cfg(all(not(test)))]
-mod panic_handler {
-    use core::panic::PanicInfo;
-    #[panic_handler]
-    fn handle_panic(_arg: &PanicInfo) -> ! {
-        crate::println!("{}", _arg);
-        loop {}
-    }
-}
-
-/// Delay function that delays a given number of milliseconds.
-pub fn delay(ms: usize) {
-    let mut timer = CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
-    timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
-    for _ in 0..ms {
-        while timer.rf(utra::timer0::EV_PENDING_ZERO) == 0 {}
-        timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
+        // Handle keyboard events.
+        critical_section::with(|cs| {
+            let mut queue = UART_RX.borrow(cs).borrow_mut();
+            while let Some(byte) = queue.pop_front() {
+                crate::println!("got {}", unsafe { char::from_u32_unchecked(byte as u32) })
+            }
+        });
     }
 }
 
