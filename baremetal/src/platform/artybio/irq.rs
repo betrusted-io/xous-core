@@ -164,7 +164,7 @@ pub extern "C" fn trap_handler(
     _a7: usize,
 ) -> ! {
     let cause: mcause::Mcause = mcause::read();
-    crate::println!("cause {:x}", cause.bits());
+    // crate::println!("cause {:x}", cause.bits());
     // 2 is illegal instruction
     if cause.bits() == 2 {
         // skip past the illegal instruction, in case that's what we want to do...

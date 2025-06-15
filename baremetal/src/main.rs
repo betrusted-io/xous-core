@@ -6,6 +6,7 @@ extern crate alloc;
 mod asm;
 
 mod platform;
+mod repl;
 use alloc::collections::VecDeque;
 use core::cell::RefCell;
 
@@ -46,12 +47,12 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     rgb.wfo(utra::rgb::OUT_OUT, 0x002);
 
     crate::platform::early_init();
+    crate::println!("\n~~Baremetal up!~~\n");
 
     // select a BIO test to run
     fifo_basic();
     // hello_world();
 
-    let bio_ss = BioSharedState::new();
     // The green LEDs flash whenever the FPGA is configured with the Arty BIO design.
     // The RGB LEDs flash when the CPU is running this code.
     let mut count = 0;
@@ -59,25 +60,23 @@ pub unsafe extern "C" fn rust_entry() -> ! {
 
     // provide some feedback on the run state of the BIO by peeking at the program counter
     // value, and provide feedback on the CPU operation by flashing the RGB LEDs.
+    let mut repl = crate::repl::Repl::new();
     loop {
-        crate::println!(
-            "pc: {:04x} {:04x} {:04x} {:04x}",
-            bio_ss.bio.r(utra::bio_bdma::SFR_DBG0),
-            bio_ss.bio.r(utra::bio_bdma::SFR_DBG1),
-            bio_ss.bio.r(utra::bio_bdma::SFR_DBG2),
-            bio_ss.bio.r(utra::bio_bdma::SFR_DBG3)
-        );
-        rgb.wfo(utra::rgb::OUT_OUT, count);
-        delay(500);
-        count += 1;
-
         // Handle keyboard events.
         critical_section::with(|cs| {
             let mut queue = UART_RX.borrow(cs).borrow_mut();
             while let Some(byte) = queue.pop_front() {
-                crate::println!("got {}", unsafe { char::from_u32_unchecked(byte as u32) })
+                repl.rx_char(byte);
             }
         });
+
+        // Process any command line requests
+        repl.process();
+
+        // Animate the LED flashing to indicate repl loop is running
+        delay(1);
+        count += 1;
+        rgb.wfo(utra::rgb::OUT_OUT, ((count / 500) as u32) << 6);
     }
 }
 
