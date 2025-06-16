@@ -44,7 +44,7 @@ pub fn uart_irq_handler() {
 pub unsafe extern "C" fn rust_entry() -> ! {
     // turn on a green LED to indicate boot
     let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
-    rgb.wfo(utra::rgb::OUT_OUT, 0x002);
+    rgb.wfo(utra::rgb::OUT_OUT, 0b010000000000);
 
     crate::platform::early_init();
     crate::println!("\n~~Baremetal up!~~\n");
@@ -76,7 +76,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         // Animate the LED flashing to indicate repl loop is running
         delay(1);
         count += 1;
-        rgb.wfo(utra::rgb::OUT_OUT, ((count / 500) as u32) << 6);
+
+        // &-ing to set LD3 to 0 and then setting the value
+        rgb.rmwf(utra::rgb::OUT_OUT, rgb.r(utra::rgb::OUT) & 0b000111111111 | ((count / 500) as u32) << 9);
     }
 }
 

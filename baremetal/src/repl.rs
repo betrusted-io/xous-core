@@ -85,9 +85,81 @@ impl Repl {
                 }
                 crate::println!("");
             }
+
+            "blinky" => {
+                if args.len() != 2 {
+                    crate::println!("Usage: blinky <LED_NAME> <RGB_HEX_VALUE>");
+                    crate::println!("Example: blinky LD2 ff0000");
+                    crate::println!("Available LEDs: LD0, LD1, LD2");
+                    self.do_cmd = false;
+                    self.cmdline.clear();
+                    return;
+                }
+
+                let ld_name = &args[0];
+                let hex_code = &args[1];
+
+                // Determine shift from LED name based on the hardware layout.
+                let shift = match ld_name.as_str() {
+                    "LD0" => 0,
+                    "LD1" => 3,
+                    "LD2" => 6,
+                    _ => {
+                        crate::println!("Invalid LD name: {}. Use LD0, LD1, or LD2", ld_name);
+                        self.do_cmd = false;
+                        self.cmdline.clear();
+                        return;
+                    }
+                };
+
+                let color_val = if hex_code.starts_with("0x") {
+                    u32::from_str_radix(&hex_code[2..], 16)
+                } else {
+                    u32::from_str_radix(hex_code, 16)
+                };
+
+                match color_val {
+                    Ok(color) => {
+                        // convert 24-bit RRGGBB into 3-bit BGR
+                        let r_msb = color & 0x800000;
+                        let g_msb = color & 0x008000;
+                        let b_msb = color & 0x000080;
+                        let bgr_val = (b_msb >> 6) | (g_msb >> 13) | (r_msb >> 23);
+
+                        let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
+                        let new_state = bgr_val << shift;
+
+                        rgb.rmwf(utra::rgb::OUT_OUT, rgb.r(utra::rgb::OUT) | new_state);
+
+                        crate::println!(
+                            "Set {} to BGR value 0b{:03b} (from hex {}). Other LEDs are off.",
+                            ld_name,
+                            bgr_val,
+                            hex_code
+                        );
+                    }
+                    Err(_) => {
+                        crate::println!("Invalid hex color value: {}", hex_code);
+                    }
+                }
+            }
+            "help" => {
+                crate::println!("Available commands:");
+                crate::println!("  help                    - Shows this help message.");
+                crate::println!("  echo [ARGS]             - Prints the arguments to the console.");
+                crate::println!(
+                    "  mon                     - Monitors the program counters of the BIO cores."
+                );
+                crate::println!("  blinky <LD> <RGB_HEX>   - Sets an LED to a color (turns others off).");
+                crate::println!("    LD: LD1, LD2, or LD3");
+                crate::println!("    RGB_HEX: e.g., ff0000 (red), 00ff00 (green), 0000ff (blue)");
+            }
+
+            "" => {}
+
             _ => {
-                crate::println!("Command not recognized: {}", cmd);
-                crate::println!("Commands include: echo, mon");
+                crate::println!("Command not recognized: '{}'", cmd);
+                crate::println!("Type 'help' for a list of commands.");
             }
         }
 
