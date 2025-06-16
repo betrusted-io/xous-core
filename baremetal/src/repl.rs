@@ -4,6 +4,8 @@ use alloc::vec::Vec;
 use utralib::*;
 use xous_bio_bdma::*;
 
+use crate::arty_rgb;
+
 pub struct Repl {
     cmdline: String,
     do_cmd: bool,
@@ -49,7 +51,7 @@ impl Repl {
         match cmd.as_str() {
             "mon" => {
                 let bio_ss = BioSharedState::new();
-                let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
+                let mut rgb = CSR::new(arty_rgb::HW_RGB_BASE as *mut u32);
                 let mut count = 0;
                 let mut quit = false;
                 const TICKS_PER_PRINT: usize = 5;
@@ -65,7 +67,7 @@ impl Repl {
                             bio_ss.bio.r(utra::bio_bdma::SFR_DBG2),
                             bio_ss.bio.r(utra::bio_bdma::SFR_DBG3)
                         );
-                        rgb.wfo(utra::rgb::OUT_OUT, (count / TICKS_PER_PRINT) as u32);
+                        rgb.wfo(arty_rgb::OUT_OUT, (count / TICKS_PER_PRINT) as u32);
                     }
                     crate::platform::delay(TICK_MS);
                     count += 1;
@@ -99,15 +101,14 @@ impl Repl {
                 let ld_name = &args[0];
                 let hex_code = &args[1];
 
-                // Determine shift from LED name based on the hardware layout.
-                let shift = match ld_name.as_str() {
-                    "LD0" => 0,
-                    "LD1" => 3,
-                    "LD2" => 6,
+                let target_led_field = match ld_name.as_str() {
+                    "LD0" => arty_rgb::LD0,
+                    "LD1" => arty_rgb::LD1,
+                    "LD2" => arty_rgb::LD2,
                     _ => {
-                        crate::println!("Invalid LD name: {}. Use LD0, LD1, or LD2", ld_name);
-                        self.do_cmd = false;
+                        crate::println!("Invalid LED name: {}. Use LD0, LD1, LD2.", ld_name);
                         self.cmdline.clear();
+                        self.do_cmd = false;
                         return;
                     }
                 };
@@ -126,13 +127,12 @@ impl Repl {
                         let b_msb = color & 0x000080;
                         let bgr_val = (b_msb >> 6) | (g_msb >> 13) | (r_msb >> 23);
 
-                        let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
-                        let new_state = bgr_val << shift;
+                        let mut rgb = CSR::new(arty_rgb::HW_RGB_BASE as *mut u32);
 
-                        rgb.rmwf(utra::rgb::OUT_OUT, rgb.r(utra::rgb::OUT) | new_state);
+                        rgb.rmwf(target_led_field, bgr_val);
 
                         crate::println!(
-                            "Set {} to BGR value 0b{:03b} (from hex {}). Other LEDs are off.",
+                            "Set {} to BGR value 0b{:03b} (from hex {}).",
                             ld_name,
                             bgr_val,
                             hex_code
@@ -150,8 +150,8 @@ impl Repl {
                 crate::println!(
                     "  mon                     - Monitors the program counters of the BIO cores."
                 );
-                crate::println!("  blinky <LD> <RGB_HEX>   - Sets an LED to a color (turns others off).");
-                crate::println!("    LD: LD1, LD2, or LD3");
+                crate::println!("  blinky <LD> <RGB_HEX>   - Sets an LED to a color.");
+                crate::println!("    LD: LD0, LD1, or LD2");
                 crate::println!("    RGB_HEX: e.g., ff0000 (red), 00ff00 (green), 0000ff (blue)");
             }
 

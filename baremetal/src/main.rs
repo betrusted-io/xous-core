@@ -5,6 +5,7 @@ extern crate alloc;
 // contains runtime setup
 mod asm;
 
+pub mod arty_rgb;
 mod platform;
 mod repl;
 use alloc::collections::VecDeque;
@@ -77,8 +78,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         delay(1);
         count += 1;
 
-        // &-ing to set LD3 to 0 and then setting the value
-        rgb.rmwf(utra::rgb::OUT_OUT, rgb.r(utra::rgb::OUT) & 0b000111111111 | ((count / 500) as u32) << 9);
+        rgb.rmwf(arty_rgb::LD3, (count / 500) as u32);
     }
 }
 
