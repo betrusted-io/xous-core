@@ -45,7 +45,7 @@ pub fn uart_irq_handler() {
 pub unsafe extern "C" fn rust_entry() -> ! {
     // turn on a green LED to indicate boot
     let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
-    rgb.wfo(utra::rgb::OUT_OUT, 0b010000000000);
+    rgb.wfo(arty_rgb::LD3, 0b010);
 
     crate::platform::early_init();
     crate::println!("\n~~Baremetal up!~~\n");
