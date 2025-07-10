@@ -23,8 +23,8 @@ artybio = [
     "xous-bio-bdma/artybio",
     "xous-bio-bdma/baremetal",
 ]
+artyvexii = ["utralib/artyvexii", "linked_list_allocator"]
 cramium-soc = ["utralib/cramium-soc"]
 
 verilator-only = []
-debug-print = []
-default = ["artybio", "debug-print"]
+default = ["artyvexii"]

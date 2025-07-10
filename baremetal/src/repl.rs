@@ -2,6 +2,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use utralib::*;
+#[cfg(feature = "artybio")]
 use xous_bio_bdma::*;
 
 use crate::arty_rgb;
@@ -50,6 +51,7 @@ impl Repl {
         let args: Vec<String> = parts.map(|s| s.to_string()).collect();
         match cmd.as_str() {
             "mon" => {
+                #[cfg(feature = "artybio")]
                 let bio_ss = BioSharedState::new();
                 let mut rgb = CSR::new(arty_rgb::HW_RGB_BASE as *mut u32);
                 let mut count = 0;
@@ -60,6 +62,7 @@ impl Repl {
                     // Hacky logic to create a 500ms interval on prints, but improve
                     // keyboard hit latency.
                     if count % TICKS_PER_PRINT == 0 {
+                        #[cfg(feature = "artybio")]
                         crate::println!(
                             "pc: {:04x} {:04x} {:04x} {:04x}",
                             bio_ss.bio.r(utra::bio_bdma::SFR_DBG0),

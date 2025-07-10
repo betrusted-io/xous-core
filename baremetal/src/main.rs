@@ -14,6 +14,7 @@ use core::cell::RefCell;
 use critical_section::Mutex;
 use platform::*;
 use utralib::*;
+#[cfg(feature = "artybio")]
 use xous_bio_bdma::*;
 
 use crate::delay;
@@ -51,6 +52,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     crate::println!("\n~~Baremetal up!~~\n");
 
     // select a BIO test to run
+    #[cfg(feature = "artybio")]
     fifo_basic();
     // hello_world();
 
@@ -85,6 +87,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
 // this test requires manual inspection of the outputs
 // the GPIO pins should toggle with 0x11, 0x12, 0x13...
 // at the specified quantum rate of the machine.
+#[cfg(feature = "artybio")]
 pub fn hello_world() {
     crate::println!("hello world test");
     let mut bio_ss = BioSharedState::new();
@@ -111,6 +114,7 @@ pub fn hello_world() {
 }
 
 #[rustfmt::skip]
+#[cfg(feature = "artybio")]
 bio_code!(hello_world_code, HELLO_START, HELLO_END,
     "li    t0, 0xFFFFFFFF",  // set all pins to outputs
     "mv    x24, t0",
@@ -134,6 +138,7 @@ bio_code!(hello_world_code, HELLO_START, HELLO_END,
 // but with a glitch before major transitions. The output could
 // be sync'd locked, but we leave it off for this test so we have
 // a demo of how things look when it's off.
+#[cfg(feature = "artybio")]
 pub fn fifo_basic() -> usize {
     crate::println!("FIFO basic");
     let mut bio_ss = BioSharedState::new();
@@ -204,6 +209,7 @@ pub fn fifo_basic() -> usize {
     1
 }
 #[rustfmt::skip]
+#[cfg(feature = "artybio")]
 bio_code!(fifo_basic0_code, FIFO_BASIC0_START, FIFO_BASIC0_END,
     "li    t0, 0xFFFFFFFF",  // set all pins to outputs
     "mv    x24, t0",
@@ -222,6 +228,7 @@ bio_code!(fifo_basic0_code, FIFO_BASIC0_START, FIFO_BASIC0_END,
     "j 11b"
 );
 #[rustfmt::skip]
+#[cfg(feature = "artybio")]
 bio_code!(fifo_basic1_code, FIFO_BASIC1_START, FIFO_BASIC1_END,
     // mach 1 code
     "91:",
@@ -238,6 +245,7 @@ bio_code!(fifo_basic1_code, FIFO_BASIC1_START, FIFO_BASIC1_END,
     "j 21b"
 );
 #[rustfmt::skip]
+#[cfg(feature = "artybio")]
 bio_code!(fifo_basic2_code, FIFO_BASIC2_START, FIFO_BASIC2_END,
     // mach 2 code
     "92:",
@@ -246,6 +254,7 @@ bio_code!(fifo_basic2_code, FIFO_BASIC2_START, FIFO_BASIC2_END,
     "j 92b"
 );
 #[rustfmt::skip]
+#[cfg(feature = "artybio")]
 bio_code!(fifo_basic3_code, FIFO_BASIC3_START, FIFO_BASIC3_END,
     // mach 3 code
     "93:",

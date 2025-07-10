@@ -400,6 +400,19 @@ impl Builder {
         self
     }
 
+    /// Configure for Arty Vexii validation board
+    pub fn target_artyvexii(&mut self) -> &mut Builder {
+        self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
+        self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
+        self.stream = BuildStream::Release;
+        self.utra_target = "artyvexii".to_string();
+        self.run_svd2repl = false;
+        self.loader = CrateSpec::Local("baremetal".to_string(), LoaderRegion::Ram);
+        // this is actually a dummy, there is no kernel in baremetal
+        self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
+        self
+    }
+
     /// Override the default kernel. For example, to use the kernel from crates.io, specify as
     /// "xous-kernel@0.9.9"
     #[allow(dead_code)]
@@ -734,6 +747,9 @@ impl Builder {
         } else if self.utra_target.contains("artybio") {
             self.loader_features.push("artybio".into());
             self.loader_features.push(format!("utralib/{}", &self.utra_target));
+        } else if self.utra_target.contains("artyvexii") {
+            self.loader_features.push("artyvexii".into());
+            self.loader_features.push(format!("utralib/{}", &self.utra_target));
         } else {
             return Err("Target unknown: please check your UTRA target".into());
         }
@@ -885,7 +901,7 @@ impl Builder {
                 let stream = self.stream.as_str();
                 let mut output_file = PathBuf::new();
                 output_file.push("target");
-                output_file.push(self.target.as_ref().expect("target"));
+                output_file.push(self.target_kernel.as_ref().expect("target"));
                 output_file.push(stream);
                 output_file.push("baremetal.img");
 

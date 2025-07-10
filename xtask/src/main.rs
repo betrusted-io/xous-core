@@ -588,7 +588,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        Some("baremetal") => {
+        Some("baremetal-artybio") => {
             builder.set_baremetal(true);
             builder.target_artybio();
 
@@ -629,6 +629,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(existing) = existing_codegen_units {
                 env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", existing);
             }*/
+        }
+
+        Some("baremetal-artyvexii") => {
+            builder.set_baremetal(true);
+            builder.target_artyvexii();
         }
 
         Some("baosec") => {

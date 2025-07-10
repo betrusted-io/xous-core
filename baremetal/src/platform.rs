@@ -7,3 +7,8 @@ pub use cramium::*;
 mod artybio;
 #[cfg(any(feature = "artybio"))]
 pub use artybio::*;
+
+#[cfg(any(feature = "artyvexii"))]
+mod artyvexii;
+#[cfg(any(feature = "artyvexii"))]
+pub use artyvexii::*;
