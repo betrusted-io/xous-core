@@ -53,8 +53,9 @@ cramium-fpga = []
 # Emulation for cramium
 hosted-baosec = []
 
-# Arty target
+# Arty targets
 artybio = []
+artyvexii = []
 
 # Specify a Precusor default so that we can pass packaging CI tests.
 default = ["hosted"]
