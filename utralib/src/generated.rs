@@ -50,6 +50,20 @@ mod atsama5d27;
 #[rustfmt::skip]
 pub use atsama5d27::*;
 
+#[cfg(feature = "artybio")]
+#[rustfmt::skip]
+mod artybio;
+#[cfg(feature = "artybio")]
+#[rustfmt::skip]
+pub use artybio::*;
+
+#[cfg(feature = "artyvexii")]
+#[rustfmt::skip]
+mod artyvexii;
+#[cfg(feature = "artyvexii")]
+#[rustfmt::skip]
+pub use artyvexii::*;
+
 // Hosted mode includes nothing, as it relies on the abstract host
 // architecture for I/O; so this file is empty when the "hosted"
 // configuration is selected and there are no corresponding "hosted"

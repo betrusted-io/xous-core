@@ -189,7 +189,7 @@ impl BioSharedState {
                 let word: u32 = u32::from_le_bytes(chunk.try_into().unwrap());
                 let rbk = self.imem_slice[core as usize][i + offset];
                 if rbk != word {
-                    print!("{:?} expected {:x} got {:x} at {}\r", core, word, rbk, i + offset);
+                    // print!("{:?} expected {:x} got {:x} at {}\r", core, word, rbk, i + offset);
                     return Err(BioError::CodeCheck(i + offset));
                 }
             } else {

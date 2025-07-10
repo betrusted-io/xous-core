@@ -89,7 +89,9 @@ fn main() {
         "renode",
         "atsama5d27",
         "cramium-soc",
-        "cramium-fpga"
+        "cramium-fpga",
+        "artybio",
+        "artyvexii"
     );
 
     #[cfg(feature = "precursor")]
@@ -130,6 +132,16 @@ fn main() {
     let svd_filenames = vec!["cramium/soc.svd", "cramium/core.svd", "cramium/daric.svd"];
     #[cfg(feature = "cramium-fpga")]
     let generated_filename = "src/generated/cramium_fpga.rs";
+
+    #[cfg(feature = "artybio")]
+    let svd_filenames = vec!["artybio/soc.svd", "artybio/bio.svd"];
+    #[cfg(feature = "artybio")]
+    let generated_filename = "src/generated/artybio.rs";
+
+    #[cfg(feature = "artyvexii")]
+    let svd_filenames = vec!["artyvexii/soc.svd"];
+    #[cfg(feature = "artyvexii")]
+    let generated_filename = "src/generated/artyvexii.rs";
 
     // ----- control file generation and rebuild sequence -----
     // check and see if the configuration has changed since the last build. This should be

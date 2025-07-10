@@ -1,0 +1,1307 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
+    <vendor>cramium</vendor>
+    <name>SOC</name>
+    <description><![CDATA[Cramium SoC]]></description>
+
+    <addressUnitBits>8</addressUnitBits>
+    <width>32</width>
+    <size>32</size>
+    <access>read-write</access>
+    <resetValue>0x00000000</resetValue>
+    <resetMask>0xFFFFFFFF</resetMask>
+
+    <peripherals>
+        <peripheral>
+            <name>BIO_BDMA</name>
+            <baseAddress>0x90000000</baseAddress>
+            <groupName>BIO_BDMA</groupName>
+            <registers>
+                <register>
+                    <name>SFR_CTRL</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>en</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[en read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>restart</name>
+                            <msb>7</msb>
+                            <bitRange>[7:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[restart read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>clkdiv_restart</name>
+                            <msb>11</msb>
+                            <bitRange>[11:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[clkdiv_restart read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_CFGINFO</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>constant0</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[constant value of 8]]></description>
+                        </field>
+                        <field>
+                            <name>constant1</name>
+                            <msb>15</msb>
+                            <bitRange>[15:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[constant value of 4]]></description>
+                        </field>
+                        <field>
+                            <name>constant2</name>
+                            <msb>31</msb>
+                            <bitRange>[31:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[constant value of 4096]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_CONFIG</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>snap_output_to_which</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[snap_output_to_which read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>snap_output_to_quantum</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[snap_output_to_quantum read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>snap_input_to_which</name>
+                            <msb>4</msb>
+                            <bitRange>[4:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[snap_input_to_which read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>snap_input_to_quantum</name>
+                            <msb>5</msb>
+                            <bitRange>[5:5]</bitRange>
+                            <lsb>5</lsb>
+                            <description><![CDATA[snap_input_to_quantum read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>disable_filter_peri</name>
+                            <msb>6</msb>
+                            <bitRange>[6:6]</bitRange>
+                            <lsb>6</lsb>
+                            <description><![CDATA[disable_filter_peri read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>disable_filter_mem</name>
+                            <msb>7</msb>
+                            <bitRange>[7:7]</bitRange>
+                            <lsb>7</lsb>
+                            <description><![CDATA[disable_filter_mem read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>clocking_mode</name>
+                            <msb>9</msb>
+                            <bitRange>[9:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[clocking_mode read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FLEVEL</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>pclk_regfifo_level0</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[pclk_regfifo_level[0] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level1</name>
+                            <msb>7</msb>
+                            <bitRange>[7:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[pclk_regfifo_level[1] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level2</name>
+                            <msb>11</msb>
+                            <bitRange>[11:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[pclk_regfifo_level[2] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level3</name>
+                            <msb>15</msb>
+                            <bitRange>[15:12]</bitRange>
+                            <lsb>12</lsb>
+                            <description><![CDATA[pclk_regfifo_level[3] read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_TXF0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdin</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdin read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_TXF1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdin</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdin read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_TXF2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdin</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdin read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_TXF3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdin</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdin read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RXF0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0020</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdout</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdout read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RXF1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0024</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdout</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdout read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RXF2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0028</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdout</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdout read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RXF3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x002c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdout</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdout read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_ELEVEL</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0030</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fifo_event_level0</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fifo_event_level[0] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_event_level1</name>
+                            <msb>7</msb>
+                            <bitRange>[7:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[fifo_event_level[1] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_event_level2</name>
+                            <msb>11</msb>
+                            <bitRange>[11:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[fifo_event_level[2] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_event_level3</name>
+                            <msb>15</msb>
+                            <bitRange>[15:12]</bitRange>
+                            <lsb>12</lsb>
+                            <description><![CDATA[fifo_event_level[3] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_event_level4</name>
+                            <msb>19</msb>
+                            <bitRange>[19:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[fifo_event_level[4] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_event_level5</name>
+                            <msb>23</msb>
+                            <bitRange>[23:20]</bitRange>
+                            <lsb>20</lsb>
+                            <description><![CDATA[fifo_event_level[5] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_event_level6</name>
+                            <msb>27</msb>
+                            <bitRange>[27:24]</bitRange>
+                            <lsb>24</lsb>
+                            <description><![CDATA[fifo_event_level[6] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_event_level7</name>
+                            <msb>31</msb>
+                            <bitRange>[31:28]</bitRange>
+                            <lsb>28</lsb>
+                            <description><![CDATA[fifo_event_level[7] read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_ETYPE</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0034</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fifo_event_lt_mask</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fifo_event_lt_mask read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_event_eq_mask</name>
+                            <msb>15</msb>
+                            <bitRange>[15:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[fifo_event_eq_mask read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_event_gt_mask</name>
+                            <msb>23</msb>
+                            <bitRange>[23:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[fifo_event_gt_mask read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_SET</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0038</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_set</name>
+                            <msb>23</msb>
+                            <bitRange>[23:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_set read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_CLR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x003c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_clr</name>
+                            <msb>23</msb>
+                            <bitRange>[23:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_clr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_STATUS</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0040</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_status</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_status read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EXTCLOCK</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0044</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_extclk</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[use_extclk read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>extclk_gpio_0</name>
+                            <msb>8</msb>
+                            <bitRange>[8:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[extclk_gpio_0 read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>extclk_gpio_1</name>
+                            <msb>13</msb>
+                            <bitRange>[13:9]</bitRange>
+                            <lsb>9</lsb>
+                            <description><![CDATA[extclk_gpio_1 read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>extclk_gpio_2</name>
+                            <msb>18</msb>
+                            <bitRange>[18:14]</bitRange>
+                            <lsb>14</lsb>
+                            <description><![CDATA[extclk_gpio_2 read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>extclk_gpio_3</name>
+                            <msb>23</msb>
+                            <bitRange>[23:19]</bitRange>
+                            <lsb>19</lsb>
+                            <description><![CDATA[extclk_gpio_3 read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FIFO_CLR</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0048</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_fifo_clr</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_fifo_clr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_QDIV0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0050</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>unused_div</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[unused_div read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_frac</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[div_frac read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_int</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[div_int read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_QDIV1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0054</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>unused_div</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[unused_div read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_frac</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[div_frac read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_int</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[div_int read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_QDIV2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0058</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>unused_div</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[unused_div read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_frac</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[div_frac read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_int</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[div_int read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_QDIV3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x005c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>unused_div</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[unused_div read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_frac</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[div_frac read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_int</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[div_int read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_SYNC_BYPASS</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0060</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_sync_bypass</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_sync_bypass read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IO_OE_INV</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0064</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_io_oe_inv</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_io_oe_inv read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IO_O_INV</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0068</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_io_o_inv</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_io_o_inv read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IO_I_INV</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x006c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_io_i_inv</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_io_i_inv read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IRQMASK_0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0070</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_irqmask_0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_irqmask_0 read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IRQMASK_1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0074</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_irqmask_1</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_irqmask_1 read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IRQMASK_2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0078</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_irqmask_2</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_irqmask_2 read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IRQMASK_3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x007c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_irqmask_3</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_irqmask_3 read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IRQ_EDGE</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0080</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_irq_edge</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_irq_edge read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DBG_PADOUT</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0084</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_dbg_padout</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_dbg_padout read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DBG_PADOE</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0088</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_dbg_padoe</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_dbg_padoe read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DBG0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0090</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>dbg_pc</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[dbg_pc read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>trap</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[trap read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DBG1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0094</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>dbg_pc</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[dbg_pc read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>trap</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[trap read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DBG2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x0098</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>dbg_pc</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[dbg_pc read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>trap</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[trap read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DBG3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x009c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>dbg_pc</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[dbg_pc read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>trap</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[trap read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_MEM_GUTTER</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00a0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_mem_gutter</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_mem_gutter read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_PERI_GUTTER</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00a4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_peri_gutter</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_peri_gutter read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_MAP_CR_EVMAP0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00b0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_evmap0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_evmap read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_MAP_CR_EVMAP1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00b4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_evmap1</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_evmap read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_MAP_CR_EVMAP2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00b8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_evmap2</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_evmap read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_MAP_CR_EVMAP3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00bc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_evmap3</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_evmap read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_MAP_CR_EVMAP4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00c0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_evmap4</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_evmap read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_MAP_CR_EVMAP5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00c4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cr_evmap5</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[cr_evmap read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_STAT_SR_EVSTAT0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00c8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_evstat0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_evstat read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_STAT_SR_EVSTAT1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00cc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_evstat1</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_evstat read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_STAT_SR_EVSTAT2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00d0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_evstat2</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_evstat read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_STAT_SR_EVSTAT3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00d4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_evstat3</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_evstat read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_STAT_SR_EVSTAT4</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00d8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_evstat4</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_evstat read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DMAREQ_STAT_SR_EVSTAT5</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00dc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sr_evstat5</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sr_evstat read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BASE_0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00e0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_base</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_base read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BOUNDS_0</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00e4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_bounds</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_bounds read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BASE_1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00e8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_base</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_base read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BOUNDS_1</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00ec</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_bounds</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_bounds read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BASE_2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00f0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_base</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_base read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BOUNDS_2</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00f4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_bounds</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_bounds read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BASE_3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00f8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_base</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_base read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FILTER_BOUNDS_3</name>
+                    <description><![CDATA[See file:///F:/code/cram-nto/modules/bio_bdma/rtl/bio_bdma.sv]]></description>
+                    <addressOffset>0x00fc</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>filter_bounds</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[filter_bounds read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x100</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+    </peripherals>
+
+    <vendorExtensions>
+        <memoryRegions>
+            <memoryRegion>
+                <name>BIO_BDMA</name>
+                <baseAddress>0x90000000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_IMEM0</name>
+                <baseAddress>0x90001000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_IMEM1</name>
+                <baseAddress>0x90002000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_IMEM2</name>
+                <baseAddress>0x90003000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_IMEM3</name>
+                <baseAddress>0x90004000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_FIFO0</name>
+                <baseAddress>0x90005000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_FIFO1</name>
+                <baseAddress>0x90006000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_FIFO2</name>
+                <baseAddress>0x90007000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_FIFO3</name>
+                <baseAddress>0x90008000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+        </memoryRegions>
+        <constants>
+        </constants>
+    </vendorExtensions>
+</device>

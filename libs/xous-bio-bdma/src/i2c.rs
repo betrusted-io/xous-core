@@ -36,7 +36,7 @@ impl<'a> BioI2C<'a> {
         // stop all the machines, so that code can be loaded
         bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
         let code = i2c_driver();
-        print!("I2C code length: {} bytes\r", code.len());
+        // print!("I2C code length: {} bytes\r", code.len());
         bio_ss.load_code(code, 0, BioCore::Core0);
 
         if hs {

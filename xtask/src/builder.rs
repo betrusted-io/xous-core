@@ -147,6 +147,7 @@ pub(crate) struct Builder {
     /// when Some, specifies a swap region as offset, size
     swap: Option<(u32, u32)>,
     change_target: bool,
+    baremetal: bool,
 }
 
 impl Builder {
@@ -176,7 +177,14 @@ impl Builder {
             no_image: false,
             swap: None,
             change_target: false,
+            baremetal: false,
         }
+    }
+
+    /// Sets a flag if the build is just for a baremetal testing target
+    pub fn set_baremetal<'a>(&'a mut self, baremetal: bool) -> &'a mut Builder {
+        self.baremetal = baremetal;
+        self
     }
 
     /// Specify an alternate loader key, as a String that can encode a file name
@@ -376,6 +384,32 @@ impl Builder {
         )
         .expect("couldn't patch shellchat");
 
+        self
+    }
+
+    /// Configure for Arty BIO validation board
+    pub fn target_artybio(&mut self) -> &mut Builder {
+        self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
+        self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
+        self.stream = BuildStream::Release;
+        self.utra_target = "artybio".to_string();
+        self.run_svd2repl = false;
+        self.loader = CrateSpec::Local("baremetal".to_string(), LoaderRegion::Ram);
+        // this is actually a dummy, there is no kernel in baremetal
+        self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
+        self
+    }
+
+    /// Configure for Arty Vexii validation board
+    pub fn target_artyvexii(&mut self) -> &mut Builder {
+        self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
+        self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
+        self.stream = BuildStream::Release;
+        self.utra_target = "artyvexii".to_string();
+        self.run_svd2repl = false;
+        self.loader = CrateSpec::Local("baremetal".to_string(), LoaderRegion::Ram);
+        // this is actually a dummy, there is no kernel in baremetal
+        self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
         self
     }
 
@@ -669,7 +703,7 @@ impl Builder {
     /// Consume the builder and execute the configured build task. This handles dispatching all
     /// configurations, including renode, hosted, and hardware targets.
     pub fn build(mut self) -> Result<(), DynError> {
-        if self.apps.is_empty() && self.services.is_empty() {
+        if self.apps.is_empty() && self.services.is_empty() && !self.baremetal {
             // no services were specified - don't build anything
             return Ok(());
         }
@@ -710,6 +744,12 @@ impl Builder {
         } else if self.utra_target.contains("hosted-baosec") {
             self.features.push("hosted-baosec".into());
             self.kernel_features.push("hosted".into());
+        } else if self.utra_target.contains("artybio") {
+            self.loader_features.push("artybio".into());
+            self.loader_features.push(format!("utralib/{}", &self.utra_target));
+        } else if self.utra_target.contains("artyvexii") {
+            self.loader_features.push("artyvexii".into());
+            self.loader_features.push(format!("utralib/{}", &self.utra_target));
         } else {
             return Err("Target unknown: please check your UTRA target".into());
         }
@@ -827,20 +867,6 @@ impl Builder {
                 std::fs::remove_file(&svd_spec_path).ok(); // don't fail if the file does not exist
             }
 
-            // ------ build the kernel ------
-            let mut kernel_extra = vec![];
-            if self.kernel_disable_defaults {
-                kernel_extra.push("--no-default-features".to_string());
-            }
-            let kernel_path = self.builder(
-                &[self.kernel.clone()],
-                &self.kernel_features,
-                &self.target_kernel.as_deref(),
-                self.stream,
-                &kernel_extra,
-                false,
-            )?;
-
             // ------ build the loader ------
             // stash any LTO settings applied to the kernel; proper layout of the loader
             // block depends on the loader being compact and highly optimized.
@@ -869,6 +895,49 @@ impl Builder {
             if let Some(existing) = existing_codegen_units {
                 env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", existing);
             }
+
+            if self.baremetal {
+                // package and exit the baremetal, then we're done
+                let stream = self.stream.as_str();
+                let mut output_file = PathBuf::new();
+                output_file.push("target");
+                output_file.push(self.target_kernel.as_ref().expect("target"));
+                output_file.push(stream);
+                output_file.push("baremetal.img");
+
+                let status = Command::new(cargo())
+                    .current_dir(project_root())
+                    .args([
+                        "run",
+                        "--package",
+                        "tools",
+                        "--bin",
+                        "copy-object",
+                        "--",
+                        &loader[0],
+                        output_file.as_os_str().to_str().unwrap(),
+                    ])
+                    .status()?;
+                if !status.success() {
+                    return Err("cargo build failed".into());
+                } else {
+                    return Ok(());
+                }
+            }
+
+            // ------ build the kernel ------
+            let mut kernel_extra = vec![];
+            if self.kernel_disable_defaults {
+                kernel_extra.push("--no-default-features".to_string());
+            }
+            let kernel_path = self.builder(
+                &[self.kernel.clone()],
+                &self.kernel_features,
+                &self.target_kernel.as_deref(),
+                self.stream,
+                &kernel_extra,
+                false,
+            )?;
 
             // ------ if targeting renode, regenerate the Platform file -----
             if self.run_svd2repl {
