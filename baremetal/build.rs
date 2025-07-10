@@ -14,6 +14,8 @@ fn main() {
         let p = PathBuf::from("src/platform/cramium/link.x");
         #[cfg(feature = "artybio")]
         let p = PathBuf::from("src/platform/artybio/link.x");
+        #[cfg(feature = "artyvexii")]
+        let p = PathBuf::from("src/platform/artyvexii/link.x");
 
         println!("cargo:rerun-if-changed={}", p.clone().into_os_string().into_string().unwrap());
         println!("cargo:rustc-link-arg=-Tlink.x");
