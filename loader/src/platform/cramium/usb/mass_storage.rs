@@ -7,7 +7,7 @@ use super::*;
 
 // Locate the "disk"
 // Memory layout is something like this:
-//   0x6200_0000  regular stack grows down from here
+//   0x6120_0000  regular stack grows down from here
 //    (fair bit of empty space - could grow RAM disk more)
 //   0x6112_0000  RAM disk + 1MiB
 //   0x6102_0000  RAM disk
