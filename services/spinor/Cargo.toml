@@ -34,6 +34,7 @@ rand = "0.8.5"
 
 [features]
 precursor = ["utralib/precursor"]
+vexii-test = []
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 extra_flush = []

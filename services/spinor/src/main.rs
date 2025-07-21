@@ -570,6 +570,7 @@ mod implementation {
         /// Not sure why :-/, but, I stopped caring because ".word 0x500F" works!
         #[inline]
         fn flush_dcache(&self, _start: u32, _len: u32) {
+            #[cfg(not(feature = "vexii-test"))]
             unsafe {
                 #[rustfmt::skip]
                 core::arch::asm!(
@@ -583,6 +584,22 @@ mod implementation {
                     "nop",
                     "nop",
                     "nop",
+                );
+            }
+            #[cfg(feature = "vexii-test")]
+            unsafe {
+                // fence.i / fence invalidates only i-cache, and syncs write-back of d-cache but
+                // d-cache is not invalidated. We need to explicitly invalidate d-cache range, which
+                // means we need to know what addresses we're updating. The arguments to the flush
+                // instruction need to be virtual addresses in the process space of the process
+                // that might be reading the data. Thus, we do not implement the invalidation here,
+                // but instead we do it in the lib.rs file of the spinor crate, so that the caller
+                // is doing the invalidation within their address space after interactions with the
+                // spinor server have occurred.
+                #[rustfmt::skip]
+                core::arch::asm!(
+                    "fence.i",
+                    "fence",
                 );
             }
             // augment with manual flushing, because the above instruction didn't seem to do the trick??
