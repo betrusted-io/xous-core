@@ -18,6 +18,15 @@ use num_traits::*;
 use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;
 
+// Note: cbo.flush is coded as a .word because Rust as of 1.87 hasn't stabilized
+// the cbo.flush instruction extension. Eventually when zicbom is stabilized,
+// we should be able to use:
+//
+// #[target_feature(enable = "zicbom")]
+//
+// Annotated onto this function; and we canreplace the ugly hex word with "cbo.flush 0({addr})"
+// while also losing the "mv a0, {addr}" that ensures that the argument ends
+// up where the .word expects it to be.
 pub unsafe fn flush_block(addr: usize) {
     core::arch::asm!(
         "mv          a0, {addr}",
