@@ -28,6 +28,51 @@ pub const CACHE_LINE_STRIDE_BYTES: usize = 512 / 8;
 
 pub fn early_init() {
     // crate::ramtests::ramtests();
+    crate::println!("start");
+    unsafe {
+        crate::platform::config_flush();
+    }
+    let testram: &mut [u32] = unsafe {
+        core::slice::from_raw_parts_mut(
+            utralib::HW_TEST_RAM_MEM as *mut u32,
+            utralib::HW_TEST_RAM_MEM_LEN / core::mem::size_of::<u32>(),
+        )
+    };
+
+    for &d in testram[..4].iter() {
+        crate::println!("{:x}", d);
+    }
+    let mut testram_ctl = CSR::new(utra::test_ram::HW_TEST_RAM_BASE as *mut u32);
+    testram_ctl.wo(utra::test_ram::SEED, 0x1111_1000);
+    testram_ctl.wo(utra::test_ram::LENGTH, 0x100);
+    testram_ctl.wo(utra::test_ram::START, 0);
+    testram_ctl.wfo(utra::test_ram::CONTROL_GO, 1);
+    crate::println!("go");
+    while testram_ctl.rf(utra::test_ram::STAT_DONE) == 0 {}
+    crate::println!("done");
+
+    for &d in testram[..4].iter() {
+        crate::println!("{:x}", d);
+    }
+    // some cache lines up...
+    for &d in testram[60..64].iter() {
+        crate::println!("{:x}", d);
+    }
+    crate::println!("term");
+    crate::println!("flush");
+    for i in (0..64).step_by(crate::platform::CACHE_LINE_STRIDE_BYTES / size_of::<u32>()) {
+        let addr = unsafe { testram.as_ptr().add(i) as usize };
+        unsafe {
+            crate::platform::flush_block(addr);
+        }
+    }
+    crate::println!("check");
+    for &d in testram[..4].iter() {
+        crate::println!("{:x}", d);
+    }
+    for &d in testram[60..64].iter() {
+        crate::println!("{:x}", d);
+    }
 
     // setup interrupts & enable IRQ handler for characters
     crate::irq::irq_setup();
@@ -276,15 +321,6 @@ pub fn test_pivot() {
     let asid: u32 = SUP_ASID;
     let satp: u32 = 0x8000_0000 | asid << 22 | (ROOT_S_PT_PA as u32 >> 12);
 
-    /*
-    // flush pts
-    for i in (ROOT_PT_PA..SCRATCH_PAGE).step_by(512 / 8) {
-        unsafe { flush_block(i) };
-    }
-    for i in (0x8000_0000..0x8000_2000).step_by(512 / 8) {
-        unsafe { flush_block(i) };
-    }
-    */
     // flush stack
     for i in (0x4001_d000..0x4001_f000).step_by(512 / 8) {
         // unsafe { flush_block(i) };
@@ -322,29 +358,6 @@ pub fn test_pivot() {
             // Enable the MMU (once we issue `mret`) and flush the cache
             "csrw        satp, {satp_val}",
             "sfence.vma",
-            /*
-            ".word 0x500F",
-            "nop",
-            "nop",
-            "nop",
-            "nop",
-            "fence",
-            "nop",
-            "nop",
-            "nop",
-            "nop",
-            "sfence.vma",
-            ".word 0x500F",
-            "nop",
-            "nop",
-            "nop",
-            "nop",
-            "fence",
-            "nop",
-            "nop",
-            "nop",
-            "nop",
-            */
             satp_val = in(reg) satp,
         );
         core::arch::asm!(
@@ -360,6 +373,87 @@ pub fn test_pivot() {
             // Issue the return, which will jump to $mepc in the specified mode in mstatus
             "mret",
         );
+    }
+}
+
+pub unsafe fn test_virtual_memory() {
+    crate::platform::test_pivot();
+    let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
+    let mut dummy = rgb.r(utra::rgb::OUT);
+    for i in 4..8 {
+        if (dummy % 2) == 0 {
+            dummy += i;
+        } else {
+            dummy += 2 * i;
+        }
+    }
+
+    unsafe { core::arch::asm!("sfence.vma", "fence", "fence.i") };
+    rgb.wfo(utra::rgb::OUT_OUT, dummy);
+    crate::println!("aft pivot");
+
+    let mut testram_ctl = CSR::new(utra::test_ram::HW_TEST_RAM_BASE as *mut u32);
+    let testram: &mut [u32] = core::slice::from_raw_parts_mut(
+        crate::platform::TEST_VA as *mut u32,
+        utralib::HW_TEST_RAM_MEM_LEN / core::mem::size_of::<u32>(),
+    );
+    testram_ctl.wo(utra::test_ram::SEED, 0x2222_2000);
+    for &d in testram[..4].iter() {
+        crate::println!("{:x}", d);
+    }
+    // some cache lines up...
+    for &d in testram[60..64].iter() {
+        crate::println!("{:x}", d);
+    }
+    testram_ctl.wfo(utra::test_ram::CONTROL_GO, 1);
+    crate::println!("go");
+    while testram_ctl.rf(utra::test_ram::STAT_DONE) == 0 {}
+    crate::println!("done");
+    crate::println!("term");
+    for &d in testram[..4].iter() {
+        crate::println!("{:x}", d);
+    }
+
+    // we were in supervisor mode. pivot to user mode
+    core::arch::asm!("fence.i", "sfence.vma",);
+    // let asid: u32 = crate::platform::USR_ASID;
+    // let satp: u32 = 0x8000_0000 | asid << 22 | (crate::platform::ROOT_PT_PA as u32 >> 12);
+    // riscv::register::satp::write((satp as u32).into());
+
+    // this doesn't work because we need the SATP setup code to be in a different physical page
+    // the problem is that the moment after this instruction is executed, we're now mapped to
+    // userspace but running supervisor code...
+
+    riscv::register::satp::set(
+        riscv::register::satp::Mode::Sv32,
+        crate::platform::USR_ASID as usize,
+        crate::platform::ROOT_PT_PA as usize >> 12,
+    );
+    core::arch::asm!("fence.i", "sfence.vma",);
+    crate::println!("bef user pivot");
+
+    pivot_user();
+    crate::println!("~~user~~");
+
+    for &d in testram[..4].iter() {
+        crate::println!("{:x}", d);
+    }
+    // some cache lines up...
+    for &d in testram[60..64].iter() {
+        crate::println!("{:x}", d);
+    }
+
+    crate::println!("flushl");
+    for i in (0..4096).step_by(crate::platform::CACHE_LINE_STRIDE_BYTES / size_of::<u32>()) {
+        let addr = testram.as_ptr().add(i) as usize;
+        crate::platform::flush_block(addr);
+    }
+    crate::println!("check");
+    for &d in testram[..4].iter() {
+        crate::println!("{:x}", d);
+    }
+    for &d in testram[60..64].iter() {
+        crate::println!("{:x}", d);
     }
 }
 
@@ -395,20 +489,11 @@ pub unsafe fn flush_block(addr: usize) {
     );
 }
 
-/*
-#define XENVCFG_CBIE_OK 0x30
-#define XENVCFG_CBCFE_OK 0x40
-  li x1, XENVCFG_CBCFE_OK | XENVCFG_CBIE_OK
-  csrw 0x30a, x1 // Allow supervisor
-  csrw 0x10a, x1 // Allow user
-*/
-
-pub const XENVCFG_CBIE_OK: usize = 0x30;
-pub const XENVCFG_CBCFE_OK: usize = 0x40;
-
+// pub const XENVCFG_CBIE_OK: usize = 0x30;
+// pub const XENVCFG_CBCFE_OK: usize = 0x40;
 pub unsafe fn config_flush() {
     core::arch::asm!(
-        "li   t0, 0x30 | 0x40",
+        "li   t0, 0x30 | 0x40", // XENVCFG_CBIE_OK | XENVCFG_CBCFE_OK
         "csrw 0x30a, t0", // allow supervisor
         "csrw 0x10a, t0", // allow user
         out("t0") _, // clobber t0
