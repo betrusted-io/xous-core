@@ -86,6 +86,7 @@ default-features = false
 features = ["rand_core", "digest"]
 
 [features]
+vexii-test = ["aes/vexii-test"]
 precursor = ["utralib/precursor", "sha2/precursor", "keystore-api/precursor"]
 hosted = ["utralib/hosted", "sha2/hosted", "keystore-api/hosted"]
 renode = ["utralib/renode", "sha2/renode", "keystore-api/renode"]
