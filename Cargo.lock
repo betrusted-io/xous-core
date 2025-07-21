@@ -273,7 +273,7 @@ dependencies = [
  "armv7",
  "bitflags 2.6.0",
  "embedded-graphics",
- "embedded-hal",
+ "embedded-hal 0.2.7",
  "png-decoder",
  "r0",
  "utralib 0.1.18",
@@ -389,6 +389,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3caf393d93b2d453e80638d0674597020cef3382ada454faacd43d1a55a735a"
 dependencies = [
  "rustc_version 0.2.3",
+]
+
+[[package]]
+name = "baremetal"
+version = "0.1.0"
+dependencies = [
+ "cramium-api",
+ "cramium-hal",
+ "critical-section",
+ "linked_list_allocator",
+ "riscv",
+ "utralib 0.1.25",
+ "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-bio-bdma",
+ "xous-riscv",
 ]
 
 [[package]]
@@ -1150,9 +1165,9 @@ dependencies = [
 
 [[package]]
 name = "critical-section"
-version = "1.1.2"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7059fff8937831a9ae6f0fe4d658ffabf58f2ca96aa9dec1c889f936f705f216"
+checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
 
 [[package]]
 name = "crossbeam"
@@ -1308,25 +1323,26 @@ dependencies = [
 [[package]]
 name = "curve25519-dalek"
 version = "4.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a677b8922c94e01bdbb12126b0bc852f00447528dee1782229af9c720c3f348"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#bef542a781348054c32a9beaf6bd1195814cace2"
 dependencies = [
  "cfg-if",
  "cpufeatures",
  "curve25519-dalek-derive",
  "digest 0.10.7",
+ "engine25519-as",
  "fiat-crypto 0.2.7",
- "platforms",
+ "log",
  "rustc_version 0.4.0",
  "subtle",
+ "utralib 0.1.25",
+ "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "zeroize",
 ]
 
 [[package]]
 name = "curve25519-dalek-derive"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f46882e17999c6cc590af592290432be3bce0428cb0d5f8b6715e4dc7b383eb3"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#bef542a781348054c32a9beaf6bd1195814cace2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1798,6 +1814,12 @@ dependencies = [
  "nb 0.1.3",
  "void",
 ]
+
+[[package]]
+name = "embedded-hal"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "361a90feb7004eca4019fb28352a9465666b24f840f5c3cddf0ff13920590b89"
 
 [[package]]
 name = "embedded-time"
@@ -3858,9 +3880,9 @@ dependencies = [
 
 [[package]]
 name = "paste"
-version = "1.0.14"
+version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
+checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pbkdf2"
@@ -4073,12 +4095,6 @@ name = "pkg-config"
 version = "0.3.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2900ede94e305130c13ddd391e0ab7cbaeb783945ae07a279c268cb05109c6cb"
-
-[[package]]
-name = "platforms"
-version = "3.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b02ffed1bc8c2234bb6f8e760e34613776c5102a041f25330b869a78153a68c"
 
 [[package]]
 name = "plotters"
@@ -4624,6 +4640,36 @@ dependencies = [
  "xous-api-names",
  "xous-ipc 0.9.63",
 ]
+
+[[package]]
+name = "riscv"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f1671c79a01a149fe000af2429ce9ccc8e58cdecda72672355d50e5536b363c"
+dependencies = [
+ "critical-section",
+ "embedded-hal 1.0.0",
+ "paste",
+ "riscv-macros",
+ "riscv-pac",
+]
+
+[[package]]
+name = "riscv-macros"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8c4aa1ea1af6dcc83a61be12e8189f9b293c3ba5a487778a4cd89fb060fdbbc"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.87",
+]
+
+[[package]]
+name = "riscv-pac"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8188909339ccc0c68cfb5a04648313f09621e8b87dc03095454f1a11f6c5d436"
 
 [[package]]
 name = "rkyv"
@@ -6047,7 +6093,7 @@ version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db75519b86287f12dcf0d171c7cf4ecc839149fe9f3b720ac4cfce52959e1dfe"
 dependencies = [
- "embedded-hal",
+ "embedded-hal 0.2.7",
  "nb 0.1.3",
  "usb-device",
 ]
@@ -6056,7 +6102,7 @@ dependencies = [
 name = "usbd_bulk_only_transport"
 version = "0.1.0"
 dependencies = [
- "embedded-hal",
+ "embedded-hal 0.2.7",
  "log",
  "nb 0.1.3",
  "packing 0.2.0",
@@ -6073,7 +6119,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6fcd931e7f821bc79563a5f993e4ffbf41500d333e611fa9df7ca135e12135f"
 dependencies = [
- "embedded-hal",
+ "embedded-hal 0.2.7",
  "itm_logger",
  "nb 0.1.3",
  "packing 0.1.0",
@@ -6086,7 +6132,7 @@ dependencies = [
 name = "usbd_mass_storage"
 version = "0.1.0"
 dependencies = [
- "embedded-hal",
+ "embedded-hal 0.2.7",
  "log",
  "nb 0.1.3",
  "packing 0.2.0",
@@ -6100,7 +6146,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d9d9a2d2b51782f26ea29fdaca5deb5b6c1300ef072e736de9f96b2e367dec5"
 dependencies = [
- "embedded-hal",
+ "embedded-hal 0.2.7",
  "itm_logger",
  "nb 0.1.3",
  "packing 0.1.0",
@@ -6114,7 +6160,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c7bda9b94b13f64e41ad0b9cc9a5af3e14b04d17e9906ae3be5cd91835b8647"
 dependencies = [
- "embedded-hal",
+ "embedded-hal 0.2.7",
  "itm_logger",
  "nb 0.1.3",
  "packing 0.1.0",
@@ -6129,7 +6175,7 @@ dependencies = [
 name = "usbd_scsi"
 version = "0.1.1"
 dependencies = [
- "embedded-hal",
+ "embedded-hal 0.2.7",
  "log",
  "nb 0.1.3",
  "packing 0.2.0",

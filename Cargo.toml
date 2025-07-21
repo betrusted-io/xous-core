@@ -119,6 +119,7 @@ members = [
   "services/keystore",
   "libs/precursor-hal",
   "apps/vault2",
+  "baremetal",
 ]
 resolver = "2"
 

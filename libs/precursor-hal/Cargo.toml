@@ -6,4 +6,5 @@ edition = "2021"
 [dependencies]
 
 [features]
+vexii-test = []
 default = []

@@ -7,7 +7,7 @@ use utils::*;
 mod builder;
 use builder::*;
 mod verifier;
-use std::env;
+use std::{env, fs, path::PathBuf};
 
 use verifier::*;
 
@@ -166,6 +166,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     builder.add_services(&extra_services);
     // extract features, and especially track language features
     let features = get_flag("--feature")?;
+
+    setup_curve25519_backend(&features);
+
     let mut language_set = false;
     for feature in features {
         builder.add_feature(&feature);
@@ -590,6 +593,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
+        Some("baremetal-artybio") => {
+            builder.set_baremetal(true);
+            builder.target_artybio();
+
+            /*
+            let existing_lto = env::var("CARGO_PROFILE_RELEASE_LTO").map(Some).unwrap_or(None);
+            let existing_codegen_units =
+                env::var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS").map(Some).unwrap_or(None);
+            // these settings will generate the most compact code (but also the hardest to debug)
+            env::set_var("CARGO_PROFILE_RELEASE_LTO", "true");
+            env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", "1");
+
+            let mut local_args = vec!["build"];
+            /*
+            let output_root = format!(
+                "{}/target/{}{}/",
+                project_root().into_os_string().into_string().unwrap(),
+                crate::TARGET_TRIPLE_RISCV32_KERNEL,
+                stream.as_str(),
+            );
+            local_args.push(&output_root); */
+
+            local_args.push("--target");
+            local_args.push(crate::TARGET_TRIPLE_RISCV32_KERNEL);
+
+            local_args.push("--features");
+            local_args.push("artybio");
+
+            let status =
+                std::process::Command::new(cargo()).current_dir(project_root()).args(&local_args).status()?;
+            if !status.success() {
+                return Err("Baremetal build failed".into());
+            }
+
+            // restore the LTO settings
+            if let Some(existing) = existing_lto {
+                env::set_var("CARGO_PROFILE_RELEASE_LTO", existing);
+            }
+            if let Some(existing) = existing_codegen_units {
+                env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", existing);
+            }*/
+        }
+
+        Some("baremetal-artyvexii") => {
+            builder.set_baremetal(true);
+            builder.target_artyvexii();
+        }
+
         Some("baosec") => {
             let board = "board-baosec";
             // select the board
@@ -898,4 +949,73 @@ fn get_flag(flag: &str) -> Result<Vec<String>, DynError> {
         }
     }
     Ok(list)
+}
+
+fn setup_curve25519_backend(features: &Vec<String>) {
+    // Determine workspace root (xtask assumed to be in subdir)
+    let workspace_root = locate_workspace_root().expect("Failed to find workspace root");
+    let config_path = workspace_root.join(".cargo/config.toml");
+
+    // assume that the system has the curve25519 accelerator if it's not the vexii-test config
+    let has_accelerator = !features.contains(&"vexii-test".to_string());
+
+    // Desired cfg value
+    let desired_cfg = if has_accelerator {
+        "curve25519_dalek_backend=\"u32e_backend\""
+    } else {
+        "curve25519_dalek_backend=\"u32_backend\""
+    };
+
+    // Read original lines
+    let original = fs::read_to_string(&config_path).expect("Failed to read config.toml");
+    let mut modified = false;
+    let mut in_target = false;
+
+    let lines: Vec<String> = original
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim();
+
+            // Detect section
+            if trimmed.starts_with("[target.") && trimmed.contains("riscv32imac-unknown-xous-elf") {
+                in_target = true;
+                return line.to_string();
+            }
+
+            if in_target && trimmed.starts_with('[') && trimmed != "[target.riscv32imac-unknown-xous-elf]" {
+                in_target = false; // exited the block
+            }
+
+            if in_target && trimmed.starts_with("rustflags") {
+                if trimmed.contains(desired_cfg) {
+                    return line.to_string(); // already correct
+                }
+
+                // Replace line with correct cfg
+                modified = true;
+                return format!(r#"rustflags = ["--cfg", '{}']"#, desired_cfg);
+            }
+
+            line.to_string()
+        })
+        .collect();
+
+    // Only write if modified
+    if modified {
+        fs::write(&config_path, lines.join("\n")).expect("Failed to write config.toml");
+        println!("Updated .cargo/config.toml");
+    } else {
+        println!("No change needed in .cargo/config.toml");
+    }
+}
+
+/// Traverse upward to find workspace root (directory with `.cargo/config.toml`)
+fn locate_workspace_root() -> Option<PathBuf> {
+    let mut dir = env::current_dir().ok()?;
+    while !dir.join(".cargo/config.toml").exists() {
+        if !dir.pop() {
+            return None;
+        }
+    }
+    Some(dir)
 }
