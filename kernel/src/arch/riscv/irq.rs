@@ -33,18 +33,39 @@ static HANDLING_IRQ: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "swap")]
 pub fn is_handling_irq() -> bool { HANDLING_IRQ.load(Ordering::SeqCst) }
 
+#[cfg(not(feature = "vexii-test"))]
 fn sim_read() -> usize {
     let existing: usize;
     unsafe { core::arch::asm!("csrrs {0}, 0x9C0, zero", out(reg) existing) };
     existing
 }
 
+#[cfg(not(feature = "vexii-test"))]
 fn sim_write(new: usize) { unsafe { core::arch::asm!("csrrw zero, 0x9C0, {0}", in(reg) new) }; }
 
+#[cfg(not(feature = "vexii-test"))]
 fn sip_read() -> usize {
     let existing: usize;
     unsafe { core::arch::asm!("csrrs {0}, 0xDC0, zero", out(reg) existing) };
     existing
+}
+
+#[cfg(feature = "vexii-test")]
+fn sim_read() -> usize {
+    let legacy_int = utralib::CSR::new(crate::platform::precursor::LEGACY_INT_VMEM as *mut u32);
+    legacy_int.r(crate::platform::precursor::legacy_int::SUPER_MASK) as usize
+}
+
+#[cfg(feature = "vexii-test")]
+fn sim_write(new: usize) {
+    let mut legacy_int = utralib::CSR::new(crate::platform::precursor::LEGACY_INT_VMEM as *mut u32);
+    legacy_int.wo(crate::platform::precursor::legacy_int::SUPER_MASK, new as u32);
+}
+
+#[cfg(feature = "vexii-test")]
+fn sip_read() -> usize {
+    let legacy_int = utralib::CSR::new(crate::platform::precursor::LEGACY_INT_VMEM as *mut u32);
+    legacy_int.r(crate::platform::precursor::legacy_int::SUPER_PENDING) as usize
 }
 
 /// Disable external interrupts

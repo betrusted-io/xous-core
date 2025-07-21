@@ -158,6 +158,10 @@ software 131.66us/block enc+dec aes256 (500 iters, 8192 len)
 with L2 cache on (64k) and 0.9.13 release candidate:
 hardware 85.52us/block enc+dec aes256 (500 iters, 8192 len)
 software 140.84us/block enc+dec aes256 (500 iters, 8192 len)
+
+with Vex-ii CPU (50MHz) (note that Vex-i runs at 100MHz) on vexii-testing branch:
+software 202us/block enc+dec aes256 (500 iters, 8192 len)
+hardware 60us/block enc+dec aes256 (500 iters, 8192 len)
 */
 pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
@@ -291,7 +295,7 @@ use aes256tests::AES256_TESTS;
 block_cipher_test!(aes128_test, "aes128", AES128_TESTS, Aes128);
 block_cipher_test!(aes128soft_test, "aes128", AES128_TESTS, Aes128Soft);
 block_cipher_test!(aes256_test, "aes256", AES256_TESTS, Aes256);
-block_cipher_test!(aes256soft_test, "aes256", AES256_TESTS, Aes256);
+block_cipher_test!(aes256soft_test, "aes256", AES256_TESTS, Aes256Soft);
 
 impl<'a> ShellCmdApi<'a> for Aes {
     cmd_api!(aes);

@@ -324,6 +324,24 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             println!();
         }
     }
+    #[cfg(feature = "early-printk")]
+    {
+        let tt_address = cfg.processes[1 as usize - 1].satp << 12;
+        let root = unsafe { &mut *(tt_address as *mut crate::PageTable) };
+
+        // map UART into kernel space for early debug in kernel (before platform init can be called)
+        // use map_page_32 because we don't track this in the RPT.
+        cfg.map_page_32(
+            root,
+            utralib::HW_UART_BASE,
+            0xffcf0000, // canonical debug UART location according to the Xous memory map
+            FLG_R | FLG_W | FLG_VALID | FLG_A | FLG_D,
+            1, // Kernel is PID 1
+        );
+    }
+    #[cfg(feature = "debug-print")]
+    // print the kernel's page table mappings as a sanity check on the loader
+    debug::print_pagetable(cfg.processes[0].satp);
 
     // Mark pages used by suspend/resume, otherwise they will be handed out to userspace.
     // However, when not doing suspend/resume, it's safe to hand this out because it's always zeroized
@@ -395,7 +413,10 @@ impl ProgramDescription {
         println!("Mapping PID {} into offset {:08x}", pid, load_offset);
         let pid_idx = (pid - 1) as usize;
         let is_kernel = pid == 1;
+        #[cfg(not(feature = "vexii-test"))]
         let flag_defaults = FLG_R | FLG_W | FLG_VALID | if is_kernel { 0 } else { FLG_U };
+        #[cfg(feature = "vexii-test")]
+        let flag_defaults = FLG_R | FLG_W | FLG_VALID | FLG_A | if is_kernel { 0 } else { FLG_U };
         let stack_addr = if is_kernel { KERNEL_STACK_TOP } else { USER_STACK_TOP } - 16;
         if is_kernel {
             assert!(self.text_offset as usize == KERNEL_LOAD_OFFSET);
@@ -423,11 +444,20 @@ impl ProgramDescription {
         if SDBG {
             println!("Kernel root PT address: {:x}", satp_address);
         }
+        #[cfg(not(feature = "vexii-test"))]
         allocator.map_page(
             satp,
             satp_address,
             PAGE_TABLE_ROOT_OFFSET,
             FLG_R | FLG_W | FLG_VALID,
+            pid as XousPid,
+        );
+        #[cfg(feature = "vexii-test")]
+        allocator.map_page(
+            satp,
+            satp_address,
+            PAGE_TABLE_ROOT_OFFSET,
+            FLG_R | FLG_W | FLG_A | FLG_VALID,
             pid as XousPid,
         );
         #[cfg(feature = "swap")]
@@ -445,11 +475,20 @@ impl ProgramDescription {
                 // Pre-allocate the first stack offset, since it
                 // will definitely be used
                 let sp_page = allocator.alloc() as usize;
+                #[cfg(not(feature = "vexii-test"))]
                 allocator.map_page(
                     satp,
                     sp_page,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
+                );
+                #[cfg(feature = "vexii-test")]
+                allocator.map_page(
+                    satp,
+                    sp_page,
+                    (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
+                    flag_defaults | FLG_D,
                     pid as XousPid,
                 );
             } else {
@@ -466,11 +505,20 @@ impl ProgramDescription {
             // If it's the kernel, also allocate an exception page
             if is_kernel {
                 let sp_page = allocator.alloc() as usize;
+                #[cfg(not(feature = "vexii-test"))]
                 allocator.map_page(
                     satp,
                     sp_page,
                     (EXCEPTION_STACK_TOP - 16 - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
+                );
+                #[cfg(feature = "vexii-test")]
+                allocator.map_page(
+                    satp,
+                    sp_page,
+                    (EXCEPTION_STACK_TOP - 16 - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
+                    flag_defaults | FLG_D,
                     pid as XousPid,
                 );
             }
@@ -526,12 +574,6 @@ impl ProgramDescription {
         }
 
         // Allocate pages for .bss, if necessary
-
-        // Our "earlyprintk" equivalent
-        if cfg!(feature = "earlyprintk") && is_kernel {
-            allocator.map_page(satp, 0xF000_2000, 0xffcf_0000, FLG_R | FLG_W | FLG_VALID, pid as XousPid);
-        }
-
         let process = &mut allocator.processes[pid_idx];
         process.entrypoint = self.entrypoint as usize;
         process.sp = stack_addr;
