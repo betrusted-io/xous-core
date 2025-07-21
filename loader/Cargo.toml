@@ -105,6 +105,7 @@ cramium-fpga = ["utralib/cramium-fpga", "debug-print"]
 atsama5d27 = ["utralib/atsama5d27", "armv7", "dep:atsama5d27"]
 
 # precursor flags
+vexii-test = []     # integration test for vexii, not a production configuration
 platform-tests = []
 renode-bypass = []
 secboot = []
@@ -138,7 +139,7 @@ userspace-swap-debug = []                                      # sets up app UAR
 
 # general flags
 debug-print = []
-earlyprintk = []
-resume = []      # suspend/resume pathway code
+early-printk = []
+resume = []       # suspend/resume pathway code
 
 default = []
