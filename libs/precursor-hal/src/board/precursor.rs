@@ -29,6 +29,9 @@ pub const EC_FW_PKG_LEN: u32 = 0x0003_2000;
 pub const EC_REGION_LEN: u32 = 0x0008_0000;
 
 pub const PDDB_LOC: u32 = 0x01D8_0000; // PDDB start
+#[cfg(feature = "vexii-test")]
+pub const PDDB_LEN: u32 = 4096 * 1024; // shorter PDDB for faster testing
+#[cfg(not(feature = "vexii-test"))]
 pub const PDDB_LEN: u32 = EC_REGION_LOC - PDDB_LOC; // must be 64k-aligned (bulk erase block size) for proper function.
 
 pub const SPINOR_ERASE_SIZE: u32 = 0x1000;
