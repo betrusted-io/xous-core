@@ -31,15 +31,9 @@ mod vex;
 // library is patched into functions that are oblivious to these features.
 // so this library has to fall back on the legacy method of determining which build target
 // is being specified.
-#[cfg(not(any(
-    all(target_arch = "riscv32", not(feature = "cramium-soc")),
-    not(feature = "vexii-test")
-)))]
+#[cfg(not(any(all(target_arch = "riscv32", not(feature = "cramium-soc")), feature = "vexii-test")))]
 pub use soft::Aes128Soft as Aes128;
-#[cfg(not(any(
-    all(target_arch = "riscv32", not(feature = "cramium-soc")),
-    not(feature = "vexii-test")
-)))]
+#[cfg(not(any(all(target_arch = "riscv32", not(feature = "cramium-soc")), feature = "vexii-test")))]
 pub use soft::Aes256Soft as Aes256;
 #[cfg(all(
     all(target_arch = "riscv32", not(feature = "cramium-soc"), not(feature = "vexii-test")),

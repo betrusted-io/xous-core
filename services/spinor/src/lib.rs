@@ -27,6 +27,7 @@ use xous_ipc::Buffer;
 // Annotated onto this function; and we canreplace the ugly hex word with "cbo.flush 0({addr})"
 // while also losing the "mv a0, {addr}" that ensures that the argument ends
 // up where the .word expects it to be.
+#[cfg(feature = "vexii-test")]
 pub unsafe fn flush_block(addr: usize) {
     core::arch::asm!(
         "mv          a0, {addr}",
