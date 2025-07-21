@@ -92,6 +92,7 @@ gen1 = [
 gen2 = ["keystore", "keystore-api/gen2"]
 # gen 1 targets
 precursor = ["utralib/precursor", "sha2/precursor", "gen1"]
+vexii-test = ["precursor-hal/vexii-test", "aes/vexii-test"]
 hosted = ["utralib/hosted", "sha2/hosted", "gen1"]
 renode = ["utralib/renode", "sha2/renode", "gen1"]
 
