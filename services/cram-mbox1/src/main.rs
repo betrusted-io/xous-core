@@ -168,6 +168,61 @@ fn main() {
     // enable the interrupt
     mailbox.csr.wo(utra::mailbox::EV_ENABLE, !0); // enable everything
 
+    #[cfg(feature = "message-test")]
+    {
+        #[cfg(feature = "hwsim")]
+        let c_csr = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::main::HW_MAIN_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map Core Control CSR range");
+        #[cfg(feature = "hwsim")]
+        let mut core_csr = CSR::new(c_csr.as_mut_ptr() as *mut u32);
+
+        let tt = xous_api_ticktimer::Ticktimer::new().unwrap();
+        let mut total = 0;
+        let mut iter = 0;
+        log::info!("running message passing test");
+        loop {
+            // this conjures a scalar message
+            #[cfg(feature = "hwsim")]
+            core_csr.wfo(utra::main::REPORT_REPORT, 0x1111_0000 + iter);
+            let now = tt.elapsed_ms();
+            #[cfg(feature = "hwsim")]
+            core_csr.wfo(utra::main::REPORT_REPORT, 0x2222_0000 + iter);
+            total += now;
+
+            if iter >= 8 && iter < 12 {
+                #[cfg(feature = "hwsim")]
+                core_csr.wfo(utra::main::REPORT_REPORT, 0x5133_D001);
+                tt.sleep_ms(1).ok();
+            } else if iter >= 12 && iter < 13 {
+                #[cfg(feature = "hwsim")]
+                core_csr.wfo(utra::main::REPORT_REPORT, 0x5133_D002);
+                tt.sleep_ms(2).ok();
+            } else if iter >= 13 && iter < 14 {
+                #[cfg(feature = "hwsim")]
+                core_csr.wfo(utra::main::REPORT_REPORT, 0x5133_D002);
+                tt.sleep_ms(3).ok();
+            } else if iter >= 14 {
+                break;
+            }
+
+            // something lame to just conjure a memory message
+            #[cfg(feature = "hwsim")]
+            core_csr.wfo(utra::main::REPORT_REPORT, 0x3333_0000 + iter);
+            let version = tt.get_version();
+            #[cfg(feature = "hwsim")]
+            core_csr.wfo(utra::main::REPORT_REPORT, 0x4444_0000 + iter);
+            total += version.len() as u64;
+            iter += 1;
+            #[cfg(feature = "hwsim")]
+            core_csr.wfo(utra::main::REPORT_REPORT, now as u32);
+            log::info!("message passing test progress: {}ms", tt.elapsed_ms());
+        }
+    }
     // tests to run:
     // all tests take the form of loopback, data transmit -> data receive ^ 0xaaaa_0000
     //

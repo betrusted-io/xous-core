@@ -18,6 +18,7 @@ num-traits = { version = "0.2.14", default-features = false }
 [features]
 "cramium" = ["utralib/cramium-fpga"]
 "hwsim" = []
+"message-test" = []
 # ext specifies to use the APB client, instead of the loopback local
 "ext" = []            # must match setting in cram-mbox2
 default = ["cramium"]
