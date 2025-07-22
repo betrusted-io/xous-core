@@ -560,8 +560,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // placement in flash is a tension between dev convenience and RAM usage. Things in flash
             // are resident, non-swapable, but end up making the slow kernel burn process take longer.
-            let cramium_flash_pkgs =
-                ["xous-log", "xous-names", "cram-mbox1", "cram-mbox2" /* "cram-hal-service" */].to_vec();
+            let cramium_flash_pkgs = [
+                "xous-log",
+                "xous-names",
+                "xous-ticktimer",
+                "cram-mbox1",
+                "cram-mbox2", /* "cram-hal-service" */
+            ]
+            .to_vec();
             let cramium_swap_pkgs = [].to_vec();
 
             builder.add_loader_feature("debug-print");
