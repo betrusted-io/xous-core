@@ -571,12 +571,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let cramium_swap_pkgs = [].to_vec();
 
             builder.add_loader_feature("debug-print");
+            builder.add_loader_feature("verilator-only");
             // builder.add_kernel_feature("debug-print");
             // builder.add_kernel_feature("debug-swap-verbose");
 
             // builder.add_feature("quantum-timer");
             // builder.add_feature("auto-trng"); // automatically initialize TRNG tester inside USB stack
             builder.add_kernel_feature("v2p");
+            builder.add_kernel_feature("verilator-only");
             // builder.add_feature("mass-storage");
             // builder.add_feature("ditherpunk");
 
