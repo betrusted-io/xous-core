@@ -339,7 +339,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             1, // Kernel is PID 1
         );
     }
-    #[cfg(feature = "debug-print")]
+    #[cfg(all(feature = "debug-print", not(feature = "verilator-only")))]
     // print the kernel's page table mappings as a sanity check on the loader
     debug::print_pagetable(cfg.processes[0].satp);
 

@@ -167,7 +167,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
         loop {}
     };
 
-    #[cfg(feature = "vexii-test")]
+    #[cfg(all(feature = "vexii-test", not(feature = "verilator-only")))]
     {
         // fake the prehash
         use ed25519_dalek_loader::Digest;
