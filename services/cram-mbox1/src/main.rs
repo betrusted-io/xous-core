@@ -222,6 +222,7 @@ fn main() {
             core_csr.wfo(utra::main::REPORT_REPORT, now as u32);
             log::info!("message passing test progress: {}ms", tt.elapsed_ms());
         }
+        log::info!("total: {}", total); // consume the total value so it's not optimized out
     }
     // tests to run:
     // all tests take the form of loopback, data transmit -> data receive ^ 0xaaaa_0000
