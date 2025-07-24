@@ -5,6 +5,7 @@ extern crate alloc;
 // contains runtime setup
 mod asm;
 
+pub mod arty_rgb;
 mod platform;
 mod repl;
 use alloc::collections::VecDeque;
@@ -45,7 +46,7 @@ pub fn uart_irq_handler() {
 pub unsafe extern "C" fn rust_entry() -> ! {
     // turn on a green LED to indicate boot
     let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
-    rgb.wfo(utra::rgb::OUT_OUT, 0x002);
+    rgb.wfo(arty_rgb::LD3, 0b010);
 
     crate::platform::early_init();
     crate::println!("\n~~Baremetal up!~~\n");
@@ -81,7 +82,8 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         // Animate the LED flashing to indicate repl loop is running
         delay(1);
         count += 1;
-        rgb.wfo(utra::rgb::OUT_OUT, ((count / 500) as u32) << 6);
+
+        rgb.rmwf(arty_rgb::LD3, (count / 500) as u32);
     }
 }
 
