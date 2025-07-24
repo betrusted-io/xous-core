@@ -56,12 +56,33 @@ impl core::fmt::Debug for MemoryMapping {
 
 fn translate_flags(req_flags: MemoryFlags) -> MMUFlags {
     let mut flags = MMUFlags::NONE;
+
+    // TODO for vex-ii:
+    // Vexii implement A-flag. In this case, we should not just be setting every
+    // readable page to "A", we should add a handler in the IRQ handler that sets "A"
+    // when the page is actually read.
+    #[cfg(not(feature = "vexii-test"))]
     if req_flags & xous_kernel::MemoryFlags::R == xous_kernel::MemoryFlags::R {
         flags |= MMUFlags::R;
     }
+    #[cfg(feature = "vexii-test")]
+    if req_flags & xous_kernel::MemoryFlags::R == xous_kernel::MemoryFlags::R {
+        flags |= MMUFlags::R | MMUFlags::A;
+    }
+
+    // TODO for vex-ii:
+    // Vexii implement D-flag. In this case, we should not just be setting every
+    // writeable page to "D", we should add a handler in the IRQ handler that sets "D"
+    // when the page is actually writte.
+    #[cfg(not(feature = "vexii-test"))]
     if req_flags & xous_kernel::MemoryFlags::W == xous_kernel::MemoryFlags::W {
         flags |= MMUFlags::W;
     }
+    #[cfg(feature = "vexii-test")]
+    if req_flags & xous_kernel::MemoryFlags::W == xous_kernel::MemoryFlags::W {
+        flags |= MMUFlags::W | MMUFlags::D;
+    }
+
     if req_flags & xous_kernel::MemoryFlags::X == xous_kernel::MemoryFlags::X {
         flags |= MMUFlags::X;
     }
@@ -650,7 +671,8 @@ pub fn map_page_inner(
 
     // Ensure the entry hasn't already been mapped.
     if unsafe { l0_pt.add(vpn0).read_volatile() } & 1 != 0 {
-        panic!("Page {:08x} already allocated!", virt);
+        klog!("Page {:08x} already allocated!", virt);
+        return Err(xous_kernel::Error::MemoryInUse);
     }
     unsafe {
         l0_pt.add(vpn0).write_volatile(

@@ -51,6 +51,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     crate::platform::early_init();
     crate::println!("\n~~Baremetal up!~~\n");
 
+    #[cfg(feature = "artyvexii")]
+    crate::platform::test_virtual_memory();
+
     // select a BIO test to run
     #[cfg(feature = "artybio")]
     fifo_basic();

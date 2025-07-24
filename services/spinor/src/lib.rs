@@ -18,6 +18,25 @@ use num_traits::*;
 use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;
 
+// Note: cbo.flush is coded as a .word because Rust as of 1.87 hasn't stabilized
+// the cbo.flush instruction extension. Eventually when zicbom is stabilized,
+// we should be able to use:
+//
+// #[target_feature(enable = "zicbom")]
+//
+// Annotated onto this function; and we canreplace the ugly hex word with "cbo.flush 0({addr})"
+// while also losing the "mv a0, {addr}" that ensures that the argument ends
+// up where the .word expects it to be.
+#[cfg(feature = "vexii-test")]
+pub unsafe fn flush_block(addr: usize) {
+    core::arch::asm!(
+        "mv          a0, {addr}",
+        ".word 0x0025200f", /* cbo.flush 0(a0) */
+        addr = in(reg) addr,
+        out("a0") _, // clobber a0; without this, the compiler can't know that a0 actually "mattered"
+    );
+}
+
 #[derive(Debug)]
 pub struct Spinor {
     conn: CID,
@@ -100,9 +119,44 @@ impl Spinor {
     }
 
     #[cfg(not(test))]
-    fn send_write_region(&self, wr: &WriteRegion) -> Result<(), SpinorError> {
+    fn send_write_region(&self, wr: &WriteRegion, _sector: &[u8]) -> Result<(), SpinorError> {
         let mut buf = Buffer::into_buf(*wr).or(Err(SpinorError::IpcError))?;
         buf.lend_mut(self.conn, Opcode::WriteRegion.to_u32().unwrap()).or(Err(SpinorError::IpcError))?;
+
+        // vexii requires virtually addressed region to be flushed. Sector contains the virtual address range
+        // to be flushed. Therefore, the cache flush routine needs to end up in the lib.rs side of things,
+        // to be called upon return from the spinor server's successful write of the region.
+        #[cfg(feature = "vexii-test")]
+        {
+            const VEXII_CACHE_LINE_WIDTH_BYTES: usize = 64;
+            let unaligned_start = _sector.as_ptr() as usize;
+            let aligned_start = unaligned_start & !(VEXII_CACHE_LINE_WIDTH_BYTES - 1);
+            let unaligned_len = _sector.len();
+            // add in the extra bytes we need at the "start" to round down to a cache line on the start
+            let partially_aligned_len = unaligned_len + (unaligned_start - aligned_start);
+            // add in the extra bytes we need at the "end" to round up to end at a cache line
+            let aligned_len = (partially_aligned_len + (VEXII_CACHE_LINE_WIDTH_BYTES - 1))
+                & !(VEXII_CACHE_LINE_WIDTH_BYTES - 1);
+            log::debug!(
+                "Flushing from {:x}-{:x} -> {:x}-{:x}",
+                unaligned_start,
+                unaligned_start + unaligned_len,
+                aligned_start,
+                aligned_start + aligned_len
+            );
+            // now use cbo.flush on each line - this is coded as binary because Rust still requires
+            // nightly to understand cbo.flush.
+            for i in (aligned_start..aligned_start + aligned_len).step_by(VEXII_CACHE_LINE_WIDTH_BYTES) {
+                // in any case, don't run past the length of the allocated area - this will cause a page fault
+                if i < unaligned_start + unaligned_len {
+                    unsafe {
+                        flush_block(i);
+                    }
+                } else {
+                    log::info!("Ignoring flush overrun @ {:x}", i);
+                }
+            }
+        }
 
         match buf.to_original::<WriteRegion, _>() {
             Ok(wr) => {
@@ -120,7 +174,7 @@ impl Spinor {
     }
 
     #[cfg(test)]
-    fn send_write_region(&self, wr: &WriteRegion) -> Result<(), SpinorError> {
+    fn send_write_region(&self, wr: &WriteRegion, _sector_dummy: &[u8]) -> Result<(), SpinorError> {
         let mut i = 0;
         if !wr.clean_patch {
             assert!(
@@ -241,7 +295,7 @@ impl Spinor {
     /// lazy and you just send a large     amount of unchanged data with a couple small changes scattered
     /// about, this will not be "smart" about it and do a diff and     optimally patch sub-regions. It
     /// will erase and re-write the entire region included in the patch. It must also be a multiple     of
-    /// two u8s in length, because the DDR interface can only tranfer even multiples of bytes.
+    /// two u8s in length, because the DDR interface can only transfer even multiples of bytes.
     /// `patch_index` is the offset relative to the base address of `region` to patch. It is *not* relative to
     /// the base of FLASH,   it is relative to the base of `region`. You can think of it as the index into
     /// the `region` slice where the patch data should go.   patch_index /can/ have an odd byte offset,
@@ -365,7 +419,7 @@ impl Spinor {
                 wr.start = patch_start
                     .expect("check region did not intersect patch region; this shouldn't be possible.");
                 wr.len = data_index as u32;
-                ret = self.send_write_region(&wr);
+                ret = self.send_write_region(&wr, sector);
                 if ret.is_err() {
                     break;
                 }
@@ -403,7 +457,7 @@ impl Spinor {
                 // if the requested patch data happens to be identical to the existing data already, don't
                 // even send the request.
                 if dirty {
-                    ret = self.send_write_region(&wr);
+                    ret = self.send_write_region(&wr, sector);
                     if ret.is_err() {
                         break; // abort fast if we encounter an error
                     }
@@ -509,7 +563,7 @@ mod tests {
         wr.data[2] = 0xCC;
         wr.data[3] = 0xDD;
         let mut spinor = Spinor::new();
-        let ret = spinor.send_write_region(&wr);
+        let ret = spinor.send_write_region(&wr, &[0]);
         assert!(ret.is_ok(), "spinor write returned an error");
 
         for (addr, &byte) in EMU_FLASH.lock().unwrap().iter().enumerate() {
@@ -538,7 +592,7 @@ mod tests {
         wr.data[8] = 0x3;
         wr.data[9] = 0x4;
         wr.len = 10;
-        let ret = spinor.send_write_region(&wr);
+        let ret = spinor.send_write_region(&wr, &[0]);
         assert!(ret.is_ok(), "spinor write returned an error");
 
         for (addr, &byte) in EMU_FLASH.lock().unwrap().iter().enumerate() {

@@ -47,26 +47,27 @@ Note that the kernel takes up a single 4 MB megapage, so it can be
 assigned to every process simply by mapping megapage 1023 (`0xffc00000`).
 
 ```
-| Address    | Description
-| ---------- | -----------
-| 0x00100000 | Default entrypoint for riscv64-unknown-elf-ld (as shown by `riscv64-unknown-elf-ld --verbose`)
-| 0x80000000 | Process stack top
-| 0xff000000 | End of memory available to processes
-| 0xff400000 | Page tables
-| 0xff800000 | Process-specific data (such as root page table)
-| 0xff801000 | Context data (registers, etc.)
-| 0xff802000 | Return address from syscalls (never allocated)
-| 0xffc00000 | Kernel arguments, allocation tables
-| 0xffca0000 | Kernel LCD framebuffer page
-| 0xffcb0000 | Kernel LCD CSR page
-| 0xffcc0000 | Kernel GDB UART CSR page
-| 0xffcd0000 | Kernel WFI CSR page
-| 0xffce0000 | Kernel TRNG CSR page
-| 0xffcf0000 | Supervisor UART CSR page
-| 0xffd00000 | Kernel binary image and data section
-| 0xfff80000 | Kernel stack top
-| 0xffff0000 | "default" stack pointer (used by interrupt handlers)
-| 0xfff00000 | {unused}
+| Address    | Description                                                                                    |
+| ---------- | ---------------------------------------------------------------------------------------------- |
+| 0x00100000 | Default entrypoint for riscv64-unknown-elf-ld (as shown by `riscv64-unknown-elf-ld --verbose`) |
+| 0x80000000 | Process stack top                                                                              |
+| 0xff000000 | End of memory available to processes                                                           |
+| 0xff400000 | Page tables                                                                                    |
+| 0xff800000 | Process-specific data (such as root page table)                                                |
+| 0xff801000 | Context data (registers, etc.)                                                                 |
+| 0xff802000 | Return address from syscalls (never allocated)                                                 |
+| 0xffc00000 | Kernel arguments, allocation tables                                                            |
+| 0xffca0000 | Kernel LCD framebuffer page                                                                    |
+| 0xffcb0000 | Kernel LCD CSR page                                                                            |
+| 0xffcc0000 | Kernel GDB UART CSR page                                                                       |
+| 0xffcd0000 | Kernel WFI CSR page                                                                            |
+| 0xffce0000 | Kernel TRNG CSR page                                                                           |
+| 0xffcf0000 | Supervisor UART CSR page                                                                       |
+| 0xffcf1000 | Kernel legacy_int shim (for vexii-test configuration)                                          |
+| 0xffd00000 | Kernel binary image and data section                                                           |
+| 0xfff80000 | Kernel stack top                                                                               |
+| 0xffff0000 | "default" stack pointer (used by interrupt handlers)                                           |
+| 0xfff00000 | {unused}                                                                                       |
 ```
 
 Note that the stack pointer is not necessarily fixed, and may be changed
@@ -74,13 +75,13 @@ in a later revision.
 
 ## Special Physical Memory Addresses
 
-| Address    | Description
-| ---------- | -----------
-| 0x40000000 | Bottom of battery-backed main RAM (16MiB)
-| 0x40FFDFFF | Top of memory available to Xous
-| 0x40FFE000 | Clean suspend record - used by the system to indicate if we are coming out of a clean suspend state
-| 0x40FFF000 | Loader stack - this is corrupted by a reboot, and should not be allocated by the kernel
-| 0x40FFFFFF | Top of battery-backed main RAM
+| Address    | Description                                                                                         |
+| ---------- | --------------------------------------------------------------------------------------------------- |
+| 0x40000000 | Bottom of battery-backed main RAM (16MiB)                                                           |
+| 0x40FFDFFF | Top of memory available to Xous                                                                     |
+| 0x40FFE000 | Clean suspend record - used by the system to indicate if we are coming out of a clean suspend state |
+| 0x40FFF000 | Loader stack - this is corrupted by a reboot, and should not be allocated by the kernel             |
+| 0x40FFFFFF | Top of battery-backed main RAM                                                                      |
 
 
 ## Memory Whitelist
@@ -184,17 +185,17 @@ uses these to keep track of borrowed memory and pre-allocating pages.
 For the purposes of Xous, `PTE[8]` shall have the bit name `S`, and
 `PTE[9]` shall have the bit name `P`.
 
-| P[9] | S[8] | X[3] | W[2] | R[1] | V[0] | Meaning               |
-| ---- | ---- | ---- | ---- | ---- | ---- | --------------------- |
-|  0   |  0   |  0   |  0   |  0   |  0   | Page is unallocated |
-|  0   |  0   |  0   |  1   |  0   |  0   | _Invalid_ |
-|  0   |  0   |  1   |  1   |  0   |  0   | _Invalid_ |
-|  0   |  0   |  0   |  0   |  0   |  1   | _Invalid_ |
-|  0   |  0   |  0   |  1   |  0   |  1   | _Invalid_ |
-|  0   |  0   |  1   |  1   |  0   |  1   | _Invalid_ |
-|  0   |  0   | _x_  | _x_  | _x_  |  0   | Page is on-demand allocated, with permissions according to _RWX_ |
-|  0   |  0   | _x_  | _x_  | _x_  |  1   | Page is allocated and valid, with permissions according to _RWX_ |
-| _x_  |  1   | _x_  |  0   | _x_  |  1   | Page is immutably shared |
-| _x_  |  1   |  0   |  0   | _x_  |  0   | Page is mutably shared (and is therefore unavailable) |
+| P[9] | S[8] | X[3] | W[2] | R[1] | V[0] | Meaning                                                          |
+| ---- | ---- | ---- | ---- | ---- | ---- | ---------------------------------------------------------------- |
+| 0    | 0    | 0    | 0    | 0    | 0    | Page is unallocated                                              |
+| 0    | 0    | 0    | 1    | 0    | 0    | _Invalid_                                                        |
+| 0    | 0    | 1    | 1    | 0    | 0    | _Invalid_                                                        |
+| 0    | 0    | 0    | 0    | 0    | 1    | _Invalid_                                                        |
+| 0    | 0    | 0    | 1    | 0    | 1    | _Invalid_                                                        |
+| 0    | 0    | 1    | 1    | 0    | 1    | _Invalid_                                                        |
+| 0    | 0    | _x_  | _x_  | _x_  | 0    | Page is on-demand allocated, with permissions according to _RWX_ |
+| 0    | 0    | _x_  | _x_  | _x_  | 1    | Page is allocated and valid, with permissions according to _RWX_ |
+| _x_  | 1    | _x_  | 0    | _x_  | 1    | Page is immutably shared                                         |
+| _x_  | 1    | 0    | 0    | _x_  | 0    | Page is mutably shared (and is therefore unavailable)            |
 
 The `P[9]` bit indicates whether the page was writable prior to the borrow.

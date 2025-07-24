@@ -250,6 +250,8 @@ pub const HW_SRAM_MEM:     usize = 0x01000000;
 pub const HW_SRAM_MEM_LEN: usize = 8192;
 pub const HW_MAIN_RAM_MEM:     usize = 0x40000000;
 pub const HW_MAIN_RAM_MEM_LEN: usize = 131072;
+pub const HW_TEST_RAM_MEM:     usize = 0x50000000;
+pub const HW_TEST_RAM_MEM_LEN: usize = 65536;
 pub const HW_BIO_MEM:     usize = 0x90000000;
 pub const HW_BIO_MEM_LEN: usize = 65536;
 pub const HW_CSR_MEM:     usize = 0xe0000000;
@@ -258,11 +260,14 @@ pub const HW_CSR_MEM_LEN: usize = 65536;
 // Physical base addresses of registers
 pub const HW_LEGACY_INT_BASE :   usize = 0xe0000000;
 pub const HW_RGB_BASE :   usize = 0xe0000800;
-pub const HW_CTRL_BASE :   usize = 0xe0001000;
-pub const HW_IDENTIFIER_MEM_BASE :   usize = 0xe0001800;
-pub const HW_LEDS_BASE :   usize = 0xe0002000;
-pub const HW_TIMER0_BASE :   usize = 0xe0002800;
-pub const HW_UART_BASE :   usize = 0xe0003000;
+pub const HW_CSRTEST_BASE :   usize = 0xe0001000;
+pub const HW_CTRL_BASE :   usize = 0xe0001800;
+pub const HW_IDENTIFIER_MEM_BASE :   usize = 0xe0002000;
+pub const HW_LEDS_BASE :   usize = 0xe0002800;
+pub const HW_TEST_RAM_TEST_RAM_BASE :   usize = 0xe0003000;
+pub const HW_TEST_RAM_BASE :   usize = 0xe0003800;
+pub const HW_TIMER0_BASE :   usize = 0xe0004000;
+pub const HW_UART_BASE :   usize = 0xe0004800;
 
 
 pub mod utra {
@@ -294,6 +299,18 @@ pub mod utra {
         pub const HW_RGB_BASE: usize = 0xe0000800;
     }
 
+    pub mod csrtest {
+        pub const CSRTEST_NUMREGS: usize = 2;
+
+        pub const WTEST: crate::Register = crate::Register::new(0, 0xffffffff);
+        pub const WTEST_WTEST: crate::Field = crate::Field::new(32, 0, WTEST);
+
+        pub const RTEST: crate::Register = crate::Register::new(1, 0xffffffff);
+        pub const RTEST_RTEST: crate::Field = crate::Field::new(32, 0, RTEST);
+
+        pub const HW_CSRTEST_BASE: usize = 0xe0001000;
+    }
+
     pub mod ctrl {
         pub const CTRL_NUMREGS: usize = 3;
 
@@ -307,7 +324,7 @@ pub mod utra {
         pub const BUS_ERRORS: crate::Register = crate::Register::new(2, 0xffffffff);
         pub const BUS_ERRORS_BUS_ERRORS: crate::Field = crate::Field::new(32, 0, BUS_ERRORS);
 
-        pub const HW_CTRL_BASE: usize = 0xe0001000;
+        pub const HW_CTRL_BASE: usize = 0xe0001800;
     }
 
     pub mod identifier_mem {
@@ -316,7 +333,7 @@ pub mod utra {
         pub const IDENTIFIER_MEM: crate::Register = crate::Register::new(0, 0xff);
         pub const IDENTIFIER_MEM_IDENTIFIER_MEM: crate::Field = crate::Field::new(8, 0, IDENTIFIER_MEM);
 
-        pub const HW_IDENTIFIER_MEM_BASE: usize = 0xe0001800;
+        pub const HW_IDENTIFIER_MEM_BASE: usize = 0xe0002000;
     }
 
     pub mod leds {
@@ -325,7 +342,40 @@ pub mod utra {
         pub const OUT: crate::Register = crate::Register::new(0, 0xf);
         pub const OUT_OUT: crate::Field = crate::Field::new(4, 0, OUT);
 
-        pub const HW_LEDS_BASE: usize = 0xe0002000;
+        pub const HW_LEDS_BASE: usize = 0xe0002800;
+    }
+
+    pub mod test_ram_test_ram {
+        pub const TEST_RAM_TEST_RAM_NUMREGS: usize = 1;
+
+        pub const TEST_RAM_TEST_RAM: crate::Register = crate::Register::new(0, 0xffffffff);
+        pub const TEST_RAM_TEST_RAM_TEST_RAM_TEST_RAM: crate::Field = crate::Field::new(32, 0, TEST_RAM_TEST_RAM);
+
+        pub const HW_TEST_RAM_TEST_RAM_BASE: usize = 0xe0003000;
+    }
+
+    pub mod test_ram {
+        pub const TEST_RAM_NUMREGS: usize = 6;
+
+        pub const SEED: crate::Register = crate::Register::new(0, 0xffffffff);
+        pub const SEED_SEED: crate::Field = crate::Field::new(32, 0, SEED);
+
+        pub const LENGTH: crate::Register = crate::Register::new(1, 0xffff);
+        pub const LENGTH_LENGTH: crate::Field = crate::Field::new(16, 0, LENGTH);
+
+        pub const START: crate::Register = crate::Register::new(2, 0xffff);
+        pub const START_START: crate::Field = crate::Field::new(16, 0, START);
+
+        pub const CONTROL: crate::Register = crate::Register::new(3, 0x1);
+        pub const CONTROL_GO: crate::Field = crate::Field::new(1, 0, CONTROL);
+
+        pub const STAT: crate::Register = crate::Register::new(4, 0x1);
+        pub const STAT_DONE: crate::Field = crate::Field::new(1, 0, STAT);
+
+        pub const TEST_RAM_PAGE: crate::Register = crate::Register::new(5, 0x1f);
+        pub const TEST_RAM_PAGE_TEST_RAM_PAGE: crate::Field = crate::Field::new(5, 0, TEST_RAM_PAGE);
+
+        pub const HW_TEST_RAM_BASE: usize = 0xe0003800;
     }
 
     pub mod timer0 {
@@ -356,7 +406,7 @@ pub mod utra {
         pub const EV_ENABLE_ZERO: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
 
         pub const TIMER0_IRQ: usize = 0;
-        pub const HW_TIMER0_BASE: usize = 0xe0002800;
+        pub const HW_TIMER0_BASE: usize = 0xe0004000;
     }
 
     pub mod uart {
@@ -390,7 +440,7 @@ pub mod utra {
         pub const RXFULL_RXFULL: crate::Field = crate::Field::new(1, 0, RXFULL);
 
         pub const UART_IRQ: usize = 1;
-        pub const HW_UART_BASE: usize = 0xe0003000;
+        pub const HW_UART_BASE: usize = 0xe0004800;
     }
 }
 
@@ -473,6 +523,29 @@ mod tests {
 
     #[test]
     #[ignore]
+    fn compile_check_csrtest_csr() {
+        use super::*;
+        let mut csrtest_csr = CSR::new(HW_CSRTEST_BASE as *mut u32);
+
+        let foo = csrtest_csr.r(utra::csrtest::WTEST);
+        csrtest_csr.wo(utra::csrtest::WTEST, foo);
+        let bar = csrtest_csr.rf(utra::csrtest::WTEST_WTEST);
+        csrtest_csr.rmwf(utra::csrtest::WTEST_WTEST, bar);
+        let mut baz = csrtest_csr.zf(utra::csrtest::WTEST_WTEST, bar);
+        baz |= csrtest_csr.ms(utra::csrtest::WTEST_WTEST, 1);
+        csrtest_csr.wfo(utra::csrtest::WTEST_WTEST, baz);
+
+        let foo = csrtest_csr.r(utra::csrtest::RTEST);
+        csrtest_csr.wo(utra::csrtest::RTEST, foo);
+        let bar = csrtest_csr.rf(utra::csrtest::RTEST_RTEST);
+        csrtest_csr.rmwf(utra::csrtest::RTEST_RTEST, bar);
+        let mut baz = csrtest_csr.zf(utra::csrtest::RTEST_RTEST, bar);
+        baz |= csrtest_csr.ms(utra::csrtest::RTEST_RTEST, 1);
+        csrtest_csr.wfo(utra::csrtest::RTEST_RTEST, baz);
+  }
+
+    #[test]
+    #[ignore]
     fn compile_check_ctrl_csr() {
         use super::*;
         let mut ctrl_csr = CSR::new(HW_CTRL_BASE as *mut u32);
@@ -535,6 +608,76 @@ mod tests {
         let mut baz = leds_csr.zf(utra::leds::OUT_OUT, bar);
         baz |= leds_csr.ms(utra::leds::OUT_OUT, 1);
         leds_csr.wfo(utra::leds::OUT_OUT, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_test_ram_test_ram_csr() {
+        use super::*;
+        let mut test_ram_test_ram_csr = CSR::new(HW_TEST_RAM_TEST_RAM_BASE as *mut u32);
+
+        let foo = test_ram_test_ram_csr.r(utra::test_ram_test_ram::TEST_RAM_TEST_RAM);
+        test_ram_test_ram_csr.wo(utra::test_ram_test_ram::TEST_RAM_TEST_RAM, foo);
+        let bar = test_ram_test_ram_csr.rf(utra::test_ram_test_ram::TEST_RAM_TEST_RAM_TEST_RAM_TEST_RAM);
+        test_ram_test_ram_csr.rmwf(utra::test_ram_test_ram::TEST_RAM_TEST_RAM_TEST_RAM_TEST_RAM, bar);
+        let mut baz = test_ram_test_ram_csr.zf(utra::test_ram_test_ram::TEST_RAM_TEST_RAM_TEST_RAM_TEST_RAM, bar);
+        baz |= test_ram_test_ram_csr.ms(utra::test_ram_test_ram::TEST_RAM_TEST_RAM_TEST_RAM_TEST_RAM, 1);
+        test_ram_test_ram_csr.wfo(utra::test_ram_test_ram::TEST_RAM_TEST_RAM_TEST_RAM_TEST_RAM, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_test_ram_csr() {
+        use super::*;
+        let mut test_ram_csr = CSR::new(HW_TEST_RAM_BASE as *mut u32);
+
+        let foo = test_ram_csr.r(utra::test_ram::SEED);
+        test_ram_csr.wo(utra::test_ram::SEED, foo);
+        let bar = test_ram_csr.rf(utra::test_ram::SEED_SEED);
+        test_ram_csr.rmwf(utra::test_ram::SEED_SEED, bar);
+        let mut baz = test_ram_csr.zf(utra::test_ram::SEED_SEED, bar);
+        baz |= test_ram_csr.ms(utra::test_ram::SEED_SEED, 1);
+        test_ram_csr.wfo(utra::test_ram::SEED_SEED, baz);
+
+        let foo = test_ram_csr.r(utra::test_ram::LENGTH);
+        test_ram_csr.wo(utra::test_ram::LENGTH, foo);
+        let bar = test_ram_csr.rf(utra::test_ram::LENGTH_LENGTH);
+        test_ram_csr.rmwf(utra::test_ram::LENGTH_LENGTH, bar);
+        let mut baz = test_ram_csr.zf(utra::test_ram::LENGTH_LENGTH, bar);
+        baz |= test_ram_csr.ms(utra::test_ram::LENGTH_LENGTH, 1);
+        test_ram_csr.wfo(utra::test_ram::LENGTH_LENGTH, baz);
+
+        let foo = test_ram_csr.r(utra::test_ram::START);
+        test_ram_csr.wo(utra::test_ram::START, foo);
+        let bar = test_ram_csr.rf(utra::test_ram::START_START);
+        test_ram_csr.rmwf(utra::test_ram::START_START, bar);
+        let mut baz = test_ram_csr.zf(utra::test_ram::START_START, bar);
+        baz |= test_ram_csr.ms(utra::test_ram::START_START, 1);
+        test_ram_csr.wfo(utra::test_ram::START_START, baz);
+
+        let foo = test_ram_csr.r(utra::test_ram::CONTROL);
+        test_ram_csr.wo(utra::test_ram::CONTROL, foo);
+        let bar = test_ram_csr.rf(utra::test_ram::CONTROL_GO);
+        test_ram_csr.rmwf(utra::test_ram::CONTROL_GO, bar);
+        let mut baz = test_ram_csr.zf(utra::test_ram::CONTROL_GO, bar);
+        baz |= test_ram_csr.ms(utra::test_ram::CONTROL_GO, 1);
+        test_ram_csr.wfo(utra::test_ram::CONTROL_GO, baz);
+
+        let foo = test_ram_csr.r(utra::test_ram::STAT);
+        test_ram_csr.wo(utra::test_ram::STAT, foo);
+        let bar = test_ram_csr.rf(utra::test_ram::STAT_DONE);
+        test_ram_csr.rmwf(utra::test_ram::STAT_DONE, bar);
+        let mut baz = test_ram_csr.zf(utra::test_ram::STAT_DONE, bar);
+        baz |= test_ram_csr.ms(utra::test_ram::STAT_DONE, 1);
+        test_ram_csr.wfo(utra::test_ram::STAT_DONE, baz);
+
+        let foo = test_ram_csr.r(utra::test_ram::TEST_RAM_PAGE);
+        test_ram_csr.wo(utra::test_ram::TEST_RAM_PAGE, foo);
+        let bar = test_ram_csr.rf(utra::test_ram::TEST_RAM_PAGE_TEST_RAM_PAGE);
+        test_ram_csr.rmwf(utra::test_ram::TEST_RAM_PAGE_TEST_RAM_PAGE, bar);
+        let mut baz = test_ram_csr.zf(utra::test_ram::TEST_RAM_PAGE_TEST_RAM_PAGE, bar);
+        baz |= test_ram_csr.ms(utra::test_ram::TEST_RAM_PAGE_TEST_RAM_PAGE, 1);
+        test_ram_csr.wfo(utra::test_ram::TEST_RAM_PAGE_TEST_RAM_PAGE, baz);
   }
 
     #[test]

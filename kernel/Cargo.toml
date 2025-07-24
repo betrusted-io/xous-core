@@ -44,6 +44,7 @@ critical-section = "1.1.1"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(ci)', 'cfg(baremetal)'] }
 
 [features]
+vexii-test = []                                                      # integration test for vexii, not a production configuration
 cramium-soc = ["utralib/cramium-soc", "rand_chacha", "raw-trng"]
 verilator-only = []
 cramium-fpga = ["utralib/cramium-fpga", "rand_chacha"]

@@ -1,6 +1,65 @@
 #![cfg_attr(not(test), no_main)]
 #![cfg_attr(not(test), no_std)]
 
+// Vex-II porting notes:
+//
+// Vex-II is currently supported as a "testing" stub. Compatibility to Vex-I is maintained
+// through the "legacy-int" shim, which implements Vex-I style litex interrupt handling and
+// masking through a CSR.
+//
+// ** Interrupts **
+// The final version of Vex-II will introduce a PLIC. This will sit in between the litex
+// interrupt controller and be largely a pass-through in Xous, but is provided so that other
+// OSes which assume PLIC can port more easily to the SoC. This means that the stubs in
+// kernel/src/arch/riscv/irq.rs (sim_read(), sim_write, sip_read()) will need to be re-written
+// to either setup the PLIC and forget it or work the PLIC directly into the handler loop.
+// Tasks:
+//   -[ ] Add PLIC into Vex-ii implementation
+//   -[ ] Refactor kernel/src/arch/riscv/irq.rs to handle this
+//
+// ** MMU **
+// Vex-II includes support for -A and -D flags in the MMU. The current work-around in Xous is
+// to simply set A for all R pages, and D for all W pages. Instead, A/D should be cleared
+// in the loader, and inside the OS when a page is "read" but "A" is missing, A should be
+// set and the read is retried. Likewise, when a page is "written" but "D" is missing,
+// "D" should be set and the write retried. This implementation will allow the MMU to skip
+// writing pages out to swap that are clean, and to also pick only pages that have not been
+// accessed to consider as candidates for swapping out.
+// Tasks:
+//   -[ ] Remove A/D "on by default" in loader/src/phase2.rs/ProgramDescription/Load() - multiple locations
+//   -[ ] Remove A/D "on by default" in kernel/src/arch/riscv/mem.rs/translate_flags()
+//   -[ ] Add handler for A/D trap inside
+//        kernel/src/arch/riscv/irq.rs/trap_handler/RiscvException::StoragePageFault | LoadPage Fault
+//   -[ ] Update swap handler to use the A/D features - not sure exact files, need to research this
+//
+// ** No curve25519 engine **
+// To make space for the Vex-II core the curve25519 engine was gutted. This means there is no signature
+// verification in the boot process. For the final Denarius implementation, this won't be a big impact
+// because there is crypto hardware there on the SoC, but for Precursor validation model this means a lot
+// of the L1 bootloader is stubbed out, and some stub code is put into the loader to "fake" the items
+// now missing due to this omission. These are clearly delineated with a "vexii-test" fetaure flag.
+//
+// ** Clocking differences & TRNG **
+// Vex-II on Precursor runs at 50MHz. This means that all of the other dependent clocks also have
+// to down-clock. This breaks XADC and causes the TrngManager to fail test. Since this is a temporary
+// config, the SoC bypasses the self-test and just causes the system to run in a more or less deterministic
+// mode of operation. The TRNG will come from a different source on Denarius.
+//
+// ** Cache flush **
+// Vex-II implements cmo.flush instructions. This means that the flush routine inside SPINOR needs
+// to be handled differently: flushes need to address a specific address to flush.
+//   -[ ] services/spinor/src/lib.rs/Spinor/patch() has multiple locations where the API is modified
+//        to allow a specific virtual address to be pushed back to the flush routine.
+//
+// ** AES **
+// Vex-II implements compliant AES instructions to the -Zkn standards (unlike Vex-I).
+// The AES library has flags that recognize the "vexii-testing" feature, and implements acceleration
+// for AES-256 (but falls back to software for AES-128). This will need to be revisited regardless
+// for the NTO/daric bring-up.
+//
+// ** Testing features **
+//   -[ ] libs/precursor/hal/src/board/precursors.rs - PDDB_LEN is shortened for vexii-test target
+
 #[macro_use]
 mod args;
 use args::{KernelArgument, KernelArguments};
@@ -8,7 +67,7 @@ use args::{KernelArgument, KernelArguments};
 #[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/debug.rs")]
 mod debug;
 mod fonts;
-#[cfg(feature = "secboot")]
+#[cfg(all(feature = "secboot", not(feature = "vexii-test")))]
 mod secboot;
 
 #[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/asm.rs")]
@@ -99,14 +158,73 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // initially validate the whole image on disk (including kernel args)
     // kernel args must be validated because tampering with them can change critical assumptions about
     // how data is loaded into memory
-    #[cfg(feature = "secboot")]
+    #[cfg(all(feature = "secboot", not(feature = "vexii-test")))]
     let mut fs_prehash = [0u8; 64];
-    #[cfg(not(feature = "secboot"))]
-    let fs_prehash = [0u8; 64];
-    #[cfg(feature = "secboot")]
+    #[cfg(not(all(feature = "secboot", not(feature = "vexii-test"))))]
+    let mut fs_prehash = [0u8; 64];
+    #[cfg(all(feature = "secboot", not(feature = "vexii-test")))]
     if !secboot::validate_xous_img(signed_buffer as *const u32, &mut fs_prehash) {
         loop {}
     };
+
+    #[cfg(feature = "vexii-test")]
+    {
+        // fake the prehash
+        use ed25519_dalek_loader::Digest;
+        #[repr(C)]
+        struct SignatureInFlash {
+            pub version: u32,
+            pub signed_len: u32,
+            pub signature: [u8; 64],
+        }
+        let sig_ptr = signed_buffer as *const SignatureInFlash;
+        let sig: &SignatureInFlash = unsafe { sig_ptr.as_ref().unwrap() };
+        let signed_len = sig.signed_len;
+        let image: &[u8] = unsafe {
+            core::slice::from_raw_parts(
+                (signed_buffer as usize + SIGBLOCK_SIZE) as *const u8,
+                signed_len as usize,
+            )
+        };
+        let mut h: sha2_loader::Sha512 = sha2_loader::Sha512::new();
+        h.update(&image);
+        let prehash = h.finalize();
+        fs_prehash.copy_from_slice(prehash.as_slice());
+
+        // ensure the crypto unit is on - necessary for TRNG to operate
+        let mut power = utralib::CSR::new(utralib::utra::power::HW_POWER_BASE as *mut u32);
+        power.rmwf(utralib::utra::power::POWER_CRYPTO_ON, 1);
+        let mut trng = utralib::CSR::new(utralib::utra::trng_server::HW_TRNG_SERVER_BASE as *mut u32);
+        trng.wo(utralib::utra::trng_server::CONTROL, 0x5); // disable avalanche generator
+
+        // debug output on TRNG unit.
+        println!(
+            "trng: cha/{:x} dat/{:x} sta/{:x}",
+            trng.r(utralib::utra::trng_server::CHACHA),
+            trng.r(utralib::utra::trng_server::DATA),
+            trng.r(utralib::utra::trng_server::STATUS)
+        );
+        let trngk = utralib::utra::trng_kernel::HW_TRNG_KERNEL_BASE as *const u32;
+        for i in 0..utralib::utra::trng_kernel::TRNG_KERNEL_NUMREGS {
+            println!("trngk{}: {:x}", i, trngk.add(i).read_volatile())
+        }
+        let trngs = utralib::utra::trng_server::HW_TRNG_SERVER_BASE as *const u32;
+        for i in 0..utralib::utra::trng_server::TRNG_SERVER_NUMREGS {
+            println!("trngs{}: {:x}", i, trngs.add(i).read_volatile())
+        }
+
+        // allow cache flushes to be initiated from supervisor and userspace
+        // I guess this creates a potential sidechannel, but we're not a multitenant
+        // threat model - if someone is running code on the SoC that can trigger
+        // cache flushes to exfil data, we've got bigger problems...?
+        core::arch::asm!(
+            "li   t0, 0x30 | 0x40", // XENVCFG_CBIE_OK | XENVCFG_CBCFE_OK
+            "csrw 0x30a, t0", // allow supervisor
+            "csrw 0x10a, t0", // allow user
+            out("t0") _, // clobber t0
+        );
+    }
+
     // the kernel arg buffer is SIG_BLOCK_SIZE into the signed region
     let arg_buffer = (signed_buffer as u32 + SIGBLOCK_SIZE as u32) as *const usize;
 
@@ -298,7 +416,10 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
                 // uart mux only exists on the FPGA variant
                 use utralib::generated::*;
                 let mut gpio_csr = CSR::new(utra::gpio::HW_GPIO_BASE as *mut u32);
+                #[cfg(not(feature = "early-printk"))]
                 gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // patch us over to a different UART for debug (1=LOG 2=APP, 0=KERNEL(hw reset default))
+                #[cfg(feature = "early-printk")]
+                gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 0); // on early printk, leave us on the kernel owning the UART
             }
 
             start_kernel(

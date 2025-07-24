@@ -69,16 +69,22 @@ impl SerialRead for Uart {
 pub fn init() {
     // Map the UART peripheral.
     MemoryManager::with_mut(|memory_manager| {
-        memory_manager
-            .map_range(
-                utra::uart::HW_UART_BASE as *mut u8,
-                (UART_ADDR & !4095) as *mut u8,
-                4096,
-                PID::new(1).unwrap(),
-                MemoryFlags::R | MemoryFlags::W,
-                MemoryType::Default,
-            )
-            .expect("unable to map serial port")
+        match memory_manager.map_range(
+            utra::uart::HW_UART_BASE as *mut u8,
+            (UART_ADDR & !4095) as *mut u8,
+            4096,
+            PID::new(1).unwrap(),
+            MemoryFlags::R | MemoryFlags::W,
+            MemoryType::Default,
+        ) {
+            Err(xous_kernel::Error::MemoryInUse) => {
+                klog!("Kernel uart already allocated by loader. No need to re-allocate.");
+            }
+            Ok(_) => {}
+            _ => {
+                panic!("Couldn't allocate kernel UART");
+            }
+        }
     });
 
     let mut uart = Uart::new(UART_ADDR, process_characters);
