@@ -168,6 +168,104 @@ fn main() {
     // enable the interrupt
     mailbox.csr.wo(utra::mailbox::EV_ENABLE, !0); // enable everything
 
+    #[cfg(feature = "message-test")]
+    {
+        #[cfg(feature = "hwsim")]
+        let c_csr = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::main::HW_MAIN_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map Core Control CSR range");
+        #[cfg(feature = "hwsim")]
+        let mut core_csr = CSR::new(c_csr.as_mut_ptr() as *mut u32);
+
+        #[cfg(feature = "aestests")]
+        {
+            use aes::cipher::generic_array::GenericArray;
+            use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
+            log::info!("AES");
+            const TEST_MAX_LEN: usize = 4096;
+            let mut dataset_op = [0u8; TEST_MAX_LEN];
+            for (i, d) in dataset_op.iter_mut().enumerate() {
+                *d = i as u8;
+            }
+            log::info!("key");
+            let key_array: [u8; 32] = [0; 32];
+            let key = GenericArray::from_slice(&key_array);
+            let cipher_hw = aes::Aes256::new(&key);
+            log::info!("round");
+            for iter in 0..2 {
+                core_csr.wfo(utra::main::REPORT_REPORT, 0xae50_0000 + iter);
+                for (i, mut chunk) in dataset_op.chunks_exact_mut(aes::BLOCK_SIZE).enumerate() {
+                    let mut block = GenericArray::clone_from_slice(&mut chunk);
+                    core_csr.wfo(utra::main::REPORT_REPORT, 0xae5e_0000 + iter + ((i as u32) << 16));
+                    cipher_hw.encrypt_block(&mut block);
+                    core_csr.wfo(utra::main::REPORT_REPORT, 0xae5e_1000 + iter + ((i as u32) << 16));
+                    for (&src, dst) in block.iter().zip(chunk.iter_mut()) {
+                        *dst = src;
+                    }
+                }
+                for (i, mut chunk) in dataset_op.chunks_exact_mut(aes::BLOCK_SIZE).enumerate() {
+                    let mut block = GenericArray::clone_from_slice(&mut chunk);
+                    core_csr.wfo(utra::main::REPORT_REPORT, 0xae5d_0000 + iter + ((i as u32) << 16));
+                    cipher_hw.decrypt_block(&mut block);
+                    core_csr.wfo(utra::main::REPORT_REPORT, 0xae5d_1000 + iter + ((i as u32) << 16));
+                    for (&src, dst) in block.iter().zip(chunk.iter_mut()) {
+                        *dst = src;
+                    }
+                }
+                if iter == 0 {
+                    log::info!("0 done");
+                }
+            }
+            log::info!("done");
+        }
+
+        let tt = xous_api_ticktimer::Ticktimer::new().unwrap();
+        let mut total = 0;
+        let mut iter = 0;
+        log::info!("running message passing test");
+        loop {
+            // this conjures a scalar message
+            #[cfg(feature = "hwsim")]
+            core_csr.wfo(utra::main::REPORT_REPORT, 0x1111_0000 + iter);
+            let now = tt.elapsed_ms();
+            #[cfg(feature = "hwsim")]
+            core_csr.wfo(utra::main::REPORT_REPORT, 0x2222_0000 + iter);
+            total += now;
+
+            if iter >= 8 && iter < 12 {
+                #[cfg(feature = "hwsim")]
+                core_csr.wfo(utra::main::REPORT_REPORT, 0x5133_D001);
+                tt.sleep_ms(1).ok();
+            } else if iter >= 12 && iter < 13 {
+                #[cfg(feature = "hwsim")]
+                core_csr.wfo(utra::main::REPORT_REPORT, 0x5133_D002);
+                tt.sleep_ms(2).ok();
+            } else if iter >= 13 && iter < 14 {
+                #[cfg(feature = "hwsim")]
+                core_csr.wfo(utra::main::REPORT_REPORT, 0x5133_D002);
+                tt.sleep_ms(3).ok();
+            } else if iter >= 14 {
+                break;
+            }
+
+            // something lame to just conjure a memory message
+            #[cfg(feature = "hwsim")]
+            core_csr.wfo(utra::main::REPORT_REPORT, 0x3333_0000 + iter);
+            let version = tt.get_version();
+            #[cfg(feature = "hwsim")]
+            core_csr.wfo(utra::main::REPORT_REPORT, 0x4444_0000 + iter);
+            total += version.len() as u64;
+            iter += 1;
+            #[cfg(feature = "hwsim")]
+            core_csr.wfo(utra::main::REPORT_REPORT, now as u32);
+            log::info!("message passing test progress: {}ms", tt.elapsed_ms());
+        }
+        log::info!("total: {}", total); // consume the total value so it's not optimized out
+    }
     // tests to run:
     // all tests take the form of loopback, data transmit -> data receive ^ 0xaaaa_0000
     //

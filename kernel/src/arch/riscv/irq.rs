@@ -50,22 +50,35 @@ fn sip_read() -> usize {
     existing
 }
 
+// using verilator-only as a proxy for the cramium-soc config;
+// when the flag is off, assume precursor config
+#[cfg(all(feature = "vexii-test", feature = "verilator-only"))]
+use crate::platform::cramium::{
+    LEGACY_INT_VMEM,
+    legacy_int::{SUPER_MASK, SUPER_PENDING},
+};
+#[cfg(all(feature = "vexii-test", not(feature = "verilator-only")))]
+use crate::platform::precursor::{
+    LEGACY_INT_VMEM,
+    legacy_int::{SUPER_MASK, SUPER_PENDING},
+};
+
 #[cfg(feature = "vexii-test")]
 fn sim_read() -> usize {
-    let legacy_int = utralib::CSR::new(crate::platform::precursor::LEGACY_INT_VMEM as *mut u32);
-    legacy_int.r(crate::platform::precursor::legacy_int::SUPER_MASK) as usize
+    let legacy_int = utralib::CSR::new(LEGACY_INT_VMEM as *mut u32);
+    legacy_int.r(SUPER_MASK) as usize
 }
 
 #[cfg(feature = "vexii-test")]
 fn sim_write(new: usize) {
-    let mut legacy_int = utralib::CSR::new(crate::platform::precursor::LEGACY_INT_VMEM as *mut u32);
-    legacy_int.wo(crate::platform::precursor::legacy_int::SUPER_MASK, new as u32);
+    let mut legacy_int = utralib::CSR::new(LEGACY_INT_VMEM as *mut u32);
+    legacy_int.wo(SUPER_MASK, new as u32);
 }
 
 #[cfg(feature = "vexii-test")]
 fn sip_read() -> usize {
-    let legacy_int = utralib::CSR::new(crate::platform::precursor::LEGACY_INT_VMEM as *mut u32);
-    legacy_int.r(crate::platform::precursor::legacy_int::SUPER_PENDING) as usize
+    let legacy_int = utralib::CSR::new(LEGACY_INT_VMEM as *mut u32);
+    legacy_int.r(SUPER_PENDING) as usize
 }
 
 /// Disable external interrupts

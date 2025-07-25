@@ -458,13 +458,16 @@ pub mod utra {
     }
 
     pub mod main {
-        pub const MAIN_NUMREGS: usize = 2;
+        pub const MAIN_NUMREGS: usize = 3;
 
         pub const DONE: crate::Register = crate::Register::new(0, 0x1);
         pub const DONE_DONE: crate::Field = crate::Field::new(1, 0, DONE);
 
         pub const IRQTEST0: crate::Register = crate::Register::new(1, 0xffff);
         pub const IRQTEST0_TRIGGER: crate::Field = crate::Field::new(16, 0, IRQTEST0);
+
+        pub const REPORT: crate::Register = crate::Register::new(2, 0xffffffff);
+        pub const REPORT_REPORT: crate::Field = crate::Field::new(32, 0, REPORT);
 
         pub const HW_MAIN_BASE: usize = 0x40081000;
     }
@@ -5676,6 +5679,14 @@ mod tests {
         let mut baz = main_csr.zf(utra::main::IRQTEST0_TRIGGER, bar);
         baz |= main_csr.ms(utra::main::IRQTEST0_TRIGGER, 1);
         main_csr.wfo(utra::main::IRQTEST0_TRIGGER, baz);
+
+        let foo = main_csr.r(utra::main::REPORT);
+        main_csr.wo(utra::main::REPORT, foo);
+        let bar = main_csr.rf(utra::main::REPORT_REPORT);
+        main_csr.rmwf(utra::main::REPORT_REPORT, bar);
+        let mut baz = main_csr.zf(utra::main::REPORT_REPORT, bar);
+        baz |= main_csr.ms(utra::main::REPORT_REPORT, 1);
+        main_csr.wfo(utra::main::REPORT_REPORT, baz);
   }
 
     #[test]
