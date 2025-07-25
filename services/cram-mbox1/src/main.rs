@@ -181,6 +181,48 @@ fn main() {
         #[cfg(feature = "hwsim")]
         let mut core_csr = CSR::new(c_csr.as_mut_ptr() as *mut u32);
 
+        #[cfg(feature = "aestests")]
+        {
+            use aes::cipher::generic_array::GenericArray;
+            use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
+            log::info!("AES");
+            const TEST_MAX_LEN: usize = 4096;
+            let mut dataset_op = [0u8; TEST_MAX_LEN];
+            for (i, d) in dataset_op.iter_mut().enumerate() {
+                *d = i as u8;
+            }
+            log::info!("key");
+            let key_array: [u8; 32] = [0; 32];
+            let key = GenericArray::from_slice(&key_array);
+            let cipher_hw = aes::Aes256::new(&key);
+            log::info!("round");
+            for iter in 0..2 {
+                core_csr.wfo(utra::main::REPORT_REPORT, 0xae50_0000 + iter);
+                for (i, mut chunk) in dataset_op.chunks_exact_mut(aes::BLOCK_SIZE).enumerate() {
+                    let mut block = GenericArray::clone_from_slice(&mut chunk);
+                    core_csr.wfo(utra::main::REPORT_REPORT, 0xae5e_0000 + iter + ((i as u32) << 16));
+                    cipher_hw.encrypt_block(&mut block);
+                    core_csr.wfo(utra::main::REPORT_REPORT, 0xae5e_1000 + iter + ((i as u32) << 16));
+                    for (&src, dst) in block.iter().zip(chunk.iter_mut()) {
+                        *dst = src;
+                    }
+                }
+                for (i, mut chunk) in dataset_op.chunks_exact_mut(aes::BLOCK_SIZE).enumerate() {
+                    let mut block = GenericArray::clone_from_slice(&mut chunk);
+                    core_csr.wfo(utra::main::REPORT_REPORT, 0xae5d_0000 + iter + ((i as u32) << 16));
+                    cipher_hw.decrypt_block(&mut block);
+                    core_csr.wfo(utra::main::REPORT_REPORT, 0xae5d_1000 + iter + ((i as u32) << 16));
+                    for (&src, dst) in block.iter().zip(chunk.iter_mut()) {
+                        *dst = src;
+                    }
+                }
+                if iter == 0 {
+                    log::info!("0 done");
+                }
+            }
+            log::info!("done");
+        }
+
         let tt = xous_api_ticktimer::Ticktimer::new().unwrap();
         let mut total = 0;
         let mut iter = 0;

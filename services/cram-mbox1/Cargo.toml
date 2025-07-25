@@ -14,9 +14,12 @@ log-server = { package = "xous-api-log", version = "0.1.65" }
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
+aes = { path = "../aes" }
 
 [features]
 "cramium" = ["utralib/cramium-fpga"]
+"vexii-test" = ["aes/vexii-test"]
+"aestests" = []
 "hwsim" = []
 "message-test" = []
 # ext specifies to use the APB client, instead of the loopback local
