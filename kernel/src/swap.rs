@@ -431,7 +431,7 @@ impl Swap {
                             true,
                         )
                         .ok();
-                        unsafe { crate::arch::mem::flush_mmu() };
+                        // unsafe { crate::arch::mem::flush_mmu() }; // redundant?
                     } else {
                         already_mapped = true;
                     }
