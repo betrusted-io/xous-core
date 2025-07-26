@@ -39,6 +39,148 @@ use core::fmt;
     dec-last
     0010_1010 => 2A, 6A, AA, EA
 */
+
+#[repr(align(32))]
+#[derive(Default)]
+struct AlignedCk128 {
+    d: [u8; 16],
+}
+
+/// AES-128 round keys
+pub(crate) type VexKeys128 = [u32; 60];
+
+fn aes_key_schedule_128_wrapper(ck: &[u8]) -> VexKeys128 {
+    let mut ck_a = AlignedCk128::default();
+    ck_a.d.copy_from_slice(&ck);
+    let mut rk: VexKeys128 = [0; 60];
+    // Safety: safe because our target has the "zkn" RV32 extensions.
+    unsafe { aes_key_schedule_128(&mut rk, &ck_a.d) };
+    rk
+}
+
+#[target_feature(enable = "zkn")]
+unsafe fn aes_key_schedule_128(rk: &mut VexKeys128, ck: &[u8]) {
+    #[rustfmt::skip]
+    unsafe {
+        // a0 - uint32_t rk [AES_256_RK_WORDS]
+        // a1 - uint8_t  ck [AES_256_CK_BYTE ]
+        core::arch::asm!(
+            "lw  a2,  0(a1)", // C0
+            "lw  a3,  4(a1)", // C1
+            "lw  a4,  8(a1)", // C2
+            "lw  a5, 12(a1)", // C3
+            // RK a0
+            // RKP a6
+            // CK a1
+            // RKE t0
+            // RCP t1
+            // RCT t2
+            // T1 t3
+            // T2 t4
+
+            "mv      a6, a0",
+            "addi    t0, a0, 160",
+            "la      t1, 50f",// t1 = round constant pointer
+
+        "30:",            // Loop start
+
+            "sw      a2, 0(a6)",         // rkp[0] = a2
+            "sw      a3, 4(a6)",         // rkp[1] = a3
+            "sw      a4, 8(a6)",         // rkp[2] = a4
+            "sw      a5, 12(a6)",         // rkp[3] = a5
+
+                                // if rke==rkp, return - loop break
+            "beq     t0, a6, 40f",
+
+            "addi    a6, a6, 16",        // increment rkp
+
+            "lbu     t2, 0(t1)",         // Load round constant byte
+            "addi    t1, t1, 1",         // Increment round constant byte
+            "xor     a2, a2, t2",         // c0 ^= rcp
+
+            // "ror32i t3, t4, a5, 8",        // tr = ROR32(c3, 8)
+            "srli t4, a5, 8",
+            "slli t3, a5, 32-8",
+            "or   t3, t3, t4",
+
+            "aes32esi a2, a2, t3, 0",   // tr = sbox(tr)
+            "aes32esi a2, a2, t3, 1",   //
+            "aes32esi a2, a2, t3, 2",   //
+            "aes32esi a2, a2, t3, 3",   //
+
+            "xor     a3, a3, a2",          // C1 ^= C0
+            "xor     a4, a4, a3",          // C1 ^= C0
+            "xor     a5, a5, a4",          // C1 ^= C0
+
+            "j 30b",                   // Loop continue
+
+        "50:",
+            ".byte 0x01, 0x02, 0x04, 0x08, 0x10",
+            ".byte 0x20, 0x40, 0x80, 0x1b, 0x36",
+
+        "40:",
+            "nop",  // was ret
+
+            in("a0") rk.as_mut_ptr(),
+            in("a1") ck.as_ptr(),
+        );
+    };
+}
+
+fn aes128_dec_key_schedule_asm_wrapper(user_key: &[u8]) -> VexKeys128 {
+    let mut rk: VexKeys128 = [0; 60];
+    let mut uk_a = AlignedCk128::default();
+    uk_a.d.copy_from_slice(&user_key);
+
+    unsafe {
+        aes_key_schedule_128(&mut rk, &uk_a.d);
+    }
+    unsafe { aes128_dec_key_schedule_asm(&mut rk, &uk_a.d) };
+    rk
+}
+
+#[target_feature(enable = "zkn")]
+unsafe fn aes128_dec_key_schedule_asm(rk: &mut VexKeys128, user_key: &[u8]) {
+    #[rustfmt::skip]
+    unsafe {
+        core::arch::asm!(
+            // a0 - uint32_t RK [AES_256_RK_WORDS]
+            // a1 - uint8_t  CK [AES_256_CK_BYTE ]
+            // a2 - RKP
+            // a3 - RKE
+            // T0 - t0
+            // T1 - t1
+
+            "addi    a2, a0, 16",              // a0 = &rk[ 4]
+            "addi    a3, a0, 160",             // a1 = &rk[40]
+
+        "20:",
+
+            "lw   t0, 0(a2)",              // Load key word
+
+            "li        t1, 0",
+            "aes32esi  t1, t1, t0, 0",     // Sub Word Forward
+            "aes32esi  t1, t1, t0, 1 ",
+            "aes32esi  t1, t1, t0, 2",
+            "aes32esi  t1, t1, t0, 3",
+
+            "li        t0, 0",
+            "aes32dsmi t0, t0, t1, 0",     // Sub Word Inverse & Inverse MixColumns
+            "aes32dsmi t0, t0, t1, 1",
+            "aes32dsmi t0, t0, t1, 2",
+            "aes32dsmi t0, t0, t1, 3",
+
+            "sw   t0, 0(a2)",             // Store key word.
+
+            "addi a2, a2, 4",            // Increment round key pointer
+            "bne  a2, a3, 20b", // Finished yet?
+
+            in("a0") rk.as_mut_ptr(),
+            in("a1") user_key.as_ptr(),
+        );
+    };
+}
+
 #[repr(align(32))]
 #[derive(Default)]
 struct AlignedCk {
@@ -717,6 +859,23 @@ macro_rules! define_aes_impl {
         }
     };
 }
+
+define_aes_impl!(
+    Aes128,
+    Aes128Enc,
+    Aes128Dec,
+    Aes128BackEnc,
+    Aes128BackDec,
+    U16,
+    128,
+    VexKeys128,
+    10,
+    aes128_dec_key_schedule_asm_wrapper,
+    aes_key_schedule_128_wrapper,
+    aes_vexriscv_decrypt_asm_wrapper,
+    aes_vexriscv_encrypt_asm_wrapper,
+    "AES-128 block cipher instance"
+);
 
 define_aes_impl!(
     Aes256,
