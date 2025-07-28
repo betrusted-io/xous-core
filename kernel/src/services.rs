@@ -66,6 +66,14 @@ pub struct SystemServices {
     pub servers: [Option<Server>; MAX_SERVER_COUNT],
 }
 
+pub enum PostActivateOp<'a> {
+    None,
+    // (result)
+    SetThreadResult(xous_kernel::Result),
+    // (sidx, current_pid, current_thread, message, client_address)
+    RememberServerMessage(usize, PID, TID, &'a Message, Option<MemoryAddress>),
+}
+
 #[derive(Copy, Clone, PartialEq)]
 pub enum ProcessState {
     /// This is an unallocated, free process
@@ -1042,13 +1050,21 @@ impl SystemServices {
 
     /// Resume the given process, picking up exactly where it left off. If the
     /// process is in the Setup state, set it up and then resume.
+    ///
+    /// `lazy_arg` is an argument that should be placed in the activated target process,
+    ///   after the activation is complete. The purpose of this is to reduce the incidence
+    ///   of the idiom where we swap into the a target process' memory state just to emplace
+    ///   a small argument or piece of data, only to swap back to then return to it on activation.
+    ///   This optimization improves message latency by around 15% in the fast path.
     pub fn activate_process_thread(
         &mut self,
         previous_tid: TID,
         new_pid: PID,
         mut new_tid: TID,
         can_resume: bool,
+        lazy_arg: PostActivateOp,
     ) -> Result<TID, xous_kernel::Error> {
+        let mut sender_idx: Option<usize> = None;
         let previous_pid = self.current_pid();
 
         #[cfg(feature = "debug-print")]
@@ -1060,59 +1076,63 @@ impl SystemServices {
 
         // Save state if the PID has changed.  This will activate the new memory
         // space.
-        let new = self.get_process_mut(new_pid)?;
         if new_pid != previous_pid {
-            klog!("New process original state: {:?}", new.state);
+            {
+                let new = self.get_process_mut(new_pid)?;
+                klog!("New process original state: {:?}", new.state);
 
-            // Ensure the new process can be run.
-            match new.state {
-                ProcessState::Free => {
-                    klog!("PID {} was free", new_pid);
-                    return Err(xous_kernel::Error::ProcessNotFound);
-                }
-                ProcessState::Setup(_) | ProcessState::Allocated => new_tid = INITIAL_TID,
-                ProcessState::Exception(_) => {
-                    new_tid = crate::arch::process::EXCEPTION_TID;
-                    // new.current_thread = new_tid;
-                }
-                ProcessState::Ready(x) => {
-                    // If no new context is specified, take the previous
-                    // context.  If that is not runnable, do a round-robin
-                    // search for the next available context.
-                    assert!(x != 0, "process was {:?} but had no runnable threads", new.state);
-                    if new_tid == 0 {
-                        new_tid = Self::find_next_thread(x, new.current_thread);
-                    }
-                    if x & (1 << new_tid) == 0 {
-                        println!(
-                            "process state is {:?}, but new thread {} is not runnable",
-                            new.state, new_tid
-                        );
+                // Ensure the new process can be run.
+                match new.state {
+                    ProcessState::Free => {
+                        klog!("PID {} was free", new_pid);
                         return Err(xous_kernel::Error::ProcessNotFound);
                     }
-                    new.current_thread = new_tid as _;
-                }
-                ProcessState::Running(_) => {
-                    panic!("process was running even though the pid was different")
-                }
-                #[cfg(feature = "gdb-stub")]
-                ProcessState::Debug(_) | ProcessState::DebugIrq(_) => {
-                    return Err(xous_kernel::Error::ProcessNotFound);
-                }
-                ProcessState::Sleeping | ProcessState::BlockedException(_) => {
-                    // println!("PID {} was sleeping or being debugged", new_pid);
-                    return Err(xous_kernel::Error::ProcessNotFound);
+                    ProcessState::Setup(_) | ProcessState::Allocated => new_tid = INITIAL_TID,
+                    ProcessState::Exception(_) => {
+                        new_tid = crate::arch::process::EXCEPTION_TID;
+                        // new.current_thread = new_tid;
+                    }
+                    ProcessState::Ready(x) => {
+                        // If no new context is specified, take the previous
+                        // context.  If that is not runnable, do a round-robin
+                        // search for the next available context.
+                        assert!(x != 0, "process was {:?} but had no runnable threads", new.state);
+                        if new_tid == 0 {
+                            new_tid = Self::find_next_thread(x, new.current_thread);
+                        }
+                        if x & (1 << new_tid) == 0 {
+                            println!(
+                                "process state is {:?}, but new thread {} is not runnable",
+                                new.state, new_tid
+                            );
+                            return Err(xous_kernel::Error::ProcessNotFound);
+                        }
+                        new.current_thread = new_tid as _;
+                    }
+                    ProcessState::Running(_) => {
+                        panic!("process was running even though the pid was different")
+                    }
+                    #[cfg(feature = "gdb-stub")]
+                    ProcessState::Debug(_) | ProcessState::DebugIrq(_) => {
+                        return Err(xous_kernel::Error::ProcessNotFound);
+                    }
+                    ProcessState::Sleeping | ProcessState::BlockedException(_) => {
+                        // println!("PID {} was sleeping or being debugged", new_pid);
+                        return Err(xous_kernel::Error::ProcessNotFound);
+                    }
                 }
             }
 
             // Perform the actual switch to the new memory space.  From this
             // point onward, we will need to activate the previous memory space
             // if we encounter an error.
+            let new = self.get_process(new_pid)?;
             new.mapping.activate()?;
 
             // Set up the new process, if necessary.  Remove the new thread from
             // the list of ready threads.
             // let old_state = new.state;
+            let new = self.get_process_mut(new_pid)?;
             new.state = match new.state {
                 ProcessState::Setup(thread_init) => {
                     // klog!("Setting up new process...");
@@ -1141,6 +1161,27 @@ impl SystemServices {
             };
             // log_process_update(file!(), line!(), new, old_state);
             new.activate()?;
+            match lazy_arg {
+                PostActivateOp::RememberServerMessage(
+                    sidx,
+                    current_pid,
+                    current_thread,
+                    message,
+                    client_address,
+                ) => {
+                    let si = {
+                        let server =
+                            self.server_from_sidx_mut(sidx).expect("couldn't re-discover server index");
+                        server.queue_response(current_pid, current_thread, message, client_address)?
+                    };
+                    sender_idx = Some(si);
+                }
+                PostActivateOp::SetThreadResult(result) => {
+                    let mut arch_process = ArchProcess::current();
+                    arch_process.set_thread_result(new_tid, result);
+                }
+                _ => (),
+            }
 
             // Mark the previous process as ready to run, since we just switched
             // away
@@ -1196,6 +1237,26 @@ impl SystemServices {
             //     can_resume
             // );
         } else {
+            match lazy_arg {
+                PostActivateOp::RememberServerMessage(
+                    sidx,
+                    current_pid,
+                    current_thread,
+                    message,
+                    client_address,
+                ) => {
+                    let si = {
+                        let server =
+                            self.server_from_sidx_mut(sidx).expect("couldn't re-discover server index");
+                        server.queue_response(current_pid, current_thread, message, client_address)?
+                    };
+                    sender_idx = Some(si);
+                }
+                PostActivateOp::SetThreadResult(result) => {
+                    ArchProcess::current().set_thread_result(new_tid, result);
+                }
+                _ => (),
+            }
             let new = self.get_process_mut(new_pid)?;
 
             // If we wanted to switch to a "new" thread, and it's the same
@@ -1253,7 +1314,9 @@ impl SystemServices {
             self.get_process_mut(new_pid)?.state
         );
 
-        Ok(new_tid)
+        // return argument based upon the lazy_arg type
+        // we get "lucky" in that sender_idx *and* new_tid are both `usize` types underneath
+        if let Some(si) = sender_idx { Ok(si) } else { Ok(new_tid) }
     }
 
     /// Move memory from one process to another.
@@ -1725,7 +1788,7 @@ impl SystemServices {
         if arch_process.thread_exists(join_tid) {
             // The target thread exists -- put this thread to sleep
             let ppid = self.get_process(pid).unwrap().ppid;
-            self.activate_process_thread(tid, ppid, 0, false)
+            self.activate_process_thread(tid, ppid, 0, false, PostActivateOp::None)
                 .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                 .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
         } else {
