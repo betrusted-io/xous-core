@@ -1,12 +1,11 @@
 MEMORY
 {
   /* we are using an unsigned loader, so the offset is not 1k offset */
-  FLASH : ORIGIN = 0x60500000, LENGTH = 32k
-  RAM : ORIGIN = 0x61000000, LENGTH = 16M
+  /* if the font location is adjusted, this needs to be updated in libs/blitstr2 codegen templates.go FONT_BASE value */
+  FONTS : ORIGIN = 0x60040000, LENGTH = 128k
+  FLASH : ORIGIN = 0x60001000, LENGTH = 252k
+  RAM : ORIGIN = 0x61000000, LENGTH = 2M
 }
-/*
-Fonts go from 0x2053_0000 to 0x2097_0000
-*/
 
 REGION_ALIAS("REGION_TEXT", FLASH);
 REGION_ALIAS("REGION_RODATA", FLASH);
@@ -88,12 +87,12 @@ SECTIONS
     . = ALIGN(4);
     _edata = .;
   } > REGION_DATA AT > REGION_RODATA
-
-  /* .fonts : ALIGN(65536)
+/*
+  .fonts : ALIGN(65536)
   {
       KEEP(*(.fontdata));
-  } > FONTS */
-
+  } > FONTS
+*/
   .bss (NOLOAD) :
   {
     _sbss = .;

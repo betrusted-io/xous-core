@@ -161,7 +161,8 @@ software 140.84us/block enc+dec aes256 (500 iters, 8192 len)
 
 with Vex-ii CPU (50MHz) (note that Vex-i runs at 100MHz) on vexii-testing branch:
 software 202us/block enc+dec aes256 (500 iters, 8192 len)
-hardware 60us/block enc+dec aes256 (500 iters, 8192 len)
+hardware 60us/block enc+dec aes256 (500 iters, 8192 len) [initial]
+hardware 25.9us/block enc+dec aes256 (500 iters, 8192 len) [optimized]
 */
 pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);

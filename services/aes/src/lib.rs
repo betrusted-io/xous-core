@@ -44,7 +44,8 @@ pub use vex::{Aes128, Aes256};
 #[cfg(feature = "vexii-test")]
 mod zkn;
 #[cfg(feature = "vexii-test")]
-pub use soft::Aes128Soft as Aes128;
+// pub use soft::Aes128Soft as Aes128;
+pub use zkn::Aes128;
 #[cfg(feature = "vexii-test")]
 pub use zkn::Aes256;
 

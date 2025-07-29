@@ -13,7 +13,7 @@ fn main() {
         #[cfg(feature = "cramium-soc")]
         let p = PathBuf::from("src/platform/cramium/link-soc.x");
         #[cfg(feature = "cramium-fpga")]
-        let p = PathBuf::from("src/platform/cramium/link-soc.x"); // note deviation -- this is because we are still simulating the FPGA model and offsets are not yet settled for that
+        let p = PathBuf::from("src/platform/cramium/link-fpga.x");
         #[cfg(not(any(feature = "cramium-soc", feature = "cramium-fpga")))]
         let p = PathBuf::from("src/platform/precursor/link.x");
 

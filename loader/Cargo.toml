@@ -101,7 +101,7 @@ board-baosec = [
 ]
 board-baosor = ["cramium-hal/loader-baosor"]
 board-dabao = ["cramium-hal/loader-dabao"]
-cramium-fpga = ["utralib/cramium-fpga", "debug-print"]
+cramium-fpga = ["utralib/cramium-fpga", "debug-print", "linked_list_allocator"]
 atsama5d27 = ["utralib/atsama5d27", "armv7", "dep:atsama5d27"]
 
 # precursor flags
