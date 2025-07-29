@@ -1186,7 +1186,7 @@ impl SystemServices {
                     let mut arch_process = ArchProcess::current();
                     arch_process.set_thread_result(new_tid, result);
                 }
-                _ => (),
+                None => (),
             }
 
             // Mark the previous process as ready to run, since we just switched
@@ -1261,7 +1261,7 @@ impl SystemServices {
                 PostActivateOp::SetThreadResult { result } => {
                     ArchProcess::current().set_thread_result(new_tid, result);
                 }
-                _ => (),
+                None => (),
             }
             let new = self.get_process_mut(new_pid)?;
 
@@ -1322,7 +1322,7 @@ impl SystemServices {
 
         // return argument based upon the lazy_arg type
         // we get "lucky" in that sender_idx *and* new_tid are both `usize` types underneath
-        if let Some(si) = sender_idx { Ok(si) } else { Ok(new_tid) }
+        Ok(sender_idx.unwrap_or(new_tid))
     }
 
     /// Move memory from one process to another.

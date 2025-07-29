@@ -633,7 +633,7 @@ fn reply_and_receive_next(
                     response.pid,
                     response.tid,
                     false,
-                    crate::services::PostActivateOp::SetThreadResult { result: response.result },
+                    PostActivateOp::SetThreadResult(response.result),
                 )
                 .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                 .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
