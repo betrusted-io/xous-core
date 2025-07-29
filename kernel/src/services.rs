@@ -1255,7 +1255,7 @@ impl SystemServices {
                 PostActivateOp::SetThreadResult(result) => {
                     ArchProcess::current().set_thread_result(new_tid, result);
                 }
-                _ => (),
+                None => (),
             }
             let new = self.get_process_mut(new_pid)?;
 
