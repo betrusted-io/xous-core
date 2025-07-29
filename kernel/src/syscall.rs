@@ -206,7 +206,9 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                             ppid,
                             ptid,
                             false,
-                            PostActivateOp::SetThreadResult(xous_kernel::Result::MessageEnvelope(envelope)),
+                            PostActivateOp::SetThreadResult {
+                                result: xous_kernel::Result::MessageEnvelope(envelope),
+                            },
                         )
                         .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                         .unwrap_or(Err(xous_kernel::Error::ProcessNotFound));
@@ -229,7 +231,13 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                         server_pid,
                         server_tid,
                         false,
-                        PostActivateOp::RememberServerMessage(sidx, pid, tid, &message, client_address),
+                        PostActivateOp::RememberServerMessage {
+                            sidx,
+                            current_pid: pid,
+                            current_thread: tid,
+                            message: &message,
+                            client_address,
+                        },
                     ) {
                         Ok(sender_idx) => {
                             let sender = SenderID::new(sidx, sender_idx, Some(pid));
@@ -625,7 +633,7 @@ fn reply_and_receive_next(
                     response.pid,
                     response.tid,
                     false,
-                    crate::services::PostActivateOp::SetThreadResult(response.result),
+                    crate::services::PostActivateOp::SetThreadResult { result: response.result },
                 )
                 .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                 .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))

@@ -68,10 +68,16 @@ pub struct SystemServices {
 
 pub enum PostActivateOp<'a> {
     None,
-    // (result)
-    SetThreadResult(xous_kernel::Result),
-    // (sidx, current_pid, current_thread, message, client_address)
-    RememberServerMessage(usize, PID, TID, &'a Message, Option<MemoryAddress>),
+    SetThreadResult {
+        result: xous_kernel::Result,
+    },
+    RememberServerMessage {
+        sidx: usize,
+        current_pid: PID,
+        current_thread: TID,
+        message: &'a Message,
+        client_address: Option<MemoryAddress>,
+    },
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -1162,13 +1168,13 @@ impl SystemServices {
             // log_process_update(file!(), line!(), new, old_state);
             new.activate()?;
             match lazy_arg {
-                PostActivateOp::RememberServerMessage(
+                PostActivateOp::RememberServerMessage {
                     sidx,
                     current_pid,
                     current_thread,
                     message,
                     client_address,
-                ) => {
+                } => {
                     let si = {
                         let server =
                             self.server_from_sidx_mut(sidx).expect("couldn't re-discover server index");
@@ -1176,7 +1182,7 @@ impl SystemServices {
                     };
                     sender_idx = Some(si);
                 }
-                PostActivateOp::SetThreadResult(result) => {
+                PostActivateOp::SetThreadResult { result } => {
                     let mut arch_process = ArchProcess::current();
                     arch_process.set_thread_result(new_tid, result);
                 }
@@ -1238,13 +1244,13 @@ impl SystemServices {
             // );
         } else {
             match lazy_arg {
-                PostActivateOp::RememberServerMessage(
+                PostActivateOp::RememberServerMessage {
                     sidx,
                     current_pid,
                     current_thread,
                     message,
                     client_address,
-                ) => {
+                } => {
                     let si = {
                         let server =
                             self.server_from_sidx_mut(sidx).expect("couldn't re-discover server index");
@@ -1252,7 +1258,7 @@ impl SystemServices {
                     };
                     sender_idx = Some(si);
                 }
-                PostActivateOp::SetThreadResult(result) => {
+                PostActivateOp::SetThreadResult { result } => {
                     ArchProcess::current().set_thread_result(new_tid, result);
                 }
                 _ => (),
