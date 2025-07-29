@@ -1,11 +1,36 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use utralib::*;
 #[cfg(feature = "artybio")]
 use xous_bio_bdma::*;
 
 use crate::arty_rgb;
+
+// A server program that runs on a BIO core to handle GPIO control.
+// It waits for a command from the main CPU via FIFO, executes it, and waits for the next.
+#[cfg(feature = "artybio")]
+#[rustfmt::skip]
+bio_code!(pin_control_code, PIN_CONTROL_START, PIN_CONTROL_END,
+    // Configure all GPIOs as outputs once at the start.
+    "li    t0, 0xFFFFFFFF",
+    "mv    x24, t0",
+  "wait_for_cmd:",
+    // Read the pin mask from FIFO0 (x16). The core will stall here until the CPU sends data.
+    "mv    t1, x16",
+    // Read the desired state (1 for high, 0 for low) from FIFO0. Stalls again.
+    "mv    t2, x16",
+    // Set the GPIO mask register (x26) to the pin mask we just received.
+    "mv    x26, t1",
+    // Set the GPIO output register (x21) to the state (high/low) we received.
+    "mv    x21, t2",
+    // Loop back to wait for the next command.
+    "j     wait_for_cmd"
+);
+
+// A flag to ensure we only initialize the BIO core once.
+static GPIO_CORE_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 pub struct Repl {
     cmdline: String,
@@ -146,6 +171,68 @@ impl Repl {
                     }
                 }
             }
+            "capsense" => {
+                #[cfg(feature = "artybio")]
+                {
+                    if args.len() != 2 {
+                        crate::println!("Usage: capsense <pin> <on|off>");
+                        self.do_cmd = false;
+                        self.cmdline.clear();
+                        return;
+                    }
+
+                    let pin = match u32::from_str_radix(&args[0], 10) {
+                        Ok(p) if p < 32 => p,
+                        _ => {
+                            crate::println!("Invalid pin number. Must be 0-31.");
+                            self.do_cmd = false;
+                            self.cmdline.clear();
+                            return;
+                        }
+                    };
+
+                    let state = args[1].as_str();
+                    if state != "on" && state != "off" {
+                        crate::println!("Invalid state. Use 'on' or 'off'.");
+                        self.do_cmd = false;
+                        self.cmdline.clear();
+                        return;
+                    }
+
+                    let mut bio_ss = BioSharedState::new();
+
+                    // On first run, load and start the GPIO control program on BIO Core 0.
+                    if !GPIO_CORE_INITIALIZED.load(Ordering::Relaxed) {
+                        crate::println!("Initializing GPIO control core (Core 0)...");
+                        let mut ctrl = bio_ss.bio.r(utra::bio_bdma::SFR_CTRL);
+                        ctrl &= !0b0001; // Stop Core 0
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+
+                        let prog = pin_control_code();
+                        bio_ss.load_code(prog, 0, BioCore::Core0);
+
+                        ctrl |= 0b0001; // Restart Core 0
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+                        GPIO_CORE_INITIALIZED.store(true, Ordering::Relaxed);
+                        crate::println!("GPIO control core is running.");
+                    }
+
+                    // Prepare the command for the BIO core.
+                    let pin_mask = 1 << pin;
+                    let state_val = if state == "on" { 1 } else { 0 };
+
+                    // Send the command words to the BIO core via its FIFO.
+                    // The core is waiting to read these two values.
+                    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, pin_mask);
+                    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, state_val);
+
+                    crate::println!("Command sent: Pin {} -> {}.", pin, state.to_uppercase());
+                }
+                #[cfg(not(feature = "artybio"))]
+                {
+                    crate::println!("'capsense' command requires 'artybio' feature.");
+                }
+            }
             "help" => {
                 crate::println!("Available commands:");
                 crate::println!("  help                    - Shows this help message.");
@@ -156,6 +243,7 @@ impl Repl {
                 crate::println!("  blinky <LD> <RGB_HEX>   - Sets an LED to a color.");
                 crate::println!("    LD: LD0, LD1, or LD2");
                 crate::println!("    RGB_HEX: e.g., ff0000 (red), 00ff00 (green), 0000ff (blue)");
+                crate::println!("  capsense <pin> <on|off> - Sets a GPIO pin high or low.");
             }
 
             "" => {}

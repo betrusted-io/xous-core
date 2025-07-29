@@ -57,7 +57,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // select a BIO test to run
     #[cfg(feature = "artybio")]
     fifo_basic();
-    // hello_world();
+    hello_world();
 
     // The green LEDs flash whenever the FPGA is configured with the Arty BIO design.
     // The RGB LEDs flash when the CPU is running this code.
