@@ -1316,7 +1316,7 @@ impl SystemServices {
 
         // return argument based upon the lazy_arg type
         // we get "lucky" in that sender_idx *and* new_tid are both `usize` types underneath
-        if let Some(si) = sender_idx { Ok(si) } else { Ok(new_tid) }
+        Ok(sender_idx.unwrap_or(new_tid))
     }
 
     /// Move memory from one process to another.
