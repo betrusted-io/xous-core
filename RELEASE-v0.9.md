@@ -521,6 +521,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Improve message passing time by ~15% in tight scalar message benchmark
   - `activate_process_thread` now takes a `lazy_arg` which is evaluated after the thread is activated. When `lazy_arg` is set, it can save a context switch, as it allows pre-switch context setup to be deferred until the final context switch to activate the target process.
 - Vexii SoC target support. This is primarily for testing the Vexii core for future implementations.
+- Baremetal targets. As the name implies, these are baremetal targets, free of Xous OS. The primary purpose of baremetal targets are to streamline low-level driver development. However, they can also be useful as templates for very small embedded projects that don't require all the features of Xous.
 
 ## Roadmap
 - Lots of testing and bug fixes
