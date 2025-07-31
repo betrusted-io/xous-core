@@ -520,6 +520,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - Modify the core message loop to use reply_and_receive_next() API
 - Improve message passing time by ~15% in tight scalar message benchmark
   - `activate_process_thread` now takes a `lazy_arg` which is evaluated after the thread is activated. When `lazy_arg` is set, it can save a context switch, as it allows pre-switch context setup to be deferred until the final context switch to activate the target process.
+- Vexii SoC target support. This is primarily for testing the Vexii core for future implementations.
 
 ## Roadmap
 - Lots of testing and bug fixes
