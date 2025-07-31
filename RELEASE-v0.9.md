@@ -518,6 +518,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - This change now hides the GAM abstraction in most cases. The GAM is used to implement windowing; for lightweight platforms that don't have the screen real estate for windows, the `canvas`/`Gid` abstractions still exist but are ignored, and applications can draw directly to the screen.
   - `baosec` target in particular supports no windowing as the screen is 128x128: the UI is purely modal, where every user interaction occupies the entire screen.
   - Modify the core message loop to use reply_and_receive_next() API
+- Improve message passing time by ~15% in tight scalar message benchmark
+  - `activate_process_thread` now takes a `lazy_arg` which is evaluated after the thread is activated. When `lazy_arg` is set, it can save a context switch, as it allows pre-switch context setup to be deferred until the final context switch to activate the target process.
 
 ## Roadmap
 - Lots of testing and bug fixes
