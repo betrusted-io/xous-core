@@ -28,6 +28,100 @@ bio_code!(pin_control_code, PIN_CONTROL_START, PIN_CONTROL_END,
     // Loop back to wait for the next command.
     "j     wait_for_cmd"
 );
+#[cfg(feature = "artybio")]
+#[rustfmt::skip]
+bio_code!(square_wave_code, SQUARE_WAVE_START, SQUARE_WAVE_END,
+    // Set all GPIOs to output mode.
+    "li    t0, 0xFFFFFFFF",
+    "mv    x24, t0",
+    // Read the pin mask from FIFO0 (x16). The core will stall here until the CPU sends it.
+    "mv    t1, x16",
+    // Set the GPIO mask register (x26) to the pin mask we just received.
+    "mv    x26, t1",
+  "loop:",
+    // Drive the masked pin(s) high.
+    "mv    x21, t1",
+    // Wait for one quantum (one BIO clock cycle).
+    "mv    x20, zero",
+    // Drive the masked pin(s) low.
+    "mv    x21, zero",
+    // Wait for another quantum.
+    "mv    x20, zero",
+    // Repeat indefinitely.
+    "j     loop"
+);
+
+#[cfg(feature = "artybio")]
+#[rustfmt::skip]
+bio_code!(slow_wave_generator_code, SLOW_WAVE_START, SLOW_WAVE_END,
+    // Configure all GPIOs as outputs.
+    "li    t0, 0xFFFFFFFF",
+    "mv    x24, t0",
+    // Read the pin mask from FIFO0 into t1.
+    "mv    t1, x16",
+    // Read the delay count from FIFO0 into t2.
+    "mv    t2, x16",
+    // Set the GPIO mask register to the pin mask.
+    "mv    x26, t1",
+  "10:", // Main loop
+    // --- HIGH PULSE ---
+    "mv    x21, t1",      // Set pin high
+    "mv    t3, t2",       // Load counter into t3 for the delay loop
+  "11:", // Delay loop 1
+    "addi  t3, t3, -1",   // Decrement counter
+    "nop",                  // Break potential CPU pipeline hazard
+    "bne   t3, zero, 11b",  // Loop if not zero
+    // --- LOW PULSE ---
+    "mv    x21, zero",    // Set pin low
+    "mv    t3, t2",       // Re-load counter for the delay loop
+  "12:", // Delay loop 2
+    "addi  t3, t3, -1",   // Decrement counter
+    "nop",                  // Break potential CPU pipeline hazard
+    "bne   t3, zero, 12b",  // Loop if not zero
+    "j     10b"           // Repeat the whole cycle
+);
+
+#[cfg(feature = "artybio")]
+#[rustfmt::skip]
+bio_code!(debug_nop_delay_code, DEBUG_NOP_DELAY_START, DEBUG_NOP_DELAY_END,
+    // No FIFO reads, no loops. Just set pin 0 high.
+    "li    t0, 0xFFFFFFFF",
+    "mv    x24, t0",
+    "li    t1, 1",        // Hardcode mask for pin 0
+    "mv    x26, t1",
+    "mv    x21, t1",      // Set pin 0 high
+    // --- SHORT, NOP-BASED DELAY ---
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop","nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop","nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop","nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop","nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+    "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop", "nop",
+
+    // --- PULSE END ---
+    "mv    x21, zero", // Set pin LOW
+    // --- HALT ---
+    "halt2:",
+    "j     halt2" // Loop forever, doing nothing
+);
 
 // A flag to ensure we only initialize the BIO core once.
 static GPIO_CORE_INITIALIZED: AtomicBool = AtomicBool::new(false);
@@ -200,16 +294,93 @@ impl Repl {
                     }
 
                     let mut bio_ss = BioSharedState::new();
+                    let mut ctrl = bio_ss.bio.r(utra::bio_bdma::SFR_CTRL);
+
+                    if state == "on" {
+                        // Stop Core 0 to ensure a clean state before loading new code.
+                        ctrl &= !0b0001;
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+
+                        // Clear the FIFO for Core 0 to remove any stale data.
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0b0001);
+
+                        // Load the slow wave generator program.
+                        let prog = slow_wave_generator_code();
+                        bio_ss.load_code(prog, 0, BioCore::Core0);
+
+                        // Set clock divider for a 100kHz BIO clock.
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x190_0000);
+
+                        // Send parameters to the BIO core via FIFO0.
+                        let pin_mask = 1 << pin;
+                        // Adjust count for the extra `nop` in the loop. This will be close to ~1Hz.
+                        let delay_count = 16666;
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, pin_mask);
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, delay_count);
+
+                        // Start Core 0.
+                        ctrl |= 0b0001_0001_0001;
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+
+                        crate::println!("Generating ~1 Hz wave on pin {}.", pin);
+                    } else {
+                        // Stop Core 0.
+                        ctrl &= !0b0001;
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+                        crate::println!("Stopped wave generator on Core 0.");
+                    }
+                }
+                #[cfg(not(feature = "artybio"))]
+                {
+                    crate::println!("'capsense' command requires 'artybio' feature.");
+                }
+            }
+
+            "pinup" => {
+                #[cfg(feature = "artybio")]
+                {
+                    if args.len() != 2 {
+                        crate::println!("Usage: pinup <pin> <on|off>");
+
+                        self.do_cmd = false;
+
+                        self.cmdline.clear();
+
+                        return;
+                    }
+
+                    let pin = match u32::from_str_radix(&args[0], 10) {
+                        Ok(p) if p < 32 => p,
+
+                        _ => {
+                            crate::println!("Invalid pin number. Must be 0-31.");
+                            self.do_cmd = false;
+                            self.cmdline.clear();
+
+                            return;
+                        }
+                    };
+
+                    let state = args[1].as_str();
+                    if state != "on" && state != "off" {
+                        crate::println!("Invalid state. Use 'on' or 'off'.");
+                        self.do_cmd = false;
+                        self.cmdline.clear();
+                        return;
+                    }
+
+                    let mut bio_ss = BioSharedState::new();
 
                     // On first run, load and start the GPIO control program on BIO Core 0.
+
                     if !GPIO_CORE_INITIALIZED.load(Ordering::Relaxed) {
                         crate::println!("Initializing GPIO control core (Core 0)...");
                         let mut ctrl = bio_ss.bio.r(utra::bio_bdma::SFR_CTRL);
                         ctrl &= !0b0001; // Stop Core 0
                         bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
-
                         let prog = pin_control_code();
                         bio_ss.load_code(prog, 0, BioCore::Core0);
+                        crate::println!("Resetting all clocks.");
                         ctrl |= 0b0001_0001_0001;
                         bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
                         GPIO_CORE_INITIALIZED.store(true, Ordering::Relaxed);
@@ -229,9 +400,10 @@ impl Repl {
                 }
                 #[cfg(not(feature = "artybio"))]
                 {
-                    crate::println!("'capsense' command requires 'artybio' feature.");
+                    crate::println!("'pinup' command requires 'artybio' feature.");
                 }
             }
+
             "help" => {
                 crate::println!("Available commands:");
                 crate::println!("  help                    - Shows this help message.");
