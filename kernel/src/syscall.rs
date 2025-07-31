@@ -11,7 +11,7 @@ use crate::arch::process::Process as ArchProcess;
 use crate::irq::{interrupt_claim, interrupt_free};
 use crate::mem::MemoryManager;
 use crate::server::{SenderID, WaitingMessage};
-use crate::services::SystemServices;
+use crate::services::{PostActivateOp, SystemServices};
 #[cfg(feature = "swap")]
 use crate::swap::{Swap, SwapAbi};
 
@@ -70,7 +70,7 @@ fn do_yield(_pid: PID, tid: TID) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         // TODO: Advance thread
         let result = ss
-            .activate_process_thread(tid, parent_pid, parent_ctx, true)
+            .activate_process_thread(tid, parent_pid, parent_ctx, true, PostActivateOp::None)
             .map(|_| Ok(xous_kernel::Result::ResumeProcess))
             .unwrap_or(Err(xous_kernel::Error::ProcessNotFound));
 
@@ -162,17 +162,7 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
             //     "there are threads available in PID {} to handle this message -- marking as Ready",
             //     server_pid
             // );
-            let sender_idx = if message.is_blocking() {
-                ss.remember_server_message(sidx, pid, tid, &message, client_address).map_err(|e| {
-                    klog!("error remembering server message: {:?}", e);
-                    ss.server_from_sidx_mut(sidx)
-                        .expect("server couldn't be located")
-                        .return_available_thread(server_tid);
-                    e
-                })?
-            } else {
-                0
-            };
+            let sender_idx = 0; // lazy-evaluate to a real number for blocking messages; eagerly set to 0 for non-blocking
             let sender = SenderID::new(sidx, sender_idx, Some(pid));
             klog!("server connection data: sidx: {}, idx: {}, server pid: {}", sidx, sender_idx, server_pid);
             let envelope = MessageEnvelope { sender: sender.into(), body: message };
@@ -191,19 +181,35 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
             // --- NOTE: Returning this value //
             return if blocking && cfg!(baremetal) {
                 if !runnable {
+                    // re-bind the envelope because the sender_idx binding is lazily evaluated
+                    let message = envelope.take_message();
+                    let sender_idx = ss
+                        .remember_server_message(sidx, pid, tid, &message, client_address)
+                        .map_err(|e| {
+                            klog!("error remembering server message: {:?}", e);
+                            ss.server_from_sidx_mut(sidx)
+                                .expect("server couldn't be located")
+                                .return_available_thread(server_tid);
+                            e
+                        })?;
+                    let sender = SenderID::new(sidx, sender_idx, Some(pid));
+                    let envelope = MessageEnvelope { sender: sender.into(), body: message };
+
                     // If it's not runnable (e.g. it's being debugged), switch to the parent.
                     let (ppid, ptid) = unsafe { (&mut *(&raw mut SWITCHTO_CALLER)).take().unwrap() };
                     klog!(
                         "Activating Server parent process (server is blocked) and switching away from Client"
                     );
-                    ss.set_thread_result(
-                        server_pid,
-                        server_tid,
-                        xous_kernel::Result::MessageEnvelope(envelope),
-                    )
-                    .expect("couldn't set result for server thread");
                     let result = ss
-                        .activate_process_thread(tid, ppid, ptid, false)
+                        .activate_process_thread(
+                            tid,
+                            ppid,
+                            ptid,
+                            false,
+                            PostActivateOp::SetThreadResult {
+                                result: xous_kernel::Result::MessageEnvelope(envelope),
+                            },
+                        )
                         .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                         .unwrap_or(Err(xous_kernel::Error::ProcessNotFound));
 
@@ -219,11 +225,42 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                 } else {
                     // Switch to the server, since it's in a state to be run.
                     klog!("Activating Server context and switching away from Client");
-                    ss.activate_process_thread(tid, server_pid, server_tid, false)
-                        .map(|_| Ok(xous_kernel::Result::MessageEnvelope(envelope)))
-                        .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+                    let message = envelope.take_message();
+                    match ss.activate_process_thread(
+                        tid,
+                        server_pid,
+                        server_tid,
+                        false,
+                        PostActivateOp::RememberServerMessage {
+                            sidx,
+                            current_pid: pid,
+                            current_thread: tid,
+                            message: &message,
+                            client_address,
+                        },
+                    ) {
+                        Ok(sender_idx) => {
+                            let sender = SenderID::new(sidx, sender_idx, Some(pid));
+                            let envelope = MessageEnvelope { sender: sender.into(), body: message };
+                            Ok(xous_kernel::Result::MessageEnvelope(envelope))
+                        }
+                        _ => Err(xous_kernel::Error::ProcessNotFound),
+                    }
                 }
             } else if blocking && !cfg!(baremetal) {
+                // re-bind the envelope: lazy eval has to happen now.
+                let message = envelope.take_message();
+                let sender_idx =
+                    ss.remember_server_message(sidx, pid, tid, &message, client_address).map_err(|e| {
+                        klog!("error remembering server message: {:?}", e);
+                        ss.server_from_sidx_mut(sidx)
+                            .expect("server couldn't be located")
+                            .return_available_thread(server_tid);
+                        e
+                    })?;
+                let sender = SenderID::new(sidx, sender_idx, Some(pid));
+                let envelope = MessageEnvelope { sender: sender.into(), body: message };
+
                 klog!("Blocking client, since it sent a blocking message");
                 ss.unschedule_thread(pid, tid)?;
                 ss.switch_to_thread(server_pid, Some(server_tid))?;
@@ -262,7 +299,7 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                 let ppid = process.ppid;
                 unsafe { SWITCHTO_CALLER = None };
                 let result = ss
-                    .activate_process_thread(tid, ppid, 0, false)
+                    .activate_process_thread(tid, ppid, 0, false, PostActivateOp::None)
                     .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                     .unwrap_or(Err(xous_kernel::Error::ProcessNotFound));
 
@@ -590,13 +627,16 @@ fn reply_and_receive_next(
         } else {
             // For baremetal targets, switch away from this process.
             if cfg!(baremetal) {
-                // Set the thread result for the client
-                ss.set_thread_result(response.pid, response.tid, response.result)?;
-
-                // Activate the client thread and switch to it
-                ss.activate_process_thread(server_tid, response.pid, response.tid, false)
-                    .map(|_| Ok(xous_kernel::Result::ResumeProcess))
-                    .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+                // Set the thread result for the client and activate the client thread and switch to it
+                ss.activate_process_thread(
+                    server_tid,
+                    response.pid,
+                    response.tid,
+                    false,
+                    PostActivateOp::SetThreadResult { result: response.result },
+                )
+                .map(|_| Ok(xous_kernel::Result::ResumeProcess))
+                .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
             }
             // For hosted targets, simply return `BlockedProcess` indicating we'll make
             // a callback to their socket at a later time.
@@ -650,7 +690,7 @@ fn receive_message(pid: PID, tid: TID, sid: SID, blocking: ExecutionType) -> Sys
             let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
             // TODO: Advance thread
             let result = ss
-                .activate_process_thread(tid, ppid, 0, false)
+                .activate_process_thread(tid, ppid, 0, false, PostActivateOp::None)
                 .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                 .unwrap_or(Err(xous_kernel::Error::ProcessNotFound));
             ss.set_last_thread(PID::new(ORIGINAL_PID.load(Relaxed)).unwrap(), ORIGINAL_TID.load(Relaxed))
@@ -841,7 +881,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             //     "Activating process thread {} in pid {} coming from pid {} thread {}",
             //     new_context, new_pid, pid, tid
             // );
-            let new_tid = ss.activate_process_thread(tid, new_pid, new_tid, true)?;
+            let new_tid = ss.activate_process_thread(tid, new_pid, new_tid, true, PostActivateOp::None)?;
             ORIGINAL_PID.store(new_pid.get(), Relaxed);
             ORIGINAL_TID.store(new_tid, Relaxed);
             Ok(xous_kernel::Result::ResumeProcess)
@@ -870,7 +910,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             // TODO: Advance thread
             if cfg!(baremetal) {
                 let result = ss
-                    .activate_process_thread(tid, ppid, 0, false)
+                    .activate_process_thread(tid, ppid, 0, false, PostActivateOp::None)
                     .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                     .unwrap_or(Err(xous_kernel::Error::ProcessNotFound));
                 ss.set_last_thread(PID::new(ORIGINAL_PID.load(Relaxed)).unwrap(), ORIGINAL_TID.load(Relaxed))
