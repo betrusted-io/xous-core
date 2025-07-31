@@ -210,8 +210,7 @@ impl Repl {
 
                         let prog = pin_control_code();
                         bio_ss.load_code(prog, 0, BioCore::Core0);
-
-                        ctrl |= 0b0001; // Restart Core 0
+                        ctrl |= 0b0001_0001_0001;
                         bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
                         GPIO_CORE_INITIALIZED.store(true, Ordering::Relaxed);
                         crate::println!("GPIO control core is running.");
