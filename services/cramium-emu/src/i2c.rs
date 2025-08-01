@@ -19,9 +19,11 @@ impl I2cApi for I2c {
         _adr: u8,
         buf: &mut [u8],
         _repeated_start: bool,
-    ) -> Result<usize, xous::Error> {
-        Ok(buf.len())
+    ) -> Result<I2cResult, xous::Error> {
+        Ok(I2cResult::Ack(buf.len()))
     }
 
-    fn i2c_write(&mut self, _dev: u8, _adr: u8, data: &[u8]) -> Result<usize, xous::Error> { Ok(data.len()) }
+    fn i2c_write(&mut self, _dev: u8, _adr: u8, data: &[u8]) -> Result<I2cResult, xous::Error> {
+        Ok(I2cResult::Ack(data.len()))
+    }
 }
