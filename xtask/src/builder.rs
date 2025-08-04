@@ -413,6 +413,19 @@ impl Builder {
         self
     }
 
+    /// Configure for baremetal bringup
+    pub fn target_baremetal_cramsoc(&mut self) -> &mut Builder {
+        self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
+        self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
+        self.stream = BuildStream::Release;
+        self.utra_target = "cramium-soc".to_string();
+        self.run_svd2repl = false;
+        self.loader = CrateSpec::Local("baremetal".to_string(), LoaderRegion::Ram);
+        // this is actually a dummy, there is no kernel in baremetal
+        self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
+        self
+    }
+
     /// Override the default kernel. For example, to use the kernel from crates.io, specify as
     /// "xous-kernel@0.9.9"
     #[allow(dead_code)]

@@ -647,6 +647,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_artyvexii();
         }
 
+        Some("baremetal-cramsoc") => {
+            builder.set_baremetal(true);
+            builder.target_baremetal_cramsoc();
+        }
+
         Some("baosec") => {
             let board = "board-baosec";
             // select the board

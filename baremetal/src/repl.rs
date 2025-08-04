@@ -1,6 +1,7 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+#[allow(unused_imports)]
 use utralib::*;
 #[cfg(feature = "artybio")]
 use xous_bio_bdma::*;
@@ -48,6 +49,7 @@ impl Repl {
         let cmd = parts.next().unwrap_or("").to_string();
         let args: Vec<String> = parts.map(|s| s.to_string()).collect();
         match cmd.as_str() {
+            #[cfg(not(feature = "cramium-soc"))]
             "mon" => {
                 #[cfg(feature = "artybio")]
                 let bio_ss = BioSharedState::new();
