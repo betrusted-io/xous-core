@@ -1,5 +1,6 @@
 use cramium_api::*;
 use cramium_hal::iox::Iox;
+use cramium_hal::udma::UartIrq;
 use cramium_hal::{udma, udma::GlobalConfig};
 use utralib::generated::*;
 
@@ -71,10 +72,14 @@ impl SerialRead for Uart {
             udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
         };
         let mut c = 0u8;
-        match udma_uart.read_async(&mut c) {
-            0 => None,
-            _ => Some(c),
-        }
+        udma_uart.read_async(&mut c);
+
+        let mut irqarray5 = CSR::new(utra::irqarray5::HW_IRQARRAY5_BASE as *mut u32);
+        // read & clear the pending bits
+        let pending = irqarray5.r(utra::irqarray5::EV_PENDING);
+        // crate::println!("pending {:x} {}", pending, unsafe { char::from_u32_unchecked(c as u32) });
+        irqarray5.wo(utra::irqarray5::EV_PENDING, pending);
+        if pending != 0 { Some(c) } else { None }
     }
 }
 
@@ -142,4 +147,6 @@ pub fn setup_rx(perclk: u32) {
     udma_uart.setup_async_read();
 
     // setup interrupt here
+    let mut uart_irq = UartIrq::new();
+    uart_irq.rx_irq_ena(udma::UartChannel::Uart1, true);
 }

@@ -147,11 +147,27 @@ pub fn early_init() {
     static_data.fill(0);
     static_data[8] = 1;
 
-    // setup other things
+    // setup heap alloc
+    setup_alloc();
+
+    // Initialize the timer, which is needed by the delay() function.
+    let mut timer = CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
+    // not using interrupts, this will be polled by delay()
+    timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0);
+    timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
+
+    let ms = SYSTEM_TICK_INTERVAL_MS;
+    timer.wfo(utra::timer0::EN_EN, 0b0); // disable the timer
+    // load its values
+    timer.wfo(utra::timer0::LOAD_LOAD, 0);
+    timer.wfo(utra::timer0::RELOAD_RELOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
+    // enable the timer
+    timer.wfo(utra::timer0::EN_EN, 0b1);
+
+    // Rx setup
     setup_rx(perclk);
     irq_setup();
     enable_irq(utra::irqarray5::IRQARRAY5_IRQ);
-    setup_alloc();
 }
 
 pub fn setup_alloc() {
@@ -168,6 +184,7 @@ pub fn delay(ms: usize) {
     let mut timer = utralib::CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
     timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
     for _ in 0..ms {
+        // comment this out for testing on MPW
         while timer.rf(utra::timer0::EV_PENDING_ZERO) == 0 {}
         timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
     }
