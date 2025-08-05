@@ -109,7 +109,7 @@ macro_rules! println
     });
 }
 
-pub fn setup_rx(perclk: u32) {
+pub fn setup_rx(perclk: u32) -> cramium_hal::udma::Uart {
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
     iox.set_alternate_function(IoxPort::PD, 13, IoxFunction::AF1);
     iox.set_alternate_function(IoxPort::PD, 14, IoxFunction::AF1);
@@ -149,4 +149,6 @@ pub fn setup_rx(perclk: u32) {
     // setup interrupt here
     let mut uart_irq = UartIrq::new();
     uart_irq.rx_irq_ena(udma::UartChannel::Uart1, true);
+
+    udma_uart
 }

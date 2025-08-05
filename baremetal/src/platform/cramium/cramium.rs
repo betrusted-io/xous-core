@@ -10,11 +10,12 @@ use crate::platform::{
 #[global_allocator]
 static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
 
-pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
-pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
+pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN - 0x8_0000;
+pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM + 0x8_0000;
+#[allow(dead_code)]
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 
-pub const HEAP_START: usize = RAM_BASE + 1024 * 1024; // 0x610F_E000
+pub const HEAP_START: usize = RAM_BASE + 0x5000;
 pub const HEAP_LEN: usize = 1024 * 256;
 
 // scratch page for exceptions located at top of RAM
@@ -23,7 +24,7 @@ pub const SCRATCH_PAGE: usize = HEAP_START - 8192;
 
 pub const UART_IFRAM_ADDR: usize = cramium_hal::board::UART_DMA_TX_BUF_PHYS;
 
-pub const SYSTEM_CLOCK_FREQUENCY: u32 = 800_000_000;
+pub const SYSTEM_CLOCK_FREQUENCY: u32 = 400_000_000;
 pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 pub fn early_init() {
@@ -53,7 +54,8 @@ pub fn early_init() {
         // enable DUART
         let duart = utra::duart::HW_DUART_BASE as *mut u32;
         duart.add(utra::duart::SFR_CR.offset()).write_volatile(0);
-        duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(24);
+        // based on ringosc trimming as measured by oscope. this will get precise after we set the PLL.
+        duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(34);
         duart.add(utra::duart::SFR_CR.offset()).write_volatile(1);
     }
     // sram0 requires 1 wait state for writes
@@ -139,13 +141,44 @@ pub fn early_init() {
         rbist.wo(utra::rbist_wrp::SFRCR_TRM, (14 << 16) | 0b001_010_00_0_0_000_0_00);
         rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
     }
-    let perclk = unsafe { init_clock_asic(800_000_000) };
+    let perclk = unsafe { init_clock_asic(SYSTEM_CLOCK_FREQUENCY) };
+
+    // test memory
+    crate::println!("\ntest memory...");
+    let base = 0x6108_5000;
+    let mem_range = unsafe {
+        core::slice::from_raw_parts_mut(base as *mut u32, (0x6120_0000 - base) / core::mem::size_of::<u32>())
+    };
+    let mut state = 1;
+    for m in mem_range.iter_mut() {
+        state = lfsr_next_u32(state);
+        *m = state;
+    }
+    state = 1;
+    let mut failures = 0;
+    for m in mem_range.iter() {
+        state = lfsr_next_u32(state);
+        if state != *m {
+            failures += 1;
+        }
+    }
+    if failures != 0 {
+        crate::println!("fast mem test failed");
+    } else {
+        crate::println!("fast mem test passed");
+    }
+    crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
 
     // setup the static data (hard-coded, because no loader) - necessary for heap
-    // see build message about non-zero data
-    let static_data = unsafe { core::slice::from_raw_parts_mut(0x6100_0000 as *mut u8, 20) };
+    // see build message about non-zero data. Also need to zero out the BSS region.
+    let static_data = unsafe { core::slice::from_raw_parts_mut(0x6108_0000 as *mut u8, 0x14 + 0x24) };
     static_data.fill(0);
     static_data[8] = 1;
+    crate::print!("static data {:x}: ", static_data.as_ptr() as usize);
+    for sd in static_data.iter() {
+        crate::print!("{:x} ", *sd);
+    }
+    crate::println!("");
 
     // setup heap alloc
     setup_alloc();
@@ -165,9 +198,10 @@ pub fn early_init() {
     timer.wfo(utra::timer0::EN_EN, 0b1);
 
     // Rx setup
-    setup_rx(perclk);
+    let mut udma_uart = setup_rx(perclk);
     irq_setup();
     enable_irq(utra::irqarray5::IRQARRAY5_IRQ);
+    udma_uart.write("console up\r\n".as_bytes());
 }
 
 pub fn setup_alloc() {
@@ -232,46 +266,65 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         2,  // 1024-1600
     ];
 
-    // Hits a 16:8:4:2:1 ratio on fclk:aclk:hclk:iclk:pclk
-    // Resulting in 800:400:200:100:50 MHz assuming 800MHz fclk
-    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x3f7f); // fclk
+    // this block might belong at the top, in particular, configuring the dividers prevents stuff
+    // from being overclocked when the PLL comes live; but for now we are debugging other stuff
+    {
+        // Hits a 16:8:4:2:1 ratio on fclk:aclk:hclk:iclk:pclk
+        // Resulting in 800:400:200:100:50 MHz assuming 800MHz fclk
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x3f7f); // fclk
 
-    // Hits a 8:8:4:2:1 ratio on fclk:aclk:hclk:iclk:pclk
-    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x3f7f); // aclk
-    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x1f3f); // hclk
-    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x0f1f); // iclk
-    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x070f); // pclk
-    // perclk divider - set to divide by 16 off of an 800Mhz base. Only found on NTO.
-    // daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
-    // perclk divider - set to divide by 8 off of an 800Mhz base. Only found on NTO.
-    daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x01_ff_ff);
+        // Hits a 8:8:4:2:1 ratio on fclk:aclk:hclk:iclk:pclk
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x3f7f); // aclk
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x1f3f); // hclk
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x0f1f); // iclk
+        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x070f); // pclk
+        // perclk divider - set to divide by 16 off of an 800Mhz base. Only found on NTO.
+        // daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
+        // perclk divider - set to divide by 8 off of an 800Mhz base. Only found on NTO.
+        // TODO: this only works for two clock settings. Broken @ 600. Need to fix this to instead derive
+        // what pclk is instead of always reporting 100mhz
+        if freq_hz == 800_000_000 {
+            daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x01_ff_ff);
+        } else {
+            daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
+        }
+
+        /*
+            perclk fields:  min-cycle-lp | min-cycle | fd-lp | fd
+            clkper fd
+                0xff :   Fperclk = Fclktop/2
+                0x7f:   Fperclk = Fclktop/4
+                0x3f :   Fperclk = Fclktop/8
+                0x1f :   Fperclk = Fclktop/16
+                0x0f :   Fperclk = Fclktop/32
+                0x07 :   Fperclk = Fclktop/64
+                0x03:   Fperclk = Fclktop/128
+                0x01:   Fperclk = Fclktop/256
+
+            min cycle of clktop, F means frequency
+            Fperclk  Max = Fperclk/(min cycle+1)*2
+        */
+
+        // turn off gates
+        daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0x2f);
+        daric_cgu.add(utra::sysctrl::SFR_HCLKGR.offset()).write_volatile(0xff);
+        daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0x8f);
+        daric_cgu.add(utra::sysctrl::SFR_PCLKGR.offset()).write_volatile(0xff);
+        crate::println!("bef gates set");
+        for _ in 0..100 {
+            crate::print!("*");
+        }
+        crate::println!(".");
+        // commit dividers
+        daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
+        crate::println!("gates set");
+        for _ in 0..100 {
+            crate::print!("-");
+        }
+        crate::println!(".");
+    }
 
     /*
-        perclk fields:  min-cycle-lp | min-cycle | fd-lp | fd
-        clkper fd
-            0xff :   Fperclk = Fclktop/2
-            0x7f:   Fperclk = Fclktop/4
-            0x3f :   Fperclk = Fclktop/8
-            0x1f :   Fperclk = Fclktop/16
-            0x0f :   Fperclk = Fclktop/32
-            0x07 :   Fperclk = Fclktop/64
-            0x03:   Fperclk = Fclktop/128
-            0x01:   Fperclk = Fclktop/256
-
-        min cycle of clktop, F means frequency
-        Fperclk  Max = Fperclk/(min cycle+1)*2
-    */
-
-    // turn off gates
-    daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0x2f);
-    daric_cgu.add(utra::sysctrl::SFR_HCLKGR.offset()).write_volatile(0xff);
-    daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0x8f);
-    daric_cgu.add(utra::sysctrl::SFR_PCLKGR.offset()).write_volatile(0xff);
-    crate::println!("bef gates set");
-    // commit dividers
-    daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
-    crate::println!("gates set");
-
     if (0 == (cgu.r(sysctrl::SFR_IPCPLLMN) & 0x0001F000))
         || (0 == (cgu.r(sysctrl::SFR_IPCPLLMN) & 0x00000fff))
     {
@@ -282,6 +335,11 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         cgu.wo(sysctrl::SFR_IPCPLLF, 0);
         cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
     }
+    */
+    for _ in 0..100 {
+        crate::print!("1");
+    }
+    crate::println!(".");
 
     // TODO select int/ext osc/xtal
     // DARIC_CGU->cgusel1 = 1; // 0: RC, 1: XTAL
@@ -292,6 +350,17 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     // DARIC_CGU->cguset = 0x32UL;
     cgu.wo(sysctrl::SFR_CGUSET, 0x32);
     // __DSB();
+
+    let duart = utra::duart::HW_DUART_BASE as *mut u32;
+    duart.add(utra::duart::SFR_CR.offset()).write_volatile(0);
+    // set the ETUC now that we're on the xosc.
+    duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(FREQ_OSC_MHZ);
+    duart.add(utra::duart::SFR_CR.offset()).write_volatile(1);
+
+    for _ in 0..100 {
+        crate::print!("2");
+    }
+    crate::println!(".");
 
     if freq_hz < 1000000 {
         // DARIC_IPC->osc = freqHz;
@@ -309,10 +378,20 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     cgu.wo(sysctrl::SFR_CGUSET, 0x32);
     //__DSB();
 
+    for _ in 0..100 {
+        crate::print!("3");
+    }
+    crate::println!(".");
+
     if freq_hz < 1000000 {
     } else {
         let n_fxp24: u64; // fixed point
         let f16mhz_log2: u32 = (freq_hz / FREQ_0).ilog2();
+
+        for _ in 0..100 {
+            crate::print!("4");
+        }
+        crate::println!(".");
 
         // PD PLL
         // DARIC_IPC->lpen |= 0x02 ;
@@ -439,3 +518,28 @@ fn fsfreq_to_hz(fs_freq: u32) -> u32 { (fs_freq * (48_000_000 / 32)) / 1_000_000
 
 #[allow(dead_code)]
 fn fsfreq_to_hz_32(fs_freq: u32) -> u32 { (fs_freq * (32_000_000 / 32)) / 1_000_000 }
+
+/// used to generate some test vectors
+#[allow(dead_code)]
+pub fn lfsr_next_u32(state: u32) -> u32 {
+    let bit = ((state >> 31) ^ (state >> 21) ^ (state >> 1) ^ (state >> 0)) & 1;
+
+    (state << 1) + bit
+}
+
+#[inline(always)]
+#[allow(dead_code)]
+fn cache_flush() {
+    unsafe {
+        #[rustfmt::skip]
+        core::arch::asm!(
+            "fence.i",
+            ".word 0x500F",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+        );
+    }
+}

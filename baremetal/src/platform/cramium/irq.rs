@@ -43,7 +43,7 @@ pub unsafe extern "C" fn _start_trap() -> ! {
             #[rustfmt::skip]
             core::arch::asm!(
                 "csrw        mscratch, sp",
-                "li          sp, 0x610FE000", // crate::platform::SCRATCH_PAGE - has to be hard-coded
+                "li          sp, 0x61083000", // crate::platform::SCRATCH_PAGE - has to be hard-coded
                 "sw       x1, 0*4(sp)",
                 // Skip SP for now
                 "sw       x3, 2*4(sp)",
@@ -89,7 +89,7 @@ pub unsafe extern "C" fn _start_trap() -> ! {
                 "csrr        t0, mscratch",
                 "sw          t0, 1*4(sp)",
                 // Restore a default stack pointer
-                "li          sp, 0x61100000", // heap base, grows down
+                "li          sp, 0x61085000", // heap base, grows down
 
                 // Note that registers $a0-$a7 still contain the arguments
                 "j           _start_trap_rust",
