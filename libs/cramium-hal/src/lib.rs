@@ -30,3 +30,21 @@ pub mod usb;
 pub use shared_csr::*;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod mbox;
+#[cfg(not(feature = "hosted-baosec"))]
+pub mod rram;
+
+#[inline(always)]
+pub fn cache_flush() {
+    unsafe {
+        // cache flush
+        #[rustfmt::skip]
+        core::arch::asm!(
+            "fence.i",
+            ".word 0x500F",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+        );
+    }
+}
