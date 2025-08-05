@@ -526,20 +526,3 @@ pub fn lfsr_next_u32(state: u32) -> u32 {
 
     (state << 1) + bit
 }
-
-#[inline(always)]
-#[allow(dead_code)]
-fn cache_flush() {
-    unsafe {
-        #[rustfmt::skip]
-        core::arch::asm!(
-            "fence.i",
-            ".word 0x500F",
-            "nop",
-            "nop",
-            "nop",
-            "nop",
-            "nop",
-        );
-    }
-}
