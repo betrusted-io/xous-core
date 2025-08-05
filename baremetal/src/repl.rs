@@ -11,6 +11,7 @@ pub struct Repl {
     do_cmd: bool,
 }
 
+const COLUMNS: usize = 4;
 impl Repl {
     pub fn new() -> Self { Self { cmdline: String::new(), do_cmd: false } }
 
@@ -82,6 +83,58 @@ impl Repl {
                             quit = true;
                         }
                     });
+                }
+            }
+            "peek" => {
+                if args.len() == 1 || args.len() == 2 {
+                    if let Ok(addr) = u32::from_str_radix(&args[0], 16) {
+                        let count = if args.len() == 2 {
+                            if let Ok(count) = u32::from_str_radix(&args[1], 10) { count } else { 1 }
+                        } else {
+                            1
+                        };
+                        // safety: it's not safe to do this, the user peeks at their own risk
+                        let peek = unsafe { core::slice::from_raw_parts(addr as *const u32, count as usize) };
+                        for (i, &d) in peek.iter().enumerate() {
+                            if (i % COLUMNS) == 0 {
+                                crate::print!("\n\r{:08x}: ", addr + (i * size_of::<u32>()) as u32);
+                            }
+                            crate::print!("{:08x} ", d);
+                        }
+                        crate::println!("");
+                    } else {
+                        crate::println!("Peek address is in hex");
+                    }
+                } else {
+                    crate::println!("Help: peek <addr> [count], addr is in hex, count in decimal");
+                }
+            }
+            "poke" => {
+                if args.len() == 2 || args.len() == 3 {
+                    if let Ok(addr) = u32::from_str_radix(&args[0], 16) {
+                        if let Ok(value) = u32::from_str_radix(&args[1], 16) {
+                            let count = if args.len() == 3 {
+                                if let Ok(count) = u32::from_str_radix(&args[2], 10) { count } else { 1 }
+                            } else {
+                                1
+                            };
+                            // safety: it's not safe to do this, the user pokes at their own risk
+                            let poke =
+                                unsafe { core::slice::from_raw_parts_mut(addr as *mut u32, count as usize) };
+                            for d in poke.iter_mut() {
+                                *d = value;
+                            }
+                            crate::println!("Poked {:x} into {:x}, {} times", value, addr, count);
+                        } else {
+                            crate::println!("Poke value is in hex");
+                        }
+                    } else {
+                        crate::println!("Poke address is in hex");
+                    }
+                } else {
+                    crate::println!(
+                        "Help: poke <addr> <value> [count], addr/value is in hex, count in decimal"
+                    );
                 }
             }
             "echo" => {
