@@ -87,7 +87,7 @@ impl Repl {
             }
             "peek" => {
                 if args.len() == 1 || args.len() == 2 {
-                    if let Ok(addr) = u32::from_str_radix(&args[0], 16) {
+                    if let Ok(addr) = usize::from_str_radix(&args[0], 16) {
                         let count = if args.len() == 2 {
                             if let Ok(count) = u32::from_str_radix(&args[1], 10) { count } else { 1 }
                         } else {
@@ -97,7 +97,7 @@ impl Repl {
                         let peek = unsafe { core::slice::from_raw_parts(addr as *const u32, count as usize) };
                         for (i, &d) in peek.iter().enumerate() {
                             if (i % COLUMNS) == 0 {
-                                crate::print!("\n\r{:08x}: ", addr + (i * size_of::<u32>()) as u32);
+                                crate::print!("\n\r{:08x}: ", addr + i * size_of::<u32>());
                             }
                             crate::print!("{:08x} ", d);
                         }
@@ -137,6 +137,52 @@ impl Repl {
                     );
                 }
             }
+            #[cfg(feature = "cramium-soc")]
+            "rram" => {
+                if args.len() == 2 || args.len() == 3 {
+                    if let Ok(addr) = usize::from_str_radix(&args[0], 16) {
+                        if addr < utralib::HW_RERAM_MEM_LEN {
+                            if let Ok(value) = u32::from_str_radix(&args[1], 16) {
+                                let count = if args.len() == 3 {
+                                    if let Ok(count) = u32::from_str_radix(&args[2], 10) { count } else { 1 }
+                                } else {
+                                    1
+                                }
+                                .min(utralib::HW_RRC_MEM_LEN as u32); // limit count to length of RRAM
+                                let mut poke = Vec::new();
+                                for _ in 0..count {
+                                    poke.push(value);
+                                }
+                                // safety: this is safe because all elements are valid between the two
+                                // representations, there are no alignment
+                                // issues downcasting to a u8, and the underlying representation
+                                // is in fact the data we're hoping to access.
+                                let poke_inner = unsafe {
+                                    core::slice::from_raw_parts(
+                                        poke.as_ptr() as *const u8,
+                                        poke.len() * core::mem::size_of::<u32>(),
+                                    )
+                                };
+                                let mut rram = cramium_hal::rram::Reram::new();
+                                rram.write_slice(addr, poke_inner);
+                                crate::println!("RRAM written {:x} into {:x}, {} times", value, addr, count);
+                            } else {
+                                crate::println!("RRAM value is in hex");
+                            }
+                        } else {
+                            crate::println!(
+                                "RRAM addresses are relative to base of RRAM, max 4M, and in hex"
+                            );
+                        }
+                    } else {
+                        crate::println!("RRAM address is in hex");
+                    }
+                } else {
+                    crate::println!(
+                        "Help: rram <addr> <value> [count], addr/value is in hex, count in decimal"
+                    );
+                }
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);
@@ -145,7 +191,12 @@ impl Repl {
             }
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
-                crate::println!("Commands include: echo, mon");
+                crate::print!("Commands include: echo, poke, peek");
+                #[cfg(feature = "cramium-soc")]
+                crate::print!(", rram");
+                #[cfg(not(feature = "cramium-soc"))]
+                crate::print!(", mon");
+                crate::println!("");
             }
         }
 
