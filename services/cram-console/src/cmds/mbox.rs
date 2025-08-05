@@ -340,7 +340,7 @@ impl<'a> ShellCmdApi<'a> for Mbox {
                                         .ok();
                                     } else {
                                         log::info!("Wrote {} bytes", rx_pkt.data[0]);
-                                        cache_flush();
+                                        cramium_hal::cache_flush();
                                         let flash_slice: &[u8] = unsafe { self.flash_window.as_slice() };
                                         log::info!("Data values before writing: {:x?}", &orig_data[..16]);
                                         log::info!("Data values after writing: {:x?}", &flash_slice[..16]);
@@ -514,20 +514,5 @@ impl<'a> ShellCmdApi<'a> for Mbox {
             write!(ret, "{}", helpstring).unwrap();
         }
         Ok(Some(ret))
-    }
-}
-
-#[inline(always)]
-fn cache_flush() {
-    unsafe {
-        #[rustfmt::skip]
-        core::arch::asm!(
-        ".word 0x500F",
-        "nop",
-        "nop",
-        "nop",
-        "nop",
-        "nop",
-    );
     }
 }

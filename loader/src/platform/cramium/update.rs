@@ -361,7 +361,7 @@ pub fn process_update(perclk: u32) {
                                         };
                                     }
                                     progress_bar(&mut sh1107, 100);
-                                    cache_flush();
+                                    cramium_hal::cache_flush();
                                     crate::println!(
                                         "data after: {:x?} .. {:x?}",
                                         &check_slice[..32],
@@ -619,20 +619,5 @@ pub fn write_rram(mbox: &mut Mbox, data: &[u32]) -> Result<usize, MboxError> {
             crate::println!("Flash write send error: {:?}", e);
             Err(e)
         }
-    }
-}
-
-#[inline(always)]
-fn cache_flush() {
-    unsafe {
-        #[rustfmt::skip]
-        core::arch::asm!(
-        ".word 0x500F",
-        "nop",
-        "nop",
-        "nop",
-        "nop",
-        "nop",
-    );
     }
 }
