@@ -183,6 +183,45 @@ impl Repl {
                     );
                 }
             }
+            #[cfg(feature = "cramium-soc")]
+            "bogomips" => {
+                crate::println!("start test");
+                // start the RTC
+                unsafe { (0x4006100c as *mut u32).write_volatile(1) };
+                let mut count: usize;
+                unsafe {
+                    #[rustfmt::skip]
+                    core::arch::asm!(
+                        // grab the RTC value
+                        "li t0, 0x40061000",
+                        "lw t1, 0x0(t0)",
+                        "li t3, 0",
+                        // wait until the next second
+                    "10:",
+                        "lw t2, 0x0(t0)",
+                        "beq t1, t2, 10b",
+                        // start of test
+                    "20:",
+                        // count outer loops
+                        "addi t3, t3, 1",
+                        // inner loop 10,000 times
+                        "li t4, 10000",
+                    "30:",
+                        "addi t4, t4, -1",
+                        "bne  x0, t4, 30b",
+                        // after inner loop, check current time; do another outer loop if time is same
+                        "lw t1, 0x0(t0)",
+                        "beq t1, t2, 20b",
+                        out("t0") _,
+                        out("t1") _,
+                        out("t2") _,
+                        out("t3") count,
+                        out("t4") _,
+                    );
+                }
+                crate::println!("{}.{} bogomips", (count * 2 * 10_000) / 1_000_000, (count * 2) % 10_000);
+                crate::platform::setup_timer();
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);
@@ -191,7 +230,7 @@ impl Repl {
             }
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
-                crate::print!("Commands include: echo, poke, peek");
+                crate::print!("Commands include: echo, poke, peek, bogomips");
                 #[cfg(feature = "cramium-soc")]
                 crate::print!(", rram");
                 #[cfg(not(feature = "cramium-soc"))]

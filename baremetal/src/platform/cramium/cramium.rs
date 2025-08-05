@@ -24,11 +24,12 @@ pub const SCRATCH_PAGE: usize = HEAP_START - 8192;
 
 pub const UART_IFRAM_ADDR: usize = cramium_hal::board::UART_DMA_TX_BUF_PHYS;
 
+// the 800_000_000 setting is tested to work at least on one sample
 pub const SYSTEM_CLOCK_FREQUENCY: u32 = 400_000_000;
 pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 pub fn early_init() {
-    let mut uart = crate::debug::Uart {};
+    let uart = crate::debug::Uart {};
 
     for _ in 0..100 {
         uart.putc('a' as u32 as u8);
@@ -96,7 +97,7 @@ pub fn early_init() {
         logic [15:0] trm_aoram1kx36     ; assign trm_aoram1kx36     = trmdat[27]; localparam t_trm IV_trm_aoram1kx36     = IV_sram_sp_hde_inst;
 
              */
-        uart.tiny_write_str("t0\r");
+        crate::println!("setting 0.9v sramtrm");
         let mut sramtrm = CSR::new(utra::coresub_sramtrm::HW_CORESUB_SRAMTRM_BASE as *mut u32);
         sramtrm.wo(utra::coresub_sramtrm::SFR_CACHE, 0x3);
         sramtrm.wo(utra::coresub_sramtrm::SFR_ITCM, 0x3);
@@ -119,7 +120,7 @@ pub fn early_init() {
         rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
         rbist.wo(utra::rbist_wrp::SFRCR_TRM, (1 << 16) | 0b011_000_00_0_0_000_0_00);
         rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-        uart.tiny_write_str("t1\r");
+        crate::println!("setting other 0.9v trims");
 
         // tcm 0.9v
         rbist.wo(utra::rbist_wrp::SFRCR_TRM, (6 << 16) | 0b011_000_00_0_0_000_0_00);
@@ -183,6 +184,16 @@ pub fn early_init() {
     // setup heap alloc
     setup_alloc();
 
+    setup_timer();
+
+    // Rx setup
+    let mut udma_uart = setup_rx(perclk);
+    irq_setup();
+    enable_irq(utra::irqarray5::IRQARRAY5_IRQ);
+    udma_uart.write("console up\r\n".as_bytes());
+}
+
+pub fn setup_timer() {
     // Initialize the timer, which is needed by the delay() function.
     let mut timer = CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
     // not using interrupts, this will be polled by delay()
@@ -196,12 +207,6 @@ pub fn early_init() {
     timer.wfo(utra::timer0::RELOAD_RELOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
     // enable the timer
     timer.wfo(utra::timer0::EN_EN, 0b1);
-
-    // Rx setup
-    let mut udma_uart = setup_rx(perclk);
-    irq_setup();
-    enable_irq(utra::irqarray5::IRQARRAY5_IRQ);
-    udma_uart.write("console up\r\n".as_bytes());
 }
 
 pub fn setup_alloc() {
@@ -284,7 +289,7 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         // TODO: this only works for two clock settings. Broken @ 600. Need to fix this to instead derive
         // what pclk is instead of always reporting 100mhz
         if freq_hz == 800_000_000 {
-            daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x01_ff_ff);
+            daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x07_ff_ff);
         } else {
             daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
         }
@@ -479,34 +484,34 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     );
 
     crate::println!("fsvalid: {}", daric_cgu.add(sysctrl::SFR_CGUFSVLD.offset()).read_volatile());
-    let _cgufsfreq0 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ0.offset()).read_volatile();
-    let _cgufsfreq1 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ1.offset()).read_volatile();
-    let _cgufsfreq2 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ2.offset()).read_volatile();
-    let _cgufsfreq3 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ3.offset()).read_volatile();
+    let cgufsfreq0 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ0.offset()).read_volatile();
+    let cgufsfreq1 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ1.offset()).read_volatile();
+    let cgufsfreq2 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ2.offset()).read_volatile();
+    let cgufsfreq3 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ3.offset()).read_volatile();
 
     crate::println!(
         "Internal osc: {} -> {} MHz ({} MHz)",
-        _cgufsfreq0,
-        fsfreq_to_hz(_cgufsfreq0),
-        fsfreq_to_hz_32(_cgufsfreq0)
+        cgufsfreq0,
+        fsfreq_to_hz(cgufsfreq0),
+        fsfreq_to_hz_32(cgufsfreq0)
     );
     crate::println!(
         "XTAL: {} -> {} MHz ({} MHz)",
-        _cgufsfreq1,
-        fsfreq_to_hz(_cgufsfreq1),
-        fsfreq_to_hz_32(_cgufsfreq1)
+        cgufsfreq1,
+        fsfreq_to_hz(cgufsfreq1),
+        fsfreq_to_hz_32(cgufsfreq1)
     );
     crate::println!(
         "pll output 0: {} -> {} MHz ({} MHz)",
-        _cgufsfreq2,
-        fsfreq_to_hz(_cgufsfreq2),
-        fsfreq_to_hz_32(_cgufsfreq2)
+        cgufsfreq2,
+        fsfreq_to_hz(cgufsfreq2),
+        fsfreq_to_hz_32(cgufsfreq2)
     );
     crate::println!(
         "pll output 1: {} -> {} MHz ({} MHz)",
-        _cgufsfreq3,
-        fsfreq_to_hz(_cgufsfreq3),
-        fsfreq_to_hz_32(_cgufsfreq3)
+        cgufsfreq3,
+        fsfreq_to_hz(cgufsfreq3),
+        fsfreq_to_hz_32(cgufsfreq3)
     );
 
     crate::println!("PLL configured to {} MHz", freq_hz / 1_000_000);
