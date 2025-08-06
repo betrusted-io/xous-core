@@ -224,7 +224,7 @@ impl Repl {
             }
 
             #[cfg(feature = "nto-bio")]
-            "bio_test" => {
+            "bio" => {
                 crate::println!("--- Starting On-Demand BIO Test Suite ---");
                 // Local counter to replace `self.passing_tests` from the TestRunner
                 let mut passing_tests = 0;
@@ -261,7 +261,7 @@ impl Repl {
 
                 passing_tests += bio_tests::units::hello_world();
                 passing_tests += bio_tests::arith::stack_test();
-                #[cfg(feature = "bio-mul")]
+
                 {
                     // safety: this is safe only if the target supports multiplication
                     passing_tests += unsafe { bio_tests::arith::mac_test() }; // 1
@@ -305,6 +305,8 @@ impl Repl {
                 crate::print!(", rram");
                 #[cfg(not(feature = "cramium-soc"))]
                 crate::print!(", mon");
+                #[cfg(not(feature = "nto-bio"))]
+                crate::print!(", bio");
                 crate::println!("");
             }
         }
