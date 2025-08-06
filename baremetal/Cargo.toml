@@ -33,5 +33,13 @@ cramium-soc = [
     "v0p9",
 ]
 
+nto-bio = [
+     "utralib/cramium-soc",
+    "linked_list_allocator",
+    "cramium-hal/loader-baosec",
+    "cramium-api",
+    "v0p9",
+]
+
 verilator-only = []
 default = ["artyvexii"]

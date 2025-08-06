@@ -222,6 +222,76 @@ impl Repl {
                 crate::println!("{}.{} bogomips", (count * 2 * 10_000) / 1_000_000, (count * 2) % 10_000);
                 crate::platform::setup_timer();
             }
+
+            #[cfg(feature = "nto-bio")]
+            "bio_test" => {
+                crate::println!("--- Starting On-Demand BIO Test Suite ---");
+                // Local counter to replace `self.passing_tests` from the TestRunner
+                let mut passing_tests = 0;
+
+                let id = get_id();
+                crate::println!("BIO ID: {:x}", id);
+                if (id >> 16) as usize == BIO_PRIVATE_MEM_LEN {
+                    passing_tests += 1;
+                } else {
+                    crate::println!(
+                        "Error: ID mem size does not match: {} != {}",
+                        id >> 16,
+                        BIO_PRIVATE_MEM_LEN
+                    );
+                }
+
+                // map the BIO ports to GPIO pins
+                let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
+                iox.set_gpio_pullup(cramium_api::iox::IoxPort::PB, 2, cramium_api::iox::IoxEnable::Enable);
+                iox.set_gpio_pullup(cramium_api::iox::IoxPort::PB, 3, cramium_api::iox::IoxEnable::Enable);
+
+                passing_tests += bio_tests::units::hello_multiverse();
+
+                bio_tests::dma::dma_filter_off();
+
+                crate::println!("*** CLKMODE 3 ***");
+                passing_tests += bio_tests::dma::dma_basic(false, 3); // 4
+                passing_tests += bio_tests::dma::dma_basic(true, 3); // 4
+                passing_tests += bio_tests::dma::dma_bytes(); // 4
+                passing_tests += bio_tests::dma::dma_u16(); // 4
+                passing_tests += bio_tests::dma::dma_coincident(3); // 4
+                passing_tests += bio_tests::dma::dma_multicore(3); // 1
+
+                passing_tests += bio_tests::units::hello_world();
+                passing_tests += bio_tests::arith::stack_test();
+                #[cfg(feature = "bio-mul")]
+                {
+                    // safety: this is safe only if the target supports multiplication
+                    passing_tests += unsafe { bio_tests::arith::mac_test() }; // 1
+                }
+
+                passing_tests += bio_tests::units::aclk_tests();
+
+                passing_tests += bio_tests::dma::filter_test();
+
+                bio_tests::dma::dma_filter_off();
+                passing_tests += bio_tests::dma::dmareq_test();
+                passing_tests += bio_tests::units::event_aliases();
+                passing_tests += bio_tests::units::fifo_alias_tests();
+
+                passing_tests += bio_tests::units::fifo_basic();
+                passing_tests += bio_tests::units::host_fifo_tests();
+
+                passing_tests += bio_tests::spi::spi_test();
+                passing_tests += bio_tests::i2c::i2c_test();
+                passing_tests += bio_tests::i2c::complex_i2c_test();
+
+                passing_tests += bio_tests::units::fifo_level_tests();
+
+                // Final report
+                crate::println!(
+                    "\n--- BIO Tests Complete: {}/{} passed. ---\n",
+                    passing_tests,
+                    BIO_TESTS_FINAL
+                );
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);
