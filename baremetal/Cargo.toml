@@ -24,7 +24,14 @@ artybio = [
     "xous-bio-bdma/baremetal",
 ]
 artyvexii = ["utralib/artyvexii", "linked_list_allocator"]
-cramium-soc = ["utralib/cramium-soc"]
+v0p9 = []
+cramium-soc = [
+    "utralib/cramium-soc",
+    "linked_list_allocator",
+    "cramium-hal/loader-baosec",
+    "cramium-api",
+    "v0p9",
+]
 
 verilator-only = []
 default = ["artyvexii"]

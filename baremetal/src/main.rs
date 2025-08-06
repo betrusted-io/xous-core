@@ -13,6 +13,7 @@ use core::cell::RefCell;
 
 use critical_section::Mutex;
 use platform::*;
+#[allow(unused_imports)]
 use utralib::*;
 #[cfg(feature = "artybio")]
 use xous_bio_bdma::*;
@@ -44,9 +45,12 @@ pub fn uart_irq_handler() {
 /// This function is safe to call exactly once.
 #[export_name = "rust_entry"]
 pub unsafe extern "C" fn rust_entry() -> ! {
-    // turn on a green LED to indicate boot
-    let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
-    rgb.wfo(arty_rgb::LD3, 0b010);
+    #[cfg(any(feature = "artyvexii", feature = "artybio"))]
+    {
+        // turn on a green LED to indicate boot
+        let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
+        rgb.wfo(utra::rgb::OUT_OUT, 0x002);
+    }
 
     crate::platform::early_init();
     crate::println!("\n~~Baremetal up!~~\n");
@@ -61,7 +65,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
 
     // The green LEDs flash whenever the FPGA is configured with the Arty BIO design.
     // The RGB LEDs flash when the CPU is running this code.
+    #[allow(unused_variables)]
     let mut count = 0;
+    #[cfg(any(feature = "artyvexii", feature = "artybio"))]
     let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
 
     // provide some feedback on the run state of the BIO by peeking at the program counter
@@ -82,8 +88,8 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         // Animate the LED flashing to indicate repl loop is running
         delay(1);
         count += 1;
-
-        rgb.rmwf(arty_rgb::LD3, (count / 500) as u32);
+        #[cfg(any(feature = "artyvexii", feature = "artybio"))]
+        rgb.wfo(utra::rgb::OUT_OUT, ((count / 500) as u32) << 6);
     }
 }
 
