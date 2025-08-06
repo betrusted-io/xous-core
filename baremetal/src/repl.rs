@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 
 #[allow(unused_imports)]
 use utralib::*;
-#[cfg(feature = "artybio")]
+#[cfg(any(feature = "artybio", feature = "nto-bio"))]
 use xous_bio_bdma::*;
 
 pub struct Repl {
@@ -225,6 +225,40 @@ impl Repl {
 
             #[cfg(feature = "nto-bio")]
             "bio" => {
+                const BIO_TESTS: usize =
+                    // get_id
+                    1
+                    // dma
+                    + 4 * 5 + 1
+                    // clocking modes
+                    // + 4 + 4 + 4 + 4 + 2
+                    // stack test
+                    + 1
+                    // hello word, hello multiverse, aclk_tests
+                    + 3
+                    // fifo_basic
+                    + 1
+                    // host_fifo_tests
+                    + 1
+                    // spi_test
+                    + 1
+                    // i2c_test
+                    + 1
+                    // complex_i2c_test
+                    + 1
+                    // fifo_level_tests
+                    + 1
+                    // fifo_alias_tests
+                    + 1
+                    // event_aliases
+                    + 1
+                    // dmareq_test
+                    + 1
+                    // bio-mul
+                    + 1
+                    // filter test
+                    + 1;
+
                 crate::println!("--- Starting On-Demand BIO Test Suite ---");
                 // Local counter to replace `self.passing_tests` from the TestRunner
                 let mut passing_tests = 0;
@@ -286,11 +320,7 @@ impl Repl {
                 passing_tests += bio_tests::units::fifo_level_tests();
 
                 // Final report
-                crate::println!(
-                    "\n--- BIO Tests Complete: {}/{} passed. ---\n",
-                    passing_tests,
-                    BIO_TESTS_FINAL
-                );
+                crate::println!("\n--- BIO Tests Complete: {}/{} passed. ---\n", passing_tests, BIO_TESTS);
             }
             "echo" => {
                 for word in args {
