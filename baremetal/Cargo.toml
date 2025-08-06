@@ -22,11 +22,20 @@ artybio = [
     "linked_list_allocator",
     "xous-bio-bdma/artybio",
     "xous-bio-bdma/baremetal",
+    "nto-bio"
 ]
 artyvexii = ["utralib/artyvexii", "linked_list_allocator"]
 v0p9 = []
 cramium-soc = [
     "utralib/cramium-soc",
+    "linked_list_allocator",
+    "cramium-hal/loader-baosec",
+    "cramium-api",
+    "v0p9",
+]
+
+nto-bio = [
+     "utralib/cramium-soc",
     "linked_list_allocator",
     "cramium-hal/loader-baosec",
     "cramium-api",
