@@ -7,7 +7,7 @@ use utils::*;
 mod builder;
 use builder::*;
 mod verifier;
-use std::{env, fs, path::PathBuf};
+use std::{env, fs, path::Path, path::PathBuf};
 
 use verifier::*;
 
@@ -649,6 +649,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         Some("baremetal-cramsoc") => {
             builder.set_baremetal(true);
+            update_flash_origin("baremetal/src/platform/cramium/link.x", 0x6000_0000)?;
+            builder.target_baremetal_cramsoc();
+        }
+
+        Some("baremetal-cramsoc-evb") => {
+            builder.set_baremetal(true);
+            update_flash_origin("baremetal/src/platform/cramium/link.x", 0x6100_0000)?;
+            builder.add_loader_feature("nto-evb");
             builder.target_baremetal_cramsoc();
         }
 
@@ -1029,4 +1037,25 @@ fn locate_workspace_root() -> Option<PathBuf> {
         }
     }
     Some(dir)
+}
+
+fn update_flash_origin<P: AsRef<Path>>(path: P, new_origin: u32) -> std::io::Result<()> {
+    let content = fs::read_to_string(&path)?;
+    let updated = content
+        .lines()
+        .map(|line| {
+            if line.trim_start().starts_with("FLASH") && line.contains("ORIGIN") {
+                let parts: Vec<&str> = line.split(',').collect();
+                let origin_part = format!("ORIGIN = 0x{:08X}", new_origin);
+                let length_part = parts.iter().find(|s| s.trim().starts_with("LENGTH")).unwrap_or(&"");
+                format!("  FLASH : {}, {}", origin_part, length_part.trim())
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<String>>()
+        .join("\n");
+
+    fs::write(path, updated)?;
+    Ok(())
 }
