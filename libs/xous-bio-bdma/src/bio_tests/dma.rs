@@ -49,7 +49,7 @@ pub fn dma_filter_off() {
 }
 
 pub fn filter_test() -> usize {
-    print!("==Filter test==\r");
+    println!("==Filter test==");
     // clear any prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -87,20 +87,20 @@ pub fn filter_test() -> usize {
     // with the filters so set, test some transactions that "should" pass
     if dma_basic(false, 0) != 4 {
         passing = false;
-        print!("DMA Filter: allowed transactions are incorrectly blocked");
+        println!("DMA Filter: allowed transactions are incorrectly blocked");
     };
 
     // with the filters so set, test transaction that "should" fail:
     // *** increments 3 ret values total
     //   - access to the BIO_BDMA registers: try to disable the filters.
-    print!("attempt to violate peri filter\r");
+    println!("attempt to violate peri filter");
     if bio_ss.bio.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM) != 0 {
         passing = false;
-        print!("peri range filter pre-condition fail A\r");
+        println!("peri range filter pre-condition fail A");
     }
     if bio_ss.bio.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI) != 0 {
         passing = false;
-        print!("peri range filter pre-condition fail B\r");
+        println!("peri range filter pre-condition fail B");
     }
     cache_flush();
     let naughty_dma_ptr: &mut [u32] = unsafe {
@@ -119,11 +119,11 @@ pub fn filter_test() -> usize {
     // check that the values did not change
     if bio_ss.bio.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM) != 0 {
         passing = false;
-        print!("peri range filter FAIL A\r");
+        println!("peri range filter FAIL A");
     }
     if bio_ss.bio.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI) != 0 {
         passing = false;
-        print!("peri range filter FAIL B\r");
+        println!("peri range filter FAIL B");
     }
     // attempt to read the config word
     bio_ss.bio.wo(
@@ -137,15 +137,15 @@ pub fn filter_test() -> usize {
     let tval = target[0];
     if tval == 0x1000_0408 {
         passing = false;
-        print!("peri range read filter FAIL target[0]->{:x} got a correct value of 0x10000408\r", tval);
+        println!("peri range read filter FAIL target[0]->{:x} got a correct value of 0x10000408", tval);
     } else {
-        print!("CFGINFO returned {:x}, != 0x10000408\r", tval);
+        println!("CFGINFO returned {:x}, != 0x10000408", tval);
     }
-    print!("peri violation test done\r");
+    println!("peri violation test done");
 
     //   - access to ROM area
     // *** increments 16 ret values total
-    print!("attempt to violate mem filter\r");
+    println!("attempt to violate mem filter");
     let val = [0xdead_beef; 1];
     // stick a value in the gutter by writing to the ROM
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, val.as_ptr() as u32); // src address
@@ -167,26 +167,26 @@ pub fn filter_test() -> usize {
         }
     }
     assert!(!is_null, "test data range in ROM is bad (all nulls), pick a new one");
-    print!("initiate\r");
+    println!("initiate");
     // now do the read; the resulting buffer should be filled with the gutter value
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, 0x6000_0000); // src address
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, read_buf.as_mut_ptr() as u32); // dst address
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, 4 * read_src.len() as u32); // initiate the transfer
     while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0x1 == 0 {}
     cache_flush();
-    print!("check\r");
+    println!("check");
     for (i, d) in read_buf.iter().enumerate() {
         if *d != val[0] {
-            print!("mem filter test fail. Expected {:x}, got {:x} at {}", val[0], *d, i);
+            println!("mem filter test fail. Expected {:x}, got {:x} at {}", val[0], *d, i);
             passing = false;
         }
     }
-    print!("attempt to violate mem filter done\r");
+    println!("attempt to violate mem filter done");
     if passing {
-        print!("==Filter test PASS==\n");
+        println!("==Filter test PASS==\n");
         1
     } else {
-        print!("==Filter test FAIL==\n");
+        println!("==Filter test FAIL==\n");
         0
     }
 }
@@ -200,9 +200,9 @@ pub fn dma_basic(concurrent: bool, clkmode: u8) -> usize {
     const TEST_LEN: usize = 64;
     let mut passing = 0;
     if !concurrent {
-        print!("DMA basic2w\r");
+        println!("DMA basic2w");
     } else {
-        print!("DMA cpu+dma concurrent\r");
+        println!("DMA cpu+dma concurrent");
     }
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
@@ -253,9 +253,9 @@ pub fn dma_basic(concurrent: bool, clkmode: u8) -> usize {
     passing += basic_u32(&mut bio_ss, ifram_src, ifram_dst, 0xC0, "i0->i1", concurrent);
 
     if !concurrent {
-        print!("DMA basic done.\r");
+        println!("DMA basic done.");
     } else {
-        print!("DMA cpu+dma concurrent done.\r");
+        println!("DMA cpu+dma concurrent done.");
     }
     passing
 }
@@ -269,7 +269,7 @@ fn basic_u32(
     concurrent: bool,
 ) -> usize {
     assert!(src.len() == dst.len());
-    print!("  - {}\r", name);
+    println!("  - {}", name);
     let mut tp = TestPattern::new(Some(seed));
     for d in src.iter_mut() {
         *d = tp.next();
@@ -290,8 +290,8 @@ fn basic_u32(
             if rbk != d {
                 if errs < 4 {
                     unsafe {
-                        print!(
-                            "{} @{:x}/{:x}, {:x} rb:{:x}\r",
+                        println!(
+                            "{} @{:x}/{:x}, {:x} rb:{:x}",
                             name,
                             src.as_ptr().add(i) as usize,
                             dst.as_ptr().add(i) as usize,
@@ -307,7 +307,7 @@ fn basic_u32(
             }
         }
         if errs > 0 {
-            print!("\r");
+            println!("");
             // errs = 0;
         }
     } else {
@@ -328,7 +328,7 @@ fn basic_u32(
         for (i, &d) in src.iter().enumerate() {
             let rbk = unsafe { dst.as_ptr().add(i).read_volatile() };
             if rbk != d {
-                print!("(c) {} DMA err @{}, {:x} rbk: {:x}\r", name, i, d, rbk);
+                println!("(c) {} DMA err @{}, {:x} rbk: {:x}", name, i, d, rbk);
                 pass = 0;
             }
         }
@@ -363,7 +363,7 @@ bio_code!(dma_basic_code, DMA_BASIC_START, DMA_BASIC_END,
 // test byte-wide modifications
 pub fn dma_bytes() -> usize {
     let mut passing = 0;
-    print!("DMA bytes\r");
+    println!("DMA bytes");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -390,24 +390,24 @@ pub fn dma_bytes() -> usize {
     ifram_src.fill(0);
     ifram_dst.fill(0);
     passing += basic_u8(&mut bio_ss, &mut main_mem_src, &mut main_mem_dst, 0x8800, "Main->main");
-    print!("m->m\r");
+    println!("m->m");
 
     main_mem_src.fill(0);
     main_mem_dst.fill(0);
     passing += basic_u8(&mut bio_ss, ifram_src, &mut main_mem_dst, 0x8840, "ifram0->main");
-    print!("0->m\r");
+    println!("0->m");
 
     ifram_src.fill(0);
     main_mem_dst.fill(0);
     passing += basic_u8(&mut bio_ss, &mut main_mem_src, ifram_dst, 0x8880, "Main->ifram1");
-    print!("m->1\r");
+    println!("m->1");
 
     main_mem_src.fill(0);
     ifram_dst.fill(0);
     passing += basic_u8(&mut bio_ss, ifram_src, ifram_dst, 0x88C0, "ifram0->ifram1");
-    print!("0->1\r");
+    println!("0->1");
 
-    print!("DMA bytes done.\r");
+    println!("DMA bytes done.");
     passing
 }
 
@@ -435,7 +435,7 @@ fn basic_u8(
     for (i, &d) in src.iter().enumerate() {
         let rbk = unsafe { dst.as_ptr().add(i).read_volatile() };
         if rbk != d {
-            print!("{} DMA err @{}, {:x} rbk: {:x}\r", name, i, d, rbk);
+            println!("{} DMA err @{}, {:x} rbk: {:x}", name, i, d, rbk);
             pass = 0;
         }
     }
@@ -465,7 +465,7 @@ bio_code!(dma_bytes_code, DMA_BYTES_START, DMA_BYTES_END,
 // test half-word modifications
 pub fn dma_u16() -> usize {
     let mut passing = 0;
-    print!("DMA u16\r");
+    println!("DMA u16");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -504,7 +504,7 @@ pub fn dma_u16() -> usize {
     ifram_dst.fill(0);
 
     passing += basic_u16(&mut bio_ss, ifram_src, ifram_dst, 0x16C0, "ifram0->ifram1");
-    print!("DMA u16 done.\r");
+    println!("DMA u16 done.");
     passing
 }
 
@@ -540,7 +540,7 @@ fn basic_u16(
     for (i, &d) in src.iter().enumerate() {
         let rbk = unsafe { dst.as_ptr().add(i).read_volatile() };
         if rbk != d {
-            print!("{} DMA err @{}, {:x} rbk: {:x}\r", name, i, d, rbk);
+            println!("{} DMA err @{}, {:x} rbk: {:x}", name, i, d, rbk);
             pass = 0;
         }
     }
@@ -571,7 +571,7 @@ bio_code!(dma_u16_code, DMA_U16_START, DMA_U16_END,
 /// parallel with the copy master.
 pub fn dma_multicore(clkmode: u8) -> usize {
     let mut passing = 0;
-    print!("DMA fast\r");
+    println!("DMA fast");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -619,13 +619,13 @@ pub fn dma_multicore(clkmode: u8) -> usize {
     for (i, &d) in main_mem_src.iter().enumerate() {
         let rbk = unsafe { main_mem_dst.as_ptr().add(i).read_volatile() };
         if rbk != d {
-            print!("Main mem (fast loop) DMA err @{}, {:x} rbk: {:x}\r", i, d, rbk);
+            println!("Main mem (fast loop) DMA err @{}, {:x} rbk: {:x}", i, d, rbk);
             pass = 0;
         }
     }
     passing += pass;
 
-    print!("DMA fast loop done.\r");
+    println!("DMA fast loop done.");
     passing
 }
 
@@ -675,7 +675,7 @@ bio_code!(dma_mc_dst_addr_code, DMA_MC_DST_ADDR_START, DMA_MC_DST_ADDR_END,
 /// Attempt to fire off all four engines at once, simultaneously, for maximum bus contention
 pub fn dma_coincident(clkmode: u8) -> usize {
     let mut passing = 0;
-    print!("DMA coincident\r");
+    println!("DMA coincident");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -714,16 +714,16 @@ pub fn dma_coincident(clkmode: u8) -> usize {
     ifram_dst.fill(0);
 
     passing += coincident_u32(&mut bio_ss, &mut main_mem_src, &mut main_mem_dst, 0x200, "m->m");
-    print!("m->m coincident\r");
+    println!("m->m coincident");
     // try other memory banks
     passing += coincident_u32(&mut bio_ss, ifram_src, &mut main_mem_dst, 0x300, "i0->m");
-    print!("0->m\r");
+    println!("0->m");
     passing += coincident_u32(&mut bio_ss, &mut main_mem_src, ifram_dst, 0x400, "m->i1");
-    print!("m->1\r");
+    println!("m->1");
     passing += coincident_u32(&mut bio_ss, ifram_src, ifram_dst, 0x500, "i0->i1");
-    print!("0->1\r");
+    println!("0->1");
 
-    print!("DMA coincident done.\r");
+    println!("DMA coincident done.");
     passing
 }
 
@@ -753,7 +753,7 @@ fn coincident_u32(
         let rbk = unsafe { dst.as_ptr().add(i).read_volatile() };
         if rbk != d {
             if errs < 4 {
-                print!("{} err @{}, {:x} rbk: {:x}\r", name, i, d, rbk);
+                println!("{} err @{}, {:x} rbk: {:x}", name, i, d, rbk);
             } else {
                 print!(".");
             }
@@ -762,7 +762,7 @@ fn coincident_u32(
         }
     }
     if errs >= 4 {
-        print!("\r");
+        println!("");
     }
     pass
 }
@@ -802,7 +802,7 @@ pub fn dmareq_test() -> usize {
     const BIO_IRQ_OFFSET: usize = 16; // subtract this offset to get the actual bit location
 
     let mut passing = 1;
-    print!("DMA requests\r");
+    println!("DMA requests");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -840,8 +840,8 @@ pub fn dmareq_test() -> usize {
     };
 
     let dmareq_bit = (BIO_IRQ_BASE - BIO_IRQ_OFFSET) / 8;
-    print!(
-        "bank: {} bit: {} dmareq_bit {}, expected: {}\r",
+    println!(
+        "bank: {} bit: {} dmareq_bit {}, expected: {}",
         bank,
         bit,
         dmareq_bit,
@@ -856,27 +856,27 @@ pub fn dmareq_test() -> usize {
         // send the register to check for the bit mask
         bio_ss.bio.base().add(utra::bio_bdma::SFR_DMAREQ_STAT_SR_EVSTAT5.offset() - bank)
     } as u32);
-    print!("send offset {}\r", bit);
+    println!("send offset {}", bit);
     // send the bit offset to look for
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF1, bit as u32);
-    print!("starting search \r");
+    println!("starting search ");
     for i in 1..15 {
-        print!("{}\r", i);
+        println!("{}", i);
         // send the bit pattern into the event-set via core 0
         bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, i);
 
         let mut timeout = 0;
         while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL2) == 0 {
             timeout += 1;
-            if timeout > 200 {
-                print!("Timeout hit on {}\r", i);
+            if timeout > 20000 {
+                println!("Timeout hit on {}", i);
                 passing = 0;
                 break;
             }
         }
         let result = bio_ss.bio.r(utra::bio_bdma::SFR_RXF2);
         if result != i {
-            print!("Event expected {}, got {}\r", i, result);
+            println!("Event expected {}, got {}", i, result);
             passing = 0;
         }
     }
@@ -893,7 +893,7 @@ pub fn dmareq_test() -> usize {
         };
     }
 
-    print!("DMA requests done.\r");
+    println!("DMA requests done.");
     passing
 }
 

@@ -1,7 +1,7 @@
 use crate::*;
 
 pub fn stack_test() -> usize {
-    print!("Stack test\r");
+    println!("Stack test");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -27,31 +27,53 @@ pub fn stack_test() -> usize {
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, 5);
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, 4);
     // wait for the computation to return
-    while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL3) == 0 {}
+    let mut timeout = 0;
+    const TIMEOUT: usize = 100_000;
+    while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL3) == 0 {
+        timeout += 1;
+        if timeout > TIMEOUT {
+            println!("Timed out waiting for result (#1)");
+            return 0;
+        }
+    }
     let result = bio_ss.bio.r(utra::bio_bdma::SFR_RXF3);
     let check = test_sum(test_sum(test_sum(3)));
-    print!("Got {}\r", result);
+    println!("Got {}", result);
     if result != check {
-        print!("Computed {}, should be {}", result, check);
+        println!("Computed {}, should be {}", result, check);
         0
     } else {
-        while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL3) == 0 {}
+        timeout = 0;
+        while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL3) == 0 {
+            timeout += 1;
+            if timeout > TIMEOUT {
+                println!("Timed out waiting for result (#2)");
+                return 0;
+            }
+        }
         let result = bio_ss.bio.r(utra::bio_bdma::SFR_RXF3);
         let check = test_sum(test_sum(test_sum(5)));
-        print!("Got {}\r", result);
+        println!("Got {}", result);
         if result != check {
-            print!("Computed {}, should be {}", result, check);
+            println!("Computed {}, should be {}", result, check);
             0
         } else {
-            while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL3) == 0 {}
+            timeout = 0;
+            while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL3) == 0 {
+                timeout += 1;
+                if timeout > TIMEOUT {
+                    println!("Timed out waiting for result (#3)");
+                    return 0;
+                }
+            }
             let result = bio_ss.bio.r(utra::bio_bdma::SFR_RXF3);
             let check = test_sum(test_sum(test_sum(4)));
-            print!("Got {}\r", result);
+            println!("Got {}", result);
             if result != check {
-                print!("Computed {}, should be {}", result, check);
+                println!("Computed {}, should be {}", result, check);
                 0
             } else {
-                print!("===stack test PASS===\r");
+                println!("===stack test PASS===");
                 1
             }
         }
@@ -143,7 +165,7 @@ bio_code!(stack_test2_code, STACK_TEST2_START, STACK_TEST2_END,
 #[cfg(feature = "bio-mul")]
 /// Safety: Only safe if the target BIO has the multiply extension
 pub unsafe fn mac_test() -> usize {
-    print!("MAC test\r");
+    println!("MAC test");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -172,13 +194,13 @@ pub unsafe fn mac_test() -> usize {
     // wait for the computation to return
     while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) == 0 {}
     let result = bio_ss.bio.r(utra::bio_bdma::SFR_RXF1) as i32;
-    print!("Got {}\r", result);
+    println!("Got {}", result);
     if result != check {
-        print!("Computed {}, should be {}\r", result, check);
-        print!("===MAC test FAIL===\r");
+        println!("Computed {}, should be {}", result, check);
+        println!("===MAC test FAIL===");
         0
     } else {
-        print!("===MAC test PASS===\r");
+        println!("===MAC test PASS===");
         1
     }
 }

@@ -9,7 +9,7 @@ use crate::*;
 // the GPIO pins should toggle with 0x11, 0x12, 0x13...
 // at the specified quantum rate of the machine.
 pub fn hello_world() -> usize {
-    print!("hello world test\r");
+    println!("hello world test");
     let mut bio_ss = BioSharedState::new();
     let simple_test_code = hello_world_code();
     // copy code to reset vector for 0th machine
@@ -20,7 +20,7 @@ pub fn hello_world() -> usize {
     bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x20_0000);
     // start the machine
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x111);
-    print!("===hello world PASS===\r");
+    println!("===hello world PASS===");
     1
 }
 #[rustfmt::skip]
@@ -44,7 +44,7 @@ bio_code!(hello_world_code, HELLO_START, HELLO_END,
 // 0x41312111, 0x42322212, 0x43332313, etc.
 // and they should be in sync-lock, no ragged transitions
 pub fn hello_multiverse() -> usize {
-    print!("multiverse\r");
+    println!("multiverse");
     let mut bio_ss = BioSharedState::new();
     // stop all the machines, so that code can be loaded
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
@@ -74,7 +74,7 @@ pub fn hello_multiverse() -> usize {
     );
     // start all the machines, all at once
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0xfff);
-    print!("===multiverse PASS===\r");
+    println!("===multiverse PASS===");
     1
 }
 #[rustfmt::skip]
@@ -145,7 +145,7 @@ bio_code!(multiverse_code3, MULTIVERSE3_START, MULTIVERSE3_END,
 // be sync'd locked, but we leave it off for this test so we have
 // a demo of how things look when it's off.
 pub fn fifo_basic() -> usize {
-    print!("FIFO basic\r");
+    println!("FIFO basic");
     // clear any prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -161,28 +161,28 @@ pub fn fifo_basic() -> usize {
     // expect no error
     match bio_ss.verify_code(&fifo_basic0_code(), 0, BioCore::Core0) {
         Err(BioError::CodeCheck(at)) => {
-            print!("Core 0 rbk fail at {}\r", at);
+            println!("Core 0 rbk fail at {}", at);
             return 0;
         }
         _ => (),
     }
     match bio_ss.verify_code(&fifo_basic1_code(), 0, BioCore::Core1) {
         Err(BioError::CodeCheck(at)) => {
-            print!("Core 1 rbk fail at {}\r", at);
+            println!("Core 1 rbk fail at {}", at);
             return 0;
         }
         _ => (),
     }
     match bio_ss.verify_code(&fifo_basic2_code(), 0, BioCore::Core2) {
         Err(BioError::CodeCheck(at)) => {
-            print!("Core 2 rbk fail at {}\r", at);
+            println!("Core 2 rbk fail at {}", at);
             return 0;
         }
         _ => (),
     }
     match bio_ss.verify_code(&fifo_basic3_code(), 0, BioCore::Core3) {
         Err(BioError::CodeCheck(at)) => {
-            print!("Core 3 rbk fail at {}\r", at);
+            println!("Core 3 rbk fail at {}", at);
             return 0;
         }
         _ => (),
@@ -190,7 +190,7 @@ pub fn fifo_basic() -> usize {
 
     // expect error
     if bio_ss.verify_code(&fifo_basic1_code(), 0, BioCore::Core0).is_ok() {
-        print!("FAIL: Core 0 passed check with false code\r");
+        println!("FAIL: Core 0 passed check with false code");
         return 0;
     }
 
@@ -204,7 +204,7 @@ pub fn fifo_basic() -> usize {
     bio_ss.bio.wo(utra::bio_bdma::SFR_CONFIG, 0);
     // start all the machines, all at once
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0xfff);
-    print!("===FIFO basic PASS===\r");
+    println!("===FIFO basic PASS===");
     1
 }
 #[rustfmt::skip]
@@ -272,7 +272,7 @@ bio_code!(fifo_basic3_code, FIFO_BASIC3_START, FIFO_BASIC3_END,
 // GPIO outputs are run without snapping in this case, because there is just one
 // machine updating outputs and no need to do that.
 pub fn host_fifo_tests() -> usize {
-    print!("Host FIFO tests\r");
+    println!("Host FIFO tests");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -318,13 +318,13 @@ pub fn host_fifo_tests() -> usize {
         //
         // finally, we're pegged at 15, because, backpressure caused us to miss the rest of
         // the entries, and we are stuck at the final written value of the output test
-        print!("r {:x}\r", rbk);
+        println!("r {:x}", rbk);
         if i <= 9 {
             assert!(rbk == (0xF1F0_0000 + i));
         } else {
             assert!(rbk == (0xF1F0_0000 + 15));
         }
-        print!("bp {:x}\r", rbk);
+        println!("bp {:x}", rbk);
     }
 
     fn get_gpio_via_core(bio_ss: &mut BioSharedState) -> u32 {
@@ -361,7 +361,7 @@ pub fn host_fifo_tests() -> usize {
 
     // confirm the core booted
     let f1_val = get_gpio_via_core(&mut bio_ss);
-    print!("core booted {:x}\r", f1_val);
+    println!("core booted {:x}", f1_val);
     assert!(f1_val == 0xfeedface);
     // ensure fifo levels are where we think they are
     assert!(bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0) == 0);
@@ -378,27 +378,27 @@ pub fn host_fifo_tests() -> usize {
         // wait for fifo to drain
     }
     let pause_val = get_gpio_via_core(&mut bio_ss);
-    print!("pause_val {:x}\r", pause_val);
+    println!("pause_val {:x}", pause_val);
     assert!(pause_val == final_val);
     // drop one more value in and confirm it appears
     let stop_val = 0xACE0_BACE;
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, stop_val);
     let stop_confirm_val = get_gpio_via_core(&mut bio_ss);
-    print!("stop_confirm_val {:x}\r", stop_confirm_val);
+    println!("stop_confirm_val {:x}", stop_confirm_val);
     assert!(stop_val == stop_confirm_val);
 
     // fifo2 should have the entire log of all values in it. make sure that's the case
     for i in 0..7 {
         let f2_val = bio_ss.bio.r(utra::bio_bdma::SFR_RXF2);
         if i > 5 {
-            print!("f2_val {:x}\r", f2_val);
+            println!("f2_val {:x}", f2_val);
         }
         assert!(f2_val == 0xf1f0_1000 + i);
     }
     let stop_check = bio_ss.bio.r(utra::bio_bdma::SFR_RXF2);
-    print!("stop_check {:x}\r", stop_check);
+    println!("stop_check {:x}", stop_check);
     assert!(stop_check == stop_val);
-    print!("===Host FIFO PASS===\r");
+    println!("===Host FIFO PASS===");
     1
 }
 #[rustfmt::skip]
@@ -499,7 +499,7 @@ struct FifoLevelTestConfig {
 // This can be done without any code running on the machines; the host can
 // set and observe all fifo levels and triggers directly.
 pub fn fifo_level_tests() -> usize {
-    print!("FIFO level comprehensive\r");
+    println!("FIFO level comprehensive");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -583,7 +583,7 @@ pub fn fifo_level_tests() -> usize {
     for (bank, config) in fifo_test_configs.iter().enumerate() {
         let irq_mask_reg = irq_masks[bank];
         let irq_mask = (1 << bank) as u32;
-        print!("irq_mask {:x}\r", irq_mask);
+        println!("irq_mask {:x}", irq_mask);
         // we want to check that less than, equals, and greater than triggers work individually
         // then we want to check that lt+eq and gt+eq work together
         // lt+gt trigger doesn't make sense, we just don't check that
@@ -592,7 +592,7 @@ pub fn fifo_level_tests() -> usize {
             // reset all the fifos
             bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0xF);
             for test_level in 0..FIFO_MAX {
-                // print!("test_level {:x} bank {:x}\r", test_level, bank);
+                // println!("test_level {:x} bank {:x}", test_level, bank);
                 // test eq at level
                 bio_ss.bio.wfo(level, test_level);
                 bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_EQ_MASK, mask);
@@ -767,7 +767,7 @@ pub fn fifo_level_tests() -> usize {
             bio_ss.bio.wo(irq_mask_reg, 0);
         }
     }
-    print!("===FIFO level comprehensive PASS===\r");
+    println!("===FIFO level comprehensive PASS===");
     1
 }
 
@@ -783,7 +783,7 @@ struct FifoLevelTestAliasConfig {
 }
 // Copy of the fifo_level_tests, but using aliased FIFO endpoints for injection and control.
 pub fn fifo_alias_tests() -> usize {
-    print!("FIFO level aliases\r");
+    println!("FIFO level aliases");
     // clear prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -879,7 +879,7 @@ pub fn fifo_alias_tests() -> usize {
     for (bank, config) in fifo_test_configs.iter_mut().enumerate() {
         let irq_mask_reg = irq_masks[bank];
         let irq_mask = (1 << bank) as u32;
-        print!("irq_mask {:x}\r", irq_mask);
+        println!("irq_mask {:x}", irq_mask);
         // we want to check that less than, equals, and greater than triggers work individually
         // then we want to check that lt+eq and gt+eq work together
         // lt+gt trigger doesn't make sense, we just don't check that
@@ -888,7 +888,7 @@ pub fn fifo_alias_tests() -> usize {
             // reset all the fifos
             bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0xF);
             for test_level in 0..FIFO_MAX {
-                // print!("test_level {:x} bank {:x}\r", test_level, bank);
+                // println!("test_level {:x} bank {:x}", test_level, bank);
                 // test eq at level
                 bio_ss.bio.wfo(level, test_level);
                 bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_EQ_MASK, mask);
@@ -1000,12 +1000,12 @@ pub fn fifo_alias_tests() -> usize {
             // other cases not covered, this focuses on aliases, not correctness of all comparison cases
         }
     }
-    print!("===FIFO level alias PASS===\r");
+    println!("===FIFO level alias PASS===");
     1
 }
 
 pub fn aclk_tests() -> usize {
-    print!("ACLK test\r");
+    println!("ACLK test");
     // clear any prior test config state
     let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
     test_cfg.wo(utra::csrtest::WTEST, 0);
@@ -1024,7 +1024,7 @@ pub fn aclk_tests() -> usize {
     // start machine 1
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x222);
     while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) < 7 {
-        print!("waiting {}\r", bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1));
+        println!("waiting {}", bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1));
         // wait
     }
     let mut results = [0u32; 7];
@@ -1032,7 +1032,7 @@ pub fn aclk_tests() -> usize {
         *d = bio_ss.bio.r(utra::bio_bdma::SFR_RXF1) & 0x3FFF_FFFF;
     }
     for (i, r) in results.iter().enumerate() {
-        print!("{}: {} cycles\r", i, r);
+        println!("{}: {} cycles", i, r);
     }
     assert!(results[1] - results[0] == 3);
     // variability is due to option for REGISTER_MEM or not
@@ -1041,7 +1041,7 @@ pub fn aclk_tests() -> usize {
     assert!(results[4] - results[3] == 3);
 
     assert!(results[6] - results[5] == 10); // related to the clock divider
-    print!("===ACLK test PASS===\r");
+    println!("===ACLK test PASS===");
     1
 }
 
@@ -1067,7 +1067,7 @@ struct EventAliasConfig {
     csr: CSR<u32>,
 }
 pub fn event_aliases() -> usize {
-    print!("Event aliases test\r");
+    println!("Event aliases test");
     let mut event_test_configs: [EventAliasConfig; 4] = [
         EventAliasConfig {
             event_set: utra::bio_fifo0::SFR_EVENT_SET,
@@ -1108,7 +1108,7 @@ pub fn event_aliases() -> usize {
 
     let mut passing = 1;
     for (i, config) in event_test_configs.iter_mut().enumerate() {
-        print!("  bnk{}\r", i);
+        println!("  bnk{}", i);
         for _ in 0..3 {
             // clear all events
             bio_ss.bio.wfo(utra::bio_bdma::SFR_EVENT_CLR_SFR_EVENT_CLR, 0xFFFF_FF);
@@ -1126,7 +1126,7 @@ pub fn event_aliases() -> usize {
             let result = bio_ss.bio.r(config.event_status); // read result using the base register
             let expected = ((test & 0xFF) << 8) | ((test & 0xFF_FF00) & !((test & 0xFF) << 16));
             if (result & 0xFF_FFFF) != expected {
-                print!("got: {:x} expect {:x}\r", result, expected);
+                println!("got: {:x} expect {:x}", result, expected);
                 passing = 0;
             }
             // test clearing from host bank
@@ -1135,12 +1135,12 @@ pub fn event_aliases() -> usize {
             let result_clr = config.csr.r(config.event_status);
             let expected_clr = result & !next;
             if result_clr != expected_clr {
-                print!("clr got: {:x} expect {:x}\r", result_clr, expected_clr);
+                println!("clr got: {:x} expect {:x}", result_clr, expected_clr);
                 passing = 0;
             };
         }
     }
-    print!("Event aliases finished\r");
+    println!("Event aliases finished");
     passing
 }
 
