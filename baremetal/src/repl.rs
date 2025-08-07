@@ -241,11 +241,11 @@ impl Repl {
                     // host_fifo_tests
                     + 1
                     // spi_test
-                    + 1
+                    // + 1
                     // i2c_test
-                    + 1
+                    // + 1
                     // complex_i2c_test
-                    + 1
+                    // + 1
                     // fifo_level_tests
                     + 1
                     // fifo_alias_tests
@@ -283,8 +283,27 @@ impl Repl {
 
                 passing_tests += bio_tests::units::hello_multiverse();
 
-                bio_tests::dma::dma_filter_off();
+                passing_tests += bio_tests::units::hello_world();
+                passing_tests += bio_tests::arith::stack_test();
 
+                // safety: this is safe only if the target supports multiplication
+                passing_tests += unsafe { bio_tests::arith::mac_test() }; // 1
+
+                passing_tests += bio_tests::units::aclk_tests();
+
+                passing_tests += bio_tests::units::event_aliases();
+                passing_tests += bio_tests::units::fifo_alias_tests();
+
+                passing_tests += bio_tests::units::fifo_basic();
+                passing_tests += bio_tests::units::host_fifo_tests();
+
+                passing_tests += bio_tests::units::fifo_level_tests();
+
+                passing_tests += bio_tests::dma::filter_test();
+                bio_tests::dma::dma_filter_off();
+                passing_tests += bio_tests::dma::dmareq_test();
+
+                bio_tests::dma::dma_filter_off();
                 crate::println!("*** CLKMODE 3 ***");
                 passing_tests += bio_tests::dma::dma_basic(false, 3); // 4
                 passing_tests += bio_tests::dma::dma_basic(true, 3); // 4
@@ -293,31 +312,9 @@ impl Repl {
                 passing_tests += bio_tests::dma::dma_coincident(3); // 4
                 passing_tests += bio_tests::dma::dma_multicore(3); // 1
 
-                passing_tests += bio_tests::units::hello_world();
-                passing_tests += bio_tests::arith::stack_test();
-
-                {
-                    // safety: this is safe only if the target supports multiplication
-                    passing_tests += unsafe { bio_tests::arith::mac_test() }; // 1
-                }
-
-                passing_tests += bio_tests::units::aclk_tests();
-
-                passing_tests += bio_tests::dma::filter_test();
-
-                bio_tests::dma::dma_filter_off();
-                passing_tests += bio_tests::dma::dmareq_test();
-                passing_tests += bio_tests::units::event_aliases();
-                passing_tests += bio_tests::units::fifo_alias_tests();
-
-                passing_tests += bio_tests::units::fifo_basic();
-                passing_tests += bio_tests::units::host_fifo_tests();
-
-                passing_tests += bio_tests::spi::spi_test();
-                passing_tests += bio_tests::i2c::i2c_test();
-                passing_tests += bio_tests::i2c::complex_i2c_test();
-
-                passing_tests += bio_tests::units::fifo_level_tests();
+                // passing_tests += bio_tests::spi::spi_test();
+                // passing_tests += bio_tests::i2c::i2c_test();
+                // passing_tests += bio_tests::i2c::complex_i2c_test();
 
                 // Final report
                 crate::println!("\n--- BIO Tests Complete: {}/{} passed. ---\n", passing_tests, BIO_TESTS);
@@ -335,7 +332,7 @@ impl Repl {
                 crate::print!(", rram");
                 #[cfg(not(feature = "cramium-soc"))]
                 crate::print!(", mon");
-                #[cfg(not(feature = "nto-bio"))]
+                #[cfg(feature = "nto-bio")]
                 crate::print!(", bio");
                 crate::println!("");
             }

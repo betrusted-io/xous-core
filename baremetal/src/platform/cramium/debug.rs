@@ -67,9 +67,15 @@ impl Write for Uart {
 impl SerialRead for Uart {
     fn getc(&mut self) -> Option<u8> {
         let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
+        #[cfg(feature = "nto-evb")]
         let mut udma_uart = unsafe {
             // safety: this is safe to call, because we set up clock and events prior to calling new.
             udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
+        };
+        #[cfg(not(feature = "nto-evb"))]
+        let mut udma_uart = unsafe {
+            // safety: this is safe to call, because we set up clock and events prior to calling new.
+            udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
         };
         let mut c = 0u8;
         udma_uart.read_async(&mut c);
@@ -111,26 +117,51 @@ macro_rules! println
 
 pub fn setup_rx(perclk: u32) -> cramium_hal::udma::Uart {
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-    iox.set_alternate_function(IoxPort::PD, 13, IoxFunction::AF1);
-    iox.set_alternate_function(IoxPort::PD, 14, IoxFunction::AF1);
-    // rx as input, with pull-up
-    iox.set_gpio_dir(IoxPort::PD, 13, IoxDir::Input);
-    iox.set_gpio_pullup(IoxPort::PD, 13, IoxEnable::Enable);
-    // tx as output
-    iox.set_gpio_dir(IoxPort::PD, 14, IoxDir::Output);
-
     let udma_global = GlobalConfig::new();
-    udma_global.clock_on(PeriphId::Uart1);
-    udma_global.map_event(
-        PeriphId::Uart1,
-        PeriphEventType::Uart(EventUartOffset::Rx),
-        EventChannel::Channel0,
-    );
-    udma_global.map_event(
-        PeriphId::Uart1,
-        PeriphEventType::Uart(EventUartOffset::Tx),
-        EventChannel::Channel1,
-    );
+    #[cfg(feature = "nto-evb")]
+    {
+        iox.set_alternate_function(IoxPort::PD, 13, IoxFunction::AF1);
+        iox.set_alternate_function(IoxPort::PD, 14, IoxFunction::AF1);
+        // rx as input, with pull-up
+        iox.set_gpio_dir(IoxPort::PD, 13, IoxDir::Input);
+        iox.set_gpio_pullup(IoxPort::PD, 13, IoxEnable::Enable);
+        // tx as output
+        iox.set_gpio_dir(IoxPort::PD, 14, IoxDir::Output);
+
+        udma_global.clock_on(PeriphId::Uart1);
+        udma_global.map_event(
+            PeriphId::Uart1,
+            PeriphEventType::Uart(EventUartOffset::Rx),
+            EventChannel::Channel0,
+        );
+        udma_global.map_event(
+            PeriphId::Uart1,
+            PeriphEventType::Uart(EventUartOffset::Tx),
+            EventChannel::Channel1,
+        );
+    }
+    #[cfg(not(feature = "nto-evb"))]
+    {
+        iox.set_alternate_function(IoxPort::PB, 13, IoxFunction::AF1);
+        iox.set_alternate_function(IoxPort::PB, 14, IoxFunction::AF1);
+        // rx as input, with pull-up
+        iox.set_gpio_dir(IoxPort::PB, 13, IoxDir::Input);
+        iox.set_gpio_pullup(IoxPort::PB, 13, IoxEnable::Enable);
+        // tx as output
+        iox.set_gpio_dir(IoxPort::PB, 14, IoxDir::Output);
+
+        udma_global.clock_on(PeriphId::Uart2);
+        udma_global.map_event(
+            PeriphId::Uart2,
+            PeriphEventType::Uart(EventUartOffset::Rx),
+            EventChannel::Channel0,
+        );
+        udma_global.map_event(
+            PeriphId::Uart2,
+            PeriphEventType::Uart(EventUartOffset::Tx),
+            EventChannel::Channel1,
+        );
+    }
 
     let baudrate: u32 = 115200;
     let freq: u32 = perclk / 2;
@@ -139,16 +170,25 @@ pub fn setup_rx(perclk: u32) -> cramium_hal::udma::Uart {
     // IFRAM0. This is a convention that must be respected by the UDMA UART library implementation
     // for things to work.
     let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
+    #[cfg(feature = "nto-evb")]
     let mut udma_uart = unsafe {
         // safety: this is safe to call, because we set up clock and events prior to calling new.
         udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
+    };
+    #[cfg(not(feature = "nto-evb"))]
+    let mut udma_uart = unsafe {
+        // safety: this is safe to call, because we set up clock and events prior to calling new.
+        udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
     };
     udma_uart.set_baud(baudrate, freq);
     udma_uart.setup_async_read();
 
     // setup interrupt here
     let mut uart_irq = UartIrq::new();
+    #[cfg(feature = "nto-evb")]
     uart_irq.rx_irq_ena(udma::UartChannel::Uart1, true);
+    #[cfg(not(feature = "nto-evb"))]
+    uart_irq.rx_irq_ena(udma::UartChannel::Uart2, true);
 
     udma_uart
 }

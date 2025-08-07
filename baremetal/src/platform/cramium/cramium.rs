@@ -29,6 +29,18 @@ pub const SYSTEM_CLOCK_FREQUENCY: u32 = 400_000_000;
 pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 pub fn early_init() {
+    let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
+    /*
+    let ao_sysctrl = utra::ao_sysctrl::HW_AO_SYSCTRL_BASE as *mut u32;
+    unsafe {
+        // this turns off the VDD85D (doesn't work)
+        // ao_sysctrl.add(utra::ao_sysctrl::SFR_PMUCSR.offset()).write_volatile(0x6c);
+
+        // this sets VDD85D to 0.90V
+        ao_sysctrl.add(utra::ao_sysctrl::SFR_PMUTRM0CSR.offset()).write_volatile(0x0842_10E0); // 0x0842_1080 default
+        daric_cgu.add(utra::sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x57);
+    }
+    */
     let uart = crate::debug::Uart {};
 
     for _ in 0..100 {
@@ -37,7 +49,6 @@ pub fn early_init() {
     unsafe {
         // this block is mandatory in all cases to get clocks set into some consistent, expected mode
         {
-            let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
             // conservative dividers
             daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x7f7f);
             daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x7f7f);
