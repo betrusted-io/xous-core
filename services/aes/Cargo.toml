@@ -21,4 +21,4 @@ vexii-test = []
 # Note: this default line should always be empty. If it has the 'cramium-soc' feature
 # checkd in, then AES acceleration gets disabled for all targets. This hack only exists
 # because in the MPW version of the silicon, HW AES in broken on the RV32.
-default = []
+default = ["cramium-soc"]

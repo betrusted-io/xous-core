@@ -31,9 +31,9 @@ mod vex;
 // library is patched into functions that are oblivious to these features.
 // so this library has to fall back on the legacy method of determining which build target
 // is being specified.
-#[cfg(not(any(all(target_arch = "riscv32", not(feature = "cramium-soc")), feature = "vexii-test")))]
+#[cfg(not(any(all(target_arch = "riscv32", feature = "cramium-soc"), feature = "vexii-test")))]
 pub use soft::Aes128Soft as Aes128;
-#[cfg(not(any(all(target_arch = "riscv32", not(feature = "cramium-soc")), feature = "vexii-test")))]
+#[cfg(not(any(all(target_arch = "riscv32", feature = "cramium-soc"), feature = "vexii-test")))]
 pub use soft::Aes256Soft as Aes256;
 #[cfg(all(
     all(target_arch = "riscv32", not(feature = "cramium-soc"), not(feature = "vexii-test")),
@@ -41,12 +41,12 @@ pub use soft::Aes256Soft as Aes256;
 ))]
 pub use vex::{Aes128, Aes256};
 
-#[cfg(feature = "vexii-test")]
+#[cfg(any(feature = "vexii-test", feature = "cramium-soc"))]
 mod zkn;
-#[cfg(feature = "vexii-test")]
+#[cfg(any(feature = "vexii-test", feature = "cramium-soc"))]
 // pub use soft::Aes128Soft as Aes128;
 pub use zkn::Aes128;
-#[cfg(feature = "vexii-test")]
+#[cfg(any(feature = "vexii-test", feature = "cramium-soc"))]
 pub use zkn::Aes256;
 
 /// Size of an AES block (128-bits; 16-bytes)
