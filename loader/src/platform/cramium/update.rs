@@ -60,9 +60,7 @@ pub enum KeyPress {
     Left,
     Right,
     Select,
-    Start,
-    A,
-    B,
+    Home,
     Invalid,
     None,
 }
@@ -79,17 +77,15 @@ pub fn scan_keyboard<T: IoSetup + IoGpio>(
         iox.set_gpio_pin_value(*port, *pin, IoxValue::Low);
         for (col, (col_port, col_pin)) in cols.iter().enumerate() {
             if iox.get_gpio_pin_value(*col_port, *col_pin) == IoxValue::Low {
+                crate::println!("Key press at ({}, {})", row, col);
                 if key_press_index < key_presses.len() {
                     key_presses[key_press_index] = match (row, col) {
-                        (0, 2) => KeyPress::None, // KeyPress::Select, None due to broken hardware
-                        (2, 1) => KeyPress::Start,
-                        (1, 2) => KeyPress::None, // KeyPress::Left, None due to broken hardware
-                        (2, 2) => KeyPress::None, // None due to broken hardware
-                        (1, 1) => KeyPress::Up,
-                        (0, 1) => KeyPress::Down,
-                        (2, 0) => KeyPress::Right,
-                        (0, 0) => KeyPress::A,
-                        (1, 0) => KeyPress::B,
+                        (1, 3) => KeyPress::Left,
+                        (1, 2) => KeyPress::Home,
+                        (1, 0) => KeyPress::Right,
+                        (0, 0) => KeyPress::Down,
+                        (0, 2) => KeyPress::Up,
+                        (0, 1) => KeyPress::Select,
                         _ => KeyPress::Invalid,
                     };
                     key_press_index += 1;
@@ -121,13 +117,7 @@ pub fn process_update(perclk: u32) {
     );
 
     crate::platform::cramium::bootlogo::show_logo(&mut sh1107);
-    gfx::msg(
-        &mut sh1107,
-        "    START to boot",
-        Point::new(0, 115 - 16),
-        Mono::White.into(),
-        Mono::Black.into(),
-    );
+    gfx::msg(&mut sh1107, "     UP to boot", Point::new(0, 115 - 16), Mono::White.into(), Mono::Black.into());
     gfx::msg(&mut sh1107, "   DOWN to update", Point::new(0, 115), Mono::White.into(), Mono::Black.into());
 
     sh1107.draw();
