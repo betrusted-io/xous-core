@@ -301,9 +301,6 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     // this needs to be turned into a call that can invoke and abort the QR code scanning.
     #[cfg(feature = "autotest")]
     {
-        // kick off the first acquisition synchronous to the frame sync. With NTO/DAR-704 fix we
-        // could turn on the sync_sof field and skip this step.
-        while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High {}
         cam.capture_async();
     }
 
