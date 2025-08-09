@@ -95,7 +95,7 @@ impl SwapHal {
             // sanity check: read ID
             let flash_id = flash_spim.mem_read_id_flash();
             let ram_id = ram_spim.mem_read_id_ram();
-            crate::println!("flash ID: {:x}", flash_id);
+            crate::println!("flash ID (init): {:x}", flash_id);
             crate::println!("ram ID: {:x}", ram_id);
             // density 18, memory type 20, mfg ID C2 ==> MX25L128833F
             // density 38, memory type 25, mfg ID C2 ==> MX25U12832F
@@ -404,13 +404,13 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
     );
 
     let iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
-    iox.set_alternate_function(IoxPort::PD, 2, IoxFunction::AF2);
-    iox.set_alternate_function(IoxPort::PD, 3, IoxFunction::AF2);
+    iox.set_alternate_function(IoxPort::PA, 3, IoxFunction::AF1);
+    iox.set_alternate_function(IoxPort::PA, 4, IoxFunction::AF1);
     // rx as input, with pull-up
-    iox.set_gpio_dir(IoxPort::PD, 2, IoxDir::Input);
-    iox.set_gpio_pullup(IoxPort::PD, 2, IoxEnable::Enable);
+    iox.set_gpio_dir(IoxPort::PA, 3, IoxDir::Input);
+    iox.set_gpio_pullup(IoxPort::PA, 3, IoxEnable::Enable);
     // tx as output
-    iox.set_gpio_dir(IoxPort::PD, 3, IoxDir::Output);
+    iox.set_gpio_dir(IoxPort::PA, 4, IoxDir::Output);
 
     // Set up the UDMA_UART block to the correct baud rate and enable status
     let udma_global = cramium_hal::udma::GlobalConfig::new();
