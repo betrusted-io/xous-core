@@ -32,7 +32,7 @@ pub fn init() -> Output {
     // to is the DUART.
     #[cfg(feature = "cramium-soc")]
     let uart = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utra::udma_uart_1::HW_UDMA_UART_1_BASE),
+        xous::MemoryAddress::new(utra::udma_uart_2::HW_UDMA_UART_2_BASE),
         None,
         4096,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -60,9 +60,9 @@ pub fn init() -> Output {
         // safety: This is safe because uart_irq is committed into a `static mut` variable that
         // ensures that its lifetime is `static`
         unsafe {
-            Pin::as_mut(&mut uart_irq).register_handler(udma::UartChannel::Uart1, uart_handler);
+            Pin::as_mut(&mut uart_irq).register_handler(udma::UartChannel::Uart2, uart_handler);
         }
-        uart_irq.rx_irq_ena(udma::UartChannel::Uart1, true);
+        uart_irq.rx_irq_ena(udma::UartChannel::Uart2, true);
         unsafe { UART_IRQ = Some(uart_irq) };
         let mut udma_uart = unsafe {
             udma::Uart::get_handle(
