@@ -1269,6 +1269,7 @@ pub fn project_root() -> PathBuf {
 
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
+#[allow(dead_code)]
 pub fn search_and_replace_in_file(filename: &str, search: &str, replace: &str) -> io::Result<()> {
     let file = File::open(filename)?;
     let reader = BufReader::new(file);
@@ -1287,6 +1288,7 @@ pub fn search_and_replace_in_file(filename: &str, search: &str, replace: &str) -
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn search_in_file(filename: &str, search: &str) -> io::Result<bool> {
     let file = File::open(filename)?;
     let reader = BufReader::new(file);
