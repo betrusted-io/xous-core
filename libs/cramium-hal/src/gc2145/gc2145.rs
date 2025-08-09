@@ -17,6 +17,7 @@ pub const CFG_FRAMEDROP_VAL: utralib::Field = utralib::Field::new(6, 1, REG_CAM_
 pub const CFG_FRAMESLICE_EN: utralib::Field = utralib::Field::new(1, 7, REG_CAM_CFG_GLOB);
 pub const CFG_FORMAT: utralib::Field = utralib::Field::new(3, 8, REG_CAM_CFG_GLOB);
 pub const CFG_SHIFT: utralib::Field = utralib::Field::new(4, 11, REG_CAM_CFG_GLOB);
+pub const CFG_SOF_SYNC: utralib::Field = utralib::Field::new(1, 30, REG_CAM_CFG_GLOB);
 pub const CFG_GLOB_EN: utralib::Field = utralib::Field::new(1, 31, REG_CAM_CFG_GLOB);
 
 pub struct Gc2145 {
@@ -242,6 +243,7 @@ impl Gc2145 {
         let global = self.csr.ms(CFG_FRAMEDROP_EN, 0)
             | self.csr.ms(CFG_FORMAT, Format::BypassLe as u32)
             | self.csr.ms(CFG_FRAMESLICE_EN, 0)
+            | self.csr.ms(CFG_SOF_SYNC, 1)
             | self.csr.ms(CFG_SHIFT, 0);
         self.csr.wo(utra::udma_camera::REG_CAM_CFG_GLOB, global);
     }
