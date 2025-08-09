@@ -20,56 +20,31 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
     unsafe {
         #[rustfmt::skip]
         asm! (
-            // test if ifram is cleared
-            "li          t0, 0x50000000",
-            "li          t1, 0x50040000",
-        "60:",
-            "lw          t2, 0(t0)",
-            // if not 0, jump to clearing routine
-            "bne         x0, t2, 30f",
-            "addi        t0, t0, 4",
-            // loop if we haven't checked all of ifram
-            "bltu        t0, t1, 60b",
-            // if we got here, all of ifram was 0, continue with boot
-            "j           50f",
+            // Place the stack pointer at the end of RAM
+            "mv          sp, {ram_top}",
+            // subtract four from sp to make room for a DMA "gutter"
+            "addi        sp, sp, -4",
 
-            // clear ifram
-        "30:",
-            "sw          x0, 0(t0)",
-            "addi        t0, t0, 4",
-            "bltu        t0, t1, 30b",
-
-            // clear main ram
-            "li          t0, 0x61000000",
-            "li          t1, 0x61200000",
-        "20:",
-            "sw          x0, 0(t0)",
-            "addi        t0, t0, 4",
-            "bltu        t0, t1, 20b",
-
-            ".word       0x500f",
-            // reset the system
-            "li          t0, 0x40040080",
-            "li          t1, 0x55aa",
-        "70:",
-            "sw          t1, 0(t0)",
-            "j           70b", // loop forever trying to trigger the reset
-            // Note that BMX access is unstable at this point in time due to the
-            // high number of parity errors that were flooding the system. Thus,
-            // the system has to go through a reset cycle before any further progress
-            // can be made.
-            // --------------------------------
-            // system should be rebooting at this point, code after this
-            // is unreachabale
-            // --------------------------------
+            // twiddle duart
+            "li          t0, 0x40042000",
+            // setup etuc
+            "sw          x0, 0x4(t0)", // CR is 0
+            "li          t1, 34", // tuned based on ringosc & oscope. not guaranteed to be precise
+            "sw          t1, 0xc(t0)",
+            "li          t1, 0x1",
+            "sw          t1, 0x4(t0)", // CR is 1
+            // print 32 instances of 'Z' (0x5A) (provided to measure baud)
+            "li          t2, 32",
+            "li          t1, 0x5A",
+        "10:",
+            "sw          t1, 0x0(t0)",
+        "11:",
+            "lw          t3, 0x8(t0)", // check SR
+            "bne         x0, t3, 11b", // wait for 0
+            "addi        t2, t2, -1",
+            "bne         x0, t2, 10b",
 
             // continue on boot
-        "50:",
-        );
-    }
-    unsafe {
-        #[rustfmt::skip]
-        asm! (
             "li          t0, 0xffffffff",
             "csrw        mideleg, t0",
             "csrw        medeleg, t0",
@@ -82,11 +57,6 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
             "sw          t1, 0(t0)",
             "addi        t0, t0, 4",
             "bltu        t0, t2, 100b",
-
-            // Place the stack pointer at the end of RAM
-            "mv          sp, {ram_top}",
-            // subtract four from sp to make room for a DMA "gutter"
-            "addi        sp, sp, -4",
 
             // Install a machine mode trap handler
             "la          t0, abort",
