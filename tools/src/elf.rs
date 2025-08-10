@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::fmt;
 use std::fs::File;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
@@ -178,6 +179,7 @@ pub fn process_program(b: &[u8], rom_only: bool) -> Result<ProgramDescription, E
     debug!("Program starts at 0x{:x}", entry_point);
 
     let mut program_offset = 0;
+    let mut data_copy = Vec::new();
     for s in elf.section_iter() {
         let name = s.get_name(&elf).unwrap_or("<<error>>");
 
@@ -251,6 +253,9 @@ pub fn process_program(b: &[u8], rom_only: bool) -> Result<ProgramDescription, E
                     // so in the case that some global shared state is needed, there should be an explicit
                     // initializer somewhere in the code. If this panic triggers, look for the code that
                     // is assuming some data is magically pre-loaded for the loader, and eliminate that code.
+                    data_copy.extend_from_slice(&section_data);
+
+                    /*
                     println!("Loader data section is not all 0's. This case is not handled by the loader.");
                     println!("Here is what is non-zero, as (byte offset: byte) tuples:");
                     let mut printed = 0;
@@ -264,6 +269,7 @@ pub fn process_program(b: &[u8], rom_only: bool) -> Result<ProgramDescription, E
                             break;
                         }
                     }
+                    */
                 }
                 continue;
             }
@@ -320,6 +326,49 @@ pub fn process_program(b: &[u8], rom_only: bool) -> Result<ProgramDescription, E
     debug!("Data size: {} bytes", data_size);
     debug!("Data offset: {:08x}", data_offset);
     debug!("Program size: {} bytes", observed_size);
+
+    if data_offset as usize % size_of::<u32>() == 0 {
+        const SPACING: &'static str = "  ";
+        let mut non_zero_tuples = Vec::<(usize, u32)>::new();
+        for (i, chunk) in data_copy.chunks_exact(4).enumerate() {
+            let word = u32::from_le_bytes(chunk.try_into().unwrap());
+            if word != 0 {
+                non_zero_tuples.push((i, word));
+            }
+        }
+        println!("Code for loader/baremetal integration:\n");
+        println!("// Define the .data region - bootstrap baremetal using these hard-coded parameters.");
+        println!("const DATA_ORIGIN: usize = 0x{:x};", data_offset);
+        println!(
+            "const DATA_SIZE_BYTES: usize = 0x{:x};",
+            // round up to the nearest u32 word. Includes .data, .bss, .stack, .heap - regions to be zero'd.
+            ((data_size + bss_size) as usize + size_of::<u32>() - 1) & !(size_of::<u32>() - 1)
+        );
+        let mut init_str = String::new();
+        init_str.push_str(&format!("const DATA_INIT: [(usize, u32); {}] = [\n", non_zero_tuples.len()));
+        for (offset, data) in non_zero_tuples {
+            init_str.push_str(&format!("{}(0x{:x}, 0x{:x}),\n", SPACING, offset, data));
+        }
+        init_str.push_str(&format!("];"));
+        print!("{}", init_str);
+        let boilerplate = r#"
+// Clear .data, .bss, .stack, .heap regions & setup .data values
+unsafe {
+    let data_ptr = DATA_ORIGIN as *mut u32;
+    for i in 0..DATA_SIZE_BYTES / size_of::<u32>() {
+        data_ptr.add(i).write_volatile(0);
+    }
+    for (offset, data) in DATA_INIT {
+        data_ptr.add(offset).write_volatile(data);
+    }
+}
+        "#;
+        println!("\n{}", boilerplate);
+    } else {
+        println!(
+            "Data section is not word-aligned, check objdump in detail for how to initialize the section"
+        );
+    }
     Ok(ProgramDescription {
         entry_point,
         program: program_data.into_inner(),
