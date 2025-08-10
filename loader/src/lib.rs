@@ -52,3 +52,6 @@ pub const GUARD_MEMORY_BYTES: usize = 8 * crate::PAGE_SIZE; // 1 extra page for 
 
 #[cfg(feature = "swap")]
 pub const SWAPPER_PID: u8 = 2;
+
+#[cfg(feature = "cramium-soc")]
+pub const SYSTEM_CLOCK_FREQUENCY: u32 = 800_000_000;

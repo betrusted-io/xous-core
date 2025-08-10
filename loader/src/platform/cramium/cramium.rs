@@ -64,8 +64,6 @@ static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::Loc
    break into the loader updater less able to get at any root keys?
 */
 
-pub const SYSTEM_CLOCK_FREQUENCY: u32 = 800_000_000;
-
 // Define the .data region - bootstrap baremetal using these hard-coded parameters.
 pub const DATA_ORIGIN: usize = 0x61000000;
 pub const DATA_SIZE_BYTES: usize = 0x5000;
@@ -255,7 +253,7 @@ pub fn early_init() -> u32 {
     // Now setup the clocks for real
     // Safety: this can only be called in the early_init boot context
     #[cfg(not(feature = "simulation-only"))]
-    let perclk = unsafe { init_clock_asic(SYSTEM_CLOCK_FREQUENCY) };
+    let perclk = unsafe { init_clock_asic(crate::SYSTEM_CLOCK_FREQUENCY) };
     #[cfg(feature = "simulation-only")]
     let perclk = 100_000_000;
     crate::println!("Perclk is {} Hz", perclk);
