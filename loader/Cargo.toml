@@ -81,6 +81,7 @@ renode = [
 ]
 cramium-soc = [
     "utralib/cramium-soc",
+    # "cramium-hal/debug-print-usb",
     "debug-print",
     "cramium-hal",
     "cramium-api",
