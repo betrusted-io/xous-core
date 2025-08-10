@@ -25,6 +25,7 @@ num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 xous-semver = "0.1.2"
 utralib = { version = "0.1.25", optional = true, default-features = false }
+loader = { path = "../../loader", optional = true }
 
 # TODO: fix this
 #[target.'cfg(target_arch = "arm")'.dependencies]
@@ -39,7 +40,7 @@ precursor = ["utralib/precursor", "susres/precursor", "watchdog"]
 hosted = ["utralib/hosted", "susres/hosted", "watchdog"]
 renode = ["utralib/renode", "susres/renode", "watchdog"]
 
-cramium-soc = ["utralib/cramium-soc", "utralib/std"]
+cramium-soc = ["utralib/cramium-soc", "utralib/std", "loader/cramium-soc"]
 cramium-fpga = ["utralib/cramium-fpga"]
 hosted-baosec = []
 
