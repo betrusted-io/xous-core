@@ -66,6 +66,11 @@ static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::Loc
 
 pub const SYSTEM_CLOCK_FREQUENCY: u32 = 800_000_000;
 
+// Define the .data region - bootstrap baremetal using these hard-coded parameters.
+pub const DATA_ORIGIN: usize = 0x61000000;
+pub const DATA_SIZE_BYTES: usize = 0x5000;
+pub const DATA_INIT: [(usize, u32); 1] = [(0x0, 0x2)];
+
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
@@ -106,10 +111,15 @@ pub fn early_init() -> u32 {
         daric_cgu.add(utra::sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x57);
     }
 
-    let uart = crate::debug::Uart {};
-
-    for _ in 0..100 {
-        uart.putc('a' as u32 as u8);
+    // Clear .data, .bss, .stack, .heap regions & setup .data values
+    unsafe {
+        let data_ptr = DATA_ORIGIN as *mut u32;
+        for i in 0..DATA_SIZE_BYTES / size_of::<u32>() {
+            data_ptr.add(i).write_volatile(0);
+        }
+        for (offset, data) in DATA_INIT {
+            data_ptr.add(offset).write_volatile(data);
+        }
     }
 
     unsafe {
@@ -427,6 +437,7 @@ pub fn early_init() -> u32 {
 
     // TODO: move this into the camera routine. For now, just free-run the clock; burns a lot of power.
     // Also, the clock is at 12.5MHz, we really want this at 25MHz but maybe it's just not possible?
+    /*
     crate::println!("Setup PWM");
     {
         use cramium_api::*;
@@ -473,6 +484,7 @@ pub fn early_init() -> u32 {
         crate::println!("0x{:2x}: 0x{:08x}", 65, unsafe { pwm.add(65).read_volatile() });
         crate::println!("");
     }
+    */
 
     #[cfg(feature = "board-bringup")]
     let iox_loop = iox.clone();
@@ -1597,9 +1609,9 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         */
 
         // turn off gates
-        daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0x2f);
+        daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0xff);
         daric_cgu.add(utra::sysctrl::SFR_HCLKGR.offset()).write_volatile(0xff);
-        daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0x8f);
+        daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0xff);
         daric_cgu.add(utra::sysctrl::SFR_PCLKGR.offset()).write_volatile(0xff);
         crate::println!("bef gates set");
         for _ in 0..100 {
