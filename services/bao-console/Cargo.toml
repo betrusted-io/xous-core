@@ -28,6 +28,9 @@ xous-swapper = { path = "../xous-swapper", optional = true }
 rand = { version = "0.8.5", features = ["getrandom"], optional = true }
 rand_chacha = { version = "0.3.1", optional = true }
 
+aes = { path = "../aes", optional = true }
+
+# aes testing
 [features]
 cramium-soc = [
     "utralib/cramium-soc",
@@ -49,11 +52,9 @@ hosted-baosec = [
     "pddb/hosted-baosec",
     "cramium-hal/hosted-baosec",
 ]
-bmp180 = [
-    "cramium-hal/bmp180",
-    "cram-hal-service",
-]
+bmp180 = ["cramium-hal/bmp180", "cram-hal-service"]
 usb = []
+aestests = ["aes"]
 battery-readout = []
 with-pddb = []
 pddbtest = ["with-pddb"]
