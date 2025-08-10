@@ -225,6 +225,10 @@ impl Repl {
 
             #[cfg(feature = "nto-bio")]
             "bio" => {
+                use cramium_hal::cache_flush;
+
+                use crate::platform::delay;
+
                 const BIO_TESTS: usize =
                     // get_id
                     1
@@ -276,15 +280,66 @@ impl Repl {
                 }
 
                 // map the BIO ports to GPIO pins
-                let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-                iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
-                iox.set_gpio_pullup(cramium_api::iox::IoxPort::PB, 2, cramium_api::iox::IoxEnable::Enable);
-                iox.set_gpio_pullup(cramium_api::iox::IoxPort::PB, 3, cramium_api::iox::IoxEnable::Enable);
+                // let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                // iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
+
+                crate::println!("Resetting block");
+                let mut bio_ss = BioSharedState::new();
+                bio_ss.init();
+
+                crate::println!("ldst trial");
+                bio_ss.load_code(ldst_code(), 0, BioCore::Core3);
+                bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x888);
+                for _ in 0..2 {
+                    debug_bio(&bio_ss);
+                }
+                crate::println!("ldst trial end");
+
+                let mut bio_ss = BioSharedState::new();
+                // stop all the machines, so that code can be loaded
+                bio_ss.bio.wo(utra::bio_bdma::SFR_EXTCLOCK, 0);
+                bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
+                bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x0);
+                bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV1, 0x0);
+                bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV2, 0x0);
+                bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV3, 0x0);
+                // bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV1, 0xFFF0_FFFF);
+                // bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV2, 0xFFF0_FFFF);
+                // bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV3, 0xFFF0_FFFF);
+                crate::println!(
+                    "rxflevel0: {}",
+                    bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0)
+                );
+                bio_ss.load_code(simple_test_code(), 0, BioCore::Core3);
+                bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x888);
+                for i in 0..12 {
+                    debug_bio(&bio_ss);
+                    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, i);
+                    crate::println!(
+                        "f0:{} f1:{} f2:{} f3:{}",
+                        bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0),
+                        bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1),
+                        bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL2),
+                        bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL3)
+                    );
+                    crate::println!(
+                        "{:x}, {:x}",
+                        bio_ss.bio.rf(utra::bio_bdma::SFR_RXF1_FDOUT),
+                        bio_ss.bio.rf(utra::bio_bdma::SFR_RXF2_FDOUT),
+                    );
+                }
+
+                bio_ss.init();
+                passing_tests += bio_tests::arith::stack_test();
+
+                crate::println!("early abort");
+                self.abort_cmd();
+                return;
 
                 passing_tests += bio_tests::units::hello_multiverse();
 
                 passing_tests += bio_tests::units::hello_world();
-                passing_tests += bio_tests::arith::stack_test();
+                bio_ss.init();
 
                 // safety: this is safe only if the target supports multiplication
                 passing_tests += unsafe { bio_tests::arith::mac_test() }; // 1
@@ -319,6 +374,102 @@ impl Repl {
                 // Final report
                 crate::println!("\n--- BIO Tests Complete: {}/{} passed. ---\n", passing_tests, BIO_TESTS);
             }
+            "usb" => {
+                crate::println!("USB basic test...");
+                let csr = cramium_hal::usb::compat::AtomicCsr::new(
+                    cramium_hal::usb::utra::CORIGINE_USB_BASE as *mut u32,
+                );
+                let irq_csr = cramium_hal::usb::compat::AtomicCsr::new(
+                    utralib::utra::irqarray1::HW_IRQARRAY1_BASE as *mut u32,
+                );
+                crate::println!("inspect USB region...");
+                let usbregs = 0x50202400 as *const u32;
+                for i in 0..32 {
+                    crate::println!("{:x}, {:08x}", i, unsafe {
+                        usbregs
+                            .add(cramium_hal::usb::utra::CORIGINE_DEV_OFFSET / size_of::<u32>() + i)
+                            .read_volatile()
+                    });
+                }
+                // safety: this is safe because we are in machine mode, and vaddr/paddr always pairs up
+                crate::println!("Getting pointer...");
+                let mut usb = unsafe {
+                    cramium_hal::usb::driver::CorigineUsb::new(
+                        cramium_hal::board::CRG_UDC_MEMBASE,
+                        csr.clone(),
+                        irq_csr.clone(),
+                    )
+                };
+                crate::println!("Reset");
+                usb.reset();
+                let mut idle_timer = 0;
+                let mut vbus_on = false;
+                let mut vbus_on_count = 0;
+                let mut in_u0 = false;
+                let mut last_sc = 0;
+                loop {
+                    let next_sc = csr.r(cramium_hal::usb::utra::PORTSC);
+                    if last_sc != next_sc {
+                        last_sc = next_sc;
+                        crate::println!("**** SC update {:x?}", cramium_hal::usb::driver::PortSc(next_sc));
+                        /*
+                        if cramium_hal::usb::driver::PortSc(next_sc).pr() {
+                            crate::println!("  >>reset<<");
+                            usb.start();
+                            in_u0 = false;
+                            vbus_on_count = 0;
+                        }
+                        */
+                    }
+                    let event = usb.udc_handle_interrupt();
+                    if event == cramium_hal::usb::driver::CrgEvent::None {
+                        idle_timer += 1;
+                    } else {
+                        // crate::println!("*Event {:?} at {}", event, idle_timer);
+                        idle_timer = 0;
+                    }
+
+                    if !vbus_on && vbus_on_count == 4 {
+                        crate::println!("*Vbus on");
+                        usb.reset();
+                        usb.init();
+                        usb.start();
+                        vbus_on = true;
+                        in_u0 = false;
+
+                        let irq1 = irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
+                        crate::println!(
+                            "irq1: {:x}, status: {:x}",
+                            irq1,
+                            csr.r(cramium_hal::usb::utra::USBSTS)
+                        );
+                        irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, irq1);
+                        // restore this to go on to boot
+                        // break;
+                    } else if usb.pp() && !vbus_on {
+                        vbus_on_count += 1;
+                        crate::println!("*Vbus_on_count: {}", vbus_on_count);
+                        // mdelay(100);
+                    } else if !usb.pp() && vbus_on {
+                        crate::println!("*Vbus off");
+                        usb.stop();
+                        usb.reset();
+                        vbus_on_count = 0;
+                        vbus_on = false;
+                        in_u0 = false;
+                    } else if in_u0 && vbus_on {
+                        // usb.udc_handle_interrupt();
+                        // TODO
+                    } else if usb.ccs() && vbus_on {
+                        // usb.print_status(usb.csr.r(cramium_hal::usb::utra::PORTSC));
+                        crate::println!("*Enter U0");
+                        in_u0 = true;
+                        let irq1 = irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
+                        // usb.print_status(csr.r(cramium_hal::usb::utra::PORTSC));
+                        irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, irq1);
+                    }
+                }
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);
@@ -342,4 +493,41 @@ impl Repl {
         self.do_cmd = false;
         self.cmdline.clear();
     }
+
+    fn abort_cmd(&mut self) {
+        self.do_cmd = false;
+        self.cmdline.clear();
+    }
+}
+
+#[rustfmt::skip]
+bio_code!(simple_test_code, SIMPLE_TEST_START, SIMPLE_TEST_END,
+    "li sp, 0x800",
+  "10:",
+    "mv t0, x31",
+    "mv t1, x16",
+    "sw t1, 0(sp)",
+    "lw t2, 0(sp)",
+    "addi t2, t2, 0x200",
+    "mv x17, t2",
+    "mv x18, t0",
+    // "mv x20, x0",
+    "j 10b"
+);
+
+#[rustfmt::skip]
+bio_code!(ldst_code, LDST_START, LDST_END,
+    "sw x0, 0x20(x0)",
+  "10:",
+    "j 10b"
+);
+
+fn debug_bio(bio_ss: &BioSharedState) {
+    crate::println!(
+        "c0:{:04x} c1:{:04x} c2:{:04x} c3:{:04x}",
+        bio_ss.bio.r(utra::bio_bdma::SFR_DBG0),
+        bio_ss.bio.r(utra::bio_bdma::SFR_DBG1),
+        bio_ss.bio.r(utra::bio_bdma::SFR_DBG2),
+        bio_ss.bio.r(utra::bio_bdma::SFR_DBG3),
+    );
 }

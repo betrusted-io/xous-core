@@ -165,7 +165,85 @@ impl BioSharedState {
         }
     }
 
+    pub fn init(&mut self) {
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
+        for imem in self.imem_slice.iter_mut() {
+            // jump to current location
+            imem.fill(0xA001_A001);
+        }
+        for (i, imem) in self.imem_slice.iter().enumerate() {
+            for (j, &d) in imem.iter().enumerate() {
+                if d != 0xA001_A001 {
+                    crate::println!("imem{}[{:x}]: {:x}", i, j, d);
+                }
+            }
+        }
+
+        // This may not scale to e.g. shared memory model but trying to see its impact
+        let fifo_slice = unsafe {
+            [
+                core::slice::from_raw_parts_mut(
+                    utralib::generated::HW_BIO_FIFO0_MEM as *mut u32,
+                    HW_BIO_FIFO0_MEM_LEN / size_of::<u32>(),
+                ),
+                core::slice::from_raw_parts_mut(
+                    utralib::generated::HW_BIO_FIFO1_MEM as *mut u32,
+                    HW_BIO_FIFO1_MEM_LEN / size_of::<u32>(),
+                ),
+                core::slice::from_raw_parts_mut(
+                    utralib::generated::HW_BIO_FIFO2_MEM as *mut u32,
+                    HW_BIO_FIFO2_MEM_LEN / size_of::<u32>(),
+                ),
+                core::slice::from_raw_parts_mut(
+                    utralib::generated::HW_BIO_FIFO3_MEM as *mut u32,
+                    HW_BIO_FIFO3_MEM_LEN / size_of::<u32>(),
+                ),
+            ]
+        };
+        for (i, fifo) in fifo_slice.iter().enumerate() {
+            crate::println!("fifo{}: {:x}", i, fifo[0]);
+        }
+
+        // set clocking mode to 3
+        self.bio.wfo(utra::bio_bdma::SFR_CONFIG_CLOCKING_MODE, 3);
+        self.bio.wo(utra::bio_bdma::SFR_EXTCLOCK, 0);
+        self.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x0_0000);
+        self.bio.wo(utra::bio_bdma::SFR_QDIV1, 0x0_0000);
+        self.bio.wo(utra::bio_bdma::SFR_QDIV2, 0x0_0000);
+        self.bio.wo(utra::bio_bdma::SFR_QDIV3, 0x0_0000);
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, 0xFFF);
+        self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, 0xf);
+        for _ in 0..8 {
+            let _ = self.bio.r(utra::bio_bdma::SFR_RXF0);
+            let _ = self.bio.r(utra::bio_bdma::SFR_RXF1);
+            let _ = self.bio.r(utra::bio_bdma::SFR_RXF2);
+            let _ = self.bio.r(utra::bio_bdma::SFR_RXF3);
+        }
+        self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, 0xf);
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
+        crate::println!(
+            "{:04x} {:04x} {:04x} {:04x}",
+            self.bio.r(utra::bio_bdma::SFR_DBG0),
+            self.bio.r(utra::bio_bdma::SFR_DBG1),
+            self.bio.r(utra::bio_bdma::SFR_DBG2),
+            self.bio.r(utra::bio_bdma::SFR_DBG3),
+        );
+
+        /*
+        crate::println!("ldst trial");
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, 0x000);
+        self.load_code(ldst_code(), 0, BioCore::Core0);
+        self.load_code(ldst_code(), 0, BioCore::Core1);
+        self.load_code(ldst_code(), 0, BioCore::Core2);
+        self.load_code(ldst_code(), 0, BioCore::Core3);
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, 0xFFF);
+        crate::println!("ldst trial end");
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, 0x000);
+        */
+    }
+
     pub fn load_code(&mut self, prog: &[u8], offset_bytes: usize, core: BioCore) {
+        crate::println!("load code from {:x}", prog.as_ptr() as usize);
         let offset = offset_bytes / core::mem::size_of::<u32>();
         for (i, chunk) in prog.chunks(4).enumerate() {
             if chunk.len() == 4 {
@@ -180,6 +258,13 @@ impl BioSharedState {
                 self.imem_slice[core as usize][i + offset] = ragged_word;
             }
         }
+        match self.verify_code(&prog, offset_bytes, core) {
+            Err(BioError::CodeCheck(offset)) => {
+                crate::println!("Code verification error at {:x}", offset)
+            }
+            _ => (),
+        }
+        cache_flush();
     }
 
     pub fn verify_code(&mut self, prog: &[u8], offset_bytes: usize, core: BioCore) -> Result<(), BioError> {
@@ -248,4 +333,20 @@ macro_rules! bio_code {
             ".word .",
         );
     };
+}
+
+#[inline(always)]
+pub(crate) fn cache_flush() {
+    unsafe {
+        // cache flush
+        #[rustfmt::skip]
+        core::arch::asm!(
+            "fence.i",
+            ".word 0x500F",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+        );
+    }
 }
