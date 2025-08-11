@@ -460,6 +460,154 @@ impl Repl {
                     }
                 }
             }
+            #[cfg(feature = "nto-bio")]
+            "capsense" => {
+                {
+                    if args.len() != 2 {
+                        crate::println!("Usage: capsense <pin> <on|off>");
+                        self.do_cmd = false;
+                        self.cmdline.clear();
+                        return;
+                    }
+
+                    let pin = match u32::from_str_radix(&args[0], 10) {
+                        Ok(p) if p < 32 => p,
+                        _ => {
+                            crate::println!("Invalid pin number. Must be 0-31.");
+                            self.do_cmd = false;
+                            self.cmdline.clear();
+                            return;
+                        }
+                    };
+
+                    let state = args[1].as_str();
+                    if state != "on" && state != "off" {
+                        crate::println!("Invalid state. Use 'on' or 'off'.");
+                        self.do_cmd = false;
+                        self.cmdline.clear();
+                        return;
+                    }
+
+                    let mut bio_ss = BioSharedState::new();
+                    let mut ctrl = bio_ss.bio.r(utra::bio_bdma::SFR_CTRL);
+                    let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                    // Set the ports as bio ports
+                    iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
+
+                    if state == "on" {
+                        // Stop Core 0 to ensure a clean state before loading new code.
+                        ctrl &= !0b0001;
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+
+                        // Clear the FIFO for Core 0 to remove any stale data.
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0b0001);
+
+                        // Load the slow wave generator program.
+                        let prog = slow_wave_generator_code();
+                        bio_ss.load_code(prog, 0, BioCore::Core0);
+
+                        // Start Core 0.
+                        ctrl |= 0b0001_0001_0001;
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+
+                        // Set clock divider for a slow 1kHz BIO clock.
+                        // Divisor = 40,000,000 / 1,000 = 40,000 (0x9C40)
+                        // bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x9C40_0000);
+
+                        // Set clock divider for a 25kHz BIO clock.
+                        // bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x6400000);
+
+                        // Set clock divider for a 32250kHz BIO clock.
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x5000000);
+
+                        // Send parameters to the BIO core via FIFO0.
+                        let pin_mask = 1 << pin;
+                        // For a 2-second half-period with a 1ms (1kHz) clock, we need 2000 counts.
+                        let delay_count = 2000;
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, pin_mask);
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, delay_count);
+
+                        crate::println!("Generating ~0.25 Hz (4 second period) wave on pin {}.", pin);
+                    } else {
+                        // Stop Core 0.
+                        ctrl &= !0b0001;
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+                        crate::println!("Stopped wave generator on Core 0.");
+                    }
+                }
+            }
+            #[cfg(feature = "nto-bio")]
+            "pinup" => {
+                {
+                    if args.len() != 2 {
+                        crate::println!("Usage: pinup <pin> <on|off>");
+
+                        self.do_cmd = false;
+
+                        self.cmdline.clear();
+
+                        return;
+                    }
+
+                    let pin = match u32::from_str_radix(&args[0], 10) {
+                        Ok(p) if p < 32 => p,
+
+                        _ => {
+                            crate::println!("Invalid pin number. Must be 0-31.");
+                            self.do_cmd = false;
+                            self.cmdline.clear();
+
+                            return;
+                        }
+                    };
+
+                    let state = args[1].as_str();
+                    if state != "on" && state != "off" {
+                        crate::println!("Invalid state. Use 'on' or 'off'.");
+                        self.do_cmd = false;
+                        self.cmdline.clear();
+                        return;
+                    }
+
+                    let mut bio_ss = BioSharedState::new();
+                    let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+
+                    iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
+                    crate::println!("Configuring BIO Core 0 for GPIO control...");
+
+                    // 1. Stop Core 0 to ensure a clean state
+                    let mut ctrl = bio_ss.bio.r(utra::bio_bdma::SFR_CTRL);
+                    ctrl &= !0b0001;
+                    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+
+                    // 2. Clear any stale data from the FIFO
+                    bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0b0001);
+
+                    // 3. Load the correct program
+                    let prog = pin_control_code();
+                    bio_ss.load_code(prog, 0, BioCore::Core0);
+
+                    // 5. Start the core
+                    ctrl |= 0b0001_0001_0001; //enable all the cores
+                    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+                    crate::println!("Core 0 is ready.");
+
+                    // 4. Reset the clock divider to a default (e.g., full speed) A value of 0 might mean full
+                    //    speed, or a small value like 1. This prevents capsense's slow clock from affecting
+                    //    pinup.
+                    bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0);
+
+                    // Prepare and send the command to the now-ready core
+                    let pin_mask = 1 << pin;
+                    let state_val = if state == "on" { 0xFFFFFFFF } else { 0 }; // Use all 1s for "on"
+
+                    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, pin_mask);
+                    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, state_val);
+
+                    crate::println!("Command sent: Pin {} -> {}.", pin, state.to_uppercase());
+                }
+            }
+
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);
@@ -475,6 +623,8 @@ impl Repl {
                 crate::print!(", mon");
                 #[cfg(feature = "nto-bio")]
                 crate::print!(", bio");
+                #[cfg(feature = "nto-bio")]
+                crate::print!(", pinup, capsense");
                 crate::println!("");
             }
         }
@@ -490,6 +640,91 @@ impl Repl {
         self.cmdline.clear();
     }
 }
+
+#[rustfmt::skip]
+bio_code!(slow_wave_generator_code, SLOW_WAVE_START, SLOW_WAVE_END,
+    // Configure all GPIOs as outputs.
+    "li    t0, 0xFFFFFFFF",
+    "mv    x24, t0",
+    // Read the pin mask from FIFO0 into t1.
+    "mv    t1, x16",
+    // Read the delay count from FIFO0 into t2.
+    "mv    t2, x16",
+    // Set the GPIO mask register to the pin mask.
+    "mv    x26, t1",
+  "10:", // Main loop
+    // --- HIGH PULSE ---
+    "mv    x21, t1",      // Set pin high
+    "mv    t3, t2",       // Load counter into t3 for the delay loop
+  "11:", // Delay loop 1
+    "mv    x20, zero",      // << Wait for one (slow) BIO clock cycle
+    "addi  t3, t3, -1",   // Decrement counter
+    "bne   t3, zero, 11b",  // Loop if not zero
+    // --- LOW PULSE ---
+    "mv    x21, zero",    // Set pin low
+    "mv    t3, t2",       // Re-load counter for the delay loop
+  "12:", // Delay loop 2
+    "mv    x20, zero",      // << Wait for one (slow) BIO clock cycle
+    "addi  t3, t3, -1",   // Decrement counter
+    "bne   t3, zero, 12b",  // Loop if not zero
+    "j     10b"           // Repeat the whole cycle
+);
+#[rustfmt::skip]
+bio_code!(pin_control_code, PIN_CONTROL_START, PIN_CONTROL_END,
+    // Configure all GPIOs as outputs once at the start.
+    "li    t0, 0xFFFFFFFF",
+    "mv    x24, t0",
+  "wait_for_cmd:",
+    // Read the pin mask from FIFO0 (x16). The core will stall here until the CPU sends data.
+    "mv    t1, x16",
+    // Read the desired state (1 for high, 0 for low) from FIFO0. Stalls again.
+    "mv    t2, x16",
+    // Set the GPIO mask register (x26) to the pin mask we just received.
+    "mv    x26, t1",
+    // Set the GPIO output register (x21) to the state (high/low) we received.
+    "mv    x21, t2",
+    // Loop back to wait for the next command.
+    "j     wait_for_cmd"
+);
+
+#[rustfmt::skip]
+bio_code!(pin_read_write_code, PIN_RW_START, PIN_RW_END,
+    // This program waits for three words from the CPU:
+    // 1. Write Pin Mask (the pin to set as output)
+    // 2. State Value (0 for LOW, 0xFFFFFFFF for HIGH)
+    // 3. Read Pin Mask (the pin to read from)
+    // It then performs the write, reads the input pin,
+    // and sends the result (0 or non-zero) back to the CPU.
+  "wait_for_cmd:",
+    // --- Receive parameters from the CPU ---
+    "mv    t1, x16",      // t1 = Write Pin Mask
+    "mv    t2, x16",      // t2 = State Value
+    "mv    t3, x16",      // t3 = Read Pin Mask
+
+    // --- Configure Pin Directions ---
+    // Set the write pin as an OUTPUT (bit = 1) and all others as INPUT (bit = 0).
+    "mv    x24, t1",
+
+    // --- Perform the Write Operation ---
+    // Set the GPIO mask register to the write pin.
+    "mv    x26, t1",
+    // Set the output register to the desired state.
+    "mv    x21, t2",
+
+    // --- Perform the Read Operation ---
+    // Read the state of all input pins into t4.
+    "mv    t4, x25",
+    // Isolate the bit for the specific pin we want to read.
+    "and   t5, t4, t3",   // t5 = (value of all pins) & (read pin mask)
+
+    // --- Send Result Back to CPU ---
+    // Write the result (t5) to the transmit FIFO (x17).
+    // The CPU will read this value.
+    "mv    x17, t5",
+
+    // Loop back to wait for the next command.
+    "j     wait_for_cmd"
+);
 
 #[rustfmt::skip]
 bio_code!(simple_test_code, SIMPLE_TEST_START, SIMPLE_TEST_END,
