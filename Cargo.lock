@@ -334,6 +334,7 @@ dependencies = [
 name = "bao-console"
 version = "0.1.0"
 dependencies = [
+ "aes 0.8.3",
  "cram-hal-service",
  "cramium-api",
  "cramium-emu",
@@ -7095,6 +7096,7 @@ dependencies = [
 name = "xous-ticktimer"
 version = "0.1.32"
 dependencies = [
+ "loader",
  "log",
  "num-derive 0.4.2",
  "num-traits",
