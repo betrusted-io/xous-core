@@ -32,6 +32,7 @@ cramium-soc = [
     "utralib/cramium-soc",
     "linked_list_allocator",
     "cramium-hal/loader-baosec",
+    # "cramium-hal/debug-print-usb",
     "cramium-api",
     "v0p9",
 ]
@@ -46,4 +47,4 @@ nto-bio = [
 nto-evb = []
 
 verilator-only = []
-default = ["artyvexii"]
+default = ["artyvexii", "nto-bio"]

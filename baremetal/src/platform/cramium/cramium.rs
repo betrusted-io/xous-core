@@ -25,27 +25,30 @@ pub const SCRATCH_PAGE: usize = HEAP_START - 8192;
 pub const UART_IFRAM_ADDR: usize = cramium_hal::board::UART_DMA_TX_BUF_PHYS;
 
 // the 800_000_000 setting is tested to work at least on one sample
-pub const SYSTEM_CLOCK_FREQUENCY: u32 = 400_000_000;
+pub const SYSTEM_CLOCK_FREQUENCY: u32 = 800_000_000;
 pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 pub fn early_init() {
+    let uart = crate::debug::Uart {};
+    uart.putc('*' as u32 as u8);
+
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
-    /*
+
     let ao_sysctrl = utra::ao_sysctrl::HW_AO_SYSCTRL_BASE as *mut u32;
     unsafe {
         // this turns off the VDD85D (doesn't work)
         // ao_sysctrl.add(utra::ao_sysctrl::SFR_PMUCSR.offset()).write_volatile(0x6c);
 
         // this sets VDD85D to 0.90V
-        ao_sysctrl.add(utra::ao_sysctrl::SFR_PMUTRM0CSR.offset()).write_volatile(0x0842_10E0); // 0x0842_1080 default
+        ao_sysctrl.add(utra::ao_sysctrl::SFR_PMUTRM0CSR.offset()).write_volatile(0x0842_1FF1); // 0x0842_1080 default
         daric_cgu.add(utra::sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x57);
     }
-    */
-    let uart = crate::debug::Uart {};
 
+    let uart = crate::debug::Uart {};
     for _ in 0..100 {
         uart.putc('a' as u32 as u8);
     }
+
     unsafe {
         // this block is mandatory in all cases to get clocks set into some consistent, expected mode
         {
@@ -181,16 +184,21 @@ pub fn early_init() {
     }
     crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
 
-    // setup the static data (hard-coded, because no loader) - necessary for heap
-    // see build message about non-zero data. Also need to zero out the BSS region.
-    let static_data = unsafe { core::slice::from_raw_parts_mut(0x6108_0000 as *mut u8, 0x14 + 0x24) };
-    static_data.fill(0);
-    static_data[8] = 1;
-    crate::print!("static data {:x}: ", static_data.as_ptr() as usize);
-    for sd in static_data.iter() {
-        crate::print!("{:x} ", *sd);
+    // Define the .data region - bootstrap baremetal using these hard-coded parameters.
+    const DATA_ORIGIN: usize = 0x61080000;
+    const DATA_SIZE_BYTES: usize = 0x5000;
+    const DATA_INIT: [(usize, u32); 1] = [(0x0, 0x1)];
+
+    // Clear .data, .bss, .stack, .heap regions & setup .data values
+    unsafe {
+        let data_ptr = DATA_ORIGIN as *mut u32;
+        for i in 0..DATA_SIZE_BYTES / size_of::<u32>() {
+            data_ptr.add(i).write_volatile(0);
+        }
+        for (offset, data) in DATA_INIT {
+            data_ptr.add(offset).write_volatile(data);
+        }
     }
-    crate::println!("");
 
     // setup heap alloc
     setup_alloc();
@@ -201,7 +209,55 @@ pub fn early_init() {
     let mut udma_uart = setup_rx(perclk);
     irq_setup();
     enable_irq(utra::irqarray5::IRQARRAY5_IRQ);
+
     udma_uart.write("console up\r\n".as_bytes());
+
+    // code to setup PWM, for testing the PWM pin
+    if false {
+        use cramium_api::*;
+        use cramium_hal::iox::Iox;
+        let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+        iox.setup_pin(IoxPort::PF, 9, Some(IoxDir::Input), Some(IoxFunction::Gpio), None, None, None, None);
+        iox.setup_pin(
+            IoxPort::PA,
+            0,
+            Some(IoxDir::Output),
+            Some(IoxFunction::Gpio),
+            None,
+            None,
+            Some(IoxEnable::Disable),
+            Some(IoxDriveStrength::Drive8mA),
+        );
+        iox.setup_pin(
+            IoxPort::PA,
+            0,
+            Some(IoxDir::Output),
+            Some(IoxFunction::AF3),
+            None,
+            None,
+            Some(IoxEnable::Disable),
+            Some(IoxDriveStrength::Drive8mA),
+        );
+        let mut timer = CSR::new(utra::pwm::HW_PWM_BASE as *mut u32);
+        timer.wo(utra::pwm::REG_CH_EN, 1);
+        timer.rmwf(utra::pwm::REG_TIM0_CFG_R_TIMER0_SAW, 0);
+        timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_TH, 0);
+        timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_MODE, 3);
+        let pwm = utra::pwm::HW_PWM_BASE as *mut u32;
+        unsafe { pwm.add(2).write_volatile(1 << 16) };
+        timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 1);
+        crate::println!("PWM running on PA0?");
+        for i in 0..12 {
+            crate::println!("0x{:2x}: 0x{:08x}", i, unsafe { pwm.add(i).read_volatile() })
+        }
+        crate::println!("0x{:2x}: 0x{:08x}", 65, unsafe { pwm.add(65).read_volatile() });
+        /*
+        for i in 80..84 {
+            crate::println!("0x{:2x}: 0x{:08x}", i, unsafe { pwm.add(i).read_volatile() })
+        }
+        */
+        crate::println!("");
+    }
 }
 
 pub fn setup_timer() {
@@ -284,7 +340,7 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
 
     // this block might belong at the top, in particular, configuring the dividers prevents stuff
     // from being overclocked when the PLL comes live; but for now we are debugging other stuff
-    {
+    let perclk = {
         // Hits a 16:8:4:2:1 ratio on fclk:aclk:hclk:iclk:pclk
         // Resulting in 800:400:200:100:50 MHz assuming 800MHz fclk
         daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x3f7f); // fclk
@@ -299,11 +355,13 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         // perclk divider - set to divide by 8 off of an 800Mhz base. Only found on NTO.
         // TODO: this only works for two clock settings. Broken @ 600. Need to fix this to instead derive
         // what pclk is instead of always reporting 100mhz
-        if freq_hz == 800_000_000 {
+        let perclk = if freq_hz > 400_000_000 {
             daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x07_ff_ff);
+            freq_hz / 8
         } else {
             daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
-        }
+            freq_hz / 4
+        };
 
         /*
             perclk fields:  min-cycle-lp | min-cycle | fd-lp | fd
@@ -322,9 +380,9 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         */
 
         // turn off gates
-        daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0x2f);
+        daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0xff);
         daric_cgu.add(utra::sysctrl::SFR_HCLKGR.offset()).write_volatile(0xff);
-        daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0x8f);
+        daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0xff);
         daric_cgu.add(utra::sysctrl::SFR_PCLKGR.offset()).write_volatile(0xff);
         crate::println!("bef gates set");
         for _ in 0..100 {
@@ -338,7 +396,8 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
             crate::print!("-");
         }
         crate::println!(".");
-    }
+        perclk
+    };
 
     /*
     if (0 == (cgu.r(sysctrl::SFR_IPCPLLMN) & 0x0001F000))
@@ -495,45 +554,27 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     );
 
     crate::println!("fsvalid: {}", daric_cgu.add(sysctrl::SFR_CGUFSVLD.offset()).read_volatile());
-    let cgufsfreq0 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ0.offset()).read_volatile();
-    let cgufsfreq1 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ1.offset()).read_volatile();
-    let cgufsfreq2 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ2.offset()).read_volatile();
-    let cgufsfreq3 = daric_cgu.add(sysctrl::SFR_CGUFSSR_FSFREQ3.offset()).read_volatile();
+    let clk_desc: [(&'static str, u32, usize); 8] = [
+        ("fclk", 16, 0x40 / size_of::<u32>()),
+        ("pke", 0, 0x40 / size_of::<u32>()),
+        ("ao", 16, 0x44 / size_of::<u32>()),
+        ("aoram", 0, 0x44 / size_of::<u32>()),
+        ("osc", 16, 0x48 / size_of::<u32>()),
+        ("xtal", 0, 0x48 / size_of::<u32>()),
+        ("pll0", 16, 0x4c / size_of::<u32>()),
+        ("pll1", 0, 0x4c / size_of::<u32>()),
+    ];
+    for (name, shift, offset) in clk_desc {
+        let fsfreq = (daric_cgu.add(offset).read_volatile() >> shift) & 0xffff;
+        crate::println!("{}: {} MHz", name, fsfreq);
+    }
+    // Taken in from latest daric_util.c
+    let mut udmacore = CSR::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
+    udmacore.wo(utra::udma_ctrl::REG_CG, 0xFFFF_FFFF);
 
-    crate::println!(
-        "Internal osc: {} -> {} MHz ({} MHz)",
-        cgufsfreq0,
-        fsfreq_to_hz(cgufsfreq0),
-        fsfreq_to_hz_32(cgufsfreq0)
-    );
-    crate::println!(
-        "XTAL: {} -> {} MHz ({} MHz)",
-        cgufsfreq1,
-        fsfreq_to_hz(cgufsfreq1),
-        fsfreq_to_hz_32(cgufsfreq1)
-    );
-    crate::println!(
-        "pll output 0: {} -> {} MHz ({} MHz)",
-        cgufsfreq2,
-        fsfreq_to_hz(cgufsfreq2),
-        fsfreq_to_hz_32(cgufsfreq2)
-    );
-    crate::println!(
-        "pll output 1: {} -> {} MHz ({} MHz)",
-        cgufsfreq3,
-        fsfreq_to_hz(cgufsfreq3),
-        fsfreq_to_hz_32(cgufsfreq3)
-    );
-
-    crate::println!("PLL configured to {} MHz", freq_hz / 1_000_000);
-    100_000_000
+    crate::println!("PLL configured to {} MHz; perclk {}", freq_hz / 1_000_000, perclk);
+    perclk
 }
-
-#[allow(dead_code)]
-fn fsfreq_to_hz(fs_freq: u32) -> u32 { (fs_freq * (48_000_000 / 32)) / 1_000_000 }
-
-#[allow(dead_code)]
-fn fsfreq_to_hz_32(fs_freq: u32) -> u32 { (fs_freq * (32_000_000 / 32)) / 1_000_000 }
 
 /// used to generate some test vectors
 #[allow(dead_code)]
