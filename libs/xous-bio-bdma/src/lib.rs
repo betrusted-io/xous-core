@@ -49,6 +49,18 @@ pub enum BioCore {
     Core3 = 3,
 }
 
+impl From<usize> for BioCore {
+    fn from(value: usize) -> Self {
+        match value {
+            0 => BioCore::Core0,
+            1 => BioCore::Core1,
+            2 => BioCore::Core2,
+            3 => BioCore::Core3,
+            _ => panic!("Invalid BioCore value: {}", value),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum BioError {
     /// specified state machine is not valid
@@ -165,7 +177,76 @@ impl BioSharedState {
         }
     }
 
+    /// This will overwrite *all* of the current core states with
+    /// the states specified in the `cores` argument, such that
+    /// `true` indicates the core should be enabled and running.
+    ///
+    /// Notably, this will also turn off any cores that are marked
+    /// as `false`. A different method needs to be written if
+    /// we want to independently manipulate core states without
+    /// affecting others. However, it's envisioned to be mostly
+    /// the case that users will manage the full set of programs
+    /// running on all four cores and not necessarily have a
+    /// dynamically-loaded, multi-tenant situation, so this simpler
+    /// API is more ergonomic to use than e.g. the generic case
+    /// of passing Option<bool> for every core state to additionally
+    /// specify if the core should be changed or left alone.
+    #[inline(never)]
+    pub fn set_core_run_states(&mut self, cores: [bool; 4]) {
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, 0); // turn off all the cores first
+        let mut core_code = 0;
+        for (i, &core) in cores.iter().enumerate() {
+            if core {
+                core_code |= 1 << i;
+            }
+        }
+        let core_mask = core_code | core_code << 4 | core_code << 8;
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, core_mask);
+        let mut timeout = 0;
+        loop {
+            let ctrl = self.bio.r(utra::bio_bdma::SFR_CTRL) & 0xFF0;
+            if ctrl == 0 {
+                break;
+            }
+            timeout += 1;
+            if timeout > 1000 {
+                crate::println!("Timeout on set_core_run_states: req {:x} != rbk {:x}", core_code, ctrl);
+                break;
+            }
+        }
+        let check = self.bio.r(utra::bio_bdma::SFR_CTRL);
+        if check != core_code {
+            crate::println!("run-state check failed: {:x}", check);
+        }
+    }
+
     pub fn init(&mut self) {
+        // set clocking mode to 3
+        self.bio.wfo(utra::bio_bdma::SFR_CONFIG_CLOCKING_MODE, 3);
+        self.bio.wo(utra::bio_bdma::SFR_EXTCLOCK, 0);
+        self.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x0_0000);
+        self.bio.wo(utra::bio_bdma::SFR_QDIV1, 0x0_0000);
+        self.bio.wo(utra::bio_bdma::SFR_QDIV2, 0x0_0000);
+        self.bio.wo(utra::bio_bdma::SFR_QDIV3, 0x0_0000);
+
+        for core in 0..4 {
+            // crate::println!("ldst trial");
+            let core_num = 1 << (core as usize);
+            self.load_code(mem_init_code(), 0, BioCore::from(core));
+            self.bio.wo(
+                utra::bio_bdma::SFR_CTRL,
+                self.bio.r(utra::bio_bdma::SFR_CTRL) | (core_num | core_num << 4 | core_num << 8),
+            );
+            for _ in 0..16 {
+                let _ = self.bio.r(utra::bio_bdma::SFR_RXF0);
+                let _ = self.bio.r(utra::bio_bdma::SFR_RXF1);
+                let _ = self.bio.r(utra::bio_bdma::SFR_RXF2);
+                let _ = self.bio.r(utra::bio_bdma::SFR_RXF3);
+            }
+            // crate::println!("ldst trial end");
+        }
+        self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, 0xf);
+
         self.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
         for imem in self.imem_slice.iter_mut() {
             // jump to current location
@@ -179,41 +260,8 @@ impl BioSharedState {
             }
         }
 
-        // This may not scale to e.g. shared memory model but trying to see its impact
-        let fifo_slice = unsafe {
-            [
-                core::slice::from_raw_parts_mut(
-                    utralib::generated::HW_BIO_FIFO0_MEM as *mut u32,
-                    HW_BIO_FIFO0_MEM_LEN / size_of::<u32>(),
-                ),
-                core::slice::from_raw_parts_mut(
-                    utralib::generated::HW_BIO_FIFO1_MEM as *mut u32,
-                    HW_BIO_FIFO1_MEM_LEN / size_of::<u32>(),
-                ),
-                core::slice::from_raw_parts_mut(
-                    utralib::generated::HW_BIO_FIFO2_MEM as *mut u32,
-                    HW_BIO_FIFO2_MEM_LEN / size_of::<u32>(),
-                ),
-                core::slice::from_raw_parts_mut(
-                    utralib::generated::HW_BIO_FIFO3_MEM as *mut u32,
-                    HW_BIO_FIFO3_MEM_LEN / size_of::<u32>(),
-                ),
-            ]
-        };
-        for (i, fifo) in fifo_slice.iter().enumerate() {
-            crate::println!("fifo{}: {:x}", i, fifo[0]);
-        }
-
-        // set clocking mode to 3
-        self.bio.wfo(utra::bio_bdma::SFR_CONFIG_CLOCKING_MODE, 3);
-        self.bio.wo(utra::bio_bdma::SFR_EXTCLOCK, 0);
-        self.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x0_0000);
-        self.bio.wo(utra::bio_bdma::SFR_QDIV1, 0x0_0000);
-        self.bio.wo(utra::bio_bdma::SFR_QDIV2, 0x0_0000);
-        self.bio.wo(utra::bio_bdma::SFR_QDIV3, 0x0_0000);
         self.bio.wo(utra::bio_bdma::SFR_CTRL, 0xFFF);
-        self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, 0xf);
-        for _ in 0..8 {
+        for _ in 0..16 {
             let _ = self.bio.r(utra::bio_bdma::SFR_RXF0);
             let _ = self.bio.r(utra::bio_bdma::SFR_RXF1);
             let _ = self.bio.r(utra::bio_bdma::SFR_RXF2);
@@ -221,29 +269,16 @@ impl BioSharedState {
         }
         self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, 0xf);
         self.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
-        crate::println!(
-            "{:04x} {:04x} {:04x} {:04x}",
-            self.bio.r(utra::bio_bdma::SFR_DBG0),
-            self.bio.r(utra::bio_bdma::SFR_DBG1),
-            self.bio.r(utra::bio_bdma::SFR_DBG2),
-            self.bio.r(utra::bio_bdma::SFR_DBG3),
-        );
-
-        /*
-        crate::println!("ldst trial");
-        self.bio.wo(utra::bio_bdma::SFR_CTRL, 0x000);
-        self.load_code(ldst_code(), 0, BioCore::Core0);
-        self.load_code(ldst_code(), 0, BioCore::Core1);
-        self.load_code(ldst_code(), 0, BioCore::Core2);
-        self.load_code(ldst_code(), 0, BioCore::Core3);
-        self.bio.wo(utra::bio_bdma::SFR_CTRL, 0xFFF);
-        crate::println!("ldst trial end");
-        self.bio.wo(utra::bio_bdma::SFR_CTRL, 0x000);
-        */
     }
 
     pub fn load_code(&mut self, prog: &[u8], offset_bytes: usize, core: BioCore) {
-        crate::println!("load code from {:x}", prog.as_ptr() as usize);
+        // turn off just the target core
+        let core_num = 1 << (core as usize);
+        self.bio.wo(
+            utra::bio_bdma::SFR_CTRL,
+            self.bio.r(utra::bio_bdma::SFR_CTRL) & !(core_num | core_num << 4 | core_num << 8),
+        );
+        // crate::println!("load code from {:x}", prog.as_ptr() as usize);
         let offset = offset_bytes / core::mem::size_of::<u32>();
         for (i, chunk) in prog.chunks(4).enumerate() {
             if chunk.len() == 4 {
@@ -264,7 +299,6 @@ impl BioSharedState {
             }
             _ => (),
         }
-        cache_flush();
     }
 
     pub fn verify_code(&mut self, prog: &[u8], offset_bytes: usize, core: BioCore) -> Result<(), BioError> {
@@ -289,6 +323,26 @@ impl BioSharedState {
             }
         }
         Ok(())
+    }
+
+    pub fn debug_pc(&self) {
+        crate::println!(
+            "c0:{:04x} c1:{:04x} c2:{:04x} c3:{:04x}",
+            self.bio.r(utra::bio_bdma::SFR_DBG0),
+            self.bio.r(utra::bio_bdma::SFR_DBG1),
+            self.bio.r(utra::bio_bdma::SFR_DBG2),
+            self.bio.r(utra::bio_bdma::SFR_DBG3),
+        );
+    }
+
+    pub fn debug_fifo(&self) {
+        crate::println!(
+            "f0:{:04x} f1:{:04x} f2:{:04x} f3:{:04x}",
+            self.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0),
+            self.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1),
+            self.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL2),
+            self.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL3),
+        );
     }
 }
 
@@ -335,18 +389,12 @@ macro_rules! bio_code {
     };
 }
 
-#[inline(always)]
-pub(crate) fn cache_flush() {
-    unsafe {
-        // cache flush
-        #[rustfmt::skip]
-        core::arch::asm!(
-            "fence.i",
-            ".word 0x500F",
-            "nop",
-            "nop",
-            "nop",
-            "nop",
-        );
-    }
-}
+#[rustfmt::skip]
+bio_code!(mem_init_code, MEM_INIT_START, MEM_INIT_END,
+    "sw x0, 0x20(x0)",
+    "li sp, 0x61200000",
+    "addi sp, sp, -4",
+    "sw x0, 0(sp)",
+  "10:",
+    "j 10b"
+);

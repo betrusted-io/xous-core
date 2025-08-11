@@ -48,25 +48,12 @@ pub fn dma_filter_off() {
     bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI, 1);
 }
 
-pub fn filter_test() -> usize {
-    println!("==Filter test==");
-    // clear any prior test config state
-    let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
-    test_cfg.wo(utra::csrtest::WTEST, 0);
-
-    let mut passing = true;
+#[inline(never)]
+fn setup_filter() {
     use utralib::generated::HW_SRAM_MEM as RAM_BASE;
     use utralib::generated::HW_SRAM_MEM_LEN as RAM_SIZE;
 
     let mut bio_ss = BioSharedState::new();
-    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
-    // reset all the fifos
-    bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0xF);
-
-    // enable the filters
-    bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM, 0);
-    bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI, 0);
-
     // "standard filter" setup
     // the gutter for memory is the highest location of RAM
     // the gutter for peripherals is the reporting test register
@@ -84,6 +71,31 @@ pub fn filter_test() -> usize {
     bio_ss.bio.wo(utra::bio_bdma::SFR_FILTER_BASE_2, (HW_IOX_BASE as u32) >> 12);
     bio_ss.bio.wo(utra::bio_bdma::SFR_FILTER_BOUNDS_2, (0x6000_0000 - HW_IOX_BASE as u32) >> 12);
 
+    for i in (0..2).into_iter().chain((40..42).into_iter().chain((56..64).into_iter())) {
+        crate::println!("{}: {:08x}", i, unsafe { ((0x50124000) as *const u32).add(i).read_volatile() })
+    }
+}
+
+pub fn filter_test() -> usize {
+    println!("==Filter test==");
+    // clear any prior test config state
+    let mut test_cfg = CSR::new(utra::csrtest::HW_CSRTEST_BASE as *mut u32);
+    test_cfg.wo(utra::csrtest::WTEST, 0);
+
+    let mut passing = true;
+
+    let mut bio_ss = BioSharedState::new();
+    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
+    // reset all the fifos
+    bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0xF);
+
+    setup_filter();
+
+    // enable the filters
+    bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM, 0);
+    bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI, 0);
+    crate::println!("config: {:x}", bio_ss.bio.r(utra::bio_bdma::SFR_CONFIG));
+
     // with the filters so set, test some transactions that "should" pass
     if dma_basic(false, 0) != 4 {
         passing = false;
@@ -94,11 +106,13 @@ pub fn filter_test() -> usize {
     // *** increments 3 ret values total
     //   - access to the BIO_BDMA registers: try to disable the filters.
     println!("attempt to violate peri filter");
-    if bio_ss.bio.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM) != 0 {
+    let cfg = unsafe { ((0x50124000 + 8) as *const u32).read_volatile() };
+    crate::println!("config: {:x}", cfg);
+    if cfg as usize & utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM.mask() != 0 {
         passing = false;
         println!("peri range filter pre-condition fail A");
     }
-    if bio_ss.bio.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI) != 0 {
+    if cfg as usize & utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI.mask() != 0 {
         passing = false;
         println!("peri range filter pre-condition fail B");
     }
@@ -117,13 +131,19 @@ pub fn filter_test() -> usize {
     while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0x1 == 0 {}
     cache_flush();
     // check that the values did not change
-    if bio_ss.bio.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM) != 0 {
+    let cfg = unsafe { ((0x5012_4008) as *const u32).read_volatile() };
+    crate::println!("config2: {:x}", cfg);
+    if cfg as usize & (1 << utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM.offset()) != 0 {
         passing = false;
         println!("peri range filter FAIL A");
     }
-    if bio_ss.bio.rf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI) != 0 {
+    if cfg as usize & (1 << utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI.offset()) != 0 {
         passing = false;
         println!("peri range filter FAIL B");
+    }
+    unsafe {
+        ((0x5012_4008) as *mut u32).write_volatile(0x0);
+        crate::println!("config3: {:x}", ((0x50124000 + 8) as *const u32).read_volatile());
     }
     // attempt to read the config word
     bio_ss.bio.wo(
@@ -226,7 +246,8 @@ pub fn dma_basic(concurrent: bool, clkmode: u8) -> usize {
     bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV2, 0x1_0000);
     bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV3, 0x1_0000);
     // start the machine
-    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x888);
+    // bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x888);
+    bio_ss.set_core_run_states([false, false, false, true]);
 
     let mut main_mem_src: [u32; TEST_LEN] = [0u32; TEST_LEN];
     let mut main_mem_dst: [u32; TEST_LEN] = [0u32; TEST_LEN];
@@ -345,7 +366,7 @@ bio_code!(dma_basic_code, DMA_BASIC_START, DMA_BASIC_END,
     "mv a1, x16",       // wait for # of bytes to move
 
     "sw  x0, 0(a2)",    // make sure write pipeline is in a good state
-    "sw  x0, 0(a2)",    // make sure write pipeline is in a good state
+    // "sw  x0, 0(a2)",    // make sure write pipeline is in a good state - maybe required due to hw issue in some clock modes, needs more testing
 
     "add a4, a1, a3",   // a4 <- end condition based on source address increment
 
@@ -479,7 +500,8 @@ pub fn dma_u16() -> usize {
     // Everything runs at "full tilt"
     bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV3, 0x1_0000);
     // start the machine
-    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x888);
+    // bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x888);
+    bio_ss.set_core_run_states([false, false, false, true]);
 
     let mut main_mem_src: [u16; 64] = [0u16; 64];
     let mut main_mem_dst: [u16; 64] = [0u16; 64];
@@ -596,8 +618,8 @@ pub fn dma_multicore(clkmode: u8) -> usize {
     bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV1, 0x1_0000);
     bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV2, 0x1_0000);
     // start the machine
-    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x777);
-
+    // bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x777);
+    bio_ss.set_core_run_states([true, true, true, false]);
     let mut tp = TestPattern::new(Some(0x100));
     let mut main_mem_src: [u32; 16] = [0u32; 16];
     let mut main_mem_dst: [u32; 16] = [0u32; 16];
@@ -611,11 +633,23 @@ pub fn dma_multicore(clkmode: u8) -> usize {
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, (main_mem_src.len() * size_of::<u32>()) as u32); // bytes to move
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF3, main_mem_dst.as_ptr() as u32); // dst address
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF3, (main_mem_src.len() * size_of::<u32>()) as u32); // bytes to move
-    while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0xF00 != 0x500 {} // trying some creative bit patterns
-    // wait for the fifo to clear, which means all copies are done
+    // this line has to be replaced with the loop below because there is a bug somewhere in the rust
+    // code causing some stack data to be overwritten? maybe?
+    // while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0xF00 != 0x500 {} // trying some creative bit
+    // START HERE for figuring out stack issue
+    loop {
+        let stat = bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS);
+        let digit_of_interest = (stat >> 8) & 0xF;
+        println!("stat: {:x}-> {:x}", stat, digit_of_interest);
+        if digit_of_interest == 5 {
+            break;
+        }
+    }
+    // patterns wait for the fifo to clear, which means all copies are done
     while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0) != 0 {}
     cache_flush();
     let mut pass = 1;
+    println!("here5");
     for (i, &d) in main_mem_src.iter().enumerate() {
         let rbk = unsafe { main_mem_dst.as_ptr().add(i).read_volatile() };
         if rbk != d {
@@ -701,7 +735,8 @@ pub fn dma_coincident(clkmode: u8) -> usize {
     bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV2, 0x1_0000);
     bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV3, 0x1_0000);
     // start the machine
-    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0xFFF);
+    bio_ss.set_core_run_states([true, true, true, true]);
+    //bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0xFFF);
 
     let mut main_mem_src: [u32; 16 * 4] = [0u32; 16 * 4];
     let mut main_mem_dst: [u32; 16 * 4] = [0u32; 16 * 4];

@@ -11,6 +11,7 @@ use crate::*;
 pub fn hello_world() -> usize {
     println!("hello world test");
     let mut bio_ss = BioSharedState::new();
+    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
     let simple_test_code = hello_world_code();
     // copy code to reset vector for 0th machine
     bio_ss.load_code(simple_test_code, 0, BioCore::Core0);
@@ -1023,8 +1024,10 @@ pub fn aclk_tests() -> usize {
 
     // start machine 1
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x222);
-    while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) < 7 {
+    let mut timeout = 0;
+    while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) < 7 && timeout < 100 {
         println!("waiting {}", bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1));
+        timeout += 1;
         // wait
     }
     let mut results = [0u32; 7];
