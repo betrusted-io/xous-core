@@ -686,46 +686,6 @@ bio_code!(pin_control_code, PIN_CONTROL_START, PIN_CONTROL_END,
     // Loop back to wait for the next command.
     "j     wait_for_cmd"
 );
-
-#[rustfmt::skip]
-bio_code!(pin_read_write_code, PIN_RW_START, PIN_RW_END,
-    // This program waits for three words from the CPU:
-    // 1. Write Pin Mask (the pin to set as output)
-    // 2. State Value (0 for LOW, 0xFFFFFFFF for HIGH)
-    // 3. Read Pin Mask (the pin to read from)
-    // It then performs the write, reads the input pin,
-    // and sends the result (0 or non-zero) back to the CPU.
-  "wait_for_cmd:",
-    // --- Receive parameters from the CPU ---
-    "mv    t1, x16",      // t1 = Write Pin Mask
-    "mv    t2, x16",      // t2 = State Value
-    "mv    t3, x16",      // t3 = Read Pin Mask
-
-    // --- Configure Pin Directions ---
-    // Set the write pin as an OUTPUT (bit = 1) and all others as INPUT (bit = 0).
-    "mv    x24, t1",
-
-    // --- Perform the Write Operation ---
-    // Set the GPIO mask register to the write pin.
-    "mv    x26, t1",
-    // Set the output register to the desired state.
-    "mv    x21, t2",
-
-    // --- Perform the Read Operation ---
-    // Read the state of all input pins into t4.
-    "mv    t4, x25",
-    // Isolate the bit for the specific pin we want to read.
-    "and   t5, t4, t3",   // t5 = (value of all pins) & (read pin mask)
-
-    // --- Send Result Back to CPU ---
-    // Write the result (t5) to the transmit FIFO (x17).
-    // The CPU will read this value.
-    "mv    x17, t5",
-
-    // Loop back to wait for the next command.
-    "j     wait_for_cmd"
-);
-
 #[rustfmt::skip]
 bio_code!(simple_test_code, SIMPLE_TEST_START, SIMPLE_TEST_END,
     "li sp, 0x800",
