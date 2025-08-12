@@ -1,3 +1,4 @@
+use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
@@ -604,8 +605,8 @@ impl Repl {
                     }
                     "up" => {
                         // --- THIS IS THE REFACTORED BLOCK ---
-                        if args.len() != 3 {
-                            crate::println!("Usage: pin up <pin> <on|off>");
+                        if args.len() < 3 || args.len() > 4 {
+                            crate::println!("Usage: pin up <pin> <on|off> [core_id: 0-3]");
                             self.do_cmd = false;
                             self.cmdline.clear();
                             return;
@@ -629,22 +630,41 @@ impl Repl {
                             return;
                         }
 
-                        // 1. Initialize BIO and IOX
+                        // 1. Parse the optional core ID argument.
+                        let target_core: Option<BioCore> = if args.len() == 4 {
+                            match u32::from_str_radix(&args[3], 10) {
+                                Ok(0) => Some(BioCore::Core0),
+                                Ok(1) => Some(BioCore::Core1),
+                                Ok(2) => Some(BioCore::Core2),
+                                Ok(3) => Some(BioCore::Core3),
+                                _ => {
+                                    crate::println!("Invalid core ID. Must be 0, 1, 2, or 3.");
+                                    self.do_cmd = false;
+                                    self.cmdline.clear();
+                                    return;
+                                }
+                            }
+                        } else {
+                            None // Default to Core 0 if no core is specified.
+                        };
+
+                        // 2. Initialize BIO and IOX
                         let mut bio_ss = BioSharedState::new();
                         let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
                         iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
 
-                        // 2. Convert string state to boolean
+                        // 3. Convert string state to boolean
                         let state_bool = state_str == "on";
 
-                        // 3. Call the library function
+                        // 4. Call the library function with the parsed core.
+                        let core_name = format!("{:?}", target_core.unwrap_or(BioCore::Core0));
                         crate::println!(
-                            "Setting pin {} to {} which is {} using the library function...",
+                            "Setting pin {} to {} using {}...",
                             pin,
                             state_str.to_uppercase(),
-                            state_bool
+                            core_name
                         );
-                        bio_ss.set_pin(pin, state_bool); // Use `None` to default to Core 0
+                        bio_ss.set_pin(pin, state_bool, target_core);
                         crate::println!("Command sent.");
                     }
                     _ => {

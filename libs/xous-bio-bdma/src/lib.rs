@@ -326,32 +326,59 @@ impl BioSharedState {
     }
 
     // pub fn set_pin(&mut self, pin: u32, state: bool, core: Option<BioCore>) {
-    pub fn set_pin(&mut self, pin: u32, state: bool) {
-        // 1. Stop Core 0 to ensure a clean state.
+    pub fn set_pin(&mut self, pin: u32, state: bool, core: Option<BioCore>) {
+        let target_core = core.unwrap_or(BioCore::Core0); // Default to Core 0 if None
+        let core_mask = 1 << (target_core as usize);
+
+        // 1. Stop the target core.
         let mut ctrl = self.bio.r(utra::bio_bdma::SFR_CTRL);
-        ctrl &= !0b0001;
+        ctrl &= !core_mask; // Clear only the EN bit for the target core
         self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
 
-        // 2. Clear any stale data from the FIFO for Core 0.
-        self.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0b0001);
+        // 2. Clear the target core's FIFO using the correct field and a bitmask. This is the corrected block.
+        self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, core_mask as u32);
 
-        // 3. Load the correct program onto Core 0.
+        // 3. Load the program onto the target core.
         let prog = pin_control_code();
-        self.load_code(prog, 0, BioCore::Core0);
+        self.load_code(prog, 0, target_core);
 
-        // 4. Start Core 0.
-        ctrl |= 0b0001_0001_0001;
+        // 4. Start the target core using read-modify-write for safety.
+        let start_mask = self.bio.ms(utra::bio_bdma::SFR_CTRL_EN, core_mask)
+            | self.bio.ms(utra::bio_bdma::SFR_CTRL_RESTART, core_mask)
+            | self.bio.ms(utra::bio_bdma::SFR_CTRL_CLKDIV_RESTART, core_mask);
+        ctrl |= start_mask;
         self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
 
-        // 5. Reset the clock divider for Core 0.
-        self.bio.wo(utra::bio_bdma::SFR_QDIV0, 0);
+        // 5. Reset the clock divider for the selected core.
+        match target_core {
+            BioCore::Core0 => self.bio.wo(utra::bio_bdma::SFR_QDIV0, 0),
+            BioCore::Core1 => self.bio.wo(utra::bio_bdma::SFR_QDIV1, 0),
+            BioCore::Core2 => self.bio.wo(utra::bio_bdma::SFR_QDIV2, 0),
+            BioCore::Core3 => self.bio.wo(utra::bio_bdma::SFR_QDIV3, 0),
+        }
 
-        // 6. Prepare and send the command to Core 0's FIFO. Use the 'state' boolean directly in the if
-        //    condition.
+        // 6. Prepare and send the command to the target core's FIFO.
         let state_val = if state { 0xFFFFFFFF } else { 0 };
+        let pin_bitmask = 1 << pin;
 
-        self.bio.wo(utra::bio_bdma::SFR_TXF0, 1 << pin);
-        self.bio.wo(utra::bio_bdma::SFR_TXF0, state_val);
+        match target_core {
+            BioCore::Core0 => {
+                self.bio.wo(utra::bio_bdma::SFR_TXF0, pin_bitmask);
+                self.bio.wo(utra::bio_bdma::SFR_TXF0, state_val);
+            }
+            BioCore::Core1 => {
+                self.bio.wo(utra::bio_bdma::SFR_TXF1, pin_bitmask);
+                self.bio.wo(utra::bio_bdma::SFR_TXF1, state_val);
+            }
+            BioCore::Core2 => {
+                self.bio.wo(utra::bio_bdma::SFR_TXF2, pin_bitmask);
+                self.bio.wo(utra::bio_bdma::SFR_TXF2, state_val);
+            }
+            BioCore::Core3 => {
+                self.bio.wo(utra::bio_bdma::SFR_TXF3, pin_bitmask);
+                self.bio.wo(utra::bio_bdma::SFR_TXF3, state_val);
+            }
+        }
     }
 
     pub fn debug_pc(&self) {
