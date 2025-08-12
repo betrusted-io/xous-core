@@ -325,29 +325,57 @@ impl BioSharedState {
         Ok(())
     }
 
-    // pub fn set_pin(&mut self, pin: u32, state: bool, core: Option<BioCore>) {
     pub fn set_pin(&mut self, pin: u32, state: bool, core: Option<BioCore>) {
-        let target_core = core.unwrap_or(BioCore::Core0); // Default to Core 0 if None
+        let target_core = core.unwrap_or(BioCore::Core0);
         let core_mask = 1 << (target_core as usize);
 
-        // 1. Stop the target core.
-        let mut ctrl = self.bio.r(utra::bio_bdma::SFR_CTRL);
-        ctrl &= !core_mask; // Clear only the EN bit for the target core
-        self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+        // --- Debug ---
+        crate::println!("\n--- Running set_pin for {:?} ---", target_core);
+        let initial_ctrl_state = self.bio.r(utra::bio_bdma::SFR_CTRL);
+        crate::println!("[0] Initial SFR_CTRL value: {:#010x}", initial_ctrl_state);
+        // --- End Debug ---
 
-        // 2. Clear the target core's FIFO using the correct field and a bitmask. This is the corrected block.
+        // 1. Stop the target core, leaving other cores running.
+        let ctrl_with_target_stopped = initial_ctrl_state & !core_mask;
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl_with_target_stopped);
+
+        // --- Debug ---
+        crate::println!("[1] Stopping core with EN mask: {:#010x}", core_mask);
+        crate::println!("    SFR_CTRL after stop:    {:#010x}", ctrl_with_target_stopped);
+        // --- End Debug ---
+
+        // 2. Clear the target core's FIFO.
         self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, core_mask as u32);
 
-        // 3. Load the program onto the target core.
-        let prog = pin_control_code();
+        // --- Debug ---
+        crate::println!("[2] Cleared FIFO for core with mask: {:#010x}", core_mask);
+        // --- End Debug ---
+
+        // 3. Load the correct, dedicated program for the target core.
+        let prog = match target_core {
+            BioCore::Core0 => pin_control_core0(),
+            BioCore::Core1 => pin_control_core1(),
+            BioCore::Core2 => pin_control_core2(),
+            BioCore::Core3 => pin_control_core3(),
+        };
         self.load_code(prog, 0, target_core);
 
-        // 4. Start the target core using read-modify-write for safety.
-        let start_mask = self.bio.ms(utra::bio_bdma::SFR_CTRL_EN, core_mask)
+        // --- Debug ---
+        crate::println!("[3] Loaded dedicated program onto {:?}", target_core);
+        // --- End Debug ---
+
+        // 4. Calculate the start mask for the target core AND reset Core 0's clocks.
+        let target_start_mask = self.bio.ms(utra::bio_bdma::SFR_CTRL_EN, core_mask)
             | self.bio.ms(utra::bio_bdma::SFR_CTRL_RESTART, core_mask)
             | self.bio.ms(utra::bio_bdma::SFR_CTRL_CLKDIV_RESTART, core_mask);
-        ctrl |= start_mask;
-        self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+        let final_start_mask = target_start_mask | 0x111;
+        let final_ctrl_state = ctrl_with_target_stopped | final_start_mask;
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, final_ctrl_state);
+
+        // --- Debug ---
+        crate::println!("[4] Starting core with final_start_mask: {:#010x}", final_start_mask);
+        crate::println!("    SFR_CTRL after start:     {:#010x}", final_ctrl_state);
+        // --- End Debug ---
 
         // 5. Reset the clock divider for the selected core.
         match target_core {
@@ -360,6 +388,12 @@ impl BioSharedState {
         // 6. Prepare and send the command to the target core's FIFO.
         let state_val = if state { 0xFFFFFFFF } else { 0 };
         let pin_bitmask = 1 << pin;
+
+        // --- Debug ---
+        // MODIFIED: Removed `format!` macro.
+        crate::println!("[5] Sending command to FIFO for core {}:", target_core as usize);
+        crate::println!("    pin_bitmask: {:#010x}, state_val: {:#010x}", pin_bitmask, state_val);
+        // --- End Debug ---
 
         match target_core {
             BioCore::Core0 => {
@@ -455,23 +489,66 @@ bio_code!(mem_init_code, MEM_INIT_START, MEM_INIT_END,
     "j 10b"
 );
 
-// #[rustfmt::skip]
+#[rustfmt::skip]
 bio_code!(
-    pin_control_code,
-    PIN_CONTROL_START,
-    PIN_CONTROL_END,
-    // Configure all GPIOs as outputs once at the start.
+    pin_control_core0,
+    PIN_CONTROL_START_0,
+    PIN_CONTROL_END_0,
+    // For Core 0: Reads from fifo[0] (x16)
     "li    t0, 0xFFFFFFFF",
     "mv    x24, t0",
-    "wait_for_cmds:",
-    // Read the pin mask from FIFO0 (x16). The core will stall here until the CPU sends data.
-    "mv    t1, x16",
-    // Read the desired state (1 for high, 0 for low) from FIFO0. Stalls again.
-    "mv    t2, x16",
-    // Set the GPIO mask register (x26) to the pin mask we just received.
-    "mv    x26, t1",
-    // Set the GPIO output register (x21) to the state (high/low) we received.
-    "mv    x21, t2",
-    // Loop back to wait for the next command.
-    "j     wait_for_cmds"
+"80:",
+    "mv    t1, x16",        // Read pin_mask
+    "mv    t2, x16",        // Read state_val
+    "mv    x26, t1",        // Set write-mask to the target pin
+    "mv    x21, t2",        // Write state, masked by x26
+    "j     80b"
+);
+
+#[rustfmt::skip]
+bio_code!(
+    pin_control_core1,
+    PIN_CONTROL_START_1,
+    PIN_CONTROL_END_1,
+    // For Core 1: Reads from fifo[1] (x17)
+    "li    t0, 0xFFFFFFFF",
+    "mv    x24, t0",
+"82:",
+    "mv    t1, x17",        // Read pin_mask
+    "mv    t2, x17",        // Read state_val
+    "mv    x26, t1",        // Set write-mask to the target pin
+    "mv    x21, t2",        // Write state, masked by x26
+    "j     82b"
+);
+
+#[rustfmt::skip]
+bio_code!(
+    pin_control_core2,
+    PIN_CONTROL_START_2,
+    PIN_CONTROL_END_2,
+    // For Core 2: Reads from fifo[2] (x18)
+    "li    t0, 0xFFFFFFFF",
+    "mv    x24, t0",
+"84:",
+    "mv    t1, x18",        // Read pin_mask
+    "mv    t2, x18",        // Read state_val
+    "mv    x26, t1",        // Set write-mask to the target pin
+    "mv    x21, t2",        // Write state, masked by x26
+    "j     84b"
+);
+
+#[rustfmt::skip]
+bio_code!(
+    pin_control_core3,
+    PIN_CONTROL_START_3,
+    PIN_CONTROL_END_3,
+    // For Core 3: Reads from fifo[3] (x19)
+    "li    t0, 0xFFFFFFFF",
+    "mv    x24, t0",
+"86:",
+    "mv    t1, x19",        // Read pin_mask
+    "mv    t2, x19",        // Read state_val
+    "mv    x26, t1",        // Set write-mask to the target pin
+    "mv    x21, t2",        // Write state, masked by x26
+    "j     86b"
 );
