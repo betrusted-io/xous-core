@@ -536,75 +536,120 @@ impl Repl {
                     }
                 }
             }
+
             #[cfg(feature = "nto-bio")]
-            "pinup" => {
-                {
-                    if args.len() != 2 {
-                        crate::println!("Usage: pinup <pin> <on|off>");
+            "pin" => {
+                if args.is_empty() {
+                    crate::println!("Usage: pin <up|read> ...");
+                    self.do_cmd = false;
+                    self.cmdline.clear();
+                    return;
+                }
 
-                        self.do_cmd = false;
-
-                        self.cmdline.clear();
-
-                        return;
-                    }
-
-                    let pin = match u32::from_str_radix(&args[0], 10) {
-                        Ok(p) if p < 32 => p,
-
-                        _ => {
-                            crate::println!("Invalid pin number. Must be 0-31.");
+                match args[0].as_str() {
+                    "read" => {
+                        if args.len() != 2 {
+                            crate::println!("Usage: pin read <pin>");
                             self.do_cmd = false;
                             self.cmdline.clear();
-
                             return;
                         }
-                    };
 
-                    let state = args[1].as_str();
-                    if state != "on" && state != "off" {
-                        crate::println!("Invalid state. Use 'on' or 'off'.");
-                        self.do_cmd = false;
-                        self.cmdline.clear();
-                        return;
+                        let pin = match u32::from_str_radix(&args[1], 10) {
+                            Ok(p) if p < 32 => p,
+                            _ => {
+                                crate::println!("Invalid pin number. Must be 0-31.");
+                                self.do_cmd = false;
+                                self.cmdline.clear();
+                                return;
+                            }
+                        };
+
+                        let mut bio_ss = BioSharedState::new();
+                        let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                        iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
+
+                        // Stop Core 0 to ensure a clean state
+                        let mut ctrl = bio_ss.bio.r(utra::bio_bdma::SFR_CTRL);
+                        ctrl &= !0b0001;
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+
+                        // Clear any stale data from the FIFO
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0b0001);
+
+                        // Load the pin reading program
+                        let prog = pin_read_code();
+                        bio_ss.load_code(prog, 0, BioCore::Core0);
+
+                        // Start the core
+                        ctrl |= 0b0001_0001_0001;
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+
+                        // Send the pin mask to the core
+                        let pin_mask = 1 << pin;
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, pin_mask);
+
+                        // Wait for the result to appear in the output FIFO.
+                        // A timeout could be added here to prevent hanging.
+                        while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0) == 0 {}
+
+                        // Read the result
+                        let result = bio_ss.bio.r(utra::bio_bdma::SFR_RXF0);
+                        let state_str = if result == 0 { "low" } else { "high" };
+                        crate::println!("Pin {} is {}.", pin, state_str);
+
+                        // Stop the core after use to prevent interference
+                        ctrl &= !0b0001;
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
                     }
+                    "up" => {
+                        // --- THIS IS THE REFACTORED BLOCK ---
+                        if args.len() != 3 {
+                            crate::println!("Usage: pin up <pin> <on|off>");
+                            self.do_cmd = false;
+                            self.cmdline.clear();
+                            return;
+                        }
 
-                    let mut bio_ss = BioSharedState::new();
-                    let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                        let pin = match u32::from_str_radix(&args[1], 10) {
+                            Ok(p) if p < 32 => p,
+                            _ => {
+                                crate::println!("Invalid pin number. Must be 0-31.");
+                                self.do_cmd = false;
+                                self.cmdline.clear();
+                                return;
+                            }
+                        };
 
-                    iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
-                    crate::println!("Configuring BIO Core 0 for GPIO control...");
+                        let state_str = args[2].as_str();
+                        if state_str != "on" && state_str != "off" {
+                            crate::println!("Invalid state. Use 'on' or 'off'.");
+                            self.do_cmd = false;
+                            self.cmdline.clear();
+                            return;
+                        }
 
-                    // 1. Stop Core 0 to ensure a clean state
-                    let mut ctrl = bio_ss.bio.r(utra::bio_bdma::SFR_CTRL);
-                    ctrl &= !0b0001;
-                    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+                        // 1. Initialize BIO and IOX
+                        let mut bio_ss = BioSharedState::new();
+                        let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                        iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
 
-                    // 2. Clear any stale data from the FIFO
-                    bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0b0001);
+                        // 2. Convert string state to boolean
+                        let state_bool = state_str == "on";
 
-                    // 3. Load the correct program
-                    let prog = pin_control_code();
-                    bio_ss.load_code(prog, 0, BioCore::Core0);
-
-                    // 5. Start the core
-                    ctrl |= 0b0001_0001_0001; //enable all the cores
-                    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
-                    crate::println!("Core 0 is ready.");
-
-                    // 4. Reset the clock divider to a default (e.g., full speed) A value of 0 might mean full
-                    //    speed, or a small value like 1. This prevents capsense's slow clock from affecting
-                    //    pinup.
-                    bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0);
-
-                    // Prepare and send the command to the now-ready core
-                    let pin_mask = 1 << pin;
-                    let state_val = if state == "on" { 0xFFFFFFFF } else { 0 }; // Use all 1s for "on"
-
-                    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, pin_mask);
-                    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, state_val);
-
-                    crate::println!("Command sent: Pin {} -> {}.", pin, state.to_uppercase());
+                        // 3. Call the library function
+                        crate::println!(
+                            "Setting pin {} to {} which is {} using the library function...",
+                            pin,
+                            state_str.to_uppercase(),
+                            state_bool
+                        );
+                        bio_ss.set_pin(pin, state_bool); // Use `None` to default to Core 0
+                        crate::println!("Command sent.");
+                    }
+                    _ => {
+                        crate::println!("Unknown pin command: '{}'. Use 'up' or 'read'.", args[0]);
+                    }
                 }
             }
 
@@ -622,9 +667,7 @@ impl Repl {
                 #[cfg(not(feature = "cramium-soc"))]
                 crate::print!(", mon");
                 #[cfg(feature = "nto-bio")]
-                crate::print!(", bio");
-                #[cfg(feature = "nto-bio")]
-                crate::print!(", pinup, capsense");
+                crate::print!(", bio, pin, capsense");
                 crate::println!("");
             }
         }
@@ -669,23 +712,41 @@ bio_code!(slow_wave_generator_code, SLOW_WAVE_START, SLOW_WAVE_END,
     "bne   t3, zero, 12b",  // Loop if not zero
     "j     10b"           // Repeat the whole cycle
 );
+// #[rustfmt::skip]
+// bio_code!(pin_control_code, PIN_CONTROL_START, PIN_CONTROL_END,
+//     // Configure all GPIOs as outputs once at the start.
+//     "li    t0, 0xFFFFFFFF",
+//     "mv    x24, t0",
+//   "wait_for_cmd:",
+//     // Read the pin mask from FIFO0 (x16). The core will stall here until the CPU sends data.
+//     "mv    t1, x16",
+//     // Read the desired state (1 for high, 0 for low) from FIFO0. Stalls again.
+//     "mv    t2, x16",
+//     // Set the GPIO mask register (x26) to the pin mask we just received.
+//     "mv    x26, t1",
+//     // Set the GPIO output register (x21) to the state (high/low) we received.
+//     "mv    x21, t2",
+//     // Loop back to wait for the next command.
+//     "j     wait_for_cmd"
+// );
 #[rustfmt::skip]
-bio_code!(pin_control_code, PIN_CONTROL_START, PIN_CONTROL_END,
-    // Configure all GPIOs as outputs once at the start.
-    "li    t0, 0xFFFFFFFF",
-    "mv    x24, t0",
+bio_code!(pin_read_code, PIN_READ_START, PIN_READ_END,
+    // Configure all pins as inputs by clearing the direction register.
+    "li    t0, 1",
+    "mv    x25, t0",
   "wait_for_cmd:",
-    // Read the pin mask from FIFO0 (x16). The core will stall here until the CPU sends data.
-    "mv    t1, x16",
-    // Read the desired state (1 for high, 0 for low) from FIFO0. Stalls again.
-    "mv    t2, x16",
-    // Set the GPIO mask register (x26) to the pin mask we just received.
-    "mv    x26, t1",
-    // Set the GPIO output register (x21) to the state (high/low) we received.
-    "mv    x21, t2",
-    // Loop back to wait for the next command.
+    // Wait for the CPU to send a pin mask via FIFO0.
+    "mv    t1, x16",        // t1 = pin_mask
+    // Read the current state of all GPIO input pins.
+    "mv    t2, x21",        // t2 = all pin states
+    // Isolate the state of the requested pin.
+    "and   t3, t2, t1",     // t3 = 0 if low, pin_mask if high
+    // Send the result back to the CPU via FIFO0.
+    "mv    x17, t3",
+    // Loop to wait for the next command.
     "j     wait_for_cmd"
 );
+
 #[rustfmt::skip]
 bio_code!(simple_test_code, SIMPLE_TEST_START, SIMPLE_TEST_END,
     "li sp, 0x800",

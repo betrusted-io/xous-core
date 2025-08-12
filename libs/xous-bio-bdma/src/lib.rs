@@ -325,6 +325,35 @@ impl BioSharedState {
         Ok(())
     }
 
+    // pub fn set_pin(&mut self, pin: u32, state: bool, core: Option<BioCore>) {
+    pub fn set_pin(&mut self, pin: u32, state: bool) {
+        // 1. Stop Core 0 to ensure a clean state.
+        let mut ctrl = self.bio.r(utra::bio_bdma::SFR_CTRL);
+        ctrl &= !0b0001;
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+
+        // 2. Clear any stale data from the FIFO for Core 0.
+        self.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0b0001);
+
+        // 3. Load the correct program onto Core 0.
+        let prog = pin_control_code();
+        self.load_code(prog, 0, BioCore::Core0);
+
+        // 4. Start Core 0.
+        ctrl |= 0b0001_0001_0001;
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+
+        // 5. Reset the clock divider for Core 0.
+        self.bio.wo(utra::bio_bdma::SFR_QDIV0, 0);
+
+        // 6. Prepare and send the command to Core 0's FIFO. Use the 'state' boolean directly in the if
+        //    condition.
+        let state_val = if state { 0xFFFFFFFF } else { 0 };
+
+        self.bio.wo(utra::bio_bdma::SFR_TXF0, 1 << pin);
+        self.bio.wo(utra::bio_bdma::SFR_TXF0, state_val);
+    }
+
     pub fn debug_pc(&self) {
         crate::println!(
             "c0:{:04x} c1:{:04x} c2:{:04x} c3:{:04x}",
@@ -397,4 +426,25 @@ bio_code!(mem_init_code, MEM_INIT_START, MEM_INIT_END,
     "sw x0, 0(sp)",
   "10:",
     "j 10b"
+);
+
+// #[rustfmt::skip]
+bio_code!(
+    pin_control_code,
+    PIN_CONTROL_START,
+    PIN_CONTROL_END,
+    // Configure all GPIOs as outputs once at the start.
+    "li    t0, 0xFFFFFFFF",
+    "mv    x24, t0",
+    "wait_for_cmds:",
+    // Read the pin mask from FIFO0 (x16). The core will stall here until the CPU sends data.
+    "mv    t1, x16",
+    // Read the desired state (1 for high, 0 for low) from FIFO0. Stalls again.
+    "mv    t2, x16",
+    // Set the GPIO mask register (x26) to the pin mask we just received.
+    "mv    x26, t1",
+    // Set the GPIO output register (x21) to the state (high/low) we received.
+    "mv    x21, t2",
+    // Loop back to wait for the next command.
+    "j     wait_for_cmds"
 );
