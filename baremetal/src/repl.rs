@@ -490,49 +490,19 @@ impl Repl {
                     }
 
                     let mut bio_ss = BioSharedState::new();
-                    let mut ctrl = bio_ss.bio.r(utra::bio_bdma::SFR_CTRL);
                     let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-                    // Set the ports as bio ports
                     iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
 
                     if state == "on" {
-                        // Stop Core 0 to ensure a clean state before loading new code.
-                        ctrl &= !0b0001;
-                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
-
-                        // Clear the FIFO for Core 0 to remove any stale data.
-                        bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0b0001);
-
-                        // Load the slow wave generator program.
-                        let prog = slow_wave_generator_code();
-                        bio_ss.load_code(prog, 0, BioCore::Core0);
-
-                        // Start Core 0.
-                        ctrl |= 0b0001_0001_0001;
-                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
-
-                        // Set clock divider for a slow 1kHz BIO clock.
-                        // Divisor = 40,000,000 / 1,000 = 40,000 (0x9C40)
-                        // bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x9C40_0000);
-
-                        // Set clock divider for a 25kHz BIO clock.
-                        // bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x6400000);
-
-                        // Set clock divider for a 32250kHz BIO clock.
-                        bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x5000000);
-
-                        // Send parameters to the BIO core via FIFO0.
-                        let pin_mask = 1 << pin;
-                        // For a 2-second half-period with a 1ms (1kHz) clock, we need 2000 counts.
+                        // Example parameters for a ~0.25 Hz wave
+                        let clock_divisor = 0x5000000; // For ~32kHz BIO clock
                         let delay_count = 2000;
-                        bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, pin_mask);
-                        bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, delay_count);
 
-                        crate::println!("Generating ~0.25 Hz (4 second period) wave on pin {}.", pin);
+                        bio_ss.start_wave_generator(pin, BioCore::Core0, clock_divisor, delay_count);
+
+                        crate::println!("Generating wave on pin {}.", pin);
                     } else {
-                        // Stop Core 0.
-                        ctrl &= !0b0001;
-                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+                        bio_ss.stop_wave_generator(BioCore::Core0);
                         crate::println!("Stopped wave generator on Core 0.");
                     }
                 }
@@ -604,7 +574,6 @@ impl Repl {
                         bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
                     }
                     "up" => {
-                        // --- THIS IS THE REFACTORED BLOCK ---
                         if args.len() < 3 || args.len() > 4 {
                             crate::println!("Usage: pin up <pin> <on|off> [core_id: 0-3]");
                             self.do_cmd = false;
@@ -704,51 +673,6 @@ impl Repl {
     }
 }
 
-#[rustfmt::skip]
-bio_code!(slow_wave_generator_code, SLOW_WAVE_START, SLOW_WAVE_END,
-    // Configure all GPIOs as outputs.
-    "li    t0, 0xFFFFFFFF",
-    "mv    x24, t0",
-    // Read the pin mask from FIFO0 into t1.
-    "mv    t1, x16",
-    // Read the delay count from FIFO0 into t2.
-    "mv    t2, x16",
-    // Set the GPIO mask register to the pin mask.
-    "mv    x26, t1",
-  "10:", // Main loop
-    // --- HIGH PULSE ---
-    "mv    x21, t1",      // Set pin high
-    "mv    t3, t2",       // Load counter into t3 for the delay loop
-  "11:", // Delay loop 1
-    "mv    x20, zero",      // << Wait for one (slow) BIO clock cycle
-    "addi  t3, t3, -1",   // Decrement counter
-    "bne   t3, zero, 11b",  // Loop if not zero
-    // --- LOW PULSE ---
-    "mv    x21, zero",    // Set pin low
-    "mv    t3, t2",       // Re-load counter for the delay loop
-  "12:", // Delay loop 2
-    "mv    x20, zero",      // << Wait for one (slow) BIO clock cycle
-    "addi  t3, t3, -1",   // Decrement counter
-    "bne   t3, zero, 12b",  // Loop if not zero
-    "j     10b"           // Repeat the whole cycle
-);
-// #[rustfmt::skip]
-// bio_code!(pin_control_code, PIN_CONTROL_START, PIN_CONTROL_END,
-//     // Configure all GPIOs as outputs once at the start.
-//     "li    t0, 0xFFFFFFFF",
-//     "mv    x24, t0",
-//   "wait_for_cmd:",
-//     // Read the pin mask from FIFO0 (x16). The core will stall here until the CPU sends data.
-//     "mv    t1, x16",
-//     // Read the desired state (1 for high, 0 for low) from FIFO0. Stalls again.
-//     "mv    t2, x16",
-//     // Set the GPIO mask register (x26) to the pin mask we just received.
-//     "mv    x26, t1",
-//     // Set the GPIO output register (x21) to the state (high/low) we received.
-//     "mv    x21, t2",
-//     // Loop back to wait for the next command.
-//     "j     wait_for_cmd"
-// );
 #[rustfmt::skip]
 bio_code!(pin_read_code, PIN_READ_START, PIN_READ_END,
     // Configure all pins as inputs by clearing the direction register.

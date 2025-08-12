@@ -415,6 +415,84 @@ impl BioSharedState {
         }
     }
 
+    // Add these two new functions to your `impl BioSharedState` block.
+
+    /// Starts a continuous square wave on a given pin using a dedicated BIO core.
+    ///
+    /// This function is NOT cooperative. The core it uses will take exclusive
+    /// control of the GPIO data bus via the `x21` register.
+    ///
+    /// # Arguments
+    ///
+    /// * `pin` - The GPIO pin number to toggle (0-31).
+    /// * `core` - The `BioCore` to run the generator program on.
+    /// * `clock_divisor` - The value for the `QDIV` register to set the frequency.
+    /// * `delay_count` - The number of BIO clock cycles for each half-period (high/low).
+    pub fn start_wave_generator(&mut self, pin: u32, core: BioCore, clock_divisor: u32, delay_count: u32) {
+        let core_mask = 1 << (core as usize);
+
+        // 1. Stop the target core to ensure a clean state.
+        let mut ctrl = self.bio.r(utra::bio_bdma::SFR_CTRL);
+        ctrl &= !core_mask;
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+
+        // 2. Clear any stale data from the core's FIFO.
+        self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, core_mask as u32);
+
+        // 3. Load the slow wave generator program.
+        let prog = slow_wave_generator_code();
+        self.load_code(prog, 0, core);
+
+        // 4. Start the core.
+        // Note: This uses a simple start and does not include the master clock reset
+        // from the cooperative pin_set function, as this function is exclusive.
+        let start_mask = core_mask | (core_mask << 4) | (core_mask << 8);
+        ctrl |= start_mask;
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+
+        // 5. Set the clock divider for the selected core.
+        match core {
+            BioCore::Core0 => self.bio.wo(utra::bio_bdma::SFR_QDIV0, clock_divisor),
+            BioCore::Core1 => self.bio.wo(utra::bio_bdma::SFR_QDIV1, clock_divisor),
+            BioCore::Core2 => self.bio.wo(utra::bio_bdma::SFR_QDIV2, clock_divisor),
+            BioCore::Core3 => self.bio.wo(utra::bio_bdma::SFR_QDIV3, clock_divisor),
+        }
+
+        // 6. Send parameters to the BIO core via its FIFO.
+        let pin_mask = 1 << pin;
+        match core {
+            BioCore::Core0 => {
+                self.bio.wo(utra::bio_bdma::SFR_TXF0, pin_mask);
+                self.bio.wo(utra::bio_bdma::SFR_TXF0, delay_count);
+            }
+            BioCore::Core1 => {
+                self.bio.wo(utra::bio_bdma::SFR_TXF1, pin_mask);
+                self.bio.wo(utra::bio_bdma::SFR_TXF1, delay_count);
+            }
+            BioCore::Core2 => {
+                self.bio.wo(utra::bio_bdma::SFR_TXF2, pin_mask);
+                self.bio.wo(utra::bio_bdma::SFR_TXF2, delay_count);
+            }
+            BioCore::Core3 => {
+                self.bio.wo(utra::bio_bdma::SFR_TXF3, pin_mask);
+                self.bio.wo(utra::bio_bdma::SFR_TXF3, delay_count);
+            }
+        }
+    }
+
+    /// Stops a BIO core that is running a program (like the wave generator).
+    ///
+    /// # Arguments
+    ///
+    /// * `core` - The `BioCore` to halt.
+    pub fn stop_wave_generator(&mut self, core: BioCore) {
+        let core_mask = 1 << (core as usize);
+        let mut ctrl = self.bio.r(utra::bio_bdma::SFR_CTRL);
+        // Clear only the enable bit for the target core.
+        ctrl &= !core_mask;
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+    }
+
     pub fn debug_pc(&self) {
         crate::println!(
             "c0:{:04x} c1:{:04x} c2:{:04x} c3:{:04x}",
@@ -551,4 +629,33 @@ bio_code!(
     "mv    x26, t1",        // Set write-mask to the target pin
     "mv    x21, t2",        // Write state, masked by x26
     "j     86b"
+);
+
+#[rustfmt::skip]
+bio_code!(slow_wave_generator_code, SLOW_WAVE_START, SLOW_WAVE_END,
+    // Configure all GPIOs as outputs.
+    "li    t0, 0xFFFFFFFF",
+    "mv    x24, t0",
+    // Read the pin mask from FIFO0 into t1.
+    "mv    t1, x16",
+    // Read the delay count from FIFO0 into t2.
+    "mv    t2, x16",
+    // Set the GPIO mask register to the pin mask.
+    "mv    x26, t1",
+  "10:", // Main loop
+    // --- HIGH PULSE ---
+    "mv    x21, t1",      // Set pin high
+    "mv    t3, t2",       // Load counter into t3 for the delay loop
+  "11:", // Delay loop 1
+    "mv    x20, zero",      // << Wait for one (slow) BIO clock cycle
+    "addi  t3, t3, -1",   // Decrement counter
+    "bne   t3, zero, 11b",  // Loop if not zero
+    // --- LOW PULSE ---
+    "mv    x21, zero",    // Set pin low
+    "mv    t3, t2",       // Re-load counter for the delay loop
+  "12:", // Delay loop 2
+    "mv    x20, zero",      // << Wait for one (slow) BIO clock cycle
+    "addi  t3, t3, -1",   // Decrement counter
+    "bne   t3, zero, 12b",  // Loop if not zero
+    "j     10b"           // Repeat the whole cycle
 );
