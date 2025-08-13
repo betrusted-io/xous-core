@@ -365,16 +365,26 @@ impl BioSharedState {
         // --- End Debug ---
 
         // 4. Calculate the start mask for the target core AND reset Core 0's clocks.
-        let target_start_mask = self.bio.ms(utra::bio_bdma::SFR_CTRL_EN, core_mask)
-            | self.bio.ms(utra::bio_bdma::SFR_CTRL_RESTART, core_mask)
-            | self.bio.ms(utra::bio_bdma::SFR_CTRL_CLKDIV_RESTART, core_mask);
-        let final_start_mask = target_start_mask | 0x111;
+        let target_start_mask = self.bio.ms(utra::bio_bdma::SFR_CTRL_EN, core_mask);
+        // | self.bio.ms(utra::bio_bdma::SFR_CTRL_RESTART, core_mask)
+        self.bio.ms(utra::bio_bdma::SFR_CTRL_CLKDIV_RESTART, core_mask);
+        let final_start_mask = target_start_mask;
         let final_ctrl_state = ctrl_with_target_stopped | final_start_mask;
+
+        // --- Debug Lines Start ---
+        // crate::println!("--- Mask Calculation ---");
+        // crate::println!("  Target Core Mask (raw):   {:012b}", core_mask);
+        // crate::println!("  Target Start Mask:        {:012b}", target_start_mask);
+        // crate::println!("  Final Start Mask (+C0):   {:012b}", final_start_mask);
+        // crate::println!("  Previous CTRL State:      {:012b}", ctrl_with_target_stopped);
+        // crate::println!("  Final CTRL Value to Write:{:012b}", final_ctrl_state);
+        // // --- Debug Lines End ---
+
         self.bio.wo(utra::bio_bdma::SFR_CTRL, final_ctrl_state);
 
         // --- Debug ---
-        crate::println!("[4] Starting core with final_start_mask: {:#010x}", final_start_mask);
-        crate::println!("    SFR_CTRL after start:     {:#010x}", final_ctrl_state);
+        crate::println!("[4] Starting core with final_start_mask: {:012b}", final_start_mask);
+        crate::println!("    SFR_CTRL after start:     {:012b}", final_ctrl_state);
         // --- End Debug ---
 
         // 5. Reset the clock divider for the selected core.
