@@ -477,6 +477,89 @@ impl BioSharedState {
         self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
     }
 
+    /// Reads the state of a single GPIO pin.
+    ///
+    /// This function loads a dedicated program onto the specified core,
+    /// sets the pin to input, reads its value, and returns true (high) or false (low).
+    /// The operation is cooperative and will not interfere with other running cores.
+    ///
+    /// # Arguments
+    /// * `pin` - The GPIO pin number to read (0-31).
+    /// * `core` - The `BioCore` to use for the operation. (Currently hard-coded to Core0)
+    ///
+    /// # Returns
+    /// * `bool` - The state of the pin (`true` for high, `false` for low).
+    pub fn read_pin(&mut self, pin: u32, core: BioCore) -> bool {
+        let target_core = core;
+        let core_mask = 1 << (target_core as usize);
+
+        // 1. Cooperatively stop the target core
+        let initial_ctrl_state = self.bio.r(utra::bio_bdma::SFR_CTRL);
+        let ctrl_with_target_stopped = initial_ctrl_state & !core_mask;
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl_with_target_stopped);
+
+        // 2. Clear the correct core's FIFO
+        self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, core_mask as u32);
+
+        // 3. Load the correct program for the target core
+        let prog = match target_core {
+            BioCore::Core0 => pin_read_code_core0(),
+            BioCore::Core1 => pin_read_code_core1(),
+            BioCore::Core2 => pin_read_code_core2(),
+            BioCore::Core3 => pin_read_code_core3(),
+        };
+        self.load_code(prog, 0, target_core);
+
+        // 4. Cooperatively start the core
+        let start_mask = self.bio.ms(utra::bio_bdma::SFR_CTRL_EN, core_mask)
+            | self.bio.ms(utra::bio_bdma::SFR_CTRL_RESTART, core_mask);
+        let final_start_state = ctrl_with_target_stopped | start_mask;
+
+        // --- Final Debug Statement ---
+        crate::println!("[read_pin] Starting core with CTRL state: {:012b}", final_start_state);
+
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, final_start_state);
+
+        // 5. Select the correct FIFO registers for the target core
+        let (txf_reg, rxf_reg, flevel_reg) = match target_core {
+            BioCore::Core0 => (
+                utra::bio_bdma::SFR_TXF0,
+                utra::bio_bdma::SFR_RXF0,
+                utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0,
+            ),
+            BioCore::Core1 => (
+                utra::bio_bdma::SFR_TXF1,
+                utra::bio_bdma::SFR_RXF1,
+                utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1,
+            ),
+            BioCore::Core2 => (
+                utra::bio_bdma::SFR_TXF2,
+                utra::bio_bdma::SFR_RXF2,
+                utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL2,
+            ),
+            BioCore::Core3 => (
+                utra::bio_bdma::SFR_TXF3,
+                utra::bio_bdma::SFR_RXF3,
+                utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL3,
+            ),
+        };
+
+        // 6. Send the pin mask to the selected core's FIFO
+        let pin_mask = 1 << pin;
+        self.bio.wo(txf_reg, pin_mask);
+
+        // 7. Wait for the result in the correct FIFO
+        while self.bio.rf(flevel_reg) == 0 {}
+
+        // 8. Read the result from the correct FIFO
+        let result = self.bio.r(rxf_reg);
+
+        // 9. Stop the core
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl_with_target_stopped);
+
+        result != 0
+    }
+
     pub fn debug_pc(&self) {
         crate::println!(
             "c0:{:04x} c1:{:04x} c2:{:04x} c3:{:04x}",
@@ -693,4 +776,48 @@ bio_code!(slow_wave_generator_core3, SLOW_WAVE_START_3, SLOW_WAVE_END_3,
   "42:",
     "mv    x20, zero", "addi  t3, t3, -1", "bne   t3, zero, 42b",
     "j     40b"
+);
+
+#[rustfmt::skip]
+bio_code!(pin_read_code_core0, PIN_READ_START_0, PIN_READ_END_0,
+    // Label for the start of the main loop.
+  "50:",
+    // Read the pin mask from FIFO0 (x16). The core will halt here until data is available.
+    "mv    t0, x16",
+
+    // Set the GPIO action mask (x26) to our target pin mask.
+    // This ensures subsequent GPIO operations only affect our target pin.
+    "mv    x26, t0",
+
+    // Using the mask in x26, set the target pin's direction to input.
+    // Writing the pin mask to x25 makes the pin an input.
+    "mv    x25, t0",
+
+    // Read the state of all 32 GPIO pins into a temporary register.
+    "mv    t1, x21",
+
+    // Isolate the state of our target pin by ANDing the full state with our mask.
+    // The result is 0 if the pin is low, or the pin mask value if it's high.
+    "and   t2, t1, t0",
+
+    // Send the result back to the host via FIFO0 (x16).
+    "mv    x16, t2",
+
+    // Loop back to wait for the next read request.
+    "j     50b"
+);
+
+#[rustfmt::skip]
+bio_code!(pin_read_code_core1, PIN_READ_START_1, PIN_READ_END_1,
+  "60:", "mv t0, x17", "mv x26, t0", "mv x25, t0", "mv t1, x21", "and t2, t1, t0", "mv x17, t2", "j 60b"
+);
+
+#[rustfmt::skip]
+bio_code!(pin_read_code_core2, PIN_READ_START_2, PIN_READ_END_2,
+  "70:", "mv t0, x18", "mv x26, t0", "mv x25, t0", "mv t1, x21", "and t2, t1, t0", "mv x18, t2", "j 70b"
+);
+
+#[rustfmt::skip]
+bio_code!(pin_read_code_core3, PIN_READ_START_3, PIN_READ_END_3,
+  "80:", "mv t0, x19", "mv x26, t0", "mv x25, t0", "mv t1, x21", "and t2, t1, t0", "mv x19, t2", "j 80b"
 );
