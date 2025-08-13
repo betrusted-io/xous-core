@@ -633,23 +633,11 @@ pub fn dma_multicore(clkmode: u8) -> usize {
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF2, (main_mem_src.len() * size_of::<u32>()) as u32); // bytes to move
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF3, main_mem_dst.as_ptr() as u32); // dst address
     bio_ss.bio.wo(utra::bio_bdma::SFR_TXF3, (main_mem_src.len() * size_of::<u32>()) as u32); // bytes to move
-    // this line has to be replaced with the loop below because there is a bug somewhere in the rust
-    // code causing some stack data to be overwritten? maybe?
-    // while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0xF00 != 0x500 {} // trying some creative bit
-    // START HERE for figuring out stack issue
-    loop {
-        let stat = bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS);
-        let digit_of_interest = (stat >> 8) & 0xF;
-        println!("stat: {:x}-> {:x}", stat, digit_of_interest);
-        if digit_of_interest == 5 {
-            break;
-        }
-    }
+    while bio_ss.bio.r(utra::bio_bdma::SFR_EVENT_STATUS) & 0xF00 != 0x500 {} // trying some creative bit
     // patterns wait for the fifo to clear, which means all copies are done
     while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0) != 0 {}
     cache_flush();
     let mut pass = 1;
-    println!("here5");
     for (i, &d) in main_mem_src.iter().enumerate() {
         let rbk = unsafe { main_mem_dst.as_ptr().add(i).read_volatile() };
         if rbk != d {
