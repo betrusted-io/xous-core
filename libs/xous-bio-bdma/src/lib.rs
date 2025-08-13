@@ -329,27 +329,13 @@ impl BioSharedState {
         let target_core = core.unwrap_or(BioCore::Core0);
         let core_mask = 1 << (target_core as usize);
 
-        // --- Debug ---
-        crate::println!("\n--- Running set_pin for {:?} ---", target_core);
-        let initial_ctrl_state = self.bio.r(utra::bio_bdma::SFR_CTRL);
-        crate::println!("[0] Initial SFR_CTRL value: {:#010x}", initial_ctrl_state);
-        // --- End Debug ---
-
         // 1. Stop the target core, leaving other cores running.
+        let initial_ctrl_state = self.bio.r(utra::bio_bdma::SFR_CTRL);
         let ctrl_with_target_stopped = initial_ctrl_state & !core_mask;
         self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl_with_target_stopped);
 
-        // --- Debug ---
-        crate::println!("[1] Stopping core with EN mask: {:#010x}", core_mask);
-        crate::println!("    SFR_CTRL after stop:    {:#010x}", ctrl_with_target_stopped);
-        // --- End Debug ---
-
         // 2. Clear the target core's FIFO.
         self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, core_mask as u32);
-
-        // --- Debug ---
-        crate::println!("[2] Cleared FIFO for core with mask: {:#010x}", core_mask);
-        // --- End Debug ---
 
         // 3. Load the correct, dedicated program for the target core.
         let prog = match target_core {
@@ -360,32 +346,15 @@ impl BioSharedState {
         };
         self.load_code(prog, 0, target_core);
 
-        // --- Debug ---
-        crate::println!("[3] Loaded dedicated program onto {:?}", target_core);
-        // --- End Debug ---
+        // 4. Calculate the final start mask for the target core.
+        // This now correctly includes both the EN (Enable) and CLKDIV_RESTART bits.
+        let target_start_mask = self.bio.ms(utra::bio_bdma::SFR_CTRL_EN, core_mask)
+            | self.bio.ms(utra::bio_bdma::SFR_CTRL_CLKDIV_RESTART, core_mask);
+        let final_ctrl_state = ctrl_with_target_stopped | target_start_mask;
 
-        // 4. Calculate the start mask for the target core AND reset Core 0's clocks.
-        let target_start_mask = self.bio.ms(utra::bio_bdma::SFR_CTRL_EN, core_mask);
-        // | self.bio.ms(utra::bio_bdma::SFR_CTRL_RESTART, core_mask)
-        self.bio.ms(utra::bio_bdma::SFR_CTRL_CLKDIV_RESTART, core_mask);
-        let final_start_mask = target_start_mask;
-        let final_ctrl_state = ctrl_with_target_stopped | final_start_mask;
-
-        // --- Debug Lines Start ---
-        // crate::println!("--- Mask Calculation ---");
-        // crate::println!("  Target Core Mask (raw):   {:012b}", core_mask);
-        // crate::println!("  Target Start Mask:        {:012b}", target_start_mask);
-        // crate::println!("  Final Start Mask (+C0):   {:012b}", final_start_mask);
-        // crate::println!("  Previous CTRL State:      {:012b}", ctrl_with_target_stopped);
-        // crate::println!("  Final CTRL Value to Write:{:012b}", final_ctrl_state);
-        // // --- Debug Lines End ---
+        crate::println!("[CTRL] Applying state {:#x} for {:?}", final_ctrl_state, target_core);
 
         self.bio.wo(utra::bio_bdma::SFR_CTRL, final_ctrl_state);
-
-        // --- Debug ---
-        crate::println!("[4] Starting core with final_start_mask: {:012b}", final_start_mask);
-        crate::println!("    SFR_CTRL after start:     {:012b}", final_ctrl_state);
-        // --- End Debug ---
 
         // 5. Reset the clock divider for the selected core.
         match target_core {
@@ -398,12 +367,6 @@ impl BioSharedState {
         // 6. Prepare and send the command to the target core's FIFO.
         let state_val = if state { 0xFFFFFFFF } else { 0 };
         let pin_bitmask = 1 << pin;
-
-        // --- Debug ---
-        // MODIFIED: Removed `format!` macro.
-        crate::println!("[5] Sending command to FIFO for core {}:", target_core as usize);
-        crate::println!("    pin_bitmask: {:#010x}, state_val: {:#010x}", pin_bitmask, state_val);
-        // --- End Debug ---
 
         match target_core {
             BioCore::Core0 => {
@@ -441,24 +404,35 @@ impl BioSharedState {
     pub fn start_wave_generator(&mut self, pin: u32, core: BioCore, clock_divisor: u32, delay_count: u32) {
         let core_mask = 1 << (core as usize);
 
-        // 1. Stop the target core to ensure a clean state.
-        let mut ctrl = self.bio.r(utra::bio_bdma::SFR_CTRL);
-        ctrl &= !core_mask;
-        self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+        // 1. Stop the target core to preserve the state of other cores.
+        let initial_ctrl_state = self.bio.r(utra::bio_bdma::SFR_CTRL);
+        let ctrl_with_target_stopped = initial_ctrl_state & !core_mask;
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl_with_target_stopped);
 
         // 2. Clear any stale data from the core's FIFO.
         self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, core_mask as u32);
 
         // 3. Load the slow wave generator program.
-        let prog = slow_wave_generator_code();
+        let prog = match core {
+            BioCore::Core0 => slow_wave_generator_core0(),
+            BioCore::Core1 => slow_wave_generator_core1(),
+            BioCore::Core2 => slow_wave_generator_core2(),
+            BioCore::Core3 => slow_wave_generator_core3(),
+        };
+
         self.load_code(prog, 0, core);
 
-        // 4. Start the core.
-        // Note: This uses a simple start and does not include the master clock reset
-        // from the cooperative pin_set function, as this function is exclusive.
-        let start_mask = core_mask | (core_mask << 4) | (core_mask << 8);
-        ctrl |= start_mask;
-        self.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
+        // 4. Start the core using a cooperative mask.
+        // We include RESTART here to ensure the program always starts from the beginning.
+        let target_start_mask = self.bio.ms(utra::bio_bdma::SFR_CTRL_EN, core_mask)
+            | self.bio.ms(utra::bio_bdma::SFR_CTRL_RESTART, core_mask)
+            | self.bio.ms(utra::bio_bdma::SFR_CTRL_CLKDIV_RESTART, core_mask);
+
+        // Combine the state of other running cores with the start command for our target core.
+        let final_ctrl_state = ctrl_with_target_stopped | target_start_mask;
+
+        crate::println!("[CTRL] Applying wavegen state {:#x} for {:?}", final_ctrl_state, core);
+        self.bio.wo(utra::bio_bdma::SFR_CTRL, final_ctrl_state);
 
         // 5. Set the clock divider for the selected core.
         match core {
@@ -640,15 +614,14 @@ bio_code!(
     "mv    x21, t2",        // Write state, masked by x26
     "j     86b"
 );
-
 #[rustfmt::skip]
-bio_code!(slow_wave_generator_code, SLOW_WAVE_START, SLOW_WAVE_END,
+bio_code!(slow_wave_generator_core0, SLOW_WAVE_START_0, SLOW_WAVE_END_0,
     // Configure all GPIOs as outputs.
     "li    t0, 0xFFFFFFFF",
     "mv    x24, t0",
-    // Read the pin mask from FIFO0 into t1.
+    // Read the pin mask from FIFO0 (x16) into t1.
     "mv    t1, x16",
-    // Read the delay count from FIFO0 into t2.
+    // Read the delay count from FIFO0 (x16) into t2.
     "mv    t2, x16",
     // Set the GPIO mask register to the pin mask.
     "mv    x26, t1",
@@ -657,15 +630,67 @@ bio_code!(slow_wave_generator_code, SLOW_WAVE_START, SLOW_WAVE_END,
     "mv    x21, t1",      // Set pin high
     "mv    t3, t2",       // Load counter into t3 for the delay loop
   "11:", // Delay loop 1
-    "mv    x20, zero",      // << Wait for one (slow) BIO clock cycle
+    "mv    x20, zero",      // Wait for one BIO clock cycle
     "addi  t3, t3, -1",   // Decrement counter
     "bne   t3, zero, 11b",  // Loop if not zero
     // --- LOW PULSE ---
     "mv    x21, zero",    // Set pin low
     "mv    t3, t2",       // Re-load counter for the delay loop
   "12:", // Delay loop 2
-    "mv    x20, zero",      // << Wait for one (slow) BIO clock cycle
+    "mv    x20, zero",      // Wait for one BIO clock cycle
     "addi  t3, t3, -1",   // Decrement counter
     "bne   t3, zero, 12b",  // Loop if not zero
     "j     10b"           // Repeat the whole cycle
+);
+
+#[rustfmt::skip]
+bio_code!(slow_wave_generator_core1, SLOW_WAVE_START_1, SLOW_WAVE_END_1,
+    "li    t0, 0xFFFFFFFF", "mv    x24, t0",
+    "mv    t1, x17", // Read pin mask from FIFO1 (x17)
+    "mv    t2, x17", // Read delay count from FIFO1 (x17)
+    "mv    x26, t1",
+  "20:",
+    "mv    x21, t1",
+    "mv    t3, t2",
+  "21:",
+    "mv    x20, zero", "addi  t3, t3, -1", "bne   t3, zero, 21b",
+    "mv    x21, zero",
+    "mv    t3, t2",
+  "22:",
+    "mv    x20, zero", "addi  t3, t3, -1", "bne   t3, zero, 22b",
+    "j     20b"
+);
+#[rustfmt::skip]
+bio_code!(slow_wave_generator_core2, SLOW_WAVE_START_2, SLOW_WAVE_END_2,
+    "li    t0, 0xFFFFFFFF", "mv    x24, t0",
+    "mv    t1, x18", // Read pin mask from FIFO2 (x18)
+    "mv    t2, x18", // Read delay count from FIFO2 (x18)
+    "mv    x26, t1",
+  "30:",
+    "mv    x21, t1",
+    "mv    t3, t2",
+  "31:",
+    "mv    x20, zero", "addi  t3, t3, -1", "bne   t3, zero, 31b",
+    "mv    x21, zero",
+    "mv    t3, t2",
+  "32:",
+    "mv    x20, zero", "addi  t3, t3, -1", "bne   t3, zero, 32b",
+    "j     30b"
+);
+#[rustfmt::skip]
+bio_code!(slow_wave_generator_core3, SLOW_WAVE_START_3, SLOW_WAVE_END_3,
+    "li    t0, 0xFFFFFFFF", "mv    x24, t0",
+    "mv    t1, x19", // Read pin mask from FIFO3 (x19)
+    "mv    t2, x19", // Read delay count from FIFO3 (x19)
+    "mv    x26, t1",
+  "40:",
+    "mv    x21, t1",
+    "mv    t3, t2",
+  "41:",
+    "mv    x20, zero", "addi  t3, t3, -1", "bne   t3, zero, 41b",
+    "mv    x21, zero",
+    "mv    t3, t2",
+  "42:",
+    "mv    x20, zero", "addi  t3, t3, -1", "bne   t3, zero, 42b",
+    "j     40b"
 );

@@ -462,49 +462,61 @@ impl Repl {
                 }
             }
             #[cfg(feature = "nto-bio")]
-            "capsense" => {
-                {
-                    if args.len() != 2 {
-                        crate::println!("Usage: capsense <pin> <on|off>");
+            "pwm" => {
+                // Check for the correct number of arguments: pin, state, and core.
+                if args.len() != 3 {
+                    crate::println!("Usage: pwm <pin> <on|off> <core>");
+                    self.do_cmd = false;
+                    self.cmdline.clear();
+                    return;
+                }
+
+                // Parse the pin number (args[0]).
+                let pin = match u32::from_str_radix(&args[0], 10) {
+                    Ok(p) if p < 32 => p,
+                    _ => {
+                        crate::println!("Invalid pin number. Must be 0-31.");
                         self.do_cmd = false;
                         self.cmdline.clear();
                         return;
                     }
+                };
 
-                    let pin = match u32::from_str_radix(&args[0], 10) {
-                        Ok(p) if p < 32 => p,
-                        _ => {
-                            crate::println!("Invalid pin number. Must be 0-31.");
-                            self.do_cmd = false;
-                            self.cmdline.clear();
-                            return;
-                        }
-                    };
+                // Parse the state (args[1]).
+                let state = args[1].as_str();
+                if state != "on" && state != "off" {
+                    crate::println!("Invalid state. Use 'on' or 'off'.");
+                    self.do_cmd = false;
+                    self.cmdline.clear();
+                    return;
+                }
 
-                    let state = args[1].as_str();
-                    if state != "on" && state != "off" {
-                        crate::println!("Invalid state. Use 'on' or 'off'.");
+                // Parse the core number (args[2]).
+                let core_num = match u32::from_str_radix(&args[2], 10) {
+                    Ok(c) if c < 4 => c, // Valid cores are 0, 1, 2, 3
+                    _ => {
+                        crate::println!("Invalid core number. Must be 0-3.");
                         self.do_cmd = false;
                         self.cmdline.clear();
                         return;
                     }
+                };
+                let target_core = BioCore::from(core_num as usize);
 
-                    let mut bio_ss = BioSharedState::new();
-                    let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-                    iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
+                let mut bio_ss = BioSharedState::new();
+                let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
 
-                    if state == "on" {
-                        // Example parameters for a ~0.25 Hz wave
-                        let clock_divisor = 0x5000000; // For ~32kHz BIO clock
-                        let delay_count = 2000;
+                if state == "on" {
+                    // Example parameters for a ~0.25 Hz wave
+                    let clock_divisor = 0x5000000; // For ~32kHz BIO clock
+                    let delay_count = 2000;
 
-                        bio_ss.start_wave_generator(pin, BioCore::Core0, clock_divisor, delay_count);
-
-                        crate::println!("Generating wave on pin {}.", pin);
-                    } else {
-                        bio_ss.stop_wave_generator(BioCore::Core0);
-                        crate::println!("Stopped wave generator on Core 0.");
-                    }
+                    bio_ss.start_wave_generator(pin, target_core, clock_divisor, delay_count);
+                    crate::println!("Generating wave on pin {} using {:?}.", pin, target_core);
+                } else {
+                    bio_ss.stop_wave_generator(target_core);
+                    crate::println!("Stopped wave generator on {:?}.", target_core);
                 }
             }
 
@@ -656,7 +668,7 @@ impl Repl {
                 #[cfg(not(feature = "cramium-soc"))]
                 crate::print!(", mon");
                 #[cfg(feature = "nto-bio")]
-                crate::print!(", bio, pin, capsense");
+                crate::print!(", bio, pin, pwm");
                 crate::println!("");
             }
         }
