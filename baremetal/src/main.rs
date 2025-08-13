@@ -82,7 +82,15 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         });
 
         // Process any command line requests
-        repl.process();
+        match repl.process() {
+            Err(e) => {
+                if let Some(m) = e.message {
+                    crate::println!("{}", m);
+                    repl.abort_cmd();
+                }
+            }
+            _ => (),
+        };
 
         // Animate the LED flashing to indicate repl loop is running
         delay(1);
