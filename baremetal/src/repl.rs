@@ -320,10 +320,6 @@ impl Repl {
 
                 passing_tests += bio_tests::arith::stack_test();
 
-                crate::println!("early abort");
-                // self.abort_cmd();
-                // return;
-
                 passing_tests += bio_tests::units::hello_multiverse();
 
                 passing_tests += bio_tests::units::hello_world();
@@ -364,6 +360,62 @@ impl Repl {
                 // Final report
                 crate::println!("\n--- BIO Tests Complete: {}/{} passed. ---\n", passing_tests, BIO_TESTS);
             }
+            #[cfg(feature = "cramium-soc")]
+            "clocks" => {
+                use cramium_hal::udma;
+                if args.len() == 1 {
+                    let freq = match u32::from_str_radix(&args[0], 10) {
+                        Ok(f) => {
+                            if f >= 100 && f <= 1600 {
+                                f * 1_000_000
+                            } else {
+                                crate::println!("{} should be a number from 100-1600", args[0]);
+                                self.abort_cmd();
+                                return;
+                            }
+                        }
+                        _ => {
+                            crate::println!("{} should be a number from 100-1600", args[0]);
+                            self.abort_cmd();
+                            return;
+                        }
+                    };
+                    crate::println!("Setting clock to: {} MHz", freq / 1_000_000);
+
+                    // reset the baud rate on the console UART
+                    let perclk = unsafe { crate::platform::init_clock_asic(freq) };
+                    let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
+                    #[cfg(feature = "nto-evb")]
+                    let mut udma_uart = unsafe {
+                        // safety: this is safe to call, because we set up clock and events prior to calling
+                        // new.
+                        udma::Uart::get_handle(
+                            utra::udma_uart_1::HW_UDMA_UART_1_BASE,
+                            uart_buf_addr,
+                            uart_buf_addr,
+                        )
+                    };
+                    #[cfg(not(feature = "nto-evb"))]
+                    let mut udma_uart = unsafe {
+                        // safety: this is safe to call, because we set up clock and events prior to calling
+                        // new.
+                        udma::Uart::get_handle(
+                            utra::udma_uart_2::HW_UDMA_UART_2_BASE,
+                            uart_buf_addr,
+                            uart_buf_addr,
+                        )
+                    };
+                    let baudrate: u32 = 115200;
+                    let freq: u32 = perclk / 2;
+                    udma_uart.set_baud(baudrate, freq);
+
+                    crate::println!("clock set done, perclk is {} MHz", perclk / 1_000_000);
+                    udma_uart.write("console up with clocks\r\n".as_bytes());
+                } else {
+                    crate::println!("clocks <CPU freq in MHz>")
+                }
+            }
+            #[cfg(feature = "cramium-soc")]
             "usb" => {
                 crate::println!("USB basic test...");
                 let csr = cramium_hal::usb::compat::AtomicCsr::new(
@@ -470,7 +522,7 @@ impl Repl {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!("Commands include: echo, poke, peek, bogomips");
                 #[cfg(feature = "cramium-soc")]
-                crate::print!(", rram");
+                crate::print!(", rram, clocks, usb");
                 #[cfg(not(feature = "cramium-soc"))]
                 crate::print!(", mon");
                 #[cfg(feature = "nto-bio")]
