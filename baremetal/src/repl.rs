@@ -462,7 +462,6 @@ impl Repl {
                 }
             }
             #[cfg(feature = "nto-bio")]
-            #[cfg(feature = "nto-bio")]
             "pin" => {
                 // We need at least a subcommand.
                 if args.is_empty() {
