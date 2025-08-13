@@ -159,6 +159,8 @@ pub fn early_init() {
     let perclk = unsafe { init_clock_asic(SYSTEM_CLOCK_FREQUENCY) };
 
     // test memory
+    // NOTE: this smashes stack - need adjustment if this is going to be a "fixture"
+    /*
     crate::println!("\ntest memory...");
     let base = 0x6108_5000;
     let mem_range = unsafe {
@@ -182,6 +184,7 @@ pub fn early_init() {
     } else {
         crate::println!("fast mem test passed");
     }
+    */
     crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
 
     // Define the .data region - bootstrap baremetal using these hard-coded parameters.
