@@ -48,3 +48,38 @@ pub fn cache_flush() {
         );
     }
 }
+
+/// A function for dumping stack. Used to help diagnose tricky problems. Invoke as:
+/// `unsafe { cramium_hal::dump_stack!(0x300) };` inside any stack frame where
+/// you want to dump some stack. The extents are specified as number of bytes,
+/// and should be word-aligned.
+#[macro_export]
+macro_rules! dump_stack {
+    ($extent_bytes:expr) => {{
+        $crate::dump_stack!($extent_bytes, cramium_hal::read_sp);
+    }};
+    // Explicit SP reader path
+    ($extent_bytes:expr, $read_sp:path) => {{
+        // No internal `unsafe` so the caller must use `unsafe { dump_stack!(...) }`
+        let sp = $read_sp();
+        let __word: usize = core::mem::size_of::<u32>();
+        let __extent_words: usize = ($extent_bytes) / __word;
+        let mut __i: usize = 0;
+        while __i < __extent_words {
+            if __i % 8 == 0 {
+                $crate::print!("\n\r{:08x}|{:04x}: ", sp + __i * __word, __i * __word);
+            }
+            // volatile read of the stack word
+            $crate::print!("{:08x} ", ((sp as *const u32).add(__i)).read_volatile());
+            __i += 1;
+        }
+        $crate::println!("");
+    }};
+}
+
+#[inline(always)]
+pub unsafe fn read_sp() -> usize {
+    let sp: usize;
+    core::arch::asm!("mv {0}, sp", out(reg) sp);
+    sp
+}
