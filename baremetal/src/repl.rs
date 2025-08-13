@@ -462,137 +462,33 @@ impl Repl {
                 }
             }
             #[cfg(feature = "nto-bio")]
-            "pwm" => {
-                // Check for the correct number of arguments: pin, state, and core.
-                if args.len() != 3 {
-                    crate::println!("Usage: pwm <pin> <on|off> <core>");
+            #[cfg(feature = "nto-bio")]
+            "pin" => {
+                // We need at least a subcommand.
+                if args.is_empty() {
+                    crate::println!("Usage: pin <set|pwm|read> ...");
                     self.do_cmd = false;
                     self.cmdline.clear();
                     return;
                 }
 
-                // Parse the pin number (args[0]).
-                let pin = match u32::from_str_radix(&args[0], 10) {
-                    Ok(p) if p < 32 => p,
-                    _ => {
-                        crate::println!("Invalid pin number. Must be 0-31.");
-                        self.do_cmd = false;
-                        self.cmdline.clear();
-                        return;
-                    }
-                };
+                let subcommand = args[0].as_str();
 
-                // Parse the state (args[1]).
-                let state = args[1].as_str();
-                if state != "on" && state != "off" {
-                    crate::println!("Invalid state. Use 'on' or 'off'.");
-                    self.do_cmd = false;
-                    self.cmdline.clear();
-                    return;
-                }
-
-                // Parse the core number (args[2]).
-                let core_num = match u32::from_str_radix(&args[2], 10) {
-                    Ok(c) if c < 4 => c, // Valid cores are 0, 1, 2, 3
-                    _ => {
-                        crate::println!("Invalid core number. Must be 0-3.");
-                        self.do_cmd = false;
-                        self.cmdline.clear();
-                        return;
-                    }
-                };
-                let target_core = BioCore::from(core_num as usize);
-
+                // Initialize BIO and IOX once, as they are common to all subcommands.
                 let mut bio_ss = BioSharedState::new();
                 let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
                 iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
 
-                if state == "on" {
-                    // Example parameters for a ~0.25 Hz wave
-                    let clock_divisor = 0x5000000; // For ~32kHz BIO clock
-                    let delay_count = 2000;
-
-                    bio_ss.start_wave_generator(pin, target_core, clock_divisor, delay_count);
-                    crate::println!("Generating wave on pin {} using {:?}.", pin, target_core);
-                } else {
-                    bio_ss.stop_wave_generator(target_core);
-                    crate::println!("Stopped wave generator on {:?}.", target_core);
-                }
-            }
-
-            #[cfg(feature = "nto-bio")]
-            "pin" => {
-                if args.is_empty() {
-                    crate::println!("Usage: pin <up|read> ...");
-                    self.do_cmd = false;
-                    self.cmdline.clear();
-                    return;
-                }
-
-                match args[0].as_str() {
-                    "read" => {
-                        if args.len() != 2 {
-                            crate::println!("Usage: pin read <pin>");
-                            self.do_cmd = false;
-                            self.cmdline.clear();
-                            return;
-                        }
-
-                        let pin = match u32::from_str_radix(&args[1], 10) {
-                            Ok(p) if p < 32 => p,
-                            _ => {
-                                crate::println!("Invalid pin number. Must be 0-31.");
-                                self.do_cmd = false;
-                                self.cmdline.clear();
-                                return;
-                            }
-                        };
-
-                        let mut bio_ss = BioSharedState::new();
-                        let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-                        iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
-
-                        // Stop Core 0 to ensure a clean state
-                        let mut ctrl = bio_ss.bio.r(utra::bio_bdma::SFR_CTRL);
-                        ctrl &= !0b0001;
-                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
-
-                        // Clear any stale data from the FIFO
-                        bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0b0001);
-
-                        // Load the pin reading program
-                        let prog = pin_read_code();
-                        bio_ss.load_code(prog, 0, BioCore::Core0);
-
-                        // Start the core
-                        ctrl |= 0b0001_0001_0001;
-                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
-
-                        // Send the pin mask to the core
-                        let pin_mask = 1 << pin;
-                        bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, pin_mask);
-
-                        // Wait for the result to appear in the output FIFO.
-                        // A timeout could be added here to prevent hanging.
-                        while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0) == 0 {}
-
-                        // Read the result
-                        let result = bio_ss.bio.r(utra::bio_bdma::SFR_RXF0);
-                        let state_str = if result == 0 { "low" } else { "high" };
-                        crate::println!("Pin {} is {}.", pin, state_str);
-
-                        // Stop the core after use to prevent interference
-                        ctrl &= !0b0001;
-                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, ctrl);
-                    }
-                    "up" => {
+                match subcommand {
+                    "set" => {
                         if args.len() < 3 || args.len() > 4 {
-                            crate::println!("Usage: pin up <pin> <on|off> [core_id: 0-3]");
+                            crate::println!("Usage: pin set <pin#> <on|off> [core]");
                             self.do_cmd = false;
                             self.cmdline.clear();
                             return;
                         }
 
+                        // Arg 1: Pin Number
                         let pin = match u32::from_str_radix(&args[1], 10) {
                             Ok(p) if p < 32 => p,
                             _ => {
@@ -603,6 +499,7 @@ impl Repl {
                             }
                         };
 
+                        // Arg 2: State
                         let state_str = args[2].as_str();
                         if state_str != "on" && state_str != "off" {
                             crate::println!("Invalid state. Use 'on' or 'off'.");
@@ -610,34 +507,23 @@ impl Repl {
                             self.cmdline.clear();
                             return;
                         }
+                        let state_bool = state_str == "on";
 
-                        // 1. Parse the optional core ID argument.
+                        // Arg 3 (Optional): Core ID
                         let target_core: Option<BioCore> = if args.len() == 4 {
                             match u32::from_str_radix(&args[3], 10) {
-                                Ok(0) => Some(BioCore::Core0),
-                                Ok(1) => Some(BioCore::Core1),
-                                Ok(2) => Some(BioCore::Core2),
-                                Ok(3) => Some(BioCore::Core3),
+                                Ok(c) if c < 4 => Some(BioCore::from(c as usize)),
                                 _ => {
-                                    crate::println!("Invalid core ID. Must be 0, 1, 2, or 3.");
+                                    crate::println!("Invalid core ID. Must be 0-3.");
                                     self.do_cmd = false;
                                     self.cmdline.clear();
                                     return;
                                 }
                             }
                         } else {
-                            None // Default to Core 0 if no core is specified.
+                            None // `set_pin` function handles the default core.
                         };
 
-                        // 2. Initialize BIO and IOX
-                        let mut bio_ss = BioSharedState::new();
-                        let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-                        iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
-
-                        // 3. Convert string state to boolean
-                        let state_bool = state_str == "on";
-
-                        // 4. Call the library function with the parsed core.
                         let core_name = format!("{:?}", target_core.unwrap_or(BioCore::Core0));
                         crate::println!(
                             "Setting pin {} to {} using {}...",
@@ -648,8 +534,152 @@ impl Repl {
                         bio_ss.set_pin(pin, state_bool, target_core);
                         crate::println!("Command sent.");
                     }
+                    "pwm" => {
+                        if args.len() < 3 || args.len() > 4 {
+                            crate::println!("Usage: pin pwm <pin#> <on|off> [core]");
+                            self.do_cmd = false;
+                            self.cmdline.clear();
+                            return;
+                        }
+
+                        // Arg 1: Pin Number
+                        let pin = match u32::from_str_radix(&args[1], 10) {
+                            Ok(p) if p < 32 => p,
+                            _ => {
+                                crate::println!("Invalid pin number. Must be 0-31.");
+                                self.do_cmd = false;
+                                self.cmdline.clear();
+                                return;
+                            }
+                        };
+
+                        // Arg 2: State
+                        let state = args[2].as_str();
+                        if state != "on" && state != "off" {
+                            crate::println!("Invalid state. Use 'on' or 'off'.");
+                            self.do_cmd = false;
+                            self.cmdline.clear();
+                            return;
+                        }
+
+                        // Arg 3 (Optional): Core ID
+                        let target_core = if args.len() == 4 {
+                            match u32::from_str_radix(&args[3], 10) {
+                                Ok(c) if c < 4 => BioCore::from(c as usize),
+                                _ => {
+                                    crate::println!("Invalid core number. Must be 0-3.");
+                                    self.do_cmd = false;
+                                    self.cmdline.clear();
+                                    return;
+                                }
+                            }
+                        } else {
+                            BioCore::Core0 // Default to Core0 if not specified
+                        };
+
+                        if state == "on" {
+                            let clock_divisor = 0x5000000;
+                            let delay_count = 2000;
+                            bio_ss.start_wave_generator(pin, target_core, clock_divisor, delay_count);
+                            crate::println!("Generating PWM on pin {} using {:?}.", pin, target_core);
+                        } else {
+                            bio_ss.stop_wave_generator(target_core);
+                            crate::println!("Stopped PWM on {:?}.", target_core);
+                        }
+                    }
+                    "read" => {
+                        if args.len() < 2 || args.len() > 3 {
+                            crate::println!("Usage: pin read <pin#> [core]");
+                            self.do_cmd = false;
+                            self.cmdline.clear();
+                            return;
+                        }
+
+                        // Arg 1: Pin Number
+                        let pin = match u32::from_str_radix(&args[1], 10) {
+                            Ok(p) if p < 32 => p,
+                            _ => {
+                                crate::println!("Invalid pin number. Must be 0-31.");
+                                self.do_cmd = false;
+                                self.cmdline.clear();
+                                return;
+                            }
+                        };
+
+                        // Arg 2 (Optional): Core ID
+                        let target_core = if args.len() == 3 {
+                            match u32::from_str_radix(&args[2], 10) {
+                                Ok(c) if c < 4 => BioCore::from(c as usize),
+                                _ => {
+                                    crate::println!("Invalid core number. Must be 0-3.");
+                                    self.do_cmd = false;
+                                    self.cmdline.clear();
+                                    return;
+                                }
+                            }
+                        } else {
+                            BioCore::Core0 // Default to Core0 if not specified
+                        };
+
+                        // Stop the core before use to ensure a clean state
+                        bio_ss.stop_wave_generator(target_core);
+                        bio_ss.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, 1 << (target_core as u32));
+
+                        // Load the pin reading program.
+                        // NOTE: This assumes a generic `pin_read_code` exists. For this to be
+                        // truly multi-core, you would need core-specific read programs
+                        // similar to the `slow_wave_generator_coreX` functions.
+                        let prog = pin_read_code();
+                        bio_ss.load_code(prog, 0, target_core);
+
+                        // Start the core cooperatively
+                        let start_mask =
+                            bio_ss.bio.ms(utra::bio_bdma::SFR_CTRL_EN, 1 << (target_core as u32))
+                                | bio_ss.bio.ms(utra::bio_bdma::SFR_CTRL_RESTART, 1 << (target_core as u32));
+                        let initial_ctrl = bio_ss.bio.r(utra::bio_bdma::SFR_CTRL);
+                        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, initial_ctrl | start_mask);
+
+                        // Send the pin mask to the correct core's FIFO
+                        let (txf_reg, rxf_reg, flevel_reg) = match target_core {
+                            BioCore::Core0 => (
+                                utra::bio_bdma::SFR_TXF0,
+                                utra::bio_bdma::SFR_RXF0,
+                                utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0,
+                            ),
+                            BioCore::Core1 => (
+                                utra::bio_bdma::SFR_TXF1,
+                                utra::bio_bdma::SFR_RXF1,
+                                utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1,
+                            ),
+                            BioCore::Core2 => (
+                                utra::bio_bdma::SFR_TXF2,
+                                utra::bio_bdma::SFR_RXF2,
+                                utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL2,
+                            ),
+                            BioCore::Core3 => (
+                                utra::bio_bdma::SFR_TXF3,
+                                utra::bio_bdma::SFR_RXF3,
+                                utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL3,
+                            ),
+                        };
+                        bio_ss.bio.wo(txf_reg, 1 << pin);
+
+                        // Wait for the result in the correct FIFO
+                        while bio_ss.bio.rf(flevel_reg) == 0 {}
+
+                        // Read and print the result
+                        let result = bio_ss.bio.r(rxf_reg);
+                        let state_str = if result == 0 { "low" } else { "high" };
+                        crate::println!("Pin {} on {:?} is {}.", pin, target_core, state_str);
+
+                        // Stop the core after use
+                        bio_ss.stop_wave_generator(target_core);
+                    }
                     _ => {
-                        crate::println!("Unknown pin command: '{}'. Use 'up' or 'read'.", args[0]);
+                        crate::println!(
+                            "Unknown pin command: '{}'. Use 'set', 'pwm', or 'read'.",
+                            subcommand
+                        );
                     }
                 }
             }
@@ -668,7 +698,7 @@ impl Repl {
                 #[cfg(not(feature = "cramium-soc"))]
                 crate::print!(", mon");
                 #[cfg(feature = "nto-bio")]
-                crate::print!(", bio, pin, pwm");
+                crate::print!(", bio, pin");
                 crate::println!("");
             }
         }
