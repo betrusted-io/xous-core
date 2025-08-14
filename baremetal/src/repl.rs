@@ -686,36 +686,54 @@ impl Repl {
 
                 crate::println!("Starting pin drive test on pin {} ({:?})...", PIN, TARGET_PORT);
 
-                // --- Hardware Setup ---
-                let mut bio_ss = BioSharedState::new();
                 let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-
                 // **NEW:** Use the `setup_pin` helper for clarity.
                 // We configure the pin's direction and set its function to AF1 for BIO use.
                 iox.setup_pin(
                     TARGET_PORT,
                     PIN as u8,
-                    Some(cramium_api::IoxDir::Output), // Set direction to Output
-                    Some(cramium_api::IoxFunction::AF1), // Select Alternate Function 1 for BIO
-                    None,                              // schmitt_trigger
-                    Some(cramium_api::IoxEnable::Disable), // No pullup, since we are driving the pin
-                    None,                              // slow_slew
-                    None,                              // strength
+                    Some(cramium_api::IoxDir::Input), // Set direction to Output
+                    Some(cramium_api::IoxFunction::Gpio), // Select Alternate Function 1 for BIO
+                    Some(cramium_api::IoxEnable::Enable), // schmitt_trigger
+                    Some(cramium_api::IoxEnable::Enable), // No pullup, since we are driving the pin
+                    None,                             // slow_slew
+                    None,                             // strength
                 );
+
+                // --- Hardware Setup ---
+                let mut bio_ss = BioSharedState::new();
+                bio_ss.init();
+                iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
 
                 // **CRITICAL:** `setup_pin` does not handle PIOSEL. We still must do it manually.
                 // This makes the final connection to the BIO controller.
+                /*
                 let mut piosel = bio_ss.bio.r(SFR_PIOSEL);
                 piosel |= 1 << PIN;
                 bio_ss.bio.wo(SFR_PIOSEL, piosel);
                 crate::println!("Pin {} configured via setup_pin and connected via PIOSEL.", PIN);
-
+                */
                 // --- BIO Core Setup ---
                 // We use the same debug assembly as before.
+                bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0xFFF0_FF00);
+                // use extclock on channel 0, tied to bit 2
+                bio_ss.bio.wo(
+                    utra::bio_bdma::SFR_EXTCLOCK,
+                    bio_ss.bio.ms(utra::bio_bdma::SFR_EXTCLOCK_USE_EXTCLK, 0b0001)
+                        | bio_ss.bio.ms(utra::bio_bdma::SFR_EXTCLOCK_EXTCLK_GPIO_0, 2),
+                );
                 bio_ss.load_code(captouch_sense_code(), 0, TARGET_CORE);
-                let mut run_states = [false; 4];
-                run_states[TARGET_CORE as usize] = true;
-                bio_ss.set_core_run_states(run_states);
+                loop {
+                    let mut run_states = [false; 4];
+                    run_states[TARGET_CORE as usize] = true;
+                    bio_ss.set_core_run_states(run_states);
+
+                    bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, 0); // start the sampling
+                    crate::println!("wait a bit");
+                    let t0 = bio_ss.bio.r(utra::bio_bdma::SFR_RXF1);
+                    let t1 = bio_ss.bio.r(utra::bio_bdma::SFR_RXF1);
+                    crate::println!("t0 {} t1 {}  t0-t1 {}", t0, t1, t1 - t0);
+                }
 
                 crate::println!("{:?} is running. Pin {} should now be driven LOW.", TARGET_CORE, PIN);
                 crate::println!("The REPL will hang; this is expected. Check the pin with an external tool.");
@@ -799,11 +817,19 @@ bio_code!(
     // This version only sets pin 2 as an output and drives it low,
     // then loops forever. It does not send any data back to the host.
 
-    "li    t0, 4",          // Load pin mask for pin 2 into register t0.
-    "mv    x26, t0",         // Set GPIO mask to our pin.
+    "li    t0, 0xffff",          // Load pin mask for pin 2 into register t0.
+    // "mv    x26, t0",         // Set GPIO mask to our pin.
     "mv    x24, t0",         // Configure pin as an OUTPUT.
-    "mv    x23, t0",         // Drive pin LOW.
-
+    "mv    t1,  x0",
+    "mv    x23, t1",         // Drive pin LOW.
+    "mv    x24, t0",
+    "mv    x0,  x16",        // block until message comes from host
+    "mv    s0,  x31",        // remember aclk time
+    "mv    x25, t0",         // make it an input
+    "mv    x20, x0",         // wait for quantum: make it extclk PB2
+    "mv    s1,  x31",        // remember aclk time
+    "mv    x17, s0",         // report the delta-t
+    "mv    x17, s1",
 "10:", // Infinite loop to hold the pin in this state.
     "j     10b"
 );
