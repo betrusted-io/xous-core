@@ -3,6 +3,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use cramium_api::IoSetup;
+use utralib::utra::iox::SFR_PIOSEL;
 #[allow(unused_imports)]
 use utralib::*;
 #[cfg(any(feature = "artybio", feature = "nto-bio"))]
@@ -672,6 +674,52 @@ impl Repl {
                     }
                 }
             }
+            "captouch" => {
+                if !args.is_empty() {
+                    return Err(Error::help("Usage: captouch (takes no arguments)"));
+                }
+
+                // --- Hardcoded Configuration ---
+                const PIN: u32 = 2;
+                const TARGET_CORE: BioCore = BioCore::Core0;
+                const TARGET_PORT: cramium_api::IoxPort = cramium_api::IoxPort::PB;
+
+                crate::println!("Starting pin drive test on pin {} ({:?})...", PIN, TARGET_PORT);
+
+                // --- Hardware Setup ---
+                let mut bio_ss = BioSharedState::new();
+                let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+
+                // **NEW:** Use the `setup_pin` helper for clarity.
+                // We configure the pin's direction and set its function to AF1 for BIO use.
+                iox.setup_pin(
+                    TARGET_PORT,
+                    PIN as u8,
+                    Some(cramium_api::IoxDir::Output), // Set direction to Output
+                    Some(cramium_api::IoxFunction::AF1), // Select Alternate Function 1 for BIO
+                    None,                              // schmitt_trigger
+                    Some(cramium_api::IoxEnable::Disable), // No pullup, since we are driving the pin
+                    None,                              // slow_slew
+                    None,                              // strength
+                );
+
+                // **CRITICAL:** `setup_pin` does not handle PIOSEL. We still must do it manually.
+                // This makes the final connection to the BIO controller.
+                let mut piosel = bio_ss.bio.r(SFR_PIOSEL);
+                piosel |= 1 << PIN;
+                bio_ss.bio.wo(SFR_PIOSEL, piosel);
+                crate::println!("Pin {} configured via setup_pin and connected via PIOSEL.", PIN);
+
+                // --- BIO Core Setup ---
+                // We use the same debug assembly as before.
+                bio_ss.load_code(captouch_sense_code(), 0, TARGET_CORE);
+                let mut run_states = [false; 4];
+                run_states[TARGET_CORE as usize] = true;
+                bio_ss.set_core_run_states(run_states);
+
+                crate::println!("{:?} is running. Pin {} should now be driven LOW.", TARGET_CORE, PIN);
+                crate::println!("The REPL will hang; this is expected. Check the pin with an external tool.");
+            }
 
             "echo" => {
                 for word in args {
@@ -740,3 +788,22 @@ fn debug_bio(bio_ss: &BioSharedState) {
         bio_ss.bio.r(utra::bio_bdma::SFR_DBG3),
     );
 }
+
+#[cfg(feature = "nto-bio")]
+#[rustfmt::skip]
+bio_code!(
+    captouch_sense_code,
+    CAPTOUCH_SENSE_START,
+    CAPTOUCH_SENSE_END,
+    // --- DEBUG: Drive Pin Low ---
+    // This version only sets pin 2 as an output and drives it low,
+    // then loops forever. It does not send any data back to the host.
+
+    "li    t0, 4",          // Load pin mask for pin 2 into register t0.
+    "mv    x26, t0",         // Set GPIO mask to our pin.
+    "mv    x24, t0",         // Configure pin as an OUTPUT.
+    "mv    x23, t0",         // Drive pin LOW.
+
+"10:", // Infinite loop to hold the pin in this state.
+    "j     10b"
+);
