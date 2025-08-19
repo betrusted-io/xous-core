@@ -674,6 +674,7 @@ macro_rules! define_aes_impl {
             }
         }
 
+        #[allow(dead_code)]
         impl BlockDecrypt for $name {
             fn decrypt_with_backend(&self, f: impl BlockClosure<BlockSize = U16>) {
                 f.call(&mut self.get_dec_backend())
@@ -759,6 +760,7 @@ macro_rules! define_aes_impl {
             inner: $name,
         }
 
+        #[allow(dead_code)]
         impl $name_dec {
             #[inline(always)]
             pub(crate) fn get_dec_backend(&self) -> $name_back_dec<'_> { self.inner.get_dec_backend() }
