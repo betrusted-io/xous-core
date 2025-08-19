@@ -4,6 +4,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 #[allow(unused_imports)]
+#[cfg(feature = "cramium-soc")]
+use cramium_api::*;
+#[allow(unused_imports)]
 use utralib::*;
 #[cfg(any(feature = "artybio", feature = "nto-bio"))]
 use xous_bio_bdma::*;
@@ -364,7 +367,6 @@ impl Repl {
             }
             #[cfg(feature = "cramium-soc")]
             "clocks" => {
-                use cramium_hal::udma;
                 if args.len() == 1 {
                     let f = u32::from_str_radix(&args[0], 10)
                         .map_err(|_| Error::help("clock <freq>, where freq is a number from 100-1600"))
@@ -375,35 +377,7 @@ impl Repl {
                         })?;
                     crate::println!("Setting clock to: {} MHz", f / 1_000_000);
 
-                    // reset the baud rate on the console UART
-                    let perclk = unsafe { crate::platform::init_clock_asic(f) };
-                    let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
-                    #[cfg(feature = "nto-evb")]
-                    let mut udma_uart = unsafe {
-                        // safety: this is safe to call, because we set up clock and events prior to calling
-                        // new.
-                        udma::Uart::get_handle(
-                            utra::udma_uart_1::HW_UDMA_UART_1_BASE,
-                            uart_buf_addr,
-                            uart_buf_addr,
-                        )
-                    };
-                    #[cfg(not(feature = "nto-evb"))]
-                    let mut udma_uart = unsafe {
-                        // safety: this is safe to call, because we set up clock and events prior to calling
-                        // new.
-                        udma::Uart::get_handle(
-                            utra::udma_uart_2::HW_UDMA_UART_2_BASE,
-                            uart_buf_addr,
-                            uart_buf_addr,
-                        )
-                    };
-                    let baudrate: u32 = 115200;
-                    let freq: u32 = perclk / 2;
-                    udma_uart.set_baud(baudrate, freq);
-
-                    crate::println!("clock set done, perclk is {} MHz", perclk / 1_000_000);
-                    udma_uart.write("console up with clocks\r\n".as_bytes());
+                    crate::platform::clockset_wrapper(f);
                 } else {
                     return Err(Error::help("clocks <CPU freq in MHz, 100-1600>"));
                 }
@@ -672,7 +646,228 @@ impl Repl {
                     }
                 }
             }
+            #[cfg(all(feature = "cramium-soc", not(feature = "nto-evb")))]
+            "ldo" => {
+                if args.len() != 1 {
+                    return Err(Error::help("vdd85 [on|off]"));
+                }
+                use cramium_hal::iox::Iox;
+                let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                if args[0] == "off" {
+                    crate::println!("Check DCDC2");
+                    let i2c_channel = cramium_hal::board::setup_i2c_pins(&iox);
+                    use cramium_hal::udma::GlobalConfig;
+                    let udma_global = GlobalConfig::new();
+                    udma_global.clock(PeriphId::from(i2c_channel), true);
+                    let i2c_ifram = unsafe {
+                        cramium_hal::ifram::IframRange::from_raw_parts(
+                            cramium_hal::board::I2C_IFRAM_ADDR,
+                            cramium_hal::board::I2C_IFRAM_ADDR,
+                            4096,
+                        )
+                    };
+                    let perclk = 100_000_000; // assume this value
+                    let mut i2c = unsafe {
+                        cramium_hal::udma::I2c::new_with_ifram(
+                            i2c_channel,
+                            400_000,
+                            perclk,
+                            i2c_ifram,
+                            &udma_global,
+                        )
+                    };
 
+                    if let Ok(mut pmic) = cramium_hal::axp2101::Axp2101::new(&mut i2c) {
+                        pmic.update(&mut i2c).ok();
+                        if let Some((voltage, _dvm)) = pmic.get_dcdc(cramium_hal::axp2101::WhichDcDc::Dcdc2) {
+                            crate::println!("DCDC2 is on and {:.2}v", voltage);
+                        } else {
+                            crate::println!("DCDC is off, turning it on!");
+                            match pmic.set_dcdc(
+                                &mut i2c,
+                                Some((0.88, true)),
+                                cramium_hal::axp2101::WhichDcDc::Dcdc2,
+                            ) {
+                                Ok(_) => crate::println!("turned on DCDC2"),
+                                Err(_) => {
+                                    return Err(Error::help("coludn't turn off DCDC2, aborted!"));
+                                }
+                            }
+                        }
+                    }
+
+                    // shut down LDO
+                    crate::println!("Engage DCDC2 FET");
+                    iox.set_gpio_pin_value(IoxPort::PA, 5, IoxValue::Low);
+                    // just "Lower the voltage"
+                    let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
+                    ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRMLP0, 0x08420002); // 0.7v
+                    let mut cgu = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+                    cgu.wo(utra::sysctrl::SFR_IPCARIPFLOW, 0x57);
+                } else {
+                    crate::println!("Disengage DCDC2 FET");
+                    iox.set_gpio_pin_value(IoxPort::PA, 5, IoxValue::High);
+                }
+            }
+            #[cfg(all(feature = "cramium-soc", not(feature = "nto-evb")))]
+            "wfi" => {
+                let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+
+                let ao_bkupreg = CSR::new(utralib::HW_AOBUREG_BASE as *mut u32);
+                for i in 0..8 {
+                    crate::println!("backup reg {}: {:08x}", i, unsafe {
+                        ao_bkupreg.base().add(i).read_volatile()
+                    });
+                }
+                let bkp = ao_bkupreg.r(utra::aobureg::SFR_BUREG_CR_BUREGS0);
+                // this will cause the backup regs to increment every wakeup cycle
+                for i in 0..8 {
+                    unsafe {
+                        ao_bkupreg.base().add(i).write_volatile(0xcafe_0001 + i as u32 + (bkp & 0xFFFF))
+                    };
+                }
+
+                // pin map to PF is controlled here, for some reason...
+                let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
+                ao_sysctrl.wo(utra::ao_sysctrl::SFR_IOX, 1);
+                // ao_sysctrl.wo(utra::ao_sysctrl::CR_WKUPMASK, 0x10_10);
+                // ao_sysctrl.wo(utra::ao_sysctrl::CR_WKUPMASK, 0x3FFFF);
+                ao_sysctrl.wo(utra::ao_sysctrl::CR_WKUPMASK, 0x3F);
+                crate::println!("ao wkupmsk: {:x}", ao_sysctrl.r(utra::ao_sysctrl::CR_WKUPMASK));
+                for pin in 2..=9 {
+                    iox.setup_pin(
+                        IoxPort::PF,
+                        pin,
+                        Some(IoxDir::Input),
+                        Some(IoxFunction::AF1),
+                        Some(IoxEnable::Enable),
+                        Some(IoxEnable::Enable),
+                        Some(IoxEnable::Enable),
+                        Some(IoxDriveStrength::Drive2mA),
+                    );
+                }
+                let mut dkpc = CSR::new(utralib::HW_DKPC_BASE as *mut u32);
+                dkpc.wo(utra::dkpc::SFR_CFG0, 0x1d);
+                dkpc.wo(utra::dkpc::SFR_CFG1, 0x04_02_02);
+                dkpc.wo(utra::dkpc::SFR_CFG2, 0x0804_02_02);
+                dkpc.wo(utra::dkpc::SFR_CFG4, 20);
+                while dkpc.r(utra::dkpc::SFR_SR1) != 0 {
+                    // this register didn't get mapped in register extraction because its type
+                    // is `apb_buf2`: FIXME - adjust the register extraction script to capture this type.
+                    // this register drains the pending interrupts from the wakeup/keyboard queue
+                    let _ = unsafe { dkpc.base().add(8).read_volatile() };
+                }
+                let mut irqarray2 = CSR::new(utralib::HW_IRQARRAY2_BASE as *mut u32);
+                irqarray2.wo(utra::irqarray2::EV_PENDING, 0xFFFF_FFFF);
+                irqarray2.wo(utra::irqarray2::EV_ENABLE, 0xFFFF_FFFF);
+                // crate::platform::irq::enable_irq(utra::irqarray2::IRQARRAY2_IRQ);
+                let forever = if args.len() > 0 { args[0] == "loop" } else { false };
+
+                // current status of WFI:
+                //  - we can scan the KP inputs using the KP scan mechanism
+                //  - stuff queues up in the fifo
+                //  - we see the vld bit set
+                //  - we can't get an interrupt to fire.
+                let mut count = 0; // just so we know the machine hasn't crashed
+                loop {
+                    crate::print!("{}|", count);
+                    for i in (0..6).chain(12..13).chain(8..9) {
+                        crate::print!("{:x}: {:x} ", i * 4, unsafe { dkpc.base().add(i).read_volatile() });
+                    }
+                    let fr = ao_sysctrl.r(utra::ao_sysctrl::SFR_AOFR);
+                    crate::print!(
+                        "int: {:x}/{:x}/{:x}",
+                        irqarray2.r(utra::irqarray2::EV_PENDING),
+                        irqarray2.r(utra::irqarray2::EV_STATUS),
+                        fr
+                    );
+                    ao_sysctrl.wo(utra::ao_sysctrl::SFR_AOFR, fr);
+                    crate::println!("");
+                    if !forever {
+                        break;
+                    } else {
+                        crate::platform::delay(500);
+                    }
+                    count += 1;
+                }
+
+                // vexriscv::register::vexriscv::mim::write(0x0); // disable all interrupts
+
+                crate::println!("entering wfi");
+                // bring us down to 100MHz so we can turn off regulators
+                let perclk = crate::platform::clockset_wrapper(100_000_000);
+                crate::println!("clocks @ 100MHz");
+
+                // configure PMIC to be off
+                let i2c_channel = cramium_hal::board::setup_i2c_pins(&iox);
+                use cramium_hal::udma::GlobalConfig;
+                let udma_global = GlobalConfig::new();
+                udma_global.clock(PeriphId::from(i2c_channel), true);
+                let i2c_ifram = unsafe {
+                    cramium_hal::ifram::IframRange::from_raw_parts(
+                        cramium_hal::board::I2C_IFRAM_ADDR,
+                        cramium_hal::board::I2C_IFRAM_ADDR,
+                        4096,
+                    )
+                };
+                let mut i2c = unsafe {
+                    cramium_hal::udma::I2c::new_with_ifram(
+                        i2c_channel,
+                        400_000,
+                        perclk,
+                        i2c_ifram,
+                        &udma_global,
+                    )
+                };
+
+                if let Ok(mut pmic) = cramium_hal::axp2101::Axp2101::new(&mut i2c) {
+                    match pmic.set_dcdc(&mut i2c, None, cramium_hal::axp2101::WhichDcDc::Dcdc2) {
+                        Ok(_) => crate::println!("turned off DCDC2"),
+                        Err(_) => crate::println!("couldn't turn off DCDC2"),
+                    }
+                }
+
+                unsafe {
+                    crate::platform::low_power();
+                }
+                crate::println!("pmu cr: {:x}", ao_sysctrl.r(utra::ao_sysctrl::SFR_PMUCSR));
+                crate::println!("pmu status: {:x}", ao_sysctrl.r(utra::ao_sysctrl::SFR_PMUSR));
+                crate::println!("pmu err: {:x}", ao_sysctrl.r(utra::ao_sysctrl::SFR_PMUFR));
+
+                crate::println!("trying PD mode");
+                ao_sysctrl.wo(utra::ao_sysctrl::CR_CR, 7);
+                ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUCRPD, 0x4c);
+                ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRMLP0, 0x08420002); // 0.7v
+                ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUPDAR, 0x5a);
+                crate::println!("entered PD mode");
+
+                // turn regulator off - system of course does not work
+                /*
+                crate::println!("attempting to turn off VDD085");
+                ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUCSR, 0x4c);
+                let mut cgu = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+                cgu.wo(utra::sysctrl::SFR_IPCARIPFLOW, 0x57);
+                for _ in 0..1024 {
+                    unsafe { core::arch::asm!("nop") };
+                }
+                crate::println!("PD pmu cr: {:x}", ao_sysctrl.r(utra::ao_sysctrl::SFR_PMUCSR));
+                */
+
+                unsafe { core::arch::asm!("wfi", "nop", "nop", "nop", "nop") };
+
+                // turn regulator back on
+                /*
+                ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUCSR, 0x7c);
+                let mut cgu = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+                cgu.wo(utra::sysctrl::SFR_IPCARIPFLOW, 0x57);
+                for _ in 0..1024 {
+                    unsafe { core::arch::asm!("nop") };
+                }
+                crate::println!("PU pmu cr: {:x}", ao_sysctrl.r(utra::ao_sysctrl::SFR_PMUCSR));
+                */
+                crate::platform::clockset_wrapper(800_000_000);
+                crate::println!("exiting wfi");
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);
@@ -688,6 +883,8 @@ impl Repl {
                 crate::print!(", mon");
                 #[cfg(feature = "nto-bio")]
                 crate::print!(", bio, pin");
+                #[cfg(all(feature = "cramium-soc", not(feature = "nto-evb")))]
+                crate::print!(", ldo, wfi");
                 crate::println!("");
             }
         }

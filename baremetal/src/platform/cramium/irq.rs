@@ -195,6 +195,12 @@ pub extern "C" fn trap_handler(
             timer0.wfo(utra::timer0::RELOAD_RELOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
         } else if (irqs_pending & (1 << utra::irqarray5::IRQARRAY5_IRQ)) != 0 {
             crate::uart_irq_handler();
+        } else if (irqs_pending & (1 << utra::irqarray2::IRQARRAY2_IRQ)) != 0 {
+            // just clear it for now
+            let mut irqarray2 = CSR::new(utralib::HW_IRQARRAY2_BASE as *mut u32);
+            let pending = irqarray2.r(utra::irqarray2::EV_PENDING);
+            crate::println!("keypress interrupt {:x}", pending);
+            irqarray2.wo(utra::irqarray2::EV_PENDING, pending);
         }
     }
 

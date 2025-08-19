@@ -1,3 +1,6 @@
+use cramium_api::*;
+use cramium_hal::iox::Iox;
+use cramium_hal::udma;
 use utralib::CSR;
 use utralib::utra;
 use utralib::utra::sysctrl;
@@ -29,25 +32,26 @@ pub const SYSTEM_CLOCK_FREQUENCY: u32 = 800_000_000;
 pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 pub fn early_init() {
+    let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+    #[cfg(not(feature = "nto-evb"))]
+    {
+        iox.set_gpio_pin_value(IoxPort::PA, 5, IoxValue::High);
+        iox.setup_pin(
+            IoxPort::PA,
+            5,
+            Some(IoxDir::Output),
+            Some(IoxFunction::Gpio),
+            None,
+            Some(IoxEnable::Enable),
+            None,
+            Some(IoxDriveStrength::Drive2mA),
+        );
+    }
+
     let uart = crate::debug::Uart {};
     uart.putc('*' as u32 as u8);
 
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
-
-    let ao_sysctrl = utra::ao_sysctrl::HW_AO_SYSCTRL_BASE as *mut u32;
-    unsafe {
-        // this turns off the VDD85D (doesn't work)
-        // ao_sysctrl.add(utra::ao_sysctrl::SFR_PMUCSR.offset()).write_volatile(0x6c);
-
-        // this sets VDD85D to 0.90V
-        ao_sysctrl.add(utra::ao_sysctrl::SFR_PMUTRM0CSR.offset()).write_volatile(0x0842_1FF1); // 0x0842_1080 default
-        daric_cgu.add(utra::sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x57);
-    }
-
-    let uart = crate::debug::Uart {};
-    for _ in 0..100 {
-        uart.putc('a' as u32 as u8);
-    }
 
     unsafe {
         // this block is mandatory in all cases to get clocks set into some consistent, expected mode
@@ -215,10 +219,47 @@ pub fn early_init() {
 
     udma_uart.write("console up\r\n".as_bytes());
 
+    // Setup I/Os so things that should be powered off are actually off
+    cramium_hal::board::setup_display_pins(&iox);
+    cramium_hal::board::setup_memory_pins(&iox);
+    cramium_hal::board::setup_i2c_pins(&iox);
+    cramium_hal::board::setup_camera_pins(&iox);
+    cramium_hal::board::setup_kb_pins(&iox);
+    cramium_hal::board::setup_oled_power_pin(&iox);
+    cramium_hal::board::setup_trng_power_pin(&iox);
+
+    #[cfg(not(feature = "nto-evb"))]
+    {
+        crate::println!("Engage DCDC2");
+        let i2c_channel = cramium_hal::board::setup_i2c_pins(&iox);
+        use cramium_hal::udma::GlobalConfig;
+        let udma_global = GlobalConfig::new();
+        udma_global.clock(PeriphId::from(i2c_channel), true);
+        let i2c_ifram = unsafe {
+            cramium_hal::ifram::IframRange::from_raw_parts(
+                cramium_hal::board::I2C_IFRAM_ADDR,
+                cramium_hal::board::I2C_IFRAM_ADDR,
+                4096,
+            )
+        };
+        let mut i2c = unsafe {
+            cramium_hal::udma::I2c::new_with_ifram(i2c_channel, 400_000, perclk, i2c_ifram, &udma_global)
+        };
+
+        if let Ok(mut pmic) = cramium_hal::axp2101::Axp2101::new(&mut i2c) {
+            match pmic.set_dcdc(&mut i2c, Some((0.88, true)), cramium_hal::axp2101::WhichDcDc::Dcdc2) {
+                Ok(_) => crate::println!("turned on DCDC2"),
+                Err(_) => crate::println!("couldn't turn off DCDC2"),
+            }
+            pmic.set_pwm_mode(&mut i2c, cramium_hal::axp2101::WhichDcDc::Dcdc2, true).ok();
+        }
+        // this does nothing on boards without the FET rework
+        crate::println!("Engage DCDC2 FET");
+        iox.set_gpio_pin_value(IoxPort::PA, 5, IoxValue::Low);
+    }
+
     // code to setup PWM, for testing the PWM pin
     if false {
-        use cramium_api::*;
-        use cramium_hal::iox::Iox;
         let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
         iox.setup_pin(IoxPort::PF, 9, Some(IoxDir::Input), Some(IoxFunction::Gpio), None, None, None, None);
         iox.setup_pin(
@@ -243,11 +284,12 @@ pub fn early_init() {
         );
         let mut timer = CSR::new(utra::pwm::HW_PWM_BASE as *mut u32);
         timer.wo(utra::pwm::REG_CH_EN, 1);
-        timer.rmwf(utra::pwm::REG_TIM0_CFG_R_TIMER0_SAW, 0);
+        timer.rmwf(utra::pwm::REG_TIM0_CFG_R_TIMER0_SAW, 1);
         timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_TH, 0);
         timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_MODE, 3);
         let pwm = utra::pwm::HW_PWM_BASE as *mut u32;
-        unsafe { pwm.add(2).write_volatile(1 << 16) };
+        // unsafe { pwm.add(2).write_volatile(1 << 16) };
+        unsafe { pwm.add(2).write_volatile(0) };
         timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 1);
         crate::println!("PWM running on PA0?");
         for i in 0..12 {
@@ -285,6 +327,21 @@ pub fn setup_alloc() {
     crate::println!("Stack @ {:x}-{:x}", HEAP_START + HEAP_LEN, RAM_BASE + RAM_SIZE);
     unsafe {
         ALLOCATOR.lock().init(HEAP_START as *mut u8, HEAP_LEN);
+    }
+}
+
+/// Delay with a given system clock frequency. Useful during power mode switching.
+pub fn delay_at_sysfreq(ms: usize, sysclk_freq: u32) {
+    let mut timer = utralib::CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
+    timer.wfo(utra::timer0::EN_EN, 0b0); // disable the timer
+    timer.wfo(utra::timer0::LOAD_LOAD, 0);
+    timer.wfo(utra::timer0::RELOAD_RELOAD, sysclk_freq / 1000);
+    timer.wfo(utra::timer0::EN_EN, 1);
+    timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
+    for _ in 0..ms {
+        // comment this out for testing on MPW
+        while timer.rf(utra::timer0::EV_PENDING_ZERO) == 0 {}
+        timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
     }
 }
 
@@ -444,7 +501,15 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     // commit dividers
     daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
 
-    // TODO select int/ext osc/xtal
+    // set voltage regulators to 0.893v. This is necessary because lp mode may set it lower.
+    crate::println!("setting vdd85 to 0.893v");
+    let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
+    ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08421FF1);
+    ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
+    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
+    crate::platform::delay_at_sysfreq(20, 48_000_000);
+    crate::println!("...done");
+
     // DARIC_CGU->cgusel1 = 1; // 0: RC, 1: XTAL
     cgu.wo(sysctrl::SFR_CGUSEL1, 1);
     // DARIC_CGU->cgufscr = FREQ_OSC_MHZ; // external crystal is 48MHz
@@ -460,7 +525,7 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(FREQ_OSC_MHZ);
     duart.add(utra::duart::SFR_CR.offset()).write_volatile(1);
 
-    if freq_hz <= 48_000_000 {
+    if freq_hz <= 1_000_000 {
         // DARIC_IPC->osc = freqHz;
         cgu.wo(sysctrl::SFR_IPCOSC, freq_hz);
         // __DSB();
@@ -476,7 +541,7 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     cgu.wo(sysctrl::SFR_CGUSET, 0x32);
     //__DSB();
 
-    if freq_hz <= 48_000_000 {
+    if freq_hz <= 1_000_000 {
     } else {
         let n_fxp24: u64; // fixed point
         let f16mhz_log2: u32 = (freq_hz / FREQ_0).ilog2();
@@ -497,7 +562,8 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
             unsafe { core::arch::asm!("nop") };
         }
         crate::println!("PLL delay 1");
-
+        // why is this print needed for the code not to crash?
+        crate::println!("freq_hz {} log2 {}", freq_hz, f16mhz_log2);
         n_fxp24 = (((freq_hz as u64) << 24) * TBL_MUL[f16mhz_log2 as usize] as u64
             + PFD_F_MHZ as u64 * UNIT_MHZ as u64 / 2)
             / (PFD_F_MHZ as u64 * UNIT_MHZ as u64); // rounded
@@ -596,4 +662,139 @@ pub fn lfsr_next_u32(state: u32) -> u32 {
     let bit = ((state >> 31) ^ (state >> 21) ^ (state >> 1) ^ (state >> 0)) & 1;
 
     (state << 1) + bit
+}
+
+pub fn clockset_wrapper(freq: u32) -> u32 {
+    // reset the baud rate on the console UART
+    let perclk = unsafe { crate::platform::init_clock_asic(freq) };
+    let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
+    #[cfg(feature = "nto-evb")]
+    let mut udma_uart = unsafe {
+        // safety: this is safe to call, because we set up clock and events prior to calling
+        // new.
+        udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
+    };
+    #[cfg(not(feature = "nto-evb"))]
+    let mut udma_uart = unsafe {
+        // safety: this is safe to call, because we set up clock and events prior to calling
+        // new.
+        udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
+    };
+    let baudrate: u32 = 115200;
+    let freq: u32 = perclk / 2;
+    udma_uart.set_baud(baudrate, freq);
+
+    crate::println!("clock set done, perclk is {} MHz", perclk / 1_000_000);
+    udma_uart.write("console up with clocks\r\n".as_bytes());
+
+    perclk
+}
+
+#[allow(dead_code)]
+pub unsafe fn low_power() -> u32 {
+    const FREQ_OSC_MHZ: u32 = 48; // 48MHz
+
+    use utra::sysctrl;
+    let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
+    let mut cgu = CSR::new(daric_cgu);
+
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x3f3f); // fclk
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x3f3f); // aclk
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x1f1f); // hclk
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x0f0f); // iclk
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x0707); // pclk
+
+    let (min_cycle, fd, perclk) = if let Some((min_cycle, fd, perclk)) = clk_to_per(48, 24) {
+        daric_cgu
+            .add(utra::sysctrl::SFR_CGUFDPER.offset())
+            .write_volatile((min_cycle as u32) << 16 | (fd as u32) << 8 | fd as u32);
+        crate::println!("perclk {}", perclk);
+        (min_cycle, fd, perclk * 1_000_000)
+    } else {
+        crate::println!("couldn't find perclk solution");
+        daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
+        (3, 0xff, 48_000_000 / 4)
+    };
+    let perclk = perclk;
+
+    // DARIC_CGU->cgusel1 = 1; // 0: RC, 1: XTAL
+    cgu.wo(sysctrl::SFR_CGUSEL0, 0);
+    cgu.wo(sysctrl::SFR_CGUSEL1, 1);
+    cgu.wo(sysctrl::SFR_CGUFSCR, FREQ_OSC_MHZ);
+    cgu.wo(sysctrl::SFR_CGUSET, 0x32);
+
+    let duart = utra::duart::HW_DUART_BASE as *mut u32;
+    duart.add(utra::duart::SFR_CR.offset()).write_volatile(0);
+    // set the ETUC now that we're on the xosc.
+    duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(FREQ_OSC_MHZ);
+    duart.add(utra::duart::SFR_CR.offset()).write_volatile(1);
+
+    cgu.wo(sysctrl::SFR_IPCOSC, FREQ_OSC_MHZ * 1_000_000);
+    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
+
+    // lower core voltage to 0.7v
+    let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
+    ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08420002);
+    // ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x1);
+    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
+
+    // power down the PLL
+    cgu.wo(sysctrl::SFR_IPCLPEN, cgu.r(sysctrl::SFR_IPCLPEN) & !0x2);
+    cgu.wo(sysctrl::SFR_IPCCR, 0x53);
+    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
+
+    for _ in 0..1024 {
+        unsafe { core::arch::asm!("nop") };
+    }
+    crate::println!("PLL pd delay 1");
+
+    crate::println!("fsvalid: {}", daric_cgu.add(sysctrl::SFR_CGUFSVLD.offset()).read_volatile());
+    let clk_desc: [(&'static str, u32, usize); 8] = [
+        ("fclk", 16, 0x40 / size_of::<u32>()),
+        ("pke", 0, 0x40 / size_of::<u32>()),
+        ("ao", 16, 0x44 / size_of::<u32>()),
+        ("aoram", 0, 0x44 / size_of::<u32>()),
+        ("osc", 16, 0x48 / size_of::<u32>()),
+        ("xtal", 0, 0x48 / size_of::<u32>()),
+        ("pll0", 16, 0x4c / size_of::<u32>()),
+        ("pll1", 0, 0x4c / size_of::<u32>()),
+    ];
+    for (name, shift, offset) in clk_desc {
+        let fsfreq = (daric_cgu.add(offset).read_volatile() >> shift) & 0xffff;
+        crate::println!("{}: {} MHz", name, fsfreq);
+    }
+
+    // gates off
+    daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0x00);
+    daric_cgu.add(utra::sysctrl::SFR_HCLKGR.offset()).write_volatile(0x00);
+    daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0x00);
+    daric_cgu.add(utra::sysctrl::SFR_PCLKGR.offset()).write_volatile(0x00);
+    // commit dividers
+    daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
+    let mut udmacore = CSR::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
+    udmacore.wo(utra::udma_ctrl::REG_CG, 0x0000_000F); // lower four are the UART
+
+    // reset the UART
+    let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
+    #[cfg(feature = "nto-evb")]
+    let mut udma_uart = unsafe {
+        // safety: this is safe to call, because we set up clock and events prior to calling
+        // new.
+        udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
+    };
+    #[cfg(not(feature = "nto-evb"))]
+    let mut udma_uart = unsafe {
+        // safety: this is safe to call, because we set up clock and events prior to calling
+        // new.
+        udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
+    };
+    let baudrate: u32 = 115200;
+    let freq: u32 = perclk / 2;
+    udma_uart.set_baud(baudrate, freq);
+
+    crate::println!("Perclk solution: {:x}|{:x} -> {} MHz", min_cycle, fd, perclk / 1_000_000);
+    crate::println!("powerdown: perclk is {} MHz", perclk / 1_000_000);
+    udma_uart.write("powerdown with clocks\r\n".as_bytes());
+
+    perclk
 }
