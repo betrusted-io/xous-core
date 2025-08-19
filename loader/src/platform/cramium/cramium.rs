@@ -285,7 +285,7 @@ pub fn early_init() -> u32 {
         EventChannel::Channel1,
     );
 
-    let baudrate: u32 = 115200;
+    let baudrate: u32 = 1_000_000;
     let freq: u32 = perclk / 2;
 
     // the address of the UART buffer is "hard-allocated" at an offset one page from the top of
