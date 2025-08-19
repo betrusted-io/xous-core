@@ -41,6 +41,7 @@ pub(crate) enum Opcode {
 // Erase/Write are uninterruptable operations. Split suspend/resume
 // into a separate server to asynchronously manage this.
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+#[allow(dead_code)]
 pub(crate) enum SusResOps {
     /// Suspend/resume callback
     SuspendResume,

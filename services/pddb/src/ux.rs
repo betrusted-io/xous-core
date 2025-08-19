@@ -165,6 +165,7 @@ pub(crate) fn password_ux_manager(
     xous::destroy_server(ux_sid).unwrap();
 }
 
+#[allow(dead_code)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum UxOpcode {
     // add UX opcodes here, separate from the main loop's

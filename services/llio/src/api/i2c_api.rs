@@ -26,6 +26,7 @@ pub enum I2cStatus {
     /// interrupt handler error
     ResponseInterruptError,
 }
+#[allow(dead_code)]
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum I2cCallback {
     Result,

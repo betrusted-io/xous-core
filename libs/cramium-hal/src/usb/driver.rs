@@ -2201,7 +2201,7 @@ impl CorigineWrapper {
         c
     }
 
-    pub fn core(&self) -> std::sync::MutexGuard<CorigineUsb> {
+    pub fn core(&self) -> std::sync::MutexGuard<'_, CorigineUsb> {
         #[cfg(feature = "verbose-debug")]
         crate::println!("lock status: {}", if self.hw.try_lock().is_err() { "locked " } else { "unlocked" });
         self.hw.lock().unwrap()

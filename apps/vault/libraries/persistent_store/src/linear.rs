@@ -43,7 +43,7 @@ impl<S: Storage> Linear<S> {
     ///
     /// This function may allocate if the slice spans multiple pages (because they may not be
     /// contiguous). However, a slice is returned if the range fits within a page.
-    pub fn read(&self, range: Range<usize>) -> StorageResult<Cow<[u8]>> {
+    pub fn read(&self, range: Range<usize>) -> StorageResult<Cow<'_, [u8]>> {
         if range.is_empty() {
             return Ok(Cow::Borrowed(&[]));
         }

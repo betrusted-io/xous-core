@@ -48,7 +48,7 @@ impl Storage for XousStorage {
         100_000
     }
 
-    fn read_slice(&self, _index: StorageIndex, _length: usize) -> StorageResult<Cow<[u8]>> {
+    fn read_slice(&self, _index: StorageIndex, _length: usize) -> StorageResult<Cow<'_, [u8]>> {
         unimplemented!()
     }
 

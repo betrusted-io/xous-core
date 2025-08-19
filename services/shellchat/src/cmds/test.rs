@@ -104,6 +104,7 @@ impl Test {
 const SAMPLE_RATE_HZ: f32 = 8000.0;
 // note to self: A4 = 440.0, E4 = 329.63, C4 = 261.63
 
+#[allow(dead_code)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 enum TestOp {
     KeyCode,

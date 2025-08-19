@@ -198,7 +198,7 @@ impl Modals {
         Ok(Modals { conn, token, have_lock: Cell::new(false) })
     }
 
-    pub fn alert_builder(&self, prompt: &str) -> AlertModalBuilder {
+    pub fn alert_builder(&self, prompt: &str) -> AlertModalBuilder<'_> {
         AlertModalBuilder {
             prompt: String::from(prompt),
             validators: vec![],

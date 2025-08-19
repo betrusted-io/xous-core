@@ -12,6 +12,7 @@ pub struct Validation {
     pub text: TextEntryPayload,
     pub opcode: u32,
 }
+#[allow(dead_code)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum ValidationOp {
     Validate,
