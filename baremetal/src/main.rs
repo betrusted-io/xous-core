@@ -72,6 +72,8 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // provide some feedback on the run state of the BIO by peeking at the program counter
     // value, and provide feedback on the CPU operation by flashing the RGB LEDs.
     let mut repl = crate::repl::Repl::new();
+    #[cfg(feature = "nto-bio")]
+    repl.init_cmd("bio"); // do a power-on BIO test
     loop {
         // Handle keyboard events.
         critical_section::with(|cs| {

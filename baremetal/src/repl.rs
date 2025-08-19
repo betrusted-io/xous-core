@@ -29,6 +29,13 @@ const COLUMNS: usize = 4;
 impl Repl {
     pub fn new() -> Self { Self { cmdline: String::new(), do_cmd: false } }
 
+    #[allow(dead_code)]
+    pub fn init_cmd(&mut self, cmd: &str) {
+        self.cmdline.push_str(cmd);
+        self.cmdline.push('\n');
+        self.do_cmd = true;
+    }
+
     pub fn rx_char(&mut self, c: u8) {
         if c == b'\r' {
             crate::println!("");
@@ -338,18 +345,17 @@ impl Repl {
                 let mut seed = 0;
                 loop {
                     crate::platform::bio::bdma_coincident_test(&args, seed);
-                    // let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
-                    // rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
-                    // rcurst.wo(utra::sysctrl::SFR_RCURST1, 0x55AA);
                     seed += 1;
                     crate::println!("seed {}", seed);
-                    if seed > 64 {
+                    if seed > 32 {
                         break;
                     }
                 }
-                /* let mut bio_ss = BioSharedState::new();
-                bio_ss.init();
-                */
+            }
+            "reset" => {
+                let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+                rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
+                // rcurst.wo(utra::sysctrl::SFR_RCURST1, 0x55AA);
             }
             #[cfg(feature = "cramium-soc")]
             "clocks" => {
