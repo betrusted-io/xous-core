@@ -446,7 +446,7 @@ impl Pddb {
         create_key: bool,
         alloc_hint: Option<usize>,
         key_changed_cb: Option<impl Fn() + 'static + Send>,
-    ) -> Result<PddbKey> {
+    ) -> Result<PddbKey<'_>> {
         if key_name.len() > (KEY_NAME_LEN - 1) {
             return Err(Error::new(ErrorKind::InvalidInput, "key name too long"));
         }

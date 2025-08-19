@@ -54,6 +54,7 @@ const PING_IDENT: u16 = 0x22b;
 /// so the poll interval should be OK to be set quite high.
 const NET_DEFAULT_POLL_MS: u64 = 900;
 
+#[allow(dead_code)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 enum WaitOp {
     WaitMs,

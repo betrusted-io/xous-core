@@ -49,7 +49,7 @@ struct Writer<'a> {
 }
 
 impl<'a> Writer<'a> {
-    pub fn new(encoded_cbor: &mut Vec<u8>) -> Writer {
+    pub fn new(encoded_cbor: &mut Vec<u8>) -> Writer<'_> {
         Writer { encoded_cbor }
     }
 

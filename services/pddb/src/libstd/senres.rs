@@ -153,7 +153,7 @@ pub trait Senres {
 
     fn can_create_writer(&self) -> bool { true }
 
-    fn reader(&self, fourcc: [u8; 4]) -> Option<Reader<Self>>
+    fn reader(&self, fourcc: [u8; 4]) -> Option<Reader<'_, Self>>
     where
         Self: core::marker::Sized,
     {
@@ -207,7 +207,7 @@ pub trait Senres {
 pub trait SenresMut: Senres {
     fn as_mut_slice(&mut self) -> &mut [u8];
     fn as_mut_ptr(&mut self) -> *mut u8;
-    fn writer(&mut self, fourcc: [u8; 4]) -> Option<Writer<Self>>
+    fn writer(&mut self, fourcc: [u8; 4]) -> Option<Writer<'_, Self>>
     where
         Self: core::marker::Sized,
     {

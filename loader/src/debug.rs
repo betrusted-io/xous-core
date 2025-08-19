@@ -1,10 +1,12 @@
 use utralib::generated::*;
+#[allow(dead_code)]
 pub struct Uart {
     // pub base: *mut u32,
 }
 
 impl Uart {
     #[cfg(any(feature = "precursor", feature = "renode"))]
+    #[allow(dead_code)]
     pub fn putc(&self, c: u8) {
         let base = utra::uart::HW_UART_BASE as *mut u32;
         let mut uart = CSR::new(base);

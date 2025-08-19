@@ -21,6 +21,7 @@ enum ClaimReleaseMove {
     Move(PID /* from */),
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 pub struct MemoryRangeExtra {
     mem_start: u32,

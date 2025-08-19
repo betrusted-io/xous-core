@@ -85,20 +85,19 @@ pub fn next_u64() -> u64 {
 }
 
 pub fn fill_bytes_via_next(dest: &mut [MaybeUninit<u8>]) {
-    use core::mem::transmute;
     let mut left = dest;
     while left.len() >= 8 {
         let (l, r) = { left }.split_at_mut(8);
         left = r;
-        let chunk: [u8; 8] = unsafe { transmute(next_u64().to_le()) };
+        let chunk: [u8; 8] = next_u64().to_ne_bytes();
         l.copy_from_slice(slice_as_uninit(&chunk));
     }
     let n = left.len();
     if n > 4 {
-        let chunk: [u8; 8] = unsafe { transmute(next_u64().to_le()) };
+        let chunk: [u8; 8] = next_u64().to_ne_bytes();
         left.copy_from_slice(slice_as_uninit(&chunk[..n]));
     } else if n > 0 {
-        let chunk: [u8; 4] = unsafe { transmute(next_u32().to_le()) };
+        let chunk: [u8; 4] = next_u32().to_ne_bytes();
         left.copy_from_slice(slice_as_uninit(&chunk[..n]));
     }
 }
