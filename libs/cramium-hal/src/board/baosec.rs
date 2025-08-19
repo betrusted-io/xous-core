@@ -205,8 +205,6 @@ pub fn setup_i2c_pins(iox: &dyn IoSetup) -> I2cChannel {
 
 /// returns the power-down port and pin number
 pub fn setup_camera_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
-    // power-down pin - default to powered down
-    iox.set_gpio_pin_value(IoxPort::PC, 14, IoxValue::High);
     iox.setup_pin(
         IoxPort::PC,
         14,
@@ -217,6 +215,8 @@ pub fn setup_camera_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         Some(IoxEnable::Enable),
         Some(IoxDriveStrength::Drive2mA),
     );
+    // power-down pin - default to powered down
+    iox.set_gpio_pin_value(IoxPort::PC, 14, IoxValue::High);
     // camera interface proper
     for pin in 2..11 {
         iox.setup_pin(
@@ -289,6 +289,38 @@ pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 2], [(Iox
 
 pub fn setup_pmic_irq<T: IoIrq>(iox: &T, server: &str, opcode: usize) {
     iox.set_irq_pin(IoxPort::PB, 13, IoxValue::Low, server, opcode);
+}
+
+pub fn setup_oled_power_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    let (port, pin) = (IoxPort::PC, 4);
+    iox.setup_pin(
+        port,
+        pin,
+        Some(IoxDir::Output),
+        Some(IoxFunction::Gpio),
+        None,
+        Some(IoxEnable::Disable),
+        None,
+        Some(IoxDriveStrength::Drive2mA),
+    );
+    iox.set_gpio_pin_value(port, pin, IoxValue::Low);
+    (port, pin)
+}
+
+pub fn setup_trng_power_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    let (port, pin) = (IoxPort::PC, 5);
+    iox.setup_pin(
+        port,
+        pin,
+        Some(IoxDir::Output),
+        Some(IoxFunction::Gpio),
+        None,
+        Some(IoxEnable::Disable),
+        None,
+        Some(IoxDriveStrength::Drive2mA),
+    );
+    iox.set_gpio_pin_value(port, pin, IoxValue::Low);
+    (port, pin)
 }
 
 // sentinel used by test infrastructure to assist with parsing
