@@ -31,6 +31,7 @@ modals = { path = "../modals", optional = true }
 libm = { version = "0.2.8" }
 nalgebra = { version = "0.33", default-features = false, features = ["libm"] }
 rqrr = "0.8.0"
+base64 = { version = "0.22.1", optional = true }
 
 locales = { path = "../../locales" }
 
@@ -56,8 +57,10 @@ autotest = []
 
 cramium-soc = ["utralib/cramium-soc", "blitstr2/cramium-soc"]
 decongest-udma = []
+b64-export = ["base64"]
 default = [
-    "decongest-udma",
+    # "b64-export",
+    # "decongest-udma",
     # "autotest",
     # "gfx-testing",
     # "hosted-baosec",

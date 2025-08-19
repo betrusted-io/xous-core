@@ -8,7 +8,6 @@ mod panic;
 mod qr;
 #[cfg(feature = "gfx-testing")]
 mod testing;
-
 use std::{
     collections::VecDeque,
     sync::{
@@ -17,6 +16,8 @@ use std::{
     },
 };
 
+#[cfg(feature = "b64-export")]
+use base64::{Engine as _, engine::general_purpose};
 use blitstr2::fontmap;
 #[cfg(feature = "board-baosec")]
 use cram_hal_service::{I2c, UdmaGlobal};
@@ -73,6 +74,9 @@ pub const IMAGE_HEIGHT: usize = 240;
 // so that we can accurately hit the "fourth corner". At the moment it's sort of a
 // luck of the draw if the interpolation hits exactly right, or if we're roughly a module
 // off from ideal, which causes the data around that point to be interpreted incorrectly.
+
+#[cfg(feature = "b64-export")]
+fn encode_base64(input: &[u8]) -> String { general_purpose::STANDARD.encode(input) }
 
 /// This converts a frame of `[u8]` grayscale pixels that may be larger than the native
 /// frame buffer resolution into a black and white bitmap.
@@ -186,7 +190,7 @@ fn map_fonts() -> MemoryRange {
 }
 
 fn main() -> ! {
-    let stack_size = 1 * 1024 * 1024;
+    let stack_size = 2 * 1024 * 1024;
     claim_main_thread(move |main_thread_token| {
         std::thread::Builder::new()
             .stack_size(stack_size)
@@ -309,6 +313,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let mut modal_queue = VecDeque::<Sender>::new();
     let mut frames = 0;
     let mut frame = [0u8; IMAGE_WIDTH * IMAGE_HEIGHT];
+    #[cfg(feature = "b64-export")]
+    let mut original = [0u8; IMAGE_WIDTH * IMAGE_HEIGHT];
     let mut decode_success;
     let mut msg_opt = None;
     #[cfg(feature = "gfx-testing")]
@@ -350,10 +356,12 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
                     let mut candidates = Vec::<Point>::new();
                     decode_success = false;
-                    log::info!("------------- SEARCH {} -----------", frames);
+                    log::debug!("------------- SEARCH {} -----------", frames);
                     let finder_width =
                         qr::find_finders(&mut candidates, &frame, bw_thresh, IMAGE_WIDTH) as isize;
                     if candidates.len() == 3 {
+                        #[cfg(feature = "b64-export")]
+                        original.copy_from_slice(&frame); // make a backup copy for diagnostics
                         let candidates_orig = candidates.clone();
                         let mut x_candidates: [Point; 3] = [Point::new(0, 0); 3];
                         // apply homography to generate a new buffer for processing
@@ -517,6 +525,22 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                     }
                                     println!(" {:2}", y);
                                 }
+                                #[cfg(feature = "b64-export")]
+                                {
+                                    println!("begin orig base 64");
+                                    for block in original.chunks(16384) {
+                                        let encoded = encode_base64(block);
+                                        println!("{}", encoded);
+                                    }
+                                    println!("end orig base 64");
+                                    println!("begin base 64");
+                                    for block in frame.chunks(16384) {
+                                        let encoded = encode_base64(block);
+                                        println!("{}", encoded);
+                                    }
+                                    println!("end base 64");
+                                }
+
                                 let simple = rqrr::SimpleGrid::from_func(modules, |x, y| {
                                     grid[(modules - 1) - x + y * modules]
                                 });
