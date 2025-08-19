@@ -32,6 +32,22 @@ pub const SYSTEM_CLOCK_FREQUENCY: u32 = 800_000_000;
 pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 pub fn early_init() {
+    // Define the .data region - bootstrap baremetal using these hard-coded parameters.
+    const DATA_ORIGIN: usize = 0x61080000;
+    const DATA_SIZE_BYTES: usize = 0x5000;
+    const DATA_INIT: [(usize, u32); 1] = [(0x0, 0x1)];
+
+    // Clear .data, .bss, .stack, .heap regions & setup .data values
+    unsafe {
+        let data_ptr = DATA_ORIGIN as *mut u32;
+        for i in 0..DATA_SIZE_BYTES / size_of::<u32>() {
+            data_ptr.add(i).write_volatile(0);
+        }
+        for (offset, data) in DATA_INIT {
+            data_ptr.add(offset).write_volatile(data);
+        }
+    }
+
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
     #[cfg(not(feature = "nto-evb"))]
     {
@@ -191,22 +207,6 @@ pub fn early_init() {
     */
     crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
 
-    // Define the .data region - bootstrap baremetal using these hard-coded parameters.
-    const DATA_ORIGIN: usize = 0x61080000;
-    const DATA_SIZE_BYTES: usize = 0x5000;
-    const DATA_INIT: [(usize, u32); 1] = [(0x0, 0x1)];
-
-    // Clear .data, .bss, .stack, .heap regions & setup .data values
-    unsafe {
-        let data_ptr = DATA_ORIGIN as *mut u32;
-        for i in 0..DATA_SIZE_BYTES / size_of::<u32>() {
-            data_ptr.add(i).write_volatile(0);
-        }
-        for (offset, data) in DATA_INIT {
-            data_ptr.add(offset).write_volatile(data);
-        }
-    }
-
     // setup heap alloc
     setup_alloc();
 
@@ -218,6 +218,8 @@ pub fn early_init() {
     enable_irq(utra::irqarray5::IRQARRAY5_IRQ);
 
     udma_uart.write("console up\r\n".as_bytes());
+    crate::debug::USE_CONSOLE.store(true, core::sync::atomic::Ordering::SeqCst);
+    crate::println!("This debug print should be on the UDMA UART");
 
     // Setup I/Os so things that should be powered off are actually off
     cramium_hal::board::setup_display_pins(&iox);

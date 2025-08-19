@@ -1,8 +1,12 @@
+use core::sync::atomic::{AtomicBool, Ordering::SeqCst};
+
 use cramium_api::*;
 use cramium_hal::iox::Iox;
 use cramium_hal::udma::UartIrq;
 use cramium_hal::{udma, udma::GlobalConfig};
 use utralib::generated::*;
+
+pub static USE_CONSOLE: AtomicBool = AtomicBool::new(false);
 
 /// A trait for serial like drivers which allows reading from a source.
 #[allow(dead_code)]
@@ -15,13 +19,29 @@ pub struct Uart {}
 #[allow(dead_code)]
 impl Uart {
     pub fn putc(&self, c: u8) {
-        let base = utra::duart::HW_DUART_BASE as *mut u32;
-        let mut uart = CSR::new(base);
-        if uart.rf(utra::duart::SFR_CR_SFR_CR) == 0 {
-            uart.wfo(utra::duart::SFR_CR_SFR_CR, 1);
+        if !USE_CONSOLE.load(SeqCst) {
+            let base = utra::duart::HW_DUART_BASE as *mut u32;
+            let mut uart = CSR::new(base);
+            if uart.rf(utra::duart::SFR_CR_SFR_CR) == 0 {
+                uart.wfo(utra::duart::SFR_CR_SFR_CR, 1);
+            }
+            while uart.r(utra::duart::SFR_SR) != 0 {}
+            uart.wo(utra::duart::SFR_TXD, c as u32);
+        } else {
+            let buf: [u8; 1] = [c];
+            let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
+            #[cfg(feature = "nto-evb")]
+            let mut udma_uart = unsafe {
+                // safety: this is safe to call, because we set up clock and events prior to calling new.
+                udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
+            };
+            #[cfg(not(feature = "nto-evb"))]
+            let mut udma_uart = unsafe {
+                // safety: this is safe to call, because we set up clock and events prior to calling new.
+                udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
+            };
+            udma_uart.write(&buf);
         }
-        while uart.r(utra::duart::SFR_SR) != 0 {}
-        uart.wo(utra::duart::SFR_TXD, c as u32);
     }
 
     fn put_digit(&mut self, d: u8) {
