@@ -98,16 +98,10 @@ pub fn delay(quantum: usize) {
 pub fn early_init() -> u32 {
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
 
-    let ao_sysctrl = utra::ao_sysctrl::HW_AO_SYSCTRL_BASE as *mut u32;
-    unsafe {
-        // this turns off the VDD85D (doesn't work)
-        // TODO: debug switching regulator power-on
-        // ao_sysctrl.add(utra::ao_sysctrl::SFR_PMUCSR.offset()).write_volatile(0x6c);
-
-        // this sets VDD85D to 0.90V
-        ao_sysctrl.add(utra::ao_sysctrl::SFR_PMUTRM0CSR.offset()).write_volatile(0x0842_1FF1); // 0x0842_1080 default
-        daric_cgu.add(utra::sysctrl::SFR_IPCARIPFLOW.offset()).write_volatile(0x57);
-    }
+    let mut ao_sysctrl = CSR::new(utra::ao_sysctrl::HW_AO_SYSCTRL_BASE as *mut u32);
+    // clear any AO wakeup pending bits
+    let fr = ao_sysctrl.r(utra::ao_sysctrl::SFR_AOFR);
+    ao_sysctrl.wo(utra::ao_sysctrl::SFR_AOFR, fr);
 
     // Clear .data, .bss, .stack, .heap regions & setup .data values
     unsafe {
@@ -434,12 +428,7 @@ pub fn early_init() -> u32 {
     }
 
     // TODO: move this into the camera routine. For now, just free-run the clock; burns a lot of power.
-    // Also, the clock is at 12.5MHz, we really want this at 25MHz but maybe it's just not possible?
-    /*
-    crate::println!("Setup PWM");
     {
-        use cramium_api::*;
-        use cramium_hal::iox::Iox;
         let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
         iox.setup_pin(IoxPort::PF, 9, Some(IoxDir::Input), Some(IoxFunction::Gpio), None, None, None, None);
         iox.setup_pin(
@@ -449,14 +438,9 @@ pub fn early_init() -> u32 {
             Some(IoxFunction::Gpio),
             None,
             None,
-            Some(IoxEnable::Enable),
-            Some(IoxDriveStrength::Drive2mA),
+            Some(IoxEnable::Disable),
+            Some(IoxDriveStrength::Drive8mA),
         );
-        for _ in 0..8 {
-            iox.set_gpio_pin(IoxPort::PA, 0, IoxValue::Low);
-            iox.set_gpio_pin(IoxPort::PA, 0, IoxValue::High);
-        }
-
         iox.setup_pin(
             IoxPort::PA,
             0,
@@ -464,25 +448,30 @@ pub fn early_init() -> u32 {
             Some(IoxFunction::AF3),
             None,
             None,
-            Some(IoxEnable::Enable),
-            Some(IoxDriveStrength::Drive2mA),
+            Some(IoxEnable::Disable),
+            Some(IoxDriveStrength::Drive8mA),
         );
         let mut timer = CSR::new(utra::pwm::HW_PWM_BASE as *mut u32);
         timer.wo(utra::pwm::REG_CH_EN, 1);
-        timer.rmwf(utra::pwm::REG_TIM0_CFG_R_TIMER0_SAW, 0);
+        timer.rmwf(utra::pwm::REG_TIM0_CFG_R_TIMER0_SAW, 1);
         timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_TH, 0);
         timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_MODE, 3);
         let pwm = utra::pwm::HW_PWM_BASE as *mut u32;
-        unsafe { pwm.add(2).write_volatile(1 << 16) };
+        // unsafe { pwm.add(2).write_volatile(1 << 16) };
+        unsafe { pwm.add(2).write_volatile(0) };
         timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 1);
         crate::println!("PWM running on PA0?");
         for i in 0..12 {
             crate::println!("0x{:2x}: 0x{:08x}", i, unsafe { pwm.add(i).read_volatile() })
         }
         crate::println!("0x{:2x}: 0x{:08x}", 65, unsafe { pwm.add(65).read_volatile() });
+        /*
+        for i in 80..84 {
+            crate::println!("0x{:2x}: 0x{:08x}", i, unsafe { pwm.add(i).read_volatile() })
+        }
+        */
         crate::println!("");
     }
-    */
 
     #[cfg(feature = "board-bringup")]
     let iox_loop = iox.clone();
