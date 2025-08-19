@@ -59,7 +59,7 @@ cramium-soc = ["utralib/cramium-soc", "blitstr2/cramium-soc"]
 decongest-udma = []
 b64-export = ["base64"]
 default = [
-    # "b64-export",
+    "b64-export",
     # "decongest-udma",
     # "autotest",
     # "gfx-testing",

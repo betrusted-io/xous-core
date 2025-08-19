@@ -346,10 +346,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     // vertically.
                     for (y_src, line) in fb.chunks(IMAGE_WIDTH / 2).enumerate() {
                         for (x_src, &u32src) in line.iter().enumerate() {
-                            frame[(IMAGE_HEIGHT - y_src - 1) * IMAGE_WIDTH + 2 * x_src] =
-                                ((u32src >> 8) & 0xff) as u8;
-                            frame[(IMAGE_HEIGHT - y_src - 1) * IMAGE_WIDTH + 2 * x_src + 1] =
-                                ((u32src >> 24) & 0xff) as u8;
+                            frame[y_src * IMAGE_WIDTH + 2 * x_src] = ((u32src >> 8) & 0xff) as u8;
+                            frame[y_src * IMAGE_WIDTH + 2 * x_src + 1] = ((u32src >> 24) & 0xff) as u8;
                         }
                     }
                     frames += 1;
@@ -578,6 +576,22 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                 }
                             } else {
                                 log::info!("Transformed image did not survive sanity check!");
+                                #[cfg(feature = "b64-export")]
+                                {
+                                    println!("begin orig base 64");
+                                    for block in original.chunks(16384) {
+                                        let encoded = encode_base64(block);
+                                        println!("{}", encoded);
+                                    }
+                                    println!("end orig base 64");
+                                    println!("begin base 64");
+                                    for block in frame.chunks(16384) {
+                                        let encoded = encode_base64(block);
+                                        println!("{}", encoded);
+                                    }
+                                    println!("end base 64");
+                                }
+
                                 gfx::msg(
                                     &mut display,
                                     "Hold device steady...",
@@ -630,9 +644,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     // to allow capture to process concurrently with the code. However, there is a bug
                     // in the SPIM block that prevents proper usage with high bus contention that should
                     // be fixed in NTO.
-                    const TIMEOUT_MS: u64 = 100;
                     #[cfg(feature = "decongest-udma")]
                     {
+                        const TIMEOUT_MS: u64 = 100;
                         let start = tt.elapsed_ms();
                         let mut now = tt.elapsed_ms();
                         // this is required because if we initiate the capture in the middle
