@@ -229,24 +229,6 @@ impl BioSharedState {
         self.bio.wo(utra::bio_bdma::SFR_QDIV2, 0x0_0000);
         self.bio.wo(utra::bio_bdma::SFR_QDIV3, 0x0_0000);
 
-        for core in 0..4 {
-            // crate::println!("ldst trial");
-            let core_num = 1 << (core as usize);
-            self.load_code(mem_init_code(), 0, BioCore::from(core));
-            self.bio.wo(
-                utra::bio_bdma::SFR_CTRL,
-                self.bio.r(utra::bio_bdma::SFR_CTRL) | (core_num | core_num << 4 | core_num << 8),
-            );
-            for _ in 0..16 {
-                let _ = self.bio.r(utra::bio_bdma::SFR_RXF0);
-                let _ = self.bio.r(utra::bio_bdma::SFR_RXF1);
-                let _ = self.bio.r(utra::bio_bdma::SFR_RXF2);
-                let _ = self.bio.r(utra::bio_bdma::SFR_RXF3);
-            }
-            // crate::println!("ldst trial end");
-        }
-        self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, 0xf);
-
         self.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
         for imem in self.imem_slice.iter_mut() {
             // jump to current location
@@ -269,6 +251,20 @@ impl BioSharedState {
         }
         self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, 0xf);
         self.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
+
+        for core in 0..4 {
+            // crate::println!("ldst trial");
+            self.load_code(mem_init_code(), 0, BioCore::from(core));
+            self.set_core_run_states([core == 0, core == 1, core == 2, core == 3]);
+            for _ in 0..16 {
+                let _ = self.bio.r(utra::bio_bdma::SFR_RXF0);
+                let _ = self.bio.r(utra::bio_bdma::SFR_RXF1);
+                let _ = self.bio.r(utra::bio_bdma::SFR_RXF2);
+                let _ = self.bio.r(utra::bio_bdma::SFR_RXF3);
+            }
+            // crate::println!("ldst trial end");
+        }
+        self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, 0xf);
     }
 
     pub fn load_code(&mut self, prog: &[u8], offset_bytes: usize, core: BioCore) {
@@ -627,9 +623,11 @@ macro_rules! bio_code {
 #[rustfmt::skip]
 bio_code!(mem_init_code, MEM_INIT_START, MEM_INIT_END,
     "sw x0, 0x20(x0)",
+    "lw t0, 0x20(x0)",
     "li sp, 0x61200000",
     "addi sp, sp, -4",
     "sw x0, 0(sp)",
+    "lw t0, 0(sp)",
   "10:",
     "j 10b"
 );

@@ -152,6 +152,7 @@ pub fn fifo_basic() -> usize {
     test_cfg.wo(utra::csrtest::WTEST, 0);
 
     let mut bio_ss = BioSharedState::new();
+    bio_ss.init();
     // stop all the machines, so that code can be loaded
     bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
     bio_ss.load_code(fifo_basic0_code(), 0, BioCore::Core0);
