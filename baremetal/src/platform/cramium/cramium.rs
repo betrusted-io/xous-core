@@ -682,7 +682,7 @@ pub fn clockset_wrapper(freq: u32) -> u32 {
         // new.
         udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
     };
-    let baudrate: u32 = 115200;
+    let baudrate: u32 = crate::UART_BAUD;
     let freq: u32 = perclk / 2;
     udma_uart.set_baud(baudrate, freq);
 
@@ -790,7 +790,7 @@ pub unsafe fn low_power() -> u32 {
         // new.
         udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
     };
-    let baudrate: u32 = 115200;
+    let baudrate: u32 = crate::UART_BAUD;
     let freq: u32 = perclk / 2;
     udma_uart.set_baud(baudrate, freq);
 

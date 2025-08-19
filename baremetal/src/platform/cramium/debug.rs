@@ -183,7 +183,7 @@ pub fn setup_rx(perclk: u32) -> cramium_hal::udma::Uart {
         );
     }
 
-    let baudrate: u32 = 115200;
+    let baudrate: u32 = crate::UART_BAUD;
     let freq: u32 = perclk / 2;
 
     // the address of the UART buffer is "hard-allocated" at an offset one page from the top of

@@ -4,3 +4,5 @@ pub use cramium::*;
 pub mod bio;
 pub mod debug;
 pub mod irq;
+
+pub const UART_BAUD: u32 = 1_000_000;
