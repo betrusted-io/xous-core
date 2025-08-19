@@ -32,6 +32,7 @@ pub(crate) struct NetTcpListenCallback {
     pub(crate) local_port: u16,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum NetTcpCallback {
     RxData,

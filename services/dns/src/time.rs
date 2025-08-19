@@ -828,6 +828,7 @@ pub(crate) fn start_time_ux() {
 }
 
 // RTC Ux helper functions
+#[allow(dead_code)]
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum ValidatorOp {
     UxMonth,

@@ -10,6 +10,7 @@ pub(crate) const DNS_NAME_LENGTH_LIMIT: usize = 256;
 pub(crate) const DNS_PKT_MAX_LEN: usize = 512;
 
 /// These opcodes can be called by anyone at any time
+#[allow(dead_code)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 #[repr(C)]
 pub(crate) enum Opcode {
