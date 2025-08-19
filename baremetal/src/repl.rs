@@ -288,41 +288,6 @@ impl Repl {
                 let mut bio_ss = BioSharedState::new();
                 bio_ss.init();
 
-                // run the simple tests to debug some basic core logics
-                if false {
-                    // let mut bio_ss = BioSharedState::new();
-                    // stop all the machines, so that code can be loaded
-                    bio_ss.bio.wo(utra::bio_bdma::SFR_EXTCLOCK, 0);
-                    bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
-                    bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x0);
-                    bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV1, 0x0);
-                    bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV2, 0x0);
-                    bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV3, 0x0);
-                    crate::println!(
-                        "rxflevel0: {}",
-                        bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0)
-                    );
-                    bio_ss.load_code(simple_test_code(), 0, BioCore::Core3);
-                    bio_ss.set_core_run_states([false, false, false, true]);
-                    for i in 0..12 {
-                        debug_bio(&bio_ss);
-                        bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, i);
-                        crate::println!(
-                            "f0:{} f1:{} f2:{} f3:{}",
-                            bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0),
-                            bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1),
-                            bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL2),
-                            bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL3)
-                        );
-                        crate::println!(
-                            "{:x}, {:x}",
-                            bio_ss.bio.rf(utra::bio_bdma::SFR_RXF1_FDOUT),
-                            bio_ss.bio.rf(utra::bio_bdma::SFR_RXF2_FDOUT),
-                        );
-                    }
-                    bio_ss.init();
-                }
-
                 passing_tests += bio_tests::arith::stack_test();
 
                 passing_tests += bio_tests::units::hello_multiverse();
@@ -334,18 +299,21 @@ impl Repl {
                 passing_tests += unsafe { bio_tests::arith::mac_test() }; // 1
 
                 passing_tests += bio_tests::units::aclk_tests();
-
                 passing_tests += bio_tests::units::event_aliases();
                 passing_tests += bio_tests::units::fifo_alias_tests();
 
                 passing_tests += bio_tests::units::fifo_basic();
+                // this test must wait then reset - if the next set of tests run
+                // too soon after this one, the system will be in a scrambled state.
+                crate::platform::delay(20);
+                bio_ss.init();
                 // passing_tests += bio_tests::units::host_fifo_tests();
 
                 passing_tests += bio_tests::units::fifo_level_tests();
 
                 bio_tests::dma::dma_filter_off();
                 passing_tests += bio_tests::dma::dmareq_test();
-
+                // here
                 bio_tests::dma::dma_filter_off();
                 crate::println!("*** CLKMODE 3 ***");
                 passing_tests += bio_tests::dma::dma_basic(false, 3); // 4
@@ -364,6 +332,24 @@ impl Repl {
 
                 // Final report
                 crate::println!("\n--- BIO Tests Complete: {}/{} passed. ---\n", passing_tests, BIO_TESTS);
+            }
+            #[cfg(feature = "nto-bio")]
+            "bdma" => {
+                let mut seed = 0;
+                loop {
+                    crate::platform::bio::bdma_coincident_test(&args, seed);
+                    // let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+                    // rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
+                    // rcurst.wo(utra::sysctrl::SFR_RCURST1, 0x55AA);
+                    seed += 1;
+                    crate::println!("seed {}", seed);
+                    if seed > 64 {
+                        break;
+                    }
+                }
+                /* let mut bio_ss = BioSharedState::new();
+                bio_ss.init();
+                */
             }
             #[cfg(feature = "cramium-soc")]
             "clocks" => {
@@ -882,7 +868,7 @@ impl Repl {
                 #[cfg(not(feature = "cramium-soc"))]
                 crate::print!(", mon");
                 #[cfg(feature = "nto-bio")]
-                crate::print!(", bio, pin");
+                crate::print!(", bio, bdma, pin");
                 #[cfg(all(feature = "cramium-soc", not(feature = "nto-evb")))]
                 crate::print!(", ldo, wfi");
                 crate::println!("");
@@ -898,42 +884,4 @@ impl Repl {
         self.do_cmd = false;
         self.cmdline.clear();
     }
-}
-
-#[cfg(feature = "nto-bio")]
-#[rustfmt::skip]
-bio_code!(simple_test_code, SIMPLE_TEST_START, SIMPLE_TEST_END,
-    "li sp, 0x800",
-  "10:",
-    "mv t0, x31",
-    "mv t1, x16",
-    "sw t1, 0(sp)",
-    "lw t2, 0(sp)",
-    "addi t2, t2, 0x200",
-    "mv x17, t2",
-    "mv x18, t0",
-    // "mv x20, x0",
-    "j 10b"
-);
-
-#[cfg(feature = "nto-bio")]
-#[rustfmt::skip]
-bio_code!(ldst_code, LDST_START, LDST_END,
-    "sw x0, 0x20(x0)",
-    "li sp, 0x61200000",
-    "addi sp, sp, -4",
-    "sw x0, 0(sp)",
-  "10:",
-    "j 10b"
-);
-
-#[cfg(feature = "nto-bio")]
-fn debug_bio(bio_ss: &BioSharedState) {
-    crate::println!(
-        "c0:{:04x} c1:{:04x} c2:{:04x} c3:{:04x}",
-        bio_ss.bio.r(utra::bio_bdma::SFR_DBG0),
-        bio_ss.bio.r(utra::bio_bdma::SFR_DBG1),
-        bio_ss.bio.r(utra::bio_bdma::SFR_DBG2),
-        bio_ss.bio.r(utra::bio_bdma::SFR_DBG3),
-    );
 }
