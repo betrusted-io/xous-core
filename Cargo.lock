@@ -4780,9 +4780,8 @@ dependencies = [
 
 [[package]]
 name = "rqrr"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48eaf9c75f2a8f231b09036c115a45a9845313f7faa6a39fa45a2a2bd06a27c7"
+version = "0.10.0"
+source = "git+https://github.com/betrusted-io/rqrr.git?branch=rv32-opt#388fc6c0b7ee6cd7e5a2261a9d67a0c0692184f1"
 dependencies = [
  "g2p",
  "image",
