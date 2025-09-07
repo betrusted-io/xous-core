@@ -81,6 +81,11 @@ fn main() {
                     log::info!("Udma configure event: {:?}/{:?}, {:x}", periph, to_channel, event_offset);
                 }
             }
+            HalOpcode::UdmaIrqStatusBits => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    scalar.arg1 = 0;
+                }
+            }
             HalOpcode::PeriphReset => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();

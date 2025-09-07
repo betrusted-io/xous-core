@@ -321,6 +321,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "cramium-emu",
                 "bao-console",
                 "pddb",
+                // "usb-cramium",
                 "keystore",
             ];
             builder.add_feature("pddbtest");
@@ -331,6 +332,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_apps(&get_cratespecs());
 
             // builder.add_feature("modal-testing");
+            builder.add_app("vault2", LoaderRegion::Swap);
         }
         Some("pddb-ci") => {
             builder
