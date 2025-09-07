@@ -87,9 +87,14 @@ features = ["rand_core", "digest"]
 
 [features]
 vexii-test = ["aes/vexii-test"]
-precursor = ["utralib/precursor", "sha2/precursor", "keystore-api/precursor"]
+precursor = [
+    "utralib/precursor",
+    "sha2/precursor",
+    "keystore-api/precursor",
+    "aes/precursor",
+]
 hosted = ["utralib/hosted", "sha2/hosted", "keystore-api/hosted"]
-renode = ["utralib/renode", "sha2/renode", "keystore-api/renode"]
+renode = ["utralib/renode", "sha2/renode", "keystore-api/renode", "aes/renode"]
 policy-menu = [
     "keystore-api/policy-menu",
 ] # provisions for users to set their password retention policies (on the block for deprecation) (note: to re-enable you need to add "rootkeys menu" to the tokens.rs in the GAM)
