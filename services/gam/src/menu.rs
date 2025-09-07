@@ -39,7 +39,7 @@ pub enum MenuOpcode {
 }
 
 impl<'a> Menu<'a> {
-    pub fn new(name: &str) -> Menu {
+    pub fn new(name: &str) -> Menu<'_> {
         let xns = xous_names::XousNames::new().unwrap();
         let sid = xous::create_server().expect("can't create private menu message server");
         let gam = Gam::new(&xns).expect("can't connect to GAM");

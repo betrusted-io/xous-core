@@ -1353,24 +1353,3 @@ impl Spim {
         true
     }
 }
-
-// Stub retained because it is helpful for debugging some bus contention issues.
-#[allow(dead_code)]
-fn cache_flush() {
-    unsafe {
-        // let the write go through before continuing
-        #[rustfmt::skip]
-        core::arch::asm!(
-            ".word 0x500F",
-            "nop",
-            "nop",
-            "nop",
-            "nop",
-            "fence",
-            "nop",
-            "nop",
-            "nop",
-            "nop",
-        );
-    }
-}

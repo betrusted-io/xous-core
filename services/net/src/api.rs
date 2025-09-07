@@ -387,6 +387,7 @@ pub(crate) struct SsidList {
 
 /// These opcodes are reserved for private SIDs shared from a DNS server to
 /// reconfigure DNS on IP change/update.
+#[allow(dead_code)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum PrivateDnsOp {
     AddIpv4DnsServer,
@@ -408,6 +409,7 @@ pub(crate) struct WifiStateSubscription {
     pub opcode: u32,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum NetCallback {
     Ping,

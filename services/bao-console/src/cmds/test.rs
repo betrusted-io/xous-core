@@ -25,6 +25,18 @@ impl<'a> ShellCmdApi<'a> for Test {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "timer" => {
+                    let start = _env.ticktimer.elapsed_ms();
+                    log::info!("Starting test");
+                    let mut seconds = 0;
+                    loop {
+                        let elapsed = _env.ticktimer.elapsed_ms() - start;
+                        if elapsed > seconds * 1000 {
+                            log::info!("{} s", seconds);
+                            seconds += 1;
+                        }
+                    }
+                }
                 #[cfg(feature = "bmp180")]
                 "temp" => {
                     use cram_hal_service::I2c;

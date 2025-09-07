@@ -172,12 +172,14 @@ macro_rules! define_aes_impl {
         #[doc=$doc]
         ///block cipher (decrypt-only)
         #[derive(Clone)]
+        #[allow(dead_code)]
         pub struct $name_dec {
             inner: $name,
         }
 
         impl $name_dec {
             #[inline(always)]
+            #[allow(dead_code)]
             pub(crate) fn get_dec_backend(&self) -> $name_back_dec<'_> { self.inner.get_dec_backend() }
         }
 

@@ -7,6 +7,7 @@
 use packing::Packed;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Packed)]
+#[allow(dead_code)]
 pub enum VersionDescriptor {
     None = 0x0000,
     /// SAM (no version claimed)
@@ -216,7 +217,7 @@ pub enum VersionDescriptor {
     /// MMC-4 (no version claimed)
     MMC4NoVersionClaimed = 0x03A0,
     /// MMC-4 T10/1545-D revision 5"},
-    MMC4T101545DRevision5   = 0x03B0,
+    MMC4T101545DRevision5 = 0x03B0,
     /// MMC-4 T10/1545-D revision 5a
     MMC4T101545DRevision5a = 0x03B1,
     /// MMC-4 T10/1545-D revision 3
@@ -971,7 +972,5 @@ pub enum VersionDescriptor {
     Ieee16672018 = 0xFFC4,
 }
 impl Default for VersionDescriptor {
-    fn default() -> Self {
-        VersionDescriptor::None
-    }
+    fn default() -> Self { VersionDescriptor::None }
 }

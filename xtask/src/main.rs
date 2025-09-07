@@ -7,7 +7,7 @@ use utils::*;
 mod builder;
 use builder::*;
 mod verifier;
-use std::{env, fs, path::PathBuf};
+use std::{env, fs, path::Path, path::PathBuf};
 
 use verifier::*;
 
@@ -203,62 +203,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if env::args().filter(|x| x == "--change-target").count() != 0 {
         builder.set_change_target_flag();
     }
-
-    // manage an ugly patch we have to do to selectively configure AES for only cramium-soc targets
-    match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
-        Ok(false) => {
-            builder::search_and_replace_in_file(
-                "services/aes/Cargo.toml",
-                "default = [\"cramium-soc\"]",
-                "default = []",
-            )
-            .expect("couldn't patch AES");
-
-            // revert these just in case - but don't throw an error if the strings aren't found
-            builder::search_and_replace_in_file(
-                "Cargo.toml",
-                "# [patch.crates-io.curve25519-dalek]",
-                "[patch.crates-io.curve25519-dalek]",
-            )
-            .ok();
-            builder::search_and_replace_in_file(
-                "Cargo.toml",
-                "# git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
-                "git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
-            )
-            .ok();
-            builder::search_and_replace_in_file(
-                "Cargo.toml",
-                "# branch = \"main\" # c25519",
-                "branch = \"main\" # c25519",
-            )
-            .ok();
-            builder::search_and_replace_in_file(
-                "services/root-keys/Cargo.toml",
-                "# features = [\"auto-release\", \"warn-fallback\"]",
-                "features = [\"auto-release\", \"warn-fallback\"]",
-            )
-            .ok();
-            builder::search_and_replace_in_file(
-                "services/shellchat/Cargo.toml",
-                "# features = [\"auto-release\", \"warn-fallback\"]",
-                "features = [\"auto-release\", \"warn-fallback\"]",
-            )
-            .ok();
-
-            match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
-                Ok(false) => {
-                    return Err(
-                        "Couldn't revert services/aes/Cargo.toml -- is the file writeable or corrupted?"
-                            .into(),
-                    );
-                }
-                _ => (),
-            }
-        }
-        _ => {}
-    }
-    let mut broken_aes_cleanup = false;
 
     // ---- now process the verb plus position dependent arguments ----
     let mut args = env::args();
@@ -590,7 +534,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some("cramium-soc") => builder.target_cramium_soc(),
                 _ => panic!("should be unreachable"),
             };
-            broken_aes_cleanup = true;
 
             for service in cramium_flash_pkgs {
                 builder.add_service(service, LoaderRegion::Flash);
@@ -649,6 +592,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_artyvexii();
         }
 
+        Some("baremetal-cramsoc") => {
+            builder.set_baremetal(true);
+            update_flash_origin("baremetal/src/platform/cramium/link.x", 0x6000_0000)?;
+            builder.target_baremetal_cramsoc();
+        }
+
+        Some("baremetal-cramsoc-evb") => {
+            builder.set_baremetal(true);
+            update_flash_origin("baremetal/src/platform/cramium/link.x", 0x6100_0000)?;
+            builder.add_loader_feature("nto-evb");
+            builder.target_baremetal_cramsoc();
+        }
+
         Some("baosec") => {
             let board = "board-baosec";
             // select the board
@@ -674,7 +630,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let bao_rram_pkgs =
                 ["xous-ticktimer", "xous-log", "xous-names", "keystore" /* "usb-cramium" */].to_vec(); /* "usb-cramium" */
             let bao_swap_pkgs =
-                ["cram-hal-service", "bao-console", /* "modals", "pddb", */ "bao-video"].to_vec(); /* "bao-video" */
+                ["cram-hal-service", "bao-console", "modals", /* "pddb", */ "bao-video"].to_vec(); /* "bao-video" */
             if !builder.is_swap_set() {
                 builder.set_swap(0, 8 * 1024 * 1024);
             }
@@ -705,7 +661,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some("baosec") => builder.target_cramium_soc(),
                 _ => panic!("should be unreachable"),
             };
-            broken_aes_cleanup = true;
 
             // It is important that this is the first service added, because the swapper *must* be in PID 2
             builder.add_service("xous-swapper", LoaderRegion::Flash);
@@ -745,55 +700,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     builder.build()?;
 
-    // AES is broken in the current rev of the Cramium SoC. This unpatches the crate so other builds can
-    // work properly.
-    if broken_aes_cleanup {
-        builder::search_and_replace_in_file(
-            "services/aes/Cargo.toml",
-            "default = [\"cramium-soc\"]",
-            "default = []",
-        )
-        .expect("couldn't patch AES");
-        builder::search_and_replace_in_file(
-            "Cargo.toml",
-            "# [patch.crates-io.curve25519-dalek]",
-            "[patch.crates-io.curve25519-dalek]",
-        )
-        .expect("couldn't patch curve25519");
-        builder::search_and_replace_in_file(
-            "Cargo.toml",
-            "# git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
-            "git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
-        )
-        .expect("couldn't patch curve25519");
-        builder::search_and_replace_in_file(
-            "Cargo.toml",
-            "# branch = \"main\" # c25519",
-            "branch = \"main\" # c25519",
-        )
-        .expect("couldn't patch curve25519");
-        builder::search_and_replace_in_file(
-            "services/root-keys/Cargo.toml",
-            "# features = [\"auto-release\", \"warn-fallback\"]",
-            "features = [\"auto-release\", \"warn-fallback\"]",
-        )
-        .expect("couldn't patch rootkeys");
-        builder::search_and_replace_in_file(
-            "services/shellchat/Cargo.toml",
-            "# features = [\"auto-release\", \"warn-fallback\"]",
-            "features = [\"auto-release\", \"warn-fallback\"]",
-        )
-        .expect("couldn't patch shellchat");
-    }
-    match builder::search_in_file("services/aes/Cargo.toml", "default = []") {
-        Ok(false) => {
-            println!(
-                "Build configuration is out of sync: cramium-soc patch on AES crate was not cleared out"
-            );
-            return Err("services/aes/Cargo.toml is in a bad state! Revert any patches to the file.".into());
-        }
-        _ => {}
-    }
     // the intent of this call is to check that crates we are sourcing from crates.io
     // match the crates in our local source. The usual cause of an inconsistency is
     // a maintainer forgot to publish a change to crates.io.
@@ -1026,4 +932,25 @@ fn locate_workspace_root() -> Option<PathBuf> {
         }
     }
     Some(dir)
+}
+
+fn update_flash_origin<P: AsRef<Path>>(path: P, new_origin: u32) -> std::io::Result<()> {
+    let content = fs::read_to_string(&path)?;
+    let updated = content
+        .lines()
+        .map(|line| {
+            if line.trim_start().starts_with("FLASH") && line.contains("ORIGIN") {
+                let parts: Vec<&str> = line.split(',').collect();
+                let origin_part = format!("ORIGIN = 0x{:08X}", new_origin);
+                let length_part = parts.iter().find(|s| s.trim().starts_with("LENGTH")).unwrap_or(&"");
+                format!("  FLASH : {}, {}", origin_part, length_part.trim())
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<String>>()
+        .join("\n");
+
+    fs::write(path, updated)?;
+    Ok(())
 }

@@ -91,6 +91,10 @@ use usb::*;
 mod pddb;
 #[cfg(feature = "with-pddb")]
 use pddb::*;
+#[cfg(feature = "aestests")]
+mod aes_cmd;
+#[cfg(feature = "aestests")]
+use aes_cmd::*;
 mod i2cdetect;
 use i2cdetect::*;
 mod cute;
@@ -105,6 +109,8 @@ pub struct CmdEnv {
     usb: Usb,
     #[cfg(feature = "with-pddb")]
     pddb_cmd: PddbCmd,
+    #[cfg(feature = "aestests")]
+    aes_cmd: Aes,
 }
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
@@ -117,6 +123,8 @@ impl CmdEnv {
             trng: trng::Trng::new(&xns).unwrap(),
             xns: xous_names::XousNames::new().unwrap(),
         };
+        #[cfg(feature = "aestests")]
+        let aes_cmd = Aes::new(&xns, &mut _common);
         CmdEnv {
             common_env: _common,
             lastverb: String::new(),
@@ -129,6 +137,8 @@ impl CmdEnv {
             usb: Usb::new(),
             #[cfg(feature = "with-pddb")]
             pddb_cmd: PddbCmd::new(),
+            #[cfg(feature = "aestests")]
+            aes_cmd,
         }
     }
 
@@ -157,6 +167,8 @@ impl CmdEnv {
             &mut self.usb,
             #[cfg(feature = "with-pddb")]
             &mut self.pddb_cmd,
+            #[cfg(feature = "aestests")]
+            &mut self.aes_cmd,
         ];
 
         if let Some(cmdline) = maybe_cmdline {

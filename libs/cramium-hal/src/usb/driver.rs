@@ -294,6 +294,14 @@ pub struct Uicr {
 }
 
 const CRG_UDC_CFG0_MAXSPEED_FS: u32 = 1;
+// surprisingly, just swapping this constant in "sort of works"
+// some to-do around figuring out why the protocol breaks, could
+// just be signal integrity because too many connectors, but very
+// likely this is also an inability to handle the longer packet
+// sizes mandated by the HS protocol.
+//
+// leave as a warning so we have this as a TODO.
+const CRG_UDC_CFG0_MAXSPEED_HS: u32 = 3;
 
 pub const CRG_UDC_ERDPLO_EHB: u32 = 1 << 3;
 
@@ -1169,6 +1177,7 @@ impl CorigineUsb {
             // wait for reset to finish
         }
 
+        // TODO: ugprade this to HS
         self.csr.wo(DEVCONFIG, 0x80 | CRG_UDC_CFG0_MAXSPEED_FS);
 
         self.csr.wo(
@@ -2192,7 +2201,7 @@ impl CorigineWrapper {
         c
     }
 
-    pub fn core(&self) -> std::sync::MutexGuard<CorigineUsb> {
+    pub fn core(&self) -> std::sync::MutexGuard<'_, CorigineUsb> {
         #[cfg(feature = "verbose-debug")]
         crate::println!("lock status: {}", if self.hw.try_lock().is_err() { "locked " } else { "unlocked" });
         self.hw.lock().unwrap()

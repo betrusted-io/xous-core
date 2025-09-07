@@ -117,6 +117,7 @@ pub enum U2fCode {
     Denied,
 }
 
+#[allow(dead_code)]
 #[derive(Eq, PartialEq, Copy, Clone)]
 #[repr(usize)]
 pub enum UsbDeviceType {
@@ -188,6 +189,7 @@ pub(crate) struct UsbListenerRegistration {
     pub listener_op_id: usize,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 #[repr(usize)]
 pub enum LogLevel {

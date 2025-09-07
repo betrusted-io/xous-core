@@ -349,41 +349,6 @@ impl Builder {
         self.run_svd2repl = false;
         self.loader = CrateSpec::Local("loader".to_string(), LoaderRegion::Ram);
         self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
-        search_and_replace_in_file("services/aes/Cargo.toml", "default = []", "default = [\"cramium-soc\"]")
-            .expect("couldn't patch AES");
-
-        // this is needed because we don't have an ed25519 accelerator on cramium targets
-        search_and_replace_in_file(
-            "Cargo.toml",
-            "[patch.crates-io.curve25519-dalek]",
-            "# [patch.crates-io.curve25519-dalek]",
-        )
-        .expect("couldn't patch curve25519");
-        search_and_replace_in_file(
-            "Cargo.toml",
-            "git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
-            "# git = \"https://github.com/betrusted-io/curve25519-dalek.git\"",
-        )
-        .expect("couldn't patch curve25519");
-        search_and_replace_in_file(
-            "Cargo.toml",
-            "branch = \"main\" # c25519",
-            "# branch = \"main\" # c25519",
-        )
-        .expect("couldn't patch curve25519");
-        search_and_replace_in_file(
-            "services/root-keys/Cargo.toml",
-            "features = [\"auto-release\", \"warn-fallback\"]",
-            "# features = [\"auto-release\", \"warn-fallback\"]",
-        )
-        .expect("couldn't patch rootkeys");
-        search_and_replace_in_file(
-            "services/shellchat/Cargo.toml",
-            "features = [\"auto-release\", \"warn-fallback\"]",
-            "# features = [\"auto-release\", \"warn-fallback\"]",
-        )
-        .expect("couldn't patch shellchat");
-
         self
     }
 
@@ -406,6 +371,19 @@ impl Builder {
         self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
         self.utra_target = "artyvexii".to_string();
+        self.run_svd2repl = false;
+        self.loader = CrateSpec::Local("baremetal".to_string(), LoaderRegion::Ram);
+        // this is actually a dummy, there is no kernel in baremetal
+        self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
+        self
+    }
+
+    /// Configure for baremetal bringup
+    pub fn target_baremetal_cramsoc(&mut self) -> &mut Builder {
+        self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
+        self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
+        self.stream = BuildStream::Release;
+        self.utra_target = "cramium-soc".to_string();
         self.run_svd2repl = false;
         self.loader = CrateSpec::Local("baremetal".to_string(), LoaderRegion::Ram);
         // this is actually a dummy, there is no kernel in baremetal
@@ -1256,6 +1234,7 @@ pub fn project_root() -> PathBuf {
 
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
+#[allow(dead_code)]
 pub fn search_and_replace_in_file(filename: &str, search: &str, replace: &str) -> io::Result<()> {
     let file = File::open(filename)?;
     let reader = BufReader::new(file);
@@ -1274,6 +1253,7 @@ pub fn search_and_replace_in_file(filename: &str, search: &str, replace: &str) -
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn search_in_file(filename: &str, search: &str) -> io::Result<bool> {
     let file = File::open(filename)?;
     let reader = BufReader::new(file);
