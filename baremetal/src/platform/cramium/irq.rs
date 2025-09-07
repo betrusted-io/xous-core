@@ -1,6 +1,10 @@
+#[cfg(feature = "nto-usb")]
+use cramium_hal::usb::utra::*;
 use riscv::register::{mcause, mie, mstatus};
 use vexriscv::register::vexriscv::{mim, mip};
 
+#[cfg(feature = "nto-usb")]
+use crate::usb::USB;
 use crate::*;
 
 pub fn irq_setup() {
@@ -43,7 +47,7 @@ pub unsafe extern "C" fn _start_trap() -> ! {
             #[rustfmt::skip]
             core::arch::asm!(
                 "csrw        mscratch, sp",
-                "li          sp, 0x61083000", // crate::platform::SCRATCH_PAGE - has to be hard-coded
+                "li          sp, 0x61043000", // crate::platform::SCRATCH_PAGE - has to be hard-coded
                 "sw       x1, 0*4(sp)",
                 // Skip SP for now
                 "sw       x3, 2*4(sp)",
@@ -89,7 +93,7 @@ pub unsafe extern "C" fn _start_trap() -> ! {
                 "csrr        t0, mscratch",
                 "sw          t0, 1*4(sp)",
                 // Restore a default stack pointer
-                "li          sp, 0x61085000", // heap base, grows down
+                "li          sp, 0x61045000", // heap base, grows down
 
                 // Note that registers $a0-$a7 still contain the arguments
                 "j           _start_trap_rust",
@@ -201,6 +205,55 @@ pub extern "C" fn trap_handler(
             let pending = irqarray2.r(utra::irqarray2::EV_PENDING);
             crate::println!("keypress interrupt {:x}", pending);
             irqarray2.wo(utra::irqarray2::EV_PENDING, pending);
+        }
+        #[cfg(feature = "nto-usb")]
+        if (irqs_pending & (1 << utralib::utra::irqarray1::IRQARRAY1_IRQ)) != 0 {
+            // handle USB interrupt
+            unsafe {
+                if let Some(ref mut usb_ref) = USB {
+                    let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
+
+                    // immediately clear the interrupt and re-enable it so we can catch an interrupt
+                    // that is generated while we are handling the interrupt.
+                    let pending = usb.irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
+                    // clear pending
+                    usb.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, pending);
+                    // re-enable interrupts
+                    usb.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
+
+                    let status = usb.csr.r(USBSTS);
+                    // usb.print_status(status);
+                    if (status & usb.csr.ms(USBSTS_SYSTEM_ERR, 1)) != 0 {
+                        crate::println!("System error");
+                        usb.csr.wfo(USBSTS_SYSTEM_ERR, 1);
+                        crate::println!("USBCMD: {:x}", usb.csr.r(USBCMD));
+                    } else {
+                        if (status & usb.csr.ms(USBSTS_EINT, 1)) != 0 {
+                            // from udc_handle_interrupt
+                            let mut ret = cramium_hal::usb::driver::CrgEvent::None;
+                            let status = usb.csr.r(USBSTS);
+                            // self.print_status(status);
+                            let _result = if (status & usb.csr.ms(USBSTS_SYSTEM_ERR, 1)) != 0 {
+                                crate::println!("System error");
+                                usb.csr.wfo(USBSTS_SYSTEM_ERR, 1);
+                                crate::println!("USBCMD: {:x}", usb.csr.r(USBCMD));
+                                cramium_hal::usb::driver::CrgEvent::Error
+                            } else {
+                                if (status & usb.csr.ms(USBSTS_EINT, 1)) != 0 {
+                                    usb.csr.wfo(USBSTS_EINT, 1);
+                                    // divert to the loader-based event ring handler
+                                    ret = usb.process_event_ring(); // there is only one event ring
+                                }
+                                ret
+                            };
+                            // crate::println!("Result: {:?}", _result);
+                        }
+                        if usb.csr.rf(IMAN_IE) != 0 {
+                            usb.csr.wo(IMAN, usb.csr.ms(IMAN_IE, 1) | usb.csr.ms(IMAN_IP, 1));
+                        }
+                    }
+                }
+            }
         }
     }
 

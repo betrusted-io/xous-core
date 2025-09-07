@@ -74,6 +74,10 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     let mut repl = crate::repl::Repl::new();
     #[cfg(feature = "nto-bio")]
     repl.init_cmd("bio"); // do a power-on BIO test
+
+    #[cfg(feature = "nto-usb")]
+    crate::platform::usb::glue::do_update(); // initially this supplants the repl loop
+
     loop {
         // Handle keyboard events.
         critical_section::with(|cs| {

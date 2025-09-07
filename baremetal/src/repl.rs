@@ -374,6 +374,7 @@ impl Repl {
                     return Err(Error::help("clocks <CPU freq in MHz, 100-1600>"));
                 }
             }
+            /*
             #[cfg(feature = "cramium-soc")]
             "usb" => {
                 crate::println!("USB basic test...");
@@ -471,6 +472,7 @@ impl Repl {
                     }
                 }
             }
+            */
             #[cfg(feature = "nto-bio")]
             "pin" => {
                 // We need at least a subcommand.

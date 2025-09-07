@@ -1,7 +1,8 @@
+/* bottom 256k reserved for copying code into RAM for JTAG-booting targets */
 MEMORY
 {
   FLASH : ORIGIN = 0x60000000, LENGTH = 256k
-  RAM : ORIGIN = 0x61080000, LENGTH = 1536k
+  RAM : ORIGIN = 0x61040000, LENGTH = 1792k
 }
 
 REGION_ALIAS("REGION_TEXT", FLASH);

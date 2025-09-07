@@ -13,11 +13,13 @@ use crate::platform::{
 #[global_allocator]
 static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
 
-pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN - 0x8_0000;
-pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM + 0x8_0000;
+// bottom 256k (0x4_0000) reserved for jtag-booting targets code space
+pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN - 0x4_0000;
+pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM + 0x4_0000;
 #[allow(dead_code)]
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 
+// 0x5000 is the space for statics
 pub const HEAP_START: usize = RAM_BASE + 0x5000;
 pub const HEAP_LEN: usize = 1024 * 256;
 
@@ -33,7 +35,7 @@ pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 pub fn early_init() {
     // Define the .data region - bootstrap baremetal using these hard-coded parameters.
-    const DATA_ORIGIN: usize = 0x61080000;
+    const DATA_ORIGIN: usize = 0x61040000;
     const DATA_SIZE_BYTES: usize = 0x5000;
     const DATA_INIT: [(usize, u32); 1] = [(0x0, 0x1)];
 
