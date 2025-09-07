@@ -35,8 +35,8 @@ pub(crate) const GC2145_INIT: [[u8; 2]; 607] = [
     [0x99, 0x11], /* Subsample */
     [0x9a, 0x0E], /* Subsample mode */
     [0x12, 0x2e],
-    [0x17, 0x14], /* Analog Mode 1 (vflip/mirror[1:0]) */
-    [0x18, 0x22], /* Analog Mode 2 */
+    [0x17, 0x14 | 0x01], /* Analog Mode 1 (vflip/mirror[1:0]) */
+    [0x18, 0x22],        /* Analog Mode 2 */
     [0x19, 0x0e],
     [0x1a, 0x01],
     [0x1b, 0x4b],

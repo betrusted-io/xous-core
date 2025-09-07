@@ -213,7 +213,9 @@ impl Axp2101 {
         }
     }
 
-    pub fn get_dcdc(&mut self, which: WhichDcDc) -> (f32, bool) { self.dcdc_v_dvm[which as usize] }
+    pub fn get_dcdc(&mut self, which: WhichDcDc) -> Option<(f32, bool)> {
+        if self.dcdc_ena[which as usize] { Some(self.dcdc_v_dvm[which as usize]) } else { None }
+    }
 
     pub fn set_ldo(
         &mut self,

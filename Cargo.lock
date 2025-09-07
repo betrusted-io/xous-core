@@ -20,21 +20,10 @@ dependencies = [
 
 [[package]]
 name = "aes"
-version = "0.8.3"
+version = "0.8.4"
 dependencies = [
  "cipher",
  "zeroize",
-]
-
-[[package]]
-name = "aes"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
-dependencies = [
- "cfg-if",
- "cipher",
- "cpufeatures",
 ]
 
 [[package]]
@@ -44,7 +33,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae0784134ba9375416d469ec31e7c5f9fa94405049cf08c5ce5b4698be673e0d"
 dependencies = [
  "aead",
- "aes 0.8.4",
+ "aes",
  "cipher",
  "ctr",
  "polyval",
@@ -58,14 +47,14 @@ version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69fa2b352dcefb5f7f3a5fb840e02665d311d878955380515e4fd50095dd3d8c"
 dependencies = [
- "aes 0.8.4",
+ "aes",
 ]
 
 [[package]]
 name = "aes-test"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.3",
+ "aes",
  "hex-literal",
  "log",
  "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -334,6 +323,7 @@ dependencies = [
 name = "bao-console"
 version = "0.1.0"
 dependencies = [
+ "aes",
  "cram-hal-service",
  "cramium-api",
  "cramium-emu",
@@ -359,6 +349,7 @@ dependencies = [
 name = "bao-video"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "blitstr2",
  "cram-hal-service",
  "cramium-api",
@@ -444,6 +435,12 @@ name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
+
+[[package]]
+name = "base64"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "base64ct"
@@ -1018,7 +1015,7 @@ dependencies = [
 name = "cram-mbox1"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.3",
+ "aes",
  "log",
  "num-derive 0.4.2",
  "num-traits",
@@ -1280,7 +1277,7 @@ dependencies = [
 name = "ctap-crypto"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.3",
+ "aes",
  "arrayref",
  "byteorder",
  "cbc",
@@ -2940,7 +2937,7 @@ dependencies = [
 name = "keystore"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.3",
+ "aes",
  "aes-gcm-siv",
  "aes-kw",
  "blowfish",
@@ -3137,6 +3134,7 @@ dependencies = [
 name = "loader"
 version = "0.1.0"
 dependencies = [
+ "aes",
  "aes-gcm-siv",
  "armv7",
  "atsama5d27",
@@ -3899,7 +3897,7 @@ dependencies = [
 name = "pddb"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.3",
+ "aes",
  "aes-gcm-siv",
  "bitfield",
  "bitflags 1.3.2",
@@ -4727,7 +4725,7 @@ dependencies = [
 name = "root-keys"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.3",
+ "aes",
  "aes-gcm-siv",
  "aes-kw",
  "blitstr2",
@@ -4772,9 +4770,8 @@ dependencies = [
 
 [[package]]
 name = "rqrr"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48eaf9c75f2a8f231b09036c115a45a9845313f7faa6a39fa45a2a2bd06a27c7"
+version = "0.10.0"
+source = "git+https://github.com/betrusted-io/rqrr.git?branch=rv32-opt#388fc6c0b7ee6cd7e5a2261a9d67a0c0692184f1"
 dependencies = [
  "g2p",
  "image",
@@ -5105,7 +5102,7 @@ dependencies = [
 name = "shellchat"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.3",
+ "aes",
  "base64 0.20.0",
  "blitstr2",
  "chrono",
@@ -6977,6 +6974,7 @@ dependencies = [
 name = "xous-kernel"
 version = "0.9.38"
 dependencies = [
+ "aes",
  "armv7",
  "bitflags 1.3.2",
  "cramium-hal",
@@ -7076,6 +7074,7 @@ dependencies = [
 name = "xous-swapper"
 version = "0.1.0"
 dependencies = [
+ "aes",
  "aes-gcm-siv",
  "cramium-api",
  "cramium-hal",
@@ -7095,6 +7094,7 @@ dependencies = [
 name = "xous-ticktimer"
 version = "0.1.32"
 dependencies = [
+ "loader",
  "log",
  "num-derive 0.4.2",
  "num-traits",
@@ -7187,7 +7187,7 @@ version = "2.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40dd8c92efc296286ce1fbd16657c5dbefff44f1b4ca01cc5f517d8b7b3d3e2e"
 dependencies = [
- "aes 0.8.4",
+ "aes",
  "arbitrary",
  "bzip2",
  "constant_time_eq",

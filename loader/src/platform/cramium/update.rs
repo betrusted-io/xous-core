@@ -5,10 +5,6 @@ use cramium_api::*;
 use cramium_hal::board::SPIM_FLASH_IFRAM_ADDR;
 use cramium_hal::ifram::IframRange;
 use cramium_hal::iox::Iox;
-use cramium_hal::mbox::{
-    MBOX_PROTOCOL_REV, Mbox, MboxError, MboxToCm7Pkt, PAYLOAD_LEN_WORDS, RERAM_PAGE_SIZE_BYTES, ToCm7Op,
-    ToRvOp,
-};
 use cramium_hal::sh1107::{Mono, Oled128x128};
 use cramium_hal::udma;
 use cramium_hal::udma::*;
@@ -23,7 +19,6 @@ use crate::SIGBLOCK_SIZE;
 use crate::platform::cramium::gfx;
 use crate::platform::cramium::sha512_digest::Sha512Prehash;
 use crate::platform::cramium::usb::{self, SliceCursor, disable_all_irqs};
-use crate::platform::delay;
 
 // TODO:
 //   - Port unicode font drawing into loader
@@ -60,9 +55,7 @@ pub enum KeyPress {
     Left,
     Right,
     Select,
-    Start,
-    A,
-    B,
+    Home,
     Invalid,
     None,
 }
@@ -79,17 +72,15 @@ pub fn scan_keyboard<T: IoSetup + IoGpio>(
         iox.set_gpio_pin_value(*port, *pin, IoxValue::Low);
         for (col, (col_port, col_pin)) in cols.iter().enumerate() {
             if iox.get_gpio_pin_value(*col_port, *col_pin) == IoxValue::Low {
+                crate::println!("Key press at ({}, {})", row, col);
                 if key_press_index < key_presses.len() {
                     key_presses[key_press_index] = match (row, col) {
-                        (0, 2) => KeyPress::None, // KeyPress::Select, None due to broken hardware
-                        (2, 1) => KeyPress::Start,
-                        (1, 2) => KeyPress::None, // KeyPress::Left, None due to broken hardware
-                        (2, 2) => KeyPress::None, // None due to broken hardware
-                        (1, 1) => KeyPress::Up,
-                        (0, 1) => KeyPress::Down,
-                        (2, 0) => KeyPress::Right,
-                        (0, 0) => KeyPress::A,
-                        (1, 0) => KeyPress::B,
+                        (1, 3) => KeyPress::Left,
+                        (1, 2) => KeyPress::Home,
+                        (1, 0) => KeyPress::Right,
+                        (0, 0) => KeyPress::Down,
+                        (0, 2) => KeyPress::Up,
+                        (0, 1) => KeyPress::Select,
                         _ => KeyPress::Invalid,
                     };
                     key_press_index += 1;
@@ -121,13 +112,7 @@ pub fn process_update(perclk: u32) {
     );
 
     crate::platform::cramium::bootlogo::show_logo(&mut sh1107);
-    gfx::msg(
-        &mut sh1107,
-        "    START to boot",
-        Point::new(0, 115 - 16),
-        Mono::White.into(),
-        Mono::Black.into(),
-    );
+    gfx::msg(&mut sh1107, "     UP to boot", Point::new(0, 115 - 16), Mono::White.into(), Mono::Black.into());
     gfx::msg(&mut sh1107, "   DOWN to update", Point::new(0, 115), Mono::White.into(), Mono::Black.into());
 
     sh1107.draw();
@@ -171,6 +156,7 @@ pub fn process_update(perclk: u32) {
         // Below is all unsafe because USB is global mutable state
         unsafe {
             if let Some(ref mut usb_ref) = crate::platform::cramium::usb::USB {
+                crate::println!("inside update");
                 let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
                 usb.reset();
                 let mut poweron = 0;
@@ -303,7 +289,9 @@ pub fn process_update(perclk: u32) {
                                         return;
                                     }
                                     crate::println!("Kernel image is good!");
-                                    let mut mbox = cramium_hal::mbox::Mbox::new();
+
+                                    let mut rram = cramium_hal::rram::Reram::new();
+
                                     // concatenate this with e.g. .min(0x2000) to shorten the run, if needed
                                     let test_len = sig_rec.signed_len as usize;
                                     let check_slice = core::slice::from_raw_parts(
@@ -318,50 +306,20 @@ pub fn process_update(perclk: u32) {
 
                                     progress_bar(&mut sh1107, 0);
 
-                                    // nearest event multiple of RERAM_PAGE_SIZE_BYTES that fits into
-                                    // our available payload length
-                                    const BLOCKLEN_BYTES: usize = (PAYLOAD_LEN_WORDS * size_of::<u32>()
-                                        / RERAM_PAGE_SIZE_BYTES)
-                                        * RERAM_PAGE_SIZE_BYTES;
+                                    // choose a constant that balances screen updates versus performance
+                                    const BLOCKLEN_BYTES: usize = 4096 * 16;
                                     let total_len = SIGBLOCK_SIZE + test_len;
                                     for (i, byte_chunk) in disk_access
                                         [k_start..k_start + SIGBLOCK_SIZE + test_len as usize]
                                         .chunks(BLOCKLEN_BYTES)
                                         .enumerate()
                                     {
-                                        // +2 words are for the address / length fields required by the
-                                        // protocol
-                                        let mut buffer = [0u32; BLOCKLEN_BYTES / size_of::<u32>() + 2];
-                                        for (src, dst) in byte_chunk.chunks(4).zip(buffer[2..].iter_mut()) {
-                                            *dst = u32::from_le_bytes(src.try_into().unwrap());
-                                        }
-                                        // now fill in the metadata for the protocol
-                                        buffer[0] =
-                                            (KERNEL_BASE_ADDR + i * BLOCKLEN_BYTES + utralib::HW_RERAM_MEM)
-                                                as u32;
-                                        buffer[1] = BLOCKLEN_BYTES as u32;
-                                        if i % 8 == 0 {
-                                            crate::println!("{:x}: {:x?}", buffer[0], &buffer[2..6]);
-                                            progress_bar(&mut sh1107, i * BLOCKLEN_BYTES * 100 / total_len);
-                                        }
-                                        match write_rram(&mut mbox, &buffer) {
-                                            Ok(len) => {
-                                                if len != BLOCKLEN_BYTES {
-                                                    crate::println!(
-                                                        "write length mismatch, got {} expected {} words",
-                                                        len,
-                                                        BLOCKLEN_BYTES
-                                                    );
-                                                }
-                                            }
-                                            Err(e) => {
-                                                crate::println!("Write failed with {:?}", e);
-                                                break;
-                                            }
-                                        };
+                                        rram.write_slice(KERNEL_BASE_ADDR + i * BLOCKLEN_BYTES, &byte_chunk);
+                                        crate::println!("{:x}: {:x?}", i * BLOCKLEN_BYTES, &byte_chunk[..4]);
+                                        progress_bar(&mut sh1107, i * BLOCKLEN_BYTES * 100 / total_len);
                                     }
                                     progress_bar(&mut sh1107, 100);
-                                    cache_flush();
+                                    cramium_hal::cache_flush();
                                     crate::println!(
                                         "data after: {:x?} .. {:x?}",
                                         &check_slice[..32],
@@ -559,80 +517,4 @@ fn progress_bar(sh1107: &mut Oled128x128<'_>, percentage: usize) {
     );
     sh1107.draw();
     sh1107.clear();
-}
-
-pub fn write_rram(mbox: &mut Mbox, data: &[u32]) -> Result<usize, MboxError> {
-    let write_pkt = MboxToCm7Pkt { version: MBOX_PROTOCOL_REV, opcode: ToCm7Op::FlashWrite, data };
-    match mbox.try_send(write_pkt) {
-        Ok(_) => {
-            crate::platform::delay(10);
-            // crate::println!("flash write sent OK");
-            let mut timeout = 0;
-            while mbox.poll_not_ready() {
-                timeout += 1;
-                if timeout > 1000 {
-                    crate::println!("flash write timeout");
-                    return Err(MboxError::NotReady);
-                }
-                crate::platform::delay(2);
-            }
-            // now receive the packet
-            let mut rx_data = [0u32; 16];
-            timeout = 0;
-            while !mbox.poll_rx_available() {
-                timeout += 1;
-                if timeout > 1000 {
-                    crate::println!("flash handshake timeout");
-                    return Err(MboxError::NotReady);
-                }
-                crate::platform::delay(2);
-            }
-            match mbox.try_rx(&mut rx_data) {
-                Ok(rx_pkt) => {
-                    crate::platform::delay(10);
-                    if rx_pkt.version != MBOX_PROTOCOL_REV {
-                        crate::println!("Version mismatch {} != {}", rx_pkt.version, MBOX_PROTOCOL_REV);
-                    }
-                    if rx_pkt.opcode != ToRvOp::RetFlashWrite {
-                        crate::println!(
-                            "Opcode mismatch {} != {}",
-                            rx_pkt.opcode as u16,
-                            ToRvOp::RetFlashWrite as u16
-                        );
-                    }
-                    if rx_pkt.len != 1 {
-                        crate::println!("Expected length mismatch {} != {}", rx_pkt.len, 1);
-                    } else {
-                        // crate::println!("Wrote {} bytes", rx_data[0]);
-                    }
-                    Ok(rx_data[0] as usize)
-                }
-                Err(e) => {
-                    crate::platform::delay(10);
-                    crate::println!("Error while deserializing: {:?}\n", e);
-                    Err(e)
-                }
-            }
-        }
-        Err(e) => {
-            delay(10);
-            crate::println!("Flash write send error: {:?}", e);
-            Err(e)
-        }
-    }
-}
-
-#[inline(always)]
-fn cache_flush() {
-    unsafe {
-        #[rustfmt::skip]
-        core::arch::asm!(
-        ".word 0x500F",
-        "nop",
-        "nop",
-        "nop",
-        "nop",
-        "nop",
-    );
-    }
 }

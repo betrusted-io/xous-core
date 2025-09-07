@@ -22,9 +22,29 @@ artybio = [
     "linked_list_allocator",
     "xous-bio-bdma/artybio",
     "xous-bio-bdma/baremetal",
+    "nto-bio",
 ]
 artyvexii = ["utralib/artyvexii", "linked_list_allocator"]
-cramium-soc = ["utralib/cramium-soc"]
+
+# Baochip feature tree below
+v0p9 = [] # selects RAM timings for VDD core = 0.9V
+cramium-soc = [
+    "utralib/cramium-soc",
+    "linked_list_allocator",
+    "cramium-hal/loader-baosec",
+    # "cramium-hal/debug-print-usb",
+    "cramium-api",
+    "v0p9",
+]
+# activates BIO test suite
+nto-bio = [
+    "xous-bio-bdma/bio-mul",
+    "xous-bio-bdma/baremetal",
+    "xous-bio-bdma/cramium-soc",
+    "xous-bio-bdma/tests",
+]
+# selects features for EVB target (defaults to baosec)
+nto-evb = []
 
 verilator-only = []
-default = ["artyvexii"]
+default = ["artyvexii", "nto-bio"]

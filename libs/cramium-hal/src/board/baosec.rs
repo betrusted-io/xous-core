@@ -189,10 +189,10 @@ pub fn setup_i2c_pins(iox: &dyn IoSetup) -> I2cChannel {
         Some(IoxEnable::Enable),
         Some(IoxDriveStrength::Drive2mA),
     );
-    // PB13 -> PMIC IRQ
+    // PB15 -> PMIC IRQ
     iox.setup_pin(
         IoxPort::PB,
-        13,
+        15,
         Some(IoxDir::Input),
         Some(IoxFunction::Gpio),
         Some(IoxEnable::Enable),
@@ -205,8 +205,6 @@ pub fn setup_i2c_pins(iox: &dyn IoSetup) -> I2cChannel {
 
 /// returns the power-down port and pin number
 pub fn setup_camera_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
-    // power-down pin - default to powered down
-    iox.set_gpio_pin_value(IoxPort::PC, 14, IoxValue::High);
     iox.setup_pin(
         IoxPort::PC,
         14,
@@ -217,6 +215,8 @@ pub fn setup_camera_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         Some(IoxEnable::Enable),
         Some(IoxDriveStrength::Drive2mA),
     );
+    // power-down pin - default to powered down
+    iox.set_gpio_pin_value(IoxPort::PC, 14, IoxValue::High);
     // camera interface proper
     for pin in 2..11 {
         iox.setup_pin(
@@ -234,10 +234,11 @@ pub fn setup_camera_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
 }
 
 /// returns the USB SE0 port and pin number
-const SE0_PIN: u8 = 14;
+/// TODO: remove this - not actually present on NTO baosec
+const SE0_PIN: u8 = 6;
 pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     iox.setup_pin(
-        IoxPort::PB,
+        IoxPort::PC,
         SE0_PIN,
         Some(IoxDir::Output),
         Some(IoxFunction::Gpio),
@@ -246,15 +247,14 @@ pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         Some(IoxEnable::Enable),
         Some(IoxDriveStrength::Drive2mA),
     );
-    iox.set_gpio_pin_value(IoxPort::PB, SE0_PIN, IoxValue::Low);
-    (IoxPort::PB, SE0_PIN)
+    iox.set_gpio_pin_value(IoxPort::PC, SE0_PIN, IoxValue::Low);
+    (IoxPort::PC, SE0_PIN)
 }
 
-// These constants definitely change for NTO. These will only work on NTO.
-const KB_PORT: IoxPort = IoxPort::PD;
-const R_PINS: [u8; 3] = [0, 1, 4];
-const C_PINS: [u8; 3] = [5, 6, 7];
-pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 3], [(IoxPort, u8); 3]) {
+const KB_PORT: IoxPort = IoxPort::PF;
+const R_PINS: [u8; 2] = [6, 7];
+const C_PINS: [u8; 4] = [2, 3, 4, 5];
+pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 2], [(IoxPort, u8); 4]) {
     for r in R_PINS {
         iox.setup_pin(
             KB_PORT,
@@ -282,13 +282,45 @@ pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 3], [(Iox
         );
     }
     (
-        [(KB_PORT, R_PINS[0]), (KB_PORT, R_PINS[1]), (KB_PORT, R_PINS[2])],
-        [(KB_PORT, C_PINS[0]), (KB_PORT, C_PINS[1]), (KB_PORT, C_PINS[2])],
+        [(KB_PORT, R_PINS[0]), (KB_PORT, R_PINS[1])],
+        [(KB_PORT, C_PINS[0]), (KB_PORT, C_PINS[1]), (KB_PORT, C_PINS[2]), (KB_PORT, C_PINS[3])],
     )
 }
 
 pub fn setup_pmic_irq<T: IoIrq>(iox: &T, server: &str, opcode: usize) {
     iox.set_irq_pin(IoxPort::PB, 13, IoxValue::Low, server, opcode);
+}
+
+pub fn setup_oled_power_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    let (port, pin) = (IoxPort::PC, 4);
+    iox.setup_pin(
+        port,
+        pin,
+        Some(IoxDir::Output),
+        Some(IoxFunction::Gpio),
+        None,
+        Some(IoxEnable::Disable),
+        None,
+        Some(IoxDriveStrength::Drive2mA),
+    );
+    iox.set_gpio_pin_value(port, pin, IoxValue::Low);
+    (port, pin)
+}
+
+pub fn setup_trng_power_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    let (port, pin) = (IoxPort::PC, 5);
+    iox.setup_pin(
+        port,
+        pin,
+        Some(IoxDir::Output),
+        Some(IoxFunction::Gpio),
+        None,
+        Some(IoxEnable::Disable),
+        None,
+        Some(IoxDriveStrength::Drive2mA),
+    );
+    iox.set_gpio_pin_value(port, pin, IoxValue::Low);
+    (port, pin)
 }
 
 // sentinel used by test infrastructure to assist with parsing

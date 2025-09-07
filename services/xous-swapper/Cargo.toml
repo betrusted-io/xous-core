@@ -21,6 +21,7 @@ loader = { path = "../../loader", features = ["swap"], optional = true }
 aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
     "aes",
 ] }
+aes = { path = "../aes", default-features = false, optional = true }
 cramium-hal = { path = "../../libs/cramium-hal", optional = true, default-features = false }
 precursor-hal = { path = "../../libs/precursor-hal", optional = true, default-features = false }
 cramium-api = { path = "../../libs/cramium-api", optional = true, default-features = false }
@@ -30,7 +31,12 @@ utralib = { version = "0.1.25", optional = true, default-features = false }
 [target.'cfg(any(windows,unix))'.dependencies]
 
 [features]
-cramium-soc = ["utralib/cramium-soc", "loader/cramium-soc", "cramium-api/std"]
+cramium-soc = [
+    "utralib/cramium-soc",
+    "loader/cramium-soc",
+    "cramium-api/std",
+    "aes/cramium-soc",
+]
 cramium-fpga = ["utralib/cramium-fpga"]
 board-baosec = ["cramium-hal/board-baosec", "cramium-soc"]
 board-baosor = ["cramium-hal/board-baosor", "cramium-soc"]

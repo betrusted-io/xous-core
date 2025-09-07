@@ -1,6 +1,6 @@
 [package]
 name = "aes"
-version = "0.8.3"
+version = "0.8.4"
 authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "AES library for Xous"
@@ -18,7 +18,6 @@ check-cfg = ["cfg(aes_compact)", "cfg(aes_force_soft)"]
 hazmat = []      # Expose cryptographically hazardous APIs
 cramium-soc = []
 vexii-test = []
-# Note: this default line should always be empty. If it has the 'cramium-soc' feature
-# checkd in, then AES acceleration gets disabled for all targets. This hack only exists
-# because in the MPW version of the silicon, HW AES in broken on the RV32.
+precursor = []
+renode = []
 default = []

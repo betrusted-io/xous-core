@@ -115,7 +115,10 @@ impl XousTickTimer {
             wdt: CSR::new(wdt.as_mut_ptr() as *mut u32),
         };
         // TODO: base this off of some system-level constant
-        xtt.csr.wo(utra::ticktimer::CLOCKS_PER_TICK, 200_000);
+        xtt.csr.wo(
+            utra::ticktimer::CLOCKS_PER_TICK,
+            (loader::SYSTEM_CLOCK_FREQUENCY / 2) / (1000 * TICKS_PER_MS as u32),
+        );
 
         #[cfg(feature = "watchdog")]
         {
