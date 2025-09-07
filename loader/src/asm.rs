@@ -13,10 +13,6 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
     #[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
     let _kernel_args = platform::FLASH_BASE + platform::KERNEL_OFFSET;
 
-    // Stub for clearing IFRAM & RAM on Cramium target. This is required
-    // to clear the parity check bits, which are randomly set on boot. System will
-    // eventually hang if these bits aren't cleared.
-    #[cfg(all(any(feature = "cramium-soc", feature = "cramium-fpga"), not(feature = "simulation-only")))]
     unsafe {
         #[rustfmt::skip]
         asm! (
@@ -24,7 +20,16 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
             "mv          sp, {ram_top}",
             // subtract four from sp to make room for a DMA "gutter"
             "addi        sp, sp, -4",
-
+            ram_top = in(reg) (platform::RAM_BASE + platform::RAM_SIZE),
+        );
+    }
+    // Stub for clearing IFRAM & RAM on Cramium target. This is required
+    // to clear the parity check bits, which are randomly set on boot. System will
+    // eventually hang if these bits aren't cleared.
+    #[cfg(all(any(feature = "cramium-soc", feature = "cramium-fpga"), not(feature = "simulation-only")))]
+    unsafe {
+        #[rustfmt::skip]
+        asm! (
             // twiddle duart
             "li          t0, 0x40042000",
             // setup etuc
@@ -43,7 +48,11 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
             "bne         x0, t3, 11b", // wait for 0
             "addi        t2, t2, -1",
             "bne         x0, t2, 10b",
-
+        );
+    }
+    unsafe {
+        #[rustfmt::skip]
+        asm! (
             // continue on boot
             "li          t0, 0xffffffff",
             "csrw        mideleg, t0",
