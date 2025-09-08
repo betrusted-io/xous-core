@@ -1558,67 +1558,63 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         2,  // 1024-1600
     ];
 
-    // this block might belong at the top, in particular, configuring the dividers prevents stuff
-    // from being overclocked when the PLL comes live; but for now we are debugging other stuff
-    let perclk = {
-        // Hits a 16:8:4:2:1 ratio on fclk:aclk:hclk:iclk:pclk
-        // Resulting in 800:400:200:100:50 MHz assuming 800MHz fclk
-        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x3fff); // fclk
+    // Safest divider settings, assuming no overclocking.
+    // If overclocking, need to lower hclk:iclk:pclk even futher; the CPU speed can outperform the bus fabric.
+    // Hits a 16:8:4:2:1 ratio on fclk:aclk:hclk:iclk:pclk
+    // Resulting in 800:400:200:100:50 MHz assuming 800MHz fclk
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x3f7f); // fclk
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x3f7f); // aclk
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x1f3f); // hclk
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x0f1f); // iclk
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x070f); // pclk
 
-        // Hits a 8:8:4:2:1 ratio on fclk:aclk:hclk:iclk:pclk
-        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x3f7f); // aclk
-        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x1f3f); // hclk
-        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x0f1f); // iclk
-        daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x070f); // pclk
-        // TODO: derive this from the actual perclk value, based on the values in the lookup table below...
-        let perclk = if freq_hz > 400_000_000 {
-            daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x07_ff_ff);
-            freq_hz / 8
-        } else {
-            daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
-            freq_hz / 4
-        };
-
-        /*
-            perclk fields:  min-cycle-lp | min-cycle | fd-lp | fd
-            clkper fd
-                0xff :   Fperclk = Fclktop/2
-                0x7f:   Fperclk = Fclktop/4
-                0x3f :   Fperclk = Fclktop/8
-                0x1f :   Fperclk = Fclktop/16
-                0x0f :   Fperclk = Fclktop/32
-                0x07 :   Fperclk = Fclktop/64
-                0x03:   Fperclk = Fclktop/128
-                0x01:   Fperclk = Fclktop/256
-
-            min cycle of clktop, F means frequency
-            Fperclk  Max = Fperclk/(min cycle+1)*2
-        */
-
-        // turn off gates
-        daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0xff);
-        daric_cgu.add(utra::sysctrl::SFR_HCLKGR.offset()).write_volatile(0xff);
-        daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0xff);
-        daric_cgu.add(utra::sysctrl::SFR_PCLKGR.offset()).write_volatile(0xff);
-        crate::println!("bef gates set");
-        for _ in 0..100 {
-            crate::print!("*");
-        }
-        crate::println!(".");
-        // commit dividers
-        daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
-        crate::println!("gates set");
-        for _ in 0..100 {
-            crate::print!("-");
-        }
-        crate::println!(".");
-        perclk
+    // calculate perclk divider. Target 100MHz.
+    let (min_cycle, fd, perclk) = if let Some((min_cycle, fd, perclk)) = clk_to_per(freq_hz / 1_000_000, 100)
+    {
+        daric_cgu
+            .add(utra::sysctrl::SFR_CGUFDPER.offset())
+            .write_volatile((min_cycle as u32) << 16 | (fd as u32) << 8 | fd as u32);
+        (min_cycle, fd, perclk * 1_000_000)
+    } else if freq_hz > 400_000_000 {
+        daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x07_ff_ff);
+        (7, 0xff, freq_hz / 8)
+    } else {
+        daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
+        (3, 0xff, freq_hz / 4)
     };
 
-    for _ in 0..100 {
-        crate::print!("1");
-    }
-    crate::println!(".");
+    /*
+        perclk fields:  min-cycle-lp | min-cycle | fd-lp | fd
+        clkper fd
+            0xff :   Fperclk = Fclktop/2
+            0x7f:   Fperclk = Fclktop/4
+            0x3f :   Fperclk = Fclktop/8
+            0x1f :   Fperclk = Fclktop/16
+            0x0f :   Fperclk = Fclktop/32
+            0x07 :   Fperclk = Fclktop/64
+            0x03:   Fperclk = Fclktop/128
+            0x01:   Fperclk = Fclktop/256
+
+        min cycle of clktop, F means frequency
+        Fperclk  Max = Fperclk/(min cycle+1)*2
+    */
+
+    // turn off gates
+    daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0xff);
+    daric_cgu.add(utra::sysctrl::SFR_HCLKGR.offset()).write_volatile(0xff);
+    daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0xff);
+    daric_cgu.add(utra::sysctrl::SFR_PCLKGR.offset()).write_volatile(0xff);
+    // commit dividers
+    daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
+
+    // set voltage regulators to 0.893v. This is necessary because lp mode may set it lower.
+    crate::println!("setting vdd85 to 0.893v");
+    let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
+    ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08421FF1);
+    ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
+    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
+    crate::platform::delay_at_sysfreq(20, 48_000_000);
+    crate::println!("...done");
 
     cgu.wo(sysctrl::SFR_CGUSEL1, 1);
     cgu.wo(sysctrl::SFR_CGUFSCR, FREQ_OSC_MHZ);
@@ -1630,12 +1626,7 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(FREQ_OSC_MHZ);
     duart.add(utra::duart::SFR_CR.offset()).write_volatile(1);
 
-    for _ in 0..100 {
-        crate::print!("2");
-    }
-    crate::println!(".");
-
-    if freq_hz < 1000000 {
+    if freq_hz <= 1_000_000 {
         cgu.wo(sysctrl::SFR_IPCOSC, freq_hz);
         cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
     }
@@ -1645,12 +1636,7 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     // commit
     cgu.wo(sysctrl::SFR_CGUSET, 0x32);
 
-    for _ in 0..100 {
-        crate::print!("3");
-    }
-    crate::println!(".");
-
-    if freq_hz < 1000000 {
+    if freq_hz <= 1_000_000 {
     } else {
         let n_fxp24: u64; // fixed point
         let f16mhz_log2: u32 = (freq_hz / FREQ_0).ilog2();
@@ -1671,7 +1657,8 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
             unsafe { core::arch::asm!("nop") };
         }
         crate::println!("PLL delay 1");
-
+        // why is this print needed for the code not to crash?
+        crate::println!("freq_hz {} log2 {}", freq_hz, f16mhz_log2);
         n_fxp24 = (((freq_hz as u64) << 24) * TBL_MUL[f16mhz_log2 as usize] as u64
             + PFD_F_MHZ as u64 * UNIT_MHZ as u64 / 2)
             / (PFD_F_MHZ as u64 * UNIT_MHZ as u64); // rounded
@@ -1731,8 +1718,12 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         let fsfreq = (daric_cgu.add(offset).read_volatile() >> shift) & 0xffff;
         crate::println!("{}: {} MHz", name, fsfreq);
     }
+    // Taken in from latest daric_util.c
+    let mut udmacore = CSR::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
+    udmacore.wo(utra::udma_ctrl::REG_CG, 0xFFFF_FFFF);
 
-    crate::println!("PLL configured to {} MHz; perclk {}", freq_hz / 1_000_000, perclk);
+    crate::println!("Perclk solution: {:x}|{:x} -> {} MHz", min_cycle, fd, perclk / 1_000_000);
+    crate::println!("PLL configured to {} MHz", freq_hz / 1_000_000);
     perclk
 }
 
@@ -2187,4 +2178,40 @@ pub fn coreuser_config() {
     // turn off updates
     coreuser.wo(utra::coreuser::PROTECT, 1);
     crate::println!("coreuser locked!");
+}
+
+/// Takes in the top clock in MHz, desired perclk in MHz, and returns a tuple of
+/// (min cycle, fd, actual freq)
+/// *tested*
+pub fn clk_to_per(top_in_mhz: u32, perclk_in_mhz: u32) -> Option<(u8, u8, u32)> {
+    let fd_platonic = ((256 * perclk_in_mhz) / (top_in_mhz / 2)).min(256);
+    if fd_platonic > 0 {
+        let fd = fd_platonic - 1;
+        let min_cycle = (2 * (256 / (fd + 1))).max(1);
+        let min_freq = top_in_mhz / min_cycle;
+        let target_freq = top_in_mhz * (fd + 1) / 512;
+        let actual_freq = target_freq.max(min_freq);
+        if fd < 256 && min_cycle < 256 && min_cycle > 0 {
+            Some(((min_cycle - 1) as u8, fd as u8, actual_freq))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+/// Delay with a given system clock frequency. Useful during power mode switching.
+pub fn delay_at_sysfreq(ms: usize, sysclk_freq: u32) {
+    let mut timer = utralib::CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
+    timer.wfo(utra::timer0::EN_EN, 0b0); // disable the timer
+    timer.wfo(utra::timer0::LOAD_LOAD, 0);
+    timer.wfo(utra::timer0::RELOAD_RELOAD, sysclk_freq / 1000);
+    timer.wfo(utra::timer0::EN_EN, 1);
+    timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
+    for _ in 0..ms {
+        // comment this out for testing on MPW
+        while timer.rf(utra::timer0::EV_PENDING_ZERO) == 0 {}
+        timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
+    }
 }
