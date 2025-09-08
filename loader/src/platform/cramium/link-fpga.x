@@ -87,12 +87,12 @@ SECTIONS
     . = ALIGN(4);
     _edata = .;
   } > REGION_DATA AT > REGION_RODATA
-/*
+
   .fonts : ALIGN(65536)
   {
       KEEP(*(.fontdata));
   } > FONTS
-*/
+
   .bss (NOLOAD) :
   {
     _sbss = .;
