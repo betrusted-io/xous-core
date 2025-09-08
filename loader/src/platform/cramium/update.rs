@@ -28,7 +28,8 @@ const TEXT_MIDLINE: isize = 51;
 
 // Empirically measured PORTSC when the port is unplugged. This might be a brittle way
 // to detect if the device is unplugged.
-const DISCONNECT_STATE: u32 = 0x40b;
+const DISCONNECT_STATE: u32 = 0x40b; //  01_0_0000_0_1_01_1
+const DISCONNECT_STATE_HS: u32 = 0xc6b; // 11_0_0011_0_1_01_1
 
 // loader is not updateable here because we're XIP. But we can update these other images:
 const SWAP_NAME: &'static str = "SWAP.IMG";
@@ -127,9 +128,11 @@ pub fn process_update(perclk: u32) {
         for kp in kps {
             if kp != KeyPress::None {
                 crate::println!("Got key: {:?}", kp);
-                key_pressed = true;
             }
-            if kp == KeyPress::Down {
+            if kp == KeyPress::Up {
+                key_pressed = true;
+            } else if kp == KeyPress::Down {
+                key_pressed = true;
                 do_update = true;
             }
         }
@@ -193,9 +196,11 @@ pub fn process_update(perclk: u32) {
                     let new_portsc = usb.portsc_val();
                     // alternately, break out of the loop when USB is disconnected
                     if new_portsc != portsc {
-                        crate::println!("PP: {:x}", portsc);
                         portsc = new_portsc;
-                        if portsc == DISCONNECT_STATE && new_usb_state == UsbDeviceState::Configured {
+                        crate::println!("PP: {:x}", portsc);
+                        if (portsc == DISCONNECT_STATE || portsc == DISCONNECT_STATE_HS)
+                            && new_usb_state == UsbDeviceState::Configured
+                        {
                             break;
                         }
                     }
@@ -289,7 +294,7 @@ pub fn process_update(perclk: u32) {
                                         return;
                                     }
                                     crate::println!("Kernel image is good!");
-
+                                    sh1107.clear();
                                     let mut rram = cramium_hal::rram::Reram::new();
 
                                     // concatenate this with e.g. .min(0x2000) to shorten the run, if needed
@@ -315,7 +320,6 @@ pub fn process_update(perclk: u32) {
                                         .enumerate()
                                     {
                                         rram.write_slice(KERNEL_BASE_ADDR + i * BLOCKLEN_BYTES, &byte_chunk);
-                                        crate::println!("{:x}: {:x?}", i * BLOCKLEN_BYTES, &byte_chunk[..4]);
                                         progress_bar(&mut sh1107, i * BLOCKLEN_BYTES * 100 / total_len);
                                     }
                                     progress_bar(&mut sh1107, 100);
