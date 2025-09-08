@@ -127,9 +127,12 @@ pub(crate) const EP1_OUT_BUF_LEN: usize = 1024;
 pub(crate) const MASS_STORAGE_EPADDR_IN: u8 = 0x81;
 pub(crate) const MASS_STORAGE_EPADDR_OUT: u8 = 0x01;
 
+const FS_MAX_PKT_SIZE: usize = 64;
+const HS_MAX_PKT_SIZE: usize = 512;
+
 pub(crate) fn enable_mass_storage_eps(this: &mut CorigineUsb, ep_num: u8) {
-    this.ep_enable(ep_num, USB_RECV, 64, EpType::BulkOutbound);
-    this.ep_enable(ep_num, USB_SEND, 64, EpType::BulkInbound);
+    this.ep_enable(ep_num, USB_RECV, HS_MAX_PKT_SIZE as _, EpType::BulkOutbound);
+    this.ep_enable(ep_num, USB_SEND, HS_MAX_PKT_SIZE as _, EpType::BulkInbound);
 }
 
 pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize, length: usize) {
@@ -145,7 +148,6 @@ pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize,
             crate::println!("USB_DT_DEVICE");
             let mut device_descriptor = DeviceDescriptor::default_mass_storage();
             device_descriptor.b_max_packet_size0 = 64;
-            device_descriptor.b_cd_usb = 0x0210;
 
             let len = length.min(core::mem::size_of::<DeviceDescriptor>());
             ep0_buf[..len].copy_from_slice(&device_descriptor.as_ref()[..len]);
@@ -163,10 +165,6 @@ pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize,
 
             this.ep0_send(this.ep0_buf.load(Ordering::SeqCst) as usize, len, 0);
         }
-        USB_DT_OTHER_SPEED_CONFIG => {
-            crate::println!("USB_DT_OTHER_SPEED_CONFIG\r\n");
-            crate::println!("*** UNHANDLED ***");
-        }
         USB_DT_CONFIG => {
             crate::println!("USB_DT_CONFIG");
             let total_length = size_of::<ConfigDescriptor>()
@@ -174,8 +172,29 @@ pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize,
                 + size_of::<EndpointDescriptor>() * 2;
             let config = ConfigDescriptor::default_mass_storage(total_length as u16);
             let interface = InterfaceDescriptor::default_mass_storage();
-            let ep_in = EndpointDescriptor::default_mass_storage(MASS_STORAGE_EPADDR_IN, 64);
-            let ep_out = EndpointDescriptor::default_mass_storage(MASS_STORAGE_EPADDR_OUT, 64);
+            let ep_in =
+                EndpointDescriptor::default_mass_storage(MASS_STORAGE_EPADDR_IN, HS_MAX_PKT_SIZE as _);
+            let ep_out =
+                EndpointDescriptor::default_mass_storage(MASS_STORAGE_EPADDR_OUT, HS_MAX_PKT_SIZE as _);
+            let response: [&[u8]; 4] = [config.as_ref(), interface.as_ref(), ep_in.as_ref(), ep_out.as_ref()];
+            let flattened = response.iter().flat_map(|slice| slice.iter().copied());
+            for (dst, src) in ep0_buf.iter_mut().zip(flattened) {
+                *dst = src
+            }
+            let buffsize = total_length.min(length);
+            this.ep0_send(this.ep0_buf.load(Ordering::SeqCst) as usize, buffsize, 0);
+        }
+        USB_DT_OTHER_SPEED_CONFIG => {
+            crate::println!("USB_DT_OTHER_SPEED_CONFIG\r\n");
+            let total_length = size_of::<ConfigDescriptor>()
+                + size_of::<InterfaceDescriptor>()
+                + size_of::<EndpointDescriptor>() * 2;
+            let config = ConfigDescriptor::default_mass_storage(total_length as u16);
+            let interface = InterfaceDescriptor::default_mass_storage();
+            let ep_in =
+                EndpointDescriptor::default_mass_storage(MASS_STORAGE_EPADDR_IN, FS_MAX_PKT_SIZE as _);
+            let ep_out =
+                EndpointDescriptor::default_mass_storage(MASS_STORAGE_EPADDR_OUT, FS_MAX_PKT_SIZE as _);
             let response: [&[u8]; 4] = [config.as_ref(), interface.as_ref(), ep_in.as_ref(), ep_out.as_ref()];
             let flattened = response.iter().flat_map(|slice| slice.iter().copied());
             for (dst, src) in ep0_buf.iter_mut().zip(flattened) {
