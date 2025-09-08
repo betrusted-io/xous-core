@@ -1,5 +1,5 @@
 [package]
-name = "usb-cramium"
+name = "usb-bao1x"
 version = "0.1.0"
 edition = "2021"
 
@@ -19,6 +19,7 @@ cramium-hal = { path = "../../libs/cramium-hal", features = [
     # "verbose-debug",
     "axp2101",
 ], optional = true }
+cramium-api = { path = "../../libs/cramium-api" }
 cram-hal-service = { path = "../cram-hal-service", optional = true }
 cramium-emu = { path = "../cramium-emu", optional = true }
 xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main" }

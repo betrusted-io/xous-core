@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use cramium_hal::usb::driver::{CRG_UDC_ERDPLO_EHB, CorigineWrapper, EventTrbS};
 use cramium_hal::usb::utra::*;
 use num_traits::*;
-use usb_cramium::HIDReport;
+use usb_bao1x::HIDReport;
 use usb_device::class_prelude::*;
 use usb_device::device::UsbDevice;
 use usb_device::prelude::*;

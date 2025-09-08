@@ -15,7 +15,7 @@ use std::panic;
 use std::sync::Arc;
 
 use api::{HIDReport, LogLevel, Opcode, U2fCode, U2fMsgIpc, UsbListenerRegistration};
-use cram_hal_service::api::KeyMap;
+use cramium_api::keyboard::KeyMap;
 use cramium_hal::axp2101::VbusIrq;
 use cramium_hal::usb::driver::{CorigineUsb, CorigineWrapper};
 use hw::CramiumUsb;
@@ -71,7 +71,7 @@ pub(crate) fn main_hw() -> ! {
     let serial_number = format!("TODO!!"); // implement in cramium-hal once we have a serial number API
 
     let native_kbd =
-        cram_hal_service::keyboard::Keyboard::new(&xns).expect("couldn't connect to keyboard service");
+        cramium_api::keyboard::Keyboard::new(&xns).expect("couldn't connect to keyboard service");
 
     let usb_mapping = xous::syscall::map_memory(
         xous::MemoryAddress::new(cramium_hal::usb::utra::CORIGINE_USB_BASE),
@@ -237,7 +237,7 @@ pub(crate) fn main_hw() -> ! {
     });
 
     log::info!("Registering PMIC handler to detect USB plug/unplug events");
-    let iox = cram_hal_service::iox_lib::IoxHal::new();
+    let iox = cramium_api::IoxHal::new();
     cramium_hal::board::setup_pmic_irq(
         &iox,
         api::SERVER_NAME_USB_DEVICE,
