@@ -123,8 +123,8 @@ pub fn do_update() {
                 let new_portsc = usb.portsc_val();
                 // alternately, break out of the loop when USB is disconnected
                 if new_portsc != portsc {
-                    crate::println!("PP: {:x}", portsc);
                     portsc = new_portsc;
+                    crate::println!("PP: {:x}", portsc);
                     if portsc == DISCONNECT_STATE && new_usb_state == UsbDeviceState::Configured {
                         break;
                     }

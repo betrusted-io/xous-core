@@ -395,7 +395,7 @@ pub fn clk_to_fd(fd_in_mhz: u32, desired_mhz: u32) -> Option<(u32, i32)> {
 /// (min cycle, fd, actual freq)
 /// *tested*
 pub fn clk_to_per(top_in_mhz: u32, perclk_in_mhz: u32) -> Option<(u8, u8, u32)> {
-    let fd_platonic = ((256 * perclk_in_mhz) / (top_in_mhz / 2)).max(256);
+    let fd_platonic = ((256 * perclk_in_mhz) / (top_in_mhz / 2)).min(256);
     if fd_platonic > 0 {
         let fd = fd_platonic - 1;
         let min_cycle = (2 * (256 / (fd + 1))).max(1);
