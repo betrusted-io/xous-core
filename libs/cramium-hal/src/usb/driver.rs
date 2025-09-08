@@ -1167,20 +1167,6 @@ impl CorigineUsb {
         println!("USB reset done: {:x}", dummy);
     }
 
-    pub fn se0_test(&mut self, value: bool) {
-        crate::println!("cmd state: {:x}", self.csr.r(USBCMD));
-        crate::println!("link state bef: {:x}", (self.csr.r(PORTSC) >> 5) & 0xf);
-        let base = self.csr.r(U2PORTPMSC);
-        if value {
-            self.csr.wo(U2PORTPMSC, (base & 0x0FFF_FFFF) | (3 << 28));
-            crate::println!("U2PORTPMSC: {:x}", self.csr.r(U2PORTPMSC));
-        } else {
-            self.csr.wo(U2PORTPMSC, (base & 0x0FFF_FFFF) | (0 << 28));
-            crate::println!("U2PORTPMSC: {:x}", self.csr.r(U2PORTPMSC));
-        }
-        crate::println!("link state aft: {:x}", (self.csr.r(PORTSC) >> 5) & 0xf);
-    }
-
     pub fn init(&mut self) {
         self.csr.rmwf(USBCMD_INT_ENABLE, 0);
         self.csr.rmwf(USBCMD_RUN_STOP, 0);
