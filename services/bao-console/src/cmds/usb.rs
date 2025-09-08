@@ -1,7 +1,7 @@
 use std::fmt::Write;
 
 use String;
-use usb_cramium::UsbHid;
+use usb_bao1x::UsbHid;
 
 use crate::{CommonEnv, ShellCmdApi};
 
