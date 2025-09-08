@@ -63,6 +63,7 @@ nto-usb = [
     "cramium-hal/debug-print-usb",
     "cramium-hal/verbose-debug",
 ]
+nto-buttons = []
 
 verilator-only = []
-default = ["nto-usb"]
+default = ["nto-buttons"]

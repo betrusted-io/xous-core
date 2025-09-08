@@ -802,3 +802,48 @@ pub unsafe fn low_power() -> u32 {
 
     perclk
 }
+
+#[allow(dead_code)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum KeyPress {
+    Up,
+    Down,
+    Left,
+    Right,
+    Select,
+    Home,
+    Invalid,
+    None,
+}
+#[allow(dead_code)]
+pub fn scan_keyboard<T: IoSetup + IoGpio>(
+    iox: &T,
+    rows: &[(IoxPort, u8)],
+    cols: &[(IoxPort, u8)],
+) -> [KeyPress; 4] {
+    let mut key_presses: [KeyPress; 4] = [KeyPress::None; 4];
+    let mut key_press_index = 0; // no Vec in no_std, so we have to manually track it
+
+    for (row, (port, pin)) in rows.iter().enumerate() {
+        iox.set_gpio_pin_value(*port, *pin, IoxValue::Low);
+        for (col, (col_port, col_pin)) in cols.iter().enumerate() {
+            if iox.get_gpio_pin_value(*col_port, *col_pin) == IoxValue::Low {
+                crate::println!("Key press at ({}, {})", row, col);
+                if key_press_index < key_presses.len() {
+                    key_presses[key_press_index] = match (row, col) {
+                        (1, 3) => KeyPress::Left,
+                        (1, 2) => KeyPress::Home,
+                        (1, 0) => KeyPress::Right,
+                        (0, 0) => KeyPress::Down,
+                        (0, 2) => KeyPress::Up,
+                        (0, 1) => KeyPress::Select,
+                        _ => KeyPress::Invalid,
+                    };
+                    key_press_index += 1;
+                }
+            }
+        }
+        iox.set_gpio_pin_value(*port, *pin, IoxValue::High);
+    }
+    key_presses
+}

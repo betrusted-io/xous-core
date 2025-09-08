@@ -374,105 +374,20 @@ impl Repl {
                     return Err(Error::help("clocks <CPU freq in MHz, 100-1600>"));
                 }
             }
-            /*
-            #[cfg(feature = "cramium-soc")]
-            "usb" => {
-                crate::println!("USB basic test...");
-                let csr = cramium_hal::usb::compat::AtomicCsr::new(
-                    cramium_hal::usb::utra::CORIGINE_USB_BASE as *mut u32,
-                );
-                let irq_csr = cramium_hal::usb::compat::AtomicCsr::new(
-                    utralib::utra::irqarray1::HW_IRQARRAY1_BASE as *mut u32,
-                );
-                crate::println!("inspect USB region...");
-                let usbregs = 0x50202400 as *const u32;
-                for i in 0..32 {
-                    crate::println!("{:x}, {:08x}", i, unsafe {
-                        usbregs
-                            .add(cramium_hal::usb::utra::CORIGINE_DEV_OFFSET / size_of::<u32>() + i)
-                            .read_volatile()
-                    });
-                }
-                // safety: this is safe because we are in machine mode, and vaddr/paddr always pairs up
-                crate::println!("Getting pointer...");
-                let mut usb = unsafe {
-                    cramium_hal::usb::driver::CorigineUsb::new(
-                        cramium_hal::board::CRG_UDC_MEMBASE,
-                        csr.clone(),
-                        irq_csr.clone(),
-                    )
-                };
-                crate::println!("Reset");
-                usb.reset();
-                let mut idle_timer = 0;
-                let mut vbus_on = false;
-                let mut vbus_on_count = 0;
-                let mut in_u0 = false;
-                let mut last_sc = 0;
+            #[cfg(feature = "nto-buttons")]
+            "buttons" => {
+                use cramium_hal::iox::Iox;
+                let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                let (rows, cols) = cramium_hal::board::baosec::setup_kb_pins(&iox);
                 loop {
-                    let next_sc = csr.r(cramium_hal::usb::utra::PORTSC);
-                    if last_sc != next_sc {
-                        last_sc = next_sc;
-                        crate::println!("**** SC update {:x?}", cramium_hal::usb::driver::PortSc(next_sc));
-                        /*
-                        if cramium_hal::usb::driver::PortSc(next_sc).pr() {
-                            crate::println!("  >>reset<<");
-                            usb.start();
-                            in_u0 = false;
-                            vbus_on_count = 0;
+                    let kps = crate::scan_keyboard(&iox, &rows, &cols);
+                    for kp in kps {
+                        if kp != crate::KeyPress::None {
+                            crate::println!("Got key: {:?}", kp);
                         }
-                        */
-                    }
-                    let event = usb.udc_handle_interrupt();
-                    if event == cramium_hal::usb::driver::CrgEvent::None {
-                        idle_timer += 1;
-                    } else {
-                        crate::println!("*Event {:?} at {}", event, idle_timer);
-                        idle_timer = 0;
-                    }
-
-                    if !vbus_on && vbus_on_count == 4 {
-                        crate::println!("*Vbus on");
-                        usb.reset();
-                        usb.init();
-                        usb.start();
-                        vbus_on = true;
-                        in_u0 = false;
-
-                        let irq1 = irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
-                        crate::println!(
-                            "irq1: {:x}, status: {:x}",
-                            irq1,
-                            csr.r(cramium_hal::usb::utra::USBSTS)
-                        );
-                        irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, irq1);
-                        // restore this to go on to boot
-                        // break;
-                    } else if usb.pp() && !vbus_on {
-                        vbus_on_count += 1;
-                        crate::println!("*Vbus_on_count: {}", vbus_on_count);
-                        // mdelay(100);
-                    } else if !usb.pp() && vbus_on {
-                        crate::println!("*Vbus off");
-                        usb.stop();
-                        usb.reset();
-                        vbus_on_count = 0;
-                        vbus_on = false;
-                        in_u0 = false;
-                    } else if in_u0 && vbus_on {
-                        // usb.udc_handle_interrupt();
-                        // TODO
-                    } else if usb.ccs() && vbus_on {
-                        // usb.print_status(usb.csr.r(cramium_hal::usb::utra::PORTSC));
-                        crate::println!("*Enter U0");
-                        in_u0 = true;
-                        let irq1 = irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
-                        // usb.print_status(csr.r(cramium_hal::usb::utra::PORTSC));
-                        irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, irq1);
                     }
                 }
             }
-            */
             #[cfg(feature = "nto-bio")]
             "pin" => {
                 // We need at least a subcommand.
