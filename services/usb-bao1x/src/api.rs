@@ -128,6 +128,7 @@ pub enum U2fCode {
 
 #[derive(Eq, PartialEq, Copy, Clone)]
 #[repr(usize)]
+#[allow(dead_code)]
 pub enum UsbDeviceType {
     Debug = 0,
     FidoKbd = 1,
