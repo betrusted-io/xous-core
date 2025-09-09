@@ -268,7 +268,7 @@ pub(crate) fn main_hw() -> ! {
                     panic!("Unexpected report from vbus_irq status");
                 }
                 VbusIrq::None => {
-                    log::warn!("Received an interrupt but no actual event reported");
+                    // log::warn!("Received an interrupt but no actual event reported");
                 }
             },
             Opcode::U2fRxDeferred => {
