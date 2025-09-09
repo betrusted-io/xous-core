@@ -30,6 +30,9 @@ rand_chacha = { version = "0.3.1", optional = true }
 
 aes = { path = "../aes", default-features = false, optional = true }
 
+# hid bringup
+xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main", optional = true }
+
 # aes testing
 [features]
 cramium-soc = [
@@ -64,4 +67,5 @@ autobasis = ["rand_chacha", "rand"]
 modal-testing = ["ux-api", "modals/modal-testing"]
 test-scrollbars = []
 test-flash = []
+ctap-bringup = ["xous-usb-hid"]
 default = []
