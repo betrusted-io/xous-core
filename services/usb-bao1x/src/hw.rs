@@ -7,12 +7,11 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use cramium_hal::usb::driver::{CRG_UDC_ERDPLO_EHB, CorigineWrapper, EventTrbS};
 use cramium_hal::usb::utra::*;
 use num_traits::*;
-use usb_bao1x::HIDReport;
 use usb_device::class_prelude::*;
 use usb_device::device::UsbDevice;
 use usb_device::prelude::*;
 use utralib::{AtomicCsr, utra};
-use xous_ipc::Buffer;
+use xous::Message;
 use xous_usb_hid::device::DeviceClass;
 use xous_usb_hid::device::fido::RawFido;
 use xous_usb_hid::device::fido::RawFidoConfig;
@@ -80,132 +79,108 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
     if (pending & CORIGINE_IRQ_MASK) != 0 {
         let status = usb.csr.r(USBSTS);
         #[cfg(feature = "verbose-debug")]
-        crate::println!("status: {:x}", status);
+        crate::println!("crg status: {:x}", status);
         if (status & usb.csr.ms(USBSTS_SYSTEM_ERR, 1)) != 0 {
             crate::println!("System error");
             usb.csr.wfo(USBSTS_SYSTEM_ERR, 1);
             crate::println!("USBCMD: {:x}", usb.csr.r(USBCMD));
-        } else {
-            if (status & usb.csr.ms(USBSTS_EINT, 1)) != 0 {
-                let status = usb.csr.r(USBSTS);
-                // self.print_status(status);
-                if (status & usb.csr.ms(USBSTS_SYSTEM_ERR, 1)) != 0 {
-                    crate::println!("System error");
-                    usb.csr.wfo(USBSTS_SYSTEM_ERR, 1);
-                    crate::println!("USBCMD: {:x}", usb.csr.r(USBCMD));
-                } else {
-                    if (status & usb.csr.ms(USBSTS_EINT, 1)) != 0 {
-                        usb.csr.wfo(USBSTS_EINT, 1);
-                        // clear IP
-                        usb.csr.rmwf(IMAN_IP, 1);
+        } else if (status & usb.csr.ms(USBSTS_EINT, 1)) != 0 {
+            usb.csr.wfo(USBSTS_EINT, 1);
+            // clear IP
+            usb.csr.rmwf(IMAN_IP, 1);
 
-                        loop {
-                            {
-                                #[cfg(feature = "verbose-debug")]
-                                crate::println!("getting event");
-                                // scoping on the hardware lock to manipulate pointer states
-                                let mut corigine_usb = usb.wrapper.core();
-                                let mut event = {
-                                    if corigine_usb.udc_event.evt_dq_pt.load(Ordering::SeqCst).is_null() {
-                                        // break;
-                                        crate::println!("null pointer in process_event_ring");
-                                        break;
-                                    }
-                                    let event_ptr =
-                                        corigine_usb.udc_event.evt_dq_pt.load(Ordering::SeqCst) as usize;
-                                    unsafe {
-                                        (event_ptr as *mut EventTrbS)
-                                            .as_mut()
-                                            .expect("couldn't deref pointer")
-                                    }
-                                };
-                                if event.dw3.cycle_bit() != corigine_usb.udc_event.ccs {
-                                    break;
-                                }
-
-                                // leaves a side-effect result of the CrgEvent inside the corigine_usb object
-                                #[cfg(feature = "verbose-debug")]
-                                crate::println!("handle inner");
-                                cramium_hal::usb::driver::handle_event_inner(&mut corigine_usb, &mut event);
-                            }
-
-                            let device = usb.device.borrow_mut();
-                            let class = usb.class.borrow_mut();
-                            if device.poll(&mut [class]) {
-                                // keyboard report handler
-                                match class.device::<NKROBootKeyboard<_>, _>().read_report() {
-                                    Ok(l) => {
-                                        // for now all we do is just print this, we don't
-                                        // actually store the data or pass it on to userspace
-                                        crate::println!("keyboard LEDs: {:?}", l);
-                                    }
-                                    Err(e) => match e {
-                                        UsbError::WouldBlock => {}
-                                        _ => crate::println!("KEYB ERR: {:?}", e),
-                                    },
-                                };
-                                // u2f report handler
-                                match class.device::<RawFido<'_, _>, _>().read_report() {
-                                    Ok(u2f_report) => {
-                                        let mut rx_to_userspace = HIDReport::default();
-                                        rx_to_userspace.0.copy_from_slice(&u2f_report.packet);
-                                        let buf = Buffer::into_buf(rx_to_userspace)
-                                            .expect("couldn't transform rx packet");
-                                        // this will panic if the server queue is full. For now, this
-                                        // is what we want to do because (a) I suspect this condition
-                                        // doesn't happen and (b) if it does it means we have to write
-                                        // code that puts it into an IRQ-handler side queue, along
-                                        // with a mechanism that sends a message to userspace that
-                                        // initiates a retry timer in an interruptable context (so
-                                        // that the queue can empty) and then re-enters the interrupt
-                                        // context via a software interrupt to retry the send.
-                                        buf.try_send(usb.conn, Opcode::IrqFidoRx.to_u32().unwrap())
-                                            .expect("couldn't send FIDO packet to userspace: maybe we need to implement a timeout/retry mechanism?");
-                                    }
-                                    Err(e) => match e {
-                                        UsbError::WouldBlock => {}
-                                        _ => crate::println!("U2F ERR: {:?}", e),
-                                    },
-                                }
-                            }
-                            {
-                                // scoping on the hardware lock to manipulate pointer states
-                                let mut hw_lock = usb.wrapper.core();
-                                if hw_lock.udc_event.evt_dq_pt.load(Ordering::SeqCst)
-                                    == hw_lock.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst)
-                                {
-                                    crate::println!(
-                                        " evt_last_trb {:x}",
-                                        hw_lock.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst) as usize
-                                    );
-                                    hw_lock.udc_event.ccs = !hw_lock.udc_event.ccs;
-                                    // does this...go to null to end the transfer??
-                                    hw_lock.udc_event.evt_dq_pt = AtomicPtr::new(
-                                        hw_lock.udc_event.event_ring.vaddr.load(Ordering::SeqCst)
-                                            as *mut EventTrbS,
-                                    );
-                                } else {
-                                    hw_lock.udc_event.evt_dq_pt = AtomicPtr::new(unsafe {
-                                        hw_lock.udc_event.evt_dq_pt.load(Ordering::SeqCst).add(1)
-                                    });
-                                }
-                            }
+            loop {
+                {
+                    #[cfg(feature = "verbose-debug")]
+                    crate::println!("getting event");
+                    // scoping on the hardware lock to manipulate pointer states
+                    let mut corigine_usb = usb.wrapper.core();
+                    let mut event = {
+                        if corigine_usb.udc_event.evt_dq_pt.load(Ordering::SeqCst).is_null() {
+                            // break;
+                            crate::println!("null pointer in process_event_ring");
+                            break;
                         }
-                        // update dequeue pointer
-                        usb.csr.wo(ERDPHI, 0);
-                        usb.csr.wo(
-                            ERDPLO,
-                            (usb.wrapper.core().udc_event.evt_dq_pt.load(Ordering::SeqCst) as u32
-                                & 0xFFFF_FFF0)
-                                | CRG_UDC_ERDPLO_EHB,
-                        );
-                        compiler_fence(Ordering::SeqCst);
+                        let event_ptr = corigine_usb.udc_event.evt_dq_pt.load(Ordering::SeqCst) as usize;
+                        unsafe { (event_ptr as *mut EventTrbS).as_mut().expect("couldn't deref pointer") }
+                    };
+                    if event.dw3.cycle_bit() != corigine_usb.udc_event.ccs {
+                        break;
                     }
-                };
+
+                    // leaves a side-effect result of the CrgEvent inside the corigine_usb object
+                    #[cfg(feature = "verbose-debug")]
+                    crate::println!("handle inner");
+                    cramium_hal::usb::driver::handle_event_inner(&mut corigine_usb, &mut event);
+                }
+
+                let device = usb.device.borrow_mut();
+                let class = usb.class.borrow_mut();
+                if device.poll(&mut [class]) {
+                    match class.device::<NKROBootKeyboard<_>, _>().read_report() {
+                        Ok(l) => {
+                            // for now all we do is just print this, we don't
+                            // actually store the data or pass it on to userspace
+                            crate::println!("keyboard LEDs: {:?}", l);
+                        }
+                        Err(e) => match e {
+                            UsbError::WouldBlock => {}
+                            _ => crate::println!("KEYB ERR: {:?}", e),
+                        },
+                    };
+                    // It's illegal to allocate a Buffer in an interrupt context (because the operation is
+                    // fallible), so we use a pre-allocated storage (usb.hid_packet) to
+                    // pass the data to userspace, which is then notified with `IrqFidoRx`
+                    // to read the stashed data
+                    match class.device::<RawFido<'_, _>, _>().read_report() {
+                        Ok(u2f_report) => {
+                            // crate::println!("got report {:x?}", u2f_report);
+                            usb.hid_packet = Some(u2f_report.packet);
+                            xous::try_send_message(
+                                usb.conn,
+                                Message::new_scalar(Opcode::IrqFidoRx.to_usize().unwrap(), 0, 0, 0, 0),
+                            )
+                            .ok();
+                        }
+                        Err(e) => match e {
+                            UsbError::WouldBlock => {}
+                            _ => crate::println!("U2F ERR: {:?}", e),
+                        },
+                    }
+                }
+                {
+                    // scoping on the hardware lock to manipulate pointer states
+                    let mut hw_lock = usb.wrapper.core();
+                    if hw_lock.udc_event.evt_dq_pt.load(Ordering::SeqCst)
+                        == hw_lock.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst)
+                    {
+                        crate::println!(
+                            " evt_last_trb {:x}",
+                            hw_lock.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst) as usize
+                        );
+                        hw_lock.udc_event.ccs = !hw_lock.udc_event.ccs;
+                        // does this...go to null to end the transfer??
+                        hw_lock.udc_event.evt_dq_pt = AtomicPtr::new(
+                            hw_lock.udc_event.event_ring.vaddr.load(Ordering::SeqCst) as *mut EventTrbS,
+                        );
+                    } else {
+                        hw_lock.udc_event.evt_dq_pt = AtomicPtr::new(unsafe {
+                            hw_lock.udc_event.evt_dq_pt.load(Ordering::SeqCst).add(1)
+                        });
+                    }
+                }
             }
-            if usb.csr.rf(IMAN_IE) != 0 {
-                usb.csr.wo(IMAN, usb.csr.ms(IMAN_IE, 1) | usb.csr.ms(IMAN_IP, 1));
-            }
+            // update dequeue pointer
+            usb.csr.wo(ERDPHI, 0);
+            usb.csr.wo(
+                ERDPLO,
+                (usb.wrapper.core().udc_event.evt_dq_pt.load(Ordering::SeqCst) as u32 & 0xFFFF_FFF0)
+                    | CRG_UDC_ERDPLO_EHB,
+            );
+            compiler_fence(Ordering::SeqCst);
+        }
+        if usb.csr.rf(IMAN_IE) != 0 {
+            usb.csr.wo(IMAN, usb.csr.ms(IMAN_IE, 1) | usb.csr.ms(IMAN_IP, 1));
         }
     } else if (pending & SW_IRQ_MASK) != 0 {
         let composite = usb.class.borrow_mut();
@@ -252,6 +227,8 @@ pub struct CramiumUsb<'a> {
             frunk_core::hlist::HCons<NKROBootKeyboard<'a, CorigineWrapper>, frunk_core::hlist::HNil>,
         >,
     >,
+    // storage for hid_packets to expatriate from the interrupt handler
+    pub hid_packet: Option<[u8; 64]>,
 }
 
 impl<'a> CramiumUsb<'a> {
@@ -287,6 +264,7 @@ impl<'a> CramiumUsb<'a> {
             fido_tx_queue: RefCell::new(VecDeque::new()),
             kbd_tx_queue: RefCell::new(VecDeque::new()),
             irq_req: None,
+            hid_packet: None,
         }
     }
 
