@@ -36,7 +36,7 @@ const CRG_EVENT_RING_NUM: usize = 1;
 const CRG_ERST_SIZE: usize = 1;
 const CRG_EVENT_RING_SIZE: usize = 32;
 const CRG_EP0_TD_RING_SIZE: usize = 16;
-pub const CRG_EP_NUM: usize = 4;
+pub const CRG_EP_NUM: usize = 8; // probably more accurately named CRG_PEI_NUM
 const CRG_TD_RING_SIZE: usize = 64; // was 1280 in original code. not even sure we need ... 64?
 const CRG_UDC_MAX_BURST: u32 = 15;
 const CRG_UDC_ISO_INTERVAL: u8 = 3;
@@ -45,19 +45,15 @@ pub const CRG_INT_TARGET: u32 = 0;
 
 /// allocate 0x100 bytes for event ring segment table, each table 0x40 bytes
 const CRG_UDC_ERSTSIZE: usize = 0x100;
-/// allocate 0x200 for one event ring, include 128 event TRBs , each TRB 16 bytes
 const CRG_UDC_EVENTRINGSIZE: usize = CRG_EVENT_RING_SIZE * size_of::<EventTrbS>() * CRG_EVENT_RING_NUM;
 /// allocate 0x200 for ep context, include 30 ep context, each ep context 16 bytes
 const CRG_UDC_EPCXSIZE: usize = 0x200;
-/// allocate 0x400 for EP0 transfer ring, include 64 transfer TRBs, each TRB 16 bytes (this doesn't line up, I
-/// think we have 16 * 16)
 const CRG_UDC_EP0_TRSIZE: usize = 0x100;
-/// 1280(TRB Num) * 4(EP NUM) * 16(TRB bytes)  // * 2 because we need one for each direction??
-const CRG_UDC_EP_TRSIZE: usize = CRG_TD_RING_SIZE * CRG_EP_NUM * 2 * size_of::<TransferTrbS>();
+const CRG_UDC_EP_TRSIZE: usize = CRG_TD_RING_SIZE * CRG_EP_NUM * size_of::<TransferTrbS>();
 /// allocate 0x400 bytes for EP0 Buffer, Normally EP0 TRB transfer length will not greater than 1K
 pub const CRG_UDC_EP0_REQBUFSIZE: usize = 256;
 pub const CRG_UDC_APP_BUF_LEN: usize = 512;
-pub const CRG_UDC_APP_BUFSIZE: usize = CRG_EP_NUM * 2 * CRG_UDC_APP_BUF_LEN;
+pub const CRG_UDC_APP_BUFSIZE: usize = CRG_EP_NUM * CRG_UDC_APP_BUF_LEN;
 
 #[cfg(not(any(feature = "board-baosec", feature = "loader-baosec")))]
 pub const CRG_IFRAM_PAGES: usize = 5;
@@ -909,6 +905,14 @@ impl CorigineUsb {
             irq_csr,
             // is there a way to make this less shitty?
             udc_ep: [
+                UdcEp::default(),
+                UdcEp::default(),
+                UdcEp::default(),
+                UdcEp::default(),
+                UdcEp::default(),
+                UdcEp::default(),
+                UdcEp::default(),
+                UdcEp::default(),
                 UdcEp::default(),
                 UdcEp::default(),
                 UdcEp::default(),
