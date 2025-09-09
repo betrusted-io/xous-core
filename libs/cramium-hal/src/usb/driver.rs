@@ -831,6 +831,12 @@ pub enum UmsState {
     Terminated,
 }
 
+pub struct AppPtr {
+    pub addr: usize,
+    pub len: usize,
+    pub ep: u8,
+}
+
 pub struct CorigineUsb {
     pub ifram_base_ptr: usize,
     pub csr: AtomicCsr<u32>,
@@ -865,7 +871,7 @@ pub struct CorigineUsb {
     event_inner: Option<CrgEvent>,
     // data pointer of the current TRB to the application layer. Tuple is (addr, len).
     // we form the unsafe slice later depending on if the application needs mutability or not :-/
-    app_ptr: Option<(usize, usize)>,
+    app_ptr: Option<AppPtr>,
 
     pub state: UsbDeviceState,
     pub cur_interface_num: u8,
@@ -930,6 +936,10 @@ impl CorigineUsb {
             event_inner: None,
             app_ptr: None,
         }
+    }
+
+    pub fn pending_ep(&self) -> Option<usize> {
+        if let Some(ap) = &self.app_ptr { Some(ap.ep as usize) } else { None }
     }
 
     pub fn setup_big_read(&mut self, app_buf: &mut [u8], disk: &[u8], offset: usize, length: usize) {
@@ -2520,31 +2530,46 @@ impl UsbBus for CorigineWrapper {
             if self.address_is_set.load(Ordering::SeqCst) {
                 #[cfg(feature = "verbose-debug")]
                 crate::println!(" ******** READ {}", ep_addr.index());
-                let ret = if let Some((ptr, len)) = self.core().app_ptr.take() {
-                    self.ep_out_ready[ep_addr.index()].store(false, Ordering::SeqCst);
-                    let app_buf = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
-                    if buf.len() < app_buf.len() {
-                        Err(UsbError::BufferOverflow)
+                let pending_ep = self.core().pending_ep();
+                let ret = if let Some(pending_ep) = pending_ep {
+                    if pending_ep as usize == ep_addr.index() {
+                        let app_ptr = self.core().app_ptr.take().expect("inconistent app_ptr state");
+                        let ptr = app_ptr.addr;
+                        let len = app_ptr.len;
+                        self.ep_out_ready[ep_addr.index()].store(false, Ordering::SeqCst);
+                        let app_buf = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
+                        if buf.len() < app_buf.len() {
+                            crate::println!(
+                                "overflow: app_buf.len() {} >= buf.len() {}",
+                                app_buf.len(),
+                                buf.len()
+                            );
+                            Err(UsbError::BufferOverflow)
+                        } else {
+                            #[cfg(feature = "verbose-debug")]
+                            crate::println!("copy into len {} from len {}", buf.len(), app_buf.len());
+                            buf[..app_buf.len()].copy_from_slice(app_buf);
+                            #[cfg(feature = "verbose-debug")]
+                            crate::println!("   {:x?}", &buf[..app_buf.len().min(8)]);
+                            Ok(app_buf.len())
+                        }
                     } else {
-                        #[cfg(feature = "verbose-debug")]
-                        crate::println!("copy into len {} from len {}", buf.len(), app_buf.len());
-                        buf[..app_buf.len()].copy_from_slice(app_buf);
-                        crate::println!("   {:x?}", &buf[..app_buf.len().min(8)]);
-                        Ok(app_buf.len())
+                        // crate::println!("read would block");
+                        Err(UsbError::WouldBlock)
                     }
                 } else {
                     Err(UsbError::WouldBlock)
                 };
 
                 if self.ep_out_ready[ep_addr.index()].swap(true, Ordering::SeqCst) == false {
-                    crate::println!("get address");
+                    // crate::println!("get address");
                     // release lock on core after getting the address
                     let addr = {
                         self.core()
                             .get_app_buf_ptr(ep_addr.index() as u8, CRG_OUT)
                             .expect("should always be a buffer available at set_address")
                     };
-                    crate::println!("address {:x}", addr);
+                    // crate::println!("address {:x}", addr);
                     if let Some((hw_ep_type, max_packet_size)) = self.ep_meta[ep_addr.index()] {
                         match hw_ep_type {
                             // NOTE: we kind of need to know how big of a transfer we expect for this
@@ -2570,7 +2595,7 @@ impl UsbBus for CorigineWrapper {
                                 unreachable!("Bulk inbound not reachable for OUT endpoints");
                             }
                             _ => {
-                                crate::println!("ep_type {:?}", hw_ep_type);
+                                // crate::println!("ep_type {:?}", hw_ep_type);
                                 self.core().ep_xfer(
                                     ep_addr.index() as u8,
                                     CRG_OUT,
@@ -3031,13 +3056,31 @@ pub fn handle_event_inner(this: &mut CorigineUsb, event_trb: &mut EventTrbS) {
                 }
             } else if pei >= 2 {
                 if comp_code == CompletionCode::Success || comp_code == CompletionCode::ShortPacket {
-                    // crate::println!("EP{} xfer event, dir {}", ep_num, if dir { "OUT" } else { "IN" });
+                    let ep = pei as u16 / 2;
+                    let ep_onehot = 1u16 << ep;
+                    crate::println!(
+                        "EP{}[{:x}] xfer event, dir {}",
+                        ep,
+                        ep_onehot,
+                        if dir { "OUT" } else { "IN" }
+                    );
                     // xfer_complete
 
                     // so unsafe. so unsafe. We're counting on the hardware to hand us a raw pointer
                     // that isn't corrupted.
                     let p_trb = unsafe { &*(event_trb.dw0 as *const TransferTrbS) };
-                    this.app_ptr = Some((p_trb.dplo as usize, (p_trb.dw2.0 & 0xffff) as usize));
+                    this.app_ptr = Some(AppPtr {
+                        addr: p_trb.dplo as usize,
+                        len: (p_trb.dw2.0 & 0xffff) as usize,
+                        ep: ep as u8,
+                    });
+                    if dir {
+                        // out
+                        ret = CrgEvent::Data(ep_onehot, 0, 0)
+                    } else {
+                        // in
+                        ret = CrgEvent::Data(0, ep_onehot, 0)
+                    }
                 } else if comp_code == CompletionCode::MissedServiceError {
                     #[cfg(feature = "std")]
                     crate::println!("MissedServiceError");
