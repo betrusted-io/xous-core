@@ -34,10 +34,10 @@ pub const CRG_OUT: bool = true;
 
 const CRG_EVENT_RING_NUM: usize = 1;
 const CRG_ERST_SIZE: usize = 1;
-const CRG_EVENT_RING_SIZE: usize = 128;
+const CRG_EVENT_RING_SIZE: usize = 32;
 const CRG_EP0_TD_RING_SIZE: usize = 16;
 pub const CRG_EP_NUM: usize = 4;
-const CRG_TD_RING_SIZE: usize = 512; // was 1280 in original code. not even sure we need ... 64?
+const CRG_TD_RING_SIZE: usize = 64; // was 1280 in original code. not even sure we need ... 64?
 const CRG_UDC_MAX_BURST: u32 = 15;
 const CRG_UDC_ISO_INTERVAL: u8 = 3;
 
@@ -45,21 +45,21 @@ pub const CRG_INT_TARGET: u32 = 0;
 
 /// allocate 0x100 bytes for event ring segment table, each table 0x40 bytes
 const CRG_UDC_ERSTSIZE: usize = 0x100;
-/// allocate 0x800 for one event ring, include 128 event TRBs , each TRB 16 bytes
+/// allocate 0x200 for one event ring, include 128 event TRBs , each TRB 16 bytes
 const CRG_UDC_EVENTRINGSIZE: usize = CRG_EVENT_RING_SIZE * size_of::<EventTrbS>() * CRG_EVENT_RING_NUM;
 /// allocate 0x200 for ep context, include 30 ep context, each ep context 16 bytes
 const CRG_UDC_EPCXSIZE: usize = 0x200;
 /// allocate 0x400 for EP0 transfer ring, include 64 transfer TRBs, each TRB 16 bytes (this doesn't line up, I
 /// think we have 16 * 16)
-const CRG_UDC_EP0_TRSIZE: usize = 0x400;
+const CRG_UDC_EP0_TRSIZE: usize = 0x100;
 /// 1280(TRB Num) * 4(EP NUM) * 16(TRB bytes)  // * 2 because we need one for each direction??
 const CRG_UDC_EP_TRSIZE: usize = CRG_TD_RING_SIZE * CRG_EP_NUM * 2 * size_of::<TransferTrbS>();
 /// allocate 0x400 bytes for EP0 Buffer, Normally EP0 TRB transfer length will not greater than 1K
-pub const CRG_UDC_EP0_REQBUFSIZE: usize = 0x400;
+pub const CRG_UDC_EP0_REQBUFSIZE: usize = 256;
 pub const CRG_UDC_APP_BUF_LEN: usize = 512;
 pub const CRG_UDC_APP_BUFSIZE: usize = CRG_EP_NUM * 2 * CRG_UDC_APP_BUF_LEN;
 
-pub const CRG_IFRAM_PAGES: usize = 22;
+pub const CRG_IFRAM_PAGES: usize = 7;
 pub const CRG_UDC_MEMBASE: usize =
     utralib::HW_IFRAM1_MEM + utralib::HW_IFRAM1_MEM_LEN - CRG_IFRAM_PAGES * 0x1000;
 
@@ -73,7 +73,7 @@ pub const CRG_UDC_EP0_BUF_OFFSET: usize = CRG_UDC_EP_TR_OFFSET + CRG_UDC_EP_TRSI
 pub const CRG_UDC_APP_BUFOFFSET: usize = CRG_UDC_EP0_BUF_OFFSET + CRG_UDC_EP0_REQBUFSIZE;
 pub const CRG_UDC_TOTAL_MEM_LEN: usize = CRG_UDC_APP_BUFOFFSET + CRG_UDC_APP_BUFSIZE;
 
-const MAX_TRB_XFER_LEN: usize = 64 * 1024;
+const MAX_TRB_XFER_LEN: usize = 1024;
 
 /* usb transfer flags */
 pub const CRG_XFER_NO_INTR: u8 = 1 << 0; //no interrupt after this transfer
