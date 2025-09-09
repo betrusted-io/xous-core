@@ -36,7 +36,7 @@ const CRG_EVENT_RING_NUM: usize = 1;
 const CRG_ERST_SIZE: usize = 1;
 const CRG_EVENT_RING_SIZE: usize = 32;
 const CRG_EP0_TD_RING_SIZE: usize = 16;
-pub const CRG_EP_NUM: usize = 8;
+pub const CRG_EP_NUM: usize = 4;
 const CRG_TD_RING_SIZE: usize = 64; // was 1280 in original code. not even sure we need ... 64?
 const CRG_UDC_MAX_BURST: u32 = 15;
 const CRG_UDC_ISO_INTERVAL: u8 = 3;
@@ -59,9 +59,15 @@ pub const CRG_UDC_EP0_REQBUFSIZE: usize = 256;
 pub const CRG_UDC_APP_BUF_LEN: usize = 512;
 pub const CRG_UDC_APP_BUFSIZE: usize = CRG_EP_NUM * 2 * CRG_UDC_APP_BUF_LEN;
 
-pub const CRG_IFRAM_PAGES: usize = 8;
+#[cfg(not(any(feature = "board-baosec", feature = "loader-baosec")))]
+pub const CRG_IFRAM_PAGES: usize = 5;
+#[cfg(not(any(feature = "board-baosec", feature = "loader-baosec")))]
 pub const CRG_UDC_MEMBASE: usize =
     utralib::HW_IFRAM1_MEM + utralib::HW_IFRAM1_MEM_LEN - CRG_IFRAM_PAGES * 0x1000;
+#[cfg(any(feature = "board-baosec", feature = "loader-baosec"))]
+pub use crate::board::CRG_IFRAM_PAGES;
+#[cfg(any(feature = "board-baosec", feature = "loader-baosec"))]
+pub use crate::board::CRG_UDC_MEMBASE;
 
 const CRG_UDC_ERST_OFFSET: usize = 0; // use relative offsets
 const CRG_UDC_EVENTRING_OFFSET: usize = CRG_UDC_ERST_OFFSET + CRG_UDC_ERSTSIZE;
@@ -903,14 +909,6 @@ impl CorigineUsb {
             irq_csr,
             // is there a way to make this less shitty?
             udc_ep: [
-                UdcEp::default(),
-                UdcEp::default(),
-                UdcEp::default(),
-                UdcEp::default(),
-                UdcEp::default(),
-                UdcEp::default(),
-                UdcEp::default(),
-                UdcEp::default(),
                 UdcEp::default(),
                 UdcEp::default(),
                 UdcEp::default(),
