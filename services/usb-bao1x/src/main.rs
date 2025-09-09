@@ -175,7 +175,7 @@ pub(crate) fn main_hw() -> ! {
                 let now = tt.elapsed_ms();
                 let opcode =
                     num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(TimeoutOp::InvalidCall);
-                log::info!("Timeout thread: {:?}", opcode);
+                log::debug!("Timeout thread: {:?}", opcode);
                 match opcode {
                     TimeoutOp::Pump => {
                         if to_run.load(Ordering::SeqCst) {
@@ -254,7 +254,7 @@ pub(crate) fn main_hw() -> ! {
         xous::reply_and_receive_next(usbdev_sid, &mut msg_opt).expect("Error fetching next message");
         let msg = msg_opt.as_mut().unwrap();
         let opcode = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidCall);
-        log::info!("{:?}", opcode);
+        log::debug!("{:?}", opcode);
         match opcode {
             Opcode::PmicIrq => match pmic.get_vbus_irq_status(&mut i2c).unwrap() {
                 VbusIrq::Insert => {
@@ -366,21 +366,25 @@ pub(crate) fn main_hw() -> ! {
                 }
             }
             Opcode::IrqFidoRx => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let u2f_report = buffer.to_original::<HIDReport, _>().unwrap();
-                if let Some(mut listener) = fido_listener.take() {
-                    let mut response = unsafe {
-                        Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
-                    };
-                    let mut deferred_buf = response.to_original::<U2fMsgIpc, _>().unwrap();
+                if let Some(raw_report) = cu.hid_packet.take() {
+                    let u2f_report = HIDReport(raw_report);
+                    if let Some(mut listener) = fido_listener.take() {
+                        let mut response = unsafe {
+                            Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                        };
+                        let mut deferred_buf = response.to_original::<U2fMsgIpc, _>().unwrap();
 
-                    deferred_buf.data.copy_from_slice(&u2f_report.0);
-                    log::trace!("ret deferred data {:x?}", &u2f_report.0[..8]);
-                    deferred_buf.code = U2fCode::RxAck;
-                    response.replace(deferred_buf).unwrap();
+                        deferred_buf.data.copy_from_slice(&u2f_report.0);
+                        log::trace!("ret deferred data {:x?}", &u2f_report.0[..8]);
+                        deferred_buf.code = U2fCode::RxAck;
+                        response.replace(deferred_buf).unwrap();
+                    } else {
+                        crate::println!("Got U2F packet, but no server to respond...queuing.");
+                        fido_rx_queue.push_back(u2f_report.0);
+                    }
                 } else {
-                    crate::println!("Got U2F packet, but no server to respond...queuing.");
-                    fido_rx_queue.push_back(u2f_report.0);
+                    // I *think* this is harmless, can remove this later on if protocol is robust
+                    log::warn!("got IrqFidoRx but no data");
                 }
             }
             Opcode::U2fTx => {
