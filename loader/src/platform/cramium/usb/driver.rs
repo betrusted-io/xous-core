@@ -51,6 +51,18 @@ pub unsafe fn init_usb() {
     unsafe {
         ALLOCATOR.lock().init(heap_start as *mut u8, heap_size);
     }
+    /*
+    // for sanity checking USB memory record limits
+    crate::println!(
+        "CRG_UDC_MEM_BASE: {:x}, CRG_UDC_EP0_TR_OFFSET: {:x}, CRG_UDC_EP_TR_OFFSET: {:x}, CRG_UDC_EP0_BUF_OFFSET: {:x}, CRG_UDC_APP_BUFOFFSET: {:x}, CRG_UDC_TOTAL_MEM_LEN: {:x}",
+        CRG_UDC_MEMBASE,
+        CRG_UDC_EP0_TR_OFFSET,
+        CRG_UDC_EP_TR_OFFSET,
+        CRG_UDC_EP0_BUF_OFFSET,
+        CRG_UDC_APP_BUFOFFSET,
+        CRG_UDC_TOTAL_MEM_LEN
+    );
+    */
 
     let mut usb = unsafe {
         cramium_hal::usb::driver::CorigineUsb::new(
