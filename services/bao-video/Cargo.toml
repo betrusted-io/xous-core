@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+cramium-hal = { path = "../../libs/cramium-hal", features = [
+    "std",
+], optional = true, default-features = false }
 utralib = { version = "0.1.25", optional = true, default-features = false }
 xous-names = { package = "xous-api-names", version = "0.9.67" }
 ticktimer = { package = "xous-api-ticktimer", version = "0.9.65" }
@@ -12,9 +15,6 @@ log-server = { package = "xous-api-log", version = "0.1.65" }
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-cramium-hal = { path = "../../libs/cramium-hal", features = [
-    "std",
-], optional = true }
 cram-hal-service = { path = "../cram-hal-service", optional = true }
 ux-api = { path = "../../libs/ux-api" }
 cramium-emu = { path = "../cramium-emu", optional = true }
@@ -59,7 +59,7 @@ cramium-soc = ["utralib/cramium-soc", "blitstr2/cramium-soc"]
 decongest-udma = []
 b64-export = ["base64"]
 default = [
-    "b64-export",
+    # "b64-export",
     # "decongest-udma",
     # "autotest",
     # "gfx-testing",
