@@ -60,4 +60,4 @@ verbose-debug = []
 prototyping = [
 ] # temporary feature-out for figuring out the code; remove this if you don't recognize it anymore
 
-default = ["mass-storage", "debug-print-usb"]
+default = ["mass-storage"]
