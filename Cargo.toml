@@ -111,7 +111,7 @@ members = [
   "services/test-swapper",
   "services/cram-console",
   "services/bao-video",
-  "services/usb-cramium",
+  "services/usb-bao1x",
   "services/bao-console",
   "libs/ux-api",
   "services/cramium-emu",
