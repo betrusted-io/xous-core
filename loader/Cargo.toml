@@ -140,6 +140,7 @@ qr = ["nalgebra", "libm"]
 updates = []
 cramium-mpw = ["cramium-hal/mpw"]
 userspace-swap-debug = []                                      # sets up app UART mapping.
+always-update = []                                             # always go into update mode, for fast dev loops
 
 # general flags
 debug-print = []

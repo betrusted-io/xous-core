@@ -121,8 +121,11 @@ pub fn process_update(perclk: u32) {
     // setup IO pins to check for update viability
     let (rows, cols) = cramium_hal::board::baosec::setup_kb_pins(&iox_kbd);
 
+    #[cfg(not(feature = "always-update"))]
     let mut key_pressed = false;
+    #[cfg(not(feature = "always-update"))]
     let mut do_update = false;
+    #[cfg(not(feature = "always-update"))]
     while !key_pressed {
         let kps = scan_keyboard(&iox_kbd, &rows, &cols);
         for kp in kps {
@@ -137,6 +140,8 @@ pub fn process_update(perclk: u32) {
             }
         }
     }
+    #[cfg(feature = "always-update")]
+    let do_update = true;
 
     sh1107.clear();
 
