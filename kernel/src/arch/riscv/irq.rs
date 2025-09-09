@@ -217,6 +217,7 @@ pub extern "C" fn trap_handler(
     {
         let pid = current_pid();
         let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
+        MemoryMapping::current().print_map();
         panic!("KERNEL({}): RISC-V fault: {} - maybe ran out of kernel stack?", pid, ex);
     }
 
