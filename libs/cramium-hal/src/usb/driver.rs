@@ -36,7 +36,7 @@ const CRG_EVENT_RING_NUM: usize = 1;
 const CRG_ERST_SIZE: usize = 1;
 const CRG_EVENT_RING_SIZE: usize = 32;
 const CRG_EP0_TD_RING_SIZE: usize = 16;
-pub const CRG_EP_NUM: usize = 4;
+pub const CRG_EP_NUM: usize = 8;
 const CRG_TD_RING_SIZE: usize = 64; // was 1280 in original code. not even sure we need ... 64?
 const CRG_UDC_MAX_BURST: u32 = 15;
 const CRG_UDC_ISO_INTERVAL: u8 = 3;
@@ -59,7 +59,7 @@ pub const CRG_UDC_EP0_REQBUFSIZE: usize = 256;
 pub const CRG_UDC_APP_BUF_LEN: usize = 512;
 pub const CRG_UDC_APP_BUFSIZE: usize = CRG_EP_NUM * 2 * CRG_UDC_APP_BUF_LEN;
 
-pub const CRG_IFRAM_PAGES: usize = 7;
+pub const CRG_IFRAM_PAGES: usize = 8;
 pub const CRG_UDC_MEMBASE: usize =
     utralib::HW_IFRAM1_MEM + utralib::HW_IFRAM1_MEM_LEN - CRG_IFRAM_PAGES * 0x1000;
 
@@ -67,8 +67,8 @@ const CRG_UDC_ERST_OFFSET: usize = 0; // use relative offsets
 const CRG_UDC_EVENTRING_OFFSET: usize = CRG_UDC_ERST_OFFSET + CRG_UDC_ERSTSIZE;
 const CRG_UDC_EPCX_OFFSET: usize = CRG_UDC_EVENTRING_OFFSET + CRG_UDC_EVENTRINGSIZE;
 
-const CRG_UDC_EP0_TR_OFFSET: usize = CRG_UDC_EPCX_OFFSET + CRG_UDC_EPCXSIZE;
-const CRG_UDC_EP_TR_OFFSET: usize = CRG_UDC_EP0_TR_OFFSET + CRG_UDC_EP0_TRSIZE;
+pub const CRG_UDC_EP0_TR_OFFSET: usize = CRG_UDC_EPCX_OFFSET + CRG_UDC_EPCXSIZE;
+pub const CRG_UDC_EP_TR_OFFSET: usize = CRG_UDC_EP0_TR_OFFSET + CRG_UDC_EP0_TRSIZE;
 pub const CRG_UDC_EP0_BUF_OFFSET: usize = CRG_UDC_EP_TR_OFFSET + CRG_UDC_EP_TRSIZE;
 pub const CRG_UDC_APP_BUFOFFSET: usize = CRG_UDC_EP0_BUF_OFFSET + CRG_UDC_EP0_REQBUFSIZE;
 pub const CRG_UDC_TOTAL_MEM_LEN: usize = CRG_UDC_APP_BUFOFFSET + CRG_UDC_APP_BUFSIZE;
@@ -903,6 +903,14 @@ impl CorigineUsb {
             irq_csr,
             // is there a way to make this less shitty?
             udc_ep: [
+                UdcEp::default(),
+                UdcEp::default(),
+                UdcEp::default(),
+                UdcEp::default(),
+                UdcEp::default(),
+                UdcEp::default(),
+                UdcEp::default(),
+                UdcEp::default(),
                 UdcEp::default(),
                 UdcEp::default(),
                 UdcEp::default(),
