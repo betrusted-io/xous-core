@@ -1,3 +1,7 @@
+extern crate alloc;
+
+use alloc::collections::VecDeque;
+use core::cell::RefCell;
 use core::convert::TryFrom;
 use core::sync::atomic::{AtomicPtr, Ordering};
 
@@ -5,12 +9,18 @@ use cramium_hal::usb::compat::AtomicCsr;
 use cramium_hal::usb::driver::CorigineUsb;
 use cramium_hal::usb::driver::*;
 use cramium_hal::usb::utra::*;
+use critical_section::Mutex;
 use linked_list_allocator::LockedHeap;
 
 use super::*;
+use crate::platform::cramium::usb::handlers::flush_tx;
 
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
+
+pub static USB_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
+pub static USB_TX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
+pub static USB_CONNECTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 pub(crate) static mut USB: Option<CorigineUsb> = None;
 
@@ -74,7 +84,7 @@ pub unsafe fn init_usb() {
     usb.assign_handler(handle_event);
 
     // initialize the "disk" area
-    let disk = mass_storage::conjure_disk();
+    let disk = handlers::conjure_disk();
     disk.fill(0);
     // setup MBR
     disk[..MBR_TEMPLATE.len()].copy_from_slice(&MBR_TEMPLATE);
@@ -263,6 +273,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
         TrbType::EventTransfer => {
             let comp_code =
                 CompletionCode::try_from(event_trb.dw2.compl_code()).expect("Invalid completion code");
+            let residual_length = event_trb.dw2.trb_tran_len() as u16;
 
             // update the dequeue pointer
             // crate::println!("event_transfer {:x?}", event_trb);
@@ -296,7 +307,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         // so unsafe. so unsafe. We're counting on the hardware to hand us a raw pointer
                         // that isn't corrupted.
                         let p_trb = unsafe { &*(event_trb.dw0 as *const TransferTrbS) };
-                        f(this, p_trb.dplo as usize, p_trb.dw2.0, 0);
+                        f(this, p_trb.dplo as usize, p_trb.dw2.0, 0, residual_length);
                     }
                 } else if comp_code == CompletionCode::MissedServiceError {
                     crate::println!("MissedServiceError");
@@ -377,8 +388,6 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         */
                     }
                     USB_REQ_SET_CONFIGURATION => {
-                        crate::println!("USB_REQ_SET_CONFIGURATION");
-
                         let mut pass = false;
                         if w_value == 0 {
                             this.set_device_state(UsbDeviceState::Address);
@@ -390,13 +399,23 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         }
 
                         if !pass {
+                            // MSD as before
                             this.assign_completion_handler(usb_ep1_bulk_in_complete, 1, USB_SEND);
                             this.assign_completion_handler(usb_ep1_bulk_out_complete, 1, USB_RECV);
+                            // USB-CDC-ACM
+                            this.assign_completion_handler(usb_ep3_bulk_in_complete, 3, USB_SEND);
+                            this.assign_completion_handler(usb_ep3_bulk_out_complete, 3, USB_RECV);
+                            this.assign_completion_handler(usb_ep2_int_in_complete, 2, USB_SEND);
+                            enable_composite_eps(this);
 
-                            enable_mass_storage_eps(this, 1);
-
+                            // Kick MSD CBW receive as before
                             this.bulk_xfer(1, USB_RECV, this.cbw_ptr(), 31, 0, 0);
                             this.ms_state = UmsState::CommandPhase;
+
+                            // Kick off CDC-ACM
+                            let acm_buf_rx = this.cdc_acm_rx_slice();
+                            this.bulk_xfer(3, USB_RECV, acm_buf_rx.as_ptr() as usize, acm_buf_rx.len(), 0, 0);
+
                             this.ep0_send(0, 0, 0);
                         }
                     }
@@ -480,8 +499,45 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                             this.ep0_send(ep0_buf.as_ptr() as usize, 1, 0);
                         }
                     }
+                    0x20 => {
+                        // SET_LINE_CODING (host -> device, 7 bytes)
+                        crate::println!("CDC SET_LINE_CODING");
+                        let length = w_length as usize;
+                        if length == 7 {
+                            // queue EP0 OUT to receive the line coding structure
+                            this.ep0_receive(this.ep0_buf.load(Ordering::SeqCst) as usize, length, 0);
+                            // when complete, just ignore or store it
+                        } else {
+                            this.ep_halt(0, USB_RECV);
+                        }
+                    }
+                    0x21 => {
+                        // GET_LINE_CODING (device -> host, 7 bytes)
+                        crate::println!("CDC GET_LINE_CODING");
+                        let ep0_buf = unsafe {
+                            core::slice::from_raw_parts_mut(
+                                this.ep0_buf.load(Ordering::SeqCst) as *mut u8,
+                                CRG_UDC_EP0_REQBUFSIZE,
+                            )
+                        };
+                        // Fill with a dummy 115200 8N1 config
+                        ep0_buf[0..4].copy_from_slice(&115200u32.to_le_bytes()); // dwDTERate
+                        ep0_buf[4] = 0; // 1 stop bit
+                        ep0_buf[5] = 0; // no parity
+                        ep0_buf[6] = 8; // 8 data bits
+                        this.ep0_send(ep0_buf.as_ptr() as usize, 7, 0);
+                    }
+                    0x22 => {
+                        // SET_CONTROL_LINE_STATE (host -> device, 0 length)
+                        crate::println!("CDC SET_CONTROL_LINE_STATE, DTR/RTS = {:x}", w_value);
+                        // wValue bit0 = DTR, bit1 = RTS
+                        // You can ignore since no real UART
+
+                        this.ep0_send(0, 0, 0);
+                    }
                     _ => {
-                        crate::println!("Unhandled!");
+                        crate::println!("Unhandled class request bRequest=0x{:x}", setup_pkt.b_request);
+                        this.ep_halt(0, USB_RECV);
                     }
                 }
             } else {
@@ -498,4 +554,15 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
         }
     }
     ret
+}
+
+pub fn flush_tx_wrapper() {
+    unsafe {
+        if let Some(ref mut usb_ref) = crate::platform::cramium::usb::USB {
+            let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
+            flush_tx(usb);
+        } else {
+            panic!("USB core not allocated, can't proceed!");
+        }
+    }
 }

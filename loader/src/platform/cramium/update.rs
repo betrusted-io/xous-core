@@ -18,7 +18,7 @@ use ux_api::minigfx::{FrameBuffer, Point};
 use crate::SIGBLOCK_SIZE;
 use crate::platform::cramium::gfx;
 use crate::platform::cramium::sha512_digest::Sha512Prehash;
-use crate::platform::cramium::usb::{self, SliceCursor, disable_all_irqs};
+use crate::platform::cramium::usb::{self, SliceCursor, USB_CONNECTED, disable_all_irqs, flush_tx_wrapper};
 
 // TODO:
 //   - Port unicode font drawing into loader
@@ -206,6 +206,7 @@ pub fn process_update(perclk: u32) {
                         if (portsc == DISCONNECT_STATE || portsc == DISCONNECT_STATE_HS)
                             && new_usb_state == UsbDeviceState::Configured
                         {
+                            USB_CONNECTED.store(false, core::sync::atomic::Ordering::SeqCst);
                             break;
                         }
                     }
@@ -236,7 +237,25 @@ pub fn process_update(perclk: u32) {
                             );
                             sh1107.draw();
                             last_usb_state = new_usb_state;
+                            USB_CONNECTED.store(true, core::sync::atomic::Ordering::SeqCst);
                         }
+                    }
+
+                    if USB_CONNECTED.load(core::sync::atomic::Ordering::SeqCst) {
+                        // echo data on USB for now - placeholder to extend for commands/extensions!
+                        critical_section::with(|cs| {
+                            let mut queue =
+                                crate::platform::cramium::usb::driver::USB_RX.borrow(cs).borrow_mut();
+                            while let Some(byte) = queue.pop_front() {
+                                critical_section::with(|cstx| {
+                                    let mut tx = crate::platform::cramium::usb::driver::USB_TX
+                                        .borrow(cstx)
+                                        .borrow_mut();
+                                    tx.push_back(byte);
+                                });
+                            }
+                        });
+                        flush_tx_wrapper();
                     }
                 }
 

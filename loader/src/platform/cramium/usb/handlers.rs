@@ -127,12 +127,25 @@ pub(crate) const EP1_OUT_BUF_LEN: usize = 1024;
 pub(crate) const MASS_STORAGE_EPADDR_IN: u8 = 0x81;
 pub(crate) const MASS_STORAGE_EPADDR_OUT: u8 = 0x01;
 
-const FS_MAX_PKT_SIZE: usize = 64;
-const HS_MAX_PKT_SIZE: usize = 512;
+pub const FS_MAX_PKT_SIZE: usize = 64;
+pub const HS_MAX_PKT_SIZE: usize = 512;
 
 pub(crate) fn enable_mass_storage_eps(this: &mut CorigineUsb, ep_num: u8) {
     this.ep_enable(ep_num, USB_RECV, HS_MAX_PKT_SIZE as _, EpType::BulkOutbound);
     this.ep_enable(ep_num, USB_SEND, HS_MAX_PKT_SIZE as _, EpType::BulkInbound);
+}
+
+// Call from USB_REQ_SET_CONFIGURATION after setting device state to Configured
+pub(crate) fn enable_composite_eps(this: &mut CorigineUsb) {
+    // MSD endpoints
+    enable_mass_storage_eps(this, 1);
+
+    // CDC notification IN (interrupt)
+    this.ep_enable(2, USB_SEND, HS_INT_MPS as _, EpType::IntrInbound);
+
+    // CDC data bulk OUT and IN
+    this.ep_enable(3, USB_RECV, HS_BULK_MPS as _, EpType::BulkOutbound);
+    this.ep_enable(3, USB_SEND, HS_BULK_MPS as _, EpType::BulkInbound);
 }
 
 pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize, length: usize) {
@@ -146,14 +159,11 @@ pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize,
     match (value >> 8) as u8 {
         USB_DT_DEVICE => {
             crate::println!("USB_DT_DEVICE");
-            let mut device_descriptor = DeviceDescriptor::default_mass_storage();
+            let mut device_descriptor = DeviceDescriptor::default_composite();
             device_descriptor.b_max_packet_size0 = 64;
 
             let len = length.min(core::mem::size_of::<DeviceDescriptor>());
             ep0_buf[..len].copy_from_slice(&device_descriptor.as_ref()[..len]);
-            // crate::println!("ptr: {:x}, len: {}", this.ep0_buf.load(Ordering::SeqCst) as usize, len);
-            // crate::println!("dd: {:x?}", device_descriptor.as_ref());
-            // crate::println!("buf: {:x?}", &ep0_buf[..len]);
             this.ep0_send(this.ep0_buf.load(Ordering::SeqCst) as usize, len, 0);
         }
         USB_DT_DEVICE_QUALIFIER => {
@@ -166,41 +176,13 @@ pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize,
             this.ep0_send(this.ep0_buf.load(Ordering::SeqCst) as usize, len, 0);
         }
         USB_DT_CONFIG => {
-            crate::println!("USB_DT_CONFIG");
-            let total_length = size_of::<ConfigDescriptor>()
-                + size_of::<InterfaceDescriptor>()
-                + size_of::<EndpointDescriptor>() * 2;
-            let config = ConfigDescriptor::default_mass_storage(total_length as u16);
-            let interface = InterfaceDescriptor::default_mass_storage();
-            let ep_in =
-                EndpointDescriptor::default_mass_storage(MASS_STORAGE_EPADDR_IN, HS_MAX_PKT_SIZE as _);
-            let ep_out =
-                EndpointDescriptor::default_mass_storage(MASS_STORAGE_EPADDR_OUT, HS_MAX_PKT_SIZE as _);
-            let response: [&[u8]; 4] = [config.as_ref(), interface.as_ref(), ep_in.as_ref(), ep_out.as_ref()];
-            let flattened = response.iter().flat_map(|slice| slice.iter().copied());
-            for (dst, src) in ep0_buf.iter_mut().zip(flattened) {
-                *dst = src
-            }
-            let buffsize = total_length.min(length);
+            let wrote = write_config_hs(ep0_buf);
+            let buffsize = wrote.min(length);
             this.ep0_send(this.ep0_buf.load(Ordering::SeqCst) as usize, buffsize, 0);
         }
         USB_DT_OTHER_SPEED_CONFIG => {
-            crate::println!("USB_DT_OTHER_SPEED_CONFIG\r\n");
-            let total_length = size_of::<ConfigDescriptor>()
-                + size_of::<InterfaceDescriptor>()
-                + size_of::<EndpointDescriptor>() * 2;
-            let config = ConfigDescriptor::default_mass_storage(total_length as u16);
-            let interface = InterfaceDescriptor::default_mass_storage();
-            let ep_in =
-                EndpointDescriptor::default_mass_storage(MASS_STORAGE_EPADDR_IN, FS_MAX_PKT_SIZE as _);
-            let ep_out =
-                EndpointDescriptor::default_mass_storage(MASS_STORAGE_EPADDR_OUT, FS_MAX_PKT_SIZE as _);
-            let response: [&[u8]; 4] = [config.as_ref(), interface.as_ref(), ep_in.as_ref(), ep_out.as_ref()];
-            let flattened = response.iter().flat_map(|slice| slice.iter().copied());
-            for (dst, src) in ep0_buf.iter_mut().zip(flattened) {
-                *dst = src
-            }
-            let buffsize = total_length.min(length);
+            let wrote = write_config_fs(ep0_buf);
+            let buffsize = wrote.min(length);
             this.ep0_send(this.ep0_buf.load(Ordering::SeqCst) as usize, buffsize, 0);
         }
         USB_DT_STRING => {
@@ -251,7 +233,13 @@ pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize,
     }
 }
 
-pub fn usb_ep1_bulk_out_complete(this: &mut CorigineUsb, buf_addr: usize, info: u32, _error: u8) {
+pub fn usb_ep1_bulk_out_complete(
+    this: &mut CorigineUsb,
+    buf_addr: usize,
+    info: u32,
+    _error: u8,
+    _residual: u16,
+) {
     let length = info & 0xFFFF;
     let buf = unsafe { core::slice::from_raw_parts(buf_addr as *const u8, info as usize & 0xFFFF) };
     let mut cbw = Cbw::default();
@@ -302,7 +290,13 @@ pub fn usb_ep1_bulk_out_complete(this: &mut CorigineUsb, buf_addr: usize, info: 
     }
 }
 
-pub fn usb_ep1_bulk_in_complete(this: &mut CorigineUsb, _buf_addr: usize, info: u32, _error: u8) {
+pub fn usb_ep1_bulk_in_complete(
+    this: &mut CorigineUsb,
+    _buf_addr: usize,
+    info: u32,
+    _error: u8,
+    _residual: u16,
+) {
     // crate::println!("bulk IN handler");
     let length = info & 0xFFFF;
     if UmsState::DataPhase == this.ms_state {
@@ -321,6 +315,98 @@ pub fn usb_ep1_bulk_in_complete(this: &mut CorigineUsb, _buf_addr: usize, info: 
         this.bulk_xfer(1, USB_RECV, CBW_ADDR, 31, 0, 0);
         this.ms_state = UmsState::CommandPhase;
     }
+}
+
+// ===== CDC Bulk OUT (EP3 OUT) =====
+pub fn usb_ep3_bulk_out_complete(
+    this: &mut CorigineUsb,
+    buf_addr: usize,
+    _info: u32,
+    _error: u8,
+    residual: u16,
+) {
+    // crate::println!("EP3 OUT: {:x} {:x}", info, _error);
+
+    let actual = CRG_UDC_APP_BUF_LEN - residual as usize;
+
+    if actual == 0 {
+        return; // zero-length packet, ignore
+    }
+
+    // Slice of received data
+    let buf = unsafe { core::slice::from_raw_parts(buf_addr as *const u8, actual as usize) };
+
+    // For now: just print, or push into a ring buffer for your "virtual terminal"
+    // crate::println!("CDC OUT received {} bytes: {:?}", actual, &buf);
+
+    critical_section::with(|cs| {
+        let mut queue = super::driver::USB_RX.borrow(cs).borrow_mut();
+        for &d in buf {
+            queue.push_back(d);
+        }
+    });
+
+    // Re-arm OUT transfer so host can send more
+    let acm_buf = this.cdc_acm_rx_slice();
+    this.bulk_xfer(3, USB_RECV, acm_buf.as_ptr() as usize, acm_buf.len(), 0, 0);
+}
+
+pub fn flush_tx(this: &mut CorigineUsb) {
+    let mut written = 0;
+
+    let tx_buf = this.cdc_acm_tx_slice();
+    critical_section::with(|cs| {
+        let mut queue = super::driver::USB_TX.borrow(cs).borrow_mut();
+        let to_copy = queue.len().min(CRG_UDC_APP_BUF_LEN);
+
+        let (a, b) = queue.as_slices();
+        if to_copy <= a.len() {
+            tx_buf[..to_copy].copy_from_slice(&a[..to_copy]);
+            queue.drain(..to_copy);
+            written = to_copy;
+        } else {
+            let first = a.len();
+            let second = to_copy - first;
+            tx_buf[..first].copy_from_slice(a);
+            tx_buf[first..to_copy].copy_from_slice(&b[..second]);
+            queue.drain(..to_copy);
+            written = to_copy;
+        }
+    });
+
+    if written > 0 {
+        this.bulk_xfer(3, USB_SEND, tx_buf.as_ptr() as usize, written, 0, 0);
+    }
+}
+
+// ===== CDC Bulk IN (EP3 IN) =====
+pub fn usb_ep3_bulk_in_complete(
+    this: &mut CorigineUsb,
+    _buf_addr: usize,
+    _info: u32,
+    _error: u8,
+    _residual: u16,
+) {
+    // crate::println!("EP3 IN");
+    // let length = CRG_UDC_APP_BUF_LEN - residual as usize;
+    // crate::println!("CDC IN transfer complete, {} bytes sent", length);
+    flush_tx(this);
+}
+
+// ===== CDC Notification IN (EP2 IN) =====
+pub fn usb_ep2_int_in_complete(
+    _this: &mut CorigineUsb,
+    _buf_addr: usize,
+    _info: u32,
+    _error: u8,
+    _residual: u16,
+) {
+    // crate::println!("EP2 INT");
+    // let length = CRG_UDC_APP_BUF_LEN - residual as usize;
+    // crate::println!("CDC notification sent, {} bytes", length);
+
+    // Typically sends SERIAL_STATE bitmap (carrier detect etc).
+    // Ignoring - this is a virtual terminal
 }
 
 fn process_mass_storage_command(this: &mut CorigineUsb, cbw: Cbw) {

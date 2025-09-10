@@ -65,10 +65,9 @@ static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::Loc
 */
 
 // Define the .data region - bootstrap baremetal using these hard-coded parameters.
-pub const DATA_ORIGIN: usize = 0x61000000;
-pub const DATA_SIZE_BYTES: usize = 0x5000;
-pub const DATA_INIT: [(usize, u32); 1] = [(0x0, 0x2)];
-
+const DATA_ORIGIN: usize = 0x61000000;
+const DATA_SIZE_BYTES: usize = 0x6000;
+const DATA_INIT: [(usize, u32); 3] = [(0x0, 0x2), (0x53c, 0x1), (0x541, 0x1)];
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
