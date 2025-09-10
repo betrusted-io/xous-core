@@ -47,7 +47,7 @@ pub unsafe extern "C" fn _start_trap() -> ! {
             #[rustfmt::skip]
             core::arch::asm!(
                 "csrw        mscratch, sp",
-                "li          sp, 0x61043000", // crate::platform::SCRATCH_PAGE - has to be hard-coded
+                "li          sp, {scratch_page}", // crate::platform::SCRATCH_PAGE - has to be hard-coded
                 "sw       x1, 0*4(sp)",
                 // Skip SP for now
                 "sw       x3, 2*4(sp)",
@@ -93,14 +93,13 @@ pub unsafe extern "C" fn _start_trap() -> ! {
                 "csrr        t0, mscratch",
                 "sw          t0, 1*4(sp)",
                 // Restore a default stack pointer
-                "li          sp, 0x61045000", // heap base, grows down
+                "li          sp, {heap_base}", // heap base, grows down
 
                 // Note that registers $a0-$a7 still contain the arguments
                 "j           _start_trap_rust",
-                // Note to self: trying to assign the scratch and default pages using in(reg) syntax
-                // clobbers the `a0` register and places the initialization outside of the handler loop
-                // and there seems to be no way to refer directly to a symbol? the `sym` directive wants
-                // to refer to an address, not a constant.
+
+                scratch_page = const SCRATCH_PAGE,
+                heap_base = const HEAP_START
             );
         }
         _start_trap_aligned();

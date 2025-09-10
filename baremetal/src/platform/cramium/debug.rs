@@ -28,19 +28,38 @@ impl Uart {
             while uart.r(utra::duart::SFR_SR) != 0 {}
             uart.wo(utra::duart::SFR_TXD, c as u32);
         } else {
-            let buf: [u8; 1] = [c];
-            let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
-            #[cfg(feature = "nto-evb")]
-            let mut udma_uart = unsafe {
-                // safety: this is safe to call, because we set up clock and events prior to calling new.
-                udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
-            };
-            #[cfg(not(feature = "nto-evb"))]
-            let mut udma_uart = unsafe {
-                // safety: this is safe to call, because we set up clock and events prior to calling new.
-                udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
-            };
-            udma_uart.write(&buf);
+            if crate::USB_CONNECTED.load(SeqCst) {
+                critical_section::with(|cs| {
+                    let mut queue = crate::USB_TX.borrow(cs).borrow_mut();
+                    // arbitrary limit to avoid runaway memory allocation in the case that
+                    // the host side doesn't have a terminal up and running
+                    if queue.len() < 4096 {
+                        queue.push_back(c);
+                    }
+                });
+            } else {
+                let buf: [u8; 1] = [c];
+                let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
+                #[cfg(feature = "nto-evb")]
+                let mut udma_uart = unsafe {
+                    // safety: this is safe to call, because we set up clock and events prior to calling new.
+                    udma::Uart::get_handle(
+                        utra::udma_uart_1::HW_UDMA_UART_1_BASE,
+                        uart_buf_addr,
+                        uart_buf_addr,
+                    )
+                };
+                #[cfg(not(feature = "nto-evb"))]
+                let mut udma_uart = unsafe {
+                    // safety: this is safe to call, because we set up clock and events prior to calling new.
+                    udma::Uart::get_handle(
+                        utra::udma_uart_2::HW_UDMA_UART_2_BASE,
+                        uart_buf_addr,
+                        uart_buf_addr,
+                    )
+                };
+                udma_uart.write(&buf);
+            }
         }
     }
 

@@ -589,7 +589,11 @@ impl Repl {
                     if let Ok(mut pmic) = cramium_hal::axp2101::Axp2101::new(&mut i2c) {
                         pmic.update(&mut i2c).ok();
                         if let Some((voltage, _dvm)) = pmic.get_dcdc(cramium_hal::axp2101::WhichDcDc::Dcdc2) {
-                            crate::println!("DCDC2 is on and {:.2}v", voltage);
+                            crate::println!(
+                                "DCDC2 is on and {}.{}v",
+                                voltage as i32,
+                                (voltage * 100.0) as i32 % 100
+                            );
                         } else {
                             crate::println!("DCDC is off, turning it on!");
                             match pmic.set_dcdc(

@@ -1,12 +1,9 @@
 mod driver;
 pub mod glue;
-mod mass_storage;
-mod sha512_digest;
-mod slice_cursor;
+mod handlers;
 
 pub use driver::*;
-pub use mass_storage::*;
-pub use slice_cursor::*;
+pub use handlers::*;
 
 use crate::irq::*;
 
@@ -87,6 +84,43 @@ const USB_DT_SSP_ISOC_ENDPOINT_COMP: u8 = 0x31;
 
 const USB_CAP_TYPE_EXT: u8 = 0x2;
 
+// ===== Constants for CDC/IAD and endpoints =====
+const USB_DT_CS_INTERFACE: u8 = 0x24;
+#[allow(dead_code)]
+const USB_DT_CS_ENDPOINT: u8 = 0x25;
+
+// CDC functional descriptor subtypes
+const CDC_FD_HEADER: u8 = 0x00;
+const CDC_FD_CALL_MANAGEMENT: u8 = 0x01;
+const CDC_FD_ACM: u8 = 0x02;
+const CDC_FD_UNION: u8 = 0x06;
+
+// CDC class codes
+const CDC_COMM_CLASS: u8 = 0x02;
+const CDC_COMM_SUBCLASS_ACM: u8 = 0x02;
+const CDC_COMM_PROTOCOL_AT: u8 = 0x01; // common ACM
+
+const CDC_DATA_CLASS: u8 = 0x0A;
+
+// Endpoint addresses. Keep MSD on EP1 as you already use.
+// CDC notification: EP2 IN
+// CDC data: EP3 OUT, EP3 IN
+const CDC_NOTIF_EP_IN: u8 = 0x82;
+const CDC_DATA_EP_OUT: u8 = 0x03;
+const CDC_DATA_EP_IN: u8 = 0x83;
+
+// Packet sizes
+const HS_BULK_MPS: u16 = 512;
+const FS_BULK_MPS: u16 = 64;
+const HS_INT_MPS: u16 = 16; // common value for CDC notif
+const FS_INT_MPS: u16 = 8;
+
+// Interrupt intervals
+// HS interval is in microframes. 9 gives 2^9 = 512 uframes ≈ 64 ms.
+const HS_INT_INTERVAL: u8 = 9;
+// FS interval in frames. 10 ≈ 10 ms
+const FS_INT_INTERVAL: u8 = 10;
+
 #[allow(dead_code)]
 #[repr(C, packed)]
 struct DeviceDescriptor {
@@ -113,6 +147,7 @@ const PRODUCT: &'static str = "SecuriBao";
 const SERIAL: &'static str = "TODO";
 
 impl DeviceDescriptor {
+    #[allow(dead_code)]
     pub fn default_mass_storage() -> Self {
         Self {
             b_length: core::mem::size_of::<Self>() as u8,
@@ -131,7 +166,27 @@ impl DeviceDescriptor {
             b_num_configurations: 1,
         }
     }
+
+    pub fn default_composite() -> Self {
+        Self {
+            b_length: core::mem::size_of::<Self>() as u8,
+            b_descriptor_type: USB_DT_DEVICE,
+            b_cd_usb: 0x0200,
+            b_device_class: 0, // composite via per-interface classing
+            b_device_sub_class: 0,
+            b_device_protocol: 0,
+            b_max_packet_size0: 0x40,
+            id_vendor: VENDOR_ID,
+            id_product: PRODUCT_ID,
+            b_cd_device: 0x0101,
+            i_manufacturer: 0x01,
+            i_product: 0x02,
+            i_serial_number: 0x03,
+            b_num_configurations: 1,
+        }
+    }
 }
+
 impl AsRef<[u8]> for DeviceDescriptor {
     fn as_ref(&self) -> &[u8] {
         unsafe {
@@ -196,6 +251,7 @@ struct ConfigDescriptor {
     pub b_max_power: u8,
 }
 impl ConfigDescriptor {
+    #[allow(dead_code)]
     pub fn default_mass_storage(total_length: u16) -> Self {
         ConfigDescriptor {
             b_length: core::mem::size_of::<Self>() as u8,
@@ -247,6 +303,40 @@ impl InterfaceDescriptor {
             i_interface: 0x0,
         }
     }
+
+    pub fn mass_storage(if_num: u8) -> Self {
+        let mut d = InterfaceDescriptor::default_mass_storage();
+        d.b_interface_number = if_num;
+        d
+    }
+
+    pub fn cdc_comm(if_num: u8) -> Self {
+        Self {
+            b_length: core::mem::size_of::<Self>() as u8,
+            b_descriptor_type: USB_DT_INTERFACE,
+            b_interface_number: if_num,
+            b_alternate_setting: 0,
+            b_num_endpoints: 1, // interrupt IN only
+            b_interface_class: CDC_COMM_CLASS,
+            b_interface_sub_class: CDC_COMM_SUBCLASS_ACM,
+            b_interface_protocol: CDC_COMM_PROTOCOL_AT,
+            i_interface: 0,
+        }
+    }
+
+    pub fn cdc_data(if_num: u8) -> Self {
+        Self {
+            b_length: core::mem::size_of::<Self>() as u8,
+            b_descriptor_type: USB_DT_INTERFACE,
+            b_interface_number: if_num,
+            b_alternate_setting: 0,
+            b_num_endpoints: 2, // bulk IN + bulk OUT
+            b_interface_class: CDC_DATA_CLASS,
+            b_interface_sub_class: 0,
+            b_interface_protocol: 0,
+            i_interface: 0,
+        }
+    }
 }
 impl AsRef<[u8]> for InterfaceDescriptor {
     fn as_ref(&self) -> &[u8] {
@@ -277,6 +367,72 @@ impl EndpointDescriptor {
             b_m_attributes: 0x02,
             w_max_packet_size: max_packet_size,
             b_interval: 0x0,
+        }
+    }
+
+    fn cdc_notif_ep_hs() -> Self {
+        EndpointDescriptor {
+            b_length: core::mem::size_of::<Self>() as u8,
+            b_descriptor_type: USB_DT_ENDPOINT,
+            b_endpoint_address: CDC_NOTIF_EP_IN,
+            b_m_attributes: 0x03, // Interrupt
+            w_max_packet_size: HS_INT_MPS,
+            b_interval: HS_INT_INTERVAL,
+        }
+    }
+
+    fn cdc_notif_ep_fs() -> Self {
+        EndpointDescriptor {
+            b_length: core::mem::size_of::<Self>() as u8,
+            b_descriptor_type: USB_DT_ENDPOINT,
+            b_endpoint_address: CDC_NOTIF_EP_IN,
+            b_m_attributes: 0x03,
+            w_max_packet_size: FS_INT_MPS,
+            b_interval: FS_INT_INTERVAL,
+        }
+    }
+
+    fn cdc_data_in_hs() -> Self {
+        EndpointDescriptor {
+            b_length: core::mem::size_of::<Self>() as u8,
+            b_descriptor_type: USB_DT_ENDPOINT,
+            b_endpoint_address: CDC_DATA_EP_IN,
+            b_m_attributes: 0x02, // Bulk
+            w_max_packet_size: HS_BULK_MPS,
+            b_interval: 0,
+        }
+    }
+
+    fn cdc_data_out_hs() -> Self {
+        EndpointDescriptor {
+            b_length: core::mem::size_of::<Self>() as u8,
+            b_descriptor_type: USB_DT_ENDPOINT,
+            b_endpoint_address: CDC_DATA_EP_OUT,
+            b_m_attributes: 0x02,
+            w_max_packet_size: HS_BULK_MPS,
+            b_interval: 0,
+        }
+    }
+
+    fn cdc_data_in_fs() -> Self {
+        EndpointDescriptor {
+            b_length: core::mem::size_of::<Self>() as u8,
+            b_descriptor_type: USB_DT_ENDPOINT,
+            b_endpoint_address: CDC_DATA_EP_IN,
+            b_m_attributes: 0x02,
+            w_max_packet_size: FS_BULK_MPS,
+            b_interval: 0,
+        }
+    }
+
+    fn cdc_data_out_fs() -> Self {
+        EndpointDescriptor {
+            b_length: core::mem::size_of::<Self>() as u8,
+            b_descriptor_type: USB_DT_ENDPOINT,
+            b_endpoint_address: CDC_DATA_EP_OUT,
+            b_m_attributes: 0x02,
+            w_max_packet_size: FS_BULK_MPS,
+            b_interval: 0,
         }
     }
 }
@@ -423,7 +579,7 @@ impl Csw {
     fn derive() -> Csw {
         let mut csw = Csw::default();
         csw.as_mut().copy_from_slice(unsafe {
-            core::slice::from_raw_parts(mass_storage::CSW_ADDR as *mut u8, size_of::<Csw>())
+            core::slice::from_raw_parts(handlers::CSW_ADDR as *mut u8, size_of::<Csw>())
         });
         csw
     }
@@ -483,4 +639,310 @@ impl AsRef<[u8]> for InquiryResponse {
             ) as &[u8]
         }
     }
+}
+
+// ===== IAD descriptor to group the CDC function =====
+#[repr(C, packed)]
+struct IadDescriptor {
+    b_length: u8,            // 8
+    b_descriptor_type: u8,   // 0x0B
+    b_first_interface: u8,   // first interface of the function
+    b_interface_count: u8,   // number of interfaces in the function
+    b_function_class: u8,    // 0x02 (CDC)
+    b_function_subclass: u8, // 0x02 (ACM)
+    b_function_protocol: u8, // 0x01 (AT)
+    i_function: u8,          // string index, 0 if none
+}
+impl IadDescriptor {
+    fn cdc(first_if: u8) -> Self {
+        Self {
+            b_length: core::mem::size_of::<Self>() as u8,
+            b_descriptor_type: USB_DT_INTERFACE_ASSOCIATION,
+            b_first_interface: first_if,
+            b_interface_count: 2,
+            b_function_class: CDC_COMM_CLASS,
+            b_function_subclass: CDC_COMM_SUBCLASS_ACM,
+            b_function_protocol: CDC_COMM_PROTOCOL_AT,
+            i_function: 0,
+        }
+    }
+}
+impl AsRef<[u8]> for IadDescriptor {
+    fn as_ref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(
+                self as *const IadDescriptor as *const u8,
+                core::mem::size_of::<IadDescriptor>(),
+            )
+        }
+    }
+}
+
+// ===== CDC functional descriptors =====
+#[repr(C, packed)]
+struct CdcHeaderFuncDesc {
+    b_function_length: u8,    // 5
+    b_descriptor_type: u8,    // CS_INTERFACE
+    b_descriptor_subtype: u8, // Header
+    bcd_cdc: u16,             // 0x0110 or 0x011A; 1.10 is common
+}
+impl CdcHeaderFuncDesc {
+    fn new() -> Self {
+        Self {
+            b_function_length: 5,
+            b_descriptor_type: USB_DT_CS_INTERFACE,
+            b_descriptor_subtype: CDC_FD_HEADER,
+            bcd_cdc: 0x0110,
+        }
+    }
+}
+impl AsRef<[u8]> for CdcHeaderFuncDesc {
+    fn as_ref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(
+                self as *const CdcHeaderFuncDesc as *const u8,
+                core::mem::size_of::<CdcHeaderFuncDesc>(),
+            )
+        }
+    }
+}
+
+#[repr(C, packed)]
+struct CdcCallMgmtFuncDesc {
+    b_function_length: u8,    // 5
+    b_descriptor_type: u8,    // CS_INTERFACE
+    b_descriptor_subtype: u8, // Call Management
+    bm_capabilities: u8,      // 0x00 device does not handle call mgmt
+    b_data_interface: u8,     // interface number of data interface
+}
+impl CdcCallMgmtFuncDesc {
+    fn new(data_if: u8) -> Self {
+        Self {
+            b_function_length: 5,
+            b_descriptor_type: USB_DT_CS_INTERFACE,
+            b_descriptor_subtype: CDC_FD_CALL_MANAGEMENT,
+            bm_capabilities: 0x00,
+            b_data_interface: data_if,
+        }
+    }
+}
+impl AsRef<[u8]> for CdcCallMgmtFuncDesc {
+    fn as_ref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(
+                self as *const CdcCallMgmtFuncDesc as *const u8,
+                core::mem::size_of::<CdcCallMgmtFuncDesc>(),
+            )
+        }
+    }
+}
+
+#[repr(C, packed)]
+struct CdcAcmFuncDesc {
+    b_function_length: u8,    // 4
+    b_descriptor_type: u8,    // CS_INTERFACE
+    b_descriptor_subtype: u8, // ACM
+    bm_capabilities: u8,      // 0x02 supports Set_Line_Coding, etc.
+}
+impl CdcAcmFuncDesc {
+    fn new() -> Self {
+        Self {
+            b_function_length: 4,
+            b_descriptor_type: USB_DT_CS_INTERFACE,
+            b_descriptor_subtype: CDC_FD_ACM,
+            bm_capabilities: 0x02,
+        }
+    }
+}
+impl AsRef<[u8]> for CdcAcmFuncDesc {
+    fn as_ref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(
+                self as *const CdcAcmFuncDesc as *const u8,
+                core::mem::size_of::<CdcAcmFuncDesc>(),
+            )
+        }
+    }
+}
+
+#[repr(C, packed)]
+struct CdcUnionFuncDesc {
+    b_function_length: u8,    // 5
+    b_descriptor_type: u8,    // CS_INTERFACE
+    b_descriptor_subtype: u8, // Union
+    b_master_interface: u8,   // comm interface number
+    b_slave_interface0: u8,   // data interface number
+}
+impl CdcUnionFuncDesc {
+    fn new(master_if: u8, slave_if: u8) -> Self {
+        Self {
+            b_function_length: 5,
+            b_descriptor_type: USB_DT_CS_INTERFACE,
+            b_descriptor_subtype: CDC_FD_UNION,
+            b_master_interface: master_if,
+            b_slave_interface0: slave_if,
+        }
+    }
+}
+impl AsRef<[u8]> for CdcUnionFuncDesc {
+    fn as_ref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(
+                self as *const CdcUnionFuncDesc as *const u8,
+                core::mem::size_of::<CdcUnionFuncDesc>(),
+            )
+        }
+    }
+}
+
+// ===== Composite Config descriptors (HS and FS) =====
+// Layout:
+//   Config
+//   IAD (CDC group)
+//   IF0 CDC Comm
+//     CDC Header, CallMgmt, ACM, Union
+//     EP interrupt IN
+//   IF1 CDC Data
+//     EP bulk OUT, EP bulk IN
+//   IF2 MSD
+//     EP bulk IN, EP bulk OUT
+
+fn config_total_len_hs() -> usize {
+    core::mem::size_of::<ConfigDescriptor>()
+    + core::mem::size_of::<IadDescriptor>()
+    + core::mem::size_of::<InterfaceDescriptor>()               // CDC Comm
+    + core::mem::size_of::<CdcHeaderFuncDesc>()
+    + core::mem::size_of::<CdcCallMgmtFuncDesc>()
+    + core::mem::size_of::<CdcAcmFuncDesc>()
+    + core::mem::size_of::<CdcUnionFuncDesc>()
+    + core::mem::size_of::<EndpointDescriptor>()                // CDC notif
+    + core::mem::size_of::<InterfaceDescriptor>()               // CDC Data
+    + core::mem::size_of::<EndpointDescriptor>() * 2            // CDC data bulk
+    + core::mem::size_of::<InterfaceDescriptor>()               // MSD
+    + core::mem::size_of::<EndpointDescriptor>() * 2 // MSD bulk
+}
+
+fn config_total_len_fs() -> usize {
+    // Same structure as HS
+    config_total_len_hs()
+}
+
+// Writes HS config into ep0_buf and returns the byte count to send
+fn write_config_hs(ep0_buf: &mut [u8]) -> usize {
+    let if_cdc_comm: u8 = 0;
+    let if_cdc_data: u8 = 1;
+    let if_msd: u8 = 2;
+
+    let total_len = config_total_len_hs() as u16;
+
+    let config = ConfigDescriptor {
+        b_length: core::mem::size_of::<ConfigDescriptor>() as u8,
+        b_descriptor_type: USB_DT_CONFIG,
+        w_total_length: total_len,
+        b_num_interfaces: 3,
+        b_configuration_value: 1,
+        i_configuration: 0,
+        bm_attributes: 0xC0, // self powered, no remote wakeup
+        b_max_power: 250,
+    };
+
+    let iad = IadDescriptor::cdc(if_cdc_comm);
+    let if_comm = InterfaceDescriptor::cdc_comm(if_cdc_comm);
+    let fd_hdr = CdcHeaderFuncDesc::new();
+    let fd_call = CdcCallMgmtFuncDesc::new(if_cdc_data);
+    let fd_acm = CdcAcmFuncDesc::new();
+    let fd_union = CdcUnionFuncDesc::new(if_cdc_comm, if_cdc_data);
+    let ep_notif = EndpointDescriptor::cdc_notif_ep_hs();
+
+    let if_data = InterfaceDescriptor::cdc_data(if_cdc_data);
+    let ep_data_out = EndpointDescriptor::cdc_data_out_hs();
+    let ep_data_in = EndpointDescriptor::cdc_data_in_hs();
+
+    let if_msd_desc = InterfaceDescriptor::mass_storage(if_msd);
+    let ep_msd_in = EndpointDescriptor::default_mass_storage(MASS_STORAGE_EPADDR_IN, HS_MAX_PKT_SIZE as _);
+    let ep_msd_out = EndpointDescriptor::default_mass_storage(MASS_STORAGE_EPADDR_OUT, HS_MAX_PKT_SIZE as _);
+
+    let parts: [&[u8]; 14] = [
+        config.as_ref(),
+        iad.as_ref(),
+        if_comm.as_ref(),
+        fd_hdr.as_ref(),
+        fd_call.as_ref(),
+        fd_acm.as_ref(),
+        fd_union.as_ref(),
+        ep_notif.as_ref(),
+        if_data.as_ref(),
+        ep_data_out.as_ref(),
+        ep_data_in.as_ref(),
+        if_msd_desc.as_ref(),
+        ep_msd_in.as_ref(),
+        ep_msd_out.as_ref(),
+    ];
+
+    let mut idx = 0;
+    for p in parts.iter() {
+        ep0_buf[idx..idx + p.len()].copy_from_slice(p);
+        idx += p.len();
+    }
+    idx
+}
+
+// Writes FS other-speed config into ep0_buf and returns the byte count
+fn write_config_fs(ep0_buf: &mut [u8]) -> usize {
+    let if_cdc_comm: u8 = 0;
+    let if_cdc_data: u8 = 1;
+    let if_msd: u8 = 2;
+
+    let total_len = config_total_len_fs() as u16;
+
+    let config = ConfigDescriptor {
+        b_length: core::mem::size_of::<ConfigDescriptor>() as u8,
+        b_descriptor_type: USB_DT_CONFIG,
+        w_total_length: total_len,
+        b_num_interfaces: 3,
+        b_configuration_value: 1,
+        i_configuration: 0,
+        bm_attributes: 0xC0,
+        b_max_power: 250,
+    };
+
+    let iad = IadDescriptor::cdc(if_cdc_comm);
+    let if_comm = InterfaceDescriptor::cdc_comm(if_cdc_comm);
+    let fd_hdr = CdcHeaderFuncDesc::new();
+    let fd_call = CdcCallMgmtFuncDesc::new(if_cdc_data);
+    let fd_acm = CdcAcmFuncDesc::new();
+    let fd_union = CdcUnionFuncDesc::new(if_cdc_comm, if_cdc_data);
+    let ep_notif = EndpointDescriptor::cdc_notif_ep_fs();
+
+    let if_data = InterfaceDescriptor::cdc_data(if_cdc_data);
+    let ep_data_out = EndpointDescriptor::cdc_data_out_fs();
+    let ep_data_in = EndpointDescriptor::cdc_data_in_fs();
+
+    let if_msd_desc = InterfaceDescriptor::mass_storage(if_msd);
+    let ep_msd_in = EndpointDescriptor::default_mass_storage(MASS_STORAGE_EPADDR_IN, FS_MAX_PKT_SIZE as _);
+    let ep_msd_out = EndpointDescriptor::default_mass_storage(MASS_STORAGE_EPADDR_OUT, FS_MAX_PKT_SIZE as _);
+
+    let parts: [&[u8]; 14] = [
+        config.as_ref(),
+        iad.as_ref(),
+        if_comm.as_ref(),
+        fd_hdr.as_ref(),
+        fd_call.as_ref(),
+        fd_acm.as_ref(),
+        fd_union.as_ref(),
+        ep_notif.as_ref(),
+        if_data.as_ref(),
+        ep_data_out.as_ref(),
+        ep_data_in.as_ref(),
+        if_msd_desc.as_ref(),
+        ep_msd_in.as_ref(),
+        ep_msd_out.as_ref(),
+    ];
+
+    let mut idx = 0;
+    for p in parts.iter() {
+        ep0_buf[idx..idx + p.len()].copy_from_slice(p);
+        idx += p.len();
+    }
+    idx
 }

@@ -53,17 +53,16 @@ nto-bio = [
 ]
 # selects features for EVB target (defaults to baosec)
 nto-evb = []
-nto-gfx = ["ux-api/loader-baosec"]
 nto-usb = [
-    "nto-gfx",
     "simple-fatfs",
     "sha2",
     "digest",
     "ed25519-dalek",
     "cramium-hal/debug-print-usb",
-    "cramium-hal/verbose-debug",
+    # "cramium-hal/verbose-debug",
 ]
 nto-buttons = []
+verbose-debug = []
 
 verilator-only = []
-default = ["nto-buttons"]
+default = ["nto-usb"]

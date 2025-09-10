@@ -17,9 +17,16 @@ use utralib::*;
 #[cfg(feature = "artybio")]
 use xous_bio_bdma::*;
 
+#[allow(unused_imports)]
 use crate::delay;
 
 static UART_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
+#[cfg(feature = "nto-usb")]
+static USB_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
+#[cfg(feature = "nto-usb")]
+static USB_TX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
+#[cfg(feature = "nto-usb")]
+static USB_CONNECTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 pub fn uart_irq_handler() {
     use crate::debug::SerialRead;
@@ -65,6 +72,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // The green LEDs flash whenever the FPGA is configured with the Arty BIO design.
     // The RGB LEDs flash when the CPU is running this code.
     #[allow(unused_variables)]
+    #[allow(unused_mut)]
     let mut count = 0;
     #[cfg(any(feature = "artyvexii", feature = "artybio"))]
     let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
@@ -76,8 +84,62 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     repl.init_cmd("bio"); // do a power-on BIO test
 
     #[cfg(feature = "nto-usb")]
-    crate::platform::usb::glue::do_update(); // initially this supplants the repl loop
+    // do the main loop through the USB interface
+    {
+        use crate::platform::usb::glue;
+        let (mut last_usb_state, mut portsc) = glue::setup();
 
+        loop {
+            use cramium_hal::usb::driver::UsbDeviceState;
+
+            let (new_usb_state, new_portsc) = glue::usb_status();
+            // break out of the loop when USB is disconnected, after it has been configured
+            // this might not make sense for baremetal that has no battery. but keep it for now.
+            if new_portsc != portsc {
+                portsc = new_portsc;
+                if glue::is_disconnected(portsc) && new_usb_state == UsbDeviceState::Configured {
+                    USB_CONNECTED.store(false, core::sync::atomic::Ordering::SeqCst);
+                    last_usb_state = UsbDeviceState::NotAttached;
+                }
+            }
+
+            if last_usb_state == UsbDeviceState::Configured {
+                // put repl in here
+                critical_section::with(|cs| {
+                    let mut queue = USB_RX.borrow(cs).borrow_mut();
+                    while let Some(byte) = queue.pop_front() {
+                        repl.rx_char(byte);
+                    }
+                });
+
+                // Process any command line requests
+                match repl.process() {
+                    Err(e) => {
+                        if let Some(m) = e.message {
+                            crate::println!("{}", m);
+                            repl.abort_cmd();
+                        }
+                    }
+                    _ => (),
+                };
+                glue::flush_tx();
+            } else {
+                // TODO: retry connection to host by pulling SE0. Need to add the SE0 switch, tho!
+            }
+
+            // provide feedback when connection is established
+            if new_usb_state != last_usb_state {
+                if new_usb_state == UsbDeviceState::Configured {
+                    crate::println!("USB is connected!");
+                    last_usb_state = new_usb_state;
+                    USB_CONNECTED.store(true, core::sync::atomic::Ordering::SeqCst);
+                }
+            }
+        }
+    }
+
+    #[cfg(not(feature = "nto-usb"))]
+    // do the main loop through the serial port
     loop {
         // Handle keyboard events.
         critical_section::with(|cs| {
