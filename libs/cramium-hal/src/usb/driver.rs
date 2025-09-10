@@ -723,7 +723,7 @@ pub struct UdcEp {
     tran_ring_full: bool,
     ep_state: EpState,
     _wedge: bool,
-    pub completion_handler: Option<fn(&mut CorigineUsb, usize, u32, u8)>,
+    pub completion_handler: Option<fn(&mut CorigineUsb, usize, u32, u8, u16)>,
 }
 impl Default for UdcEp {
     fn default() -> Self {
@@ -766,7 +766,7 @@ impl UdcEp {
         }
     }
 
-    pub fn assign_completion_handler(&mut self, f: fn(&mut CorigineUsb, usize, u32, u8)) {
+    pub fn assign_completion_handler(&mut self, f: fn(&mut CorigineUsb, usize, u32, u8, u16)) {
         self.completion_handler = Some(f);
     }
 }
@@ -1022,7 +1022,7 @@ impl CorigineUsb {
 
     pub fn assign_completion_handler(
         &mut self,
-        handler_fn: fn(&mut Self, usize, u32, u8),
+        handler_fn: fn(&mut Self, usize, u32, u8, u16),
         ep_num: u8,
         dir: bool,
     ) {
@@ -1031,6 +1031,26 @@ impl CorigineUsb {
 
     /// For use in simple applications that don't require concurrent application buffer pointers
     pub fn cbw_ptr(&self) -> usize { self.ifram_base_ptr + CRG_UDC_APP_BUFOFFSET }
+
+    /// "Manually allocated" to clear the 1k of data used for mass storage
+    pub fn cdc_acm_rx_slice(&self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(
+                (self.ifram_base_ptr + CRG_UDC_APP_BUFOFFSET + CRG_UDC_APP_BUF_LEN * 2) as *mut u8,
+                CRG_UDC_APP_BUF_LEN,
+            )
+        }
+    }
+
+    /// "Manually allocated" to clear the 1k of data used for mass storage + 512 bytes for ACM RX
+    pub fn cdc_acm_tx_slice(&self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(
+                (self.ifram_base_ptr + CRG_UDC_APP_BUFOFFSET + CRG_UDC_APP_BUF_LEN * 3) as *mut u8,
+                CRG_UDC_APP_BUF_LEN,
+            )
+        }
+    }
 
     pub fn get_app_buf_ptr(&mut self, ep_num: u8, dir: bool) -> Option<usize> {
         let mut enq_index = self.app_enq_index[ep_num as usize];
@@ -1188,6 +1208,14 @@ impl CorigineUsb {
     }
 
     pub fn init(&mut self) {
+        let ifram_slice = unsafe {
+            core::slice::from_raw_parts_mut(
+                self.ifram_base_ptr as *mut u32,
+                CRG_IFRAM_PAGES * 4096 / size_of::<u32>(),
+            )
+        };
+        ifram_slice.fill(0);
+
         self.csr.rmwf(USBCMD_INT_ENABLE, 0);
         self.csr.rmwf(USBCMD_RUN_STOP, 0);
 
