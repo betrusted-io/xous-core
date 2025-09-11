@@ -32,6 +32,7 @@ impl UsbHid {
         UsbHid { conn }
     }
 
+    #[cfg(feature = "mass-storage")]
     pub fn set_block_device(&self, read_id: usize, write_id: usize, max_lba_id: usize) {
         send_message(
             self.conn,
@@ -46,6 +47,7 @@ impl UsbHid {
         .unwrap();
     }
 
+    #[cfg(feature = "mass-storage")]
     pub fn set_block_device_sid(&self, app_sid: xous::SID) {
         let sid = app_sid.to_u32();
         send_message(
@@ -61,6 +63,7 @@ impl UsbHid {
         .unwrap();
     }
 
+    #[cfg(feature = "mass-storage")]
     pub fn reset_block_device(&self) {
         send_message(
             self.conn,
