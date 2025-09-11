@@ -4,12 +4,13 @@ use std::collections::VecDeque;
 use std::sync::atomic::compiler_fence;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
-use cramium_hal::usb::driver::{CRG_UDC_ERDPLO_EHB, CorigineWrapper, EventTrbS};
+use cramium_hal::usb::driver::*;
 use cramium_hal::usb::utra::*;
 use num_traits::*;
 use usb_device::class_prelude::*;
 use usb_device::device::UsbDevice;
 use usb_device::prelude::*;
+use usbd_serial::SerialPort;
 use utralib::{AtomicCsr, utra};
 use xous::Message;
 use xous_usb_hid::device::DeviceClass;
@@ -91,8 +92,8 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
 
             loop {
                 {
-                    #[cfg(feature = "verbose-debug")]
-                    crate::println!("getting event");
+                    // #[cfg(feature = "verbose-debug")]
+                    // crate::println!("getting event");
                     // scoping on the hardware lock to manipulate pointer states
                     let mut corigine_usb = usb.wrapper.core();
                     let mut event = {
@@ -111,12 +112,30 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                     // leaves a side-effect result of the CrgEvent inside the corigine_usb object
                     #[cfg(feature = "verbose-debug")]
                     crate::println!("handle inner");
-                    cramium_hal::usb::driver::handle_event_inner(&mut corigine_usb, &mut event);
+                    if cramium_hal::usb::driver::handle_event_inner(&mut corigine_usb, &mut event) {
+                        crate::println!("~~~~~got reset~~~~");
+                        // reset the ready state
+                        for ready in usb.wrapper.ep_out_ready.iter() {
+                            ready.store(false, Ordering::SeqCst);
+                        }
+                        usb.wrapper.address_is_set.store(false, Ordering::SeqCst);
+                    }
                 }
 
                 let device = usb.device.borrow_mut();
                 let class = usb.class.borrow_mut();
-                if device.poll(&mut [class]) {
+                let serial = usb.serial_port.borrow_mut();
+                if device.poll(&mut [class, serial as &mut dyn UsbClass<_>]) {
+                    let mut buf = [0u8; 512];
+                    if let Ok(count) = serial.read(&mut buf) {
+                        crate::println!("serial read: {:x?}", &buf[..count]);
+                        if buf[0] == 'a' as u32 as u8 {
+                            // echo back
+                            // let wr_res = serial.write(b"boo!");
+                            let wr_res = serial.write(&buf[..count]);
+                            crate::println!("serial write: {:?}", wr_res);
+                        }
+                    }
                     match class.device::<NKROBootKeyboard<_>, _>().read_report() {
                         Ok(l) => {
                             // for now all we do is just print this, we don't
@@ -229,6 +248,7 @@ pub struct CramiumUsb<'a> {
     >,
     // storage for hid_packets to expatriate from the interrupt handler
     pub hid_packet: Option<[u8; 64]>,
+    pub serial_port: SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]>,
 }
 
 impl<'a> CramiumUsb<'a> {
@@ -243,7 +263,13 @@ impl<'a> CramiumUsb<'a> {
         let class = UsbHidClassBuilder::new()
             .add_device(NKROBootKeyboardConfig::default())
             .add_device(RawFidoConfig::default())
-            .build(&usb_alloc);
+            .build(usb_alloc);
+
+        // this buffer needs to be at least as big as the max packet size, ideally 2x as much. Set it to
+        // 1k.
+        let rx_buf = [0u8; 1024];
+        let tx_buf = [0u8; 1024];
+        let serial_port = SerialPort::new_with_store(&usb_alloc, rx_buf, tx_buf);
 
         let device = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x3613))
             .manufacturer("Kosagi")
@@ -251,6 +277,7 @@ impl<'a> CramiumUsb<'a> {
             .serial_number(&serial_number)
             // this is *required* by the corigine stack
             .max_packet_size_0(64)
+            .device_class(0)
             .build();
 
         CramiumUsb {
@@ -265,6 +292,7 @@ impl<'a> CramiumUsb<'a> {
             kbd_tx_queue: RefCell::new(VecDeque::new()),
             irq_req: None,
             hid_packet: None,
+            serial_port,
         }
     }
 
@@ -320,6 +348,9 @@ impl<'a> CramiumUsb<'a> {
             .map(|_| core::sync::atomic::AtomicBool::new(false))
             .collect::<Vec<_>>()
             .into_boxed_slice();
+        for ready in self.wrapper.ep_out_ready.iter() {
+            ready.store(false, Ordering::SeqCst);
+        }
 
         // re-enable IRQs
         self.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
