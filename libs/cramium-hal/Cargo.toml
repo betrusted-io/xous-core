@@ -18,7 +18,10 @@ rkyv = { version = "0.8.8", default-features = false, features = [
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 riscv = { version = "0.5.6", package = "xous-riscv" }
-usb-device = { version = "0.2.8", features = ["log"], optional = true }
+usb-device = { git = "https://github.com/betrusted-io/usb-device.git", branch = "main", features = [
+    "log",
+    "control-buffer-256",
+], optional = true }
 bitfield = "0.13.2"
 either = { version = "1.9.0", default-features = false }
 ux-api = { path = "../ux-api", default-features = false, optional = true }
@@ -54,9 +57,7 @@ kernel-baosec = ["utralib/cramium-soc"]
 kernel-baosor = ["utralib/cramium-soc"]
 kernel-dabao = ["utralib/cramium-soc"]
 test-baosec = ["ux-api/loader-baosec", "camera-gc2145"]
-hosted-baosec = [
-    "std"
-] # emulated hardware on x86 platform
+hosted-baosec = ["std"] # emulated hardware on x86 platform
 board-baosor = [
     "camera-gc2145",
     "axp2101",
