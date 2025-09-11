@@ -53,6 +53,18 @@ pub(crate) fn main_hw() -> ! {
     // before any IRQ calls try to use it.
     crate::println!("APP UART in PID {}", xous::process::id());
 
+    #[cfg(feature = "usbd-debug")]
+    // bind the duart
+    let duart_mapping = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utra::duart::HW_DUART_BASE),
+        xous::MemoryAddress::new(0x3000_0000),
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map DUART");
+    #[cfg(feature = "usbd-debug")]
+    crate::println!("duart mapping: {:x?}", duart_mapping);
+
     #[cfg(feature = "debug-print-usb")]
     panic::set_hook(Box::new(|info| {
         crate::println!("{}", info);
