@@ -850,6 +850,7 @@ pub enum UmsState {
     Terminated,
 }
 
+#[derive(Copy, Clone)]
 pub struct AppPtr {
     pub addr: usize,
     pub len: usize,
@@ -890,7 +891,7 @@ pub struct CorigineUsb {
     pub event_inner: Option<CrgEvent>,
     // data pointer of the current TRB to the application layer. Tuple is (addr, len).
     // we form the unsafe slice later depending on if the application needs mutability or not :-/
-    pub app_ptr: Option<AppPtr>,
+    pub app_ptr: [Option<AppPtr>; CRG_EP_NUM],
 
     pub state: UsbDeviceState,
     pub cur_interface_num: u8,
@@ -961,12 +962,13 @@ impl CorigineUsb {
             callback_wr: None,
             remaining_wr: None,
             event_inner: None,
-            app_ptr: None,
+            app_ptr: [None; CRG_EP_NUM],
         }
     }
 
-    pub fn pending_ep(&self) -> Option<usize> {
-        if let Some(ap) = &self.app_ptr { Some(ap.ep as usize) } else { None }
+    pub fn pending_ep(&self, ep_num: usize, dir: bool) -> Option<usize> {
+        let pei = CorigineUsb::pei(ep_num as _, dir) - 2;
+        if let Some(ap) = &self.app_ptr[pei] { Some(ap.ep as usize) } else { None }
     }
 
     pub fn setup_big_read(&mut self, app_buf: &mut [u8], disk: &[u8], offset: usize, length: usize) {
@@ -2491,7 +2493,7 @@ impl UsbBus for CorigineWrapper {
     /// Implementations may also return other errors if applicable.
     fn write(&self, ep_addr: EndpointAddress, buf: &[u8]) -> Result<usize> {
         if ep_addr.index() == 0 {
-            // #[cfg(feature = "verbose-debug")]
+            #[cfg(feature = "verbose-debug")]
             crate::println!(" ******* EP0 WRITE ({}): {:x?}", buf.len(), &buf[..8.min(buf.len())]);
             let ep0_buf_addr = self.core().ep0_buf.load(Ordering::SeqCst) as usize;
             let ep0_buf =
@@ -2529,6 +2531,7 @@ impl UsbBus for CorigineWrapper {
             assert!(buf.len() < CRG_UDC_APP_BUF_LEN, "write buffer size exceeded");
             hw_buf[..buf.len()].copy_from_slice(&buf);
             let pei = CorigineUsb::pei(ep_addr.index() as u8, CRG_IN);
+            let _ = self.core().app_ptr[pei - 2].take(); // remove the app ptr if it's queued - for now we do nothing with it
             if let Some((hw_ep_type, _max_packet_size)) = self.ep_meta[pei - 2] {
                 match hw_ep_type {
                     EpType::BulkInbound => {
@@ -2577,13 +2580,14 @@ impl UsbBus for CorigineWrapper {
     ///
     /// Implementations may also return other errors if applicable.
     fn read(&self, ep_addr: EndpointAddress, buf: &mut [u8]) -> Result<usize> {
+        let pei_offset = CorigineUsb::pei(ep_addr.index() as u8, CRG_OUT) - 2;
         if ep_addr.index() == 0 {
-            // #[cfg(feature = "verbose-debug")]
+            #[cfg(feature = "verbose-debug")]
             crate::println!(" ******** EP0 READ");
             // setup packet
             if let Some(setup) = self.core().setup.take() {
                 buf[..setup.len()].copy_from_slice(&setup);
-                // #[cfg(feature = "verbose-debug")]
+                #[cfg(feature = "verbose-debug")]
                 crate::println!("   {:x?}", &buf[..setup.len()]);
                 Ok(setup.len())
             } else {
@@ -2592,12 +2596,13 @@ impl UsbBus for CorigineWrapper {
             }
         } else {
             if self.address_is_set.load(Ordering::SeqCst) {
-                let pending_ep = self.core().pending_ep();
+                let pending_ep = self.core().pending_ep(ep_addr.index(), CRG_OUT);
                 #[cfg(feature = "verbose-debug")]
                 crate::println!(" ******** READ {} pending {:?}", ep_addr.index(), pending_ep);
                 let ret = if let Some(pending_ep) = pending_ep {
                     if pending_ep as usize == ep_addr.index() {
-                        let app_ptr = self.core().app_ptr.take().expect("inconistent app_ptr state");
+                        let app_ptr =
+                            self.core().app_ptr[pei_offset].take().expect("inconistent app_ptr state");
                         let ptr = app_ptr.addr;
                         let len = app_ptr.len;
                         self.ep_out_ready[ep_addr.index()].store(false, Ordering::SeqCst);
@@ -2634,8 +2639,7 @@ impl UsbBus for CorigineWrapper {
                             .expect("should always be a buffer available at set_address")
                     };
                     // crate::println!("address {:x}", addr);
-                    let pei = CorigineUsb::pei(ep_addr.index() as u8, CRG_OUT);
-                    if let Some((hw_ep_type, max_packet_size)) = self.ep_meta[pei - 2] {
+                    if let Some((hw_ep_type, max_packet_size)) = self.ep_meta[pei_offset] {
                         match hw_ep_type {
                             // NOTE: we kind of need to know how big of a transfer we expect for this
                             // to work, otherwise, the transfer may not complete. But we won't know
@@ -2661,11 +2665,7 @@ impl UsbBus for CorigineWrapper {
                                     0, // CRG_XFER_SET_CHAIN,
                                 );
                             }
-                            EpType::BulkInbound => {
-                                crate::println!("bulk in UNREACHABLE");
-                                unreachable!("Bulk inbound not reachable for OUT endpoints");
-                            }
-                            _ => {
+                            EpType::IntrOutbound => {
                                 #[cfg(feature = "verbose-debug")]
                                 crate::println!(
                                     "::::::: setting up interrupt outbound ep{} @ {:x} :::::::",
@@ -2683,6 +2683,9 @@ impl UsbBus for CorigineWrapper {
                                     false,
                                     false,
                                 );
+                            }
+                            _ => {
+                                todo!("EP type not handled yet {:?}", hw_ep_type);
                             }
                         }
                     } else {
@@ -2875,12 +2878,12 @@ pub fn handle_event_inner(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> 
                     // so unsafe. so unsafe. We're counting on the hardware to hand us a raw pointer
                     // that isn't corrupted.
                     let p_trb = unsafe { &*(event_trb.dw0 as *const TransferTrbS) };
-                    this.app_ptr = Some(AppPtr {
+                    this.app_ptr[pei as usize - 2] = Some(AppPtr {
                         addr: p_trb.dplo as usize,
                         len: (p_trb.dw2.0 & 0xffff) as usize - residual_length as usize,
                         ep: ep as u8,
                     });
-                    if dir {
+                    if dir == USB_RECV {
                         // out
                         ret = CrgEvent::Data(ep_onehot, 0, 0)
                     } else {
