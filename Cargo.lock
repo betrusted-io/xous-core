@@ -6116,7 +6116,7 @@ dependencies = [
 [[package]]
 name = "usbd-serial"
 version = "0.1.1"
-source = "git+https://github.com/betrusted-io/usbd-serial.git?branch=v0.1.1-betrusted#1731bd2b4d06249d4e6492986235069186fc489e"
+source = "git+https://github.com/betrusted-io/usbd-serial.git?branch=v0.1.1-betrusted#c20edaf89d74466e06773f66110a38156c6eb4a7"
 dependencies = [
  "embedded-hal 0.2.7",
  "nb 0.1.3",
