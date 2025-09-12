@@ -18,10 +18,17 @@ rkyv = { version = "0.8.8", default-features = false, features = [
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 riscv = { version = "0.5.6", package = "xous-riscv" }
+
 usb-device = { git = "https://github.com/betrusted-io/usb-device.git", branch = "main", features = [
     "log",
     "control-buffer-256",
 ], optional = true }
+
+# usb-device = { path = "../../../usb-device", features = [
+#     "log",
+#     "control-buffer-256",
+# ], optional = true }
+
 bitfield = "0.13.2"
 either = { version = "1.9.0", default-features = false }
 ux-api = { path = "../ux-api", default-features = false, optional = true }
