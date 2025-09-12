@@ -525,6 +525,12 @@ pub(crate) fn main_hw() -> ! {
                     LogLevel::Err => log::set_max_level(log::LevelFilter::Error),
                 }
             }),
+            Opcode::SerialFlush => {
+                // temporary code
+                let all_items: Vec<u8> = cu.serial_rx.drain(..).collect();
+                log::info!("received: {:x?}", all_items); // echo back
+                let _ = cu.serial_port.write(&all_items);
+            }
             Opcode::InvalidCall => {
                 log::warn!("Illegal opcode received {:?}", msg);
             }

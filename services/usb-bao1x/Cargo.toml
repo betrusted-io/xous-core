@@ -37,14 +37,18 @@ usb-device = { git = "https://github.com/betrusted-io/usb-device.git", branch = 
     "log",
     "control-buffer-256",
 ] }
+# usb-device = { path = "../../../usb-device", features = [
+#     "log",
+#     "control-buffer-256",
+# ] }
 
 # Serial support
 usbd-serial = { git = "https://github.com/betrusted-io/usbd-serial.git", branch = "v0.1.1-betrusted", features = [
     "max-packet-size-512",
 ] }
-#usbd-serial = { path = "../../../usbd-serial", features = [
-#    "max-packet-size-512",
-#] }
+# usbd-serial = { path = "../../../usbd-serial", features = [
+#     "max-packet-size-512",
+# ] }
 
 [features]
 cramium-soc = []

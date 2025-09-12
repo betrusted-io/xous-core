@@ -128,13 +128,17 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                 if device.poll(&mut [class, serial as &mut dyn UsbClass<_>]) {
                     let mut buf = [0u8; 512];
                     if let Ok(count) = serial.read(&mut buf) {
-                        crate::println!("serial read: {:x?}", &buf[..count]);
-                        if buf[0] == 'a' as u32 as u8 {
-                            // echo back
-                            // let wr_res = serial.write(b"boo!");
-                            let wr_res = serial.write(&buf[..count]);
-                            crate::println!("serial write: {:?}", wr_res);
+                        for &d in buf[..count].iter() {
+                            usb.serial_rx.push_back(d);
                         }
+                        // crate::println!("serial read: {:x?}", &buf[..count]);
+
+                        // TODO: implement the actual Xous serial API instead of this stand-in routine
+                        xous::try_send_message(
+                            usb.conn,
+                            Message::new_scalar(Opcode::SerialFlush.to_usize().unwrap(), 0, 0, 0, 0),
+                        )
+                        .ok();
                     }
                     match class.device::<NKROBootKeyboard<_>, _>().read_report() {
                         Ok(l) => {
@@ -173,10 +177,6 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                     if hw_lock.udc_event.evt_dq_pt.load(Ordering::SeqCst)
                         == hw_lock.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst)
                     {
-                        crate::println!(
-                            " evt_last_trb {:x}",
-                            hw_lock.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst) as usize
-                        );
                         hw_lock.udc_event.ccs = !hw_lock.udc_event.ccs;
                         // does this...go to null to end the transfer??
                         hw_lock.udc_event.evt_dq_pt = AtomicPtr::new(
@@ -249,6 +249,7 @@ pub struct CramiumUsb<'a> {
     // storage for hid_packets to expatriate from the interrupt handler
     pub hid_packet: Option<[u8; 64]>,
     pub serial_port: SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]>,
+    pub serial_rx: VecDeque<u8>,
 }
 
 impl<'a> CramiumUsb<'a> {
@@ -270,14 +271,24 @@ impl<'a> CramiumUsb<'a> {
         let rx_buf = [0u8; 1024];
         let tx_buf = [0u8; 1024];
         let serial_port = SerialPort::new_with_store(&usb_alloc, rx_buf, tx_buf);
+        // HACK ALERT: due to a shortcoming in the usb-device implementation, inside the interrupt handler we
+        // have to catch and parse SETUP-OUT sequences. Basically the driver assumes that the OUT endpoint is
+        // always configured to trigger, but in our stack every time we have an OUT on EP0, we have to
+        // set it up with the correct length. See the "TrbType::SetupPkt" arm of handle_event_inner()
+        // for more details.
+        //
+        // In particular, Mass Storage has to handle a similar situation, so if adding a mass storage
+        // interface, this hack has to be dealt with (and btw, there are not enough endpoints availbale
+        // to concurrently add that in - you have to kick out one of the interfaces above to add mass
+        // storage!)
 
         let device = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x3613))
-            .manufacturer("Kosagi")
-            .product("Precursor")
+            .manufacturer("Baochip")
+            .product("Baosec")
             .serial_number(&serial_number)
             // this is *required* by the corigine stack
             .max_packet_size_0(64)
-            .device_class(0)
+            .composite_with_iads()
             .build();
 
         CramiumUsb {
@@ -293,6 +304,7 @@ impl<'a> CramiumUsb<'a> {
             irq_req: None,
             hid_packet: None,
             serial_port,
+            serial_rx: VecDeque::new(),
         }
     }
 
