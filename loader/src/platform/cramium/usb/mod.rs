@@ -168,6 +168,7 @@ impl DeviceDescriptor {
         }
     }
 
+    #[allow(dead_code)]
     pub fn default_composite() -> Self {
         Self {
             b_length: core::mem::size_of::<Self>() as u8,
@@ -176,6 +177,26 @@ impl DeviceDescriptor {
             b_device_class: 0, // composite via per-interface classing
             b_device_sub_class: 0,
             b_device_protocol: 0,
+            b_max_packet_size0: 0x40,
+            id_vendor: VENDOR_ID,
+            id_product: PRODUCT_ID,
+            b_cd_device: 0x0101,
+            i_manufacturer: 0x01,
+            i_product: 0x02,
+            i_serial_number: 0x03,
+            b_num_configurations: 1,
+        }
+    }
+
+    // Windows-friendly composite: EF/02/01 indicates IAD-present composite
+    pub fn composite_with_iad() -> Self {
+        Self {
+            b_length: core::mem::size_of::<Self>() as u8,
+            b_descriptor_type: USB_DT_DEVICE,
+            b_cd_usb: 0x0200,
+            b_device_class: 0xEF,     // Miscellaneous
+            b_device_sub_class: 0x02, // Common Class
+            b_device_protocol: 0x01,  // Interface Association Descriptor (IAD)
             b_max_packet_size0: 0x40,
             id_vendor: VENDOR_ID,
             id_product: PRODUCT_ID,
