@@ -148,7 +148,7 @@ pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize,
 
     match (value >> 8) as u8 {
         USB_DT_DEVICE => {
-            let mut dd = DeviceDescriptor::default_composite();
+            let mut dd = DeviceDescriptor::composite_with_iad();
             dd.b_max_packet_size0 = 64;
             let len = length.min(core::mem::size_of::<DeviceDescriptor>());
             ep0_buf[..len].copy_from_slice(&dd.as_ref()[..len]);
