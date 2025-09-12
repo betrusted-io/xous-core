@@ -2726,8 +2726,8 @@ impl UsbBus for CorigineWrapper {
     /// be IN or OUT, but not both at the same time. Devices with both IN/OUT may leave this as
     /// an empty stub.
     fn set_ep0_out(&self) {
-        let addr = self.core().ep0_buf.load(Ordering::SeqCst) as usize;
-        self.core().ep0_receive(addr, 64, 0);
+        // let addr = self.core().ep0_buf.load(Ordering::SeqCst) as usize;
+        // self.core().ep0_receive(addr, 64, 0);
     }
 
     /// Causes the USB peripheral to enter USB suspend mode, lowering power consumption and
@@ -2904,6 +2904,17 @@ pub fn handle_event_inner(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> 
             this.setup_tag = event_trb.get_setup_tag();
             #[cfg(feature = "verbose-debug")]
             crate::println!("     **handle_setup_pkt tag {}", this.setup_tag);
+
+            // the driver doesn't have a provision to set up an ep0 receive, which is necessary for
+            // the stack to work. Any cases of EP0 receive needed for the devices to work have to be
+            // manually put in here. Ugh!
+            if setup_storage[0] == 0x21 && setup_storage[1] == 0x20 && setup_storage[6] == 0x07 {
+                crate::println!(
+                    "HACK: setup ep0 receive for ACM class - we ignore the result, but the receive must exist"
+                );
+                this.ep0_receive(this.ep0_buf.load(Ordering::SeqCst) as usize, 7, 0);
+            }
+
             ret = CrgEvent::Data(0, 0, 1);
         }
         TrbType::DataStage => {
