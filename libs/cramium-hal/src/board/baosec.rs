@@ -286,7 +286,7 @@ pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 2], [(Iox
 }
 
 pub fn setup_pmic_irq<T: IoIrq>(iox: &T, server: &str, opcode: usize) {
-    iox.set_irq_pin(IoxPort::PB, 13, IoxValue::Low, server, opcode);
+    iox.set_irq_pin(IoxPort::PB, 15, IoxValue::Low, server, opcode);
 }
 
 pub fn setup_oled_power_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
