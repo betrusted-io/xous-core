@@ -160,7 +160,7 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
 
     // Configure PB15 -> PIO0 for test (although the code is capable of toggling all pins, only map one).
     let iox = iox::Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
-    let pin = iox.set_pio_bit_from_port_and_pin(iox::IoxPort::PB, 15).unwrap();
+    let pin = iox.set_bio_bit_from_port_and_pin(iox::IoxPort::PB, 15).unwrap();
     report_api("Configured PIO pin: ", pin as u32);
 
     // setup PIO block as DMA target -- just take the data coming into the TX
@@ -179,7 +179,7 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
     sm_a.config_set_out_pins(0, 32);
     sm_a.config_set_clkdiv(133.0); // have it run slow so this test operates in the background
     sm_a.config_set_out_shift(false, true, 32);
-    // map the pin returned from set_pio_bit_from_port_and_pin
+    // map the pin returned from set_bio_bit_from_port_and_pin
     sm_a.sm_set_pindirs_with_mask(1 << pin as usize, 1 << pin as usize);
     sm_a.sm_init(a_prog.entry());
     sm_a.sm_clear_fifos(); // ensure the fifos are cleared for this test
