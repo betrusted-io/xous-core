@@ -334,6 +334,15 @@ pub fn usb_ep3_bulk_out_complete(
     this.bulk_xfer(3, USB_RECV, acm_buf.as_ptr() as usize, acm_buf.len(), 0, 0);
 }
 
+pub fn flush() {
+    unsafe {
+        if let Some(ref mut usb_ref) = crate::platform::usb::USB {
+            let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
+            flush_tx(usb);
+        }
+    }
+}
+
 pub fn flush_tx(this: &mut CorigineUsb) {
     let mut written = 0;
 

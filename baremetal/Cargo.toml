@@ -65,7 +65,12 @@ nto-usb = [
     # "cramium-hal/verbose-debug",
 ]
 nto-buttons = []
-nto-trng = ["nto-usb", "base64"]
+nto-trng = [
+    "nto-usb",
+    "base64",
+    "xous-bio-bdma/baremetal",
+    "xous-bio-bdma/cramium-soc",
+]
 verbose-debug = []
 
 verilator-only = []

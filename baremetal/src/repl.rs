@@ -852,6 +852,78 @@ impl Repl {
                     }
                 }
             }
+            #[cfg(feature = "nto-trng")]
+            "trngav" => {
+                use base64::{Engine as _, engine::general_purpose};
+                fn encode_base64(input: &[u8]) -> String { general_purpose::STANDARD.encode(input) }
+                fn as_u8_slice(slice: &[u32]) -> &[u8] {
+                    let len = slice.len() * size_of::<u32>();
+                    unsafe { core::slice::from_raw_parts(slice.as_ptr() as *const u8, len) }
+                }
+
+                use cramium_hal::iox::Iox;
+                use xous_bio_bdma::*;
+
+                let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                let (power_port, power_pin) = cramium_hal::board::setup_trng_power_pin(&iox);
+                let bio_input = cramium_hal::board::setup_trng_input_pin(&iox);
+                // turn on the system
+                iox.set_gpio_pin_value(power_port, power_pin, IoxValue::High);
+
+                let mut bio_ss = BioSharedState::new();
+                bio_ss.init();
+                crate::println!("bio_input: {}", bio_input);
+                crate::avtrng::setup(&mut bio_ss, bio_input);
+
+                crate::println!("====AVSTART====");
+                const BUFLEN: usize = 256;
+
+                crate::usb::flush();
+
+                const BITS_PER_SAMPLE: usize = 4;
+                loop {
+                    let mut buf = [0u32; BUFLEN / size_of::<u32>()];
+                    for d in buf.iter_mut() {
+                        let mut raw32 = 0;
+                        for _ in 0..(size_of::<u32>() * 8) / BITS_PER_SAMPLE {
+                            // wait for the next interval to arrive
+                            while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0) == 0 {}
+                            let raw = bio_ss.bio.r(utra::bio_bdma::SFR_RXF0);
+                            // crate::println!("raw: {:x}", raw);
+                            raw32 <<= BITS_PER_SAMPLE;
+                            raw32 |= (raw >> 1) & ((1 << BITS_PER_SAMPLE) - 1)
+                        }
+                        *d = raw32;
+                    }
+                    let buf_u8 = as_u8_slice(&buf);
+                    let b64 = encode_base64(buf_u8);
+                    unsafe {
+                        if let Some(ref mut usb_ref) = crate::platform::usb::USB {
+                            let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
+                            let tx_buf = usb.cdc_acm_tx_slice();
+                            let b64_as_slice = b64.as_bytes();
+                            assert!(b64_as_slice.len() + 1 < tx_buf.len()); // this is ensured by adjusting BUFLEN
+                            tx_buf[..b64_as_slice.len()].copy_from_slice(b64_as_slice);
+                            tx_buf[b64_as_slice.len()] = '\n' as char as u32 as u8;
+                            while !crate::platform::usb::TX_IDLE
+                                .swap(false, core::sync::atomic::Ordering::SeqCst)
+                            {
+                                // wait for tx to go idle
+                            }
+                            usb.bulk_xfer(
+                                3,
+                                cramium_hal::usb::driver::USB_SEND,
+                                tx_buf.as_ptr() as usize,
+                                b64_as_slice.len() + 1,
+                                0,
+                                0,
+                            );
+                        } else {
+                            panic!("USB core not allocated, can't proceed!");
+                        }
+                    }
+                }
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);
@@ -872,7 +944,7 @@ impl Repl {
                 #[cfg(feature = "nto-usb")]
                 crate::print!(", usb");
                 #[cfg(feature = "nto-trng")]
-                crate::print!(", trngro");
+                crate::print!(", trngro, trngav");
                 crate::println!("");
             }
         }
