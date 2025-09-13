@@ -43,7 +43,7 @@ def main(argv=None) -> int:
         description="Serial capture tool for RO/AVA TRNG base64 streams."
     )
     ap.add_argument("--port", default="/dev/ttyACM0", help="Serial port (default: /dev/ttyACM0)")
-    ap.add_argument("--type", choices=["ro", "ava"], default="ro", help='Command type: "ro" or "ava" (default: ro)')
+    ap.add_argument("--type", choices=["ro", "av"], default="ro", help='Command type: "ro" or "av" (default: ro)')
     ap.add_argument("--length", default="50M", help="Bytes to capture, supports k/m/g suffixes. Default: 50M")
     ap.add_argument("--baud", type=int, default=480_000_000, help="Baud rate")
     ap.add_argument("--outdir", type=Path, default=Path("."), help="Output directory (default: .)")
@@ -60,7 +60,7 @@ def main(argv=None) -> int:
         print("Target read length must be at least 64k")
         return 2
 
-    cmd = "trngro\r" if args.type == "ro" else "trngava\r"
+    cmd = "trngro\r" if args.type == "ro" else "trngav\r"
 
     try:
         ser = serial.Serial(
