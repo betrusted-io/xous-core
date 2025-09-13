@@ -1,16 +1,10 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-#[cfg(feature = "cramium-soc")]
-use cram_hal_service::trng;
-#[cfg(feature = "hosted-baosec")]
-use cramium_emu::trng;
-
 pub mod api;
 pub use api::*;
 use num_traits::*;
 use packed_struct::PackedStruct;
 use rkyv::option::ArchivedOption;
-use trng::api::TrngTestMode;
 pub use usb_device::device::UsbDeviceState;
 use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;
@@ -18,6 +12,7 @@ pub use xous_usb_hid::device::fido::RawFidoReport;
 pub use xous_usb_hid::device::keyboard::KeyboardLedsReport;
 pub use xous_usb_hid::page::Keyboard as UsbKeyCode;
 
+// TODO: this object is misnamed, it also includes a serial handler
 #[derive(Debug)]
 pub struct UsbHid {
     conn: CID,
@@ -239,13 +234,13 @@ impl UsbHid {
     /// Another thread can be used to call serial_flush() if we don't want to
     /// block forever and we're receiving small amounts of binary data.
     pub fn serial_wait_binary(&self) -> Vec<u8> {
-        let req = UsbSerialBinary { d: [0u8; SERIAL_BINARY_BUFLEN], len: 0 };
+        let req = UsbSerialBinary { d: Vec::new() };
         let mut buf = Buffer::into_buf(req).or(Err(xous::Error::InternalError)).expect("Internal error");
         buf.lend_mut(self.conn, Opcode::SerialHookBinary.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))
             .expect("Internal error");
         let resp = buf.to_original::<UsbSerialBinary, _>().unwrap();
-        resp.d[..resp.len].to_vec()
+        resp.d
     }
 
     /// Non-blocking call that issues a serial flush command to the USB stack
@@ -272,19 +267,18 @@ impl UsbHid {
         .unwrap();
     }
 
-    /// Tries to set the serial port in TRNG mode. Will silently fail if already in console mode.
-    pub fn serial_set_trng_mode(&self, mode: TrngTestMode) {
-        send_message(
-            self.conn,
-            Message::new_scalar(
-                Opcode::SerialHookTrngSender.to_usize().unwrap(),
-                mode.to_usize().unwrap(),
-                0,
-                0,
-                0,
-            ),
-        )
-        .unwrap();
+    /// Takes a slice-u8 and tries to send the data. Reports how many bytes were actually sent.
+    pub fn serial_send(&self, data: &[u8]) -> Result<usize, xous::Error> {
+        let mut sender = UsbSerialBinary { d: Vec::new() };
+        // sendable length is limited by the size of a page of memory, e.g. how much we can map
+        // into the receiving process in a single go
+        let sendable_len = data.len().min(SERIAL_BINARY_BUFLEN);
+        sender.d.extend_from_slice(data);
+        let buf = Buffer::into_buf(sender).or(Err(xous::Error::InternalError)).expect("Internal error");
+        // NOTE: The send will not fail if the host receiver can't accept the characters (i.e. no host
+        // connected)
+        buf.send(self.conn, Opcode::SerialSendData.to_u32().unwrap()).ok();
+        Ok(sendable_len)
     }
 
     pub fn register_u2f_observer(&self, server_name: &str, action_opcode: usize) {

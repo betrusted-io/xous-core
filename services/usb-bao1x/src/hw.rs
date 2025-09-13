@@ -24,36 +24,150 @@ use xous_usb_hid::prelude::*;
 
 use crate::Opcode;
 
-/*
-    1. interrupt enters
-    2. poll() is called in a loop
-        - this loop is the process_event_ring() "loop"
-        - the result of poll() is immediately passed on to the Class() handler *before* the Event is dequeued
-            - the read()/write() functions calls that would interact with the Transfer TRBs should all be called by now
-        - (so, the events are handled one-by-one even though "poll" natively wants to aggregate all simultaneous events)
-    3. only after the loop is done, do we execute the post-amble Event DeQueue pointer update
-    4. EP allocation simply manages some bookkeeping that allows the EpAddress to be passed on to read()/write()
-    call such that the handlers line up with the packet type. This virtually implements the function-pointer immediate
-    decode & dispatch of handlers within the framework of the USB crate
-    5. interrupt exits
+/// Maximum packet size for serial - tied to the speed of the port (HS)
+pub const SERIAL_MAX_PACKET_SIZE: usize = 512;
 
-    I think this succeeds where the previous version fails because:
-        - the EventTRB is only dequeued after all the transfer pending data is handled - previously we would
-        dequeue the EventTRB, then potentially take arbitrarily long (due to interruptability) to handle the
-        TransferTRB, which could allow the TransferTRB to be overwritten because the existence of the EventTRB
-        is more of what stalls the packet engine
-        - The actual "set stall" handler thus might actually be nil, because the stall I believe is automatically
-        originated within the USB hardware itself, as it knows that a packet is pending and will NAK the packets.
-        The clearing of the stall is the only thing that might need an implementation, and that is equivalently
-        the enqueue ZLP function but we need to revisit this on a case by case basis - it might make sense for
-        the system to unstall right away based on the read of the TransferTRB instead of trying to split the
-        unstall call to work with the usb-device stack.
+#[repr(align(32))]
+pub struct CramiumUsb<'a> {
+    pub conn: xous::CID,
+    pub csr: AtomicCsr<u32>,
+    pub irq_csr: AtomicCsr<u32>,
+    pub fido_tx_queue: RefCell<VecDeque<RawFidoReport>>,
+    pub kbd_tx_queue: RefCell<VecDeque<Keyboard>>,
+    pub irq_req: Option<UsbIrqReq>,
+    pub wrapper: CorigineWrapper,
+    pub device: UsbDevice<'a, CorigineWrapper>,
+    pub class: UsbHidClass<
+        'a,
+        CorigineWrapper,
+        frunk_core::hlist::HCons<
+            RawFido<'a, CorigineWrapper>,
+            frunk_core::hlist::HCons<NKROBootKeyboard<'a, CorigineWrapper>, frunk_core::hlist::HNil>,
+        >,
+    >,
+    // storage for hid_packets to expatriate from the interrupt handler
+    pub hid_packet: Option<[u8; 64]>,
+    pub serial_port: SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]>,
+    // holds one HS packet - must be statically allocated in IRQ handler. Valid length is
+    // passed as part of the interrupt recovery message.
+    pub serial_rx: [u8; SERIAL_MAX_PACKET_SIZE],
+}
 
-    Another option would be to just figure out how to abuse the usb-device stack to simply generate
-    a formatted device descriptor that we can feed into the state-machine based implementation provided
-    by the vendor as a reference.
+impl<'a> CramiumUsb<'a> {
+    pub fn new(
+        csr: AtomicCsr<u32>,
+        irq_csr: AtomicCsr<u32>,
+        cid: xous::CID,
+        cw: CorigineWrapper,
+        usb_alloc: &'a UsbBusAllocator<CorigineWrapper>,
+        serial_number: &'a String,
+    ) -> Self {
+        let class = UsbHidClassBuilder::new()
+            .add_device(NKROBootKeyboardConfig::default())
+            .add_device(RawFidoConfig::default())
+            .build(usb_alloc);
 
-*/
+        let rx_buf = [0u8; SERIAL_MAX_PACKET_SIZE * 2];
+        let tx_buf = [0u8; SERIAL_MAX_PACKET_SIZE * 2];
+        let serial_port = SerialPort::new_with_store(&usb_alloc, rx_buf, tx_buf);
+        // HACK ALERT: due to a shortcoming in the usb-device implementation, inside the interrupt handler we
+        // have to catch and parse SETUP-OUT sequences. Basically the driver assumes that the OUT endpoint is
+        // always configured to trigger, but in our stack every time we have an OUT on EP0, we have to
+        // set it up with the correct length. See the "TrbType::SetupPkt" arm of handle_event_inner()
+        // for more details.
+        //
+        // In particular, Mass Storage has to handle a similar situation, so if adding a mass storage
+        // interface, this hack has to be dealt with (and btw, there are not enough endpoints availbale
+        // to concurrently add that in - you have to kick out one of the interfaces above to add mass
+        // storage!)
+
+        let device = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x3613))
+            .manufacturer("Baochip")
+            .product("Baosec")
+            .serial_number(&serial_number)
+            // this is *required* by the corigine stack
+            .max_packet_size_0(64)
+            .composite_with_iads()
+            .build();
+
+        CramiumUsb {
+            conn: cid,
+            // safety: we created iframrange to have the exact same P&V mappings
+            wrapper: cw,
+            device,
+            class,
+            csr,
+            irq_csr,
+            fido_tx_queue: RefCell::new(VecDeque::new()),
+            kbd_tx_queue: RefCell::new(VecDeque::new()),
+            irq_req: None,
+            hid_packet: None,
+            serial_port,
+            serial_rx: [0u8; SERIAL_MAX_PACKET_SIZE],
+        }
+    }
+
+    pub fn init(&mut self) {
+        // this has to be done in `main` because we're passing a pointer to the Box'd structure, which
+        // the IRQ handler can freely and safely manipulate
+        xous::claim_interrupt(
+            utra::irqarray1::IRQARRAY1_IRQ,
+            composite_handler,
+            self as *mut CramiumUsb as *mut usize,
+        )
+        .expect("couldn't claim irq");
+        log::debug!("claimed IRQ with state at {:x}", self as *mut CramiumUsb as usize);
+
+        // enable both the corigine core IRQ and the software IRQ bit
+        // software IRQ is used to initiate send/receive from software to the interrupt context
+        self.irq_csr.wo(utra::irqarray1::EV_SOFT, 0);
+        self.irq_csr.wo(utra::irqarray1::EV_EDGE_TRIGGERED, 0);
+        self.irq_csr.wo(utra::irqarray1::EV_POLARITY, 0);
+
+        self.wrapper.hw.lock().unwrap().init();
+        self.wrapper.hw.lock().unwrap().start();
+        self.wrapper.hw.lock().unwrap().update_current_speed();
+
+        // irq must me enabled without dependency on the hw lock
+        self.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, CORIGINE_IRQ_MASK | SW_IRQ_MASK);
+    }
+
+    pub fn sw_irq(&mut self, request_type: UsbIrqReq) {
+        self.irq_req = Some(request_type);
+        self.irq_csr.wfo(utra::irqarray1::EV_SOFT_TRIGGER, SW_IRQ_MASK);
+    }
+
+    /// Process an unplug event
+    pub fn unplug(&mut self) {
+        // disable all interrupts so we can safely go through initialization routines
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, 0);
+
+        self.wrapper.hw.lock().unwrap().reset();
+        self.wrapper.hw.lock().unwrap().init();
+        self.wrapper.hw.lock().unwrap().start();
+        self.wrapper.hw.lock().unwrap().update_current_speed();
+
+        // reset all shared data structures
+        self.device.force_reset().ok();
+        self.fido_tx_queue = RefCell::new(VecDeque::new());
+        self.kbd_tx_queue = RefCell::new(VecDeque::new());
+        self.irq_req = None;
+        self.wrapper.event = None;
+        self.wrapper.address_is_set.store(false, Ordering::SeqCst);
+        self.wrapper.ep_out_ready = (0..cramium_hal::usb::driver::CRG_EP_NUM + 1)
+            .map(|_| std::sync::Arc::new(core::sync::atomic::AtomicBool::new(false)))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        for ready in self.wrapper.ep_out_ready.iter() {
+            ready.store(false, Ordering::SeqCst);
+        }
+
+        // re-enable IRQs
+        self.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, CORIGINE_IRQ_MASK | SW_IRQ_MASK);
+    }
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum UsbIrqReq {
@@ -126,17 +240,10 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                 let class = usb.class.borrow_mut();
                 let serial = usb.serial_port.borrow_mut();
                 if device.poll(&mut [class, serial as &mut dyn UsbClass<_>]) {
-                    let mut buf = [0u8; 512];
-                    if let Ok(count) = serial.read(&mut buf) {
-                        for &d in buf[..count].iter() {
-                            usb.serial_rx.push_back(d);
-                        }
-                        // crate::println!("serial read: {:x?}", &buf[..count]);
-
-                        // TODO: implement the actual Xous serial API instead of this stand-in routine
+                    if let Ok(count) = serial.read(&mut usb.serial_rx) {
                         xous::try_send_message(
                             usb.conn,
-                            Message::new_scalar(Opcode::SerialFlush.to_usize().unwrap(), 0, 0, 0, 0),
+                            Message::new_scalar(Opcode::IrqSerialRx.to_usize().unwrap(), count, 0, 0, 0),
                         )
                         .ok();
                     }
@@ -225,147 +332,5 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
             }
             None => (),
         }
-    }
-}
-
-#[repr(align(32))]
-pub struct CramiumUsb<'a> {
-    pub conn: xous::CID,
-    pub csr: AtomicCsr<u32>,
-    pub irq_csr: AtomicCsr<u32>,
-    pub fido_tx_queue: RefCell<VecDeque<RawFidoReport>>,
-    pub kbd_tx_queue: RefCell<VecDeque<Keyboard>>,
-    pub irq_req: Option<UsbIrqReq>,
-    pub wrapper: CorigineWrapper,
-    pub device: UsbDevice<'a, CorigineWrapper>,
-    pub class: UsbHidClass<
-        'a,
-        CorigineWrapper,
-        frunk_core::hlist::HCons<
-            RawFido<'a, CorigineWrapper>,
-            frunk_core::hlist::HCons<NKROBootKeyboard<'a, CorigineWrapper>, frunk_core::hlist::HNil>,
-        >,
-    >,
-    // storage for hid_packets to expatriate from the interrupt handler
-    pub hid_packet: Option<[u8; 64]>,
-    pub serial_port: SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]>,
-    pub serial_rx: VecDeque<u8>,
-}
-
-impl<'a> CramiumUsb<'a> {
-    pub fn new(
-        csr: AtomicCsr<u32>,
-        irq_csr: AtomicCsr<u32>,
-        cid: xous::CID,
-        cw: CorigineWrapper,
-        usb_alloc: &'a UsbBusAllocator<CorigineWrapper>,
-        serial_number: &'a String,
-    ) -> Self {
-        let class = UsbHidClassBuilder::new()
-            .add_device(NKROBootKeyboardConfig::default())
-            .add_device(RawFidoConfig::default())
-            .build(usb_alloc);
-
-        // this buffer needs to be at least as big as the max packet size, ideally 2x as much. Set it to
-        // 1k.
-        let rx_buf = [0u8; 1024];
-        let tx_buf = [0u8; 1024];
-        let serial_port = SerialPort::new_with_store(&usb_alloc, rx_buf, tx_buf);
-        // HACK ALERT: due to a shortcoming in the usb-device implementation, inside the interrupt handler we
-        // have to catch and parse SETUP-OUT sequences. Basically the driver assumes that the OUT endpoint is
-        // always configured to trigger, but in our stack every time we have an OUT on EP0, we have to
-        // set it up with the correct length. See the "TrbType::SetupPkt" arm of handle_event_inner()
-        // for more details.
-        //
-        // In particular, Mass Storage has to handle a similar situation, so if adding a mass storage
-        // interface, this hack has to be dealt with (and btw, there are not enough endpoints availbale
-        // to concurrently add that in - you have to kick out one of the interfaces above to add mass
-        // storage!)
-
-        let device = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x3613))
-            .manufacturer("Baochip")
-            .product("Baosec")
-            .serial_number(&serial_number)
-            // this is *required* by the corigine stack
-            .max_packet_size_0(64)
-            .composite_with_iads()
-            .build();
-
-        CramiumUsb {
-            conn: cid,
-            // safety: we created iframrange to have the exact same P&V mappings
-            wrapper: cw,
-            device,
-            class,
-            csr,
-            irq_csr,
-            fido_tx_queue: RefCell::new(VecDeque::new()),
-            kbd_tx_queue: RefCell::new(VecDeque::new()),
-            irq_req: None,
-            hid_packet: None,
-            serial_port,
-            serial_rx: VecDeque::new(),
-        }
-    }
-
-    pub fn init(&mut self) {
-        // this has to be done in `main` because we're passing a pointer to the Box'd structure, which
-        // the IRQ handler can freely and safely manipulate
-        xous::claim_interrupt(
-            utra::irqarray1::IRQARRAY1_IRQ,
-            composite_handler,
-            self as *mut CramiumUsb as *mut usize,
-        )
-        .expect("couldn't claim irq");
-        log::debug!("claimed IRQ with state at {:x}", self as *mut CramiumUsb as usize);
-
-        // enable both the corigine core IRQ and the software IRQ bit
-        // software IRQ is used to initiate send/receive from software to the interrupt context
-        self.irq_csr.wo(utra::irqarray1::EV_SOFT, 0);
-        self.irq_csr.wo(utra::irqarray1::EV_EDGE_TRIGGERED, 0);
-        self.irq_csr.wo(utra::irqarray1::EV_POLARITY, 0);
-
-        self.wrapper.hw.lock().unwrap().init();
-        self.wrapper.hw.lock().unwrap().start();
-        self.wrapper.hw.lock().unwrap().update_current_speed();
-
-        // irq must me enabled without dependency on the hw lock
-        self.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
-        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, CORIGINE_IRQ_MASK | SW_IRQ_MASK);
-    }
-
-    pub fn sw_irq(&mut self, request_type: UsbIrqReq) {
-        self.irq_req = Some(request_type);
-        self.irq_csr.wfo(utra::irqarray1::EV_SOFT_TRIGGER, SW_IRQ_MASK);
-    }
-
-    /// Process an unplug event
-    pub fn unplug(&mut self) {
-        // disable all interrupts so we can safely go through initialization routines
-        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, 0);
-
-        self.wrapper.hw.lock().unwrap().reset();
-        self.wrapper.hw.lock().unwrap().init();
-        self.wrapper.hw.lock().unwrap().start();
-        self.wrapper.hw.lock().unwrap().update_current_speed();
-
-        // reset all shared data structures
-        self.device.force_reset().ok();
-        self.fido_tx_queue = RefCell::new(VecDeque::new());
-        self.kbd_tx_queue = RefCell::new(VecDeque::new());
-        self.irq_req = None;
-        self.wrapper.event = None;
-        self.wrapper.address_is_set.store(false, Ordering::SeqCst);
-        self.wrapper.ep_out_ready = (0..cramium_hal::usb::driver::CRG_EP_NUM + 1)
-            .map(|_| core::sync::atomic::AtomicBool::new(false))
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-        for ready in self.wrapper.ep_out_ready.iter() {
-            ready.store(false, Ordering::SeqCst);
-        }
-
-        // re-enable IRQs
-        self.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
-        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, CORIGINE_IRQ_MASK | SW_IRQ_MASK);
     }
 }
