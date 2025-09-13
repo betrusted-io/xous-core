@@ -891,6 +891,7 @@ impl Repl {
                             let raw = bio_ss.bio.r(utra::bio_bdma::SFR_RXF0);
                             // crate::println!("raw: {:x}", raw);
                             raw32 <<= BITS_PER_SAMPLE;
+                            // shift right by one because bit 0 always samples as 0, due to instruction timing
                             raw32 |= (raw >> 1) & ((1 << BITS_PER_SAMPLE) - 1)
                         }
                         *d = raw32;
