@@ -458,36 +458,50 @@ fn main() {
                 }
             }
             HalOpcode::IrqLocalHandler => {
-                // Figure out which port(s) caused the IRQ
-                let irq_flag = iox.csr.r(utralib::utra::iox::SFR_INTFR);
-                // clear the set bit by writing it back
-                iox.csr.wo(utralib::utra::iox::SFR_INTFR, irq_flag);
-                let mut found = false;
-                for bitpos in 0..8 {
-                    // the bit position is flipped versus register order in memory
-                    if ((irq_flag << (bitpos as u32)) & 0x80) != 0 {
-                        if let Some(local_reg) = irq_table[bitpos] {
-                            found = true;
-                            // interrupts are "Best effort" and can gracefully fail if the receiver has been
-                            // overwhelmed by too many interrupts
-                            xous::try_send_message(
-                                local_reg.cid,
-                                xous::Message::new_scalar(local_reg.opcode, 0, 0, 0, 0),
-                            )
-                            .ok();
-                        } else {
-                            log::warn!(
-                                "Got IRQ on position {} but no registration was found, ignoring!",
-                                bitpos
-                            );
+                if let Some(scalar) = msg.body.scalar_message() {
+                    // Figure out which port(s) caused the IRQ
+                    let irq_flag = iox.csr.r(utralib::utra::iox::SFR_INTFR);
+                    // clear the set bit by writing it back
+                    iox.csr.wo(utralib::utra::iox::SFR_INTFR, irq_flag);
+                    let mut found = false;
+                    for bitpos in 0..8 {
+                        // the bit position is flipped versus register order in memory
+                        if ((irq_flag << (bitpos as u32)) & 0x80) != 0 {
+                            if let Some(local_reg) = irq_table[bitpos] {
+                                found = true;
+                                // interrupts are "Best effort" and can gracefully fail if the receiver has
+                                // been overwhelmed by too many interrupts
+                                xous::try_send_message(
+                                    local_reg.cid,
+                                    xous::Message::new_scalar(local_reg.opcode, 0, 0, 0, 0),
+                                )
+                                .ok();
+                            } else {
+                                log::warn!(
+                                    "Got IRQ on position {} but no registration was found, ignoring!",
+                                    bitpos
+                                );
+                            }
                         }
                     }
-                }
-                if !found {
-                    log::warn!(
-                        "No handler was found for raw flag: {:x} (note bit order is reversed)",
-                        irq_flag
-                    );
+                    if !found {
+                        if irq_flag != 0 {
+                            log::warn!(
+                                "No handler was found for raw flag: {:x} (note bit order is reversed)",
+                                irq_flag
+                            );
+                        } else {
+                            log::info!("Interrupt received but maybe not for us? pending {:x}", scalar.arg1);
+                            log::info!("CR0 {:x}", iox.csr.r(utralib::utra::iox::SFR_INTCR_CRINT0));
+                            log::info!("CR1 {:x}", iox.csr.r(utralib::utra::iox::SFR_INTCR_CRINT1));
+                            log::info!("CR2 {:x}", iox.csr.r(utralib::utra::iox::SFR_INTCR_CRINT2));
+                            log::info!("CR3 {:x}", iox.csr.r(utralib::utra::iox::SFR_INTCR_CRINT3));
+                            log::info!("CR4 {:x}", iox.csr.r(utralib::utra::iox::SFR_INTCR_CRINT4));
+                            log::info!("CR5 {:x}", iox.csr.r(utralib::utra::iox::SFR_INTCR_CRINT5));
+                            log::info!("CR6 {:x}", iox.csr.r(utralib::utra::iox::SFR_INTCR_CRINT6));
+                            log::info!("CR7 {:x}", iox.csr.r(utralib::utra::iox::SFR_INTCR_CRINT7));
+                        }
+                    }
                 }
             }
             HalOpcode::SetGpioBank => {
