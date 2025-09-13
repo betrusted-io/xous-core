@@ -82,6 +82,7 @@ pub trait IoSetup {
         slow_slew: Option<IoxEnable>,
         strength: Option<IoxDriveStrength>,
     );
+    fn set_pio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8>;
 }
 
 /// Traits for accessing GPIOs after the port has been set up.
@@ -258,6 +259,28 @@ impl IoSetup for IoxHal {
             IoxConfigMessage { port, pin, direction, function, schmitt_trigger, pullup, slow_slew, strength };
         let buf = xous_ipc::Buffer::into_buf(msg).unwrap();
         buf.lend(self.conn, HalOpcode::ConfigureIox as u32).expect("Couldn't set up IO");
+    }
+
+    fn set_pio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8> {
+        match xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                HalOpcode::ConfigureBio.to_usize().unwrap(),
+                port as usize,
+                pin as usize,
+                0,
+                0,
+            ),
+        ) {
+            Ok(xous::Result::Scalar2(code, ok)) => {
+                if ok != 0 {
+                    Some(code as u8)
+                } else {
+                    None
+                }
+            }
+            _ => panic!("Internal error setting up BIO"),
+        }
     }
 }
 
