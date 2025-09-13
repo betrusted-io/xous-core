@@ -1,15 +1,20 @@
+#[cfg(feature = "debug-print")]
 use utralib::generated::*;
 pub struct Uart {
     // pub base: *mut u32,
 }
 
 impl Uart {
+    #[cfg(feature = "debug-print")]
     pub fn putc(&self, c: u8) {
         let base = utra::duart::HW_DUART_BASE as *mut u32;
         let mut uart = CSR::new(base);
         while uart.r(utra::duart::SFR_SR) != 0 {}
         uart.wo(utra::duart::SFR_TXD, c as u32);
     }
+
+    #[cfg(not(feature = "debug-print"))]
+    pub fn putc(&self, _c: u8) {}
 }
 
 use core::fmt::{Error, Write};
@@ -29,7 +34,7 @@ pub mod debug_print_hardware {
     {
         ($($args:tt)+) => ({
                 use core::fmt::Write;
-                let _ = write!(crate::bio_tests::debug::Uart {}, $($args)+);
+                let _ = write!(crate::debug::Uart {}, $($args)+);
         });
     }
 }
