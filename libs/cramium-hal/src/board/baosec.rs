@@ -333,7 +333,7 @@ pub fn setup_trng_input_pin<T: IoSetup + IoGpio>(iox: &T) -> u8 {
         None,
         Some(IoxDriveStrength::Drive2mA),
     );
-    iox.set_pio_bit_from_port_and_pin(port, pin).expect("Couldn't allocate TRNG input pin")
+    iox.set_bio_bit_from_port_and_pin(port, pin).expect("Couldn't allocate TRNG input pin")
 }
 
 // sentinel used by test infrastructure to assist with parsing

@@ -82,7 +82,7 @@ pub trait IoSetup {
         slow_slew: Option<IoxEnable>,
         strength: Option<IoxDriveStrength>,
     );
-    fn set_pio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8>;
+    fn set_bio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8>;
 }
 
 /// Traits for accessing GPIOs after the port has been set up.
@@ -230,14 +230,14 @@ impl IoxHal {
 
     /// Returns the PIO bit that was enabled based on the port and pin specifier given;
     /// returns `None` if the proposed mapping is invalid.
-    pub fn set_pio_bit_from_port_and_pin(&self, _port: IoxPort, _pin: u8) -> Option<u8> {
+    pub fn set_bio_bit_from_port_and_pin(&self, _port: IoxPort, _pin: u8) -> Option<u8> {
         todo!("Do this when we get around to filling in the PIO drivers")
     }
 
     /// Returns the PIO bit that was disabled based on the port and pin specifier given;
     /// returns `None` if the proposed mapping is invalid. Does not change the AF mapping,
     /// simply disables the bit in the PIO mux register.
-    pub fn unset_pio_bit_from_port_and_pin(&self, _port: IoxPort, _pin: u8) -> Option<u8> {
+    pub fn unset_bio_bit_from_port_and_pin(&self, _port: IoxPort, _pin: u8) -> Option<u8> {
         todo!("Do this when we get around to filling in the PIO drivers")
     }
 }
@@ -261,7 +261,7 @@ impl IoSetup for IoxHal {
         buf.lend(self.conn, HalOpcode::ConfigureIox as u32).expect("Couldn't set up IO");
     }
 
-    fn set_pio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8> {
+    fn set_bio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8> {
         match xous::send_message(
             self.conn,
             xous::Message::new_blocking_scalar(

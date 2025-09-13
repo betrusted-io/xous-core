@@ -253,7 +253,7 @@ impl Iox {
 
     /// Returns the PIO bit that was enabled based on the port and pin specifier given;
     /// returns `None` if the proposed mapping is invalid.
-    pub fn set_pio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8> {
+    pub fn set_bio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8> {
         match port {
             IoxPort::PA => None,
             IoxPort::PB => {
@@ -261,17 +261,17 @@ impl Iox {
                     None
                 } else {
                     self.set_alternate_function(port, pin, IoxFunction::AF1);
-                    let pio_bit = 15 - pin;
-                    self.csr.wo(iox::SFR_PIOSEL, self.csr.r(iox::SFR_PIOSEL) | (1 << pio_bit as u32));
-                    Some(pio_bit)
+                    let bio_bit = 15 - pin;
+                    self.csr.wo(iox::SFR_PIOSEL, self.csr.r(iox::SFR_PIOSEL) | (1 << bio_bit as u32));
+                    Some(bio_bit)
                 }
             }
             IoxPort::PC => {
                 if pin < 16 {
                     self.set_alternate_function(port, pin, IoxFunction::AF1);
-                    let pio_bit = pin + 16;
-                    self.csr.wo(iox::SFR_PIOSEL, self.csr.r(iox::SFR_PIOSEL) | (1 << pio_bit as u32));
-                    Some(pio_bit)
+                    let bio_bit = pin + 16;
+                    self.csr.wo(iox::SFR_PIOSEL, self.csr.r(iox::SFR_PIOSEL) | (1 << bio_bit as u32));
+                    Some(bio_bit)
                 } else {
                     None
                 }
@@ -283,7 +283,7 @@ impl Iox {
     /// Returns the PIO bit that was disabled based on the port and pin specifier given;
     /// returns `None` if the proposed mapping is invalid. Does not change the AF mapping,
     /// simply disables the bit in the PIO mux register.
-    pub fn unset_pio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8> {
+    pub fn unset_bio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8> {
         match port {
             IoxPort::PA => None,
             IoxPort::PB => {
@@ -377,8 +377,8 @@ impl IoSetup for Iox {
         }
     }
 
-    fn set_pio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8> {
-        self.set_pio_bit_from_port_and_pin(port, pin)
+    fn set_bio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8> {
+        self.set_bio_bit_from_port_and_pin(port, pin)
     }
 }
 

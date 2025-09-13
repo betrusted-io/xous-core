@@ -30,7 +30,7 @@ pub enum HalOpcode {
     SetGpioBank = 5,
     /// Return the value of a GPIO bank (blocking scalar)
     GetGpioBank = 6,
-    /// Configure BIO
+    /// Configure BIO pins
     ConfigureBio = 17,
 
     /// Configure UDMA clocks & events
