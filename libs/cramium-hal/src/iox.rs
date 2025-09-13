@@ -267,7 +267,7 @@ impl Iox {
                 }
             }
             IoxPort::PC => {
-                if (pin != 6 && pin != 11 && pin != 14 && pin != 15) && pin < 16 {
+                if pin < 16 {
                     self.set_alternate_function(port, pin, IoxFunction::AF1);
                     let pio_bit = pin + 16;
                     self.csr.wo(iox::SFR_PIOSEL, self.csr.r(iox::SFR_PIOSEL) | (1 << pio_bit as u32));
@@ -375,6 +375,10 @@ impl IoSetup for Iox {
         if let Some(s) = strength {
             self.set_drive_strength(port, pin, s);
         }
+    }
+
+    fn set_pio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8> {
+        self.set_pio_bit_from_port_and_pin(port, pin)
     }
 }
 
