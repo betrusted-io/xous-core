@@ -5,6 +5,8 @@ use cramium_hal::usb::driver::*;
 
 use super::*;
 
+pub static TX_IDLE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(true);
+
 // Locate the "disk"
 pub(crate) const RAMDISK_ADDRESS: usize = crate::platform::HEAP_START + crate::platform::HEAP_LEN;
 pub(crate) const STACK_SIZE: usize = 128 * 1024; // 128k for stack is enough? maybe? if the ramdisk overflows, it smashes stack - dangerous!
@@ -335,6 +337,10 @@ pub fn usb_ep3_bulk_out_complete(
 pub fn flush_tx(this: &mut CorigineUsb) {
     let mut written = 0;
 
+    while !crate::platform::usb::TX_IDLE.swap(false, core::sync::atomic::Ordering::SeqCst) {
+        // wait for tx to go idle
+    }
+
     let tx_buf = this.cdc_acm_tx_slice();
     critical_section::with(|cs| {
         let mut queue = crate::USB_TX.borrow(cs).borrow_mut();
@@ -357,6 +363,9 @@ pub fn flush_tx(this: &mut CorigineUsb) {
 
     if written > 0 {
         this.bulk_xfer(3, USB_SEND, tx_buf.as_ptr() as usize, written, 0, 0);
+    } else {
+        // release the lock
+        TX_IDLE.store(true, Ordering::SeqCst);
     }
 }
 
@@ -371,6 +380,11 @@ pub fn usb_ep3_bulk_in_complete(
     // crate::println!("EP3 IN");
     // let length = CRG_UDC_APP_BUF_LEN - residual as usize;
     // crate::println!("CDC IN transfer complete, {} bytes sent", length);
+
+    // signal that more stuff can be put into the pipe
+    TX_IDLE.store(true, Ordering::SeqCst);
+
+    // this may or may not initiate a new connection, depending on how full the Tx buffer is
     flush_tx(this);
 }
 

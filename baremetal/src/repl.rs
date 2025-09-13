@@ -11,6 +11,9 @@ use utralib::*;
 #[cfg(any(feature = "artybio", feature = "nto-bio"))]
 use xous_bio_bdma::*;
 
+#[cfg(feature = "nto-trng")]
+static TRNG_INIT: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
 pub struct Error {
     pub message: Option<&'static str>,
 }
@@ -781,6 +784,74 @@ impl Repl {
                 crate::platform::clockset_wrapper(800_000_000);
                 crate::println!("exiting wfi");
             }
+            #[cfg(feature = "nto-trng")]
+            "trngro" => {
+                use base64::{Engine as _, engine::general_purpose};
+                fn encode_base64(input: &[u8]) -> String { general_purpose::STANDARD.encode(input) }
+                fn as_u8_slice(slice: &[u32]) -> &[u8] {
+                    let len = slice.len() * size_of::<u32>();
+                    unsafe { core::slice::from_raw_parts(slice.as_ptr() as *const u8, len) }
+                }
+
+                let mut trng = cramium_hal::sce::trng::Trng::new(utralib::utra::trng::HW_TRNG_BASE);
+                // local TRNG generator test
+                if TRNG_INIT.swap(true, core::sync::atomic::Ordering::SeqCst) == false {
+                    crate::println!("setting up TRNG");
+                    trng.setup_raw_generation(256);
+                    trng.start();
+                } else {
+                    // safety: the handle is already initialized
+                    unsafe {
+                        trng.force_mode(cramium_hal::sce::trng::Mode::Raw);
+                    }
+                }
+                crate::println!("====ROSTART====");
+                const BUFLEN: usize = 256;
+                // test code for checking performance & alignment of decode data - eliminates
+                // encoding & trng generation overhead
+                // let b64_as_slice =
+                // b"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn+AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnJ2en6ChoqOkpaanqKmqq6ytrq+wsbKztLW2t7i5uru8vb6/
+                // wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs7e7v8PHy8/T19vf4+fr7/P3+/w==";
+
+                loop {
+                    let mut buf = [0u32; BUFLEN / size_of::<u32>()];
+                    for d in buf.iter_mut() {
+                        loop {
+                            if let Some(word) = trng.get_u32() {
+                                *d = word;
+                                break;
+                            }
+                        }
+                    }
+                    let buf_u8 = as_u8_slice(&buf);
+                    let b64 = encode_base64(buf_u8);
+                    unsafe {
+                        if let Some(ref mut usb_ref) = crate::platform::usb::USB {
+                            let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
+                            let tx_buf = usb.cdc_acm_tx_slice();
+                            let b64_as_slice = b64.as_bytes();
+                            assert!(b64_as_slice.len() + 1 < tx_buf.len()); // this is ensured by adjusting BUFLEN
+                            tx_buf[..b64_as_slice.len()].copy_from_slice(b64_as_slice);
+                            tx_buf[b64_as_slice.len()] = '\n' as char as u32 as u8;
+                            while !crate::platform::usb::TX_IDLE
+                                .swap(false, core::sync::atomic::Ordering::SeqCst)
+                            {
+                                // wait for tx to go idle
+                            }
+                            usb.bulk_xfer(
+                                3,
+                                cramium_hal::usb::driver::USB_SEND,
+                                tx_buf.as_ptr() as usize,
+                                b64_as_slice.len() + 1,
+                                0,
+                                0,
+                            );
+                        } else {
+                            panic!("USB core not allocated, can't proceed!");
+                        }
+                    }
+                }
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);
@@ -791,13 +862,17 @@ impl Repl {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!("Commands include: echo, poke, peek, bogomips");
                 #[cfg(feature = "cramium-soc")]
-                crate::print!(", rram, clocks, usb");
+                crate::print!(", rram, clocks");
                 #[cfg(not(feature = "cramium-soc"))]
                 crate::print!(", mon");
                 #[cfg(feature = "nto-bio")]
                 crate::print!(", bio, bdma, pin");
                 #[cfg(all(feature = "cramium-soc", not(feature = "nto-evb")))]
                 crate::print!(", ldo, wfi");
+                #[cfg(feature = "nto-usb")]
+                crate::print!(", usb");
+                #[cfg(feature = "nto-trng")]
+                crate::print!(", trngro");
                 crate::println!("");
             }
         }
