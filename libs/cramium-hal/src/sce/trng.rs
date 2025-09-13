@@ -69,7 +69,7 @@ bitflags! {
 }
 
 #[derive(PartialEq, Eq)]
-enum Mode {
+pub enum Mode {
     Uninit,
     Raw,
     /// TODO
@@ -144,6 +144,63 @@ impl Trng {
 
     #[cfg(feature = "verilator-only")]
     pub fn setup_raw_generation(&mut self, _count: u16) { self.mode = Mode::Raw; }
+
+    // placeholder code taken out of 'testuit_nto' - doesn't work
+    /*
+    pub fn setup_raw_generation(&mut self, _count: u16) {
+        self.csr.wo(utra::trng::SFR_CRSRC, 0xFFFF);
+        self.csr.wo(utra::trng::SFR_CRANA, 0xFFFF);
+        self.csr.wo(utra::trng::SFR_OPT, 0x20);
+
+        /*
+           assign {    cr_reseed_sel,          // 16
+                       cr_reseed_intval[1:0],  // 14
+                       cr_gen_intval[1:0],     // 12
+                       cr_healthtest_len[5:0], // 6
+                       cr_postproc_opt[1:0],   // 4
+                       cr_drng_en,             // 3
+                       cr_hlthtest_en,         // 2
+                       cr_pfilter_en,          // 1
+                       cr_gen_en               // 0
+                   } = cr_postproc;
+        */
+        self.csr.wo(utra::trng::SFR_PP, 0x1 << 14 | 0x2 << 12 | 0x20 << 6 | 0x1);
+        /*
+        contex.trng->postproc.bits.cr_reseed_intval = 0x01;
+        contex.trng->postproc.bits.cr_gen_intval = 0x02;
+        contex.trng->postproc.bits.cr_healthtest_len = 0x20;
+        contex.trng->postproc.bits.cr_postproc_opt = 0x00;
+        contex.trng->postproc.bits.cr_drng_en = 0x00;
+        contex.trng->postproc.bits.cr_hlthtest_en = 0x00;
+        contex.trng->postproc.bits.cr_pfilter_en = 0x00;
+        contex.trng->postproc.bits.cr_gen_en = 0x01;
+        */
+        // contex.trng->chain0 = 0xFFFFFFFE; // chan0的数值中1的个数为奇数时候，随机性更强
+        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, 0xFFFFFFFE);
+        // contex.trng->chain1 = 0xFFFFFFFC; // chain1 小于 chain0 会更随机
+        // 当chain0只有一个1的时候，chain1对应的位也为1 会采样会一个高频时钟 ，暂未成功
+        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, 0xFFFFFFFC);
+
+        // self.start();
+
+        let _ = self.csr.r(utra::trng::SFR_SR);
+        /*
+        crate::println!("sfr_crsrc = 0x{:x}", self.csr.r(utra::trng::SFR_CRSRC));
+        crate::println!("sfr_crana = 0x{:x}", self.csr.r(utra::trng::SFR_CRANA));
+        crate::println!("sfr_postproc = 0x{:x}", self.csr.r(utra::trng::SFR_PP));
+        crate::println!("sfr_opt = 0x{:x}", self.csr.r(utra::trng::SFR_OPT));
+        */
+    }
+
+    pub fn get_raw(&mut self) -> u32 {
+        // while self.csr.r(utra::trng::SFR_SR) & (1 << 28) == 0 {}
+        self.csr.r(utra::trng::SFR_BUF)
+    }
+    */
+
+    /// Function used primarily for re-entrant testing. Forces the mode to a given
+    /// mode. Only safe if the TRNG is actually already in that mode!
+    pub unsafe fn force_mode(&mut self, mode: Mode) { self.mode = mode; }
 
     #[cfg(not(feature = "verilator-only"))]
     pub fn get_raw(&mut self) -> u32 {
