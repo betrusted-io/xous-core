@@ -2229,7 +2229,7 @@ pub struct CorigineWrapper {
     pub hw: Arc<Mutex<CorigineUsb>>,
     /// Tuple is (type of endpoint, max packet size)
     pub ep_meta: [Option<(EpType, usize)>; CRG_EP_NUM],
-    pub ep_out_ready: Box<[AtomicBool]>,
+    pub ep_out_ready: Box<[Arc<AtomicBool>]>,
     pub address_is_set: Arc<AtomicBool>,
     pub event: Option<CrgEvent>,
 }
@@ -2240,7 +2240,7 @@ impl CorigineWrapper {
             hw: Arc::new(Mutex::new(obj)),
             ep_meta: [None; CRG_EP_NUM],
             ep_out_ready: (0..CRG_EP_NUM + 1)
-                .map(|_| AtomicBool::new(false))
+                .map(|_| Arc::new(AtomicBool::new(false)))
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
             event: None,
@@ -2253,10 +2253,7 @@ impl CorigineWrapper {
         let mut c = Self {
             hw: self.hw.clone(),
             ep_meta: [None; CRG_EP_NUM],
-            ep_out_ready: (0..CRG_EP_NUM + 1)
-                .map(|_| AtomicBool::new(false))
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
+            ep_out_ready: self.ep_out_ready.clone(),
             event: None,
             address_is_set: self.address_is_set.clone(),
         };
@@ -2599,6 +2596,16 @@ impl UsbBus for CorigineWrapper {
                 let pending_ep = self.core().pending_ep(ep_addr.index(), CRG_OUT);
                 #[cfg(feature = "verbose-debug")]
                 crate::println!(" ******** READ {} pending {:?}", ep_addr.index(), pending_ep);
+                #[cfg(feature = "verbose-debug")]
+                {
+                    let mut readies: usize = 0;
+                    for (i, epr) in self.ep_out_ready.iter().enumerate() {
+                        if epr.load(Ordering::SeqCst) {
+                            readies |= 1 << i;
+                        }
+                    }
+                    crate::println!("     readies: {:b}", readies);
+                }
                 let ret = if let Some(pending_ep) = pending_ep {
                     if pending_ep as usize == ep_addr.index() {
                         let app_ptr =
