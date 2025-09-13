@@ -19,24 +19,30 @@ impl Uart {
     #[cfg(all(feature = "debug-print-usb", target_os = "xous"))]
     pub fn putc(&mut self, c: u8) {
         if unsafe { SWAP_APP_UART_VADDR } == 0 {
-            let uart = xous::syscall::map_memory(
+            match xous::syscall::map_memory(
                 xous::MemoryAddress::new(utralib::utra::udma_uart_0::HW_UDMA_UART_0_BASE),
                 None,
                 4096,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map debug serial port");
-            unsafe { SWAP_APP_UART_VADDR = uart.as_mut_ptr() as usize };
+            ) {
+                Ok(uart) => {
+                    unsafe { SWAP_APP_UART_VADDR = uart.as_mut_ptr() as usize };
+                }
+                _ => return,
+            }
         }
         if unsafe { SWAP_APP_UART_IFRAM_VADDR } == 0 {
-            let mem = xous::syscall::map_memory(
+            match xous::syscall::map_memory(
                 xous::MemoryAddress::new(crate::board::APP_UART_IFRAM_ADDR),
                 None,
                 4096,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map debug serial port dma ram");
-            unsafe { SWAP_APP_UART_IFRAM_VADDR = mem.as_mut_ptr() as usize };
+            ) {
+                Ok(mem) => {
+                    unsafe { SWAP_APP_UART_IFRAM_VADDR = mem.as_mut_ptr() as usize };
+                }
+                _ => return,
+            }
         }
         use crate::udma;
         // safety: safe to call as long as the raw parts are initialized and we exclusively
@@ -65,8 +71,8 @@ impl Write for Uart {
         for c in s.bytes() {
             self.putc(c);
         }
-        #[cfg(all(feature = "std", not(feature = "debug-print-usb")))]
-        log::info!("{}", s);
+        // #[cfg(all(feature = "std", not(feature = "debug-print-usb")))]
+        // log::info!("{}", s);
         Ok(())
     }
 }

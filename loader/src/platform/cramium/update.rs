@@ -18,7 +18,7 @@ use ux_api::minigfx::{FrameBuffer, Point};
 use crate::SIGBLOCK_SIZE;
 use crate::platform::cramium::gfx;
 use crate::platform::cramium::sha512_digest::Sha512Prehash;
-use crate::platform::cramium::usb::{self, SliceCursor, disable_all_irqs};
+use crate::platform::cramium::usb::{self, SliceCursor, USB_CONNECTED, disable_all_irqs, flush_tx_wrapper};
 
 // TODO:
 //   - Port unicode font drawing into loader
@@ -28,7 +28,8 @@ const TEXT_MIDLINE: isize = 51;
 
 // Empirically measured PORTSC when the port is unplugged. This might be a brittle way
 // to detect if the device is unplugged.
-const DISCONNECT_STATE: u32 = 0x40b;
+const DISCONNECT_STATE: u32 = 0x40b; //  01_0_0000_0_1_01_1
+const DISCONNECT_STATE_HS: u32 = 0xc6b; // 11_0_0011_0_1_01_1
 
 // loader is not updateable here because we're XIP. But we can update these other images:
 const SWAP_NAME: &'static str = "SWAP.IMG";
@@ -120,20 +121,27 @@ pub fn process_update(perclk: u32) {
     // setup IO pins to check for update viability
     let (rows, cols) = cramium_hal::board::baosec::setup_kb_pins(&iox_kbd);
 
+    #[cfg(not(feature = "always-update"))]
     let mut key_pressed = false;
+    #[cfg(not(feature = "always-update"))]
     let mut do_update = false;
+    #[cfg(not(feature = "always-update"))]
     while !key_pressed {
         let kps = scan_keyboard(&iox_kbd, &rows, &cols);
         for kp in kps {
             if kp != KeyPress::None {
                 crate::println!("Got key: {:?}", kp);
-                key_pressed = true;
             }
-            if kp == KeyPress::Down {
+            if kp == KeyPress::Up {
+                key_pressed = true;
+            } else if kp == KeyPress::Down {
+                key_pressed = true;
                 do_update = true;
             }
         }
     }
+    #[cfg(feature = "always-update")]
+    let do_update = true;
 
     sh1107.clear();
 
@@ -193,9 +201,12 @@ pub fn process_update(perclk: u32) {
                     let new_portsc = usb.portsc_val();
                     // alternately, break out of the loop when USB is disconnected
                     if new_portsc != portsc {
-                        crate::println!("PP: {:x}", portsc);
                         portsc = new_portsc;
-                        if portsc == DISCONNECT_STATE && new_usb_state == UsbDeviceState::Configured {
+                        crate::println!("PP: {:x}", portsc);
+                        if (portsc == DISCONNECT_STATE || portsc == DISCONNECT_STATE_HS)
+                            && new_usb_state == UsbDeviceState::Configured
+                        {
+                            USB_CONNECTED.store(false, core::sync::atomic::Ordering::SeqCst);
                             break;
                         }
                     }
@@ -226,7 +237,25 @@ pub fn process_update(perclk: u32) {
                             );
                             sh1107.draw();
                             last_usb_state = new_usb_state;
+                            USB_CONNECTED.store(true, core::sync::atomic::Ordering::SeqCst);
                         }
+                    }
+
+                    if USB_CONNECTED.load(core::sync::atomic::Ordering::SeqCst) {
+                        // echo data on USB for now - placeholder to extend for commands/extensions!
+                        critical_section::with(|cs| {
+                            let mut queue =
+                                crate::platform::cramium::usb::driver::USB_RX.borrow(cs).borrow_mut();
+                            while let Some(byte) = queue.pop_front() {
+                                critical_section::with(|cstx| {
+                                    let mut tx = crate::platform::cramium::usb::driver::USB_TX
+                                        .borrow(cstx)
+                                        .borrow_mut();
+                                    tx.push_back(byte);
+                                });
+                            }
+                        });
+                        flush_tx_wrapper();
                     }
                 }
 
@@ -289,7 +318,7 @@ pub fn process_update(perclk: u32) {
                                         return;
                                     }
                                     crate::println!("Kernel image is good!");
-
+                                    sh1107.clear();
                                     let mut rram = cramium_hal::rram::Reram::new();
 
                                     // concatenate this with e.g. .min(0x2000) to shorten the run, if needed
@@ -315,7 +344,6 @@ pub fn process_update(perclk: u32) {
                                         .enumerate()
                                     {
                                         rram.write_slice(KERNEL_BASE_ADDR + i * BLOCKLEN_BYTES, &byte_chunk);
-                                        crate::println!("{:x}: {:x?}", i * BLOCKLEN_BYTES, &byte_chunk[..4]);
                                         progress_bar(&mut sh1107, i * BLOCKLEN_BYTES * 100 / total_len);
                                     }
                                     progress_bar(&mut sh1107, 100);

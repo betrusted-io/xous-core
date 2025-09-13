@@ -1,5 +1,5 @@
 [package]
-name = "usb-cramium"
+name = "usb-bao1x"
 version = "0.1.0"
 edition = "2021"
 
@@ -19,6 +19,7 @@ cramium-hal = { path = "../../libs/cramium-hal", features = [
     # "verbose-debug",
     "axp2101",
 ], optional = true }
+cramium-api = { path = "../../libs/cramium-api" }
 cram-hal-service = { path = "../cram-hal-service", optional = true }
 cramium-emu = { path = "../cramium-emu", optional = true }
 xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main" }
@@ -32,10 +33,22 @@ frunk_core = "0.4.2"
 # for debugging interrupts
 riscv = { version = "0.5.6", package = "xous-riscv" }
 
-[dependencies.usb-device]
-# see top level Cargo.toml for patch.crates-io directive to help with dev work
-version = "0.2.8"
-features = ["log"]
+usb-device = { git = "https://github.com/betrusted-io/usb-device.git", branch = "main", features = [
+    "log",
+    "control-buffer-256",
+] }
+# usb-device = { path = "../../../usb-device", features = [
+#     "log",
+#     "control-buffer-256",
+# ] }
+
+# Serial support
+usbd-serial = { git = "https://github.com/betrusted-io/usbd-serial.git", branch = "v0.1.1-betrusted", features = [
+    "max-packet-size-512",
+] }
+# usbd-serial = { path = "../../../usbd-serial", features = [
+#     "max-packet-size-512",
+# ] }
 
 [features]
 cramium-soc = []
@@ -54,9 +67,14 @@ renode = ["utralib/renode", "utralib/std"]
 mass-storage = []
 debug-print-usb = [
 ] # mutually exclusive feature with other crates that use the app UART
-verbose-debug = []
+verbose-debug = ["cramium-hal/verbose-debug"]
+
+# mutually exclusive with kernel "print-panics"; will get a DUART allocation error on boot if kernel panics are on
+# sticks the DUART into the deep stack; necessary because we can't have external dependencies in usbd-device
+# and the DUART can be banged with simple hard-coded memory offsets.
+usbd-debug = ["usb-device/baochip-debug"]
 
 prototyping = [
 ] # temporary feature-out for figuring out the code; remove this if you don't recognize it anymore
 
-default = ["mass-storage", "debug-print-usb"]
+default = ["debug-print-usb"]

@@ -13,12 +13,13 @@ use crate::platform::{
 #[global_allocator]
 static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
 
-pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN - 0x8_0000;
-pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM + 0x8_0000;
+pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
+pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 #[allow(dead_code)]
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 
-pub const HEAP_START: usize = RAM_BASE + 0x5000;
+const DATA_SIZE_BYTES: usize = 0x6000;
+pub const HEAP_START: usize = RAM_BASE + DATA_SIZE_BYTES;
 pub const HEAP_LEN: usize = 1024 * 256;
 
 // scratch page for exceptions located at top of RAM
@@ -33,9 +34,9 @@ pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 pub fn early_init() {
     // Define the .data region - bootstrap baremetal using these hard-coded parameters.
-    const DATA_ORIGIN: usize = 0x61080000;
-    const DATA_SIZE_BYTES: usize = 0x5000;
-    const DATA_INIT: [(usize, u32); 1] = [(0x0, 0x1)];
+    // Define the .data region - bootstrap baremetal using these hard-coded parameters.
+    const DATA_ORIGIN: usize = 0x61000000;
+    const DATA_INIT: [(usize, u32); 4] = [(0x0, 0x2), (0x53c, 0x1), (0x541, 0x1), (0x546, 0x1)];
 
     // Clear .data, .bss, .stack, .heap regions & setup .data values
     unsafe {
@@ -51,6 +52,7 @@ pub fn early_init() {
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
     #[cfg(not(feature = "nto-evb"))]
     {
+        // sets up the FET control for DCDC2 (only useful on boards that support it)
         iox.set_gpio_pin_value(IoxPort::PA, 5, IoxValue::High);
         iox.setup_pin(
             IoxPort::PA,
@@ -393,7 +395,7 @@ pub fn clk_to_fd(fd_in_mhz: u32, desired_mhz: u32) -> Option<(u32, i32)> {
 /// (min cycle, fd, actual freq)
 /// *tested*
 pub fn clk_to_per(top_in_mhz: u32, perclk_in_mhz: u32) -> Option<(u8, u8, u32)> {
-    let fd_platonic = ((256 * perclk_in_mhz) / (top_in_mhz / 2)).max(256);
+    let fd_platonic = ((256 * perclk_in_mhz) / (top_in_mhz / 2)).min(256);
     if fd_platonic > 0 {
         let fd = fd_platonic - 1;
         let min_cycle = (2 * (256 / (fd + 1))).max(1);
@@ -799,4 +801,49 @@ pub unsafe fn low_power() -> u32 {
     udma_uart.write("powerdown with clocks\r\n".as_bytes());
 
     perclk
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum KeyPress {
+    Up,
+    Down,
+    Left,
+    Right,
+    Select,
+    Home,
+    Invalid,
+    None,
+}
+#[allow(dead_code)]
+pub fn scan_keyboard<T: IoSetup + IoGpio>(
+    iox: &T,
+    rows: &[(IoxPort, u8)],
+    cols: &[(IoxPort, u8)],
+) -> [KeyPress; 4] {
+    let mut key_presses: [KeyPress; 4] = [KeyPress::None; 4];
+    let mut key_press_index = 0; // no Vec in no_std, so we have to manually track it
+
+    for (row, (port, pin)) in rows.iter().enumerate() {
+        iox.set_gpio_pin_value(*port, *pin, IoxValue::Low);
+        for (col, (col_port, col_pin)) in cols.iter().enumerate() {
+            if iox.get_gpio_pin_value(*col_port, *col_pin) == IoxValue::Low {
+                crate::println!("Key press at ({}, {})", row, col);
+                if key_press_index < key_presses.len() {
+                    key_presses[key_press_index] = match (row, col) {
+                        (1, 3) => KeyPress::Left,
+                        (1, 2) => KeyPress::Home,
+                        (1, 0) => KeyPress::Right,
+                        (0, 0) => KeyPress::Down,
+                        (0, 2) => KeyPress::Up,
+                        (0, 1) => KeyPress::Select,
+                        _ => KeyPress::Invalid,
+                    };
+                    key_press_index += 1;
+                }
+            }
+        }
+        iox.set_gpio_pin_value(*port, *pin, IoxValue::High);
+    }
+    key_presses
 }

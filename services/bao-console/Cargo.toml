@@ -18,7 +18,7 @@ cramium-hal = { path = "../../libs/cramium-hal", features = [
 cramium-api = { path = "../../libs/cramium-api" }
 cram-hal-service = { path = "../cram-hal-service", optional = true }
 cramium-emu = { path = "../cramium-emu", optional = true }
-usb-cramium = { path = "../usb-cramium" }
+usb-bao1x = { path = "../usb-bao1x" }
 modals = { path = "../modals", default-features = false }
 ux-api = { path = "../../libs/ux-api", optional = true }
 pddb = { path = "../pddb", optional = true }
@@ -30,25 +30,28 @@ rand_chacha = { version = "0.3.1", optional = true }
 
 aes = { path = "../aes", default-features = false, optional = true }
 
+# hid bringup
+xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main", optional = true }
+
 # aes testing
 [features]
 cramium-soc = [
     "utralib/cramium-soc",
     "modals/cramium-soc",
-    "usb-cramium/cramium-soc",
+    "usb-bao1x/cramium-soc",
     "aes/cramium-soc",
 ]
 board-baosec = [
     "modals/board-baosec",
     "cram-hal-service",
     "cramium-hal",
-    "usb-cramium/board-baosec",
+    "usb-bao1x/board-baosec",
     "pddb/board-baosec",
     "xous-swapper",
 ]
 hosted-baosec = [
     "modals/hosted-baosec",
-    "usb-cramium/hosted-baosec",
+    "usb-bao1x/hosted-baosec",
     "cramium-emu",
     "pddb/hosted-baosec",
     "cramium-hal/hosted-baosec",
@@ -64,4 +67,5 @@ autobasis = ["rand_chacha", "rand"]
 modal-testing = ["ux-api", "modals/modal-testing"]
 test-scrollbars = []
 test-flash = []
+ctap-bringup = ["xous-usb-hid"]
 default = []

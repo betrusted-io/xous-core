@@ -1,5 +1,6 @@
 use cramium_hal::usb::utra::*;
-use riscv::register::{mcause, mie, mstatus, vexriscv::mim, vexriscv::mip};
+use riscv::register::{mcause, mie, mstatus};
+use vexriscv::register::vexriscv::{mim, mip};
 
 use super::*;
 
@@ -63,7 +64,7 @@ pub unsafe extern "C" fn _start_trap() -> ! {
             #[rustfmt::skip]
             core::arch::asm!(
                 "csrw        mscratch, sp",
-                "li          sp, 0x6101F000", // scratch page: one page below the disk start
+                "li          sp, {scratch_page}", // scratch page: one page below the disk start
                 "sw       x1, 0*4(sp)",
                 // Skip SP for now
                 "sw       x3, 2*4(sp)",
@@ -103,13 +104,11 @@ pub unsafe extern "C" fn _start_trap() -> ! {
                 "csrr        t0, mscratch",
                 "sw          t0, 1*4(sp)",
                 // Restore a default stack pointer
-                "li          sp, 0x6101F000", /* builds down from scratch page */
+                "li          sp, {scratch_page}", /* builds down from scratch page */
                 // Note that registers $a0-$a7 still contain the arguments
                 "j           _start_trap_rust",
-                // Note to self: trying to assign the scratch and default pages using in(reg) syntax
-                // clobbers the `a0` register and places the initialization outside of the handler loop
-                // and there seems to be no way to refer directly to a symbol? the `sym` directive wants
-                // to refer to an address, not a constant.
+
+                scratch_page = const SCRATCH_PAGE,
             );
         }
         _start_trap_aligned();

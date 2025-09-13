@@ -111,7 +111,7 @@ members = [
   "services/test-swapper",
   "services/cram-console",
   "services/bao-video",
-  "services/usb-cramium",
+  "services/usb-bao1x",
   "services/bao-console",
   "libs/ux-api",
   "services/cramium-emu",
@@ -171,6 +171,8 @@ branch = "main" # c25519
 git = "https://github.com/betrusted-io/usb-device.git"
 branch = "main"
 # local dev shortcuts
+# path = "../usb-device"
+# [patch.github-io.usb-device]
 # path = "../usb-device"
 
 [patch.crates-io.getrandom]

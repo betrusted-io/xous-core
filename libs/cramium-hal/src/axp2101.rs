@@ -382,7 +382,7 @@ impl Axp2101 {
         for (name, offset) in measurements {
             i2c.i2c_read(AXP2101_DEV, offset, &mut buf, false).unwrap();
             let v: u32 = (((buf[0] as u32) & 0x3F) << 8) | buf[1] as u32;
-            crate::println!("{}: {:0.3}V", name, v as f32 / 1000.0);
+            crate::println!("{}: {}.{}V", name, v / 1000, v % 1000);
         }
         i2c.i2c_read(AXP2101_DEV, REG_TS_H, &mut buf, false).unwrap();
         let v: u32 = (((buf[0] as u32) & 0x3F) << 8) | buf[1] as u32;
@@ -390,7 +390,7 @@ impl Axp2101 {
 
         i2c.i2c_read(AXP2101_DEV, REG_TDIE_H, &mut buf, false).unwrap();
         let v: u32 = (((buf[0] as u32) & 0x3F) << 8) | buf[1] as u32;
-        crate::println!("Die temp: {:0.2}C", 22.0 + (7274.0 - v as f32) / 20.0);
+        crate::println!("Die temp: {}C", 22 + (7274 - v) / 20);
 
         i2c.i2c_read(AXP2101_DEV, REG_SOC, &mut buf[0..1], false).unwrap();
         crate::println!("SOC: {}%", buf[0]);

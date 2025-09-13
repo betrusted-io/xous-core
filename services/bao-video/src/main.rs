@@ -304,6 +304,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     // this needs to be turned into a call that can invoke and abort the QR code scanning.
     #[cfg(feature = "autotest")]
     {
+        log::info!("initiating auto test");
         cam.capture_async();
     }
 

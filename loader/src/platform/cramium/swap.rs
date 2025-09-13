@@ -426,7 +426,7 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
         EventChannel::Channel3,
     );
 
-    let baudrate: u32 = 115200;
+    let baudrate: u32 = 1_000_000;
     let perclk = 100_000_000; // TODO: turn this into a symbolic const, or better yet, pass in from the loader
     let freq: u32 = perclk / 2;
 

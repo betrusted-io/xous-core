@@ -56,9 +56,12 @@ pub(crate) enum Opcode {
     SerialClearHooks = 517,
     /// TRNG send poll
     SerialTrngPoll = 518,
+    /// Send serial data
+    SerialSendData = 519,
 
     /// Interrupt-context USB stack messages
     IrqFidoRx = 768,
+    IrqSerialRx = 769,
 
     #[cfg(feature = "mass-storage")]
     SetBlockDevice = 1024,
@@ -128,6 +131,7 @@ pub enum U2fCode {
 
 #[derive(Eq, PartialEq, Copy, Clone)]
 #[repr(usize)]
+#[allow(dead_code)]
 pub enum UsbDeviceType {
     Debug = 0,
     FidoKbd = 1,
@@ -154,17 +158,16 @@ impl TryFrom<usize> for UsbDeviceType {
     }
 }
 
-pub const SERIAL_BINARY_BUFLEN: usize = 128;
+pub const SERIAL_BINARY_BUFLEN: usize = 3840; // save 256 bytes on the page for Rkyv overhead
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct UsbSerialAscii {
     pub s: String,
     pub delimiter: Option<char>,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct UsbSerialBinary {
-    pub d: [u8; SERIAL_BINARY_BUFLEN],
-    pub len: usize,
+    pub d: Vec<u8>,
 }
 
 pub const MAX_HID_REPORT_DESCRIPTOR_LEN: usize = 1024;

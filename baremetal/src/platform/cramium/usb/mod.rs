@@ -1,12 +1,11 @@
-pub mod driver;
+mod driver;
+pub mod glue;
 mod handlers;
-mod irq;
-mod slice_cursor;
 
 pub use driver::*;
 pub use handlers::*;
-pub use irq::*;
-pub use slice_cursor::*;
+
+use crate::irq::*;
 
 // Note that the trap handler is just placed one page below this, and it
 // needs to be manually updated in the assembly because we can't refer to
@@ -142,8 +141,8 @@ struct DeviceDescriptor {
 }
 const VENDOR_ID: u16 = 0x1209;
 const PRODUCT_ID: u16 = 0x3613; // this needs to change! this is the Precursor product ID.
-const MANUFACTURER: &'static str = "Bao Semi";
-const PRODUCT: &'static str = "SecuriBao";
+const MANUFACTURER: &'static str = "Baochip";
+const PRODUCT: &'static str = "Dabao";
 // no seriously, do this
 const SERIAL: &'static str = "TODO";
 
@@ -208,6 +207,7 @@ impl DeviceDescriptor {
         }
     }
 }
+
 impl AsRef<[u8]> for DeviceDescriptor {
     fn as_ref(&self) -> &[u8] {
         unsafe {

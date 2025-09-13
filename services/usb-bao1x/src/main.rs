@@ -14,8 +14,8 @@ use std::collections::VecDeque;
 use std::panic;
 use std::sync::Arc;
 
-use api::{HIDReport, LogLevel, Opcode, U2fCode, U2fMsgIpc, UsbListenerRegistration};
-use cram_hal_service::api::KeyMap;
+use api::*;
+use cramium_api::keyboard::KeyMap;
 use cramium_hal::axp2101::VbusIrq;
 use cramium_hal::usb::driver::{CorigineUsb, CorigineWrapper};
 use hw::CramiumUsb;
@@ -35,11 +35,21 @@ enum TimeoutOp {
     Quit,
 }
 
-/*
-    TODO:
-    - [ ] Reduce debug spew. This is left in place for now because we will definitely need it in the
-      future and it hasn't seemed to affect the stack operation like it did in the user-space implementation.
-*/
+#[derive(Debug)]
+enum SerialListenMode {
+    // this just causes data incoming to be printed to the debug log; it is the default
+    NoListener,
+    // this assumes there will be a CR/LF character to delimit lines (the `char` arg), and
+    // will buffer data until two conditions are met: 1) a listener is hooked and 2) a CR/LF is received.
+    // This will "infinitely" buffer incoming characters if no listener is hooked.
+    AsciiListener(Option<char>),
+    // this will simply buffer the data until the `usize` argument is met and passes it back to
+    // hooked listener. If this mode is set and there is no listener, it will buffer data "indefinitely"
+    // (e.g. until local heap is exhausted and the system panics)
+    BinaryListener,
+    // this will take any serial input and pass it on as if one was typing at the console
+    ConsoleListener,
+}
 
 fn main() -> ! {
     #[cfg(target_os = "xous")]
@@ -52,6 +62,18 @@ pub(crate) fn main_hw() -> ! {
     // confirm that the app UART is initialized in our PID - this needs to happen in a userspace call
     // before any IRQ calls try to use it.
     crate::println!("APP UART in PID {}", xous::process::id());
+
+    #[cfg(feature = "usbd-debug")]
+    // bind the duart
+    let duart_mapping = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utra::duart::HW_DUART_BASE),
+        xous::MemoryAddress::new(0x3000_0000),
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map DUART");
+    #[cfg(feature = "usbd-debug")]
+    crate::println!("duart mapping: {:x?}", duart_mapping);
 
     #[cfg(feature = "debug-print-usb")]
     panic::set_hook(Box::new(|info| {
@@ -71,7 +93,7 @@ pub(crate) fn main_hw() -> ! {
     let serial_number = format!("TODO!!"); // implement in cramium-hal once we have a serial number API
 
     let native_kbd =
-        cram_hal_service::keyboard::Keyboard::new(&xns).expect("couldn't connect to keyboard service");
+        cramium_api::keyboard::Keyboard::new(&xns).expect("couldn't connect to keyboard service");
 
     let usb_mapping = xous::syscall::map_memory(
         xous::MemoryAddress::new(cramium_hal::usb::utra::CORIGINE_USB_BASE),
@@ -133,6 +155,12 @@ pub(crate) fn main_hw() -> ! {
     let mut cu = Box::new(CramiumUsb::new(usb.clone(), irq_csr.clone(), cid, cw, &usb_alloc, &serial_number));
     cu.init();
 
+    // Serial driver variables
+    let mut serial_listener: Option<xous::MessageEnvelope> = None;
+    let mut serial_listen_mode: SerialListenMode = SerialListenMode::NoListener;
+    let mut serial_buf = Vec::<u8>::new();
+    let mut serial_rx_trigger = false; // when true, the condition was met to pass data to the listener (but the listener was not yet installed)
+
     // under the theory that PIDs cannot be forged.
     // also if someone commandeers a process, all bets are off within that process (this is a general
     // statement)
@@ -175,7 +203,7 @@ pub(crate) fn main_hw() -> ! {
                 let now = tt.elapsed_ms();
                 let opcode =
                     num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(TimeoutOp::InvalidCall);
-                log::info!("Timeout thread: {:?}", opcode);
+                log::debug!("Timeout thread: {:?}", opcode);
                 match opcode {
                     TimeoutOp::Pump => {
                         if to_run.load(Ordering::SeqCst) {
@@ -237,7 +265,7 @@ pub(crate) fn main_hw() -> ! {
     });
 
     log::info!("Registering PMIC handler to detect USB plug/unplug events");
-    let iox = cram_hal_service::iox_lib::IoxHal::new();
+    let iox = cramium_api::IoxHal::new();
     cramium_hal::board::setup_pmic_irq(
         &iox,
         api::SERVER_NAME_USB_DEVICE,
@@ -254,7 +282,7 @@ pub(crate) fn main_hw() -> ! {
         xous::reply_and_receive_next(usbdev_sid, &mut msg_opt).expect("Error fetching next message");
         let msg = msg_opt.as_mut().unwrap();
         let opcode = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidCall);
-        log::info!("{:?}", opcode);
+        log::debug!("{:?}", opcode);
         match opcode {
             Opcode::PmicIrq => match pmic.get_vbus_irq_status(&mut i2c).unwrap() {
                 VbusIrq::Insert => {
@@ -268,7 +296,7 @@ pub(crate) fn main_hw() -> ! {
                     panic!("Unexpected report from vbus_irq status");
                 }
                 VbusIrq::None => {
-                    log::warn!("Received an interrupt but no actual event reported");
+                    // log::warn!("Received an interrupt but no actual event reported");
                 }
             },
             Opcode::U2fRxDeferred => {
@@ -366,21 +394,25 @@ pub(crate) fn main_hw() -> ! {
                 }
             }
             Opcode::IrqFidoRx => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let u2f_report = buffer.to_original::<HIDReport, _>().unwrap();
-                if let Some(mut listener) = fido_listener.take() {
-                    let mut response = unsafe {
-                        Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
-                    };
-                    let mut deferred_buf = response.to_original::<U2fMsgIpc, _>().unwrap();
+                if let Some(raw_report) = cu.hid_packet.take() {
+                    let u2f_report = HIDReport(raw_report);
+                    if let Some(mut listener) = fido_listener.take() {
+                        let mut response = unsafe {
+                            Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                        };
+                        let mut deferred_buf = response.to_original::<U2fMsgIpc, _>().unwrap();
 
-                    deferred_buf.data.copy_from_slice(&u2f_report.0);
-                    log::trace!("ret deferred data {:x?}", &u2f_report.0[..8]);
-                    deferred_buf.code = U2fCode::RxAck;
-                    response.replace(deferred_buf).unwrap();
+                        deferred_buf.data.copy_from_slice(&u2f_report.0);
+                        log::trace!("ret deferred data {:x?}", &u2f_report.0[..8]);
+                        deferred_buf.code = U2fCode::RxAck;
+                        response.replace(deferred_buf).unwrap();
+                    } else {
+                        crate::println!("Got U2F packet, but no server to respond...queuing.");
+                        fido_rx_queue.push_back(u2f_report.0);
+                    }
                 } else {
-                    crate::println!("Got U2F packet, but no server to respond...queuing.");
-                    fido_rx_queue.push_back(u2f_report.0);
+                    // I *think* this is harmless, can remove this later on if protocol is robust
+                    log::warn!("got IrqFidoRx but no data");
                 }
             }
             Opcode::U2fTx => {
@@ -509,6 +541,228 @@ pub(crate) fn main_hw() -> ! {
                     LogLevel::Err => log::set_max_level(log::LevelFilter::Error),
                 }
             }),
+            Opcode::IrqSerialRx => msg_scalar_unpack!(msg, valid_bytes, _, _, _, {
+                serial_buf.extend_from_slice(&cu.serial_rx[..valid_bytes]);
+                match serial_listen_mode {
+                    SerialListenMode::NoListener => {
+                        match std::str::from_utf8(&serial_buf) {
+                            Ok(s) => log::info!("No listener ascii: {}", s),
+                            Err(_) => {
+                                log::info!("No listener binary: {:x?}", &serial_buf);
+                            }
+                        }
+                        serial_buf.clear();
+                    }
+                    SerialListenMode::ConsoleListener => {
+                        match std::str::from_utf8(&serial_buf) {
+                            Ok(s) => {
+                                for c in s.chars() {
+                                    native_kbd.inject_key(c);
+                                }
+                            }
+                            Err(_) => {
+                                log::info!("Non UTF-8 received on console: {:x?}", &serial_buf);
+                            }
+                        }
+                        serial_buf.clear();
+                    }
+                    SerialListenMode::AsciiListener(maybe_delimiter) => {
+                        if let Some(delimiter) = maybe_delimiter {
+                            if !delimiter.is_ascii() {
+                                log::warn!(
+                                    "Chosen ASCII delimiter {} is not ASCII. Serial receive will not function properly.",
+                                    delimiter
+                                );
+                            }
+                            if !serial_rx_trigger {
+                                // once true, sticks as true
+                                serial_rx_trigger =
+                                    serial_buf.iter().find(|&&c| c == (delimiter as u8)).is_some();
+                            }
+                        } else {
+                            serial_rx_trigger = true;
+                        }
+                        // now see if we should pass it back to the listener (if it is hooked)
+                        if serial_rx_trigger && serial_listener.is_some() {
+                            let mut rx_msg = serial_listener.take().unwrap();
+                            let mut response = unsafe {
+                                Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
+                            };
+                            let mut buf = response.to_original::<UsbSerialAscii, _>().unwrap();
+                            use std::fmt::Write; // is this really the best way to do it? probably not.
+                            write!(buf.s, "{}", std::string::String::from_utf8_lossy(&serial_buf)).ok();
+
+                            response.replace(buf).unwrap();
+                            // the rx_msg will drop and respond to the listener
+                            serial_rx_trigger = false;
+                            serial_buf.clear();
+                        }
+                    }
+                    SerialListenMode::BinaryListener => {
+                        match serial_listener.take() {
+                            Some(mut rx_msg) => {
+                                let mut response = unsafe {
+                                    Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
+                                };
+                                let mut buf = response.to_original::<UsbSerialBinary, _>().unwrap();
+                                let n = serial_buf.len().min(SERIAL_BINARY_BUFLEN);
+                                let at_most_one_page: Vec<u8> = serial_buf.drain(..n).collect();
+                                buf.d.extend_from_slice(&at_most_one_page);
+                                response.replace(buf).unwrap();
+                                // the rx_msg will drop and respond to the listener
+                            }
+                            None => {
+                                // do nothing, keep queuing data...
+                            }
+                        }
+                    }
+                }
+            }),
+            Opcode::SerialHookAscii => {
+                let maybe_delimiter = {
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let data = buffer.to_original::<UsbSerialAscii, _>().unwrap();
+                    data.delimiter
+                };
+                serial_listen_mode = SerialListenMode::AsciiListener(maybe_delimiter);
+                serial_listener = msg_opt.take();
+            }
+            Opcode::SerialHookBinary => {
+                serial_listen_mode = SerialListenMode::BinaryListener;
+                serial_listener = msg_opt.take();
+            }
+            Opcode::SerialHookConsole => msg_scalar_unpack!(msg, _, _, _, _, {
+                let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
+                match xous::send_message(
+                    log_conn,
+                    xous::Message::new_blocking_scalar(
+                        log_server::api::Opcode::TryHookUsbMirror.to_usize().unwrap(),
+                        0,
+                        0,
+                        0,
+                        0,
+                    ),
+                ) {
+                    Ok(xous::Result::Scalar1(result)) => {
+                        if result == 1 {
+                            serial_listen_mode = SerialListenMode::ConsoleListener;
+                            // unhook any previous pending listener
+                            serial_listener.take();
+                        } else {
+                            log::error!("Error trying to connect USB console.");
+                        }
+                    }
+                    _ => {
+                        log::error!("Could not connect USB console");
+                    }
+                }
+            }),
+            Opcode::SerialClearHooks => {
+                let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
+                // it is never harmful to double-unhook this
+                xous::send_message(
+                    log_conn,
+                    xous::Message::new_blocking_scalar(
+                        log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(),
+                        0,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+                .ok();
+
+                serial_listen_mode = SerialListenMode::NoListener;
+                serial_listener.take();
+            }
+            Opcode::SerialFlush => msg_scalar_unpack!(msg, _, _, _, _, {
+                // this will hardware flush any pending items in usb_serial driver
+                cu.serial_port.flush().ok();
+                // this tries to return any data that's pending within the main loop's buffers
+                match serial_listen_mode {
+                    SerialListenMode::BinaryListener => {
+                        match serial_listener.take() {
+                            Some(mut rx_msg) => {
+                                let mut response = unsafe {
+                                    Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
+                                };
+                                let mut buf = response.to_original::<UsbSerialBinary, _>().unwrap();
+                                let chars_avail = serial_buf.len().min(SERIAL_BINARY_BUFLEN);
+                                buf.d.copy_from_slice(serial_buf.drain(..chars_avail).as_slice());
+                                response.replace(buf).unwrap();
+                                // the rx_msg will drop and respond to the listener
+                            }
+                            None => {
+                                // do nothing, keep queuing data...
+                            }
+                        }
+                    }
+                    SerialListenMode::AsciiListener(_) => {
+                        match serial_listener.take() {
+                            Some(mut rx_msg) => {
+                                let mut response = unsafe {
+                                    Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
+                                };
+                                let mut buf = response.to_original::<UsbSerialAscii, _>().unwrap();
+                                use std::fmt::Write; // is this really the best way to do it? probably not.
+                                write!(buf.s, "{}", std::string::String::from_utf8_lossy(&serial_buf)).ok();
+
+                                response.replace(buf).unwrap();
+                                // the rx_msg will drop and respond to the listener
+                                serial_rx_trigger = false;
+                            }
+                            None => {} // do nothing
+                        }
+                    }
+                    _ => {}
+                }
+            }),
+            Opcode::SerialSendData => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let data = buffer.to_original::<UsbSerialBinary, _>().unwrap();
+                let mut total_sent = 0;
+                for chunk in data.d.chunks(crate::hw::SERIAL_MAX_PACKET_SIZE) {
+                    match cu.serial_port.write(chunk) {
+                        Ok(sent) => total_sent += sent,
+                        Err(e) => {
+                            log::error!("Error in SerialSendData: {:?}", e);
+                        }
+                    }
+                }
+                log::debug!("Serial sent {} bytes", total_sent);
+            }
+            Opcode::LogString => {
+                // the logger API is "best effort" only. Because retries and response codes can cause problems
+                // in the logger API, if anything goes wrong, we prefer to discard characters rather than get
+                // the whole subsystem stuck in some awful recursive error handling hell.
+                match msg.body.memory_message() {
+                    Some(mem_msg) => {
+                        let buffer = unsafe { Buffer::from_memory_message(mem_msg) };
+                        match buffer.to_original::<api::UsbString, _>() {
+                            Ok(usb_send) => {
+                                // this is implemented as a "blocking write": the routine will block until the
+                                // data has all been written.
+                                let send_data = usb_send.s.as_bytes();
+                                let to_send = usb_send.s.len();
+                                let mut sent = 0;
+                                while sent < to_send {
+                                    match cu.serial_port.write(&send_data[sent..to_send]) {
+                                        Ok(written) => {
+                                            sent += written;
+                                        }
+                                        Err(_) => {
+                                            // just drop characters
+                                        }
+                                    }
+                                    cu.serial_port.flush().ok(); // just drop characters on error
+                                }
+                            }
+                            _ => {} // silent errors
+                        }
+                    }
+                    _ => {} // silent errors
+                }
+            }
             Opcode::InvalidCall => {
                 log::warn!("Illegal opcode received {:?}", msg);
             }

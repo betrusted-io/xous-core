@@ -1,7 +1,8 @@
 mod cmds;
+#[cfg(feature = "ctap-bringup")]
+mod ctap;
 mod repl;
 mod shell;
-
 use cmds::*;
 
 fn main() {
@@ -126,6 +127,10 @@ fn main() {
             }
         }
     }
+
+    #[cfg(feature = "ctap-bringup")]
+    crate::ctap::ctap_test();
+
     #[cfg(any(feature = "hosted-baosec", not(feature = "battery-readout")))]
     loop {
         tt.sleep_ms(2_000).ok();

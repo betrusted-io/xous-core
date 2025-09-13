@@ -34,9 +34,13 @@ pub struct UsbString {
 #[cfg(feature = "usb")]
 fn usb_send_str(conn: xous::CID, s: &str) {
     let serializer = UsbString { s: String::from(s), sent: None };
-    let buf = xous_ipc::Buffer::into_buf(serializer).expect("usb error");
-    // failures to send are silent & ignored; also, this API doesn't block.
-    buf.send(conn, 8192 /* LogString */).expect("usb error");
+    match xous_ipc::Buffer::into_buf(serializer) {
+        Ok(buf) => {
+            // failures to send are silent & ignored; also, this API doesn't block.
+            buf.send(conn, 8192 /* LogString */).ok();
+        }
+        _ => {} // dont block on errors
+    }
 }
 
 fn reader_thread(arg: usize) {

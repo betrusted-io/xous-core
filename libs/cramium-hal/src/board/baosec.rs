@@ -36,20 +36,18 @@ pub const SPIM_FLASH_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IF
 // one page for the I2C driver
 pub const I2C_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 8 * 4096;
 
-// memory for camera driver - note this is mutually exclusive with USB, can't use both at the same time
+// USB pages
+pub const CRG_IFRAM_PAGES: usize = 5;
+pub const CRG_UDC_MEMBASE: usize = I2C_IFRAM_ADDR - CRG_IFRAM_PAGES * 0x1000;
+
+// memory for camera driver
 pub const CAM_IFRAM_LEN_PAGES: usize = 30;
 pub const CAM_IFRAM_ADDR: usize =
     utralib::HW_IFRAM1_MEM + utralib::HW_IFRAM1_MEM_LEN - CAM_IFRAM_LEN_PAGES * 4096;
 
-// USB pages - USB subsystem is a hog, needs a lot of pages, note this is mutually exclusive with camera,
-// can't use both at once
-pub const CRG_IFRAM_PAGES: usize = 23; // +1 for extended application buffer by 4k
-pub const CRG_UDC_MEMBASE: usize =
-    utralib::HW_IFRAM1_MEM + utralib::HW_IFRAM1_MEM_LEN - CRG_IFRAM_PAGES * 0x1000;
-
 // MANUALLY SYNCED TO ALLOCATIONS ABOVE
 // inclusive numbering - we allocate pages from the top-down, so the last number should generally be 31
-pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 9, 31];
+pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 9 - CRG_IFRAM_PAGES, 31];
 pub const IFRAM1_RESERVED_PAGE_RANGE: [usize; 2] = [31 - CAM_IFRAM_LEN_PAGES, 31];
 
 // Display pins
@@ -288,7 +286,7 @@ pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 2], [(Iox
 }
 
 pub fn setup_pmic_irq<T: IoIrq>(iox: &T, server: &str, opcode: usize) {
-    iox.set_irq_pin(IoxPort::PB, 13, IoxValue::Low, server, opcode);
+    iox.set_irq_pin(IoxPort::PB, 15, IoxValue::Low, server, opcode);
 }
 
 pub fn setup_oled_power_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {

@@ -35,6 +35,12 @@ impl fmt::Display for IniF {
             writeln!(f, "        Loaded from {:08x} - {}", load_offset, section)?;
             load_offset += section.size as u32;
         }
+        writeln!(
+            f,
+            "        Size on disk: {} ({}kiB)",
+            load_offset - self.load_offset,
+            (load_offset - self.load_offset) / 1024
+        )?;
         Ok(())
     }
 }

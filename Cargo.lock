@@ -102,9 +102,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.79"
+version = "1.0.99"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "080e9890a082662b09c1ad45f567faeeb47f22b5fb23895fbe1e651e718e25ca"
+checksum = "b0674a1ddeecb70197781e945de4b3b8ffb61fa939a5597bcf48503737663100"
 
 [[package]]
 name = "app-loader"
@@ -147,19 +147,20 @@ dependencies = [
 
 [[package]]
 name = "argh"
-version = "0.1.12"
+version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7af5ba06967ff7214ce4c7419c7d185be7ecd6cc4965a8f6e1d8ce0398aad219"
+checksum = "34ff18325c8a36b82f992e533ece1ec9f9a9db446bd1c14d4f936bac88fcd240"
 dependencies = [
  "argh_derive",
  "argh_shared",
+ "rust-fuzzy-search",
 ]
 
 [[package]]
 name = "argh_derive"
-version = "0.1.12"
+version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56df0aeedf6b7a2fc67d06db35b09684c3e8da0c95f8f27685cb17e08413d87a"
+checksum = "adb7b2b83a50d329d5d8ccc620f5c7064028828538bdf5646acd60dc1f767803"
 dependencies = [
  "argh_shared",
  "proc-macro2",
@@ -169,9 +170,9 @@ dependencies = [
 
 [[package]]
 name = "argh_shared"
-version = "0.1.12"
+version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5693f39141bda5760ecc4111ab08da40565d1771038c4a0250f03457ec707531"
+checksum = "a464143cc82dedcdc3928737445362466b7674b5db4e2eb8e869846d6d84f4f6"
 dependencies = [
  "serde",
 ]
@@ -187,9 +188,9 @@ dependencies = [
 
 [[package]]
 name = "arrayref"
-version = "0.3.7"
+version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b4930d2cb77ce62f89ee5d5289b4ac049559b1c45539271f5ed4fdc7db34545"
+checksum = "76a2e8124351fda1ef8aaaa3bbd7ebbcb486bbcd4225aca0aa0d84bb2db8fecb"
 
 [[package]]
 name = "arrayvec"
@@ -335,7 +336,7 @@ dependencies = [
  "pddb",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "usb-cramium",
+ "usb-bao1x",
  "utralib 0.1.25",
  "ux-api",
  "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -343,6 +344,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-ticktimer",
  "xous-swapper",
+ "xous-usb-hid",
 ]
 
 [[package]]
@@ -389,9 +391,14 @@ dependencies = [
  "cramium-api",
  "cramium-hal",
  "critical-section",
+ "digest 0.10.7",
+ "ed25519-dalek",
  "linked_list_allocator",
  "riscv",
+ "sha2",
+ "simple-fatfs",
  "utralib 0.1.25",
+ "ux-api",
  "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-bio-bdma",
  "xous-riscv",
@@ -808,7 +815,7 @@ dependencies = [
  "once_cell",
  "strsim 0.10.0",
  "termcolor",
- "textwrap 0.16.0",
+ "textwrap 0.16.2",
 ]
 
 [[package]]
@@ -1920,7 +1927,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a12e6657c4c97ebab115a42dcee77225f7f482cdd841cf7088c657a42e9e00e7"
 dependencies = [
  "atty",
- "humantime 2.1.0",
+ "humantime 2.2.0",
  "log",
  "regex",
  "termcolor",
@@ -2652,9 +2659,9 @@ dependencies = [
 
 [[package]]
 name = "humantime"
-version = "2.1.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
+checksum = "9b112acc8b3adf4b107a8ec20977da0273a8c386765a3ec0229bd500a1443f9f"
 
 [[package]]
 name = "iana-time-zone"
@@ -3142,6 +3149,7 @@ dependencies = [
  "cramium-api",
  "cramium-hal",
  "crc 1.8.1",
+ "critical-section",
  "curve25519-dalek-loader",
  "digest 0.10.7",
  "ed25519-dalek",
@@ -3153,6 +3161,7 @@ dependencies = [
  "pio",
  "pio-proc",
  "rand_chacha 0.3.1",
+ "riscv",
  "sha2",
  "sha2-loader",
  "simple-fatfs",
@@ -4232,9 +4241,9 @@ dependencies = [
 
 [[package]]
 name = "protobuf"
-version = "3.3.0"
+version = "3.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b65f4a8ec18723a734e5dc09c173e0abf9690432da5340285d536edcb4dac190"
+checksum = "d65a1d4ddae7d8b5de68153b48f6aa3bba8cb002b243dbdbc55a5afbc98f99f4"
 dependencies = [
  "once_cell",
  "protobuf-support",
@@ -4243,9 +4252,9 @@ dependencies = [
 
 [[package]]
 name = "protobuf-codegen"
-version = "3.3.0"
+version = "3.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e85514a216b1c73111d9032e26cc7a5ecb1bb3d4d9539e91fb72a4395060f78"
+checksum = "5d3976825c0014bbd2f3b34f0001876604fe87e0c86cd8fa54251530f1544ace"
 dependencies = [
  "anyhow",
  "once_cell",
@@ -4258,12 +4267,12 @@ dependencies = [
 
 [[package]]
 name = "protobuf-parse"
-version = "3.3.0"
+version = "3.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77d6fbd6697c9e531873e81cec565a85e226b99a0f10e1acc079be057fe2fcba"
+checksum = "b4aeaa1f2460f1d348eeaeed86aea999ce98c1bded6f089ff8514c9d9dbdc973"
 dependencies = [
  "anyhow",
- "indexmap 1.9.3",
+ "indexmap 2.2.2",
  "log",
  "protobuf",
  "protobuf-support",
@@ -4274,9 +4283,9 @@ dependencies = [
 
 [[package]]
 name = "protobuf-support"
-version = "3.3.0"
+version = "3.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6872f4d4f4b98303239a2b5838f5bbbb77b01ffc892d627957f37a22d7cfe69c"
+checksum = "3e36c2f31e0a47f9280fb347ef5e461ffcd2c52dd520d8e216b52f93b0b0d7d6"
 dependencies = [
  "thiserror",
 ]
@@ -4779,6 +4788,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-fuzzy-search"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a157657054ffe556d8858504af8a672a054a6e0bd9e8ee531059100c0fa11bb2"
+
+[[package]]
 name = "rustc-std-workspace-alloc"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5014,9 +5029,9 @@ dependencies = [
 
 [[package]]
 name = "serde_repr"
-version = "0.1.18"
+version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b2e6b945e9d3df726b65d6ee24060aff8e3533d431f677a9695db04eff9dfdb"
+checksum = "175ee3e80ae9982737ca543e96133087cbd9a485eecc3bc4de9c1a37b47ea59c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5560,9 +5575,9 @@ dependencies = [
 
 [[package]]
 name = "textwrap"
-version = "0.16.0"
+version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "222a222a5bfe1bba4a77b45ec488a741b3cb8872e5e499451fd7d0129c9c7c3d"
+checksum = "c13547615a44dc9c452a8a534638acdf07120d4b6847c8178705da06306a3057"
 
 [[package]]
 name = "thiserror"
@@ -5990,10 +6005,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "usb-cramium"
+name = "usb-bao1x"
 version = "0.1.0"
 dependencies = [
  "cram-hal-service",
+ "cramium-api",
  "cramium-emu",
  "cramium-hal",
  "frunk_core",
@@ -6004,6 +6020,7 @@ dependencies = [
  "packed_struct",
  "rkyv 0.8.8",
  "usb-device",
+ "usbd-serial 0.1.1 (git+https://github.com/betrusted-io/usbd-serial.git?branch=v0.1.1-betrusted)",
  "utralib 0.1.25",
  "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
@@ -6017,7 +6034,7 @@ dependencies = [
 [[package]]
 name = "usb-device"
 version = "0.2.8"
-source = "git+https://github.com/betrusted-io/usb-device.git?branch=main#31de6a25950194783e49244743c9dd69fac0dfad"
+source = "git+https://github.com/betrusted-io/usb-device.git?branch=main#7ab6ba8120f3d7b6e0904a7ef33e27e192617fe9"
 dependencies = [
  "log",
 ]
@@ -6047,7 +6064,7 @@ dependencies = [
  "rkyv 0.8.8",
  "trng",
  "usb-device",
- "usbd-serial",
+ "usbd-serial 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "usbd_mass_storage 0.1.0",
  "usbd_scsi 0.1.1",
  "utralib 0.1.25",
@@ -6090,6 +6107,16 @@ name = "usbd-serial"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db75519b86287f12dcf0d171c7cf4ecc839149fe9f3b720ac4cfce52959e1dfe"
+dependencies = [
+ "embedded-hal 0.2.7",
+ "nb 0.1.3",
+ "usb-device",
+]
+
+[[package]]
+name = "usbd-serial"
+version = "0.1.1"
+source = "git+https://github.com/betrusted-io/usbd-serial.git?branch=v0.1.1-betrusted#c20edaf89d74466e06773f66110a38156c6eb4a7"
 dependencies = [
  "embedded-hal 0.2.7",
  "nb 0.1.3",
