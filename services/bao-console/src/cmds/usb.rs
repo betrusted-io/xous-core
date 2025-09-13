@@ -35,6 +35,22 @@ impl<'a> ShellCmdApi<'a> for Usb {
                         Err(_e) => write!(ret, "Can't send: are we connected to a host?").unwrap(),
                     }
                 }
+                "console" => {
+                    // this will enable input injection mode
+                    self.usb_dev.serial_console_input_injection();
+                    write!(ret, "USB console connected.").ok();
+                }
+                "noconsole" => {
+                    // this will disable any hooks (including the console input hook)
+                    self.usb_dev.serial_clear_input_hooks();
+                    write!(ret, "USB console disconnected.").ok();
+                }
+                "sersend" => {
+                    let mut val = String::new();
+                    join_tokens(&mut val, &mut tokens);
+                    let sent = self.usb_dev.serial_send(val.as_bytes()).unwrap_or(0);
+                    write!(ret, "Sent {} bytes", sent).ok();
+                }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
                 }
