@@ -961,9 +961,9 @@ pub fn early_init() -> u32 {
             a_prog.setup_default_config(&mut sm_a);
             sm_a.config_set_out_pins(16, 8);
             sm_a.config_set_clkdiv(50_000.0f32); // set to 1ms per cycle
-            iox.set_pio_bit_from_port_and_pin(cramium_hal::iox::IoxPort::PC, 2).unwrap();
-            iox.set_pio_bit_from_port_and_pin(cramium_hal::iox::IoxPort::PC, 1).unwrap();
-            let pin = iox.set_pio_bit_from_port_and_pin(cramium_hal::iox::IoxPort::PC, 0).unwrap();
+            iox.set_bio_bit_from_port_and_pin(cramium_hal::iox::IoxPort::PC, 2).unwrap();
+            iox.set_bio_bit_from_port_and_pin(cramium_hal::iox::IoxPort::PC, 1).unwrap();
+            let pin = iox.set_bio_bit_from_port_and_pin(cramium_hal::iox::IoxPort::PC, 0).unwrap();
             let pin = 0;
             sm_a.sm_set_pindirs_with_mask(7 << 16, 7 << 16);
             sm_a.sm_set_pins_with_mask(7 << 16, 7 << 16);
