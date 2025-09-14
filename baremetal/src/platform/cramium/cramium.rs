@@ -36,7 +36,7 @@ pub fn early_init() {
     // Define the .data region - bootstrap baremetal using these hard-coded parameters.
     // Define the .data region - bootstrap baremetal using these hard-coded parameters.
     const DATA_ORIGIN: usize = 0x61000000;
-    const DATA_INIT: [(usize, u32); 4] = [(0x0, 0x2), (0x53c, 0x1), (0x541, 0x1), (0x546, 0x1)];
+    const DATA_INIT: [(usize, u32); 5] = [(0x0, 0x2), (0x558, 0x1), (0x55b, 0x1), (0x55e, 0x1), (0x563, 0x1)];
 
     // Clear .data, .bss, .stack, .heap regions & setup .data values
     unsafe {

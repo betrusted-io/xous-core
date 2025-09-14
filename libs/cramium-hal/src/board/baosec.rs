@@ -321,6 +321,21 @@ pub fn setup_trng_power_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     (port, pin)
 }
 
+pub fn setup_trng_input_pin<T: IoSetup + IoGpio>(iox: &T) -> u8 {
+    let (port, pin) = (IoxPort::PC, 15);
+    iox.setup_pin(
+        port,
+        pin,
+        Some(IoxDir::Input),
+        Some(IoxFunction::Gpio),
+        Some(IoxEnable::Enable), // enable the schmitt trigger on this pad
+        Some(IoxEnable::Disable),
+        None,
+        Some(IoxDriveStrength::Drive2mA),
+    );
+    iox.set_bio_bit_from_port_and_pin(port, pin).expect("Couldn't allocate TRNG input pin")
+}
+
 // sentinel used by test infrastructure to assist with parsing
 // The format of any test infrastructure output to recover is as follows:
 // _|TT|_<ident>,<data separated by commas>,_|TE|_

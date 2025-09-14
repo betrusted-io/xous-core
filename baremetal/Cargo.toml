@@ -23,6 +23,9 @@ ed25519-dalek = { version = "=2.1.0", optional = true, default-features = false,
     "rand_core",
     "digest",
 ] }
+base64 = { version = "0.22.1", optional = true, default-features = false, features = [
+    "alloc",
+] }
 
 [features]
 artybio = [
@@ -58,11 +61,17 @@ nto-usb = [
     "sha2",
     "digest",
     "ed25519-dalek",
-    "cramium-hal/debug-print-usb",
+    # "cramium-hal/debug-print-usb",
     # "cramium-hal/verbose-debug",
 ]
 nto-buttons = []
+nto-trng = [
+    "nto-usb",
+    "base64",
+    "xous-bio-bdma/baremetal",
+    "xous-bio-bdma/cramium-soc",
+]
 verbose-debug = []
 
 verilator-only = []
-default = ["nto-usb"]
+default = ["nto-usb", "nto-trng"]

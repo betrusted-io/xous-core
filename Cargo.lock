@@ -388,6 +388,7 @@ dependencies = [
 name = "baremetal"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "cramium-api",
  "cramium-hal",
  "critical-section",

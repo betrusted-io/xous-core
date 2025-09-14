@@ -25,6 +25,7 @@ baremetal = []
 std = []
 arty = []
 bio-mul = []
+debug-print = []
 
 tests = []
 default = ["tests", "cramium-soc"]
