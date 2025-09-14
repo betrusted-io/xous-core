@@ -1,7 +1,12 @@
 use String;
+#[cfg(feature = "board-baosec")]
 use cram_hal_service::I2c;
 use cramium_api::I2cApi;
 use cramium_api::I2cResult;
+#[cfg(feature = "board-baosec")]
+use cramium_api::*;
+#[cfg(feature = "hosted-baosec")]
+use cramium_emu::i2c::I2c;
 
 use crate::{CommonEnv, ShellCmdApi};
 
