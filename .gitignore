@@ -28,6 +28,8 @@ buildpush.ps1
 # notes to myself
 /*.txt
 tools/test-backup-analyze.sh
+todo.md
+notes/
 
 # SSH id file for convenience
 /id_pi
