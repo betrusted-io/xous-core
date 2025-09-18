@@ -794,7 +794,6 @@ impl Repl {
                 }
 
                 let mut trng = cramium_hal::sce::trng::Trng::new(utralib::utra::trng::HW_TRNG_BASE);
-                // local TRNG generator test
                 if TRNG_INIT.swap(true, core::sync::atomic::Ordering::SeqCst) == false {
                     crate::println!("setting up TRNG");
                     trng.setup_raw_generation(256);
@@ -815,6 +814,7 @@ impl Repl {
 
                 loop {
                     let mut buf = [0u32; BUFLEN / size_of::<u32>()];
+                    #[cfg(not(feature = "trng-debug"))]
                     for d in buf.iter_mut() {
                         loop {
                             if let Some(word) = trng.get_u32() {
@@ -823,6 +823,19 @@ impl Repl {
                             }
                         }
                     }
+                    #[cfg(feature = "trng-debug")]
+                    crate::trng_ro(
+                        0x0000001F,
+                        0x0000FFFF,
+                        0x00000002,
+                        crate::TrngOpt::RngB,
+                        0xFFFFFFFF,
+                        0xFFFFFFFF,
+                        0xFFFFFFFF,
+                        0xFFFFFFFF,
+                        &mut buf,
+                        true,
+                    );
                     let buf_u8 = as_u8_slice(&buf);
                     let b64 = encode_base64(buf_u8);
                     unsafe {

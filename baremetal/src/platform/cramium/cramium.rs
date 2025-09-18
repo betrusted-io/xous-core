@@ -847,3 +847,154 @@ pub fn scan_keyboard<T: IoSetup + IoGpio>(
     }
     key_presses
 }
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
+#[cfg(feature = "trng-debug")]
+#[repr(u32)]
+pub enum TrngOpt {
+    RngA = 0x0,
+    RngB = 0x1_0000,
+}
+
+#[cfg(feature = "trng-debug")]
+fn trng_stop(trng: &mut CSR<u32>, sce: &mut CSR<u32>, opt: TrngOpt) {
+    trng.wo(utra::trng::SFR_AR_GEN, 0xa5); // trigger stop
+    match opt {
+        TrngOpt::RngB => {
+            sce.wo(utra::sce_glbsfr::SFR_FFEN, !(1 << 5)); // disable fifo
+        }
+        TrngOpt::RngA => {
+            sce.wo(utra::sce_glbsfr::SFR_FFEN, !(1 << 4)); // disable fifo
+        }
+    }
+}
+
+#[cfg(feature = "trng-debug")]
+fn trng_raw_buf_ready(trng: &CSR<u32>) -> bool { trng.r(utra::trng::SFR_SR) & (1 << 28) != 0 }
+
+#[allow(dead_code)]
+#[cfg(feature = "trng-debug")]
+pub fn trng_ro(
+    crsrc: u32,
+    crana: u32,
+    post_proc: u32,
+    opt: TrngOpt,
+    chain0_l: u32,
+    chain0_h: u32,
+    chain1_l: u32,
+    chain1_h: u32,
+    buf: &mut [u32],
+    do_raw: bool,
+) {
+    let mut trng = CSR::new(utralib::utra::trng::HW_TRNG_BASE as *mut u32);
+    let mut sce = CSR::new(utralib::utra::sce_glbsfr::HW_SCE_GLBSFR_BASE as *mut u32);
+    let rngb_mem = unsafe {
+        core::slice::from_raw_parts(
+            utralib::HW_SEG_RNGB_MEM as *const u32,
+            utralib::HW_SEG_RNGB_MEM_LEN / size_of::<u32>(),
+        )
+    };
+    let rnga_mem = unsafe {
+        core::slice::from_raw_parts(
+            utralib::HW_SEG_RNGA_MEM as *const u32,
+            utralib::HW_SEG_RNGA_MEM_LEN / size_of::<u32>(),
+        )
+    };
+
+    match opt {
+        TrngOpt::RngB => sce.wo(utra::sce_glbsfr::SFR_FFEN, 1 << 5),
+        TrngOpt::RngA => sce.wo(utra::sce_glbsfr::SFR_FFEN, 1 << 4),
+    }
+
+    trng.wo(utra::trng::SFR_CRSRC, crsrc);
+    trng.wo(utra::trng::SFR_CRANA, crana);
+    trng.wo(utra::trng::SFR_PP, post_proc);
+    trng.wo(utra::trng::SFR_OPT, opt as u32 | 0x100);
+    // contex.trng->opt = 0x10040;   // use rngB , gen 0x40*4*4=1024 bytes 为啥现在是 0x100 *4 ???
+    trng.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, chain0_l);
+    trng.wo(utra::trng::SFR_CHAIN_RNGCHAINEN1, chain0_h);
+    trng.wo(utra::trng::SFR_CHAIN_RNGCHAINEN2, chain1_l);
+    trng.wo(utra::trng::SFR_CHAIN_RNGCHAINEN3, chain1_h);
+
+    /*
+    crate::println!("crsrc: {:08x}", trng.r(utra::trng::SFR_CRSRC));
+    crate::println!("crana: {:08x}", trng.r(utra::trng::SFR_CRANA));
+    crate::println!("postproc: {:08x}", trng.r(utra::trng::SFR_PP));
+    crate::println!("opt: {:08x}", trng.r(utra::trng::SFR_OPT));
+    crate::println!("chain0_l: {:08x}", trng.r(utra::trng::SFR_CHAIN_RNGCHAINEN0));
+    crate::println!("chain0_h: {:08x}", trng.r(utra::trng::SFR_CHAIN_RNGCHAINEN1));
+    crate::println!("chain1_l: {:08x}", trng.r(utra::trng::SFR_CHAIN_RNGCHAINEN2));
+    crate::println!("chain1_h: {:08x}", trng.r(utra::trng::SFR_CHAIN_RNGCHAINEN3));
+
+    crate::println!("rng start");
+    */
+    if !do_raw {
+        for (genloop, chunk) in buf.chunks_mut(256).enumerate() {
+            match opt {
+                TrngOpt::RngB => sce.wo(utra::sce_glbsfr::SFR_FFCLR, 0x0000FF05),
+                TrngOpt::RngA => sce.wo(utra::sce_glbsfr::SFR_FFCLR, 0x0000FF04),
+            }
+
+            if genloop != 0 {
+                /*
+                crate::println!(
+                    "GEN_LOOP = {},HLTHTEST_ERRCNT (After gen)= {}",
+                    genloop - 1,
+                    ((trng.r(utra::trng::SFR_SR) >> 16) & 0x00FF)
+                ); //上一次结果打印
+                */
+            }
+            /*
+            crate::println!(
+                "GEN_LOOP = {} ,HLTHTEST_ERRCNT (Before gen)= {}",
+                genloop,
+                ((trng.r(utra::trng::SFR_SR) >> 16) & 0x00FF)
+            ); //新的起始打印
+            */
+            trng.wo(utra::trng::SFR_AR_GEN, 0x5a); // trigger start
+
+            match opt {
+                TrngOpt::RngB => {
+                    while (sce.r(utra::sce_glbsfr::SFR_FFCNT_SR_FF5) >> 4) & 0xFFF < chunk.len() as u32 {
+                        // wait
+                    }
+                    chunk.copy_from_slice(&rngb_mem[..chunk.len()]);
+                    /*
+                    crate::println!(
+                        "GEN_LOOP = {} ,HLTHTEST_ERRCNT (After gen)= {}\r\n",
+                        genloop,
+                        ((trng.r(utra::trng::SFR_SR) >> 16) & 0x00FF)
+                    );
+                    */
+                }
+                TrngOpt::RngA => {
+                    while (sce.r(utra::sce_glbsfr::SFR_FFCNT_SR_FF4) >> 4) & 0xFFF < chunk.len() as u32 {
+                        // wait
+                    }
+                    chunk.copy_from_slice(&rnga_mem[..chunk.len()]);
+                    /*
+                    crate::println!(
+                        "GEN_LOOP = {} ,HLTHTEST_ERRCNT (After gen)= {}\r\n",
+                        genloop,
+                        ((trng.r(utra::trng::SFR_SR) >> 16) & 0x00FF)
+                    );
+                    */
+                }
+            }
+        }
+        // crate::println!("HLTHTEST_ERRCNT (After gen)= {}\r\n", ((trng.r(utra::trng::SFR_SR) >> 16) &
+        // 0x00FF));
+        trng_stop(&mut trng, &mut sce, opt);
+    } else {
+        // make sure the trng is in the stopped state
+        trng_stop(&mut trng, &mut sce, opt);
+        // crate::println!("raw data");
+
+        for d in buf.iter_mut() {
+            while !trng_raw_buf_ready(&trng) {} // wait for buffer to fill
+            *d = trng.r(utra::trng::SFR_BUF);
+        }
+    }
+    // crate::println!("rng stop");
+}
