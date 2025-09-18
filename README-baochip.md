@@ -57,9 +57,10 @@ variant of the `daric` chip. This is the relevant legal organization in terms
 of purchasing chips and systems related to this code base; thus from a user
 perspective this is the brand used in Xous.
 
-`bao1x`: The short name of the Xous target that targets the `Baochip1x` SoC.
-It is also used as a target for "pure SoC" simulations; i.e., verilog RTL
-simulations where the peripherals are entirely virtual test benches.
+`bao1x`: The short name of the Xous target that targets the `Baochip1x` SoC
+(full part number: BAO1X2S4F-WA). It is also used as a target for "pure SoC"
+simulations; i.e., verilog RTL simulations where the peripherals are entirely
+virtual test benches.
 
 `baosec`: Internal code name of a board that contains the `Baochip1x` with
 a USB security token form factor. This is likewise the name of the xtask target
