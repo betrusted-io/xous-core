@@ -29,10 +29,10 @@
 /// a `TextResponseValid` message which pumps the work queue.
 mod api;
 use api::*;
-#[cfg(feature = "bao1x")]
-use bao1x_hal_service::trng::Trng;
 #[cfg(feature = "hosted-baosec")]
 use bao1x_emu::trng::Trng;
+#[cfg(feature = "bao1x")]
+use bao1x_hal_service::trng::Trng;
 use blitstr2::GlyphStyle;
 #[cfg(feature = "ditherpunk")]
 use gam::Bitmap;

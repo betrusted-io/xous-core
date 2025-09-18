@@ -11,10 +11,10 @@ use std::cmp::max;
 #[cfg(feature = "ditherpunk")]
 use std::convert::TryInto;
 
-#[cfg(feature = "bao1x")]
-use bao1x_hal_service::trng::Trng;
 #[cfg(feature = "hosted-baosec")]
 use bao1x_emu::trng::Trng;
+#[cfg(feature = "bao1x")]
+use bao1x_hal_service::trng::Trng;
 use bit_field::BitField;
 #[cfg(not(any(feature = "hosted-baosec", feature = "board-baosec")))]
 use gam::*;

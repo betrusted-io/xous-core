@@ -3,10 +3,10 @@ use core::mem::size_of;
 use std::convert::TryInto;
 
 use aes_gcm_siv::Nonce;
-#[cfg(all(feature = "bao1x-hal", not(feature = "hosted-baosec")))]
-use bao1x_hal_service::trng::Trng;
 #[cfg(feature = "hosted-baosec")]
 use bao1x_emu::trng::Trng;
+#[cfg(all(feature = "bao1x-hal", not(feature = "hosted-baosec")))]
+use bao1x_hal_service::trng::Trng;
 use rand_core::RngCore;
 #[cfg(all(not(feature = "bao1x-hal"), not(feature = "hosted-baosec")))]
 use trng::Trng;

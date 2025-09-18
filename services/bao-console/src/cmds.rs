@@ -2,10 +2,10 @@ use core::fmt::Write;
 use std::collections::HashMap;
 
 use String;
-#[cfg(feature = "bao1x")]
-use bao1x_hal_service::trng;
 #[cfg(feature = "hosted-baosec")]
 use bao1x_emu::trng;
+#[cfg(feature = "bao1x")]
+use bao1x_hal_service::trng;
 use xous::MessageEnvelope;
 
 /////////////////////////// Common items to all commands

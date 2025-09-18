@@ -47,8 +47,7 @@ impl IframRange {
         // This constant is in fact hard-coded because we are trying to break a circular
         // dependency on the bao1x-hal-service crate and make this library "neutral" so it
         // can be included in any context.
-        let conn =
-            xns.request_connection("_bao1x-SoC HAL_").expect("Couldn't connect to bao1x HAL server");
+        let conn = xns.request_connection("_bao1x-SoC HAL_").expect("Couldn't connect to bao1x HAL server");
         let bank_code = match bank {
             Some(IframBank::Bank0) => 0,
             Some(IframBank::Bank1) => 1,

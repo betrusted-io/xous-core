@@ -39,8 +39,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                 }
                 #[cfg(feature = "bmp180")]
                 "temp" => {
-                    use bao1x_hal_service::I2c;
                     use bao1x_hal::bmp180::Bmp180;
+                    use bao1x_hal_service::I2c;
                     let mut i2c = I2c::new();
 
                     match Bmp180::new(&mut i2c) {
@@ -58,8 +58,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }
                 }
                 "shutdown" => {
-                    use bao1x_hal_service::I2c;
                     use bao1x_api::*;
+                    use bao1x_hal_service::I2c;
                     let iox = bao1x_api::IoxHal::new();
                     let mut i2c = I2c::new();
                     iox.setup_pin(
