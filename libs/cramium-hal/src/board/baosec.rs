@@ -336,6 +336,21 @@ pub fn setup_trng_input_pin<T: IoSetup + IoGpio>(iox: &T) -> u8 {
     iox.set_bio_bit_from_port_and_pin(port, pin).expect("Couldn't allocate TRNG input pin")
 }
 
+pub fn setup_keep_on_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    let (port, pin) = (IoxPort::PF, 0);
+    iox.setup_pin(
+        port,
+        pin,
+        Some(IoxDir::Output),
+        Some(IoxFunction::Gpio),
+        None,
+        Some(IoxEnable::Disable),
+        None,
+        Some(IoxDriveStrength::Drive2mA),
+    );
+    (port, pin)
+}
+
 // sentinel used by test infrastructure to assist with parsing
 // The format of any test infrastructure output to recover is as follows:
 // _|TT|_<ident>,<data separated by commas>,_|TE|_

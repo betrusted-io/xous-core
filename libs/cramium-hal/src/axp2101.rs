@@ -329,6 +329,10 @@ impl Axp2101 {
         }
     }
 
+    pub fn powerdown(&self, i2c: &mut dyn I2cApi) -> Result<(), xous::Error> {
+        i2c.i2c_write(AXP2101_DEV, REG_PMUCOMMON, &[0b00_11_0_1_01]).map(|_| ())
+    }
+
     pub fn debug(&mut self, i2c: &mut dyn I2cApi) {
         /*
         let mut buf = [0u8, 0u8];

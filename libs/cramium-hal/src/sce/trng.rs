@@ -61,10 +61,10 @@ bitflags! {
 
 bitflags! {
     pub struct Status: u32 {
-        const GEN_COUNT_MASK          = 0b0_0__0000_0000__1111_1111_1111_1111;
-        const HEALTHTEST_ERRCNT_MASK  = 0b0_0__1111_1111__0000_0000_0000_0000;
-        const BUFREADY                = 0b0_1__0000_0000__0000_0000_0000_0000;
-        const DRNG_REESED_REQ         = 0b1_0__0000_0000__0000_0000_0000_0000;
+        const GEN_COUNT_MASK          = 0b0_0__0000_0000_0000__1111_1111_1111_1111;
+        const HEALTHTEST_ERRCNT_MASK  = 0b0_0__1111_1111_1111__0000_0000_0000_0000;
+        const BUFREADY                = 0b0_1__0000_0000_0000__0000_0000_0000_0000;
+        const DRNG_REESED_REQ         = 0b1_0__0000_0000_0000__0000_0000_0000_0000;
     }
 }
 
@@ -85,7 +85,7 @@ const RAW_ENTRIES: usize = 16;
 /// making it more difficult for any adversary to reason about the current
 /// state of the TRNG given the QC samples.
 #[allow(dead_code)]
-const RAW_GUARDBAND: usize = 32;
+const RAW_GUARDBAND: usize = 2;
 
 pub struct Trng {
     pub csr: CSR<u32>,
@@ -118,85 +118,27 @@ impl Trng {
     pub fn setup_raw_generation(&mut self, count: u16) {
         self._count = count;
         self.mode = Mode::Raw;
-        // turn on all the entropy sources
+
         self.csr.wo(
             utra::trng::SFR_CRSRC,
-            (EntropySource::LOW_FREQ_EN
-                | EntropySource::HIGH_FREQ_EN
-                | EntropySource::LOW_FREQ_SRC_MASK
-                | EntropySource::HIGH_FREQ_SRC_MASK)
+            (EntropySource::LOW_FREQ_EN | EntropySource::HIGH_FREQ_EN | EntropySource::LOW_FREQ_SRC_MASK)
                 .bits(),
         );
         // turn on all the analog generators, and declare their outputs valid
         self.csr.wo(utra::trng::SFR_CRANA, (Analog::ENABLE_MASK | Analog::VALID_MASK).bits());
-        // Enable the rng chains. This must be set correctly: get this wrong, and entropy drops from something
-        // like 0.5-0.8 bits/bit to ~0.01 bits/bit.
-        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, 0xfffe);
-        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN1, 0x1ffe);
 
-        self.csr.wo(
-            utra::trng::SFR_PP,
-            (Config::GEN_EN | Config::GEN_INTERVAL_4 | Config::RESEED_INTERVAL_1).bits()
-                | Config::HEALTHEST_EN.bits(),
-        );
-        self.csr.wo(utra::trng::SFR_OPT, 0);
+        self.csr.wo(utra::trng::SFR_PP, (Config::PARITY_FILTER_EN).bits());
+
+        self.csr.wo(utra::trng::SFR_OPT, 0x1_0000); // TrngB
+
+        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, 0xFFFFFFFF);
+        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN1, 0xFFFFFFFF);
+        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN2, 0xFFFFFFFF);
+        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN3, 0xFFFFFFFF);
     }
 
     #[cfg(feature = "verilator-only")]
     pub fn setup_raw_generation(&mut self, _count: u16) { self.mode = Mode::Raw; }
-
-    // placeholder code taken out of 'testuit_nto' - doesn't work
-    /*
-    pub fn setup_raw_generation(&mut self, _count: u16) {
-        self.csr.wo(utra::trng::SFR_CRSRC, 0xFFFF);
-        self.csr.wo(utra::trng::SFR_CRANA, 0xFFFF);
-        self.csr.wo(utra::trng::SFR_OPT, 0x20);
-
-        /*
-           assign {    cr_reseed_sel,          // 16
-                       cr_reseed_intval[1:0],  // 14
-                       cr_gen_intval[1:0],     // 12
-                       cr_healthtest_len[5:0], // 6
-                       cr_postproc_opt[1:0],   // 4
-                       cr_drng_en,             // 3
-                       cr_hlthtest_en,         // 2
-                       cr_pfilter_en,          // 1
-                       cr_gen_en               // 0
-                   } = cr_postproc;
-        */
-        self.csr.wo(utra::trng::SFR_PP, 0x1 << 14 | 0x2 << 12 | 0x20 << 6 | 0x1);
-        /*
-        contex.trng->postproc.bits.cr_reseed_intval = 0x01;
-        contex.trng->postproc.bits.cr_gen_intval = 0x02;
-        contex.trng->postproc.bits.cr_healthtest_len = 0x20;
-        contex.trng->postproc.bits.cr_postproc_opt = 0x00;
-        contex.trng->postproc.bits.cr_drng_en = 0x00;
-        contex.trng->postproc.bits.cr_hlthtest_en = 0x00;
-        contex.trng->postproc.bits.cr_pfilter_en = 0x00;
-        contex.trng->postproc.bits.cr_gen_en = 0x01;
-        */
-        // contex.trng->chain0 = 0xFFFFFFFE; // chan0的数值中1的个数为奇数时候，随机性更强
-        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, 0xFFFFFFFE);
-        // contex.trng->chain1 = 0xFFFFFFFC; // chain1 小于 chain0 会更随机
-        // 当chain0只有一个1的时候，chain1对应的位也为1 会采样会一个高频时钟 ，暂未成功
-        self.csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, 0xFFFFFFFC);
-
-        // self.start();
-
-        let _ = self.csr.r(utra::trng::SFR_SR);
-        /*
-        crate::println!("sfr_crsrc = 0x{:x}", self.csr.r(utra::trng::SFR_CRSRC));
-        crate::println!("sfr_crana = 0x{:x}", self.csr.r(utra::trng::SFR_CRANA));
-        crate::println!("sfr_postproc = 0x{:x}", self.csr.r(utra::trng::SFR_PP));
-        crate::println!("sfr_opt = 0x{:x}", self.csr.r(utra::trng::SFR_OPT));
-        */
-    }
-
-    pub fn get_raw(&mut self) -> u32 {
-        // while self.csr.r(utra::trng::SFR_SR) & (1 << 28) == 0 {}
-        self.csr.r(utra::trng::SFR_BUF)
-    }
-    */
 
     /// Function used primarily for re-entrant testing. Forces the mode to a given
     /// mode. Only safe if the TRNG is actually already in that mode!
@@ -212,64 +154,15 @@ impl Trng {
         }
 
         // If empty, refill the buffer.
-        while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
-
-        #[cfg(feature = "compress-entropy")]
-        let mut sample = self.csr.r(utra::trng::SFR_BUF);
-        #[cfg(feature = "compress-entropy")]
-        let mut i: u32 = 0;
         for d in self.raw.iter_mut() {
-            // Perform entropy compression. The TRNG itself is a sparse-1 oracle, which will
-            // occasionally emit a 1 in a stream of 0's. The 1 itself has some periodicity
-            // to it, but at a period unrelated to the system clock. The algorithm is basically
-            // as follows:
-            //   - `rng_var` is a counter [0-255] that spins according to the rate of this loop
-            //   - inspect the TRNG bitstream, bit-by-bit, from LSB to MSB.
-            //      - Every inspection, increment `rng_var`
-            //      - If the inspection result is 1, store `rng_var` as a compressed entropy bit
-            //      - If 0, keep searching; do not store, but also increment all the loop variables
-            // The result is a stream of at least uniformly distributed numbers. The resulting
-            // stream does have some long-term periodic behaviors in it, but it is also not entirely
-            // predictable. Basically, the randomness seems to fluctuate in and out based on how
-            // much noise is actually being coupled into the TRNG circuit.
-            #[cfg(feature = "compress-entropy")]
-            {
-                let mut output_buf = [0u8; 4];
-                for b in output_buf.iter_mut() {
-                    loop {
-                        if i > 31 {
-                            i = 0;
-                            while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
-                            sample = self.csr.r(utra::trng::SFR_BUF);
-                        }
-                        if ((sample >> i) & 1) != 0 {
-                            *b = self.rng_var;
-                            // update loop vars *after* test and assignment
-                            i += 1;
-                            self.rng_var = self.rng_var.wrapping_add(1);
-                            // break so we're assigning to the next byte
-                            break;
-                        } else {
-                            // update all loop vars
-                            i += 1;
-                            self.rng_var = self.rng_var.wrapping_add(1);
-                        }
-                    }
-                }
-                *d = Some(u32::from_le_bytes(output_buf));
-            }
-
             // With the adjusted settings for the TRNG, the output is not perfect, but
             // substantially better than before. Previously it was maybe one bit per
             // 64 bits in entropy, now it looks like better than 0.5. Still more analysis
             // needs to be done, there are some subtle biases in the generator but they
             // are small enough we can pass the numbers directly into the CSPRNG for
             // mixing without compression.
-            #[cfg(not(feature = "compress-entropy"))]
-            {
-                while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
-                *d = Some(self.csr.r(utra::trng::SFR_BUF));
-            }
+            while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
+            *d = Some(self.csr.r(utra::trng::SFR_BUF));
         }
 
         // Run the TRNG state forward for some number of cycles to make it harder to draw
