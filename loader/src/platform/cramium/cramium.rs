@@ -67,7 +67,7 @@ static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::Loc
 // Define the .data region - bootstrap baremetal using these hard-coded parameters.
 const DATA_ORIGIN: usize = 0x61000000;
 const DATA_SIZE_BYTES: usize = 0x6000;
-const DATA_INIT: [(usize, u32); 3] = [(0x0, 0x2), (0x53c, 0x1), (0x541, 0x1)];
+const DATA_INIT: [(usize, u32); 3] = [(0x0, 0x2), (0x558, 0x1), (0x55d, 0x1)];
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
@@ -262,6 +262,24 @@ pub fn early_init() -> u32 {
     //  UART_RX_B[2] = PB14  console
     #[allow(unused_mut)] // some configs require mut
     let mut iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+
+    // setup power to "shut down" - keyboard press should be what's keeping us on at this stage
+    let (port, pin) = cramium_hal::board::setup_keep_on_pin(&iox);
+    iox.set_gpio_pin_value(port, pin, IoxValue::Low);
+    /*
+    // allow for shutdown to process
+    iox.setup_pin(
+        IoxPort::PF,
+        6,
+        Some(IoxDir::Output),
+        Some(IoxFunction::Gpio),
+        None,
+        Some(IoxEnable::Disable),
+        None,
+        Some(IoxDriveStrength::Drive8mA),
+    );
+    iox.set_gpio_pin_value(IoxPort::PF, 6, IoxValue::Low);
+    */
     iox.set_alternate_function(IoxPort::PB, 13, IoxFunction::AF1);
     iox.set_alternate_function(IoxPort::PB, 14, IoxFunction::AF1);
     // rx as input, with pull-up

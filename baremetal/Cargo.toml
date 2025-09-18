@@ -71,6 +71,7 @@ nto-trng = [
     "xous-bio-bdma/baremetal",
     "xous-bio-bdma/cramium-soc",
 ]
+trng-debug = []
 verbose-debug = []
 
 verilator-only = []
