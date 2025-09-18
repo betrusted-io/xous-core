@@ -249,12 +249,12 @@ impl Typesetter {
         let mut ellipsis = style_glyph('…', base_style);
         ellipsis.kern = 0;
 
-        #[cfg(not(feature = "cramium-soc"))]
+        #[cfg(not(feature = "bao1x"))]
         let mut large_space = style_glyph(' ', &GlyphStyle::Cjk);
-        #[cfg(feature = "cramium-soc")]
+        #[cfg(feature = "bao1x")]
         let mut large_space = style_glyph(' ', &GlyphStyle::Tall);
 
-        if cfg!(feature = "cramium-soc") {
+        if cfg!(feature = "bao1x") {
             large_space.wide = glyph_to_height_hint(GlyphStyle::Tall) as u8;
         } else {
             large_space.wide = glyph_to_height_hint(GlyphStyle::Cjk) as u8;

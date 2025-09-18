@@ -26,7 +26,7 @@ pub type Block8 = GenericArray<Block, U8>;
 
 // vex patches
 #[cfg(all(
-    all(target_arch = "riscv32", not(feature = "cramium-soc"), not(feature = "vexii-test")),
+    all(target_arch = "riscv32", not(feature = "bao1x"), not(feature = "vexii-test")),
     any(feature = "precursor", feature = "renode"),
 ))]
 mod vex;
@@ -35,31 +35,31 @@ mod vex;
 // so this library has to fall back on the legacy method of determining which build target
 // is being specified.
 #[cfg(not(any(
-    all(target_arch = "riscv32", feature = "cramium-soc"),
+    all(target_arch = "riscv32", feature = "bao1x"),
     feature = "vexii-test",
     feature = "precursor",
     feature = "renode"
 )))]
 pub use soft::Aes128Soft as Aes128;
 #[cfg(not(any(
-    all(target_arch = "riscv32", feature = "cramium-soc"),
+    all(target_arch = "riscv32", feature = "bao1x"),
     feature = "vexii-test",
     feature = "precursor",
     feature = "renode"
 )))]
 pub use soft::Aes256Soft as Aes256;
 #[cfg(all(
-    all(target_arch = "riscv32", not(feature = "cramium-soc"), not(feature = "vexii-test")),
+    all(target_arch = "riscv32", not(feature = "bao1x"), not(feature = "vexii-test")),
     any(feature = "precursor", feature = "renode"),
 ))]
 pub use vex::{Aes128, Aes256};
 
-#[cfg(any(feature = "vexii-test", feature = "cramium-soc"))]
+#[cfg(any(feature = "vexii-test", feature = "bao1x"))]
 mod zkn;
-#[cfg(any(feature = "vexii-test", feature = "cramium-soc"))]
+#[cfg(any(feature = "vexii-test", feature = "bao1x"))]
 // pub use soft::Aes128Soft as Aes128;
 pub use zkn::Aes128;
-#[cfg(any(feature = "vexii-test", feature = "cramium-soc"))]
+#[cfg(any(feature = "vexii-test", feature = "bao1x"))]
 pub use zkn::Aes256;
 
 /// Size of an AES block (128-bits; 16-bytes)

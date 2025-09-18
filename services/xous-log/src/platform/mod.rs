@@ -25,11 +25,11 @@ pub use atsama5d2::debug;
 #[cfg(feature = "atsama5d27")]
 pub use atsama5d2::implementation;
 
-#[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
+#[cfg(any(feature = "bao1x"))]
 #[macro_use]
-pub mod cramium;
+pub mod bao1x;
 
-#[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
-pub use cramium::debug;
-#[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
-pub use cramium::implementation;
+#[cfg(any(feature = "bao1x"))]
+pub use bao1x::debug;
+#[cfg(any(feature = "bao1x"))]
+pub use bao1x::implementation;

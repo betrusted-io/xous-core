@@ -164,7 +164,7 @@ software 202us/block enc+dec aes256 (500 iters, 8192 len)
 hardware 60us/block enc+dec aes256 (500 iters, 8192 len) [initial]
 hardware 25.9us/block enc+dec aes256 (500 iters, 8192 len) [optimized]
 
-with vex NTO CPU (400MHz)
+with vex bao1x CPU (400MHz)
 hardware 4.65µs/block enc+dec AES256
 software 45.79µs/block enc+dec AES256
 
@@ -173,7 +173,7 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
     let mut dataset_ref: [u8; TEST_MAX_LEN] = [0; TEST_MAX_LEN];
     let xns = xous_names::XousNames::new().unwrap();
-    let trng = cram_hal_service::trng::Trng::new(&xns).unwrap();
+    let trng = bao1x_hal_service::trng::Trng::new(&xns).unwrap();
     let callback_conn = xns.request_connection_blocking(crate::shell::SERVER_NAME_SHELLCHAT).unwrap();
 
     // fill a random array with words
@@ -383,9 +383,9 @@ impl<'a> ShellCmdApi<'a> for Aes {
                     .unwrap();
                 log::info!(
                     "{}BENCH,AES,PASS,{}us/block,{}",
-                    cramium_hal::board::BOOKEND_START,
+                    bao1x_hal::board::BOOKEND_START,
                     elapsed * 1000.0,
-                    cramium_hal::board::BOOKEND_END
+                    bao1x_hal::board::BOOKEND_END
                 );
             } else {
                 // pass was 0, we failed
@@ -393,9 +393,9 @@ impl<'a> ShellCmdApi<'a> for Aes {
                     .unwrap();
                 log::info!(
                     "{}BENCH,AES,FAIL,{}us/block,{}",
-                    cramium_hal::board::BOOKEND_START,
+                    bao1x_hal::board::BOOKEND_START,
                     elapsed * 1000.0,
-                    cramium_hal::board::BOOKEND_END
+                    bao1x_hal::board::BOOKEND_END
                 );
             }
         });

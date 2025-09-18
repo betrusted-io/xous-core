@@ -6,7 +6,7 @@ use crate::platform;
 // Note: inline constants are not yet stable in Rust: https://github.com/rust-lang/rust/pull/104087
 #[link_section = ".text.init"]
 #[export_name = "_start"]
-#[cfg(not(feature = "cramium-soc"))]
+#[cfg(not(feature = "bao1x"))]
 pub extern "C" fn _start() {
     unsafe {
         #[rustfmt::skip]
@@ -31,7 +31,7 @@ pub extern "C" fn _start() {
 
 #[link_section = ".text.init"]
 #[export_name = "_start"]
-#[cfg(feature = "cramium-soc")]
+#[cfg(feature = "bao1x")]
 pub extern "C" fn _start() {
     unsafe {
         #[rustfmt::skip]

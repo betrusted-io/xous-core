@@ -228,12 +228,12 @@ pub const CODEPOINTS: [u32; 207] = [
 0x0FFFD,
 ];
 
-#[cfg(any(feature="precursor", feature="renode", feature="cramium-soc", feature="board-baosec"))]
+#[cfg(any(feature="precursor", feature="renode", feature="bao1x", feature="board-baosec"))]
 pub static GLYPH_LOCATION: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 pub const GLYPH_LEN: usize = 6624;
 
 pub fn glyphs() -> &'static [u32] {
-    #[cfg(any(feature="precursor", feature="renode", feature="cramium-soc", feature="board-baosec"))]
+    #[cfg(any(feature="precursor", feature="renode", feature="bao1x", feature="board-baosec"))]
     unsafe {
         let data: *const u32 = core::mem::transmute(GLYPH_LOCATION.load(core::sync::atomic::Ordering::SeqCst));
         core::slice::from_raw_parts(data, GLYPH_LEN)

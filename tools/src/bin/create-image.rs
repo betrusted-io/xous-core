@@ -34,7 +34,7 @@ fn csr_to_config(hv: tools::utils::CsrConfig, ram_config: &mut RamConfig) {
     // Look for the largest memory block, which we'll treat as main memory
     for (k, v) in &hv.regions {
         if (
-            k.find("sram").is_some()  // uniquely finds region on Precursor and Cramium (excludes 'reram' correctly)
+            k.find("sram").is_some()  // uniquely finds region on Precursor and bao1x (excludes 'reram' correctly)
             || k.find("ddr_ram").is_some()
             // finds region on atsama5d27 uniquely
         ) && v.length > ram_config.size
@@ -322,7 +322,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // "patch" on top of the RAM area -- it's a specifier for what part
     // of RAM should be carved out to use as swap.
     //
-    // On Cramium, the swap region may point to a section of memory-mapped RAM, *or*
+    // On bao1x, the swap region may point to a section of memory-mapped RAM, *or*
     // it can point to register-mapped SPI RAM. The distinction is based solely upon
     // the starting address. If the starting address is `0`, we assume this is talking
     // about register-mapped SPI RAM. If it is non-zero, then we assume this is referring

@@ -29,19 +29,12 @@ mod precursor_pvt;
 #[rustfmt::skip]
 pub use precursor_pvt::*;
 
-#[cfg(feature = "cramium-soc")]
+#[cfg(feature = "bao1x")]
 #[rustfmt::skip]
-mod cramium_soc;
-#[cfg(feature = "cramium-soc")]
+mod bao1x;
+#[cfg(feature = "bao1x")]
 #[rustfmt::skip]
-pub use cramium_soc::*;
-
-#[cfg(feature = "cramium-fpga")]
-#[rustfmt::skip]
-mod cramium_fpga;
-#[cfg(feature = "cramium-fpga")]
-#[rustfmt::skip]
-pub use cramium_fpga::*;
+pub use bao1x::*;
 
 #[cfg(feature = "atsama5d27")]
 #[rustfmt::skip]

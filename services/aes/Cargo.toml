@@ -16,7 +16,7 @@ check-cfg = ["cfg(aes_compact)", "cfg(aes_force_soft)"]
 
 [features]
 hazmat = []      # Expose cryptographically hazardous APIs
-cramium-soc = []
+bao1x = []
 vexii-test = []
 precursor = []
 renode = []

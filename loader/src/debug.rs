@@ -15,7 +15,7 @@ impl Uart {
         uart.wo(utra::uart::RXTX, c as u32)
     }
 
-    #[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
+    #[cfg(any(feature = "bao1x"))]
     pub fn putc(&self, c: u8) {
         let base = utra::duart::HW_DUART_BASE as *mut u32;
         let mut uart = CSR::new(base);

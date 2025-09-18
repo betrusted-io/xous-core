@@ -10,11 +10,9 @@ fn main() {
 
     let linker_file_path = if target.starts_with("riscv") {
         println!("cargo:rustc-link-search={}", out_dir.display());
-        #[cfg(feature = "cramium-soc")]
-        let p = PathBuf::from("src/platform/cramium/link-soc.x");
-        #[cfg(feature = "cramium-fpga")]
-        let p = PathBuf::from("src/platform/cramium/link-fpga.x");
-        #[cfg(not(any(feature = "cramium-soc", feature = "cramium-fpga")))]
+        #[cfg(feature = "bao1x")]
+        let p = PathBuf::from("src/platform/bao1x/link.x");
+        #[cfg(not(any(feature = "bao1x")))]
         let p = PathBuf::from("src/platform/precursor/link.x");
 
         println!("cargo:rerun-if-changed={}", p.clone().into_os_string().into_string().unwrap());

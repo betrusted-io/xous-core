@@ -18,19 +18,19 @@ utralib = { version = "0.1.25", optional = true, default-features = false }
 armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", optional = true }
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", optional = true }
 sha2-loader = { path = "./sha2-loader", default-features = false, optional = true }
-cramium-hal = { path = "../libs/cramium-hal", optional = true, default-features = false }
-cramium-api = { path = "../libs/cramium-api", optional = true, default-features = false }
+bao1x-hal = { path = "../libs/bao1x-hal", optional = true, default-features = false }
+bao1x-api = { path = "../libs/bao1x-api", optional = true, default-features = false }
 ux-api = { path = "../libs/ux-api", optional = true, default-features = false }
 xous-pl230 = { path = "../libs/xous-pl230", optional = true, features = [
     "tests",
     "pio",
-    "cramium-soc",
+    "bao1x",
     "baremetal",
     # "dma-mainram",  # PL-230 option - this fails on MPW
 ] }
 # xous-pio = { path = "../libs/xous-pio", optional = true, features = [
 #     "tests",
-#     "cramium-soc",
+#     "bao1x",
 #     "baremetal",
 # ] }
 aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
@@ -82,20 +82,20 @@ renode = [
     "secboot",
     "sha2-loader",
 ]
-cramium-soc = [
+bao1x = [
     "dep:aes",
-    "aes/cramium-soc",
-    "utralib/cramium-soc",
-    # "cramium-hal/debug-print-usb",
+    "aes/bao1x",
+    "utralib/bao1x",
+    # "bao1x-hal/debug-print-usb",
     "debug-print",
-    "cramium-hal",
-    "cramium-api",
+    "bao1x-hal",
+    "bao1x-api",
     "rand_chacha",
     "sram-margin",
     # "boot-delay",
 ]
 board-baosec = [
-    "cramium-hal/loader-baosec",
+    "bao1x-hal/loader-baosec",
     "updates",
     "usb",
     "simple-fatfs",
@@ -105,9 +105,8 @@ board-baosec = [
     "digest",
     "ux-api/loader-baosec",
 ]
-board-baosor = ["cramium-hal/loader-baosor"]
-board-dabao = ["cramium-hal/loader-dabao"]
-cramium-fpga = ["utralib/cramium-fpga", "debug-print", "linked_list_allocator"]
+board-baosor = ["bao1x-hal/loader-baosor"]
+board-dabao = ["bao1x-hal/loader-dabao"]
 atsama5d27 = ["utralib/atsama5d27", "armv7", "dep:atsama5d27"]
 
 # precursor flags
@@ -120,9 +119,9 @@ secboot = []
 # swap flag
 swap = ["dep:aes-gcm-siv"]
 
-# cramium target flags
+# bao1x target flags
 board-bringup = []
-sh1107-bringup = []                                            # used to discover FB parameters
+sh1107-bringup = []                                          # used to discover FB parameters
 sram-margin = []
 boot-delay = []
 simulation-only = []
@@ -136,13 +135,13 @@ dump-trng = []
 fast-fclk = []
 clock-tests = []
 reset-debug = []
-cam-test = ["nalgebra", "libm", "cramium-hal/debug-print-usb"]
+cam-test = ["nalgebra", "libm", "bao1x-hal/debug-print-usb"]
 usb = ["critical-section"]
 qr = ["nalgebra", "libm"]
 updates = []
-cramium-mpw = ["cramium-hal/mpw"]
-userspace-swap-debug = []                                      # sets up app UART mapping.
-always-update = []                                             # always go into update mode, for fast dev loops
+bao1x-mpw = ["bao1x-hal/mpw"]
+userspace-swap-debug = []                                    # sets up app UART mapping.
+always-update = []                                           # always go into update mode, for fast dev loops
 
 # general flags
 debug-print = []

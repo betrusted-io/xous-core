@@ -15,13 +15,13 @@ log-server = { package = "xous-api-log", version = "0.1.65" }
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-cramium-hal = { path = "../../libs/cramium-hal", features = [
+bao1x-hal = { path = "../../libs/bao1x-hal", features = [
     "std",
 ], optional = true }
-cram-hal-service = { path = "../cram-hal-service", optional = true }
+bao1x-hal-service = { path = "../bao1x-hal-service", optional = true }
 ux-api = { path = "../../libs/ux-api" }
-cramium-emu = { path = "../cramium-emu", optional = true }
-cramium-api = { path = "../../libs/cramium-api" }
+bao1x-emu = { path = "../bao1x-emu", optional = true }
+bao1x-api = { path = "../../libs/bao1x-api" }
 xous-ipc = "0.10.6"
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
@@ -74,13 +74,13 @@ hkdf = "0.12.4"
 #features = ["rand_core", "digest"]
 
 [features]
-cramium-soc = ["utralib/cramium-soc", "aes/cramium-soc"]
+bao1x = ["utralib/bao1x", "aes/bao1x"]
 board-baosec = [
-    "utralib/cramium-soc",
+    "utralib/bao1x",
     "ux-api/board-baosec",
     "keystore-api/gen2",
     "modals/no-gam",
-    "modals/cramium-soc",
+    "modals/bao1x",
 ] # USB form factor token
 loader-baosec = ["ux-api/loader-baosec"]
 test-baosec = ["ux-api/loader-baosec"]
@@ -89,13 +89,13 @@ hosted-baosec = [
     "modals/no-gam",
 ] # emulated hardware on x86 platform
 board-baosor = [
-    "utralib/cramium-soc",
+    "utralib/bao1x",
     "keystore-api/gen2",
-    "modals/cramium-soc",
+    "modals/bao1x",
 ] # Precursor form factor
 loader-baosor = []
 board-dabao = [
-    "utralib/cramium-soc",
+    "utralib/bao1x",
     "keystore-api/gen2",
 ] # Dev board form factor
 loader-dabao = []

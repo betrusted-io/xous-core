@@ -2,7 +2,7 @@ use core::fmt::Write;
 use std::collections::HashMap;
 
 use String;
-use cram_hal_service::trng;
+use bao1x_hal_service::trng;
 #[cfg(feature = "shellperf")]
 use utralib::generated::*;
 use xous::MessageEnvelope;

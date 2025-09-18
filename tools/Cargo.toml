@@ -48,6 +48,6 @@ name = "sign-image"
 [features]
 precursor = []
 renode = []
-cramium-soc = []
+bao1x = []
 atsama5d2 = []
 default = []

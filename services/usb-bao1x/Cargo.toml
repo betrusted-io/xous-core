@@ -13,15 +13,15 @@ log-server = { package = "xous-api-log", version = "0.1.65" }
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-cramium-hal = { path = "../../libs/cramium-hal", features = [
+bao1x-hal = { path = "../../libs/bao1x-hal", features = [
     "std",
     "debug-print-usb",
     # "verbose-debug",
     "axp2101",
 ], optional = true }
-cramium-api = { path = "../../libs/cramium-api" }
-cram-hal-service = { path = "../cram-hal-service", optional = true }
-cramium-emu = { path = "../cramium-emu", optional = true }
+bao1x-api = { path = "../../libs/bao1x-api" }
+bao1x-hal-service = { path = "../bao1x-hal-service", optional = true }
+bao1x-emu = { path = "../bao1x-emu", optional = true }
 xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main" }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
@@ -51,14 +51,14 @@ usbd-serial = { git = "https://github.com/betrusted-io/usbd-serial.git", branch 
 # ] }
 
 [features]
-cramium-soc = []
+bao1x = []
 board-baosec = [
-    "utralib/cramium-soc",
+    "utralib/bao1x",
     "utralib/std",
-    "cramium-hal",
-    "cram-hal-service",
+    "bao1x-hal",
+    "bao1x-hal-service",
 ]
-hosted-baosec = ["utralib/hosted", "utralib/std", "cramium-emu"]
+hosted-baosec = ["utralib/hosted", "utralib/std", "bao1x-emu"]
 # none of these other modes are actually supported, but are listed here
 # to allow direct re-use of API code
 precursor = ["utralib/precursor", "utralib/std"]
@@ -67,7 +67,7 @@ renode = ["utralib/renode", "utralib/std"]
 mass-storage = []
 debug-print-usb = [
 ] # mutually exclusive feature with other crates that use the app UART
-verbose-debug = ["cramium-hal/verbose-debug"]
+verbose-debug = ["bao1x-hal/verbose-debug"]
 
 # mutually exclusive with kernel "print-panics"; will get a DUART allocation error on boot if kernel panics are on
 # sticks the DUART into the deep stack; necessary because we can't have external dependencies in usbd-device

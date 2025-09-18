@@ -12,7 +12,7 @@ pub mod syscall;
 
 #[cfg(any(feature = "precursor", feature = "renode"))]
 use utralib::generated::*;
-#[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
+#[cfg(any(feature = "bao1x"))]
 use xous_kernel::PID;
 #[cfg(any(feature = "precursor", feature = "renode"))]
 use xous_kernel::{MemoryFlags, MemoryType, PID};
@@ -64,7 +64,7 @@ pub fn init() {
 pub fn idle() -> bool {
     // Issue `wfi`. This will return as soon as an external interrupt
     // is available.
-    #[cfg(any(feature = "cramium-fpga", feature = "cramium-soc", feature = "renode"))]
+    #[cfg(any(feature = "bao1x", feature = "renode"))]
     // "traditional" path for stopping a clock
     unsafe {
         riscv::asm::wfi()

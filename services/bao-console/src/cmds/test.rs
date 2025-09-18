@@ -39,8 +39,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                 }
                 #[cfg(feature = "bmp180")]
                 "temp" => {
-                    use cram_hal_service::I2c;
-                    use cramium_hal::bmp180::Bmp180;
+                    use bao1x_hal::bmp180::Bmp180;
+                    use bao1x_hal_service::I2c;
                     let mut i2c = I2c::new();
 
                     match Bmp180::new(&mut i2c) {
@@ -58,9 +58,9 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }
                 }
                 "shutdown" => {
-                    use cram_hal_service::I2c;
-                    use cramium_api::*;
-                    let iox = cramium_api::IoxHal::new();
+                    use bao1x_api::*;
+                    use bao1x_hal_service::I2c;
+                    let iox = bao1x_api::IoxHal::new();
                     let mut i2c = I2c::new();
                     iox.setup_pin(
                         IoxPort::PF,
@@ -79,7 +79,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         iox.get_gpio_bank_value(IoxPort::PF)
                     );
 
-                    let axp2101 = cramium_hal::axp2101::Axp2101::new(&mut i2c).expect("couldn't get AXP2101");
+                    let axp2101 = bao1x_hal::axp2101::Axp2101::new(&mut i2c).expect("couldn't get AXP2101");
                     log::info!("sending shutdown to axp2101 pmic...in four seconds");
                     let tt = ticktimer::Ticktimer::new().unwrap();
                     tt.sleep_ms(4000).ok();
@@ -98,11 +98,11 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("sent shutdown to axp2101");
                 }
                 "keepon" => {
-                    use cramium_api::*;
-                    let iox = cramium_api::IoxHal::new();
-                    let (port, pin) = cramium_hal::board::setup_keep_on_pin(&iox);
+                    use bao1x_api::*;
+                    let iox = bao1x_api::IoxHal::new();
+                    let (port, pin) = bao1x_hal::board::setup_keep_on_pin(&iox);
                     iox.set_gpio_pin_value(port, pin, IoxValue::High);
-                    let _ = cramium_hal::board::setup_kb_pins(&iox);
+                    let _ = bao1x_hal::board::setup_kb_pins(&iox);
                     log::info!("keepon got {:x?}", iox.get_gpio_pin_value(IoxPort::PF, 0));
                 }
                 _ => {

@@ -325,10 +325,10 @@ name = "bao-console"
 version = "0.1.0"
 dependencies = [
  "aes",
- "cram-hal-service",
- "cramium-api",
- "cramium-emu",
- "cramium-hal",
+ "bao1x-api",
+ "bao1x-emu",
+ "bao1x-hal",
+ "bao1x-hal-service",
  "log",
  "modals",
  "num-derive 0.4.2",
@@ -351,12 +351,12 @@ dependencies = [
 name = "bao-video"
 version = "0.1.0"
 dependencies = [
+ "bao1x-api",
+ "bao1x-emu",
+ "bao1x-hal",
+ "bao1x-hal-service",
  "base64 0.22.1",
  "blitstr2",
- "cram-hal-service",
- "cramium-api",
- "cramium-emu",
- "cramium-hal",
  "libm 0.2.8",
  "locales",
  "log",
@@ -376,6 +376,108 @@ dependencies = [
 ]
 
 [[package]]
+name = "bao1x-api"
+version = "0.1.0"
+dependencies = [
+ "num-derive 0.4.2",
+ "num-traits",
+ "rkyv 0.8.8",
+ "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-names",
+ "xous-ipc 0.10.6 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "bao1x-emu"
+version = "0.1.0"
+dependencies = [
+ "bao1x-api",
+ "log",
+ "minifb",
+ "num-derive 0.4.2",
+ "num-traits",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "rkyv 0.8.8",
+ "ux-api",
+ "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-ipc 0.10.6 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "bao1x-hal"
+version = "0.1.0"
+dependencies = [
+ "bao1x-api",
+ "bitfield",
+ "bitflags 1.3.2",
+ "either",
+ "log",
+ "num-derive 0.4.2",
+ "num-traits",
+ "rkyv 0.8.8",
+ "usb-device",
+ "utralib 0.1.25",
+ "ux-api",
+ "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-names",
+ "xous-api-ticktimer",
+ "xous-riscv",
+]
+
+[[package]]
+name = "bao1x-hal-service"
+version = "0.1.0"
+dependencies = [
+ "bao1x-api",
+ "bao1x-hal",
+ "bitfield",
+ "log",
+ "num-derive 0.4.2",
+ "num-traits",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+ "rkyv 0.8.8",
+ "utralib 0.1.25",
+ "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+ "xous-ipc 0.10.6 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "bao1x-mbox1"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "log",
+ "num-derive 0.4.2",
+ "num-traits",
+ "utralib 0.1.25",
+ "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+]
+
+[[package]]
+name = "bao1x-mbox2"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "num-derive 0.4.2",
+ "num-traits",
+ "utralib 0.1.25",
+ "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+]
+
+[[package]]
 name = "bare-metal"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -388,9 +490,9 @@ dependencies = [
 name = "baremetal"
 version = "0.1.0"
 dependencies = [
+ "bao1x-api",
+ "bao1x-hal",
  "base64 0.22.1",
- "cramium-api",
- "cramium-hal",
  "critical-section",
  "digest 0.10.7",
  "ed25519-dalek",
@@ -979,8 +1081,8 @@ dependencies = [
 name = "cram-console"
 version = "0.1.0"
 dependencies = [
- "cram-hal-service",
- "cramium-hal",
+ "bao1x-hal",
+ "bao1x-hal-service",
  "ime-plugin-shell",
  "locales",
  "log",
@@ -996,108 +1098,6 @@ dependencies = [
  "xous-api-ticktimer",
  "xous-ipc 0.10.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-swapper",
-]
-
-[[package]]
-name = "cram-hal-service"
-version = "0.1.0"
-dependencies = [
- "bitfield",
- "cramium-api",
- "cramium-hal",
- "log",
- "num-derive 0.4.2",
- "num-traits",
- "rand_chacha 0.3.1",
- "rand_core 0.6.4",
- "rkyv 0.8.8",
- "utralib 0.1.25",
- "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-api-log",
- "xous-api-names",
- "xous-api-ticktimer",
- "xous-ipc 0.10.6 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "cram-mbox1"
-version = "0.1.0"
-dependencies = [
- "aes",
- "log",
- "num-derive 0.4.2",
- "num-traits",
- "utralib 0.1.25",
- "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-api-log",
- "xous-api-names",
- "xous-api-ticktimer",
-]
-
-[[package]]
-name = "cram-mbox2"
-version = "0.1.0"
-dependencies = [
- "log",
- "num-derive 0.4.2",
- "num-traits",
- "utralib 0.1.25",
- "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-api-log",
- "xous-api-names",
- "xous-api-ticktimer",
-]
-
-[[package]]
-name = "cramium-api"
-version = "0.1.0"
-dependencies = [
- "num-derive 0.4.2",
- "num-traits",
- "rkyv 0.8.8",
- "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-api-names",
- "xous-ipc 0.10.6 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "cramium-emu"
-version = "0.1.0"
-dependencies = [
- "cramium-api",
- "log",
- "minifb",
- "num-derive 0.4.2",
- "num-traits",
- "rand 0.8.5",
- "rand_core 0.6.4",
- "rkyv 0.8.8",
- "ux-api",
- "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-api-log",
- "xous-api-names",
- "xous-ipc 0.10.6 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "cramium-hal"
-version = "0.1.0"
-dependencies = [
- "bitfield",
- "bitflags 1.3.2",
- "cramium-api",
- "either",
- "log",
- "num-derive 0.4.2",
- "num-traits",
- "rkyv 0.8.8",
- "usb-device",
- "utralib 0.1.25",
- "ux-api",
- "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-api-names",
- "xous-api-ticktimer",
- "xous-riscv",
 ]
 
 [[package]]
@@ -2271,10 +2271,10 @@ checksum = "0fd8b261ccf00df8c5cc60c082bb7d7aa64c33a433cfcc091ca244326c924b2c"
 name = "gam"
 version = "0.1.0"
 dependencies = [
+ "bao1x-hal-service",
  "blitstr2",
  "com",
  "content-plugin-api",
- "cram-hal-service",
  "digest 0.9.0",
  "enum_dispatch",
  "graphics-server",
@@ -2393,9 +2393,9 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 name = "graphics-server"
 version = "0.1.0"
 dependencies = [
+ "bao1x-hal",
+ "bao1x-hal-service",
  "blitstr2",
- "cram-hal-service",
- "cramium-hal",
  "keyboard",
  "locales",
  "log",
@@ -2948,13 +2948,13 @@ dependencies = [
  "aes",
  "aes-gcm-siv",
  "aes-kw",
+ "bao1x-api",
+ "bao1x-emu",
+ "bao1x-hal",
+ "bao1x-hal-service",
  "blowfish",
  "byteorder",
  "cipher",
- "cram-hal-service",
- "cramium-api",
- "cramium-emu",
- "cramium-hal",
  "digest 0.10.7",
  "hex 0.4.3",
  "hkdf",
@@ -3146,9 +3146,9 @@ dependencies = [
  "aes-gcm-siv",
  "armv7",
  "atsama5d27",
+ "bao1x-api",
+ "bao1x-hal",
  "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs?branch=main)",
- "cramium-api",
- "cramium-hal",
  "crc 1.8.1",
  "critical-section",
  "curve25519-dalek-loader",
@@ -3328,11 +3328,11 @@ dependencies = [
 name = "modals"
 version = "0.1.0"
 dependencies = [
+ "bao1x-api",
+ "bao1x-emu",
+ "bao1x-hal-service",
  "bit_field",
  "blitstr2",
- "cram-hal-service",
- "cramium-api",
- "cramium-emu",
  "gam",
  "locales",
  "log",
@@ -3909,13 +3909,13 @@ version = "0.1.0"
 dependencies = [
  "aes",
  "aes-gcm-siv",
+ "bao1x-emu",
+ "bao1x-hal",
+ "bao1x-hal-service",
  "bitfield",
  "bitflags 1.3.2",
  "blowfish",
  "cipher",
- "cram-hal-service",
- "cramium-emu",
- "cramium-hal",
  "digest 0.10.7",
  "gam",
  "hex 0.4.3",
@@ -6009,10 +6009,10 @@ dependencies = [
 name = "usb-bao1x"
 version = "0.1.0"
 dependencies = [
- "cram-hal-service",
- "cramium-api",
- "cramium-emu",
- "cramium-hal",
+ "bao1x-api",
+ "bao1x-emu",
+ "bao1x-hal",
+ "bao1x-hal-service",
  "frunk_core",
  "locales",
  "log",
@@ -6044,9 +6044,9 @@ dependencies = [
 name = "usb-device-xous"
 version = "0.1.0"
 dependencies = [
+ "bao1x-hal",
+ "bao1x-hal-service",
  "bitfield",
- "cram-hal-service",
- "cramium-hal",
  "embedded-time",
  "frunk_core",
  "fugit",
@@ -7004,8 +7004,8 @@ version = "0.9.38"
 dependencies = [
  "aes",
  "armv7",
+ "bao1x-hal",
  "bitflags 1.3.2",
- "cramium-hal",
  "critical-section",
  "crossbeam-channel",
  "gdbstub",
@@ -7025,7 +7025,7 @@ dependencies = [
 name = "xous-log"
 version = "0.1.28"
 dependencies = [
- "cramium-hal",
+ "bao1x-hal",
  "log",
  "num-derive 0.4.2",
  "num-traits",
@@ -7055,8 +7055,8 @@ dependencies = [
 name = "xous-pl230"
 version = "0.1.0"
 dependencies = [
+ "bao1x-hal",
  "bitfield",
- "cramium-hal",
  "log",
  "pio",
  "pio-proc",
@@ -7104,8 +7104,8 @@ version = "0.1.0"
 dependencies = [
  "aes",
  "aes-gcm-siv",
- "cramium-api",
- "cramium-hal",
+ "bao1x-api",
+ "bao1x-hal",
  "loader",
  "log",
  "num-derive 0.4.2",

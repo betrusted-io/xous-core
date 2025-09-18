@@ -40,8 +40,7 @@ precursor = ["utralib/precursor", "susres/precursor", "watchdog"]
 hosted = ["utralib/hosted", "susres/hosted", "watchdog"]
 renode = ["utralib/renode", "susres/renode", "watchdog"]
 
-cramium-soc = ["utralib/cramium-soc", "utralib/std", "loader/cramium-soc"]
-cramium-fpga = ["utralib/cramium-fpga"]
+bao1x = ["utralib/bao1x", "utralib/std", "loader/bao1x"]
 hosted-baosec = []
 
 susres = []
@@ -51,7 +50,3 @@ timestamp = []
 default = []     # watchdog option is now moved into individual platform configs
 # default = []
 # default = ["debug-print"]
-
-# Note to self: if implementing "susres" for cramium targets,
-# it's currently a "susres" feature flag in the implementation crate,
-# but 'feature = "cramium-fpga"' clauses in main.rs!

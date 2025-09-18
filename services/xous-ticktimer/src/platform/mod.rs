@@ -12,8 +12,7 @@ pub use precursor::*;
         feature = "precursor",
         feature = "renode",
         feature = "atsama5d27",
-        feature = "cramium-fpga",
-        feature = "cramium-soc",
+        feature = "bao1x",
         not(target_os = "xous")
     ))
 ))]
@@ -24,8 +23,7 @@ pub mod hosted;
         feature = "precursor",
         feature = "renode",
         feature = "atsama5d27",
-        feature = "cramium-fpga",
-        feature = "cramium-soc",
+        feature = "bao1x",
         not(target_os = "xous")
     ))
 ))]
@@ -37,11 +35,11 @@ pub mod atsama5d2;
 #[cfg(any(feature = "atsama5d27"))]
 pub use atsama5d2::*;
 
-#[cfg(any(feature = "cramium-fpga", feature = "cramium-soc"))]
+#[cfg(any(feature = "bao1x"))]
 #[macro_use]
-pub mod cramium;
-#[cfg(any(feature = "cramium-fpga", feature = "cramium-soc"))]
-pub use cramium::*;
+pub mod bao1x;
+#[cfg(any(feature = "bao1x"))]
+pub use bao1x::*;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 pub(crate) struct TimeoutExpiry(i64);

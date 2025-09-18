@@ -9,6 +9,6 @@ mod betrusted;
 pub use crate::backend::betrusted::*;
 
 #[cfg(feature = "board-baosor")]
-mod cramium;
+mod bao1x;
 #[cfg(feature = "board-baosor")]
-pub use crate::backend::cramium::*;
+pub use crate::backend::bao1x::*;

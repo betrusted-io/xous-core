@@ -10,7 +10,7 @@ use crate::platform;
 pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
     #[cfg(any(feature = "precursor", feature = "renode"))]
     let _kernel_args = _kernel_args;
-    #[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
+    #[cfg(any(feature = "bao1x"))]
     let _kernel_args = platform::FLASH_BASE + platform::KERNEL_OFFSET;
 
     unsafe {
@@ -23,10 +23,10 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
             ram_top = in(reg) (platform::RAM_BASE + platform::RAM_SIZE),
         );
     }
-    // Stub for clearing IFRAM & RAM on Cramium target. This is required
+    // Stub for clearing IFRAM & RAM on bao1x target. This is required
     // to clear the parity check bits, which are randomly set on boot. System will
     // eventually hang if these bits aren't cleared.
-    #[cfg(all(any(feature = "cramium-soc", feature = "cramium-fpga"), not(feature = "simulation-only")))]
+    #[cfg(all(any(feature = "bao1x"), not(feature = "simulation-only")))]
     unsafe {
         #[rustfmt::skip]
         asm! (
@@ -87,14 +87,14 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
     }
 }
 
-// This is code for debugging RV32 core reset on the cramium target.
+// This is code for debugging RV32 core reset on the bao1x target.
 #[cfg(feature = "reset-debug")]
 #[link_section = ".text.init"]
 #[export_name = "_start"]
 pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
     #[cfg(any(feature = "precursor", feature = "renode"))]
     let _kernel_args = _kernel_args;
-    #[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
+    #[cfg(any(feature = "bao1x"))]
     let _kernel_args = platform::FLASH_BASE + platform::KERNEL_OFFSET;
     unsafe {
         #[rustfmt::skip]
@@ -228,7 +228,7 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
 #[export_name = "abort"]
 /// This is only used in debug mode
 pub extern "C" fn abort() -> ! {
-    #[cfg(not(feature = "cramium-soc"))]
+    #[cfg(not(feature = "bao1x"))]
     unsafe {
         #[rustfmt::skip]
         asm!(
@@ -237,7 +237,7 @@ pub extern "C" fn abort() -> ! {
             options(noreturn)
         );
     }
-    #[cfg(feature = "cramium-soc")]
+    #[cfg(feature = "bao1x")]
     unsafe {
         use utralib::generated::*;
         let uart = utra::duart::HW_DUART_BASE as *mut u32;

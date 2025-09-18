@@ -88,8 +88,7 @@ fn main() {
         "hosted",
         "renode",
         "atsama5d27",
-        "cramium-soc",
-        "cramium-fpga",
+        "bao1x",
         "artybio",
         "artyvexii"
     );
@@ -123,15 +122,10 @@ fn main() {
     #[cfg(feature = "atsama5d27")]
     let generated_filename = "src/generated/atsama5d27.rs";
 
-    #[cfg(feature = "cramium-soc")]
-    let svd_filenames = vec!["cramium/core.svd", "cramium/daric.svd"];
-    #[cfg(feature = "cramium-soc")]
-    let generated_filename = "src/generated/cramium_soc.rs";
-
-    #[cfg(feature = "cramium-fpga")]
-    let svd_filenames = vec!["cramium/soc.svd", "cramium/core.svd", "cramium/daric.svd"];
-    #[cfg(feature = "cramium-fpga")]
-    let generated_filename = "src/generated/cramium_fpga.rs";
+    #[cfg(feature = "bao1x")]
+    let svd_filenames = vec!["bao1x/core.svd", "bao1x/daric.svd"];
+    #[cfg(feature = "bao1x")]
+    let generated_filename = "src/generated/bao1x.rs";
 
     #[cfg(feature = "artybio")]
     let svd_filenames = vec!["artybio/soc.svd", "artybio/bio.svd"];
