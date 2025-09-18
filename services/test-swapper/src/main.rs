@@ -32,7 +32,7 @@ fn main() -> ! {
     let mut spimap = xous::map_memory(
         None,
         xous::MemoryAddress::new(xous::arch::MMAP_VIRT_BASE),
-        // should normally be cramium_hal::board::SPINOR_LEN
+        // should normally be bao1x_hal::board::SPINOR_LEN
         16 * 1024 * 1024,
         xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::VIRT,
     )

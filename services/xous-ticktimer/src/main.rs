@@ -13,7 +13,7 @@ use log::{error, info};
 mod platform;
 use platform::implementation::*;
 use platform::*;
-#[cfg(not(any(target_arch = "arm", feature = "cramium-soc", feature = "cramium-fpga")))]
+#[cfg(not(any(target_arch = "arm", feature = "bao1x")))]
 use susres::SuspendOrder;
 
 fn main() -> ! {
@@ -51,13 +51,13 @@ fn main() -> ! {
     ticktimer.reset(); // reset the time to 0
 
     // register a suspend/resume listener
-    #[cfg(not(any(target_arch = "arm", feature = "cramium-soc", feature = "cramium-fpga")))]
+    #[cfg(not(any(target_arch = "arm", feature = "bao1x")))]
     let xns = xous_names::XousNames::new().unwrap();
 
-    #[cfg(not(any(target_arch = "arm", feature = "cramium-soc", feature = "cramium-fpga")))]
+    #[cfg(not(any(target_arch = "arm", feature = "bao1x")))]
     let sr_cid = xous::connect(ticktimer_server).expect("couldn't create suspend callback connection");
 
-    #[cfg(not(any(target_arch = "arm", feature = "cramium-soc", feature = "cramium-fpga")))]
+    #[cfg(not(any(target_arch = "arm", feature = "bao1x")))]
     let mut susres =
         susres::Susres::new(Some(SuspendOrder::Last), &xns, api::Opcode::SuspendResume as u32, sr_cid)
             .expect("couldn't create suspend/resume object");
@@ -193,7 +193,7 @@ fn main() -> ! {
 
             api::Opcode::SuspendResume => xous::msg_scalar_unpack!(msg, _token, _, _, _, {
                 ticktimer.suspend();
-                #[cfg(not(any(target_arch = "arm", feature = "cramium-soc", feature = "cramium-fpga")))]
+                #[cfg(not(any(target_arch = "arm", feature = "bao1x")))]
                 susres.suspend_until_resume(_token).expect("couldn't execute suspend/resume");
                 ticktimer.resume();
             }),

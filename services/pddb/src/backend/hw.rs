@@ -16,7 +16,7 @@ use aes_gcm_siv::aead::{Aead, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
 use backend::bcrypt::*;
 #[cfg(all(feature = "gen2"))]
-use cramium_hal::board::{BOOKEND_END, BOOKEND_START, SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
+use bao1x_hal::board::{BOOKEND_END, BOOKEND_START, SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
 #[cfg(feature = "gen1")]
 use keystore_api::AesRootkeyType;
 use keystore_api::{Checksums, KeywrapError};
@@ -232,8 +232,8 @@ impl PddbOs {
             // pages maintain a 1:1 correspondence with the offsets in SPI flash and (b)
             // by simply dereferencing any slices derived from virtual area we get a correct pointer
             // that we can pass directly into the swapper to update the correct sector of memory.
-            xous::MemoryAddress::new(xous::arch::MMAP_VIRT_BASE + cramium_hal::board::PDDB_LOC as usize),
-            cramium_hal::board::PDDB_LEN as usize,
+            xous::MemoryAddress::new(xous::arch::MMAP_VIRT_BASE + bao1x_hal::board::PDDB_LOC as usize),
+            bao1x_hal::board::PDDB_LEN as usize,
             xous::MemoryFlags::R | xous::MemoryFlags::VIRT,
         )
         .expect("Couldn't map the PDDB memory range");
@@ -485,7 +485,7 @@ impl PddbOs {
     /// it out of the slice as a pointer.
     #[cfg(all(feature = "gen2", target_os = "xous"))]
     pub(crate) fn patch(&self, buf: &[u8], offset: usize) {
-        use cramium_hal::board::SPINOR_ERASE_SIZE;
+        use bao1x_hal::board::SPINOR_ERASE_SIZE;
 
         let mut written = 0;
 

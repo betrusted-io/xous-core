@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use String;
 #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
-const PDDB_A_LEN: usize = cramium_hal::board::PDDB_LEN as usize;
+const PDDB_A_LEN: usize = bao1x_hal::board::PDDB_LEN as usize;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -322,8 +322,8 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     write!(ret, "Sync result code: {:?}\n", self.pddb.sync()).ok();
                     log::info!(
                         "{}PDDB.SYNCDONE,{}",
-                        cramium_hal::board::BOOKEND_START,
-                        cramium_hal::board::BOOKEND_END
+                        bao1x_hal::board::BOOKEND_START,
+                        bao1x_hal::board::BOOKEND_END
                     );
                 }
                 "hwtest" => {

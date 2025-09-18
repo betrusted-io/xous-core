@@ -25,7 +25,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "alloc",
 ], optional = true }
 
-cramium-hal = { path = "../../libs/cramium-hal", optional = true, default-features = false, features = [
+bao1x-hal = { path = "../../libs/bao1x-hal", optional = true, default-features = false, features = [
     "std",
 ] }
 
@@ -39,11 +39,10 @@ cramium-hal = { path = "../../libs/cramium-hal", optional = true, default-featur
 # ] } # v2p feature is used when lcd-console feature is turned on
 
 [features]
-cramium-soc = ["utralib/cramium-soc", "cramium-hal"]
-cramium-fpga = ["utralib/cramium-fpga"]
-board-baosec = ["cramium-hal/board-baosec"]
-board-baosor = ["cramium-hal/board-baosor"]
-board-dabao = ["cramium-hal/board-dabao"]
+bao1x = ["utralib/bao1x", "bao1x-hal"]
+board-baosec = ["bao1x-hal/board-baosec"]
+board-baosor = ["bao1x-hal/board-baosor"]
+board-dabao = ["bao1x-hal/board-dabao"]
 hosted-baosec = []
 
 precursor = ["utralib/precursor"]

@@ -15,10 +15,10 @@ use std::panic;
 use std::sync::Arc;
 
 use api::*;
-use cramium_api::keyboard::KeyMap;
-use cramium_hal::axp2101::VbusIrq;
-use cramium_hal::usb::driver::{CorigineUsb, CorigineWrapper};
-use hw::CramiumUsb;
+use bao1x_api::keyboard::KeyMap;
+use bao1x_hal::axp2101::VbusIrq;
+use bao1x_hal::usb::driver::{CorigineUsb, CorigineWrapper};
+use hw::Bao1xUsb;
 use hw::UsbIrqReq;
 use num_traits::*;
 use usb_device::class_prelude::*;
@@ -90,33 +90,32 @@ pub(crate) fn main_hw() -> ! {
     log::trace!("registered with NS -- {:?}", usbdev_sid);
     let tt = ticktimer::Ticktimer::new().unwrap();
 
-    let serial_number = format!("TODO!!"); // implement in cramium-hal once we have a serial number API
+    let serial_number = format!("TODO!!"); // implement in bao1x-hal once we have a serial number API
 
-    let native_kbd =
-        cramium_api::keyboard::Keyboard::new(&xns).expect("couldn't connect to keyboard service");
+    let native_kbd = bao1x_api::keyboard::Keyboard::new(&xns).expect("couldn't connect to keyboard service");
 
     let usb_mapping = xous::syscall::map_memory(
-        xous::MemoryAddress::new(cramium_hal::usb::utra::CORIGINE_USB_BASE),
+        xous::MemoryAddress::new(bao1x_hal::usb::utra::CORIGINE_USB_BASE),
         None,
-        cramium_hal::usb::utra::CORIGINE_USB_LEN,
+        bao1x_hal::usb::utra::CORIGINE_USB_LEN,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't reserve register pages");
     let ifram_range = xous::syscall::map_memory(
-        xous::MemoryAddress::new(cramium_hal::usb::driver::CRG_UDC_MEMBASE),
-        xous::MemoryAddress::new(cramium_hal::usb::driver::CRG_UDC_MEMBASE), /* make P & V addresses
-                                                                              * line up */
-        cramium_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000,
+        xous::MemoryAddress::new(bao1x_hal::usb::driver::CRG_UDC_MEMBASE),
+        xous::MemoryAddress::new(bao1x_hal::usb::driver::CRG_UDC_MEMBASE), /* make P & V addresses
+                                                                            * line up */
+        bao1x_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't allocate IFRAM pages");
     assert!(
-        cramium_hal::usb::driver::CRG_UDC_TOTAL_MEM_LEN <= cramium_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000
+        bao1x_hal::usb::driver::CRG_UDC_TOTAL_MEM_LEN <= bao1x_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000
     );
     log::info!(
         "total memory len: {:x}, allocated: {:x}",
-        cramium_hal::usb::driver::CRG_UDC_TOTAL_MEM_LEN,
-        cramium_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000
+        bao1x_hal::usb::driver::CRG_UDC_TOTAL_MEM_LEN,
+        bao1x_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000
     );
     let irq_range = xous::syscall::map_memory(
         xous::MemoryAddress::new(utra::irqarray1::HW_IRQARRAY1_BASE),
@@ -152,7 +151,7 @@ pub(crate) fn main_hw() -> ! {
     //    another crate that implements the USB stack which can't handle Box'd structures.
     //  - It is safe to call `.init()` repeatedly because within `init()` we have an atomic bool that tracks
     //    if the interrupt handler has been hooked, and ignores further requests to hook it.
-    let mut cu = Box::new(CramiumUsb::new(usb.clone(), irq_csr.clone(), cid, cw, &usb_alloc, &serial_number));
+    let mut cu = Box::new(Bao1xUsb::new(usb.clone(), irq_csr.clone(), cid, cw, &usb_alloc, &serial_number));
     cu.init();
 
     // Serial driver variables
@@ -265,15 +264,11 @@ pub(crate) fn main_hw() -> ! {
     });
 
     log::info!("Registering PMIC handler to detect USB plug/unplug events");
-    let iox = cramium_api::IoxHal::new();
-    cramium_hal::board::setup_pmic_irq(
-        &iox,
-        api::SERVER_NAME_USB_DEVICE,
-        Opcode::PmicIrq.to_usize().unwrap(),
-    );
-    let mut i2c = cram_hal_service::I2c::new();
-    let mut pmic = cramium_hal::axp2101::Axp2101::new(&mut i2c).expect("couldn't open PMIC");
-    pmic.setup_vbus_irq(&mut i2c, cramium_hal::axp2101::VbusIrq::Remove).expect("couldn't setup IRQ");
+    let iox = bao1x_api::IoxHal::new();
+    bao1x_hal::board::setup_pmic_irq(&iox, api::SERVER_NAME_USB_DEVICE, Opcode::PmicIrq.to_usize().unwrap());
+    let mut i2c = bao1x_hal_service::I2c::new();
+    let mut pmic = bao1x_hal::axp2101::Axp2101::new(&mut i2c).expect("couldn't open PMIC");
+    pmic.setup_vbus_irq(&mut i2c, bao1x_hal::axp2101::VbusIrq::Remove).expect("couldn't setup IRQ");
 
     log::info!("Entering main loop");
 

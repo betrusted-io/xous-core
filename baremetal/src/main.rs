@@ -21,11 +21,9 @@ use xous_bio_bdma::*;
 use crate::delay;
 
 static UART_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
-#[cfg(feature = "nto-usb")]
+#[allow(dead_code)]
 static USB_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
-#[cfg(feature = "nto-usb")]
 static USB_TX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
-#[cfg(feature = "nto-usb")]
 static USB_CONNECTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 pub fn uart_irq_handler() {
@@ -80,17 +78,17 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // provide some feedback on the run state of the BIO by peeking at the program counter
     // value, and provide feedback on the CPU operation by flashing the RGB LEDs.
     let mut repl = crate::repl::Repl::new();
-    #[cfg(feature = "nto-bio")]
+    #[cfg(feature = "bao1x-bio")]
     repl.init_cmd("bio"); // do a power-on BIO test
 
-    #[cfg(feature = "nto-usb")]
+    #[cfg(feature = "bao1x-usb")]
     // do the main loop through the USB interface
     {
         use crate::platform::usb::glue;
         let (mut last_usb_state, mut portsc) = glue::setup();
 
         loop {
-            use cramium_hal::usb::driver::UsbDeviceState;
+            use bao1x_hal::usb::driver::UsbDeviceState;
 
             let (new_usb_state, new_portsc) = glue::usb_status();
             // break out of the loop when USB is disconnected, after it has been configured
@@ -138,7 +136,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         }
     }
 
-    #[cfg(not(feature = "nto-usb"))]
+    #[cfg(not(feature = "bao1x-usb"))]
     // do the main loop through the serial port
     loop {
         // Handle keyboard events.
@@ -235,7 +233,7 @@ pub fn fifo_basic() -> usize {
 
     // The code readback is broken on the Arty BIO target due to a pipeline stage
     // in the code readback path that causes the previous read's data to show up
-    // on the current read access. On the NTO-BIO (full chip version), the BIO runs
+    // on the current read access. On the bao1x-BIO (full chip version), the BIO runs
     // at a much higher speed than the bus framework and thus the data is returned
     // on time for the read. However in the FPGA for simplicity the BIO is geared
     // at 2:1 BIO speed to CPU core speed, and the bus fabric runs at a single speed

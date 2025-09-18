@@ -1,7 +1,7 @@
 use String;
-use cram_hal_service::I2c;
-use cramium_api::I2cApi;
-use cramium_api::I2cResult;
+use bao1x_hal_service::I2c;
+use bao1x_api::I2cApi;
+use bao1x_api::I2cResult;
 
 use crate::{CommonEnv, ShellCmdApi};
 

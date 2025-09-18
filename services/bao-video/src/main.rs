@@ -14,14 +14,9 @@ use std::{
     },
 };
 
-#[cfg(feature = "b64-export")]
-use base64::{Engine as _, engine::general_purpose};
-use blitstr2::fontmap;
-#[cfg(feature = "board-baosec")]
-use cram_hal_service::{I2c, UdmaGlobal};
-use cramium_api::*;
+use bao1x_api::*;
 #[cfg(feature = "hosted-baosec")]
-use cramium_emu::{
+use bao1x_emu::{
     camera::Gc2145,
     display::{MainThreadToken, Mono, Oled128x128, claim_main_thread},
     i2c::I2c,
@@ -30,10 +25,15 @@ use cramium_emu::{
 // breadcrumb to future self:
 //   - For GC0308 drivers, look in code/esp32-camera for sample code/constants
 #[cfg(feature = "board-baosec")]
-use cramium_hal::{
+use bao1x_hal::{
     gc2145::Gc2145,
     sh1107::{MainThreadToken, Mono, Oled128x128, claim_main_thread},
 };
+#[cfg(feature = "board-baosec")]
+use bao1x_hal_service::{I2c, UdmaGlobal};
+#[cfg(feature = "b64-export")]
+use base64::{Engine as _, engine::general_purpose};
+use blitstr2::fontmap;
 #[cfg(feature = "board-baosec")]
 use num_traits::*;
 #[cfg(not(feature = "hosted-baosec"))]
@@ -138,7 +138,7 @@ fn handle_irq(_irq_no: usize, arg: *mut usize) {
     .ok();
 }
 
-#[cfg(any(feature = "cramium-soc"))]
+#[cfg(any(feature = "bao1x"))]
 fn map_fonts() -> MemoryRange {
     log::trace!("mapping fonts");
     // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
@@ -218,7 +218,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let udma_global = UdmaGlobal::new();
     let mut i2c = I2c::new();
 
-    let mut display = Oled128x128::new(main_thread_token, cramium_api::PERCLK, &iox, &udma_global);
+    let mut display = Oled128x128::new(main_thread_token, bao1x_api::PERCLK, &iox, &udma_global);
     display.init();
     display.clear();
     display.draw();
@@ -242,7 +242,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     #[cfg(not(feature = "hosted-baosec"))]
     {
         // setup camera pins
-        let (cam_pdwn_bnk, cam_pdwn_pin) = cramium_hal::board::setup_camera_pins(&iox);
+        let (cam_pdwn_bnk, cam_pdwn_pin) = bao1x_hal::board::setup_camera_pins(&iox);
         // disable camera powerdown
         iox.set_gpio_pin_value(cam_pdwn_bnk, cam_pdwn_pin, IoxValue::Low);
     }
@@ -254,7 +254,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
     let (pid, mid) = cam.read_id(&mut i2c);
     log::info!("Camera pid {:x}, mid {:x}", pid, mid);
-    cam.init(&mut i2c, cramium_api::camera::Resolution::Res320x240);
+    cam.init(&mut i2c, bao1x_api::camera::Resolution::Res320x240);
     tt.sleep_ms(1).ok();
 
     let (cols, _rows) = cam.resolution();
@@ -426,7 +426,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     // actually want to re-initiate the capture immediately (or leave it on continuous mode)
                     // to allow capture to process concurrently with the code. However, there is a bug
                     // in the SPIM block that prevents proper usage with high bus contention that should
-                    // be fixed in NTO.
+                    // be fixed in bao1x.
                     #[cfg(feature = "decongest-udma")]
                     {
                         const TIMEOUT_MS: u64 = 100;
@@ -434,7 +434,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         let mut now = tt.elapsed_ms();
                         // this is required because if we initiate the capture in the middle
                         // of a frame, we get an offset result. This should be fixed by DAR-704
-                        // on NTO if the pull request is accepted; in which case, we can just rely
+                        // on bao1x if the pull request is accepted; in which case, we can just rely
                         // on setting bit 30 of the CFG_GLOBAL register which will cause any
                         // RX start request to align to the beginning of a frame automatically.
                         while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High
@@ -453,8 +453,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     // wait for the transfer to finish
                     let start = tt.elapsed_ms();
                     let mut now = tt.elapsed_ms();
-                    use cramium_hal::udma::Udma;
-                    while cam.udma_busy(cramium_hal::udma::Bank::Rx) && ((now - start) < TIMEOUT_MS) {
+                    use bao1x_hal::udma::Udma;
+                    while cam.udma_busy(bao1x_hal::udma::Bank::Rx) && ((now - start) < TIMEOUT_MS) {
                         now = tt.elapsed_ms();
                         // busy-wait to get better time resolution on when the frame ends
                     }

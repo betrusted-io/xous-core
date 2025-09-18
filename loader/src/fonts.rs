@@ -3,34 +3,34 @@
 // The order of these modules affects the link order in the loader, which is referred to in the graphics engine.
 // To make changes, see <xous_root>/libs/blitstr2/codegen/main.go
 
-#[cfg(not(feature = "cramium-soc"))]
+#[cfg(not(feature = "bao1x"))]
 pub mod emoji;
-#[cfg(not(feature = "cramium-soc"))]
+#[cfg(not(feature = "bao1x"))]
 pub mod zh;
-#[cfg(not(feature = "cramium-soc"))]
+#[cfg(not(feature = "bao1x"))]
 pub mod ja;
-#[cfg(not(feature = "cramium-soc"))]
+#[cfg(not(feature = "bao1x"))]
 pub mod kr;
-#[cfg(not(feature = "cramium-soc"))]
+#[cfg(not(feature = "bao1x"))]
 pub mod bold;
-#[cfg(not(feature = "cramium-soc"))]
+#[cfg(not(feature = "bao1x"))]
 pub mod mono;
-#[cfg(not(feature = "cramium-soc"))]
+#[cfg(not(feature = "bao1x"))]
 pub mod regular;
-#[cfg(not(feature = "cramium-soc"))]
+#[cfg(not(feature = "bao1x"))]
 pub mod tall;
-#[cfg(not(feature = "cramium-soc"))]
+#[cfg(not(feature = "bao1x"))]
 pub mod small;
 
-#[cfg(feature = "cramium-soc")]
+#[cfg(feature = "bao1x")]
 pub mod emoji;
-#[cfg(feature = "cramium-soc")]
+#[cfg(feature = "bao1x")]
 pub mod bold;
-#[cfg(feature = "cramium-soc")]
+#[cfg(feature = "bao1x")]
 pub mod mono;
-#[cfg(feature = "cramium-soc")]
+#[cfg(feature = "bao1x")]
 pub mod regular;
-#[cfg(feature = "cramium-soc")]
+#[cfg(feature = "bao1x")]
 pub mod tall;
-#[cfg(feature = "cramium-soc")]
+#[cfg(feature = "bao1x")]
 pub mod small;

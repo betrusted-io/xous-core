@@ -35,10 +35,10 @@ embedded-time = "0.12.1"                                                        
 packed_struct = { version = "0.10", default-features = false }                               # used by the xous-usb-hid crate
 num_enum = { version = "0.5", default-features = false }                                     # used by the xous-usb-hid crate
 
-cramium-hal = { path = "../../libs/cramium-hal", features = [
+bao1x-hal = { path = "../../libs/bao1x-hal", features = [
     "std",
 ], optional = true }
-cram-hal-service = { path = "../cram-hal-service", optional = true }
+bao1x-hal-service = { path = "../bao1x-hal-service", optional = true }
 
 
 # Mass storage support
@@ -72,5 +72,5 @@ mjolnir = [
 ] # the big hammer for debugging Spinal USB issues. A raw memory dump of config and descriptor space. Use with care.
 pinger = []
 
-# cramium targets must specify no default features; this is necessary for cargo doc to work.
+# bao1x targets must specify no default features; this is necessary for cargo doc to work.
 default = ["trng"]

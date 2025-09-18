@@ -29,17 +29,17 @@
 /// a `TextResponseValid` message which pumps the work queue.
 mod api;
 use api::*;
-use blitstr2::GlyphStyle;
-#[cfg(feature = "cramium-soc")]
-use cram_hal_service::trng::Trng;
+#[cfg(feature = "bao1x")]
+use bao1x_hal_service::trng::Trng;
 #[cfg(feature = "hosted-baosec")]
-use cramium_emu::trng::Trng;
+use bao1x_emu::trng::Trng;
+use blitstr2::GlyphStyle;
 #[cfg(feature = "ditherpunk")]
 use gam::Bitmap;
 #[cfg(not(any(feature = "hosted-baosec", feature = "board-baosec")))]
 use gam::modal::*;
 use locales::t;
-#[cfg(all(not(feature = "cramium-soc"), not(feature = "doc-deps"), not(feature = "hosted-baosec")))]
+#[cfg(all(not(feature = "bao1x"), not(feature = "doc-deps"), not(feature = "hosted-baosec")))]
 use trng::Trng;
 #[cfg(feature = "tts")]
 use tts_frontend::TtsFrontend;
@@ -73,9 +73,9 @@ enum RendererState {
     RunImage(ManagedImage),
 }
 
-#[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
+#[cfg(not(any(feature = "hosted-baosec", feature = "bao1x")))]
 const DEFAULT_STYLE: GlyphStyle = gam::SYSTEM_STYLE;
-#[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+#[cfg(any(feature = "hosted-baosec", feature = "bao1x"))]
 const DEFAULT_STYLE: GlyphStyle = ux_api::SYSTEM_STYLE;
 
 fn main() -> ! {
@@ -132,7 +132,7 @@ fn wrapped_main() -> ! {
     let mut last_percentage = 0;
     let mut start_work: u32 = 0;
     let mut end_work: u32 = 100;
-    #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
+    #[cfg(not(any(feature = "hosted-baosec", feature = "bao1x")))]
     let mut renderer_modal = Modal::new(
         gam::SHARED_MODAL_NAME,
         ActionType::TextEntry(text_action.clone()),
@@ -141,7 +141,7 @@ fn wrapped_main() -> ! {
         DEFAULT_STYLE,
         8,
     );
-    #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+    #[cfg(any(feature = "hosted-baosec", feature = "bao1x"))]
     let mut renderer_modal = Modal::new(
         "dummy",
         ActionType::TextEntry(text_action.clone()),
@@ -150,12 +150,12 @@ fn wrapped_main() -> ! {
         DEFAULT_STYLE,
         8,
     );
-    #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+    #[cfg(any(feature = "hosted-baosec", feature = "bao1x"))]
     {
-        let kbd = cramium_api::keyboard::Keyboard::new(&xns).unwrap();
+        let kbd = bao1x_api::keyboard::Keyboard::new(&xns).unwrap();
         kbd.register_listener(api::SERVER_NAME_MODALS, Opcode::ModalKeypress.to_u32().unwrap() as usize);
     }
-    #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
+    #[cfg(not(any(feature = "hosted-baosec", feature = "bao1x")))]
     renderer_modal.spawn_helper(
         modals_sid,
         renderer_modal.sid,
@@ -536,12 +536,12 @@ fn wrapped_main() -> ! {
                             text.push_str("\n\n");
                         }
 
-                        #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+                        #[cfg(any(feature = "hosted-baosec", feature = "bao1x"))]
                         let phrase = ux_api::widgets::bytes_to_bip39(
                             &config.bip39_data[..config.bip39_len as usize].to_vec(),
                         )
                         .unwrap_or(vec![t!("bip39.invalid_bytes", locales::LANG).to_string()]);
-                        #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
+                        #[cfg(not(any(feature = "hosted-baosec", feature = "bao1x")))]
                         let phrase = renderer_modal
                             .gam
                             .bytes_to_bip39(&config.bip39_data[..config.bip39_len as usize].to_vec())
@@ -723,9 +723,9 @@ fn wrapped_main() -> ! {
                 }
             }
             Some(Opcode::FinishProgress) => msg_scalar_unpack!(msg, caller, _, _, _, {
-                #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
+                #[cfg(not(any(feature = "hosted-baosec", feature = "bao1x")))]
                 renderer_modal.gam.relinquish_focus().unwrap();
-                #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+                #[cfg(any(feature = "hosted-baosec", feature = "bao1x"))]
                 renderer_modal.gfx.release_modal().unwrap();
                 op = RendererState::None;
                 // unblock the caller, which was forwarded on as the first argument
@@ -760,7 +760,7 @@ fn wrapped_main() -> ! {
                         config.text.is_none(),
                         None,
                     );
-                    #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
+                    #[cfg(not(any(feature = "hosted-baosec", feature = "bao1x")))]
                     log::debug!("UPDATE_DYN gid: {:?}", renderer_modal.canvas);
                     renderer_modal.redraw();
                     xous::yield_slice();
@@ -777,9 +777,9 @@ fn wrapped_main() -> ! {
                 }
             },
             Some(Opcode::DoCloseDynamicNotification) => {
-                #[cfg(not(any(feature = "hosted-baosec", feature = "cramium-soc")))]
+                #[cfg(not(any(feature = "hosted-baosec", feature = "bao1x")))]
                 renderer_modal.gam.relinquish_focus().unwrap();
-                #[cfg(any(feature = "hosted-baosec", feature = "cramium-soc"))]
+                #[cfg(any(feature = "hosted-baosec", feature = "bao1x"))]
                 renderer_modal.gfx.release_modal().unwrap();
                 dynamic_notification_active = false;
                 op = RendererState::None;

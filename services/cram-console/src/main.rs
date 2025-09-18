@@ -18,7 +18,7 @@ use std::sync::{
 use std::thread;
 
 use cmds::*;
-use cram_hal_service::keyboard;
+use bao1x_hal_service::keyboard;
 use graphics_server::Gid;
 use locales::t;
 use num_traits::*;

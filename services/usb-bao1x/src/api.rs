@@ -71,7 +71,7 @@ pub(crate) enum Opcode {
     ResetBlockDevice = 1026,
 
     /// Platform-specific messages for callback handlers
-    #[cfg(feature = "cramium-soc")]
+    #[cfg(feature = "bao1x")]
     PmicIrq = 1536,
 
     // HIDv2

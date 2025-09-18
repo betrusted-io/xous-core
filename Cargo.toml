@@ -86,8 +86,8 @@ members = [
   "services/ffi-test",
   "services/tts",
   "services/cram-console",
-  "services/cram-mbox1",
-  "services/cram-mbox2",
+  "services/bao1x-mbox1",
+  "services/bao1x-mbox2",
   #"services/test-spawn",
   #"services/test-spawn/spawn",
   "services/usb-test",
@@ -105,17 +105,16 @@ members = [
   "libs/xous-bio",
   "libs/xous-bio-bdma",
   "libs/xous-pl230",
-  "libs/cramium-hal",
-  "services/cram-hal-service",
+  "libs/bao1x-hal",
+  "services/bao1x-hal-service",
   "services/xous-swapper",
   "services/test-swapper",
-  "services/cram-console",
   "services/bao-video",
   "services/usb-bao1x",
   "services/bao-console",
   "libs/ux-api",
-  "services/cramium-emu",
-  "libs/cramium-api",
+  "services/bao1x-emu",
+  "libs/bao1x-api",
   "services/keystore",
   "libs/precursor-hal",
   "baremetal",
@@ -155,8 +154,8 @@ opt-level = "s" # z,s: Optimize for size instead of performance; 1 for easier de
 sha2 = { git = "https://github.com/betrusted-io/hashes.git", branch = "sha2-v0.10.8-xous" }
 # sha2 = { path = "../hashes/sha2" }
 
-# Debugging the cramium-soc feature on aes ("--features swap" only needed for loader):
-# cargo tree -e features --features cramium-soc --features swap -f "{p} {f}"
+# Debugging the bao1x feature on aes ("--features swap" only needed for loader):
+# cargo tree -e features --features bao1x --features swap -f "{p} {f}"
 [patch.crates-io.aes]
 path = "services/aes"
 

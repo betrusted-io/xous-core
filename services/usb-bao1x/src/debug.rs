@@ -5,7 +5,7 @@ pub mod debug_print_hardware {
     {
         ($($args:tt)+) => ({
                 use core::fmt::Write;
-                let _ = write!(cramium_hal::debug::Uart{}, $($args)+);
+                let _ = write!(bao1x_hal::debug::Uart{}, $($args)+);
         });
     }
 }

@@ -55,7 +55,7 @@
 // Vex-II implements compliant AES instructions to the -Zkn standards (unlike Vex-I).
 // The AES library has flags that recognize the "vexii-testing" feature, and implements acceleration
 // for AES-256 (but falls back to software for AES-128). This will need to be revisited regardless
-// for the NTO/daric bring-up.
+// for the bao1x/bao1x bring-up.
 //
 // ** Testing features **
 //   -[ ] libs/precursor/hal/src/board/precursors.rs - PDDB_LEN is shortened for vexii-test target
@@ -142,17 +142,17 @@ pub enum IniType {
 /// This function is safe to call exactly once.
 #[export_name = "rust_entry"]
 pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32) -> ! {
-    #[cfg(all(feature = "cramium-soc", not(feature = "verilator-only")))]
+    #[cfg(all(feature = "bao1x", not(feature = "verilator-only")))]
     let perclk_freq = crate::platform::early_init(); // sets up PLLs so we're not running at 16MHz...
-    // need to make this "official" for NTO, the feature flag combo below works around some simulation config
-    // conflicts.
-    #[cfg(all(feature = "verilator-only", not(feature = "cramium-mpw")))]
+    // need to make this "official" for bao1x, the feature flag combo below works around some simulation
+    // config conflicts.
+    #[cfg(all(feature = "verilator-only", not(feature = "bao1x-mpw")))]
     platform::coreuser_config();
 
-    #[cfg(not(all(feature = "cramium-soc", not(feature = "verilator-only"))))]
+    #[cfg(not(all(feature = "bao1x", not(feature = "verilator-only"))))]
     let perclk_freq = 0;
 
-    #[cfg(all(feature = "cramium-soc", feature = "updates"))]
+    #[cfg(all(feature = "bao1x", feature = "updates"))]
     crate::platform::process_update(perclk_freq);
 
     // initially validate the whole image on disk (including kernel args)
@@ -264,8 +264,8 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
         println!("No suspend marker found, doing a cold boot!");
         #[cfg(feature = "simulation-only")]
         println!("Configured for simulation. Skipping RAM clear!");
-        #[cfg(not(any(feature = "cramium-soc", feature = "cramium-fpga")))]
-        // cramium target clears RAM with assembly routine on boot
+        #[cfg(not(any(feature = "bao1x")))]
+        // bao1x target clears RAM with assembly routine on boot
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg, &fs_prehash);
@@ -411,7 +411,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
 
         #[cfg(not(feature = "atsama5d27"))]
         {
-            #[cfg(not(any(feature = "cramium-soc", feature = "cramium-fpga")))]
+            #[cfg(not(any(feature = "bao1x")))]
             {
                 // uart mux only exists on the FPGA variant
                 use utralib::generated::*;
@@ -626,7 +626,7 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
 /// Clears all of RAM. This is a must for systems that have suspend-to-RAM for security.
 /// It is configured to be skipped in simulation only, to accelerate the simulation times
 /// since we can initialize the RAM to zero in simulation.
-#[cfg(all(not(feature = "simulation-only"), not(feature = "cramium-soc")))]
+#[cfg(all(not(feature = "simulation-only"), not(feature = "bao1x")))]
 fn clear_ram(cfg: &mut BootConfig) {
     // clear RAM on a cold boot.
     // RAM is persistent and battery-backed. This means secret material could potentially

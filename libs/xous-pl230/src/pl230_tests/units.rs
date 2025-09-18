@@ -150,7 +150,7 @@ pub fn basic_tests(pl230: &mut Pl230) -> bool {
 
 #[cfg(feature = "pio")]
 pub fn pio_test(pl230: &mut Pl230) -> bool {
-    use cramium_hal::iox;
+    use bao1x_hal::iox;
     use xous_pio::*;
 
     report_api("channels", pl230.csr.rf(utra::pl230::STATUS_CHNLS_MINUS1) + 1);

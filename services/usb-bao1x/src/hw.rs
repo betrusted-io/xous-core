@@ -4,8 +4,8 @@ use std::collections::VecDeque;
 use std::sync::atomic::compiler_fence;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
-use cramium_hal::usb::driver::*;
-use cramium_hal::usb::utra::*;
+use bao1x_hal::usb::driver::*;
+use bao1x_hal::usb::utra::*;
 use num_traits::*;
 use usb_device::class_prelude::*;
 use usb_device::device::UsbDevice;
@@ -28,7 +28,7 @@ use crate::Opcode;
 pub const SERIAL_MAX_PACKET_SIZE: usize = 512;
 
 #[repr(align(32))]
-pub struct CramiumUsb<'a> {
+pub struct Bao1xUsb<'a> {
     pub conn: xous::CID,
     pub csr: AtomicCsr<u32>,
     pub irq_csr: AtomicCsr<u32>,
@@ -53,7 +53,7 @@ pub struct CramiumUsb<'a> {
     pub serial_rx: [u8; SERIAL_MAX_PACKET_SIZE],
 }
 
-impl<'a> CramiumUsb<'a> {
+impl<'a> Bao1xUsb<'a> {
     pub fn new(
         csr: AtomicCsr<u32>,
         irq_csr: AtomicCsr<u32>,
@@ -90,7 +90,7 @@ impl<'a> CramiumUsb<'a> {
             .composite_with_iads()
             .build();
 
-        CramiumUsb {
+        Bao1xUsb {
             conn: cid,
             // safety: we created iframrange to have the exact same P&V mappings
             wrapper: cw,
@@ -113,10 +113,10 @@ impl<'a> CramiumUsb<'a> {
         xous::claim_interrupt(
             utra::irqarray1::IRQARRAY1_IRQ,
             composite_handler,
-            self as *mut CramiumUsb as *mut usize,
+            self as *mut Bao1xUsb as *mut usize,
         )
         .expect("couldn't claim irq");
-        log::debug!("claimed IRQ with state at {:x}", self as *mut CramiumUsb as usize);
+        log::debug!("claimed IRQ with state at {:x}", self as *mut Bao1xUsb as usize);
 
         // enable both the corigine core IRQ and the software IRQ bit
         // software IRQ is used to initiate send/receive from software to the interrupt context
@@ -155,7 +155,7 @@ impl<'a> CramiumUsb<'a> {
         self.irq_req = None;
         self.wrapper.event = None;
         self.wrapper.address_is_set.store(false, Ordering::SeqCst);
-        self.wrapper.ep_out_ready = (0..cramium_hal::usb::driver::CRG_EP_NUM + 1)
+        self.wrapper.ep_out_ready = (0..bao1x_hal::usb::driver::CRG_EP_NUM + 1)
             .map(|_| std::sync::Arc::new(core::sync::atomic::AtomicBool::new(false)))
             .collect::<Vec<_>>()
             .into_boxed_slice();
@@ -179,7 +179,7 @@ pub const CORIGINE_IRQ_MASK: u32 = 0x1;
 pub const SW_IRQ_MASK: u32 = 0x2;
 
 pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
-    let usb = unsafe { &mut *(arg as *mut CramiumUsb) };
+    let usb = unsafe { &mut *(arg as *mut Bao1xUsb) };
 
     // immediately clear the interrupt and re-enable it so we can catch an interrupt
     // that is generated while we are handling the interrupt.
@@ -226,7 +226,7 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                     // leaves a side-effect result of the CrgEvent inside the corigine_usb object
                     #[cfg(feature = "verbose-debug")]
                     crate::println!("handle inner");
-                    if cramium_hal::usb::driver::handle_event_inner(&mut corigine_usb, &mut event) {
+                    if bao1x_hal::usb::driver::handle_event_inner(&mut corigine_usb, &mut event) {
                         crate::println!("~~~~~got reset~~~~");
                         // reset the ready state
                         for ready in usb.wrapper.ep_out_ready.iter() {

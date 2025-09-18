@@ -28,9 +28,9 @@ rkyv = { version = "0.8.8", default-features = false, features = [
 
 utralib = { version = "0.1.25", optional = true, default-features = false }
 
-cram-hal-service = { path = "../cram-hal-service", optional = true, features = [
+bao1x-hal-service = { path = "../bao1x-hal-service", optional = true, features = [
 ] }
-cramium-hal = { path = "../../libs/cramium-hal", optional = true, features = [
+bao1x-hal = { path = "../../libs/bao1x-hal", optional = true, features = [
     "derive-rkyv",
     "std",
 ] }
@@ -39,13 +39,13 @@ cramium-hal = { path = "../../libs/cramium-hal", optional = true, features = [
 minifb = "0.26.0"
 
 [features]
-cramium-soc = [
-    "utralib/cramium-soc",
-    "cram-hal-service",
-    "cramium-hal",
-    "cramium-hal/std",
+bao1x = [
+    "utralib/bao1x",
+    "bao1x-hal-service",
+    "bao1x-hal",
+    "bao1x-hal/std",
 ]
-board-baosor = ["cramium-hal/board-baosor", "blitstr2/board-baosor"]
+board-baosor = ["bao1x-hal/board-baosor", "blitstr2/board-baosor"]
 
 precursor = [
     "utralib/precursor",

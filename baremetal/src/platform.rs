@@ -1,7 +1,7 @@
-#[cfg(any(feature = "cramium-soc"))]
-mod cramium;
-#[cfg(any(feature = "cramium-soc"))]
-pub use cramium::*;
+#[cfg(any(feature = "bao1x"))]
+mod bao1x;
+#[cfg(any(feature = "bao1x"))]
+pub use bao1x::*;
 
 #[cfg(any(feature = "artybio"))]
 mod artybio;

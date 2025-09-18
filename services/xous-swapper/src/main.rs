@@ -119,7 +119,7 @@ pub struct SwapCountTracker {
 ///
 /// Known things the swapper has to allocate memory for in hard-OOM:
 ///   - L1 page table entries for tracking swap
-///   - An extra page for stack (needed for cramium targets, but not on precursor due to HAL differences)
+///   - An extra page for stack (needed for bao1x targets, but not on precursor due to HAL differences)
 ///   - An additional page seems to be necessary for handling OOM-during-move-or-lend edge cases.
 const HARD_OOM_RESERVED_PAGES: usize = 3;
 

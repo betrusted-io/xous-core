@@ -2,8 +2,8 @@ use core::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 
-#[cfg(feature = "cramium-soc")]
-use cram_hal_service::trng;
+#[cfg(feature = "bao1x")]
+use bao1x_hal_service::trng;
 use log::{error, info};
 use ux_api::minigfx::*;
 use ux_api::service::api::*;

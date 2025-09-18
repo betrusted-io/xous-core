@@ -41,7 +41,7 @@ enum ConnectSuccess {
     // AuthenticationRequest
 }
 
-#[cfg(any(feature = "precursor", feature = "renode", feature = "cramium-fpga", feature = "cramium-soc"))]
+#[cfg(any(feature = "precursor", feature = "renode", feature = "bao1x"))]
 mod implementation {
     use utralib::generated::*;
 
@@ -78,7 +78,7 @@ mod implementation {
 }
 
 #[cfg(any(not(target_os = "xous"),
-    not(any(feature="precursor", feature="renode", feature="cramium-fpga", feature="cramium-soc", not(target_os = "xous"))) // default to pass crates.io build
+    not(any(feature="precursor", feature="renode", feature="bao1x", not(target_os = "xous"))) // default to pass crates.io build
 ))]
 mod implementation {
     pub struct D11cTimeout {}

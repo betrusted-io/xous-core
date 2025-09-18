@@ -10,18 +10,18 @@ use ux_api::service::api;
 use ux_api::service::api::*;
 
 mod logo;
-#[cfg(not(feature = "cramium-soc"))]
+#[cfg(not(feature = "bao1x"))]
 mod poweron;
-#[cfg(feature = "cramium-soc")]
+#[cfg(feature = "bao1x")]
 mod poweron_bt;
-#[cfg(feature = "cramium-soc")]
+#[cfg(feature = "bao1x")]
 use poweron_bt as poweron;
 mod sleep_note;
 
 use blitstr2::fontmap;
 use xous_ipc::Buffer;
 
-#[cfg(any(feature = "precursor", feature = "renode", feature = "cramium-soc"))]
+#[cfg(any(feature = "precursor", feature = "renode", feature = "bao1x"))]
 // only install for hardware targets; hosted mode uses host's panic handler
 mod panic;
 
@@ -79,7 +79,7 @@ fn map_fonts() -> xous::MemoryRange {
     fontregion
 }
 
-#[cfg(any(feature = "cramium-soc"))]
+#[cfg(any(feature = "bao1x"))]
 fn map_fonts() -> xous::MemoryRange {
     log::trace!("mapping fonts");
     // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
@@ -168,7 +168,7 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
         };
         panic::panic_handler_thread(is_panic.clone(), hwfb, control);
     }
-    #[cfg(feature = "cramium-soc")]
+    #[cfg(feature = "bao1x")]
     {
         // This is safe because the SPIM is finished with initialization, and the handler is
         // Mutex-protected.
@@ -184,7 +184,7 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
     let sid = xns.register_name(api::SERVER_NAME_GFX, Some(2)).expect("can't register server");
     #[cfg(not(target_os = "xous"))]
     let sid = xns.register_name(api::SERVER_NAME_GFX, Some(1)).expect("can't register server");
-    #[cfg(feature = "cramium-soc")]
+    #[cfg(feature = "bao1x")]
     let sid = {
         log::warn!(
             "Remember to notch the expected connections for graphics_server down to 1 after initial testing!"
@@ -198,9 +198,9 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
     display.redraw();
 
     // register a suspend/resume listener
-    #[cfg(not(feature = "cramium-soc"))]
+    #[cfg(not(feature = "bao1x"))]
     let sr_cid = xous::connect(sid).expect("couldn't create suspend callback connection");
-    #[cfg(not(feature = "cramium-soc"))]
+    #[cfg(not(feature = "bao1x"))]
     let mut susres =
         susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, GfxOpcode::SuspendResume as u32, sr_cid)
             .expect("couldn't create suspend/resume object");
@@ -219,7 +219,7 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
             let op = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(GfxOpcode::InvalidCall);
             log::debug!("{:?}", op);
             match op {
-                #[cfg(not(feature = "cramium-soc"))]
+                #[cfg(not(feature = "bao1x"))]
                 GfxOpcode::SuspendResume => {
                     if let Some(scalar) = msg.body.scalar_message() {
                         let token = scalar.arg1;

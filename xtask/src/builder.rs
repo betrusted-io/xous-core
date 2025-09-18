@@ -329,23 +329,11 @@ impl Builder {
         self
     }
 
-    /// Configure various Cramium targets
-    pub fn target_cramium_fpga(&mut self) -> &mut Builder {
+    pub fn target_bao1x_soc(&mut self) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
-        self.utra_target = "cramium-fpga".to_string();
-        self.run_svd2repl = false;
-        self.loader = CrateSpec::Local("loader".to_string(), LoaderRegion::Ram);
-        self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
-        self
-    }
-
-    pub fn target_cramium_soc(&mut self) -> &mut Builder {
-        self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
-        self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
-        self.stream = BuildStream::Release;
-        self.utra_target = "cramium-soc".to_string();
+        self.utra_target = "bao1x".to_string();
         self.run_svd2repl = false;
         self.loader = CrateSpec::Local("loader".to_string(), LoaderRegion::Ram);
         self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
@@ -379,11 +367,11 @@ impl Builder {
     }
 
     /// Configure for baremetal bringup
-    pub fn target_baremetal_cramsoc(&mut self) -> &mut Builder {
+    pub fn target_baremetal_bao1x(&mut self) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
-        self.utra_target = "cramium-soc".to_string();
+        self.utra_target = "bao1x".to_string();
         self.run_svd2repl = false;
         self.loader = CrateSpec::Local("baremetal".to_string(), LoaderRegion::Ram);
         // this is actually a dummy, there is no kernel in baremetal
@@ -705,19 +693,12 @@ impl Builder {
         } else if self.utra_target.contains("atsama5d2") {
             self.kernel_features.push("atsama5d27".into());
             self.loader_features.push("atsama5d27".into());
-        } else if self.utra_target.contains("cramium-fpga") {
-            self.features.push("cramium-fpga".into());
+        } else if self.utra_target.contains("bao1x") {
+            self.features.push("bao1x".into());
             self.features.push(format!("utralib/{}", &self.utra_target));
-            self.kernel_features.push("cramium-fpga".into());
+            self.kernel_features.push("bao1x".into());
             self.kernel_features.push(format!("utralib/{}", &self.utra_target));
-            self.loader_features.push("cramium-fpga".into());
-            self.loader_features.push(format!("utralib/{}", &self.utra_target));
-        } else if self.utra_target.contains("cramium-soc") {
-            self.features.push("cramium-soc".into());
-            self.features.push(format!("utralib/{}", &self.utra_target));
-            self.kernel_features.push("cramium-soc".into());
-            self.kernel_features.push(format!("utralib/{}", &self.utra_target));
-            self.loader_features.push("cramium-soc".into());
+            self.loader_features.push("bao1x".into());
             self.loader_features.push(format!("utralib/{}", &self.utra_target));
         } else if self.utra_target.contains("hosted-baosec") {
             self.features.push("hosted-baosec".into());
@@ -972,7 +953,7 @@ impl Builder {
                 return Err("cargo build failed".into());
             }
 
-            let status = if self.utra_target.contains("cramium") {
+            let status = if self.utra_target.contains("bao1x") {
                 Command::new(cargo())
                     .current_dir(project_root())
                     .args([
@@ -990,7 +971,7 @@ impl Builder {
                         loader_bin.to_str().unwrap(),
                         "--min-xous-ver",
                         &self.min_ver,
-                        "--with-jump", // cramium target has a jump inserted in the loader sig block
+                        "--with-jump", // bao1x target has a jump inserted in the loader sig block
                     ])
                     .status()?
             } else {
@@ -1071,10 +1052,8 @@ impl Builder {
             args.push("precursor");
         } else if self.utra_target.contains("atsama5d2") {
             args.push("atsama5d2");
-        } else if self.utra_target.contains("cramium-soc") {
-            args.push("cramium-soc")
-        } else if self.utra_target.contains("cramium-fpga") {
-            args.push("cramium-soc")
+        } else if self.utra_target.contains("bao1x") {
+            args.push("bao1x")
         }
         args.push("--");
 

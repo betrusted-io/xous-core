@@ -470,7 +470,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 #[cfg(feature = "gen2")]
-use cramium_hal::board::*;
+use bao1x_hal::board::*;
 use locales::t;
 use num_traits::*;
 #[cfg(feature = "gen1")]

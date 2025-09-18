@@ -24,7 +24,7 @@ fn main() {
         let mut spimap = xous::map_memory(
             None,
             xous::MemoryAddress::new(xous::arch::MMAP_VIRT_BASE),
-            cramium_hal::board::SPINOR_LEN as usize,
+            bao1x_hal::board::SPINOR_LEN as usize,
             xous::MemoryFlags::R | xous::MemoryFlags::VIRT,
         )
         .expect("couldn't map spi range");
@@ -111,9 +111,9 @@ fn main() {
 
     #[cfg(feature = "battery-readout")]
     {
-        use cramium_api::I2cApi;
-        let mut i2c = cram_hal_service::I2c::new();
-        use cramium_hal::axp2101::*;
+        use bao1x_api::I2cApi;
+        let mut i2c = bao1x_hal_service::I2c::new();
+        use bao1x_hal::axp2101::*;
         let measurements = [("VBAT", REG_VBAT_H), ("VBUS", REG_VBUS_H), ("VSYS", REG_VSYS_H)];
         let mut buf = [0u8, 0u8];
         loop {

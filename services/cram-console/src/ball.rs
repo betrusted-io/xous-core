@@ -1,7 +1,7 @@
 const BALL_RADIUS: i16 = 10;
 const MOMENTUM_LIMIT: i32 = 8;
 const BORDER_WIDTH: i16 = 5;
-use cram_hal_service::trng;
+use bao1x_hal_service::trng;
 use graphics_server::{Circle, ClipObjectList, ClipObjectType, DrawStyle, PixelColor, Point, Rectangle};
 
 pub struct Ball {

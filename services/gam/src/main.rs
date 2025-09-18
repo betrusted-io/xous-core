@@ -15,9 +15,9 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use std::collections::HashMap;
 
 use api::Opcode;
+#[cfg(feature = "bao1x")]
+use bao1x_hal_service::trng;
 use blitstr2::GlyphStyle;
-#[cfg(feature = "cramium-soc")]
-use cram_hal_service::trng;
 use gam::{MAIN_MENU_NAME, ROOTKEY_MODAL_NAME};
 use log::info;
 use num_traits::*;
@@ -68,9 +68,9 @@ fn wrapped_main() -> ! {
 
     let screensize = gfx.screen_size().expect("Couldn't get screen size");
     // the status canvas is special -- there can only be one, and it is ultimately trusted
-    #[cfg(feature = "cramium-soc")]
+    #[cfg(feature = "bao1x")]
     let glyph_height_hint = gfx.glyph_height_hint(GlyphStyle::Tall).expect("couldn't get glyph height");
-    #[cfg(not(feature = "cramium-soc"))]
+    #[cfg(not(feature = "bao1x"))]
     let glyph_height_hint = gfx.glyph_height_hint(GlyphStyle::Cjk).expect("couldn't get glyph height");
     let status_canvas = Canvas::new(
         Rectangle::new_coords(

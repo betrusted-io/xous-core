@@ -11,15 +11,15 @@ use std::cmp::max;
 #[cfg(feature = "ditherpunk")]
 use std::convert::TryInto;
 
-use bit_field::BitField;
-#[cfg(feature = "cramium-soc")]
-use cram_hal_service::trng::Trng;
+#[cfg(feature = "bao1x")]
+use bao1x_hal_service::trng::Trng;
 #[cfg(feature = "hosted-baosec")]
-use cramium_emu::trng::Trng;
+use bao1x_emu::trng::Trng;
+use bit_field::BitField;
 #[cfg(not(any(feature = "hosted-baosec", feature = "board-baosec")))]
 use gam::*;
 use num_traits::*;
-#[cfg(all(not(feature = "cramium-soc"), not(feature = "doc-deps"), not(feature = "hosted-baosec")))]
+#[cfg(all(not(feature = "bao1x"), not(feature = "doc-deps"), not(feature = "hosted-baosec")))]
 use trng::Trng;
 #[cfg(any(feature = "hosted-baosec", feature = "board-baosec"))]
 use ux_api::widgets::*;
