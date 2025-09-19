@@ -123,7 +123,7 @@ fn main() {
     let generated_filename = "src/generated/atsama5d27.rs";
 
     #[cfg(feature = "bao1x")]
-    let svd_filenames = vec!["bao1x/core.svd", "bao1x/daric.svd"];
+    let svd_filenames = vec!["bao1x/core.svd", "bao1x/bao1x_peri.svd"];
     #[cfg(feature = "bao1x")]
     let generated_filename = "src/generated/bao1x.rs";
 
