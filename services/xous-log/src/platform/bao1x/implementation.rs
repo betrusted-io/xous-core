@@ -1,28 +1,28 @@
 use core::fmt::{Error, Write};
-#[cfg(feature = "bao1x")]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
 use std::pin::Pin;
 
-#[cfg(feature = "bao1x")]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
 use bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
-#[cfg(feature = "bao1x")]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
 use bao1x_hal::udma;
 use utralib::generated::*;
 
 pub struct Output {}
 
-#[cfg(feature = "bao1x")]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
 pub static mut UART_DMA_TX_BUF_VIRT: *mut u8 = 0x0000_0000 as *mut u8;
 
-#[cfg(feature = "bao1x")]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
 pub static mut UART_IRQ: Option<Pin<Box<bao1x_hal::udma::UartIrq>>> = None;
 
-#[cfg(feature = "bao1x")]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
 pub static mut KBD_CONN: u32 = 0;
 
 pub fn init() -> Output {
     // TODO: migrate this to a "proper" UART that is available on SoC hardware, but for now all we have access
     // to is the DUART.
-    #[cfg(feature = "bao1x")]
+    #[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
     let uart = xous::syscall::map_memory(
         xous::MemoryAddress::new(utra::udma_uart_2::HW_UDMA_UART_2_BASE),
         None,
@@ -30,8 +30,11 @@ pub fn init() -> Output {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't map serial port");
-    unsafe { crate::platform::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() as _ };
-    #[cfg(feature = "bao1x")]
+    #[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+    unsafe {
+        crate::platform::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() as _
+    };
+    #[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
     {
         // Note: for the TX buf, we allocate a pre-reserved portion of IFRAM as our
         // DMA buffer. We do *not* use the IFRAM allocator in `bao1x-hal-service` because
@@ -65,13 +68,25 @@ pub fn init() -> Output {
         };
         udma_uart.setup_async_read();
     }
+    #[cfg(all(feature = "bao1x", feature = "hwsim"))]
+    let uart = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utra::duart::HW_DUART_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map UDMA buffer");
+    #[cfg(all(feature = "bao1x", feature = "hwsim"))]
+    unsafe {
+        crate::platform::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() as _
+    };
     println!("Mapped UART @ {:08x}", uart.as_ptr() as usize);
     println!("Process: map success!");
 
     Output {}
 }
 
-#[cfg(feature = "bao1x")]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
 fn uart_handler(_irq_no: usize, _arg: *mut usize) {
     let mut uart = unsafe {
         udma::Uart::get_handle(
@@ -117,7 +132,7 @@ pub struct OutputWriter {}
 #[allow(dead_code)]
 impl OutputWriter {
     pub fn putc(&self, c: u8) {
-        #[cfg(feature = "bao1x")]
+        #[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
         {
             // safety: safe to call as long as the raw parts are initialized and we exclusively
             // own it; and the UART has been initialized. For this peripheral, initialization
@@ -134,13 +149,19 @@ impl OutputWriter {
             // enqueue our character to send via DMA
             uart.write(&[c]);
         }
+        #[cfg(all(feature = "bao1x", feature = "hwsim"))]
+        {
+            let mut uart_csr = unsafe { CSR::new(crate::platform::debug::DEFAULT_UART_ADDR) };
+            while uart_csr.r(utra::duart::SFR_SR) != 0 {}
+            uart_csr.wo(utra::duart::SFR_TXD, c as usize);
+        }
     }
 
     /// Write a buffer to the output and return the number of
     /// bytes written. This is mostly compatible with `std::io::Write`,
     /// except it is infallible.
     pub fn write(&mut self, buf: &[u8]) -> usize {
-        #[cfg(feature = "bao1x")]
+        #[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
         {
             // safety: safe to call as long as the raw parts are initialized and we exclusively
             // own it; and the UART has been initialized. For this peripheral, initialization
@@ -154,6 +175,15 @@ impl OutputWriter {
                 )
             };
             uart.write(buf)
+        }
+        #[cfg(all(feature = "bao1x", feature = "hwsim"))]
+        {
+            let mut uart_csr = unsafe { CSR::new(crate::platform::debug::DEFAULT_UART_ADDR) };
+            for &c in buf.iter() {
+                while uart_csr.r(utra::duart::SFR_SR) != 0 {}
+                uart_csr.wo(utra::duart::SFR_TXD, c as usize);
+            }
+            buf.len()
         }
     }
 

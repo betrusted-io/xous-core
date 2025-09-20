@@ -44,6 +44,7 @@ board-baosec = ["bao1x-hal/board-baosec"]
 board-baosor = ["bao1x-hal/board-baosor"]
 board-dabao = ["bao1x-hal/board-dabao"]
 hosted-baosec = []
+hwsim = []
 
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
