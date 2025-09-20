@@ -66,13 +66,13 @@ impl Uart {
 
 use core::fmt::{Error, Write};
 impl Write for Uart {
-    fn write_str(&mut self, s: &str) -> Result<(), Error> {
+    fn write_str(&mut self, _s: &str) -> Result<(), Error> {
         #[cfg(not(all(feature = "std", not(feature = "debug-print-usb"))))]
-        for c in s.bytes() {
+        for c in _s.bytes() {
             self.putc(c);
         }
         // #[cfg(all(feature = "std", not(feature = "debug-print-usb")))]
-        // log::info!("{}", s);
+        // log::info!("{}", _s);
         Ok(())
     }
 }

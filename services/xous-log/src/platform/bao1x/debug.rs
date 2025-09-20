@@ -1,6 +1,6 @@
 use core::fmt::{Error, Write};
 
-#[cfg(feature = "bao1x")]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
 use bao1x_hal::udma;
 
 #[macro_export]
@@ -30,7 +30,7 @@ pub struct Uart {}
 // this is a hack to bypass an explicit initialization/allocation step for the debug structure
 pub static mut DEFAULT_UART_ADDR: *mut usize = 0x0000_0000 as *mut usize;
 
-#[cfg(feature = "bao1x")]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
 impl Uart {
     pub fn putc(&self, c: u8) {
         // check that we've been initialized before attempting to send any characters...
@@ -54,6 +54,18 @@ impl Uart {
 
         // enqueue our character to send via DMA
         uart.write(&[c]);
+    }
+}
+#[cfg(all(feature = "bao1x", feature = "hwsim"))]
+impl Uart {
+    pub fn putc(&self, c: u8) {
+        // check that we've been initialized before attempting to send any characters...
+        if unsafe { DEFAULT_UART_ADDR } as usize == 0 {
+            return;
+        }
+        let mut uart_csr = unsafe { utralib::CSR::new(DEFAULT_UART_ADDR) };
+        while uart_csr.r(utralib::utra::duart::SFR_SR) != 0 {}
+        uart_csr.wo(utralib::utra::duart::SFR_TXD, c as usize);
     }
 }
 

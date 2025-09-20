@@ -51,6 +51,7 @@ board-baosec = [
     "bmp180",
     "utralib/bao1x",
     "ux-api/board-baosec",
+    "ux-api/std",
 ] # USB form factor token
 loader-baosec = [
     "utralib/bao1x",
@@ -66,9 +67,11 @@ kernel-dabao = ["utralib/bao1x"]
 test-baosec = ["ux-api/loader-baosec", "camera-gc2145"]
 hosted-baosec = ["std"] # emulated hardware on x86 platform
 board-baosor = [
+    "std",
     "camera-gc2145",
     "axp2101",
     "utralib/bao1x",
+    "ux-api/std",
 ] # Precursor form factor
 loader-baosor = []
 board-dabao = ["utralib/bao1x"] # Dev board form factor
@@ -89,7 +92,6 @@ std = [
     "xous-api-names",
     "usb-device",
     "xous-api-ticktimer",
-    "ux-api/std",
     "bao1x-api/std",
 ]
 derive-rkyv = ["rkyv"]

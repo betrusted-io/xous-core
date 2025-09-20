@@ -1,6 +1,6 @@
 // Constants that define pin locations, RAM offsets, etc. for the DaBao basic breakout board
-use crate::iox::IoSetup;
-use crate::iox::*;
+
+use bao1x_api::*;
 
 // console uart buffer
 pub const UART_DMA_TX_BUF_PHYS: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096;
@@ -42,7 +42,7 @@ pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     (IoxPort::PB, SE0_PIN)
 }
 
-pub fn setup_i2c_pins(iox: &dyn IoSetup) -> crate::udma::I2cChannel {
+pub fn setup_i2c_pins(iox: &dyn IoSetup) -> bao1x_api::I2cChannel {
     // I2C_SCL_B[0]
     iox.setup_pin(
         IoxPort::PB,
@@ -65,5 +65,12 @@ pub fn setup_i2c_pins(iox: &dyn IoSetup) -> crate::udma::I2cChannel {
         Some(IoxEnable::Enable),
         Some(IoxDriveStrength::Drive2mA),
     );
-    crate::udma::I2cChannel::Channel0
+    bao1x_api::I2cChannel::Channel0
 }
+
+// these are a bodge to allow some UDMA imports to work - they need to be present even if
+// there currently no SPINOR devices attached.
+pub const SPINOR_PAGE_LEN: u32 = 0x100;
+pub const SPINOR_ERASE_SIZE: u32 = 0x1000; // this is the smallest sector size.
+pub const SPINOR_BULK_ERASE_SIZE: u32 = 0x1_0000; // this is the bulk erase size.
+pub const SPINOR_LEN: u32 = 16384 * 1024;
