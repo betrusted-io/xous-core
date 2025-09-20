@@ -499,7 +499,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     builder.add_loader_feature(board);
                     builder.add_kernel_feature(board);
                 }
-                _ => (), // don't add any board because this is simulation
+                Some("bao1x-sim") => {
+                    let board = "board-dabao";
+                    // select the board
+                    builder.add_feature(board);
+                    builder.add_loader_feature(board);
+                    builder.add_kernel_feature(board);
+                    builder.kernel_disable_defaults(); // need to turn of kernel DUART exclusive access so console can work!
+                }
+                _ => panic!("unhandled configuration"),
             };
 
             // placement in flash is a tension between dev convenience and RAM usage. Things in flash

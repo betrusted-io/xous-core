@@ -224,7 +224,7 @@ impl Builder {
         self
     }
 
-    /// Disable default features on the loader
+    /// Disable default features on the kernel
     #[allow(dead_code)]
     pub fn kernel_disable_defaults(&mut self) -> &mut Builder {
         self.kernel_disable_defaults = true;
