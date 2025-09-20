@@ -24,7 +24,9 @@ static LOCAL_RNG_STATE: [AtomicU32; 8] = [
 
 pub fn init() {}
 
-/// This a fully deterministic PRNG that relies on Chacha8 for state evolution.
+/// This a fully deterministic PRNG that relies on Chacha8 for state evolution. This is
+/// used in verilator simulation environments.
+#[cfg(feature = "verilator-only")]
 pub fn get_u32() -> u32 {
     // Local storage for the seed.
     let mut seed = [0u8; 32];

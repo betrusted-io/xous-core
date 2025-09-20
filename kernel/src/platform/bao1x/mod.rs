@@ -2,7 +2,11 @@
 // SPDX-FileCopyrightText: 2024 bunnie <bunnie@kosagi.com>
 // SPDX-License-Identifier: Apache-2.0
 
-#[cfg(feature = "bao1x")]
+#[cfg(all(feature = "bao1x", not(feature = "verilator-only")))]
+#[path = "rand.rs"]
+pub mod rand;
+#[cfg(all(feature = "bao1x", feature = "verilator-only"))]
+#[path = "rand_fake.rs"]
 pub mod rand;
 
 #[cfg(any(feature = "debug-print", feature = "print-panics"))]
