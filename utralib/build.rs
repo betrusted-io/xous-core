@@ -123,7 +123,11 @@ fn main() {
     let generated_filename = "src/generated/atsama5d27.rs";
 
     #[cfg(feature = "bao1x")]
-    let svd_filenames = vec!["bao1x/core.svd", "bao1x/bao1x_peri.svd"];
+    let mut svd_filenames = vec!["bao1x/core.svd", "bao1x/bao1x_peri.svd"];
+    #[cfg(feature = "bao1x")]
+    if std::path::Path::new("bao1x/soc.svd").exists() {
+        svd_filenames.push("bao1x/soc.svd");
+    }
     #[cfg(feature = "bao1x")]
     let generated_filename = "src/generated/bao1x.rs";
 
