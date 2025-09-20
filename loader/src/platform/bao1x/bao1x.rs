@@ -10,6 +10,7 @@ use bao1x_hal::udma;
 #[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
 use bao1x_hal::{axp2101::Axp2101, udma::GlobalConfig};
 use utralib::generated::*;
+#[cfg(not(feature = "verilator-only"))]
 use utralib::utra::sysctrl;
 
 #[cfg(feature = "qr")]
@@ -2199,6 +2200,7 @@ pub fn coreuser_config() {
 /// Takes in the top clock in MHz, desired perclk in MHz, and returns a tuple of
 /// (min cycle, fd, actual freq)
 /// *tested*
+#[allow(dead_code)]
 pub fn clk_to_per(top_in_mhz: u32, perclk_in_mhz: u32) -> Option<(u8, u8, u32)> {
     let fd_platonic = ((256 * perclk_in_mhz) / (top_in_mhz / 2)).min(256);
     if fd_platonic > 0 {
@@ -2218,6 +2220,7 @@ pub fn clk_to_per(top_in_mhz: u32, perclk_in_mhz: u32) -> Option<(u8, u8, u32)> 
 }
 
 /// Delay with a given system clock frequency. Useful during power mode switching.
+#[allow(dead_code)]
 pub fn delay_at_sysfreq(ms: usize, sysclk_freq: u32) {
     let mut timer = utralib::CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
     timer.wfo(utra::timer0::EN_EN, 0b0); // disable the timer
