@@ -11,6 +11,9 @@ pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_EXT_MEM_LEN;
 pub const RAM_SIZE: usize = 2 * 1024 * 1024;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_EXT_MEM;
 
+// placeholder for compatibility with other targets
+pub fn early_init() -> u32 { 0 }
+
 /// Note that this memory test is "destructive" -- supend/resume will fail if it is enabled
 #[cfg(feature = "platform-tests")]
 pub fn platform_tests() {
