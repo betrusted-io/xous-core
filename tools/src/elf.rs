@@ -36,6 +36,13 @@ pub struct ProgramDescription {
     /// Size of .data section
     pub data_size: u32,
 
+    /// Poke table for data section; in (address, data) tuples. Addresses are in `u32` format
+    /// because we're packing them for a target that is 32-bits, which may be different from the host.
+    pub poke_table: Vec<(u32, u32)>,
+
+    /// Size of region to be zero-ized by the loader
+    pub clear_size: u32,
+
     /// Size of the .bss section
     pub bss_size: u32,
 
@@ -156,6 +163,7 @@ pub fn process_program(b: &[u8], rom_only: bool) -> Result<ProgramDescription, E
     let elf = ElfFile::new(&b).map_err(|x| ElfReadError::ParseElfError(x))?;
     let entry_point = elf.header.pt2.entry_point() as u32;
     let mut program_data = Cursor::new(Vec::new());
+    let mut poke_table = Vec::<(u32, u32)>::new();
 
     let mut size = 0;
     let mut data_offset = 0;
@@ -328,42 +336,12 @@ pub fn process_program(b: &[u8], rom_only: bool) -> Result<ProgramDescription, E
     debug!("Program size: {} bytes", observed_size);
 
     if data_offset as usize % size_of::<u32>() == 0 {
-        const SPACING: &'static str = "  ";
-        let mut non_zero_tuples = Vec::<(usize, u32)>::new();
         for (i, chunk) in data_copy.chunks_exact(4).enumerate() {
             let word = u32::from_le_bytes(chunk.try_into().unwrap());
             if word != 0 {
-                non_zero_tuples.push((i, word));
+                poke_table.push((i as u32, word));
             }
         }
-        println!("Code for loader/baremetal integration:\n");
-        println!("// Define the .data region - bootstrap baremetal using these hard-coded parameters.");
-        println!("const DATA_ORIGIN: usize = 0x{:x};", data_offset);
-        println!(
-            "const DATA_SIZE_BYTES: usize = 0x{:x};",
-            // round up to the nearest u32 word. Includes .data, .bss, .stack, .heap - regions to be zero'd.
-            ((data_size + bss_size) as usize + size_of::<u32>() - 1) & !(size_of::<u32>() - 1)
-        );
-        let mut init_str = String::new();
-        init_str.push_str(&format!("const DATA_INIT: [(usize, u32); {}] = [\n", non_zero_tuples.len()));
-        for (offset, data) in non_zero_tuples {
-            init_str.push_str(&format!("{}(0x{:x}, 0x{:x}),\n", SPACING, offset, data));
-        }
-        init_str.push_str(&format!("];"));
-        print!("{}", init_str);
-        let boilerplate = r#"
-// Clear .data, .bss, .stack, .heap regions & setup .data values
-unsafe {
-    let data_ptr = DATA_ORIGIN as *mut u32;
-    for i in 0..DATA_SIZE_BYTES / size_of::<u32>() {
-        data_ptr.add(i).write_volatile(0);
-    }
-    for (offset, data) in DATA_INIT {
-        data_ptr.add(offset).write_volatile(data);
-    }
-}
-        "#;
-        println!("\n{}", boilerplate);
     } else {
         println!(
             "Data section is not word-aligned, check objdump in detail for how to initialize the section"
@@ -377,6 +355,10 @@ unsafe {
         text_offset,
         text_size,
         bss_size,
+        // round up to the nearest u32 word. Includes .data, .bss, .stack, .heap - regions to be zero'd.
+        clear_size: (((data_size + bss_size) as usize + size_of::<u32>() - 1) & !(size_of::<u32>() - 1))
+            as u32,
+        poke_table,
     })
 }
 
