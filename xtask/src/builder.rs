@@ -825,6 +825,7 @@ impl Builder {
             if self.change_target {
                 std::fs::remove_file(&svd_spec_path).ok(); // don't fail if the file does not exist
             }
+            let is_bao = if self.utra_target == "bao1x" { "--bao1x" } else { "" };
 
             // ------ build the loader ------
             // stash any LTO settings applied to the kernel; proper layout of the loader
@@ -875,6 +876,7 @@ impl Builder {
                         "--",
                         &loader[0],
                         output_file.as_os_str().to_str().unwrap(),
+                        is_bao,
                     ])
                     .status()?;
                 if !status.success() {
@@ -947,6 +949,7 @@ impl Builder {
                     "--",
                     &loader[0],
                     loader_presign.as_os_str().to_str().unwrap(),
+                    is_bao,
                 ])
                 .status()?;
             if !status.success() {

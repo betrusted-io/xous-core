@@ -26,6 +26,7 @@ pkcs8 = { version = "0.8.0", features = ["pem"] }
 base64 = "0.20.0"
 rand = "0.8.5"
 aes-gcm-siv = "0.11.1"
+bao1x-api = { path = "../libs/bao1x-api" }
 
 [[bin]]
 name = "copy-object"

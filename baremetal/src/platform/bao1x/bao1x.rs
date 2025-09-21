@@ -33,22 +33,6 @@ pub const SYSTEM_CLOCK_FREQUENCY: u32 = 800_000_000;
 pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 pub fn early_init() {
-    // Define the .data region - bootstrap baremetal using these hard-coded parameters.
-    // Define the .data region - bootstrap baremetal using these hard-coded parameters.
-    const DATA_ORIGIN: usize = 0x61000000;
-    const DATA_INIT: [(usize, u32); 5] = [(0x0, 0x2), (0x558, 0x1), (0x55b, 0x1), (0x55e, 0x1), (0x563, 0x1)];
-
-    // Clear .data, .bss, .stack, .heap regions & setup .data values
-    unsafe {
-        let data_ptr = DATA_ORIGIN as *mut u32;
-        for i in 0..DATA_SIZE_BYTES / size_of::<u32>() {
-            data_ptr.add(i).write_volatile(0);
-        }
-        for (offset, data) in DATA_INIT {
-            data_ptr.add(offset).write_volatile(data);
-        }
-    }
-
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
     #[cfg(not(feature = "bao1x-evb"))]
     {
@@ -178,35 +162,32 @@ pub fn early_init() {
         rbist.wo(utra::rbist_wrp::SFRCR_TRM, (14 << 16) | 0b001_010_00_0_0_000_0_00);
         rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
     }
-    let perclk = unsafe { init_clock_asic(SYSTEM_CLOCK_FREQUENCY) };
 
-    // test memory
-    // NOTE: this smashes stack - need adjustment if this is going to be a "fixture"
-    /*
-    crate::println!("\ntest memory...");
-    let base = 0x6108_5000;
-    let mem_range = unsafe {
-        core::slice::from_raw_parts_mut(base as *mut u32, (0x6120_0000 - base) / core::mem::size_of::<u32>())
-    };
-    let mut state = 1;
-    for m in mem_range.iter_mut() {
-        state = lfsr_next_u32(state);
-        *m = state;
-    }
-    state = 1;
-    let mut failures = 0;
-    for m in mem_range.iter() {
-        state = lfsr_next_u32(state);
-        if state != *m {
-            failures += 1;
+    // Now that SRAM trims are setup, initialize all the statics by writing to memory.
+    // For baremetal, the statics structure is just at the flash base.
+    const STATICS_LOC: usize = FLASH_BASE;
+
+    // safety: this data structure is pre-loaded by the image loader and is guaranteed to
+    // only have representable, valid values that are aligned according to the repr(C) spec
+    let statics_in_rom: &bao1x_api::StaticsInRom =
+        unsafe { (STATICS_LOC as *const bao1x_api::StaticsInRom).as_ref().unwrap() };
+    assert!(statics_in_rom.version == bao1x_api::STATICS_IN_ROM_VERSION, "Can't find valid statics table");
+
+    // Clear .data, .bss, .stack, .heap regions & setup .data values
+    // Safety: only safe if the values computed by the loader are correct.
+    unsafe {
+        let data_ptr = statics_in_rom.data_origin as *mut u32;
+        for i in 0..statics_in_rom.data_size_bytes as usize / size_of::<u32>() {
+            data_ptr.add(i).write_volatile(0);
+        }
+        for &(offset, data) in &statics_in_rom.poke_table[..statics_in_rom.valid_pokes as usize] {
+            data_ptr.add(offset as usize).write_volatile(data);
         }
     }
-    if failures != 0 {
-        crate::println!("fast mem test failed");
-    } else {
-        crate::println!("fast mem test passed");
-    }
-    */
+
+    // set the clock
+    let perclk = unsafe { init_clock_asic(SYSTEM_CLOCK_FREQUENCY) };
+
     crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
 
     // setup heap alloc

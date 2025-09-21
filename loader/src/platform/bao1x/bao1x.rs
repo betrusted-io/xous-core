@@ -66,9 +66,6 @@ static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::Loc
 */
 
 // Define the .data region - bootstrap baremetal using these hard-coded parameters.
-const DATA_ORIGIN: usize = 0x61000000;
-const DATA_SIZE_BYTES: usize = 0x6000;
-const DATA_INIT: [(usize, u32); 3] = [(0x0, 0x2), (0x558, 0x1), (0x55d, 0x1)];
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
@@ -94,25 +91,49 @@ pub fn delay(quantum: usize) {
     }
 }
 
-#[cfg(all(feature = "bao1x", not(feature = "verilator-only")))]
 pub fn early_init() -> u32 {
+    // For the loader, the statics structure is located just after the signature block
+    const STATICS_LOC: usize = FLASH_BASE + 0x1000;
+
+    // safety: this data structure is pre-loaded by the image loader and is guaranteed to
+    // only have representable, valid values that are aligned according to the repr(C) spec
+    let statics_in_rom: &bao1x_api::StaticsInRom =
+        unsafe { (STATICS_LOC as *const bao1x_api::StaticsInRom).as_ref().unwrap() };
+    assert!(statics_in_rom.version == bao1x_api::STATICS_IN_ROM_VERSION, "Can't find valid statics table");
+
+    // Clear .data, .bss, .stack, .heap regions & setup .data values
+    // Safety: only safe if the values computed by the loader are correct.
+    // Question: this happens before we setup any clocks, timing, etc. I think the CPU is running
+    // in a "slow enough" state that these writes should happen, but this may need to be re-ordered
+    // in particular with respect to SRAM trimming if there are boot issues discovered in the field.
+    unsafe {
+        let data_ptr = statics_in_rom.data_origin as *mut u32;
+        for i in 0..statics_in_rom.data_size_bytes as usize / size_of::<u32>() {
+            data_ptr.add(i).write_volatile(0);
+        }
+        for &(offset, data) in &statics_in_rom.poke_table[..statics_in_rom.valid_pokes as usize] {
+            data_ptr.add(offset as usize).write_volatile(data);
+        }
+    }
+
+    #[cfg(not(feature = "verilator-only"))]
+    let ret = early_init_hw();
+
+    // return a fake clock result
+    #[cfg(feature = "verilator-only")]
+    let ret = 100_000_000;
+
+    ret
+}
+
+#[cfg(all(feature = "bao1x", not(feature = "verilator-only")))]
+pub fn early_init_hw() -> u32 {
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
 
     let mut ao_sysctrl = CSR::new(utra::ao_sysctrl::HW_AO_SYSCTRL_BASE as *mut u32);
     // clear any AO wakeup pending bits
     let fr = ao_sysctrl.r(utra::ao_sysctrl::SFR_AOFR);
     ao_sysctrl.wo(utra::ao_sysctrl::SFR_AOFR, fr);
-
-    // Clear .data, .bss, .stack, .heap regions & setup .data values
-    unsafe {
-        let data_ptr = DATA_ORIGIN as *mut u32;
-        for i in 0..DATA_SIZE_BYTES / size_of::<u32>() {
-            data_ptr.add(i).write_volatile(0);
-        }
-        for (offset, data) in DATA_INIT {
-            data_ptr.add(offset).write_volatile(data);
-        }
-    }
 
     unsafe {
         // this block is mandatory in all cases to get clocks set into some consistent, expected mode
