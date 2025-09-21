@@ -1,9 +1,8 @@
 MEMORY
 {
-  /* we are using an unsigned loader, so the offset is not 1k offset */
   /* if the font location is adjusted, this needs to be updated in libs/blitstr2 codegen templates.go FONT_BASE value */
   FONTS : ORIGIN = 0x60040000, LENGTH = 128k
-  FLASH : ORIGIN = 0x60001000, LENGTH = 252k
+  FLASH : ORIGIN = 0x60001100, LENGTH = 252k - 256
   RAM : ORIGIN = 0x61000000, LENGTH = 2M
 }
 
