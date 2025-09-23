@@ -367,13 +367,13 @@ impl Builder {
     }
 
     /// Configure for baremetal bringup
-    pub fn target_baremetal_bao1x(&mut self) -> &mut Builder {
+    pub fn target_baremetal_bao1x(&mut self, subtype: &str) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
         self.utra_target = "bao1x".to_string();
         self.run_svd2repl = false;
-        self.loader = CrateSpec::Local("baremetal".to_string(), LoaderRegion::Ram);
+        self.loader = CrateSpec::Local(subtype.to_string(), LoaderRegion::Ram);
         // this is actually a dummy, there is no kernel in baremetal
         self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
         self
@@ -863,7 +863,7 @@ impl Builder {
                 output_file.push("target");
                 output_file.push(self.target_kernel.as_ref().expect("target"));
                 output_file.push(stream);
-                output_file.push("baremetal.img");
+                output_file.push(format!("{}.img", self.loader.name().unwrap_or("baremetal".to_string())));
 
                 let status = Command::new(cargo())
                     .current_dir(project_root())

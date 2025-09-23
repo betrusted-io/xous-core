@@ -601,14 +601,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("baremetal-bao1x") => {
             builder.set_baremetal(true);
             update_flash_origin("baremetal/src/platform/bao1x/link.x", 0x6000_0100)?;
-            builder.target_baremetal_bao1x();
+            builder.target_baremetal_bao1x("baremetal");
         }
 
         Some("baremetal-bao1x-evb") => {
             builder.set_baremetal(true);
             update_flash_origin("baremetal/src/platform/bao1x/link.x", 0x6100_0100)?;
             builder.add_loader_feature("bao1x-evb");
-            builder.target_baremetal_bao1x();
+            builder.target_baremetal_bao1x("baremetal");
+        }
+
+        Some("bao1x-boot0") => {
+            builder.set_baremetal(true);
+            builder.target_baremetal_bao1x("bao1x-boot0");
         }
 
         Some("baosec") => {
