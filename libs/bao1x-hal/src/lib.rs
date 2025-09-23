@@ -29,6 +29,8 @@ pub mod usb;
 #[cfg(not(feature = "hosted-baosec"))]
 pub use shared_csr::*;
 #[cfg(not(feature = "hosted-baosec"))]
+pub mod acram;
+#[cfg(not(feature = "hosted-baosec"))]
 pub mod mbox;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod rram;
