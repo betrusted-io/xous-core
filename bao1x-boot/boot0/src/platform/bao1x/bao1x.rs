@@ -13,8 +13,8 @@ static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::Loc
 
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
-#[allow(dead_code)]
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
+pub const SIGBLOCK_LEN: usize = 768; // this is adjusted inside builder.rs, in the sign-image invocation
 
 // This may not be a great assumption. TODO: fix this by deriving from the static boot constants.
 // also fix this in the baremetal/loader configs.
@@ -33,9 +33,6 @@ pub const SYSTEM_CLOCK_FREQUENCY: u32 = 400_000_000;
 pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 pub fn early_init() {
-    let uart = crate::debug::Uart {};
-    uart.putc('*' as u32 as u8);
-
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
 
     unsafe {
@@ -69,7 +66,7 @@ pub fn early_init() {
 
     // Now that SRAM trims are setup, initialize all the statics by writing to memory.
     // For baremetal, the statics structure is just at the flash base.
-    const STATICS_LOC: usize = FLASH_BASE;
+    const STATICS_LOC: usize = FLASH_BASE + SIGBLOCK_LEN;
 
     // safety: this data structure is pre-loaded by the image loader and is guaranteed to
     // only have representable, valid values that are aligned according to the repr(C) spec
@@ -88,6 +85,9 @@ pub fn early_init() {
             data_ptr.add(offset as usize).write_volatile(data);
         }
     }
+
+    let uart = crate::debug::Uart {};
+    uart.putc('*' as u32 as u8);
 
     // set the clock
     let perclk = unsafe { init_clock_asic(SYSTEM_CLOCK_FREQUENCY) };
@@ -148,7 +148,6 @@ pub fn init_hash() {
     let sce_mem = unsafe {
         core::slice::from_raw_parts_mut(utralib::HW_SEG_LKEY_MEM as *mut u32, 10 * 1024 / size_of::<u32>())
     };
-    crate::println!("init hash");
     #[rustfmt::skip]
     let constants =
         SHA256_H.iter().chain(
@@ -168,13 +167,6 @@ pub fn init_hash() {
     for (dst, &src) in sce_mem.iter_mut().zip(constants) {
         *dst = src;
     }
-    for (i, &d) in sce_mem.iter().enumerate() {
-        if i % 8 == 0 {
-            crate::print!("\n\r{:04x}: ", i);
-        }
-        crate::print!("{:08x} ", d);
-    }
-    crate::println!("");
     let mut combo_hash = CSR::new(utra::combohash::HW_COMBOHASH_BASE as *mut u32);
     combo_hash.wo(utra::combohash::SFR_OPT3, 0); // u32 big-endian constant load
     combo_hash.wfo(utra::combohash::SFR_CRFUNC_CR_FUNC, HashFunction::Init as u32);
@@ -186,7 +178,6 @@ pub fn init_hash() {
     }
     // clear the flag on exit
     combo_hash.rmwf(utra::combohash::SFR_FR_MFSM_DONE, 1);
-    crate::println!("init hash done");
 }
 
 /// Delay with a given system clock frequency. Useful during power mode switching.

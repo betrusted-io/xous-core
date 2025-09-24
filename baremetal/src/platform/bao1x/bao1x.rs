@@ -15,8 +15,8 @@ static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::Loc
 
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
-#[allow(dead_code)]
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
+pub const SIGBLOCK_LEN: usize = 768; // this is adjusted inside builder.rs, in the sign-image invocation
 
 const DATA_SIZE_BYTES: usize = 0x6000;
 pub const HEAP_START: usize = RAM_BASE + DATA_SIZE_BYTES;
@@ -165,7 +165,7 @@ pub fn early_init() {
 
     // Now that SRAM trims are setup, initialize all the statics by writing to memory.
     // For baremetal, the statics structure is just at the flash base.
-    const STATICS_LOC: usize = FLASH_BASE;
+    const STATICS_LOC: usize = FLASH_BASE + SIGBLOCK_LEN;
 
     // safety: this data structure is pre-loaded by the image loader and is guaranteed to
     // only have representable, valid values that are aligned according to the repr(C) spec
