@@ -80,6 +80,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .takes_value(false)
                 .help("Insert a jump instruction in the signature block"),
         )
+        .arg(
+            Arg::with_name("sig-length")
+                .long("sig-length")
+                .takes_value(true)
+                .default_value("4096")
+                .required(false),
+        )
         .get_matches();
 
     let minver =
@@ -91,6 +98,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             None
         };
 
+    let sig_length = usize::from_str_radix(matches.value_of("sig-length").unwrap_or("4096"), 10)
+        .expect("sig-length should be a decimal number");
     // Sign the loader, if an output file was specified
     if let Some(loader_output) = matches.value_of("loader-output") {
         let loader_key = matches.value_of("loader-key").expect("no loader key specified");
@@ -110,6 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &minver,
             false,
             matches.is_present("with-jump"),
+            sig_length,
         )?;
     }
 
@@ -131,6 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &minver,
             true,
             matches.is_present("with-jump"),
+            sig_length,
         )?;
     }
     Ok(())
