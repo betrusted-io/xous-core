@@ -835,6 +835,7 @@ Hardware images:
  tiny                    Precursor tiny image. For testing with services built out-of-tree.
  baosec                  Baosec application target image.
  baremetal-bao1x         Baremetal image for baochip1x targets.
+ bao1x-boot0             Boot0 partition for baochip1x targets.
 
 Hosted emulation:
  run                     Run user image in hosted mode with release flags. [cratespecs] are apps
