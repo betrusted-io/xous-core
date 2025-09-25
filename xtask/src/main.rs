@@ -732,7 +732,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("generate-locales") => generate_locales()?,
         Some("wycheproof-import") => wycheproof_import()?,
         Some("dummy-template") => generate_app_menus(&Vec::new()),
-        _ => print_help(),
+        task => {
+            if let Some(task) = task {
+                eprintln!("error: task {task:?} not recognized");
+            }
+
+            print_help();
+            std::process::exit(1);
+        }
     }
     builder.build()?;
 
