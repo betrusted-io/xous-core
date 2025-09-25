@@ -10,6 +10,7 @@ xous-api-names = { version = "0.9.67", optional = true }
 xous-api-ticktimer = { version = "0.9.65", optional = true }
 log = { version = "0.4.14", optional = true }
 utralib = { version = "0.1.25", default-features = false, optional = true }
+bitflags = "1.2.1"
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
@@ -35,10 +36,6 @@ bao1x-api = { path = "../bao1x-api", default-features = false }
 
 # [target.'cfg(target_os = "xous")'.dependencies]
 xous = { version = "0.9.66", features = ["v2p"] }
-
-bitflags = "1.2.1"
-# TODO: migrate from bitflags to this crate
-bitbybit = "1.4.0"
 
 [features]
 camera-ov2640 = []

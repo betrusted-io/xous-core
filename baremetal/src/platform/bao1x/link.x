@@ -2,7 +2,7 @@
 MEMORY
 {
   /* Note: ORIGIN is updated by xtask for baremetal targets */
-  FLASH : ORIGIN = 0x60000400, LENGTH = 256k - 1024
+  FLASH : ORIGIN = 0x60000100, LENGTH = 256k - 256
   RAM : ORIGIN = 0x61000000, LENGTH = 2048k
 }
 

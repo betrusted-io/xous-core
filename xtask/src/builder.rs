@@ -148,7 +148,6 @@ pub(crate) struct Builder {
     swap: Option<(u32, u32)>,
     change_target: bool,
     baremetal: bool,
-    sigblock_size: usize,
 }
 
 impl Builder {
@@ -179,14 +178,7 @@ impl Builder {
             swap: None,
             change_target: false,
             baremetal: false,
-            sigblock_size: 4096,
         }
-    }
-
-    /// Sets up the signature block size
-    pub fn set_sigblock_size<'a>(&'a mut self, size: usize) -> &'a mut Builder {
-        self.sigblock_size = size;
-        self
     }
 
     /// Sets a flag if the build is just for a baremetal testing target
@@ -375,13 +367,13 @@ impl Builder {
     }
 
     /// Configure for baremetal bringup
-    pub fn target_baremetal_bao1x(&mut self, subtype: &str) -> &mut Builder {
+    pub fn target_baremetal_bao1x(&mut self) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
         self.utra_target = "bao1x".to_string();
         self.run_svd2repl = false;
-        self.loader = CrateSpec::Local(subtype.to_string(), LoaderRegion::Ram);
+        self.loader = CrateSpec::Local("baremetal".to_string(), LoaderRegion::Ram);
         // this is actually a dummy, there is no kernel in baremetal
         self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
         self
@@ -871,10 +863,7 @@ impl Builder {
                 output_file.push("target");
                 output_file.push(self.target_kernel.as_ref().expect("target"));
                 output_file.push(stream);
-                let mut presign_file = output_file.clone();
-                output_file.push(format!("{}.img", self.loader.name().unwrap_or("baremetal".to_string())));
-                presign_file
-                    .push(format!("{}-presign.img", self.loader.name().unwrap_or("baremetal".to_string())));
+                output_file.push("baremetal.img");
 
                 let status = Command::new(cargo())
                     .current_dir(project_root())
@@ -886,35 +875,13 @@ impl Builder {
                         "copy-object",
                         "--",
                         &loader[0],
-                        presign_file.as_os_str().to_str().unwrap(),
+                        output_file.as_os_str().to_str().unwrap(),
                         is_bao,
                     ])
                     .status()?;
                 if !status.success() {
                     return Err("cargo build failed".into());
                 } else {
-                    Command::new(cargo())
-                        .current_dir(project_root())
-                        .args([
-                            "run",
-                            "--package",
-                            "tools",
-                            "--bin",
-                            "sign-image",
-                            "--",
-                            "--loader-image",
-                            presign_file.to_str().unwrap(),
-                            "--loader-key",
-                            &self.loader_key,
-                            "--loader-output",
-                            output_file.to_str().unwrap(),
-                            "--min-xous-ver",
-                            &self.min_ver,
-                            "--sig-length",
-                            &self.sigblock_size.to_string(),
-                            "--with-jump", // bao1x target has a jump inserted in the loader sig block
-                        ])
-                        .status()?;
                     return Ok(());
                 }
             }
