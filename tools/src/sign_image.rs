@@ -9,44 +9,9 @@ use sha2::{Digest, Sha512};
 
 const LOADER_VERSION: u32 = 1;
 const LOADER_PREHASH_VERSION: u32 = 2;
+const RV_SKIP_I: u32 = 0x0000106f; // jal x0, 4096
 
 use xous_semver::SemVer;
-
-pub fn generate_jal_x0(signed_offset: isize) -> Result<u32, String> {
-    // Check that offset is 2-byte aligned (even)
-    if signed_offset & 1 != 0 {
-        return Err("JAL offset must be 2-byte aligned (even)".to_string());
-    }
-
-    // Check that offset fits in 21-bit signed range
-    // JAL can encode offsets from -2^20 to 2^20 - 2
-    const MIN_OFFSET: isize = -(1 << 20); // -1048576
-    const MAX_OFFSET: isize = (1 << 20) - 2; // 1048574
-
-    if signed_offset < MIN_OFFSET || signed_offset > MAX_OFFSET {
-        return Err(format!("JAL offset {} is out of range [{}, {}]", signed_offset, MIN_OFFSET, MAX_OFFSET));
-    }
-
-    let imm = signed_offset as u32;
-
-    // Extract bit fields for JAL J-type encoding
-    // JAL immediate format: [20|10:1|11|19:12]
-    let imm_20 = (imm >> 20) & 1; // bit 20 -> instruction bit 31
-    let imm_19_12 = (imm >> 12) & 0xFF; // bits 19:12 -> instruction bits 19:12
-    let imm_11 = (imm >> 11) & 1; // bit 11 -> instruction bit 20
-    let imm_10_1 = (imm >> 1) & 0x3FF; // bits 10:1 -> instruction bits 30:21
-
-    // Assemble the JAL instruction
-    // Format: imm[20] | imm[10:1] | imm[11] | imm[19:12] | rd | opcode
-    let instruction = (imm_20 << 31) |      // imm[20] at bit 31
-                     (imm_10_1 << 21) |    // imm[10:1] at bits 30:21
-                     (imm_11 << 20) |      // imm[11] at bit 20
-                     (imm_19_12 << 12) |   // imm[19:12] at bits 19:12
-                     // rd = x0 = 0 (bits 11:7)
-                     0x6F; // JAL opcode (0b1101111)
-
-    Ok(instruction)
-}
 
 pub fn load_pem(src: &str) -> Result<pem::Pem, Box<dyn std::error::Error>> {
     let mut input = vec![];
@@ -63,7 +28,6 @@ pub fn sign_image(
     minver: &Option<SemVer>,
     semver: Option<[u8; 16]>,
     with_jump: bool,
-    length: usize,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut source = source.to_owned();
     let mut dest_file = vec![];
@@ -102,10 +66,8 @@ pub fn sign_image(
         Ed25519KeyPair::from_pkcs8_maybe_unchecked(&private_key.contents).map_err(|e| format!("{}", e))?;
     let signature = signing_key.sign(&source);
 
-    let jal = generate_jal_x0(length as isize)?;
-    println!("offset {:x}, jal {:x}", length, jal);
     let extra_pad = if with_jump {
-        dest_file.write_all(&jal.to_le_bytes())?;
+        dest_file.write_all(&RV_SKIP_I.to_le_bytes())?;
         4
     } else {
         0
@@ -118,9 +80,9 @@ pub fn sign_image(
     let signature_u8 = &signature.as_ref();
     dest_file.write_all(signature_u8)?;
 
-    // Pad the first sector to length bytes.
+    // Pad the first sector to 4096 bytes.
     let mut v = vec![];
-    v.resize(length - 4 - 4 - signature_u8.len() - extra_pad, 0);
+    v.resize(4096 - 4 - 4 - signature_u8.len() - extra_pad, 0);
     dest_file.write_all(&v)?;
 
     // Fill the remainder of the source data
@@ -144,7 +106,6 @@ pub fn sign_image_prehash(
     minver: &Option<SemVer>,
     semver: Option<[u8; 16]>,
     with_jump: bool,
-    length: usize,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut source = source.to_owned();
     let mut dest_file = vec![];
@@ -190,9 +151,8 @@ pub fn sign_image_prehash(
     let signing_key = SigningKey::from_bytes(&secbytes);
     let signature = signing_key.sign_digest(h);
 
-    let jal = generate_jal_x0(length as isize)?;
     let extra_pad = if with_jump {
-        dest_file.write_all(&jal.to_le_bytes())?;
+        dest_file.write_all(&RV_SKIP_I.to_le_bytes())?;
         4
     } else {
         0
@@ -205,9 +165,9 @@ pub fn sign_image_prehash(
     let signature_u8 = &signature.to_bytes();
     dest_file.write_all(signature_u8)?;
 
-    // Pad the first sector to length bytes.
+    // Pad the first sector to 4096 bytes.
     let mut v = vec![];
-    v.resize(length - 4 - 4 - signature_u8.len() - extra_pad, 0);
+    v.resize(4096 - 4 - 4 - signature_u8.len() - extra_pad, 0);
     dest_file.write_all(&v)?;
 
     // Fill the remainder of the source data
@@ -232,7 +192,6 @@ pub fn sign_file<S, T>(
     minver: &Option<SemVer>,
     use_prehash: bool,
     with_jump: bool,
-    sector_length: usize,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     S: AsRef<Path>,
@@ -244,9 +203,9 @@ where
     source_file.read_to_end(&mut source)?;
 
     let result = if use_prehash {
-        sign_image_prehash(&source, private_key, defile, minver, None, with_jump, sector_length)?
+        sign_image_prehash(&source, private_key, defile, minver, None, with_jump)?
     } else {
-        sign_image(&source, private_key, defile, minver, None, with_jump, sector_length)?
+        sign_image(&source, private_key, defile, minver, None, with_jump)?
     };
     dest_file.write_all(&result)?;
     Ok(())

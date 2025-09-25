@@ -47,9 +47,6 @@ pub(crate) const TARGET_TRIPLE_RISCV32_KERNEL: &str = "riscv32imac-unknown-none-
 pub(crate) const TARGET_TRIPLE_ARM: &str = "armv7a-unknown-xous-elf";
 pub(crate) const TARGET_TRIPLE_ARM_KERNEL: &str = "armv7a-unknown-none-elf";
 
-/// Size of the "statics" region used to initialize baremetal targets
-const STATICS_LEN: usize = 0x100;
-
 // because I have nowhere else to note this. The commit that contains the rkyv-enum derive
 // refactor to work around warnings thrown by Rust 1.64.0 is: f815ed85b58b671178fbf53b4cea34186fc406eb
 // We could undo this if it turns out to be a compiler regression.
@@ -602,36 +599,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Some("baremetal-bao1x") => {
-            let sigblock_size = 0x300;
-            update_flash_origin(
-                "baremetal/src/platform/bao1x/link.x",
-                (0x6000_0000 + sigblock_size + STATICS_LEN) as u32,
-            )?;
-            builder.set_baremetal(true).target_baremetal_bao1x("baremetal").set_sigblock_size(sigblock_size);
+            builder.set_baremetal(true);
+            update_flash_origin("baremetal/src/platform/bao1x/link.x", 0x6000_0100)?;
+            builder.target_baremetal_bao1x();
         }
 
         Some("baremetal-bao1x-evb") => {
-            let sigblock_size = 0x300;
-            update_flash_origin(
-                "baremetal/src/platform/bao1x/link.x",
-                (0x6100_0000 + sigblock_size + STATICS_LEN) as u32,
-            )?;
             builder.set_baremetal(true);
+            update_flash_origin("baremetal/src/platform/bao1x/link.x", 0x6100_0100)?;
             builder.add_loader_feature("bao1x-evb");
-            builder.set_sigblock_size(sigblock_size);
-            builder.target_baremetal_bao1x("baremetal");
-        }
-
-        Some("bao1x-boot0") => {
-            let sigblock_size = 0x300;
-            update_flash_origin(
-                "baremetal/src/platform/bao1x/link.x",
-                (0x6000_0000 + sigblock_size + STATICS_LEN) as u32,
-            )?;
-            builder
-                .set_baremetal(true)
-                .target_baremetal_bao1x("bao1x-boot0")
-                .set_sigblock_size(sigblock_size);
+            builder.target_baremetal_bao1x();
         }
 
         Some("baosec") => {
