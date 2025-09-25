@@ -21,16 +21,3 @@ pub mod regular;
 pub mod tall;
 #[cfg(not(feature = "bao1x"))]
 pub mod small;
-
-#[cfg(feature = "bao1x")]
-pub mod emoji;
-#[cfg(feature = "bao1x")]
-pub mod bold;
-#[cfg(feature = "bao1x")]
-pub mod mono;
-#[cfg(feature = "bao1x")]
-pub mod regular;
-#[cfg(feature = "bao1x")]
-pub mod tall;
-#[cfg(feature = "bao1x")]
-pub mod small;
