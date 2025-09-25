@@ -5,8 +5,6 @@
 #![allow(dead_code)]
 #[cfg(not(feature = "bao1x"))]
 pub const FONT_BASE: usize = 0x2053_0000;
-#[cfg(feature = "bao1x")]
-pub const FONT_BASE: usize = 0x6004_0000;
 
 #[cfg(not(feature = "bao1x"))]
 pub const EMOJI_OFFSET: usize = 0x0;
@@ -46,31 +44,4 @@ pub const SMALL_OFFSET: usize = 0x10dde0;
 pub const SMALL_LEN: usize = 0x19e0;
 #[cfg(not(feature = "bao1x"))]
 pub const FONT_TOTAL_LEN: usize = 0x10f7c0;
-
-#[cfg(feature = "bao1x")]
-pub const EMOJI_OFFSET: usize = 0x0;
-#[cfg(feature = "bao1x")]
-pub const EMOJI_LEN: usize = 0xab00;
-#[cfg(feature = "bao1x")]
-pub const BOLD_OFFSET: usize = 0xab00;
-#[cfg(feature = "bao1x")]
-pub const BOLD_LEN: usize = 0x19e0;
-#[cfg(feature = "bao1x")]
-pub const MONO_OFFSET: usize = 0xc4e0;
-#[cfg(feature = "bao1x")]
-pub const MONO_LEN: usize = 0x19e0;
-#[cfg(feature = "bao1x")]
-pub const REGULAR_OFFSET: usize = 0xdec0;
-#[cfg(feature = "bao1x")]
-pub const REGULAR_LEN: usize = 0x19e0;
-#[cfg(feature = "bao1x")]
-pub const TALL_OFFSET: usize = 0xf8a0;
-#[cfg(feature = "bao1x")]
-pub const TALL_LEN: usize = 0x6780;
-#[cfg(feature = "bao1x")]
-pub const SMALL_OFFSET: usize = 0x16020;
-#[cfg(feature = "bao1x")]
-pub const SMALL_LEN: usize = 0x19e0;
-#[cfg(feature = "bao1x")]
-pub const FONT_TOTAL_LEN: usize = 0x17a00;
 
