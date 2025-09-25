@@ -21,5 +21,6 @@ oid = []
 precursor = ["utralib/precursor"]
 renode = ["utralib/renode"]
 std = []
+debug = []
 # This crate is specific to the bao1x.
 default = ["bao1x"]

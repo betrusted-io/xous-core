@@ -17,6 +17,7 @@ use digest::{
 };
 
 mod core_api;
+#[cfg(feature = "debug")]
 mod debug;
 mod sha256;
 mod sha512;

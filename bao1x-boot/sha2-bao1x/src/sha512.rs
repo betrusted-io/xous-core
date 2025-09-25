@@ -29,11 +29,13 @@ fn compress(csr: &mut CSR<u32>, blocks: &[[u8; BLOCK_LEN]]) {
     const BUF_BLOCKS: usize = utralib::HW_SEG_MSG_MEM_LEN / BLOCK_LEN;
     // safety: this is the actual location of the message buffer and its length according to the hardware
     // spec. only safe because this is machine mode and no-std (no threads, no concurrency)
+    #[cfg(feature = "debug")]
     let msg_blocks: &mut [[u8; BLOCK_LEN]; BUF_BLOCKS] =
         unsafe { &mut *(utralib::HW_SEG_MSG_MEM as *mut [[u8; BLOCK_LEN]; BUF_BLOCKS]) };
 
     for block_chunk in blocks.chunks(BUF_BLOCKS) {
         // block_chunk has a length equal to or less than msg_buf due to .chunks() iterator above
+        #[cfg(feature = "debug")]
         for (src, dst) in block_chunk.iter().zip(msg_blocks.iter_mut()) {
             crate::println!("  {:x?}", src);
             dst.copy_from_slice(src);
@@ -58,9 +60,9 @@ fn compress(csr: &mut CSR<u32>, blocks: &[[u8; BLOCK_LEN]]) {
                 .with_seg_result(true)
                 .raw_value(),
         );
-        // csr.wo(utra::combohash::SFR_OPT3, 0);
 
         // debug dump
+        #[cfg(feature = "debug")]
         for i in 0..utra::combohash::COMBOHASH_NUMREGS {
             crate::println!("{:x}: {:x}", i * 4, unsafe {
                 (utra::combohash::HW_COMBOHASH_BASE as *const u32).add(i).read_volatile()
@@ -78,10 +80,14 @@ fn compress(csr: &mut CSR<u32>, blocks: &[[u8; BLOCK_LEN]]) {
         // clear the flag on exit
         csr.rmwf(utra::combohash::SFR_FR_MFSM_DONE, 1);
 
-        let state = unsafe { core::slice::from_raw_parts(utralib::HW_SEG_HOUT_MEM as *const u32, 16) };
-        let state_byte = unsafe { core::slice::from_raw_parts(utralib::HW_SEG_HOUT_MEM as *const u8, 32) };
-        crate::println!("state: {:x?}", state);
-        crate::println!("state_byte: {:x?}", state_byte);
+        #[cfg(feature = "debug")]
+        {
+            let state = unsafe { core::slice::from_raw_parts(utralib::HW_SEG_HOUT_MEM as *const u32, 16) };
+            let state_byte =
+                unsafe { core::slice::from_raw_parts(utralib::HW_SEG_HOUT_MEM as *const u8, 32) };
+            crate::println!("state: {:x?}", state);
+            crate::println!("state_byte: {:x?}", state_byte);
+        }
 
         // clear the first block setting - this was set by the new() function
         // it does not hurt to clear it every successive block
