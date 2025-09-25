@@ -1,5 +1,3 @@
-use bao1x_api::*;
-use bao1x_hal::iox::Iox;
 use bao1x_hal::udma;
 use utralib::CSR;
 use utralib::utra;
@@ -18,6 +16,8 @@ pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 pub const SIGBLOCK_LEN: usize = 768; // this is adjusted inside builder.rs, in the sign-image invocation
 
+// This may not be a great assumption. TODO: fix this by deriving from the static boot constants.
+// also fix this in the baremetal/loader configs.
 const DATA_SIZE_BYTES: usize = 0x6000;
 pub const HEAP_START: usize = RAM_BASE + DATA_SIZE_BYTES;
 pub const HEAP_LEN: usize = 1024 * 256;
@@ -28,31 +28,11 @@ pub const SCRATCH_PAGE: usize = HEAP_START - 8192;
 
 pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 
-// the 800_000_000 setting is tested to work at least on one sample
-pub const SYSTEM_CLOCK_FREQUENCY: u32 = 800_000_000;
+// Run at 400MHz to ensure we can boot even without an external VDD85 regulator!
+pub const SYSTEM_CLOCK_FREQUENCY: u32 = 400_000_000;
 pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 pub fn early_init() {
-    let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-    #[cfg(not(feature = "bao1x-evb"))]
-    {
-        // sets up the FET control for DCDC2 (only useful on boards that support it)
-        iox.set_gpio_pin_value(IoxPort::PA, 5, IoxValue::High);
-        iox.setup_pin(
-            IoxPort::PA,
-            5,
-            Some(IoxDir::Output),
-            Some(IoxFunction::Gpio),
-            None,
-            Some(IoxEnable::Enable),
-            None,
-            Some(IoxDriveStrength::Drive2mA),
-        );
-    }
-
-    let uart = crate::debug::Uart {};
-    uart.putc('*' as u32 as u8);
-
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
 
     unsafe {
@@ -84,85 +64,6 @@ pub fn early_init() {
     sramtrm.wo(utra::coresub_sramtrm::SFR_SRAM0, 0x8);
     sramtrm.wo(utra::coresub_sramtrm::SFR_SRAM1, 0x8);
 
-    #[cfg(feature = "v0p9")]
-    {
-        /*
-        logic [15:0] trm_ram32kx72      ; assign trm_ram32kx72      = trmdat[0 ]; localparam t_trm IV_trm_ram32kx72      = IV_sram_sp_uhde_inst_sram0;
-        logic [15:0] trm_ram8kx72       ; assign trm_ram8kx72       = trmdat[1 ]; localparam t_trm IV_trm_ram8kx72       = IV_sram_sp_hde_inst_sram1;
-        logic [15:0] trm_rf1kx72        ; assign trm_rf1kx72        = trmdat[2 ]; localparam t_trm IV_trm_rf1kx72        = IV_rf_sp_hde_inst_cache;
-        logic [15:0] trm_rf256x27       ; assign trm_rf256x27       = trmdat[3 ]; localparam t_trm IV_trm_rf256x27       = IV_rf_sp_hde_inst_cache;
-        logic [15:0] trm_rf512x39       ; assign trm_rf512x39       = trmdat[4 ]; localparam t_trm IV_trm_rf512x39       = IV_rf_sp_hde_inst_cache;
-        logic [15:0] trm_rf128x31       ; assign trm_rf128x31       = trmdat[5 ]; localparam t_trm IV_trm_rf128x31       = IV_rf_sp_hde_inst_cache;
-        logic [15:0] trm_dtcm8kx36      ; assign trm_dtcm8kx36      = trmdat[6 ]; localparam t_trm IV_trm_dtcm8kx36      = IV_sram_sp_hde_inst_tcm;
-        logic [15:0] trm_itcm32kx18     ; assign trm_itcm32kx18     = trmdat[7 ]; localparam t_trm IV_trm_itcm32kx18     = IV_sram_sp_hde_inst_tcm;
-        logic [15:0] trm_ifram32kx36    ; assign trm_ifram32kx36    = trmdat[8 ]; localparam t_trm IV_trm_ifram32kx36    = IV_sram_sp_uhde_inst;
-        logic [15:0] trm_sce_sceram_10k ; assign trm_sce_sceram_10k = trmdat[9 ]; localparam t_trm IV_trm_sce_sceram_10k = IV_sram_sp_hde_inst;
-        logic [15:0] trm_sce_hashram_3k ; assign trm_sce_hashram_3k = trmdat[10]; localparam t_trm IV_trm_sce_hashram_3k = IV_rf_sp_hde_inst;
-        logic [15:0] trm_sce_aesram_1k  ; assign trm_sce_aesram_1k  = trmdat[11]; localparam t_trm IV_trm_sce_aesram_1k  = IV_rf_sp_hde_inst;
-        logic [15:0] trm_sce_pkeram_4k  ; assign trm_sce_pkeram_4k  = trmdat[12]; localparam t_trm IV_trm_sce_pkeram_4k  = IV_rf_sp_hde_inst;
-        logic [15:0] trm_sce_aluram_3k  ; assign trm_sce_aluram_3k  = trmdat[13]; localparam t_trm IV_trm_sce_aluram_3k  = IV_rf_sp_hde_inst;
-        logic [15:0] trm_sce_mimmdpram  ; assign trm_sce_mimmdpram  = trmdat[14]; localparam t_trm IV_trm_sce_mimmdpram  = IV_rf_2p_hdc_inst;
-        logic [15:0] trm_rdram1kx32     ; assign trm_rdram1kx32     = trmdat[15]; localparam t_trm IV_trm_rdram1kx32     = IV_rf_2p_hdc_inst_vex;
-        logic [15:0] trm_rdram512x64    ; assign trm_rdram512x64    = trmdat[16]; localparam t_trm IV_trm_rdram512x64    = IV_rf_2p_hdc_inst_vex;
-        logic [15:0] trm_rdram128x22    ; assign trm_rdram128x22    = trmdat[17]; localparam t_trm IV_trm_rdram128x22    = IV_rf_2p_hdc_inst_vex;
-        logic [15:0] trm_rdram32x16     ; assign trm_rdram32x16     = trmdat[18]; localparam t_trm IV_trm_rdram32x16     = IV_rf_2p_hdc_inst_vex;
-        logic [15:0] trm_bioram1kx32    ; assign trm_bioram1kx32    = trmdat[19]; localparam t_trm IV_trm_bioram1kx32    = IV_rf_sp_hde_inst_cache;
-        logic [15:0] trm_tx_fifo128x32  ; assign trm_tx_fifo128x32  = trmdat[20]; localparam t_trm IV_trm_tx_fifo128x32  = IV_rf_2p_hdc_inst;
-        logic [15:0] trm_rx_fifo128x32  ; assign trm_rx_fifo128x32  = trmdat[21]; localparam t_trm IV_trm_rx_fifo128x32  = IV_rf_2p_hdc_inst;
-        logic [15:0] trm_fifo32x19      ; assign trm_fifo32x19      = trmdat[22]; localparam t_trm IV_trm_fifo32x19      = IV_rf_2p_hdc_inst;
-        logic [15:0] trm_udcmem_share   ; assign trm_udcmem_share   = trmdat[23]; localparam t_trm IV_trm_udcmem_share   = IV_rf_2p_hdc_inst;
-        logic [15:0] trm_udcmem_odb     ; assign trm_udcmem_odb     = trmdat[24]; localparam t_trm IV_trm_udcmem_odb     = IV_rf_2p_hdc_inst;
-        logic [15:0] trm_udcmem_256x64  ; assign trm_udcmem_256x64  = trmdat[25]; localparam t_trm IV_trm_udcmem_256x64  = IV_rf_2p_hdc_inst;
-        logic [15:0] trm_acram2kx64     ; assign trm_acram2kx64     = trmdat[26]; localparam t_trm IV_trm_acram2kx64     = IV_sram_sp_uhde_inst_sram0;
-        logic [15:0] trm_aoram1kx36     ; assign trm_aoram1kx36     = trmdat[27]; localparam t_trm IV_trm_aoram1kx36     = IV_sram_sp_hde_inst;
-
-             */
-        crate::println!("setting 0.9v sramtrm");
-        let mut sramtrm = CSR::new(utra::coresub_sramtrm::HW_CORESUB_SRAMTRM_BASE as *mut u32);
-        sramtrm.wo(utra::coresub_sramtrm::SFR_CACHE, 0x3);
-        sramtrm.wo(utra::coresub_sramtrm::SFR_ITCM, 0x3);
-        sramtrm.wo(utra::coresub_sramtrm::SFR_DTCM, 0x3);
-        sramtrm.wo(utra::coresub_sramtrm::SFR_VEXRAM, 0x1);
-
-        let mut rbist = CSR::new(utra::rbist_wrp::HW_RBIST_WRP_BASE as *mut u32);
-        // bio 0.9v settings
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (19 << 16) | 0b011_000_01_0_0_000_0_00);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-
-        // vex 0.9v settings
-        for i in 0..4 {
-            rbist.wo(utra::rbist_wrp::SFRCR_TRM, ((15 + i) << 16) | 0b001_010_00_0_0_000_0_00);
-            rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-        }
-
-        // sram 0.9v settings
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (0 << 16) | 0b011_000_01_0_1_000_0_00);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (1 << 16) | 0b011_000_00_0_0_000_0_00);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-        crate::println!("setting other 0.9v trims");
-
-        // tcm 0.9v
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (6 << 16) | 0b011_000_00_0_0_000_0_00);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (7 << 16) | 0b011_000_00_0_0_000_0_00);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-
-        // ifram 0.9v
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (8 << 16) | 0b010_000_00_0_1_000_1_01);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-
-        // sce 0.9V
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (9 << 16) | 0b011_000_00_0_0_000_0_00);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-        for i in 0..4 {
-            rbist.wo(utra::rbist_wrp::SFRCR_TRM, ((10 + i) << 16) | 0b011_000_01_0_1_000_0_00);
-            rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-        }
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (14 << 16) | 0b001_010_00_0_0_000_0_00);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-    }
-
     // Now that SRAM trims are setup, initialize all the statics by writing to memory.
     // For baremetal, the statics structure is just at the flash base.
     const STATICS_LOC: usize = FLASH_BASE + SIGBLOCK_LEN;
@@ -185,6 +86,9 @@ pub fn early_init() {
         }
     }
 
+    let uart = crate::debug::Uart {};
+    uart.putc('*' as u32 as u8);
+
     // set the clock
     let perclk = unsafe { init_clock_asic(SYSTEM_CLOCK_FREQUENCY) };
 
@@ -195,6 +99,8 @@ pub fn early_init() {
 
     setup_timer();
 
+    init_hash();
+
     // Rx setup
     let mut udma_uart = setup_rx(perclk);
     irq_setup();
@@ -203,91 +109,6 @@ pub fn early_init() {
     udma_uart.write("console up\r\n".as_bytes());
     crate::debug::USE_CONSOLE.store(true, core::sync::atomic::Ordering::SeqCst);
     crate::println!("This debug print should be on the UDMA UART");
-
-    // Setup I/Os so things that should be powered off are actually off
-    bao1x_hal::board::setup_display_pins(&iox);
-    bao1x_hal::board::setup_memory_pins(&iox);
-    bao1x_hal::board::setup_i2c_pins(&iox);
-    bao1x_hal::board::setup_camera_pins(&iox);
-    bao1x_hal::board::setup_kb_pins(&iox);
-    bao1x_hal::board::setup_oled_power_pin(&iox);
-    bao1x_hal::board::setup_trng_power_pin(&iox);
-
-    #[cfg(not(feature = "bao1x-evb"))]
-    {
-        crate::println!("Engage DCDC2");
-        let i2c_channel = bao1x_hal::board::setup_i2c_pins(&iox);
-        use bao1x_hal::udma::GlobalConfig;
-        let udma_global = GlobalConfig::new();
-        udma_global.clock(PeriphId::from(i2c_channel), true);
-        let i2c_ifram = unsafe {
-            bao1x_hal::ifram::IframRange::from_raw_parts(
-                bao1x_hal::board::I2C_IFRAM_ADDR,
-                bao1x_hal::board::I2C_IFRAM_ADDR,
-                4096,
-            )
-        };
-        let mut i2c = unsafe {
-            bao1x_hal::udma::I2c::new_with_ifram(i2c_channel, 400_000, perclk, i2c_ifram, &udma_global)
-        };
-
-        if let Ok(mut pmic) = bao1x_hal::axp2101::Axp2101::new(&mut i2c) {
-            match pmic.set_dcdc(&mut i2c, Some((0.88, true)), bao1x_hal::axp2101::WhichDcDc::Dcdc2) {
-                Ok(_) => crate::println!("turned on DCDC2"),
-                Err(_) => crate::println!("couldn't turn off DCDC2"),
-            }
-            pmic.set_pwm_mode(&mut i2c, bao1x_hal::axp2101::WhichDcDc::Dcdc2, true).ok();
-        }
-        // this does nothing on boards without the FET rework
-        crate::println!("Engage DCDC2 FET");
-        iox.set_gpio_pin_value(IoxPort::PA, 5, IoxValue::Low);
-    }
-
-    // code to setup PWM, for testing the PWM pin
-    if false {
-        let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-        iox.setup_pin(IoxPort::PF, 9, Some(IoxDir::Input), Some(IoxFunction::Gpio), None, None, None, None);
-        iox.setup_pin(
-            IoxPort::PA,
-            0,
-            Some(IoxDir::Output),
-            Some(IoxFunction::Gpio),
-            None,
-            None,
-            Some(IoxEnable::Disable),
-            Some(IoxDriveStrength::Drive8mA),
-        );
-        iox.setup_pin(
-            IoxPort::PA,
-            0,
-            Some(IoxDir::Output),
-            Some(IoxFunction::AF3),
-            None,
-            None,
-            Some(IoxEnable::Disable),
-            Some(IoxDriveStrength::Drive8mA),
-        );
-        let mut timer = CSR::new(utra::pwm::HW_PWM_BASE as *mut u32);
-        timer.wo(utra::pwm::REG_CH_EN, 1);
-        timer.rmwf(utra::pwm::REG_TIM0_CFG_R_TIMER0_SAW, 1);
-        timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_TH, 0);
-        timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_MODE, 3);
-        let pwm = utra::pwm::HW_PWM_BASE as *mut u32;
-        // unsafe { pwm.add(2).write_volatile(1 << 16) };
-        unsafe { pwm.add(2).write_volatile(0) };
-        timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 1);
-        crate::println!("PWM running on PA0?");
-        for i in 0..12 {
-            crate::println!("0x{:2x}: 0x{:08x}", i, unsafe { pwm.add(i).read_volatile() })
-        }
-        crate::println!("0x{:2x}: 0x{:08x}", 65, unsafe { pwm.add(65).read_volatile() });
-        /*
-        for i in 80..84 {
-            crate::println!("0x{:2x}: 0x{:08x}", i, unsafe { pwm.add(i).read_volatile() })
-        }
-        */
-        crate::println!("");
-    }
 }
 
 pub fn setup_timer() {
@@ -313,6 +134,50 @@ pub fn setup_alloc() {
     unsafe {
         ALLOCATOR.lock().init(HEAP_START as *mut u8, HEAP_LEN);
     }
+}
+
+/// This function loads all the round constants into the combohasher's local memory.
+pub fn init_hash() {
+    use bao1x_hal::sce::combohash::*;
+    // safety: this one is a little less clear from the register set extraction. But in the case of
+    // system initialization, the SCE uses its entire RAM range (10kiB worth) as a single buffer, so
+    // none of the buffer boundaries are respected. Thus we set the length of the segment to 10kiB
+    // solely because as hardware designers, we know this is what's there. You can see the size of
+    // the SCERAM's block definition via its RBIST wrapper here:
+    // https://github.com/baochip/baochip-1x/blob/96ba390759ba361e50e57bd21f02c806ddafc4ff/rtl/modules/soc_coresub/rtl/soc_coresub.sv#L1018
+    let sce_mem = unsafe {
+        core::slice::from_raw_parts_mut(utralib::HW_SEG_LKEY_MEM as *mut u32, 10 * 1024 / size_of::<u32>())
+    };
+    #[rustfmt::skip]
+    let constants =
+        SHA256_H.iter().chain(
+        SHA256_K.iter().chain(
+        SHA512_H.iter().chain(
+        SHA512_K.iter().chain(
+        BLK2S_H.iter().chain(
+        BLK2B_H.iter().chain(
+        BLK2_X.iter().chain(
+        BLK3_H.iter().chain(
+        BLK3_X.iter().chain(
+        RIPMD_H.iter().chain(
+        RIPMD_K.iter().chain(
+        RIPMD_X.iter().chain(
+        RAMSEG_SHA3.iter()
+    ))))))))))));
+    for (dst, &src) in sce_mem.iter_mut().zip(constants) {
+        *dst = src;
+    }
+    let mut combo_hash = CSR::new(utra::combohash::HW_COMBOHASH_BASE as *mut u32);
+    combo_hash.wo(utra::combohash::SFR_OPT3, 0); // u32 big-endian constant load
+    combo_hash.wfo(utra::combohash::SFR_CRFUNC_CR_FUNC, HashFunction::Init as u32);
+
+    combo_hash.wo(utra::combohash::SFR_FR, 0xf); // clear completion flag
+    combo_hash.wo(utra::combohash::SFR_AR, 0x5a); // start
+    while combo_hash.rf(utra::combohash::SFR_FR_MFSM_DONE) == 0 {
+        // wait for mem to copy
+    }
+    // clear the flag on exit
+    combo_hash.rmwf(utra::combohash::SFR_FR_MFSM_DONE, 1);
 }
 
 /// Delay with a given system clock frequency. Useful during power mode switching.
@@ -661,13 +526,6 @@ pub fn clockset_wrapper(freq: u32) -> u32 {
     // reset the baud rate on the console UART
     let perclk = unsafe { crate::platform::init_clock_asic(freq) };
     let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
-    #[cfg(feature = "bao1x-evb")]
-    let mut udma_uart = unsafe {
-        // safety: this is safe to call, because we set up clock and events prior to calling
-        // new.
-        udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
-    };
-    #[cfg(not(feature = "bao1x-evb"))]
     let mut udma_uart = unsafe {
         // safety: this is safe to call, because we set up clock and events prior to calling
         // new.
@@ -769,13 +627,6 @@ pub unsafe fn low_power() -> u32 {
 
     // reset the UART
     let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
-    #[cfg(feature = "bao1x-evb")]
-    let mut udma_uart = unsafe {
-        // safety: this is safe to call, because we set up clock and events prior to calling
-        // new.
-        udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
-    };
-    #[cfg(not(feature = "bao1x-evb"))]
     let mut udma_uart = unsafe {
         // safety: this is safe to call, because we set up clock and events prior to calling
         // new.
@@ -790,200 +641,4 @@ pub unsafe fn low_power() -> u32 {
     udma_uart.write("powerdown with clocks\r\n".as_bytes());
 
     perclk
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum KeyPress {
-    Up,
-    Down,
-    Left,
-    Right,
-    Select,
-    Home,
-    Invalid,
-    None,
-}
-#[allow(dead_code)]
-pub fn scan_keyboard<T: IoSetup + IoGpio>(
-    iox: &T,
-    rows: &[(IoxPort, u8)],
-    cols: &[(IoxPort, u8)],
-) -> [KeyPress; 4] {
-    let mut key_presses: [KeyPress; 4] = [KeyPress::None; 4];
-    let mut key_press_index = 0; // no Vec in no_std, so we have to manually track it
-
-    for (row, (port, pin)) in rows.iter().enumerate() {
-        iox.set_gpio_pin_value(*port, *pin, IoxValue::Low);
-        for (col, (col_port, col_pin)) in cols.iter().enumerate() {
-            if iox.get_gpio_pin_value(*col_port, *col_pin) == IoxValue::Low {
-                crate::println!("Key press at ({}, {})", row, col);
-                if key_press_index < key_presses.len() {
-                    key_presses[key_press_index] = match (row, col) {
-                        (1, 3) => KeyPress::Left,
-                        (1, 2) => KeyPress::Home,
-                        (1, 0) => KeyPress::Right,
-                        (0, 0) => KeyPress::Down,
-                        (0, 2) => KeyPress::Up,
-                        (0, 1) => KeyPress::Select,
-                        _ => KeyPress::Invalid,
-                    };
-                    key_press_index += 1;
-                }
-            }
-        }
-        iox.set_gpio_pin_value(*port, *pin, IoxValue::High);
-    }
-    key_presses
-}
-
-#[derive(Copy, Clone, PartialEq, Eq)]
-#[allow(dead_code)]
-#[cfg(feature = "trng-debug")]
-#[repr(u32)]
-pub enum TrngOpt {
-    RngA = 0x0,
-    RngB = 0x1_0000,
-}
-
-#[cfg(feature = "trng-debug")]
-fn trng_stop(trng: &mut CSR<u32>, sce: &mut CSR<u32>, opt: TrngOpt) {
-    trng.wo(utra::trng::SFR_AR_GEN, 0xa5); // trigger stop
-    match opt {
-        TrngOpt::RngB => {
-            sce.wo(utra::sce_glbsfr::SFR_FFEN, !(1 << 5)); // disable fifo
-        }
-        TrngOpt::RngA => {
-            sce.wo(utra::sce_glbsfr::SFR_FFEN, !(1 << 4)); // disable fifo
-        }
-    }
-}
-
-#[cfg(feature = "trng-debug")]
-fn trng_raw_buf_ready(trng: &CSR<u32>) -> bool { trng.r(utra::trng::SFR_SR) & (1 << 28) != 0 }
-
-#[allow(dead_code)]
-#[cfg(feature = "trng-debug")]
-pub fn trng_ro(
-    crsrc: u32,
-    crana: u32,
-    post_proc: u32,
-    opt: TrngOpt,
-    chain0_l: u32,
-    chain0_h: u32,
-    chain1_l: u32,
-    chain1_h: u32,
-    buf: &mut [u32],
-    do_raw: bool,
-) {
-    let mut trng = CSR::new(utralib::utra::trng::HW_TRNG_BASE as *mut u32);
-    let mut sce = CSR::new(utralib::utra::sce_glbsfr::HW_SCE_GLBSFR_BASE as *mut u32);
-    let rngb_mem = unsafe {
-        core::slice::from_raw_parts(
-            utralib::HW_SEG_RNGB_MEM as *const u32,
-            utralib::HW_SEG_RNGB_MEM_LEN / size_of::<u32>(),
-        )
-    };
-    let rnga_mem = unsafe {
-        core::slice::from_raw_parts(
-            utralib::HW_SEG_RNGA_MEM as *const u32,
-            utralib::HW_SEG_RNGA_MEM_LEN / size_of::<u32>(),
-        )
-    };
-
-    match opt {
-        TrngOpt::RngB => sce.wo(utra::sce_glbsfr::SFR_FFEN, 1 << 5),
-        TrngOpt::RngA => sce.wo(utra::sce_glbsfr::SFR_FFEN, 1 << 4),
-    }
-
-    trng.wo(utra::trng::SFR_CRSRC, crsrc);
-    trng.wo(utra::trng::SFR_CRANA, crana);
-    trng.wo(utra::trng::SFR_PP, post_proc);
-    trng.wo(utra::trng::SFR_OPT, opt as u32 | 0x100);
-    // contex.trng->opt = 0x10040;   // use rngB , gen 0x40*4*4=1024 bytes 为啥现在是 0x100 *4 ???
-    trng.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, chain0_l);
-    trng.wo(utra::trng::SFR_CHAIN_RNGCHAINEN1, chain0_h);
-    trng.wo(utra::trng::SFR_CHAIN_RNGCHAINEN2, chain1_l);
-    trng.wo(utra::trng::SFR_CHAIN_RNGCHAINEN3, chain1_h);
-
-    /*
-    crate::println!("crsrc: {:08x}", trng.r(utra::trng::SFR_CRSRC));
-    crate::println!("crana: {:08x}", trng.r(utra::trng::SFR_CRANA));
-    crate::println!("postproc: {:08x}", trng.r(utra::trng::SFR_PP));
-    crate::println!("opt: {:08x}", trng.r(utra::trng::SFR_OPT));
-    crate::println!("chain0_l: {:08x}", trng.r(utra::trng::SFR_CHAIN_RNGCHAINEN0));
-    crate::println!("chain0_h: {:08x}", trng.r(utra::trng::SFR_CHAIN_RNGCHAINEN1));
-    crate::println!("chain1_l: {:08x}", trng.r(utra::trng::SFR_CHAIN_RNGCHAINEN2));
-    crate::println!("chain1_h: {:08x}", trng.r(utra::trng::SFR_CHAIN_RNGCHAINEN3));
-
-    crate::println!("rng start");
-    */
-    if !do_raw {
-        for (genloop, chunk) in buf.chunks_mut(256).enumerate() {
-            match opt {
-                TrngOpt::RngB => sce.wo(utra::sce_glbsfr::SFR_FFCLR, 0x0000FF05),
-                TrngOpt::RngA => sce.wo(utra::sce_glbsfr::SFR_FFCLR, 0x0000FF04),
-            }
-
-            if genloop != 0 {
-                /*
-                crate::println!(
-                    "GEN_LOOP = {},HLTHTEST_ERRCNT (After gen)= {}",
-                    genloop - 1,
-                    ((trng.r(utra::trng::SFR_SR) >> 16) & 0x00FF)
-                ); //上一次结果打印
-                */
-            }
-            /*
-            crate::println!(
-                "GEN_LOOP = {} ,HLTHTEST_ERRCNT (Before gen)= {}",
-                genloop,
-                ((trng.r(utra::trng::SFR_SR) >> 16) & 0x00FF)
-            ); //新的起始打印
-            */
-            trng.wo(utra::trng::SFR_AR_GEN, 0x5a); // trigger start
-
-            match opt {
-                TrngOpt::RngB => {
-                    while (sce.r(utra::sce_glbsfr::SFR_FFCNT_SR_FF5) >> 4) & 0xFFF < chunk.len() as u32 {
-                        // wait
-                    }
-                    chunk.copy_from_slice(&rngb_mem[..chunk.len()]);
-                    /*
-                    crate::println!(
-                        "GEN_LOOP = {} ,HLTHTEST_ERRCNT (After gen)= {}\r\n",
-                        genloop,
-                        ((trng.r(utra::trng::SFR_SR) >> 16) & 0x00FF)
-                    );
-                    */
-                }
-                TrngOpt::RngA => {
-                    while (sce.r(utra::sce_glbsfr::SFR_FFCNT_SR_FF4) >> 4) & 0xFFF < chunk.len() as u32 {
-                        // wait
-                    }
-                    chunk.copy_from_slice(&rnga_mem[..chunk.len()]);
-                    /*
-                    crate::println!(
-                        "GEN_LOOP = {} ,HLTHTEST_ERRCNT (After gen)= {}\r\n",
-                        genloop,
-                        ((trng.r(utra::trng::SFR_SR) >> 16) & 0x00FF)
-                    );
-                    */
-                }
-            }
-        }
-        // crate::println!("HLTHTEST_ERRCNT (After gen)= {}\r\n", ((trng.r(utra::trng::SFR_SR) >> 16) &
-        // 0x00FF));
-        trng_stop(&mut trng, &mut sce, opt);
-    } else {
-        // make sure the trng is in the stopped state
-        trng_stop(&mut trng, &mut sce, opt);
-        // crate::println!("raw data");
-
-        for d in buf.iter_mut() {
-            while !trng_raw_buf_ready(&trng) {} // wait for buffer to fill
-            *d = trng.r(utra::trng::SFR_BUF);
-        }
-    }
-    // crate::println!("rng stop");
 }

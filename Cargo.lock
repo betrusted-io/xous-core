@@ -55,7 +55,7 @@ name = "aes-test"
 version = "0.1.0"
 dependencies = [
  "aes",
- "hex-literal",
+ "hex-literal 0.3.4",
  "log",
  "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
@@ -144,6 +144,12 @@ checksum = "7d5a26814d8dcb93b0e5a0ff3c6d80a8843bafb21b39e8e18a6f05471870e110"
 dependencies = [
  "derive_arbitrary",
 ]
+
+[[package]]
+name = "arbitrary-int"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "825297538d77367557b912770ca3083f778a196054b3ee63b22673c4a3cae0a5"
 
 [[package]]
 name = "argh"
@@ -388,6 +394,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "bao1x-boot0"
+version = "0.1.0"
+dependencies = [
+ "bao1x-api",
+ "bao1x-hal",
+ "base64 0.22.1",
+ "critical-section",
+ "digest 0.10.7",
+ "ed25519-dalek",
+ "hex-literal 1.0.0",
+ "linked_list_allocator",
+ "riscv",
+ "sha2-bao1x",
+ "simple-fatfs",
+ "utralib 0.1.25",
+ "ux-api",
+ "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-bio-bdma",
+ "xous-riscv",
+]
+
+[[package]]
 name = "bao1x-emu"
 version = "0.1.0"
 dependencies = [
@@ -411,6 +439,7 @@ name = "bao1x-hal"
 version = "0.1.0"
 dependencies = [
  "bao1x-api",
+ "bitbybit",
  "bitfield",
  "bitflags 1.3.2",
  "either",
@@ -606,6 +635,18 @@ name = "bit_field"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed8765909f9009617974ab6b7d332625b320b33c326b1e9321382ef1999b5d56"
+
+[[package]]
+name = "bitbybit"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec187a89ab07e209270175faf9e07ceb2755d984954e58a2296e325ddece2762"
+dependencies = [
+ "arbitrary-int",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.87",
+]
 
 [[package]]
 name = "bitfield"
@@ -2550,6 +2591,12 @@ name = "hex-literal"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ebdb29d2ea9ed0083cd8cece49bbd968021bd99b0849edb4a9a7ee0fdf6a4e0"
+
+[[package]]
+name = "hex-literal"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bcaaec4551594c969335c98c903c1397853d4198408ea609190f420500f6be71"
 
 [[package]]
 name = "hidapi"
@@ -5093,6 +5140,15 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-ipc 0.10.6 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "sha2-bao1x"
+version = "0.10.9"
+dependencies = [
+ "bao1x-hal",
+ "digest 0.10.7",
+ "utralib 0.1.25",
 ]
 
 [[package]]
