@@ -893,6 +893,19 @@ impl Builder {
                 if !status.success() {
                     return Err("cargo build failed".into());
                 } else {
+                    // bao1x bootloader targets. Figure out if it's boot0 or boot1
+                    let function_code = match self.loader {
+                        CrateSpec::Local(name, _) => {
+                            if name == "bao1x-boot0" {
+                                "boot0"
+                            } else if name == "bao1x-boot1" {
+                                "boot1"
+                            } else {
+                                return Err(String::from("Target subtype not supported").into());
+                            }
+                        }
+                        _ => return Err(String::from("Can't determine bootloader region").into()),
+                    };
                     Command::new(cargo())
                         .current_dir(project_root())
                         .args([
@@ -913,6 +926,9 @@ impl Builder {
                             "--sig-length",
                             &self.sigblock_size.to_string(),
                             "--with-jump", // bao1x target has a jump inserted in the loader sig block
+                            "--bao1x",
+                            "--function-code",
+                            function_code,
                         ])
                         .status()?;
                     return Ok(());
