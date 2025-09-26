@@ -122,22 +122,22 @@ pub const MAX_HEIGHT: u8 = {{.Font.Size}};
 pub const CODEPOINTS: [u32; {{.GS.CodepointsLen}}] = [
 {{.GS.Codepoints}}];
 
-#[cfg(any(feature="precursor", feature="renode", feature="cramium-soc", feature="board-baosec"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 pub static GLYPH_LOCATION: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 pub const GLYPH_LEN: usize = {{.GS.GlyphsLen}};
 
 pub fn glyphs() -> &'static [u32] {
-    #[cfg(any(feature="precursor", feature="renode", feature="cramium-soc", feature="board-baosec"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     unsafe {
         let data: *const u32 = core::mem::transmute(GLYPH_LOCATION.load(core::sync::atomic::Ordering::SeqCst));
         core::slice::from_raw_parts(data, GLYPH_LEN)
     }
 
-    #[cfg(not(target_os = "xous"))]
+    #[cfg(any(not(target_os = "xous"), feature="bao1x"))]
     &GLYPHS
 }
 
-#[cfg(not(target_os = "xous"))]
+#[cfg(any(not(target_os = "xous"), feature = "bao1x"))]
 /// Packed 16px * 16px glyph pattern data.
 /// Pixels are packed in row-major order with LSB of first pixel word
 /// containing the top left pixel. Bit of 0 means clear, 1 means set
@@ -172,10 +172,7 @@ const loadermodTemplate = `#![cfg_attr(rustfmt, rustfmt_skip)]
 // The order of these modules affects the link order in the loader, which is referred to in the graphics engine.
 // To make changes, see <xous_root>/libs/blitstr2/codegen/main.go
 {{range $f := .FontDir}}
-#[cfg(not(feature = "cramium-soc"))]
-pub mod {{$f.Name}};{{end}}
-{{range $f := .SmallFontDir}}
-#[cfg(feature = "cramium-soc")]
+#[cfg(not(feature = "bao1x"))]
 pub mod {{$f.Name}};{{end}}
 `
 
@@ -184,15 +181,10 @@ const fontmapTemplate = `#![cfg_attr(rustfmt, rustfmt_skip)]
 // The order of these modules affects the link order in the loader, which is referred to in the graphics engine.
 // To make changes, see <xous_root>/libs/blitstr2/codegen/main.go
 #![allow(dead_code)]
-#[cfg(not(feature = "cramium-soc"))]
+#[cfg(not(feature = "bao1x"))]
 pub const FONT_BASE: usize = 0x2053_0000;
-#[cfg(feature = "cramium-soc")]
-pub const FONT_BASE: usize = 0x6004_0000;
 
-{{range $f := .FontDir}}#[cfg(not(feature = "cramium-soc"))]
+{{range $f := .FontDir}}#[cfg(not(feature = "bao1x"))]
 pub const {{$f.Name}}: usize = 0x{{$f.Len}};
-{{end}}
-{{range $fs := .SmallFontDir}}#[cfg(feature = "cramium-soc")]
-pub const {{$fs.Name}}: usize = 0x{{$fs.Len}};
 {{end}}
 `

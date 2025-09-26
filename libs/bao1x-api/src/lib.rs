@@ -12,6 +12,7 @@ pub mod api;
 pub use api::*;
 #[cfg(feature = "std")]
 pub mod keyboard;
+pub mod signatures;
 
 /// Constants used by both emulation and hardware implementations
 pub const PERCLK: u32 = 100_000_000;

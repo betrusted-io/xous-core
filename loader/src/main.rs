@@ -157,7 +157,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     #[cfg(all(feature = "secboot", not(feature = "vexii-test")))]
     let mut fs_prehash = [0u8; 64];
     #[cfg(not(all(feature = "secboot", not(feature = "vexii-test"))))]
-    let mut fs_prehash = [0u8; 64];
+    let fs_prehash = [0u8; 64];
     #[cfg(all(feature = "secboot", not(feature = "vexii-test")))]
     if !secboot::validate_xous_img(signed_buffer as *const u32, &mut fs_prehash) {
         loop {}

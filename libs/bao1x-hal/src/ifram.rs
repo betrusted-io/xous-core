@@ -1,7 +1,7 @@
 use bao1x_api::*;
+use xous::MemoryRange;
 #[cfg(feature = "std")]
-use xous::Result;
-use xous::{MemoryRange, Message, send_message};
+use xous::{Message, Result, send_message};
 
 pub enum IframBank {
     Bank0,
@@ -121,8 +121,11 @@ impl IframRange {
     }
 }
 
+#[cfg(feature = "std")]
 use core::sync::atomic::{AtomicU32, Ordering};
+#[cfg(feature = "std")]
 pub(crate) static REFCOUNT: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "std")]
 impl Drop for IframRange {
     fn drop(&mut self) {
         // this is all terrible and broken, see https://github.com/betrusted-io/xous-core/issues/482

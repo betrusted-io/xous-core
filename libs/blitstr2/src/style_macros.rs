@@ -155,9 +155,13 @@ macro_rules! english_rules {
             Ok(g) => g,
             _ => match $emoji_style($ch) {
                 Ok(g) => g,
-                _ => match $base_style(REPLACEMENT) {
+                // add more character sets to bao1x target by adding match clauses here
+                _ => match zh_glyph($ch) {
                     Ok(g) => g,
-                    _ => NULL_GLYPH_SPRITE,
+                    _ => match $base_style(REPLACEMENT) {
+                        Ok(g) => g,
+                        _ => NULL_GLYPH_SPRITE,
+                    },
                 },
             },
         }
