@@ -17,7 +17,7 @@ pub const REVOCATION_OFFSET: usize = 124;
 /// Why this matters: boot0 has to boot the chip under all modes. An external power source is needed for
 /// IDD85 > 100mA. Thus we can't boot at max speed config, as not all system configurations have the
 /// external regulator. So, we have to work at reduced VDD/frequency and make sure this constraint is met.
-pub fn validate_image(img_offset: *const u32) -> Result<(), String> {
+pub fn validate_image(img_offset: *const u32) -> Result<usize, String> {
     // conjure the signature struct directly out of memory. super unsafe.
     let sig_ptr = img_offset as *const SignatureInFlash;
     let sig: &SignatureInFlash = unsafe { sig_ptr.as_ref().unwrap() };
@@ -46,8 +46,8 @@ pub fn validate_image(img_offset: *const u32) -> Result<(), String> {
     }
 
     let one_way_counters = OneWayCounter::new();
-    let mut valid = false;
     let mut secure = false;
+    let mut passing_key: Option<usize> = None;
     for (i, key) in sig.sealed_data.pubkeys.iter().enumerate() {
         if key.iter().all(|&x| x == 0) {
             continue;
@@ -68,13 +68,12 @@ pub fn validate_image(img_offset: *const u32) -> Result<(), String> {
         // the function inside the ed25519 crate.
         match verifying_key.verify_prehashed(h, None, &ed25519_signature) {
             Ok(_) => {
+                passing_key = Some(i);
                 if i != sig.sealed_data.pubkeys.len() - 1 {
-                    valid = true;
                     secure = true;
                     break;
                 } else if i == sig.sealed_data.pubkeys.len() - 1 {
                     // this is the developer key slot
-                    valid = true;
                     secure = false;
                     break;
                 }
@@ -86,7 +85,11 @@ pub fn validate_image(img_offset: *const u32) -> Result<(), String> {
     if !secure {
         erase_secrets();
     }
-    if valid { Ok(()) } else { Err(String::from("No valid pubkeys found or signature invalid")) }
+    if let Some(valid_key) = passing_key {
+        Ok(valid_key)
+    } else {
+        Err(String::from("No valid pubkeys found or signature invalid"))
+    }
 }
 
 fn erase_secrets() {

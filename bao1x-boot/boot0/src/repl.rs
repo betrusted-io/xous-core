@@ -246,7 +246,7 @@ impl Repl {
                 }
             }
             "check" => match crate::sigcheck::validate_image(crate::FLASH_BASE as *const u32) {
-                Ok(_) => crate::println!("sigcheck passed"),
+                Ok(key_number) => crate::println!("sigcheck passed on key {}", key_number),
                 Err(e) => crate::println!("sigcheck failed: {}", e),
             },
             "reps" => {
