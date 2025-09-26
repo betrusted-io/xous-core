@@ -245,6 +245,34 @@ impl Repl {
                     crate::println!("Sha512 failed: {:x?}", digest);
                 }
             }
+            "check" => match crate::sigcheck::validate_image(crate::FLASH_BASE as *const u32) {
+                Ok(_) => crate::println!("sigcheck passed"),
+                Err(e) => crate::println!("sigcheck failed: {}", e),
+            },
+            "reps" => {
+                crate::println!("start test");
+                // start the RTC
+                unsafe { (0x4006100c as *mut u32).write_volatile(1) };
+                let mut count = 0;
+                let start_time = unsafe { (0x40061000 as *mut u32).read_volatile() };
+                loop {
+                    let new_time = unsafe { (0x40061000 as *mut u32).read_volatile() };
+                    if new_time != start_time {
+                        break;
+                    }
+                }
+                let start_time = unsafe { (0x40061000 as *mut u32).read_volatile() };
+                loop {
+                    let new_time = unsafe { (0x40061000 as *mut u32).read_volatile() };
+                    if new_time >= start_time + 5 {
+                        break;
+                    }
+                    crate::sigcheck::validate_image(crate::FLASH_BASE as *const u32).ok();
+                    count += 1;
+                }
+                crate::println!("{} reps/sec", count / 5);
+                crate::platform::setup_timer();
+            }
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!("Commands include: echo, bogomips, peek, poke, sha256check");

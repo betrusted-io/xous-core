@@ -7,6 +7,7 @@ mod asm;
 
 mod platform;
 mod repl;
+mod sigcheck;
 use alloc::collections::VecDeque;
 use core::cell::RefCell;
 

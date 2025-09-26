@@ -1,3 +1,4 @@
+use bao1x_api::signatures::SIGBLOCK_LEN;
 use bao1x_hal::udma;
 use utralib::CSR;
 use utralib::utra;
@@ -14,7 +15,6 @@ static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::Loc
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
-pub const SIGBLOCK_LEN: usize = 768; // this is adjusted inside builder.rs, in the sign-image invocation
 
 // This may not be a great assumption. TODO: fix this by deriving from the static boot constants.
 // also fix this in the baremetal/loader configs.

@@ -18,9 +18,9 @@ critical-section = "1.2.0"
 ux-api = { path = "../../libs/ux-api", optional = true, default-features = false }
 simple-fatfs = { git = "https://github.com/betrusted-io/simple-fatfs.git", branch = "baosec", optional = true, default-features = false }
 digest = { version = "^0.10.7", optional = true }
-ed25519-dalek = { version = "=2.1.0", optional = true, default-features = false, features = [
-    "rand_core",
+ed25519-dalek = { package = "ed25519-dalek-bao1x", path = "../ed25519-dalek-bao1x", default-features = false, features = [
     "digest",
+    "debug",
 ] }
 base64 = { version = "0.22.1", optional = true, default-features = false, features = [
     "alloc",
