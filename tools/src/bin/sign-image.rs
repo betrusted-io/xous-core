@@ -85,7 +85,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .long("sig-length")
                 .takes_value(true)
                 .default_value("4096")
+                .help("Change the length of the signature block. Defaults to 4096.")
                 .required(false),
+        )
+        .arg(Arg::with_name("bao1x").long("bao1x").help("Generate images for the bao1x target"))
+        .arg(
+            Arg::with_name("function-code")
+            .long("function-code")
+            .takes_value(true)
+            .help("Function code to embed in the signature block. Only meaningful in combination with --bao1x")
+            .required(false)
         )
         .get_matches();
 
@@ -111,15 +120,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err("invalid loader private key type")?;
         }
         println!("Signing loader");
+        // bao1x can use pre-hash signatures because it's a clean-sheet bootloader
+        // precursor uses the older style because we are avoiding updating the boot ROM in the SoC to avoid
+        // bricking.
+        let version = if matches.is_present("bao1x") {
+            tools::sign_image::Version::Bao1xV1
+        } else {
+            tools::sign_image::Version::Loader
+        };
         sign_file(
             &loader_image,
             &loader_output,
             &loader_pkey,
             matches.is_present("defile"),
             &minver,
-            false,
+            version,
             matches.is_present("with-jump"),
             sig_length,
+            matches.value_of("function-code"),
         )?;
     }
 
@@ -133,15 +151,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err("invalid kernel private key type")?;
         }
         println!("Signing kernel");
+        let version = if matches.is_present("bao1x") {
+            tools::sign_image::Version::Bao1xV1
+        } else {
+            tools::sign_image::Version::LoaderPrehash
+        };
         sign_file(
             &kernel_image,
             &kernel_output,
             &kernel_pkey,
             matches.is_present("defile"),
             &minver,
-            true,
+            version,
             matches.is_present("with-jump"),
             sig_length,
+            Some(matches.value_of("function-code").unwrap_or("kernel")),
         )?;
     }
     Ok(())

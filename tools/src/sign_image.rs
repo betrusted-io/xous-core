@@ -1,15 +1,22 @@
 use std::io::{Read, Write};
 use std::path::Path;
 
+use bao1x_api::signatures::{
+    FunctionCode, PADDING_LEN, PUBLIC_KEY_LENGTH, SIGBLOCK_LEN, SealedFields, UNSIGNED_LEN,
+};
 use ed25519_dalek::{DigestSigner, SigningKey};
 use pkcs8::PrivateKeyInfo;
 use pkcs8::der::Decodable;
-use ring::signature::Ed25519KeyPair;
+use ring::signature::{Ed25519KeyPair, KeyPair};
 use sha2::{Digest, Sha512};
 
-const LOADER_VERSION: u32 = 1;
-const LOADER_PREHASH_VERSION: u32 = 2;
-
+#[repr(u32)]
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum Version {
+    Loader = 1,
+    LoaderPrehash = 2,
+    Bao1xV1 = 0x1_00,
+}
 use xous_semver::SemVer;
 
 pub fn generate_jal_x0(signed_offset: isize) -> Result<u32, String> {
@@ -64,8 +71,9 @@ pub fn sign_image(
     semver: Option<[u8; 16]>,
     with_jump: bool,
     length: usize,
+    version: Version,
+    function_code: Option<&str>,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let mut source = source.to_owned();
     let mut dest_file = vec![];
 
     // Append version information to the binary. Appending it here means it is part
@@ -76,152 +84,172 @@ pub fn sign_image(
         None => SemVer::from_git()?.into(),
     };
 
-    // extra data appended here needs to be reflected in two places in Xous:
-    // 1. root-keys/src/implementation.rs @ sign-loader()
-    // 2. graphics-server/src/main.rs @ Some(Opcode::BulkReadfonts)
-    // This is because memory ownership is split between two crates for performance reasons:
-    // the direct memory page of fonts belongs to the graphics server, to avoid having to send
-    // a message on every font lookup. However, the keys reside in root-keys, so therefore,
-    // a bulk read operation has to shuttle font data back to the root-keys crate. Of course,
-    // the appended metadata is in the font region, so, this data has to be shuttled back.
-    // The graphics server is also entirely naive to how much cryptographic data is in the font
-    // region, and I think it's probably better for it to stay that way.
-    source.append(&mut minver_bytes.to_vec());
-    source.append(&mut semver.to_vec());
-    for &b in LOADER_VERSION.to_le_bytes().iter() {
-        source.push(b);
+    match version {
+        Version::Loader | Version::LoaderPrehash => {
+            let mut source = source.to_owned();
+            // extra data appended here needs to be reflected in two places in Xous:
+            // 1. root-keys/src/implementation.rs @ sign-loader()
+            // 2. graphics-server/src/main.rs @ Some(Opcode::BulkReadfonts)
+            // This is because memory ownership is split between two crates for performance reasons:
+            // the direct memory page of fonts belongs to the graphics server, to avoid having to send
+            // a message on every font lookup. However, the keys reside in root-keys, so therefore,
+            // a bulk read operation has to shuttle font data back to the root-keys crate. Of course,
+            // the appended metadata is in the font region, so, this data has to be shuttled back.
+            // The graphics server is also entirely naive to how much cryptographic data is in the font
+            // region, and I think it's probably better for it to stay that way.
+            source.append(&mut minver_bytes.to_vec());
+            source.append(&mut semver.to_vec());
+            let prehash = match version {
+                Version::Loader => false,
+                Version::LoaderPrehash => true,
+                _ => return Err(String::from("Unhandled image version").into()),
+            };
+            for &b in (version as u32).to_le_bytes().iter() {
+                source.push(b);
+            }
+            for &b in (source.len() as u32).to_le_bytes().iter() {
+                source.push(b);
+            }
+
+            let (signature, pubkey) = if prehash {
+                // pre-hash the message
+                let mut h: Sha512 = Sha512::new();
+                h.update(&source);
+
+                let pkinfo = PrivateKeyInfo::from_der(&private_key.contents).map_err(|e| format!("{}", e))?;
+                // First 2 bytes of the `private_key` are a record specifier and length field. Check they are
+                // correct.
+                assert!(pkinfo.private_key[0] == 0x4);
+                assert!(pkinfo.private_key[1] == 0x20);
+                let mut secbytes = [0u8; 32];
+                secbytes.copy_from_slice(&pkinfo.private_key[2..]);
+                // Now we can use the private key data.
+                let signing_key = SigningKey::from_bytes(&secbytes);
+
+                // derive a private key
+                let sk = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&private_key.contents)
+                    .map_err(|e| format!("{}", e))?;
+                let mut pubkey_bytes = [0u8; 32];
+                pubkey_bytes.copy_from_slice(sk.public_key().as_ref());
+
+                let sig = signing_key.sign_digest(h.clone()).to_bytes();
+                (sig, pubkey_bytes)
+            } else {
+                // NOTE NOTE NOTE
+                // can't find a good ASN.1 ED25519 key decoder, just relying on the fact that the last
+                // 32 bytes are "always" the private key. always? the private key?
+                let signing_key = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&private_key.contents)
+                    .map_err(|e| format!("{}", e))?;
+                let mut sig = [0u8; 64];
+                sig.copy_from_slice(signing_key.sign(&source).as_ref());
+                let mut pubkey_bytes = [0u8; 32];
+                pubkey_bytes.copy_from_slice(signing_key.public_key().as_ref());
+                (sig, pubkey_bytes)
+            };
+
+            let jal = generate_jal_x0(length as isize)?;
+            // println!("offset {:x}, jal {:x}", length, jal);
+            let extra_pad = if with_jump {
+                dest_file.write_all(&jal.to_le_bytes())?;
+                4
+            } else {
+                0
+            };
+
+            dest_file.write_all(&(version as u32).to_le_bytes())?;
+            dest_file.write_all(&(source.len() as u32).to_le_bytes())?;
+
+            // Write the signature data
+            dest_file.write_all(&signature)?;
+
+            // Write the public key - for now it's just an interim key, but this should be replaced with
+            // the actual code signing key eventually. This is only relevant for baochip targets, Precursor
+            // has this pre-burned into its KEYROM.
+            dest_file.write_all(&pubkey)?;
+
+            // Pad the first sector to length bytes.
+            let mut v = vec![];
+            v.resize(length - 4 - 4 - signature.len() - extra_pad - pubkey.len(), 0);
+            dest_file.write_all(&v)?;
+
+            // Fill the remainder of the source data
+
+            if defile {
+                println!(
+                    "WARNING: defiling the loader image. This corrupts the binary and should cause it to fail the signature check."
+                );
+                source[16778] ^= 0x1 // flip one bit at some random offset
+            }
+
+            dest_file.write_all(&source)?;
+
+            Ok(dest_file)
+        }
+        Version::Bao1xV1 => {
+            let pkinfo = PrivateKeyInfo::from_der(&private_key.contents).map_err(|e| format!("{}", e))?;
+            // First 2 bytes of the `private_key` are a record specifier and length field. Check they are
+            // correct.
+            assert!(pkinfo.private_key[0] == 0x4);
+            assert!(pkinfo.private_key[1] == 0x20);
+            let mut secbytes = [0u8; 32];
+            secbytes.copy_from_slice(&pkinfo.private_key[2..]);
+            // Now we can use the private key data.
+            let signing_key = SigningKey::from_bytes(&secbytes);
+
+            // derive a private key
+            let sk = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&private_key.contents)
+                .map_err(|e| format!("{}", e))?;
+
+            let function_code = match function_code {
+                Some("boot0") => FunctionCode::Boot0,
+                Some("boot1") => FunctionCode::Boot1,
+                Some("kernel") => FunctionCode::Kernel,
+                _ => FunctionCode::Developer,
+            };
+            let mut sealed_fields = SealedFields {
+                version: version as u32,
+                signed_len: (source.len() + SIGBLOCK_LEN - UNSIGNED_LEN) as u32,
+                function_code: function_code as u32,
+                reserved: 0,
+                min_semver: minver_bytes,
+                semver,
+                pubkeys: [
+                    [0u8; PUBLIC_KEY_LENGTH],
+                    [0u8; PUBLIC_KEY_LENGTH],
+                    [0u8; PUBLIC_KEY_LENGTH],
+                    [0u8; PUBLIC_KEY_LENGTH],
+                ],
+            };
+            sealed_fields.pubkeys[3].copy_from_slice(sk.public_key().as_ref());
+
+            let mut protected = Vec::new();
+            protected.extend_from_slice(sealed_fields.as_ref());
+            protected.resize(protected.len() + PADDING_LEN, 0);
+            protected.extend_from_slice(&source);
+
+            // pre-hash the message
+            let mut h: Sha512 = Sha512::new();
+            h.update(&protected);
+
+            let sig = signing_key.sign_digest(h.clone()).to_bytes();
+
+            let jal = generate_jal_x0(length as isize)?;
+            dest_file.write_all(&jal.to_le_bytes())?;
+
+            // Write the signature data
+            dest_file.write_all(&sig)?;
+
+            if defile {
+                println!(
+                    "WARNING: defiling the loader image. This corrupts the binary and should cause it to fail the signature check."
+                );
+                protected[size_of::<SealedFields>() + 16] ^= 0x1 // flip one bit in the zero-padding region
+            }
+
+            dest_file.write_all(&protected)?;
+            Ok(dest_file)
+        }
     }
-    for &b in (source.len() as u32).to_le_bytes().iter() {
-        source.push(b);
-    }
-
-    // NOTE NOTE NOTE
-    // can't find a good ASN.1 ED25519 key decoder, just relying on the fact that the last
-    // 32 bytes are "always" the private key. always? the private key?
-    let signing_key =
-        Ed25519KeyPair::from_pkcs8_maybe_unchecked(&private_key.contents).map_err(|e| format!("{}", e))?;
-    let signature = signing_key.sign(&source);
-
-    let jal = generate_jal_x0(length as isize)?;
-    println!("offset {:x}, jal {:x}", length, jal);
-    let extra_pad = if with_jump {
-        dest_file.write_all(&jal.to_le_bytes())?;
-        4
-    } else {
-        0
-    };
-
-    dest_file.write_all(&LOADER_VERSION.to_le_bytes())?;
-    dest_file.write_all(&(source.len() as u32).to_le_bytes())?;
-
-    // Write the signature data
-    let signature_u8 = &signature.as_ref();
-    dest_file.write_all(signature_u8)?;
-
-    // Pad the first sector to length bytes.
-    let mut v = vec![];
-    v.resize(length - 4 - 4 - signature_u8.len() - extra_pad, 0);
-    dest_file.write_all(&v)?;
-
-    // Fill the remainder of the source data
-
-    if defile {
-        println!(
-            "WARNING: defiling the loader image. This corrupts the binary and should cause it to fail the signature check."
-        );
-        source[16778] ^= 0x1 // flip one bit at some random offset
-    }
-
-    dest_file.write_all(&source)?;
-
-    Ok(dest_file)
-}
-
-pub fn sign_image_prehash(
-    source: &[u8],
-    private_key: &pem::Pem,
-    defile: bool,
-    minver: &Option<SemVer>,
-    semver: Option<[u8; 16]>,
-    with_jump: bool,
-    length: usize,
-) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let mut source = source.to_owned();
-    let mut dest_file = vec![];
-
-    // Append version information to the binary. Appending it here means it is part
-    // of the signed bundle.
-    let minver_bytes = if let Some(mv) = minver { mv.into() } else { [0u8; 16] };
-    let semver: [u8; 16] = match semver {
-        Some(semver) => semver,
-        None => SemVer::from_git()?.into(),
-    };
-
-    // extra data appended here needs to be reflected in two places in Xous:
-    // 1. root-keys/src/implementation.rs @ sign-loader()
-    // 2. graphics-server/src/main.rs @ Some(Opcode::BulkReadfonts)
-    // This is because memory ownership is split between two crates for performance reasons:
-    // the direct memory page of fonts belongs to the graphics server, to avoid having to send
-    // a message on every font lookup. However, the keys reside in root-keys, so therefore,
-    // a bulk read operation has to shuttle font data back to the root-keys crate. Of course,
-    // the appended metadata is in the font region, so, this data has to be shuttled back.
-    // The graphics server is also entirely naive to how much cryptographic data is in the font
-    // region, and I think it's probably better for it to stay that way.
-    source.append(&mut minver_bytes.to_vec());
-    source.append(&mut semver.to_vec());
-    for &b in LOADER_PREHASH_VERSION.to_le_bytes().iter() {
-        source.push(b);
-    }
-    for &b in (source.len() as u32).to_le_bytes().iter() {
-        source.push(b);
-    }
-
-    // pre-hash the message
-    let mut h: Sha512 = Sha512::new();
-    h.update(&source);
-
-    let private_key = PrivateKeyInfo::from_der(&private_key.contents).map_err(|e| format!("{}", e))?;
-    // First 2 bytes of the `private_key` are a record specifier and length field. Check they are correct.
-    assert!(private_key.private_key[0] == 0x4);
-    assert!(private_key.private_key[1] == 0x20);
-    let mut secbytes = [0u8; 32];
-    secbytes.copy_from_slice(&private_key.private_key[2..]);
-    // Now we can use the private key data.
-    let signing_key = SigningKey::from_bytes(&secbytes);
-    let signature = signing_key.sign_digest(h);
-
-    let jal = generate_jal_x0(length as isize)?;
-    let extra_pad = if with_jump {
-        dest_file.write_all(&jal.to_le_bytes())?;
-        4
-    } else {
-        0
-    };
-
-    dest_file.write_all(&LOADER_PREHASH_VERSION.to_le_bytes())?;
-    dest_file.write_all(&(source.len() as u32).to_le_bytes())?;
-
-    // Write the signature data
-    let signature_u8 = &signature.to_bytes();
-    dest_file.write_all(signature_u8)?;
-
-    // Pad the first sector to length bytes.
-    let mut v = vec![];
-    v.resize(length - 4 - 4 - signature_u8.len() - extra_pad, 0);
-    dest_file.write_all(&v)?;
-
-    // Fill the remainder of the source data
-
-    if defile {
-        println!(
-            "WARNING: defiling the loader image. This corrupts the binary and should cause it to fail the signature check."
-        );
-        source[16778] ^= 0x1 // flip one bit at some random offset
-    }
-
-    dest_file.write_all(&source)?;
-
-    Ok(dest_file)
 }
 
 pub fn sign_file<S, T>(
@@ -230,9 +258,10 @@ pub fn sign_file<S, T>(
     private_key: &pem::Pem,
     defile: bool,
     minver: &Option<SemVer>,
-    use_prehash: bool,
+    version: Version,
     with_jump: bool,
     sector_length: usize,
+    function_code: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     S: AsRef<Path>,
@@ -243,11 +272,17 @@ where
     let mut dest_file = std::fs::File::create(output)?;
     source_file.read_to_end(&mut source)?;
 
-    let result = if use_prehash {
-        sign_image_prehash(&source, private_key, defile, minver, None, with_jump, sector_length)?
-    } else {
-        sign_image(&source, private_key, defile, minver, None, with_jump, sector_length)?
-    };
+    let result = sign_image(
+        &source,
+        private_key,
+        defile,
+        minver,
+        None,
+        with_jump,
+        sector_length,
+        version,
+        function_code,
+    )?;
     dest_file.write_all(&result)?;
     Ok(())
 }
