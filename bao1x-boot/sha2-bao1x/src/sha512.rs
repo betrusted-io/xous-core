@@ -29,14 +29,13 @@ fn compress(csr: &mut CSR<u32>, blocks: &[[u8; BLOCK_LEN]]) {
     const BUF_BLOCKS: usize = utralib::HW_SEG_MSG_MEM_LEN / BLOCK_LEN;
     // safety: this is the actual location of the message buffer and its length according to the hardware
     // spec. only safe because this is machine mode and no-std (no threads, no concurrency)
-    #[cfg(feature = "debug")]
     let msg_blocks: &mut [[u8; BLOCK_LEN]; BUF_BLOCKS] =
         unsafe { &mut *(utralib::HW_SEG_MSG_MEM as *mut [[u8; BLOCK_LEN]; BUF_BLOCKS]) };
 
     for block_chunk in blocks.chunks(BUF_BLOCKS) {
         // block_chunk has a length equal to or less than msg_buf due to .chunks() iterator above
-        #[cfg(feature = "debug")]
         for (src, dst) in block_chunk.iter().zip(msg_blocks.iter_mut()) {
+            #[cfg(feature = "debug")]
             crate::println!("  {:x?}", src);
             dst.copy_from_slice(src);
         }
