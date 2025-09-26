@@ -92,7 +92,7 @@ pub struct OneWayCounter {
     #[cfg(feature = "std")]
     mapping: MemoryRange,
 }
-
+const COUNTER_STRIDE_U32: usize = 8;
 impl OneWayCounter {
     pub fn new() -> Self {
         #[cfg(not(feature = "std"))]
@@ -120,7 +120,7 @@ impl OneWayCounter {
         if offset < ONEWAY_LEN {
             // safety: only safe because the pointer is length-checked
             // we use this form to access the array because we need to read_volatile()
-            Ok(unsafe { base.add(offset).read_volatile() })
+            Ok(unsafe { base.add(offset * COUNTER_STRIDE_U32).read_volatile() })
         } else {
             Err(OneWayErr::OutOfBounds)
         }
@@ -133,11 +133,11 @@ impl OneWayCounter {
         let base = self.mapping.as_mut_ptr() as *mut u32;
 
         if offset < ONEWAY_LEN {
-            let starting_value = self.get(offset).unwrap(); // offset is already checked
+            let starting_value = self.get(offset * COUNTER_STRIDE_U32).unwrap(); // offset is already checked
             // this will cause the increment in hardware
-            unsafe { base.add(offset).write_volatile(0) }
+            unsafe { base.add(offset * COUNTER_STRIDE_U32).write_volatile(0) }
             crate::cache_flush();
-            let ending_value = self.get(offset).unwrap();
+            let ending_value = self.get(offset * COUNTER_STRIDE_U32).unwrap();
             // if the increment didn't happen, we may have experienced wear-out on the line
             // it's only good for 10k increments
             if ending_value != starting_value + 1 { Err(OneWayErr::IncFail) } else { Ok(()) }
