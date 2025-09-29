@@ -1,7 +1,7 @@
 use std::io::{Error, ErrorKind};
 
 use clap::{App, Arg, crate_version};
-use tools::sign_image::{load_pem, sign_file};
+use tools::sign_image::{convert_to_uf2, load_pem, sign_file};
 
 const DEVKEY_PATH: &str = "devkey/dev.key";
 
@@ -139,6 +139,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             sig_length,
             matches.value_of("function-code"),
         )?;
+
+        if matches.is_present("bao1x") {
+            if loader_output.ends_with(".img") {
+                let loader_uf2 = format!("{}uf2", &loader_output[..loader_output.len() - 3]);
+                // generate a uf2 file
+                convert_to_uf2(&loader_output, &loader_uf2, matches.value_of("function-code"), None)?;
+                println!("Created UF2 at {}", loader_uf2);
+            } else {
+                Err("Can't generate UF2 file because the output file is not specified with a .img suffix")?;
+            }
+        }
     }
 
     if let Some(kernel_output) = matches.value_of("kernel-output") {
@@ -167,6 +178,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             sig_length,
             Some(matches.value_of("function-code").unwrap_or("kernel")),
         )?;
+
+        if matches.is_present("bao1x") {
+            if kernel_output.ends_with(".img") {
+                let kernel_uf2 = format!("{}uf2", &kernel_output[..kernel_output.len() - 3]);
+                // generate a uf2 file
+                convert_to_uf2(&kernel_output, &kernel_uf2, matches.value_of("function-code"), None)?;
+                println!("Created UF2 at {}", kernel_uf2);
+            } else {
+                Err(
+                    "Can't generate UF2 file because the kernel output file is not specified with a .img suffix",
+                )?;
+            }
+        }
     }
     Ok(())
 }
