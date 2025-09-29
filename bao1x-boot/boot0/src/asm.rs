@@ -3,7 +3,6 @@ use core::arch::asm;
 use crate::platform;
 #[link_section = ".text.init"]
 #[export_name = "_start"]
-#[cfg(feature = "bao1x")]
 pub extern "C" fn _start() {
     unsafe {
         #[rustfmt::skip]
@@ -21,8 +20,8 @@ pub extern "C" fn _start() {
             "sw          t1, 0xc(t0)",
             "li          t1, 0x1",
             "sw          t1, 0x4(t0)", // CR is 1
-            // print 32 instances of 'Z' (0x5A) (provided to measure baud)
-            "li          t2, 32",
+            // print 8 instances of 'Z' (0x5A) (provided to help measure baud)
+            "li          t2, 8",
             "li          t1, 0x5A",
         "10:",
             "sw          t1, 0x0(t0)",

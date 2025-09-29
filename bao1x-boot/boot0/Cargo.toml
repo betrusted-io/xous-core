@@ -2,8 +2,8 @@
 name = "bao1x-boot0"
 version = "0.1.0"
 authors = ["bunnie <bunnie@kosagi.com>"]
-edition = "2018"
-description = "Boot0 loader"
+edition = "2021"
+description = "Boot0 partition"
 
 [dependencies]
 xous = "0.9.66"
@@ -13,20 +13,7 @@ bao1x-api = { path = "../../libs/bao1x-api", optional = true, default-features =
 vexriscv = { version = "0.5.6", package = "xous-riscv" }
 riscv = { version = "0.14.0", features = ["critical-section-single-hart"] }
 linked_list_allocator = { version = "0.10.5", optional = true }
-xous-bio-bdma = { path = "../../libs/xous-bio-bdma", optional = true, default-features = false }
 critical-section = "1.2.0"
-ux-api = { path = "../../libs/ux-api", optional = true, default-features = false }
-simple-fatfs = { git = "https://github.com/betrusted-io/simple-fatfs.git", branch = "baosec", optional = true, default-features = false }
-digest = { version = "^0.10.7", optional = true }
-ed25519-dalek = { package = "ed25519-dalek-bao1x", path = "../ed25519-dalek-bao1x", default-features = false, features = [
-    "digest",
-    "debug",
-] }
-base64 = { version = "0.22.1", optional = true, default-features = false, features = [
-    "alloc",
-] }
-sha2-bao1x = { path = "../sha2-bao1x", optional = true, default-features = false }
-hex-literal = "1.0.0"
 
 [features]
 # Baochip feature tree below
@@ -34,10 +21,10 @@ bao1x = [
     "utralib/bao1x",
     "linked_list_allocator",
     "bao1x-hal/loader-baosec",
-    # "bao1x-hal/debug-print-usb",
     "bao1x-api",
-    "sha2-bao1x/bao1x",
-    "digest",
 ]
+
+# turns on a bunch of developer debug features. No production build should have this feature activated!
+unsafe-dev = []
 
 default = ["bao1x"]

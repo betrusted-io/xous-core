@@ -1,9 +1,9 @@
 use bao1x_api::signatures::SIGBLOCK_LEN;
-use bao1x_hal::udma;
 use utralib::CSR;
 use utralib::utra;
 use utralib::utra::sysctrl;
 
+#[cfg(feature = "unsafe-dev")]
 use crate::platform::{
     debug::setup_rx,
     irq::{enable_irq, irq_setup},
@@ -22,14 +22,18 @@ const DATA_SIZE_BYTES: usize = 0x6000;
 pub const HEAP_START: usize = RAM_BASE + DATA_SIZE_BYTES;
 pub const HEAP_LEN: usize = 1024 * 256;
 
-// scratch page for exceptions located at top of RAM
-// NOTE: there is an additional page above this for exception stack
-pub const SCRATCH_PAGE: usize = HEAP_START - 8192;
+// scratch page for exceptions
+//   - scratch data is stored in positive offsets from here
+//   - exception stack is stored in negative offsets from here, hence the +4096
+// total occupied area is [HEAP_START + HEAP_LEN..HEAP_START + HEAP_LEN + 8192]
+pub const SCRATCH_PAGE: usize = HEAP_START + HEAP_LEN + 4096;
 
 pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 
-// Run at 400MHz to ensure we can boot even without an external VDD85 regulator!
-pub const SYSTEM_CLOCK_FREQUENCY: u32 = 400_000_000;
+/// Run at 400MHz to ensure we can boot even without an external VDD85 regulator!
+/// Also relying on the IFR region setting the SRAM trimming to work at this safe default
+/// so we don't have to initialize it in boot0.
+pub const DEFAULT_FCLK_FREQUENCY: u32 = 400_000_000;
 pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 pub fn early_init() {
@@ -62,7 +66,6 @@ pub fn early_init() {
     // sram0 requires 1 wait state for writes
     let mut sramtrm = CSR::new(utra::coresub_sramtrm::HW_CORESUB_SRAMTRM_BASE as *mut u32);
     sramtrm.wo(utra::coresub_sramtrm::SFR_SRAM0, 0x8);
-    sramtrm.wo(utra::coresub_sramtrm::SFR_SRAM1, 0x8);
 
     // Now that SRAM trims are setup, initialize all the statics by writing to memory.
     // For baremetal, the statics structure is just at the flash base.
@@ -86,11 +89,8 @@ pub fn early_init() {
         }
     }
 
-    let uart = crate::debug::Uart {};
-    uart.putc('*' as u32 as u8);
-
-    // set the clock
-    let perclk = unsafe { init_clock_asic(SYSTEM_CLOCK_FREQUENCY) };
+    // set the clock.
+    let perclk = unsafe { init_clock_asic(DEFAULT_FCLK_FREQUENCY) };
 
     crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
 
@@ -99,16 +99,25 @@ pub fn early_init() {
 
     setup_timer();
 
+    // this is a security-critical initialization. Failure to do this correctly breaks
+    // all the hardware hashes. It's done once, in boot0. Note that the constants *are*
+    // malleable (no hardware lock to prevent update), which is a potential vulnerability.
     init_hash();
 
-    // Rx setup
-    let mut udma_uart = setup_rx(perclk);
-    irq_setup();
-    enable_irq(utra::irqarray5::IRQARRAY5_IRQ);
+    // TxRx setup
+    #[cfg(feature = "unsafe-dev")]
+    let mut udma_uart = {
+        let mut udma_uart = setup_rx(perclk);
+        irq_setup();
+        enable_irq(utra::irqarray5::IRQARRAY5_IRQ);
+        udma_uart
+    };
+    // Tx-only setup
+    #[cfg(not(feature = "unsafe-dev"))]
+    let _udma_uart = crate::debug::setup_tx(perclk);
 
-    udma_uart.write("console up\r\n".as_bytes());
     crate::debug::USE_CONSOLE.store(true, core::sync::atomic::Ordering::SeqCst);
-    crate::println!("This debug print should be on the UDMA UART");
+    crate::println!("boot0 console up");
 }
 
 pub fn setup_timer() {
@@ -122,7 +131,7 @@ pub fn setup_timer() {
     timer.wfo(utra::timer0::EN_EN, 0b0); // disable the timer
     // load its values
     timer.wfo(utra::timer0::LOAD_LOAD, 0);
-    timer.wfo(utra::timer0::RELOAD_RELOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
+    timer.wfo(utra::timer0::RELOAD_RELOAD, (DEFAULT_FCLK_FREQUENCY / 1_000) * ms);
     // enable the timer
     timer.wfo(utra::timer0::EN_EN, 0b1);
 }
@@ -138,7 +147,7 @@ pub fn setup_alloc() {
 
 /// This function loads all the round constants into the combohasher's local memory.
 pub fn init_hash() {
-    use bao1x_hal::sce::combohash::*;
+    use bao1x_api::sce::combohash::*;
     // safety: this one is a little less clear from the register set extraction. But in the case of
     // system initialization, the SCE uses its entire RAM range (10kiB worth) as a single buffer, so
     // none of the buffer boundaries are respected. Thus we set the length of the segment to 10kiB
@@ -196,6 +205,7 @@ pub fn delay_at_sysfreq(ms: usize, sysclk_freq: u32) {
 }
 
 /// Delay function that delays a given number of milliseconds.
+#[allow(dead_code)]
 pub fn delay(ms: usize) {
     let mut timer = utralib::CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
     timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
@@ -212,28 +222,6 @@ mod panic_handler {
     fn handle_panic(_arg: &PanicInfo) -> ! {
         crate::println!("{}", _arg);
         loop {}
-    }
-}
-
-/// This takes in the FD input frequency (the frequency to be divided) in MHz
-/// and the fd value, and returns the resulting divided frequency.
-/// *not tested*
-#[allow(dead_code)]
-pub fn fd_to_clk(fd_in_mhz: u32, fd_val: u32) -> u32 { (fd_in_mhz * (fd_val + 1)) / 256 }
-
-/// Takes in the FD input frequencyin MHz, and then the desired frequency.
-/// Returns Some((fd value, deviation in *hz*, not MHz)) if the requirement is satisfiable
-/// Returns None if the equation is ill-formed.
-/// *not tested*
-#[allow(dead_code)]
-pub fn clk_to_fd(fd_in_mhz: u32, desired_mhz: u32) -> Option<(u32, i32)> {
-    let platonic_fd: u32 = (desired_mhz * 256) / fd_in_mhz;
-    if platonic_fd > 0 {
-        let actual_fd = platonic_fd - 1;
-        let actual_clk = fd_to_clk(fd_in_mhz, actual_fd);
-        Some((actual_fd, desired_mhz as i32 - actual_clk as i32))
-    } else {
-        None
     }
 }
 
@@ -258,13 +246,7 @@ pub fn clk_to_per(top_in_mhz: u32, perclk_in_mhz: u32) -> Option<(u8, u8, u32)> 
     }
 }
 
-// This function supercedes init_clock_asic() and needs to be back-ported
-// into xous-core
-// TODO:
-//  - [ ] Case of clocks <= 48MHz: turn off PLL, divide directly from OSC
-//  - [ ] Derive clock dividers from freq targets, instead of hard-coding them
-//  - [ ] Maybe improve dividers to optimize hclk/iclk/pclk settings in lower power?
-//  - [ ] Very maybe consider setting hclk/iclk/pclk in case of overclocking
+/// TODO: pare this down for the boot0 function
 pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     use utra::sysctrl;
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
@@ -313,35 +295,19 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     // perclk divider - set to divide by 8 off of an 800Mhz base. Only found on bao1x.
     // TODO: this only works for two clock settings. Broken @ 600. Need to fix this to instead derive
     // what pclk is instead of always reporting 100mhz
-    let (min_cycle, fd, perclk) = if let Some((min_cycle, fd, perclk)) = clk_to_per(freq_hz / 1_000_000, 100)
-    {
-        daric_cgu
-            .add(utra::sysctrl::SFR_CGUFDPER.offset())
-            .write_volatile((min_cycle as u32) << 16 | (fd as u32) << 8 | fd as u32);
-        (min_cycle, fd, perclk * 1_000_000)
-    } else if freq_hz > 400_000_000 {
-        daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x07_ff_ff);
-        (7, 0xff, freq_hz / 8)
-    } else {
-        daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
-        (3, 0xff, freq_hz / 4)
-    };
-
-    /*
-        perclk fields:  min-cycle-lp | min-cycle | fd-lp | fd
-        clkper fd
-            0xff :   Fperclk = Fclktop/2
-            0x7f:   Fperclk = Fclktop/4
-            0x3f :   Fperclk = Fclktop/8
-            0x1f :   Fperclk = Fclktop/16
-            0x0f :   Fperclk = Fclktop/32
-            0x07 :   Fperclk = Fclktop/64
-            0x03:   Fperclk = Fclktop/128
-            0x01:   Fperclk = Fclktop/256
-
-        min cycle of clktop, F means frequency
-        Fperclk  Max = Fperclk/(min cycle+1)*2
-    */
+    let (_min_cycle, _fd, perclk) =
+        if let Some((min_cycle, fd, perclk)) = clk_to_per(freq_hz / 1_000_000, 100) {
+            daric_cgu
+                .add(utra::sysctrl::SFR_CGUFDPER.offset())
+                .write_volatile((min_cycle as u32) << 16 | (fd as u32) << 8 | fd as u32);
+            (min_cycle, fd, perclk * 1_000_000)
+        } else if freq_hz > 400_000_000 {
+            daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x07_ff_ff);
+            (7, 0xff, freq_hz / 8)
+        } else {
+            daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
+            (3, 0xff, freq_hz / 4)
+        };
 
     // turn off gates
     daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0xff);
@@ -465,180 +431,18 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         }
         crate::println!("PLL delay 2");
 
-        //printf("read reg a0 : %08" PRIx32"\n", *((volatile uint32_t* )0x400400a0));
-        //printf("read reg a4 : %04" PRIx16"\n", *((volatile uint16_t* )0x400400a4));
-        //printf("read reg a8 : %04" PRIx16"\n", *((volatile uint16_t* )0x400400a8));
-
-        // TODO wait/poll lock status?
         // DARIC_CGU->cgusel0 = 1; // clktop sel, 0:clksys, 1:clkpll0
         cgu.wo(sysctrl::SFR_CGUSEL0, 1);
         // __DSB();
         // DARIC_CGU->cguset = 0x32; // commit
         cgu.wo(sysctrl::SFR_CGUSET, 0x32);
         crate::println!("clocks set");
-
-        // __DSB();
-
-        // printf ("    MN: 0x%05x, F: 0x%06x, Q: 0x%04x\n",
-        //     DARIC_IPC->pll_mn, DARIC_IPC->pll_f, DARIC_IPC->pll_q);
-        // printf ("    LPEN: 0x%01x, OSC: 0x%04x, BIAS: 0x%04x,\n",
-        //     DARIC_IPC->lpen, DARIC_IPC->osc, DARIC_IPC->ipc);
     }
-    crate::println!(
-        "mn {:x}, q{:x}",
-        (0x400400a0 as *const u32).read_volatile(),
-        (0x400400a8 as *const u32).read_volatile()
-    );
 
-    crate::println!("fsvalid: {}", daric_cgu.add(sysctrl::SFR_CGUFSVLD.offset()).read_volatile());
-    let clk_desc: [(&'static str, u32, usize); 8] = [
-        ("fclk", 16, 0x40 / size_of::<u32>()),
-        ("pke", 0, 0x40 / size_of::<u32>()),
-        ("ao", 16, 0x44 / size_of::<u32>()),
-        ("aoram", 0, 0x44 / size_of::<u32>()),
-        ("osc", 16, 0x48 / size_of::<u32>()),
-        ("xtal", 0, 0x48 / size_of::<u32>()),
-        ("pll0", 16, 0x4c / size_of::<u32>()),
-        ("pll1", 0, 0x4c / size_of::<u32>()),
-    ];
-    for (name, shift, offset) in clk_desc {
-        let fsfreq = (daric_cgu.add(offset).read_volatile() >> shift) & 0xffff;
-        crate::println!("{}: {} MHz", name, fsfreq);
-    }
     // Taken in from latest daric_util.c
     let mut udmacore = CSR::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
     udmacore.wo(utra::udma_ctrl::REG_CG, 0xFFFF_FFFF);
 
-    crate::println!("Perclk solution: {:x}|{:x} -> {} MHz", min_cycle, fd, perclk / 1_000_000);
     crate::println!("PLL configured to {} MHz", freq_hz / 1_000_000);
-    perclk
-}
-
-/// used to generate some test vectors
-#[allow(dead_code)]
-pub fn lfsr_next_u32(state: u32) -> u32 {
-    let bit = ((state >> 31) ^ (state >> 21) ^ (state >> 1) ^ (state >> 0)) & 1;
-
-    (state << 1) + bit
-}
-
-pub fn clockset_wrapper(freq: u32) -> u32 {
-    // reset the baud rate on the console UART
-    let perclk = unsafe { crate::platform::init_clock_asic(freq) };
-    let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
-    let mut udma_uart = unsafe {
-        // safety: this is safe to call, because we set up clock and events prior to calling
-        // new.
-        udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
-    };
-    let baudrate: u32 = crate::UART_BAUD;
-    let freq: u32 = perclk / 2;
-    udma_uart.set_baud(baudrate, freq);
-
-    crate::println!("clock set done, perclk is {} MHz", perclk / 1_000_000);
-    udma_uart.write("console up with clocks\r\n".as_bytes());
-
-    perclk
-}
-
-#[allow(dead_code)]
-pub unsafe fn low_power() -> u32 {
-    const FREQ_OSC_MHZ: u32 = 48; // 48MHz
-
-    use utra::sysctrl;
-    let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
-    let mut cgu = CSR::new(daric_cgu);
-
-    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x3f3f); // fclk
-    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x3f3f); // aclk
-    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x1f1f); // hclk
-    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x0f0f); // iclk
-    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x0707); // pclk
-
-    let (min_cycle, fd, perclk) = if let Some((min_cycle, fd, perclk)) = clk_to_per(48, 24) {
-        daric_cgu
-            .add(utra::sysctrl::SFR_CGUFDPER.offset())
-            .write_volatile((min_cycle as u32) << 16 | (fd as u32) << 8 | fd as u32);
-        crate::println!("perclk {}", perclk);
-        (min_cycle, fd, perclk * 1_000_000)
-    } else {
-        crate::println!("couldn't find perclk solution");
-        daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
-        (3, 0xff, 48_000_000 / 4)
-    };
-    let perclk = perclk;
-
-    // DARIC_CGU->cgusel1 = 1; // 0: RC, 1: XTAL
-    cgu.wo(sysctrl::SFR_CGUSEL0, 0);
-    cgu.wo(sysctrl::SFR_CGUSEL1, 1);
-    cgu.wo(sysctrl::SFR_CGUFSCR, FREQ_OSC_MHZ);
-    cgu.wo(sysctrl::SFR_CGUSET, 0x32);
-
-    let duart = utra::duart::HW_DUART_BASE as *mut u32;
-    duart.add(utra::duart::SFR_CR.offset()).write_volatile(0);
-    // set the ETUC now that we're on the xosc.
-    duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(FREQ_OSC_MHZ);
-    duart.add(utra::duart::SFR_CR.offset()).write_volatile(1);
-
-    cgu.wo(sysctrl::SFR_IPCOSC, FREQ_OSC_MHZ * 1_000_000);
-    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
-
-    // lower core voltage to 0.7v
-    let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
-    ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08420002);
-    // ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x1);
-    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
-
-    // power down the PLL
-    cgu.wo(sysctrl::SFR_IPCLPEN, cgu.r(sysctrl::SFR_IPCLPEN) & !0x2);
-    cgu.wo(sysctrl::SFR_IPCCR, 0x53);
-    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
-
-    for _ in 0..1024 {
-        unsafe { core::arch::asm!("nop") };
-    }
-    crate::println!("PLL pd delay 1");
-
-    crate::println!("fsvalid: {}", daric_cgu.add(sysctrl::SFR_CGUFSVLD.offset()).read_volatile());
-    let clk_desc: [(&'static str, u32, usize); 8] = [
-        ("fclk", 16, 0x40 / size_of::<u32>()),
-        ("pke", 0, 0x40 / size_of::<u32>()),
-        ("ao", 16, 0x44 / size_of::<u32>()),
-        ("aoram", 0, 0x44 / size_of::<u32>()),
-        ("osc", 16, 0x48 / size_of::<u32>()),
-        ("xtal", 0, 0x48 / size_of::<u32>()),
-        ("pll0", 16, 0x4c / size_of::<u32>()),
-        ("pll1", 0, 0x4c / size_of::<u32>()),
-    ];
-    for (name, shift, offset) in clk_desc {
-        let fsfreq = (daric_cgu.add(offset).read_volatile() >> shift) & 0xffff;
-        crate::println!("{}: {} MHz", name, fsfreq);
-    }
-
-    // gates off
-    daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0x00);
-    daric_cgu.add(utra::sysctrl::SFR_HCLKGR.offset()).write_volatile(0x00);
-    daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0x00);
-    daric_cgu.add(utra::sysctrl::SFR_PCLKGR.offset()).write_volatile(0x00);
-    // commit dividers
-    daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
-    let mut udmacore = CSR::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
-    udmacore.wo(utra::udma_ctrl::REG_CG, 0x0000_000F); // lower four are the UART
-
-    // reset the UART
-    let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
-    let mut udma_uart = unsafe {
-        // safety: this is safe to call, because we set up clock and events prior to calling
-        // new.
-        udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
-    };
-    let baudrate: u32 = crate::UART_BAUD;
-    let freq: u32 = perclk / 2;
-    udma_uart.set_baud(baudrate, freq);
-
-    crate::println!("Perclk solution: {:x}|{:x} -> {} MHz", min_cycle, fd, perclk / 1_000_000);
-    crate::println!("powerdown: perclk is {} MHz", perclk / 1_000_000);
-    udma_uart.write("powerdown with clocks\r\n".as_bytes());
-
     perclk
 }

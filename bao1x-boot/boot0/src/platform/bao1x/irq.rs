@@ -1,8 +1,13 @@
-use riscv::register::{mcause, mie, mstatus};
-use vexriscv::register::vexriscv::{mim, mip};
+#[cfg(feature = "unsafe-dev")]
+use riscv::register::mstatus;
+use riscv::register::{mcause, mie};
+#[cfg(feature = "unsafe-dev")]
+use vexriscv::register::vexriscv::mim;
+use vexriscv::register::vexriscv::mip;
 
 use crate::*;
 
+#[cfg(feature = "unsafe-dev")]
 pub fn irq_setup() {
     unsafe {
         #[rustfmt::skip]
@@ -23,6 +28,7 @@ pub fn irq_setup() {
     unsafe { mie::set_mext() };
 }
 
+#[cfg(feature = "unsafe-dev")]
 pub fn enable_irq(irq_no: usize) {
     // Note that the vexriscv "IRQ Mask" register is inverse-logic --
     // that is, setting a bit in the "mask" register unmasks (i.e. enables) it.
@@ -43,7 +49,7 @@ pub unsafe extern "C" fn _start_trap() -> ! {
             #[rustfmt::skip]
             core::arch::asm!(
                 "csrw        mscratch, sp",
-                "li          sp, {scratch_page}", // crate::platform::SCRATCH_PAGE - has to be hard-coded
+                "li          sp, {scratch_page}", // scratch_page, grows up
                 "sw       x1, 0*4(sp)",
                 // Skip SP for now
                 "sw       x3, 2*4(sp)",
@@ -79,23 +85,17 @@ pub unsafe extern "C" fn _start_trap() -> ! {
                 // Save MEPC
                 "csrr        t0, mepc",
                 "sw       t0, 31*4(sp)",
-                // Save x1, which was used to calculate the offset.  Prior to
-                // calculating, it was stashed at 0x61006000.
-                //"li          t0, 0x61006000",
-                //"lw        t1, 0*4(t0)",
-                //"sw       t1, 0*4(sp)",
 
                 // Finally, save SP
                 "csrr        t0, mscratch",
                 "sw          t0, 1*4(sp)",
                 // Restore a default stack pointer
-                "li          sp, {heap_base}", // heap base, grows down
+                "li          sp, {scratch_page}", // scratch_page, grows down
 
                 // Note that registers $a0-$a7 still contain the arguments
                 "j           _start_trap_rust",
 
-                scratch_page = const SCRATCH_PAGE,
-                heap_base = const HEAP_START
+                scratch_page = const SCRATCH_PAGE
             );
         }
         _start_trap_aligned();
@@ -191,8 +191,9 @@ pub extern "C" fn trap_handler(
             let ms = SYSTEM_TICK_INTERVAL_MS;
             let mut timer0 = CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
             timer0.wfo(utra::timer0::EV_PENDING_ZERO, 1);
-            timer0.wfo(utra::timer0::RELOAD_RELOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
+            timer0.wfo(utra::timer0::RELOAD_RELOAD, (crate::DEFAULT_FCLK_FREQUENCY / 1_000) * ms);
         } else if (irqs_pending & (1 << utra::irqarray5::IRQARRAY5_IRQ)) != 0 {
+            #[cfg(feature = "unsafe-dev")]
             crate::uart_irq_handler();
         } else if (irqs_pending & (1 << utra::irqarray2::IRQARRAY2_IRQ)) != 0 {
             // just clear it for now

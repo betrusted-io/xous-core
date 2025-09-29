@@ -22,17 +22,6 @@ pub struct Repl {
     do_cmd: bool,
 }
 
-// courtesy of claude
-const K_DATA: &'static [u8; 853] = b"The quick brown fox jumps over the lazy dog while contemplating \
-the meaning of existence in a digital world. Numbers like 123456789 and symbols @#$%^&*() add variety to this test \
-message. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore \
-magna aliqua. Testing patterns: ABCDEFGHIJKLMNOPQRSTUVWXYZ and abcdefghijklmnopqrstuvwxyz provide full alphabet coverage. \
-Special characters !@#$%^&*()_+-=[]{}|;':.,.<>?/ enhance the diversity of this sample text. The year 2024 brings new \
-challenges and opportunities for software development and testing methodologies. Random words like elephant, butterfly, \
-quantum, nebula, crystalline, harmonic, and serendipity fill the remaining space. Pi equals 3.14159265358979323846 \
-approximately. This text serves as a placeholder for various testing scenarios!!!";
-const COLUMNS: usize = 4;
-
 impl Repl {
     pub fn new() -> Self { Self { cmdline: String::new(), do_cmd: false } }
 
@@ -117,53 +106,6 @@ impl Repl {
                 crate::println!("{}.{} bogomips", (count * 2 * 10_000) / 1_000_000, (count * 2) % 10_000);
                 crate::platform::setup_timer();
             }
-            "peek" => {
-                if args.len() == 1 || args.len() == 2 {
-                    let addr = usize::from_str_radix(&args[0], 16)
-                        .map_err(|_| Error::help("Peek address is in hex"))?;
-
-                    let count = if args.len() == 2 {
-                        if let Ok(count) = u32::from_str_radix(&args[1], 10) { count } else { 1 }
-                    } else {
-                        1
-                    };
-                    // safety: it's not safe to do this, the user peeks at their own risk
-                    let peek = unsafe { core::slice::from_raw_parts(addr as *const u32, count as usize) };
-                    for (i, &d) in peek.iter().enumerate() {
-                        if (i % COLUMNS) == 0 {
-                            crate::print!("\n\r{:08x}: ", addr + i * size_of::<u32>());
-                        }
-                        crate::print!("{:08x} ", d);
-                    }
-                    crate::println!("");
-                } else {
-                    return Err(Error::help("Help: peek <addr> [count], addr is in hex, count in decimal"));
-                }
-            }
-            "poke" => {
-                if args.len() == 2 || args.len() == 3 {
-                    let addr = u32::from_str_radix(&args[0], 16)
-                        .map_err(|_| Error::help("Poke address is in hex"))?;
-
-                    let value =
-                        u32::from_str_radix(&args[1], 16).map_err(|_| Error::help("Poke value is in hex"))?;
-                    let count = if args.len() == 3 {
-                        if let Ok(count) = u32::from_str_radix(&args[2], 10) { count } else { 1 }
-                    } else {
-                        1
-                    };
-                    // safety: it's not safe to do this, the user pokes at their own risk
-                    let poke = unsafe { core::slice::from_raw_parts_mut(addr as *mut u32, count as usize) };
-                    for d in poke.iter_mut() {
-                        *d = value;
-                    }
-                    crate::println!("Poked {:x} into {:x}, {} times", value, addr, count);
-                } else {
-                    return Err(Error::help(
-                        "Help: poke <addr> <value> [count], addr/value is in hex, count in decimal",
-                    ));
-                }
-            }
             "reset" => {
                 let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
                 rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
@@ -191,61 +133,10 @@ impl Repl {
                 }
                 crate::println!("");
             }
-            "sha2" => {
-                use digest::Digest;
-                use hex_literal::hex;
-                use sha2_bao1x::Sha256;
-
-                const K_EXPECTED_DIGEST_256: [u8; 32] =
-                    hex!("de1b3b58e16d6b12c906898025d4bc5a594075f4fd4252fa88128b2e0b7a266a");
-
-                let mut pass: bool = true;
-                let mut hasher = Sha256::new();
-
-                hasher.update(K_DATA);
-                // hasher.update(data);
-                let digest = hasher.finalize();
-
-                for (&expected, result) in K_EXPECTED_DIGEST_256.iter().zip(digest) {
-                    if expected != result {
-                        pass = false;
-                    }
-                }
-                if pass {
-                    crate::println!("Sha256 passed.");
-                } else {
-                    crate::println!("Sha256 failed: {:x?}", digest);
-                }
-            }
-            "sha5" => {
-                use digest::Digest;
-                use hex_literal::hex;
-                use sha2_bao1x::Sha512;
-
-                // generated by claude.
-                const K_EXPECTED_DIGEST_512: [u8; 64] = hex!(
-                    "e827276a7d5f2653fe27abc0b0c86533e75acfd4d75253b1229bf86aee19e4a0722691e9ef60510892dc60f4edff795d7875d0d8293a39a7a327a7e1bf07000a"
-                );
-
-                let mut pass: bool = true;
-                let mut hasher = Sha512::new();
-
-                hasher.update(K_DATA);
-                // hasher.update(data);
-                let digest = hasher.finalize();
-
-                for (&expected, result) in K_EXPECTED_DIGEST_512.iter().zip(digest) {
-                    if expected != result {
-                        pass = false;
-                    }
-                }
-                if pass {
-                    crate::println!("Sha512 passed.");
-                } else {
-                    crate::println!("Sha512 failed: {:x?}", digest);
-                }
-            }
-            "check" => match crate::sigcheck::validate_image(crate::FLASH_BASE as *const u32) {
+            "check" => match bao1x_hal::sigcheck::validate_image(
+                crate::FLASH_BASE as *const u32,
+                bao1x_api::BOOT0_REVOCATION_OFFSET,
+            ) {
                 Ok(key_number) => crate::println!("sigcheck passed on key {}", key_number),
                 Err(e) => crate::println!("sigcheck failed: {}", e),
             },
@@ -267,12 +158,19 @@ impl Repl {
                     if new_time >= start_time + 5 {
                         break;
                     }
-                    crate::sigcheck::validate_image(crate::FLASH_BASE as *const u32).ok();
+                    bao1x_hal::sigcheck::validate_image(
+                        crate::FLASH_BASE as *const u32,
+                        bao1x_api::BOOT0_REVOCATION_OFFSET,
+                    )
+                    .ok();
                     count += 1;
                 }
                 crate::println!("{} reps/sec", count / 5);
                 crate::platform::setup_timer();
             }
+            "boot1" => unsafe {
+                crate::asm::jump_to(bao1x_api::BOOT1_START);
+            },
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!("Commands include: echo, bogomips, peek, poke, sha256check");
