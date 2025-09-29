@@ -14,6 +14,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "alloc",
 ], optional = true }
 bytemuck = { version = "1.0", features = ["derive"] }
+bitbybit = "1.4.0"
 
 [features]
 std = ["derive-rkyv", "xous-names", "xous-ipc"]
