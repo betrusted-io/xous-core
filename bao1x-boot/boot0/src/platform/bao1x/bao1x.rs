@@ -69,7 +69,7 @@ pub fn early_init() {
 
     // Now that SRAM trims are setup, initialize all the statics by writing to memory.
     // For baremetal, the statics structure is just at the flash base.
-    const STATICS_LOC: usize = FLASH_BASE + SIGBLOCK_LEN;
+    const STATICS_LOC: usize = bao1x_api::BOOT0_START + SIGBLOCK_LEN;
 
     // safety: this data structure is pre-loaded by the image loader and is guaranteed to
     // only have representable, valid values that are aligned according to the repr(C) spec
