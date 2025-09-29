@@ -34,6 +34,10 @@ pub mod acram;
 pub mod mbox;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod rram;
+#[cfg(not(feature = "hosted-baosec"))]
+pub mod sigcheck;
+#[cfg(not(feature = "hosted-baosec"))]
+pub mod sram_trim;
 
 #[inline(always)]
 pub fn cache_flush() {

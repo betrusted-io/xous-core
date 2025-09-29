@@ -1,6 +1,8 @@
 // Constants that define pin locations, RAM offsets, etc. for the BaoSec board
 use bao1x_api::*;
 
+pub const DEFAULT_FCLK_FREQUENCY: u32 = 800_000_000;
+
 pub const I2C_AXP2101_ADR: u8 = 0x34;
 pub const I2C_TUSB320_ADR: u8 = 0x47;
 pub const I2C_BQ27427_ADR: u8 = 0x55;
@@ -232,11 +234,11 @@ pub fn setup_camera_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
 }
 
 /// returns the USB SE0 port and pin number
-/// TODO: remove this - not actually present on bao1x baosec
-const SE0_PIN: u8 = 6;
 pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    const SE0_PIN: u8 = 5;
+    const SE0_PORT: IoxPort = IoxPort::PF;
     iox.setup_pin(
-        IoxPort::PC,
+        SE0_PORT,
         SE0_PIN,
         Some(IoxDir::Output),
         Some(IoxFunction::Gpio),
@@ -245,8 +247,7 @@ pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         Some(IoxEnable::Enable),
         Some(IoxDriveStrength::Drive2mA),
     );
-    iox.set_gpio_pin_value(IoxPort::PC, SE0_PIN, IoxValue::Low);
-    (IoxPort::PC, SE0_PIN)
+    (SE0_PORT, SE0_PIN)
 }
 
 const KB_PORT: IoxPort = IoxPort::PF;
@@ -285,6 +286,50 @@ pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 2], [(Iox
     )
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum KeyPress {
+    Up,
+    Down,
+    Left,
+    Right,
+    Select,
+    Home,
+    Invalid,
+    None,
+}
+
+pub fn scan_keyboard<T: IoSetup + IoGpio>(
+    iox: &T,
+    rows: &[(IoxPort, u8)],
+    cols: &[(IoxPort, u8)],
+) -> [KeyPress; 4] {
+    let mut key_presses: [KeyPress; 4] = [KeyPress::None; 4];
+    let mut key_press_index = 0; // no Vec in no_std, so we have to manually track it
+
+    for (row, (port, pin)) in rows.iter().enumerate() {
+        iox.set_gpio_pin_value(*port, *pin, IoxValue::Low);
+        for (col, (col_port, col_pin)) in cols.iter().enumerate() {
+            if iox.get_gpio_pin_value(*col_port, *col_pin) == IoxValue::Low {
+                crate::println!("Key press at ({}, {})", row, col);
+                if key_press_index < key_presses.len() {
+                    key_presses[key_press_index] = match (row, col) {
+                        (1, 3) => KeyPress::Left,
+                        (1, 2) => KeyPress::Home,
+                        (1, 0) => KeyPress::Right,
+                        (0, 0) => KeyPress::Down,
+                        (0, 2) => KeyPress::Up,
+                        (0, 1) => KeyPress::Select,
+                        _ => KeyPress::Invalid,
+                    };
+                    key_press_index += 1;
+                }
+            }
+        }
+        iox.set_gpio_pin_value(*port, *pin, IoxValue::High);
+    }
+    key_presses
+}
+
 pub fn setup_pmic_irq<T: IoIrq>(iox: &T, server: &str, opcode: usize) {
     iox.set_irq_pin(IoxPort::PB, 15, IoxValue::Low, server, opcode);
 }
@@ -301,7 +346,6 @@ pub fn setup_oled_power_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         None,
         Some(IoxDriveStrength::Drive2mA),
     );
-    iox.set_gpio_pin_value(port, pin, IoxValue::Low);
     (port, pin)
 }
 
@@ -317,7 +361,6 @@ pub fn setup_trng_power_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         None,
         Some(IoxDriveStrength::Drive2mA),
     );
-    iox.set_gpio_pin_value(port, pin, IoxValue::Low);
     (port, pin)
 }
 
@@ -336,8 +379,8 @@ pub fn setup_trng_input_pin<T: IoSetup + IoGpio>(iox: &T) -> u8 {
     iox.set_bio_bit_from_port_and_pin(port, pin).expect("Couldn't allocate TRNG input pin")
 }
 
-pub fn setup_keep_on_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
-    let (port, pin) = (IoxPort::PF, 0);
+pub fn setup_dcdc2_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    let (port, pin) = (IoxPort::PF, 5);
     iox.setup_pin(
         port,
         pin,
@@ -349,6 +392,30 @@ pub fn setup_keep_on_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         Some(IoxDriveStrength::Drive2mA),
     );
     (port, pin)
+}
+
+pub fn setup_console_pins<T: IoSetup + IoGpio>(iox: &T) -> PeriphId {
+    iox.setup_pin(
+        IoxPort::PB,
+        13,
+        Some(IoxDir::Input),
+        Some(IoxFunction::AF1),
+        Some(IoxEnable::Enable),
+        Some(IoxEnable::Enable),
+        None,
+        None,
+    );
+    iox.setup_pin(
+        IoxPort::PB,
+        14,
+        Some(IoxDir::Output),
+        Some(IoxFunction::AF1),
+        None,
+        None,
+        Some(IoxEnable::Enable),
+        Some(IoxDriveStrength::Drive4mA),
+    );
+    PeriphId::Uart2
 }
 
 // sentinel used by test infrastructure to assist with parsing

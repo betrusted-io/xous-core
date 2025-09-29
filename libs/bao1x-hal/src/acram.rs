@@ -1,3 +1,4 @@
+use bao1x_api::OneWayEncoding;
 use bitbybit::*;
 #[cfg(feature = "std")]
 use xous::MemoryRange;
@@ -87,6 +88,7 @@ impl KeySlotAccess {
 pub enum OneWayErr {
     OutOfBounds,
     IncFail,
+    InvalidCoding,
 }
 pub struct OneWayCounter {
     #[cfg(feature = "std")]
@@ -126,7 +128,12 @@ impl OneWayCounter {
         }
     }
 
-    pub fn inc(&self, offset: usize) -> Result<(), OneWayErr> {
+    /// Marked as `unsafe` because the offset needs to be correct. It's recommended to use
+    /// `inc_coded()` where possible. This function is necessary for the cases that don't
+    /// fit into the `encode_oneway` mechanism, e.g. key revocations, etc.
+    ///
+    /// All you have to do to be safe is no be super-sure you got the offset right.
+    pub unsafe fn inc(&self, offset: usize) -> Result<(), OneWayErr> {
         #[cfg(not(feature = "std"))]
         let base = ONEWAY_START as *mut u32;
         #[cfg(feature = "std")]
@@ -144,5 +151,41 @@ impl OneWayCounter {
         } else {
             Err(OneWayErr::OutOfBounds)
         }
+    }
+
+    /// Automatically increments the correct slot based on the OFFSET encoded in the definition
+    pub fn inc_coded<T>(&self) -> Result<(), OneWayErr>
+    where
+        T: OneWayEncoding,
+        T::Error: core::fmt::Debug,
+    {
+        #[cfg(not(feature = "std"))]
+        let base = ONEWAY_START as *mut u32;
+        #[cfg(feature = "std")]
+        let base = self.mapping.as_mut_ptr() as *mut u32;
+
+        let offset = T::OFFSET;
+        if offset < ONEWAY_LEN {
+            let starting_value = self.get(offset * COUNTER_STRIDE_U32).unwrap(); // offset is already checked
+            // this will cause the increment in hardware
+            unsafe { base.add(offset * COUNTER_STRIDE_U32).write_volatile(0) }
+            crate::cache_flush();
+            let ending_value = self.get(offset * COUNTER_STRIDE_U32).unwrap();
+            // if the increment didn't happen, we may have experienced wear-out on the line
+            // it's only good for 10k increments
+            if ending_value != starting_value + 1 { Err(OneWayErr::IncFail) } else { Ok(()) }
+        } else {
+            Err(OneWayErr::OutOfBounds)
+        }
+    }
+
+    pub fn get_decoded<T>(&self) -> Result<T, OneWayErr>
+    where
+        T: OneWayEncoding,
+        T: TryFrom<u32>,
+        T::Error: core::fmt::Debug,
+    {
+        let raw = self.get(T::OFFSET)?;
+        T::try_from(raw).map_err(|_| OneWayErr::InvalidCoding)
     }
 }
