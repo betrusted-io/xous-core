@@ -94,6 +94,7 @@ impl Repl {
                                 let offset = record.address() as usize - utralib::HW_RERAM_MEM;
                                 rram.write_slice(offset, record.data());
                                 crate::println!("Wrote {} to 0x{:x}", record.data().len(), record.address());
+                                crate::println_d!("{:x}", record.address());
                             } else {
                                 crate::println!(
                                     "Invalid write address {:x}, block ignored!",
@@ -119,6 +120,36 @@ impl Repl {
                     self.local_echo = true;
                 } else {
                     self.local_echo = false;
+                }
+            }
+            #[cfg(feature = "unsafe-debug")]
+            "peek" => {
+                const COLUMNS: usize = 4;
+                if args.len() == 1 || args.len() == 2 {
+                    let addr = usize::from_str_radix(&args[0], 16)
+                        .map_err(|_| Error::help("Peek address is in hex"))?;
+
+                    if addr >= utralib::HW_RERAM_MEM + bao1x_api::RRAM_STORAGE_LEN
+                        && addr < utralib::HW_RERAM_MEM + utralib::HW_RERAM_MEM_LEN
+                    {
+                        return Err(Error::help("Peek disallowed for security-related sectors"));
+                    }
+                    let count = if args.len() == 2 {
+                        if let Ok(count) = u32::from_str_radix(&args[1], 10) { count } else { 1 }
+                    } else {
+                        1
+                    };
+                    // safety: it's not safe to do this, the user peeks at their own risk
+                    let peek = unsafe { core::slice::from_raw_parts(addr as *const u32, count as usize) };
+                    for (i, &d) in peek.iter().enumerate() {
+                        if (i % COLUMNS) == 0 {
+                            crate::print!("\n\r{:08x}: ", addr + i * size_of::<u32>());
+                        }
+                        crate::print!("{:08x} ", d);
+                    }
+                    crate::println!("");
+                } else {
+                    return Err(Error::help("Help: peek <addr> [count], addr is in hex, count in decimal"));
                 }
             }
             "echo" => {

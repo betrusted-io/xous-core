@@ -115,6 +115,7 @@ def wait_for_response(
                 lines = text.split('\n')
                 
                 for line in lines:
+                    # print(line)
                     # Look for pattern: "Wrote 256 to 0x60070a00"
                     match = re.search(r'Wrote\s+(\d+)\s+to\s+(0x[0-9a-fA-F]+)', line)
                     if match:
@@ -263,14 +264,18 @@ def send_uf2_file(
     # Track failures
     failed_blocks: Dict[int, TransferResult] = {}
     total_retries = 0
-    
+    successful_blocks = 0
+
+    echo_off = 'localecho off\r'
     try:
         with uf2_path.open('rb') as f:
             # Send twice because the very first message is sometimes messed up in serial protocol
-            ser.write("localecho off\r".encode('utf-8'))
-            ser.flush()
-            ser.write("localecho off\r".encode('utf-8'))
-            ser.flush()
+            # Also send with individual flush because on the actual serial protocol, we need to slow
+            # down the protocol until echo is actually turned off due to the lag in processing local echo.
+            for _i in range(2):
+                for c in echo_off:
+                    ser.write(c.encode('utf-8'))
+                    ser.flush()
             time.sleep(0.1)
 
             for block_idx in range(total_blocks):
@@ -308,6 +313,7 @@ def send_uf2_file(
                     if result.attempts > 1:
                         total_retries += result.attempts - 1
                     status = f"OK (Retries: {total_retries})"
+                    successful_blocks += 1
                 
                 pbar.update(block_idx + 1, status=status)
         
@@ -323,7 +329,6 @@ def send_uf2_file(
     print(f"Transfer Summary")
     print(f"{'='*60}")
     
-    successful_blocks = total_blocks - len(failed_blocks)
     success_rate = (successful_blocks / total_blocks * 100) if total_blocks > 0 else 0
     
     print(f"Total blocks: {total_blocks}")

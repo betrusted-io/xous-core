@@ -3,9 +3,13 @@ use bao1x_hal::board::KeyPress;
 
 pub fn try_boot<T: IoSetup + IoGpio>(board_type: &BoardTypeCoding, iox: &T) -> Option<KeyPress> {
     if let Some(key) = crate::platform::get_key(board_type, iox) {
-        // skip boot if a key is pressed; record what key it is so we know to check that it has
-        // become *unpressed* before looking for a new press
-        return Some(key);
+        // TODO: on baosec v2, we should not get Invalid keys. However, as we wait for the new
+        // boards to come in this will be a thing.
+        if key != KeyPress::Invalid {
+            // skip boot if a key is pressed; record what key it is so we know to check that it has
+            // become *unpressed* before looking for a new press
+            return Some(key);
+        }
     }
 
     let one_way = bao1x_hal::acram::OneWayCounter::new();
@@ -18,13 +22,15 @@ pub fn try_boot<T: IoSetup + IoGpio>(board_type: &BoardTypeCoding, iox: &T) -> O
     seal_boot1_keys();
     // loader is at the same offset as baremetal. Accept either as valid boot.
     // This diverges if the signature check is successful
-    bao1x_hal::sigcheck::validate_image(
+    match bao1x_hal::sigcheck::validate_image(
         bao1x_api::LOADER_START as *const u32,
         bao1x_api::BOOT1_START as *const u32,
         bao1x_api::BOOT1_REVOCATION_OFFSET,
         true,
-    )
-    .ok();
+    ) {
+        Ok(k) => crate::println!("**should be unreachable** Booted with key {}", k),
+        Err(e) => crate::println!("Image did not validate: {:?}", e),
+    }
     crate::println!("No valid loader or baremetal image found. Halting!");
     bao1x_hal::sigcheck::die_no_std();
 }
@@ -45,13 +51,15 @@ pub fn boot_or_die() -> ! {
     seal_boot1_keys();
     // loader is at the same offset as baremetal. Accept either as valid boot.
     // This diverges if the signature check is successful
-    bao1x_hal::sigcheck::validate_image(
+    match bao1x_hal::sigcheck::validate_image(
         bao1x_api::LOADER_START as *const u32,
         bao1x_api::BOOT1_START as *const u32,
         bao1x_api::BOOT1_REVOCATION_OFFSET,
         true,
-    )
-    .ok();
+    ) {
+        Ok(k) => crate::println!("**should be unreachable** Booted with key {}", k),
+        Err(e) => crate::println!("Image did not validate: {:?}", e),
+    }
     crate::println!("No valid loader or baremetal image found. Halting!");
     bao1x_hal::sigcheck::die_no_std();
 }

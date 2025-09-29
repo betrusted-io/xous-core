@@ -67,7 +67,11 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // "flash" SE0 for 1 second so as to emulate a clean re-plug event, allowing the
     // stack to enumerate from a coherent state. Up until now, any attempt of the
     // host to talk to us just gave us nonsense
-    crate::println!("No valid boot image found; enabling USB...");
+    if current_key.is_none() {
+        crate::println!("No valid boot image found; enabling USB...");
+    } else {
+        crate::println!("Boot bypassed with keypress: {:?}", current_key);
+    }
     let (se0_port, se0_pin) = match board_type {
         BoardTypeCoding::Baosec => bao1x_hal::board::setup_usb_pins(&iox),
         _ => crate::platform::setup_dabao_se0_pin(&iox),
