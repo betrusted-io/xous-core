@@ -20,7 +20,8 @@ pub fn try_boot<T: IoSetup + IoGpio>(board_type: &BoardTypeCoding, iox: &T) -> O
     // This diverges if the signature check is successful
     bao1x_hal::sigcheck::validate_image(
         bao1x_api::LOADER_START as *const u32,
-        bao1x_api::LOADER_REVOCATION_OFFSET,
+        bao1x_api::BOOT1_START as *const u32,
+        bao1x_api::BOOT1_REVOCATION_OFFSET,
         true,
     )
     .ok();
@@ -46,7 +47,8 @@ pub fn boot_or_die() -> ! {
     // This diverges if the signature check is successful
     bao1x_hal::sigcheck::validate_image(
         bao1x_api::LOADER_START as *const u32,
-        bao1x_api::LOADER_REVOCATION_OFFSET,
+        bao1x_api::BOOT1_START as *const u32,
+        bao1x_api::BOOT1_REVOCATION_OFFSET,
         true,
     )
     .ok();

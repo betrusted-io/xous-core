@@ -76,7 +76,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
             _ => (),
         };
     }
+    // self-validate the image with the keys we put in, just to make sure our code wasn't tampered with
     if bao1x_hal::sigcheck::validate_image(
+        bao1x_api::BOOT0_START as *const u32,
         bao1x_api::BOOT0_START as *const u32,
         bao1x_api::BOOT0_REVOCATION_OFFSET,
         false,
@@ -90,13 +92,15 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                 // Primary boot selected. Check Boot1 first, then fall back to LOADER/BAREMETAL.
                 bao1x_hal::sigcheck::validate_image(
                     bao1x_api::BOOT1_START as *const u32,
-                    bao1x_api::BOOT1_REVOCATION_OFFSET,
+                    bao1x_api::BOOT0_START as *const u32,
+                    bao1x_api::BOOT0_REVOCATION_OFFSET,
                     true,
                 )
                 .ok();
                 bao1x_hal::sigcheck::validate_image(
                     bao1x_api::LOADER_START as *const u32,
-                    bao1x_api::LOADER_REVOCATION_OFFSET,
+                    bao1x_api::BOOT0_START as *const u32,
+                    bao1x_api::BOOT0_REVOCATION_OFFSET,
                     true,
                 )
                 .ok();
@@ -105,13 +109,15 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                 // Alternate boot selected. Check LOADER/BAREMETAL, then fall back to Boot1.
                 bao1x_hal::sigcheck::validate_image(
                     bao1x_api::LOADER_START as *const u32,
-                    bao1x_api::LOADER_REVOCATION_OFFSET,
+                    bao1x_api::BOOT0_START as *const u32,
+                    bao1x_api::BOOT0_REVOCATION_OFFSET,
                     true,
                 )
                 .ok();
                 bao1x_hal::sigcheck::validate_image(
                     bao1x_api::BOOT1_START as *const u32,
-                    bao1x_api::BOOT1_REVOCATION_OFFSET,
+                    bao1x_api::BOOT0_START as *const u32,
+                    bao1x_api::BOOT0_REVOCATION_OFFSET,
                     true,
                 )
                 .ok();
