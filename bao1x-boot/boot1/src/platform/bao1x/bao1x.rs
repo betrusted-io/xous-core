@@ -13,7 +13,6 @@ static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::Loc
 
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
-pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 pub const SIGBLOCK_LEN: usize = 768; // this is adjusted inside builder.rs, in the sign-image invocation
 
 const DATA_SIZE_BYTES: usize = 0x6000;
@@ -179,7 +178,7 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> bao1x_api::Boar
 
     // Now that SRAM trims are setup, initialize all the statics by writing to memory.
     // For baremetal, the statics structure is just at the flash base.
-    const STATICS_LOC: usize = FLASH_BASE + SIGBLOCK_LEN;
+    const STATICS_LOC: usize = bao1x_api::BOOT1_START + SIGBLOCK_LEN;
 
     // safety: this data structure is pre-loaded by the image loader and is guaranteed to
     // only have representable, valid values that are aligned according to the repr(C) spec

@@ -93,7 +93,6 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // value, and provide feedback on the CPU operation by flashing the RGB LEDs.
     let mut repl = crate::repl::Repl::new();
     let mut new_key: Option<KeyPress>;
-    crate::println!("connect status {:?}", USB_CONNECTED.load(Ordering::SeqCst));
     loop {
         let (new_usb_state, new_portsc) = glue::usb_status();
 
@@ -121,27 +120,25 @@ pub unsafe extern "C" fn rust_entry() -> ! {
 
         // repl handling; USB is entirely interrupt driven, so there is no loop to handle it
         if USB_CONNECTED.load(Ordering::SeqCst) {
-            if last_usb_state == UsbDeviceState::Configured {
-                // fetch characters from the Rx buffer
-                critical_section::with(|cs| {
-                    let mut queue = USB_RX.borrow(cs).borrow_mut();
-                    while let Some(byte) = queue.pop_front() {
-                        repl.rx_char(byte);
-                    }
-                });
+            // fetch characters from the Rx buffer
+            critical_section::with(|cs| {
+                let mut queue = USB_RX.borrow(cs).borrow_mut();
+                while let Some(byte) = queue.pop_front() {
+                    repl.rx_char(byte);
+                }
+            });
 
-                // Process any command line requests
-                match repl.process() {
-                    Err(e) => {
-                        if let Some(m) = e.message {
-                            crate::println!("{}", m);
-                            repl.abort_cmd();
-                        }
+            // Process any command line requests
+            match repl.process() {
+                Err(e) => {
+                    if let Some(m) = e.message {
+                        crate::println!("{}", m);
+                        repl.abort_cmd();
                     }
-                    _ => (),
-                };
-                glue::flush_tx();
-            }
+                }
+                _ => (),
+            };
+            glue::flush_tx();
         } else {
             // Handle keyboard events.
             critical_section::with(|cs| {

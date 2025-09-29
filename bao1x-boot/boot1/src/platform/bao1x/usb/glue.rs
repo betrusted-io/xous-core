@@ -25,7 +25,6 @@ pub fn setup() -> (UsbDeviceState, u32) {
     // Below is all unsafe because USB is global mutable state
     unsafe {
         if let Some(ref mut usb_ref) = crate::platform::bao1x::usb::USB {
-            crate::println!("inside update");
             let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
             usb.reset();
             let mut poweron = 0;
