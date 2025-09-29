@@ -7,6 +7,9 @@ ignore = [
     "libs/mass-storage/**",
     "loader/curve25519-dalek-loader/**",
     "loader/ed25519-dalek-loader/**",
+    "boot/curve25519-dalek-bao1x/**",
+    "boot/ed25519-dalek-bao1x/**",
+    "boot/sha2-bao1x/**",
     "loader/sha2-loader/**",
     "imports/getrandom/**",
 ]
