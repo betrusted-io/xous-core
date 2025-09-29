@@ -397,6 +397,7 @@ dependencies = [
 name = "bao1x-api"
 version = "0.1.0"
 dependencies = [
+ "bitbybit",
  "bytemuck",
  "num-derive 0.4.2",
  "num-traits",
@@ -412,14 +413,27 @@ version = "0.1.0"
 dependencies = [
  "bao1x-api",
  "bao1x-hal",
+ "critical-section",
+ "linked_list_allocator",
+ "riscv",
+ "utralib 0.1.25",
+ "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-riscv",
+]
+
+[[package]]
+name = "bao1x-boot1"
+version = "0.1.0"
+dependencies = [
+ "bao1x-api",
+ "bao1x-hal",
  "base64 0.22.1",
  "critical-section",
  "digest 0.10.7",
  "ed25519-dalek-bao1x",
- "hex-literal 1.0.0",
  "linked_list_allocator",
  "riscv",
- "sha2-bao1x",
+ "sha2",
  "simple-fatfs",
  "utralib 0.1.25",
  "ux-api",
@@ -451,15 +465,19 @@ dependencies = [
 name = "bao1x-hal"
 version = "0.1.0"
 dependencies = [
+ "arbitrary-int",
  "bao1x-api",
  "bitbybit",
  "bitfield",
  "bitflags 1.3.2",
+ "digest 0.10.7",
+ "ed25519-dalek-bao1x",
  "either",
  "log",
  "num-derive 0.4.2",
  "num-traits",
  "rkyv 0.8.8",
+ "sha2-bao1x",
  "usb-device",
  "utralib 0.1.25",
  "ux-api",
@@ -538,9 +556,11 @@ dependencies = [
  "critical-section",
  "digest 0.10.7",
  "ed25519-dalek",
+ "hex-literal 1.0.0",
  "linked_list_allocator",
  "riscv",
  "sha2",
+ "sha2-bao1x",
  "simple-fatfs",
  "utralib 0.1.25",
  "ux-api",
@@ -3431,6 +3451,7 @@ dependencies = [
  "curve25519-dalek-loader",
  "digest 0.10.7",
  "ed25519-dalek",
+ "ed25519-dalek-bao1x",
  "ed25519-dalek-loader",
  "lazy_static",
  "libm 0.2.8",
@@ -3441,6 +3462,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "riscv",
  "sha2",
+ "sha2-bao1x",
  "sha2-loader",
  "simple-fatfs",
  "utralib 0.1.25",
@@ -5406,7 +5428,7 @@ dependencies = [
 name = "sha2-bao1x"
 version = "0.10.9"
 dependencies = [
- "bao1x-hal",
+ "bao1x-api",
  "digest 0.10.7",
  "utralib 0.1.25",
 ]
@@ -7542,6 +7564,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "atty",
+ "bao1x-api",
  "chrono",
  "filetime",
  "lazy_static",
