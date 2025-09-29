@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 
 #[allow(unused_imports)]
 use bao1x_api::*;
+use bao1x_hal::acram::OneWayCounter;
 use utralib::*;
 
 pub struct Error {
@@ -122,6 +123,19 @@ impl Repl {
                     self.local_echo = false;
                 }
             }
+            "autoboot" => {
+                // this toggles the autoboot flag by incrementing the one-way counter associated with
+                // autobooting.
+                let one_way = OneWayCounter::new();
+                match one_way.inc_coded::<bao1x_api::BootWaitCoding>() {
+                    Ok(_) => {
+                        let autoboot_state =
+                            one_way.get_decoded::<bao1x_api::BootWaitCoding>().expect("couldn't fetch flag");
+                        crate::println!("autoboot is now set to {:?}", autoboot_state);
+                    }
+                    Err(e) => crate::println!("Couldn't toggle autoboot: {:?}", e),
+                }
+            }
             #[cfg(feature = "unsafe-debug")]
             "peek" => {
                 const COLUMNS: usize = 4;
@@ -160,7 +174,7 @@ impl Repl {
             }
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
-                crate::print!("Commands include: reset, echo, boot");
+                crate::print!("Commands include: reset, echo, boot, autoboot, localecho, uf2");
                 crate::println!("");
             }
         }

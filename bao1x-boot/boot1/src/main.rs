@@ -12,7 +12,7 @@ mod uf2;
 use alloc::collections::VecDeque;
 use core::{cell::RefCell, sync::atomic::Ordering};
 
-use bao1x_api::BoardTypeCoding;
+use bao1x_api::{BoardTypeCoding, BootWaitCoding};
 use bao1x_hal::{board::KeyPress, iox::Iox, usb::driver::UsbDeviceState};
 use critical_section::Mutex;
 use platform::*;
@@ -21,6 +21,7 @@ use utralib::*;
 
 use crate::delay;
 use crate::platform::usb::glue;
+use crate::secboot::boot_or_die;
 
 static UART_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
 #[allow(dead_code)]
@@ -59,19 +60,35 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     crate::println!("\n~~Boot1 up!~~\n");
 
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-    // this diverges if the conditions to boot the next stage are met, or if
-    // the conditions fail and the device is in a secured state. It returns
-    // and allows the repl loop below to run if an update is authorized.
-    let mut current_key = secboot::try_boot(&board_type, &iox);
 
-    // "flash" SE0 for 1 second so as to emulate a clean re-plug event, allowing the
-    // stack to enumerate from a coherent state. Up until now, any attempt of the
-    // host to talk to us just gave us nonsense
-    if current_key.is_none() {
-        crate::println!("No valid boot image found; enabling USB...");
+    let mut current_key = if let Some(key) = crate::platform::get_key(&board_type, &iox) {
+        // TODO: on baosec v2, we should not get Invalid keys. However, as we wait for the new
+        // boards to come in this will be a thing.
+        if key != KeyPress::Invalid {
+            // skip boot if a key is pressed; record what key it is so we know to check that it has
+            // become *unpressed* before looking for a new press
+            Some(key)
+        } else {
+            None
+        }
     } else {
+        None
+    };
+
+    let one_way = bao1x_hal::acram::OneWayCounter::new();
+    let boot_wait = one_way.get_decoded::<BootWaitCoding>().expect("internal error");
+
+    if boot_wait == BootWaitCoding::Disable && current_key.is_none() {
+        // this should diverge, rest of code is not run
+        boot_or_die();
+    }
+
+    if boot_wait == BootWaitCoding::Enable {
+        crate::println!("Boot bypassed because autoboot was disabled");
+    } else if current_key.is_some() {
         crate::println!("Boot bypassed with keypress: {:?}", current_key);
     }
+
     let (se0_port, se0_pin) = match board_type {
         BoardTypeCoding::Baosec => bao1x_hal::board::setup_usb_pins(&iox),
         _ => crate::platform::setup_dabao_se0_pin(&iox),
