@@ -26,6 +26,9 @@ use crate::acram::OneWayCounter;
 /// `revocation_offset` is the offset into the one-way counter array that contains the revocations
 /// corresponding to the pubkeys presented.
 ///
+/// `function code` is a domain separator that ensures that signed sections can't be passed into
+/// the wrong phase of the boot sequence. Passed as a list of u32-values that are allowed.
+///
 /// `auto_jump` is a flag which, when `true`, causes the code to diverge into the signed block.
 /// If `false` the function returns the key index of the first passing public key, or an error
 /// if none were found.
@@ -33,6 +36,7 @@ pub fn validate_image(
     img_offset: *const u32,
     pubkeys_offset: *const u32,
     revocation_offset: usize,
+    function_codes: &[u32],
     auto_jump: bool,
 ) -> Result<usize, String> {
     // conjure the signature struct directly out of memory. super unsafe.
@@ -58,12 +62,12 @@ pub fn validate_image(
 
     // checking the function code prevents exploiting code meant for other partitions signed
     // with a valid signature as code for the next stage boot.
-    if !(sig.sealed_data.function_code == FunctionCode::Boot0 as u32
-        || sig.sealed_data.function_code == FunctionCode::Boot1 as u32
-        || sig.sealed_data.function_code == FunctionCode::UpdatedBoot1 as u32)
-    {
+    if !function_codes.contains(&sig.sealed_data.function_code) {
+        crate::println!("Function code {} not expected", sig.sealed_data.function_code);
         return Err(String::from("Partition has invalid function code"));
     }
+
+    let developer = sig.sealed_data.function_code == FunctionCode::Developer as u32;
 
     let one_way_counters = OneWayCounter::new();
     let mut secure = false;
@@ -82,6 +86,7 @@ pub fn validate_image(
             ed25519_dalek::VerifyingKey::from_bytes(key).or(Err(String::from("invalid public key")))?;
 
         let ed25519_signature = ed25519_dalek::Signature::from(sig.signature);
+        // crate::println!("Verifying image {:x?} with {:x?}", &image[..16], &key);
         let mut h: Sha512 = Sha512::new();
         h.update(&image);
         // debugging note: h.clone() does *not* work. You have to print the hash by modifying
@@ -102,7 +107,7 @@ pub fn validate_image(
         }
     }
 
-    if !secure {
+    if !secure || developer {
         erase_secrets();
     }
     if let Some(valid_key) = passing_key {
