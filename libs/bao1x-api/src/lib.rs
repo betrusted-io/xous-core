@@ -17,6 +17,10 @@ pub mod sce;
 pub mod signatures;
 pub use offsets::*;
 
+/// UF2 Family ID. Randomly generated, no collisions with the known list, still to be merged
+/// into the "official" list
+pub const BAOCHIP_1X_UF2_FAMILY: u32 = 0xa7d7_6373;
+
 /// Constants used by both emulation and hardware implementations
 pub const PERCLK: u32 = 100_000_000;
 pub const SERVER_NAME_KBD: &str = "_Matrix keyboard driver_";

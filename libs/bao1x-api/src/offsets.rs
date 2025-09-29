@@ -6,6 +6,11 @@ pub const BOOT1_START: usize = 0x6002_0000;
 pub const LOADER_START: usize = 0x6006_0000;
 pub const BAREMETAL_START: usize = LOADER_START;
 pub const KERNEL_START: usize = 0x6008_0000;
+// loadable apps all "start" at this address for UF2 updates
+// however these are remapped into external flash based on a defragmentation table
+// and app ID. The app ID also has to get encoded into this offset, likely to be
+// stuck in bits 24-27, to give up to 16 app slots of up to 8MiB in size.
+pub const APP_START_UF2: usize = 0x7000_0000;
 
 // Define a trait with just the offset
 pub trait OneWayEncoding: TryFrom<u32> {
