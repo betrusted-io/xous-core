@@ -16,14 +16,31 @@ use crate::acram::OneWayCounter;
 /// Why this matters: boot0 has to boot the chip under all modes. An external power source is needed for
 /// IDD85 > 100mA. Thus we can't boot at max speed config, as not all system configurations have the
 /// external regulator. So, we have to work at reduced VDD/frequency and make sure this constraint is met.
+///
+/// `img_offset` is a pointer to untrusted image data
+///
+/// `pubkeys_offset` is a pointer to trusted public key data. Because 'pubkeys_offset` is assumed to be
+/// trusted minimal validation is done on this pointer. It's important that the caller has vetted this
+/// pointer before using it!
+///
+/// `revocation_offset` is the offset into the one-way counter array that contains the revocations
+/// corresponding to the pubkeys presented.
+///
+/// `auto_jump` is a flag which, when `true`, causes the code to diverge into the signed block.
+/// If `false` the function returns the key index of the first passing public key, or an error
+/// if none were found.
 pub fn validate_image(
     img_offset: *const u32,
+    pubkeys_offset: *const u32,
     revocation_offset: usize,
     auto_jump: bool,
 ) -> Result<usize, String> {
     // conjure the signature struct directly out of memory. super unsafe.
     let sig_ptr = img_offset as *const SignatureInFlash;
     let sig: &SignatureInFlash = unsafe { sig_ptr.as_ref().unwrap() };
+
+    let pubkey_ptr = pubkeys_offset as *const SignatureInFlash;
+    let pk_src: &SignatureInFlash = unsafe { pubkey_ptr.as_ref().unwrap() };
 
     let signed_len = sig.sealed_data.signed_len;
     let image: &[u8] = unsafe {
@@ -51,7 +68,7 @@ pub fn validate_image(
     let one_way_counters = OneWayCounter::new();
     let mut secure = false;
     let mut passing_key: Option<usize> = None;
-    for (i, key) in sig.sealed_data.pubkeys.iter().enumerate() {
+    for (i, key) in pk_src.sealed_data.pubkeys.iter().enumerate() {
         if key.iter().all(|&x| x == 0) {
             continue;
         }
