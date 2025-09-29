@@ -10,22 +10,30 @@ pub const PUBLIC_KEY_LENGTH: usize = 32; // length of an ed25519 public key.
 #[repr(u32)]
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum FunctionCode {
+    /// Should never be used
+    Invalid = 0,
     /// Code for a valid boot0 region
-    Boot0 = 0,
+    Boot0 = 1,
     /// Code for a valid boot1 region
-    Boot1 = 1,
+    Boot1 = 2,
     /// Expected code when being passed a boot1 region update. Self-signing/sealing implementations
     /// can change this code to Boot1; externally signed implementations would accept UpdatedBoot1
     /// as interchangeable with Boot1
-    UpdatedBoot1 = 2,
+    UpdatedBoot1 = 3,
+    /// Loader
+    Loader = 4,
+    UpdatedLoader = 5,
+    /// Baremetal options
+    Baremetal = 6,
+    UpdatedBaremetal = 7,
     /// Kernel region
-    Kernel = 3,
-    UpdatedKernel = 4,
+    Kernel = 0x1_00,
+    UpdatedKernel = 0x1_01,
     /// Application region
-    App = 5,
-    UpdatedApp = 6,
+    App = 0x10_0000,
+    UpdatedApp = 0x10_0001,
     /// Developer use - can go in any region, but only usable with secrets wiped.
-    Developer = 7,
+    Developer = 0x1000_0000,
 }
 
 pub const BAOCHIP_SIG_VERSION: u32 = 0x1_00;
