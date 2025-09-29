@@ -19,10 +19,11 @@ impl Error {
 pub struct Repl {
     cmdline: String,
     do_cmd: bool,
+    local_echo: bool,
 }
 
 impl Repl {
-    pub fn new() -> Self { Self { cmdline: String::new(), do_cmd: false } }
+    pub fn new() -> Self { Self { cmdline: String::new(), do_cmd: false, local_echo: true } }
 
     #[allow(dead_code)]
     pub fn init_cmd(&mut self, cmd: &str) {
@@ -46,7 +47,9 @@ impl Repl {
             // everything else
             match char::from_u32(c as u32) {
                 Some(c) => {
-                    crate::print!("{}", c);
+                    if self.local_echo {
+                        crate::print!("{}", c);
+                    }
                     self.cmdline.push(c);
                 }
                 None => {
@@ -72,6 +75,51 @@ impl Repl {
             }
             "boot" => {
                 crate::secboot::boot_or_die();
+            }
+            "uf2" => {
+                use base64::{Engine as _, engine::general_purpose};
+                if args.len() != 1 {
+                    crate::println_d!("u2f query malformed");
+                    return Err(Error::help("uf2 [base64 data]"));
+                }
+                match general_purpose::STANDARD.decode(&args[0]) {
+                    Ok(uf2_data) => {
+                        if let Some(record) = crate::uf2::Uf2Block::from_bytes(&uf2_data) {
+                            if record.address() as usize >= bao1x_api::BAREMETAL_START
+                                && (record.address() as usize)
+                                    < utralib::HW_RERAM_MEM + bao1x_api::RRAM_STORAGE_LEN
+                                && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
+                            {
+                                let mut rram = bao1x_hal::rram::Reram::new();
+                                let offset = record.address() as usize - utralib::HW_RERAM_MEM;
+                                rram.write_slice(offset, record.data());
+                                crate::println!("Wrote {} to 0x{:x}", record.data().len(), record.address());
+                            } else {
+                                crate::println!(
+                                    "Invalid write address {:x}, block ignored!",
+                                    record.address()
+                                );
+                            }
+                        } else {
+                            crate::println_d!("invalid u2f data");
+                        }
+                    }
+                    Err(e) => {
+                        crate::println_d!("Decode error {:?}", e);
+                        return Err(Error::help("Corrupt base64"));
+                    }
+                }
+                crate::usb::flush();
+            }
+            "localecho" => {
+                if args.len() != 1 {
+                    return Err(Error::help("localecho [on | off]"));
+                }
+                if args[0] == "on" {
+                    self.local_echo = true;
+                } else {
+                    self.local_echo = false;
+                }
             }
             "echo" => {
                 for word in args {

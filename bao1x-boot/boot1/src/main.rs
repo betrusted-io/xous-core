@@ -7,6 +7,8 @@ mod asm;
 mod platform;
 mod repl;
 mod secboot;
+mod uf2;
+
 use alloc::collections::VecDeque;
 use core::{cell::RefCell, sync::atomic::Ordering};
 
