@@ -605,7 +605,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let sigblock_size = 0x300;
             update_flash_origin(
                 "baremetal/src/platform/bao1x/link.x",
-                (0x6000_0000 + sigblock_size + STATICS_LEN) as u32,
+                (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
             )?;
             builder.set_baremetal(true).target_baremetal_bao1x("baremetal").set_sigblock_size(sigblock_size);
         }
@@ -625,8 +625,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("bao1x-boot0") => {
             let sigblock_size = 0x300;
             update_flash_origin(
-                "baremetal/src/platform/bao1x/link.x",
-                (0x6000_0000 + sigblock_size + STATICS_LEN) as u32,
+                "bao1x-boot/boot0/link.x",
+                (bao1x_api::BOOT0_START + sigblock_size + STATICS_LEN) as u32,
             )?;
             builder
                 .set_baremetal(true)
@@ -634,12 +634,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .set_sigblock_size(sigblock_size);
         }
 
+        Some("bao1x-boot1") => {
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "bao1x-boot/boot1/src/platform/bao1x/link.x",
+                (bao1x_api::BOOT1_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder
+                .set_baremetal(true)
+                .target_baremetal_bao1x("bao1x-boot1")
+                .set_sigblock_size(sigblock_size);
+        }
+
         Some("baosec") => {
             let board = "board-baosec";
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "loader/src/platform/bao1x/link.x",
+                (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
             // select the board
             builder.add_feature(board);
             builder.add_loader_feature(board);
             builder.add_kernel_feature(board);
+            builder.set_sigblock_size(sigblock_size);
 
             // placement in flash is a tension between dev convenience and RAM usage. Things in flash
             // are resident, non-swapable, but end up making the slow kernel burn process take longer.

@@ -20,3 +20,4 @@ ureq = { version = "2.9.0", features = ["json"] }
 svd2utra = "0.1.23"
 lazy_static = "1.4.0"
 # toml_edit = "0.14.4" # would be used to verify Cargo.toml files, but it's too hard to do this right now.
+bao1x-api = { path = "../libs/bao1x-api" }

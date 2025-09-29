@@ -1023,7 +1023,12 @@ impl Builder {
                         loader_bin.to_str().unwrap(),
                         "--min-xous-ver",
                         &self.min_ver,
+                        "--sig-length",
+                        &self.sigblock_size.to_string(),
                         "--with-jump", // bao1x target has a jump inserted in the loader sig block
+                        "--bao1x",
+                        "--function-code",
+                        "loader",
                     ])
                     .status()?
             } else {
@@ -1054,26 +1059,55 @@ impl Builder {
             let mut xous_img_path = output_bundle.parent().unwrap().to_owned();
             xous_img_path.push("xous.img");
 
-            let status = Command::new(cargo())
-                .current_dir(project_root())
-                .args([
-                    "run",
-                    "--package",
-                    "tools",
-                    "--bin",
-                    "sign-image",
-                    "--",
-                    "--kernel-image",
-                    output_bundle.to_str().unwrap(),
-                    "--kernel-key",
-                    &self.kernel_key,
-                    "--kernel-output",
-                    xous_img_path.to_str().unwrap(),
-                    "--min-xous-ver",
-                    &self.min_ver,
-                    // "--defile",
-                ])
-                .status()?;
+            let status = if self.utra_target.contains("bao1x") {
+                Command::new(cargo())
+                    .current_dir(project_root())
+                    .args([
+                        "run",
+                        "--package",
+                        "tools",
+                        "--bin",
+                        "sign-image",
+                        "--",
+                        "--kernel-image",
+                        output_bundle.to_str().unwrap(),
+                        "--kernel-key",
+                        &self.kernel_key,
+                        "--kernel-output",
+                        xous_img_path.to_str().unwrap(),
+                        "--min-xous-ver",
+                        &self.min_ver,
+                        "--sig-length",
+                        &self.sigblock_size.to_string(),
+                        "--with-jump", // bao1x target has a jump inserted in the sig block
+                        "--bao1x",
+                        "--function-code",
+                        "kernel",
+                        // "--defile",
+                    ])
+                    .status()?
+            } else {
+                Command::new(cargo())
+                    .current_dir(project_root())
+                    .args([
+                        "run",
+                        "--package",
+                        "tools",
+                        "--bin",
+                        "sign-image",
+                        "--",
+                        "--kernel-image",
+                        output_bundle.to_str().unwrap(),
+                        "--kernel-key",
+                        &self.kernel_key,
+                        "--kernel-output",
+                        xous_img_path.to_str().unwrap(),
+                        "--min-xous-ver",
+                        &self.min_ver,
+                        // "--defile",
+                    ])
+                    .status()?
+            };
             if !status.success() {
                 return Err("kernel image sign failed".into());
             }
