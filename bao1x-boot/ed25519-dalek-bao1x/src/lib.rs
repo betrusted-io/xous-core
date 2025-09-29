@@ -281,6 +281,6 @@ pub use crate::signing::*;
 pub use crate::verifying::*;
 
 #[cfg(feature = "debug")]
-mod debug;
+pub mod debug;
 #[cfg(feature = "debug")]
 pub use debug::*;

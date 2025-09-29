@@ -75,7 +75,7 @@ required-features = ["rand_core"]
 [features]
 # add print debugging
 debug = ["utralib"]
-default = ["fast", "std", "zeroize", "debug"]
+default = ["fast", "std", "zeroize"]
 alloc = [
     "curve25519-dalek/alloc",
     "ed25519/alloc",
