@@ -1,6 +1,13 @@
-use bao1x_api::*;
+use bao1x_api::{signatures::FunctionCode, *};
 use bao1x_hal::board::KeyPress;
 
+const ALLOWED_FUNCTIONS: [u32; 5] = [
+    FunctionCode::Baremetal as u32,
+    FunctionCode::UpdatedBaremetal as u32,
+    FunctionCode::Loader as u32,
+    FunctionCode::UpdatedLoader as u32,
+    FunctionCode::Developer as u32,
+];
 pub fn try_boot<T: IoSetup + IoGpio>(board_type: &BoardTypeCoding, iox: &T) -> Option<KeyPress> {
     if let Some(key) = crate::platform::get_key(board_type, iox) {
         // TODO: on baosec v2, we should not get Invalid keys. However, as we wait for the new
@@ -26,6 +33,7 @@ pub fn try_boot<T: IoSetup + IoGpio>(board_type: &BoardTypeCoding, iox: &T) -> O
         bao1x_api::LOADER_START as *const u32,
         bao1x_api::BOOT1_START as *const u32,
         bao1x_api::BOOT1_REVOCATION_OFFSET,
+        &ALLOWED_FUNCTIONS,
         true,
     ) {
         Ok(k) => crate::println!("**should be unreachable** Booted with key {}", k),
@@ -55,6 +63,7 @@ pub fn boot_or_die() -> ! {
         bao1x_api::LOADER_START as *const u32,
         bao1x_api::BOOT1_START as *const u32,
         bao1x_api::BOOT1_REVOCATION_OFFSET,
+        &ALLOWED_FUNCTIONS,
         true,
     ) {
         Ok(k) => crate::println!("**should be unreachable** Booted with key {}", k),

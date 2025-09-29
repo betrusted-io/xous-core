@@ -13,6 +13,7 @@ use alloc::collections::VecDeque;
 #[cfg(feature = "unsafe-dev")]
 use core::cell::RefCell;
 
+use bao1x_api::signatures::FunctionCode;
 #[cfg(feature = "unsafe-dev")]
 use critical_section::Mutex;
 use platform::*;
@@ -81,11 +82,14 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         bao1x_api::BOOT0_START as *const u32,
         bao1x_api::BOOT0_START as *const u32,
         bao1x_api::BOOT0_REVOCATION_OFFSET,
+        &[FunctionCode::Boot0 as u32], // only boot0 is allowed for boot0
         false,
     )
     .is_ok()
     {
         seal_boot0_keys();
+        let allowed_functions =
+            [FunctionCode::Boot1 as u32, FunctionCode::UpdatedBoot1 as u32, FunctionCode::Developer as u32];
         let one_way_access = bao1x_hal::acram::OneWayCounter::new();
         match one_way_access.get_decoded::<bao1x_api::AltBootCoding>() {
             Ok(bao1x_api::AltBootCoding::PrimaryPartition) => {
@@ -94,6 +98,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                     bao1x_api::BOOT1_START as *const u32,
                     bao1x_api::BOOT0_START as *const u32,
                     bao1x_api::BOOT0_REVOCATION_OFFSET,
+                    &allowed_functions,
                     true,
                 )
                 .ok();
@@ -101,6 +106,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                     bao1x_api::LOADER_START as *const u32,
                     bao1x_api::BOOT0_START as *const u32,
                     bao1x_api::BOOT0_REVOCATION_OFFSET,
+                    &allowed_functions,
                     true,
                 )
                 .ok();
@@ -111,6 +117,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                     bao1x_api::LOADER_START as *const u32,
                     bao1x_api::BOOT0_START as *const u32,
                     bao1x_api::BOOT0_REVOCATION_OFFSET,
+                    &allowed_functions,
                     true,
                 )
                 .ok();
@@ -118,6 +125,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                     bao1x_api::BOOT1_START as *const u32,
                     bao1x_api::BOOT0_START as *const u32,
                     bao1x_api::BOOT0_REVOCATION_OFFSET,
+                    &allowed_functions,
                     true,
                 )
                 .ok();
