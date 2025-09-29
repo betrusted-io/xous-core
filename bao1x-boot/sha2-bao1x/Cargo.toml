@@ -11,16 +11,15 @@ description = "sha2 hardware accelerator engine - specific to bao1x"
 
 # Rust-standard digest API dependencies
 digest = "^0.10.7"
-utralib = { version = "0.1.25", optional = true, default-features = false }
-bao1x-hal = { path = "../../libs/bao1x-hal", optional = true, default-features = false }
+utralib = { version = "0.1.25", default-features = false }
+bao1x-api = { path = "../../libs/bao1x-api" }
 
 [features]
 compress = []
-bao1x = ["utralib/bao1x", "bao1x-hal/loader-baosec"]
+bao1x = ["utralib/bao1x"]
 oid = []
 precursor = ["utralib/precursor"]
 renode = ["utralib/renode"]
 std = []
 debug = []
-# This crate is specific to the bao1x.
-default = ["bao1x"]
+default = []

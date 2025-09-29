@@ -1,4 +1,4 @@
-use bao1x_hal::sce::combohash::*;
+use bao1x_api::sce::combohash::*;
 use digest::{
     core_api::BlockSizeUser,
     generic_array::GenericArray,
