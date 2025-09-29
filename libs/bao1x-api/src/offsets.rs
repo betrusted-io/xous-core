@@ -6,6 +6,10 @@ pub const BOOT1_START: usize = 0x6002_0000;
 pub const LOADER_START: usize = 0x6006_0000;
 pub const BAREMETAL_START: usize = LOADER_START;
 pub const KERNEL_START: usize = 0x6008_0000;
+
+// total storage area available in RRAM. Above this are reserved vectors for security apparatus.
+pub const RRAM_STORAGE_LEN: usize = 0x3D_A000;
+
 // loadable apps all "start" at this address for UF2 updates
 // however these are remapped into external flash based on a defragmentation table
 // and app ID. The app ID also has to get encoded into this offset, likely to be
