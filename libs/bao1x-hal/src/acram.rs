@@ -140,11 +140,11 @@ impl OneWayCounter {
         let base = self.mapping.as_mut_ptr() as *mut u32;
 
         if offset < ONEWAY_LEN {
-            let starting_value = self.get(offset * COUNTER_STRIDE_U32).unwrap(); // offset is already checked
+            let starting_value = self.get(offset).unwrap(); // offset is already checked
             // this will cause the increment in hardware
             unsafe { base.add(offset * COUNTER_STRIDE_U32).write_volatile(0) }
             crate::cache_flush();
-            let ending_value = self.get(offset * COUNTER_STRIDE_U32).unwrap();
+            let ending_value = self.get(offset).unwrap();
             // if the increment didn't happen, we may have experienced wear-out on the line
             // it's only good for 10k increments
             if ending_value != starting_value + 1 { Err(OneWayErr::IncFail) } else { Ok(()) }
@@ -166,11 +166,13 @@ impl OneWayCounter {
 
         let offset = T::OFFSET;
         if offset < ONEWAY_LEN {
-            let starting_value = self.get(offset * COUNTER_STRIDE_U32).unwrap(); // offset is already checked
+            let starting_value = self.get(offset).unwrap(); // offset is already checked
             // this will cause the increment in hardware
             unsafe { base.add(offset * COUNTER_STRIDE_U32).write_volatile(0) }
             crate::cache_flush();
-            let ending_value = self.get(offset * COUNTER_STRIDE_U32).unwrap();
+            let ending_value = self.get(offset).unwrap();
+            // crate::println!("ending: {} starting: {}", ending_value, starting_value);
+
             // if the increment didn't happen, we may have experienced wear-out on the line
             // it's only good for 10k increments
             if ending_value != starting_value + 1 { Err(OneWayErr::IncFail) } else { Ok(()) }
