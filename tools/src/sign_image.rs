@@ -203,6 +203,7 @@ pub fn sign_image(
             let function_code = match function_code {
                 Some("boot0") => FunctionCode::Boot0,
                 Some("boot1") => FunctionCode::Boot1,
+                Some("loader") => FunctionCode::Boot1,
                 Some("kernel") => FunctionCode::Kernel,
                 _ => FunctionCode::Developer,
             };
