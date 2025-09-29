@@ -640,6 +640,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "bao1x-boot/boot1/src/platform/bao1x/link.x",
                 (bao1x_api::BOOT1_START + sigblock_size + STATICS_LEN) as u32,
             )?;
+            // builder.add_loader_feature("unsafe-debug");
             builder
                 .set_baremetal(true)
                 .target_baremetal_bao1x("bao1x-boot1")
