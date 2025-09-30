@@ -141,13 +141,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
 
         if matches.is_present("bao1x") {
-            if loader_output.ends_with(".img") {
+            if loader_output.ends_with(".img") || loader_output.ends_with(".bin") {
                 let loader_uf2 = format!("{}uf2", &loader_output[..loader_output.len() - 3]);
                 // generate a uf2 file
                 convert_to_uf2(&loader_output, &loader_uf2, matches.value_of("function-code"), None)?;
                 println!("Created UF2 at {}", loader_uf2);
             } else {
-                Err("Can't generate UF2 file because the output file is not specified with a .img suffix")?;
+                Err(
+                    "Can't generate UF2 file because the output file is not specified with a .img/.bin suffix",
+                )?;
             }
         }
     }
