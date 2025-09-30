@@ -29,7 +29,7 @@
 //! let signing_key: SigningKey = SigningKey::generate(&mut csprng);
 //! # }
 //! ```
-//! 
+//!
 //! We can now use this `signing_key` to sign a message:
 #![cfg_attr(feature = "rand_core", doc = "```")]
 #![cfg_attr(not(feature = "rand_core"), doc = "```ignore")]
@@ -43,7 +43,7 @@
 //! let signature: Signature = signing_key.sign(message);
 //! # }
 //! ```
-//! 
+//!
 //! As well as to verify that this is, indeed, a valid signature on
 //! that `message`:
 #![cfg_attr(feature = "rand_core", doc = "```")]
@@ -59,7 +59,7 @@
 //! assert!(signing_key.verify(message, &signature).is_ok());
 //! # }
 //! ```
-//! 
+//!
 //! Anyone else, given the `public` half of the `signing_key` can also easily
 //! verify this signature:
 #![cfg_attr(feature = "rand_core", doc = "```")]
@@ -79,7 +79,7 @@
 //! assert!(verifying_key.verify(message, &signature).is_ok());
 //! # }
 //! ```
-//! 
+//!
 //! ## Serialisation
 //!
 //! `VerifyingKey`s, `SecretKey`s, `SigningKey`s, and `Signature`s can be serialised
@@ -104,7 +104,7 @@
 //! let signature_bytes:  [u8; SIGNATURE_LENGTH]  = signature.to_bytes();
 //! # }
 //! ```
-//! 
+//!
 //! And similarly, decoded from bytes with `::from_bytes()`:
 #![cfg_attr(feature = "rand_core", doc = "```")]
 #![cfg_attr(not(feature = "rand_core"), doc = "```ignore")]
@@ -131,7 +131,7 @@
 //! #     do_test();
 //! # }
 //! ```
-//! 
+//!
 //! ### PKCS#8 Key Encoding
 //!
 //! PKCS#8 is a private key format with support for multiple algorithms.
@@ -141,7 +141,7 @@
 //! ```text
 //! -----BEGIN PRIVATE KEY-----
 //! ```
-//! 
+//!
 //! To use PKCS#8, you need to enable the `pkcs8` crate feature.
 //!
 //! The following traits can be used to decode/encode [`SigningKey`] and
@@ -167,7 +167,7 @@
 //! let verifying_key = VerifyingKey::from_public_key_pem(pem)
 //!     .expect("invalid public key PEM");
 //! ```
-//! 
+//!
 //! ### Using Serde
 //!
 //! If you prefer the bytes to be wrapped in another serialisation format, all
@@ -176,7 +176,7 @@
 //! ```bash
 //! $ cargo build --features="serde"
 //! ```
-//! 
+//!
 //! They can be then serialised into any of the wire formats which serde supports.
 //! For example, using [bincode](https://github.com/TyOverby/bincode):
 #![cfg_attr(all(feature = "rand_core", feature = "serde"), doc = "```")]
@@ -196,7 +196,7 @@
 //! let encoded_signature: Vec<u8> = serialize(&signature).unwrap();
 //! # }
 //! ```
-//! 
+//!
 //! After sending the `encoded_verifying_key` and `encoded_signature`, the
 //! recipient may deserialise them and verify:
 #![cfg_attr(all(feature = "rand_core", feature = "serde"), doc = "```")]
