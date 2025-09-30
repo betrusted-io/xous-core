@@ -91,7 +91,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     let (mut last_usb_state, mut portsc) = crate::platform::usb::glue::hotplug_usb(&iox);
 
     crate::println!(
-        "usb connected {:?}, tx ready {:?}",
+        "  [usb connected {:?}] [tx idle {:?}]",
         USB_CONNECTED.load(Ordering::SeqCst),
         crate::platform::usb::TX_IDLE.load(Ordering::SeqCst)
     );

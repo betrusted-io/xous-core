@@ -1,7 +1,7 @@
 use bao1x_api::{IoGpio, IoSetup};
 use bao1x_hal::usb::driver::UsbDeviceState;
 
-use crate::{glue, usb};
+use crate::glue;
 
 // Empirically measured PORTSC when the port is unplugged. This might be a brittle way
 // to detect if the device is unplugged.
@@ -11,12 +11,6 @@ const DISCONNECT_STATE_HS: u32 = 0xc6b; // 11_0_0011_0_1_01_1
 pub fn is_disconnected(state: u32) -> bool { state == DISCONNECT_STATE_HS || state == DISCONNECT_STATE }
 
 pub fn setup() -> (UsbDeviceState, u32) {
-    crate::println_d!(
-        "RAM disk starts at {:x} and is {}kiB in length",
-        usb::RAMDISK_ADDRESS,
-        usb::RAMDISK_LEN / 1024
-    );
-
     // safety: this is safe because we're calling this before any access to `USB` static mut
     // state, and we also understand that the .data section doesn't exist in the loader and
     // we've taken countermeasures to initialize everything "from code", i.e. not relying
