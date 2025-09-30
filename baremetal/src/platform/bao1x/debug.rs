@@ -62,35 +62,6 @@ impl Uart {
             }
         }
     }
-
-    fn put_digit(&mut self, d: u8) {
-        let nyb = d & 0xF;
-        let c = if nyb < 10 { nyb + 0x30 } else { nyb + 0x61 - 10 };
-        assert!(c >= 0x30, "conversion failed!");
-        self.putc(c);
-    }
-
-    pub fn put_hex(&mut self, c: u8) {
-        self.put_digit(c >> 4);
-        self.put_digit(c & 0xF);
-    }
-
-    pub fn newline(&mut self) {
-        self.putc(0xa);
-        self.putc(0xd);
-    }
-
-    pub fn print_hex_word(&mut self, word: u32) {
-        for &byte in word.to_be_bytes().iter() {
-            self.put_hex(byte);
-        }
-    }
-
-    pub fn tiny_write_str(&mut self, s: &str) {
-        for c in s.bytes() {
-            self.putc(c);
-        }
-    }
 }
 
 use core::fmt::{Error, Write};
@@ -230,4 +201,57 @@ pub fn setup_rx(perclk: u32) -> bao1x_hal::udma::Uart {
     uart_irq.rx_irq_ena(udma::UartChannel::Uart2, true);
 
     udma_uart
+}
+
+// ==== DUART-only debug print ==== -> this is used for USB feedback to avoid Tx loops on USB
+/// Placeholder for debug
+pub struct Duart {}
+
+impl Duart {
+    /// Print a character
+    pub fn putc(&self, c: u8) {
+        let base = utra::duart::HW_DUART_BASE as *mut u32;
+        let mut uart = CSR::new(base);
+        if uart.rf(utra::duart::SFR_CR_SFR_CR) == 0 {
+            uart.wfo(utra::duart::SFR_CR_SFR_CR, 1);
+        }
+        while uart.r(utra::duart::SFR_SR) != 0 {}
+        uart.wo(utra::duart::SFR_TXD, c as u32);
+    }
+}
+
+impl Write for Duart {
+    fn write_str(&mut self, s: &str) -> Result<(), Error> {
+        for c in s.bytes() {
+            self.putc(c);
+        }
+        Ok(())
+    }
+}
+
+#[macro_use]
+/// Hardware debug print module
+pub mod debug_print_duart {
+    #[macro_export]
+    macro_rules! print_d
+    {
+        ($($args:tt)+) => ({
+                use core::fmt::Write;
+                let _ = write!(crate::debug::Duart {}, $($args)+);
+        });
+    }
+}
+
+#[macro_export]
+macro_rules! println_d
+{
+    () => ({
+        $crate::print_d!("\r\n")
+    });
+    ($fmt:expr) => ({
+        $crate::print_d!(concat!($fmt, "\r\n"))
+    });
+    ($fmt:expr, $($args:tt)+) => ({
+        $crate::print_d!(concat!($fmt, "\r\n"), $($args)+)
+    });
 }

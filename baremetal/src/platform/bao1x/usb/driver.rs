@@ -10,36 +10,6 @@ use super::*;
 
 pub(crate) static mut USB: Option<CorigineUsb> = None;
 
-/// Safety issue: the loader itself doesn't have a loader. So, any .data required by
-/// the loader program can't be set up in advance for the loader.
-///
-/// The root problem: generally, a `static mut` in the loader will cause some .data
-/// to be allocated. The USB handler needs to be a `static mut` because
-/// the interrupt handler needs to be able to find it at a globally known location, and
-/// the data has to persist beyond the scope of a single interrupt.
-///
-/// The assumption: we don't have to include the data section in the loader's ROM image
-/// because 1) the data going into the `static mut` interrupt handler is assumed uninitialized
-/// (due to the wrapper being an Option<Usb> set to None); and 2) the RAM is fully zeroized by a
-/// small assembly routine that executes before the loader runs.
-///
-/// (1) means that in practice, the contents of the .data section is "almost 0".
-/// (2) means we can just whack a pointer at where the
-/// data section should go and the assumptions are met for the loader.
-///
-/// The inconsistency: inspecting the generated binary indicates that the `None` representation
-/// for USB is not `0`; it instead has the representation of `2`. This means that if we try to
-/// access `USB` prior to initialization, we will get UB.
-///
-/// Safe usage: init_usb() must be called before any attempt to access USB, including interrupts.
-/// Furthermore, we have to manually guarantee that there are no concurrency/race conditions accessing
-/// the USB structure (we are in no_std so we don't have a Mutex). Finally, we have to ensure that
-/// USB is initialized with no assumptions about what is in memory prior to any access to it.
-///
-/// Even then, we might have some risk of UB if the compiler decides it really wants to rely
-/// on some pre-initialized structure of the `USB` static mut `None`. In practice, we haven't
-/// seen this, but we run a risk of this breaking in future versions of Rust because the compiler
-/// is allowed to assume that `USB` has the correct value to represent a `None` on boot.
 pub unsafe fn init_usb() {
     let mut usb = unsafe {
         bao1x_hal::usb::driver::CorigineUsb::new(
@@ -70,8 +40,6 @@ pub unsafe fn init_usb() {
     disk[FAT_DATA3_OFFSET..FAT_DATA3_OFFSET + FAT_DATA3.len()].copy_from_slice(&FAT_DATA3);
 
     // install the interrupt handler
-    // setup the stack & controller
-    irq_setup();
     enable_irq(utralib::utra::irqarray1::IRQARRAY1_IRQ);
     // for testing
     enable_irq(utralib::utra::irqarray19::IRQARRAY19_IRQ);
@@ -107,43 +75,11 @@ pub unsafe fn test_usb() {
         usb.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xffff_ffff); // blanket clear
         usb.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
 
-        crate::println!("hw started...");
-        /*
-        let mut vbus_on = false;
-        let mut vbus_on_count = 0;
-        let mut in_u0 = false;
-        loop {
-            if vbus_on == false && vbus_on_count == 4 {
-                crate::println!("vbus on");
-                usb.init();
-                usb.start();
-                vbus_on = true;
-                in_u0 = false;
-            } else if usb.pp() == true && vbus_on == false {
-                vbus_on_count += 1;
-                delay(100);
-            } else if usb.pp() == false && vbus_on == true {
-                crate::println!("20230802 vbus off during while");
-                usb.stop();
-                usb.reset();
-                vbus_on_count = 0;
-                vbus_on = false;
-                in_u0 = false;
-            } else if in_u0 == true && vbus_on == true {
-                crate::println!("USB stack started");
-                break;
-                // crate::println!("Would be uvc_bulk_thread()");
-                // uvc_bulk_thread();
-            } else if usb.ccs() == true && vbus_on == true {
-                crate::println!("enter U0");
-                in_u0 = true;
-            }
-        }
-        */
+        crate::println_d!("hw started...");
         let mut i = 0;
         loop {
             // wait for interrupt handler to do something
-            crate::println!("{}", i);
+            crate::println_d!("{}", i);
             i += 1;
             delay(10_000);
             // for testing interrupt handler
@@ -151,7 +87,7 @@ pub unsafe fn test_usb() {
             irqarray19.wfo(utralib::utra::irqarray19::EV_SOFT_TRIGGER, 0x80);
         }
     } else {
-        crate::println!("USB core not allocated, skipping USB test");
+        crate::println_d!("USB core not allocated, skipping USB test");
     }
 }
 
@@ -211,7 +147,7 @@ fn get_status_request(this: &mut CorigineUsb, request_type: u8, index: u16) {
 }
 
 fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
-    // crate::println!("handle_event: {:x?}", event_trb);
+    // crate::println_d!("handle_event: {:x?}", event_trb);
     let pei = event_trb.get_endpoint_id();
     let ep_num = pei >> 1;
     let udc_ep = &mut this.udc_ep[pei as usize];
@@ -223,14 +159,14 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
             // this.print_status(portsc_val);
 
             let portsc = PortSc(portsc_val);
-            // crate::println!("{:?}", portsc);
+            // crate::println_d!("{:?}", portsc);
 
             if portsc.prc() && !portsc.pr() {
-                crate::println!("update_current_speed() - reset done");
+                crate::println_d!("update_current_speed() - reset done");
                 this.update_current_speed();
             }
             if portsc.csc() && portsc.ppc() && portsc.pp() && portsc.ccs() {
-                crate::println!("update_current_speed() - cable connect");
+                crate::println_d!("update_current_speed() - cable connect");
                 this.update_current_speed();
             }
 
@@ -241,7 +177,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                 CompletionCode::try_from(event_trb.dw2.compl_code()).expect("Invalid completion code");
 
             #[cfg(feature = "verbose-debug")]
-            crate::println!(
+            crate::println_d!(
                 "e_trb {:x} {:x} {:x} {:x}",
                 event_trb.dw0,
                 event_trb.dw1,
@@ -250,7 +186,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
             );
             let residual_length = event_trb.dw2.trb_tran_len() as u16;
             // update the dequeue pointer
-            // crate::println!("event_transfer {:x?}", event_trb);
+            // crate::println_d!("event_transfer {:x?}", event_trb);
             let deq_pt =
                 unsafe { (event_trb.dw0 as *mut TransferTrbS).add(1).as_mut().expect("Couldn't deref ptr") };
             if deq_pt.get_trb_type() == TrbType::Link {
@@ -258,7 +194,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
             } else {
                 udc_ep.deq_pt = AtomicPtr::new(deq_pt as *mut TransferTrbS);
             }
-            // crate::println!("EventTransfer: comp_code {:?}, PEI {}", comp_code, pei);
+            // crate::println_d!("EventTransfer: comp_code {:?}, PEI {}", comp_code, pei);
 
             let dir = (pei & 1) != 0;
             if pei == 0 {
@@ -270,19 +206,19 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         ret = CrgEvent::Data(1, 0, 0); // FIXME: this ordering contradicts the `dir` bit, but seems necessary to trigger the next packet send
                     }
                 } else {
-                    crate::println!("EP0 unhandled comp_code: {:?}", comp_code);
+                    crate::println_d!("EP0 unhandled comp_code: {:?}", comp_code);
                     ret = CrgEvent::None;
                 }
             } else if pei >= 2 {
                 if comp_code == CompletionCode::Success || comp_code == CompletionCode::ShortPacket {
-                    // crate::println!("EP{} xfer event, dir {}", ep_num, if dir { "OUT" } else { "IN" });
+                    // crate::println_d!("EP{} xfer event, dir {}", ep_num, if dir { "OUT" } else { "IN" });
                     // xfer_complete
                     if let Some(f) = this.udc_ep[pei as usize].completion_handler {
                         // so unsafe. so unsafe. We're counting on the hardware to hand us a raw pointer
                         // that isn't corrupted.
                         let p_trb = unsafe { &*(event_trb.dw0 as *const TransferTrbS) };
                         #[cfg(feature = "verbose-debug")]
-                        crate::println!(
+                        crate::println_d!(
                             "p_trb {:x} {:x} {:x} {:x}",
                             p_trb.dphi,
                             p_trb.dplo,
@@ -292,9 +228,9 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         f(this, p_trb.dplo as usize, p_trb.dw2.0, 0, residual_length);
                     }
                 } else if comp_code == CompletionCode::MissedServiceError {
-                    crate::println!("MissedServiceError");
+                    crate::println_d!("MissedServiceError");
                 } else {
-                    crate::println!("EventTransfer {:?} event not handled", comp_code);
+                    crate::println_d!("EventTransfer {:?} event not handled", comp_code);
                 }
             }
         }
@@ -312,7 +248,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
             let w_length = setup_pkt.w_length;
 
             /*
-            crate::println!(
+            crate::println_d!(
                 "  b_request={:x}, b_request_type={:x}, w_value={:04x}, w_index=0x{:x}, w_length={}",
                 setup_pkt.b_request,
                 setup_pkt.b_request_type,
@@ -325,20 +261,20 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
             if (setup_pkt.b_request_type & USB_TYPE_MASK) == USB_TYPE_STANDARD {
                 match setup_pkt.b_request {
                     USB_REQ_GET_STATUS => {
-                        crate::println!("USB_REQ_GET_STATUS");
+                        crate::println_d!("USB_REQ_GET_STATUS");
                         get_status_request(this, setup_pkt.b_request_type, w_index);
                     }
                     USB_REQ_SET_ADDRESS => {
-                        crate::println!("USB_REQ_SET_ADDRESS: {}, tag: {}", w_value, this.setup_tag);
+                        crate::println_d!("USB_REQ_SET_ADDRESS: {}, tag: {}", w_value, this.setup_tag);
                         this.set_addr(w_value as u8, CRG_INT_TARGET);
-                        // crate::println!(" ******* set address done {}", w_value & 0xff);
+                        // crate::println_d!(" ******* set address done {}", w_value & 0xff);
                     }
                     USB_REQ_SET_SEL => {
-                        crate::println!("USB_REQ_SET_SEL");
+                        crate::println_d!("USB_REQ_SET_SEL");
                         this.ep0_receive(this.ep0_buf.load(Ordering::SeqCst) as usize, w_length as usize, 0);
                         delay(100);
                         /* do set sel */
-                        crate::println!("SEL_VALUE NOT HANDLED");
+                        crate::println_d!("SEL_VALUE NOT HANDLED");
                         /*
                         crg_udc->sel_value.u1_sel_value = *ep0_buf;
                         crg_udc->sel_value.u1_pel_value = *(ep0_buf+1);
@@ -347,19 +283,19 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         */
                     }
                     USB_REQ_SET_ISOCH_DELAY => {
-                        crate::println!("USB_REQ_SET_ISOCH_DELAY");
+                        crate::println_d!("USB_REQ_SET_ISOCH_DELAY");
                         /* do set isoch delay */
                         this.ep0_send(0, 0, 0);
                     }
                     USB_REQ_CLEAR_FEATURE => {
-                        crate::println!("USB_REQ_CLEAR_FEATURE");
-                        crate::println!("*** UNSUPPORTED ***");
+                        crate::println_d!("USB_REQ_CLEAR_FEATURE");
+                        crate::println_d!("*** UNSUPPORTED ***");
                         /* do clear feature */
                         // clear_feature_request(setup_pkt.b_request_type, w_index, w_value);
                     }
                     USB_REQ_SET_FEATURE => {
-                        crate::println!("USB_REQ_SET_FEATURE\r\n");
-                        crate::println!("*** UNSUPPORTED ***");
+                        crate::println_d!("USB_REQ_SET_FEATURE\r\n");
+                        crate::println_d!("*** UNSUPPORTED ***");
                         /* do set feature */
                         /*
                         if crg_udc_get_device_state() == USB_STATE_CONFIGURED {
@@ -402,11 +338,11 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         }
                     }
                     USB_REQ_GET_DESCRIPTOR => {
-                        crate::println!("USB_REQ_GET_DESCRIPTOR");
+                        crate::println_d!("USB_REQ_GET_DESCRIPTOR");
                         get_descriptor_request(this, w_value, w_index as usize, w_length as usize);
                     }
                     USB_REQ_GET_CONFIGURATION => {
-                        crate::println!("USB_REQ_GET_CONFIGURATION");
+                        crate::println_d!("USB_REQ_GET_CONFIGURATION");
                         let ep0_buf = unsafe {
                             core::slice::from_raw_parts_mut(
                                 this.ep0_buf.load(Ordering::SeqCst) as *mut u8,
@@ -421,13 +357,13 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         this.ep0_send(ep0_buf.as_ptr() as usize, 1, 0);
                     }
                     USB_REQ_SET_INTERFACE => {
-                        crate::println!("USB_REQ_SET_INTERFACE");
+                        crate::println_d!("USB_REQ_SET_INTERFACE");
                         this.cur_interface_num = (w_value & 0xF) as u8;
-                        crate::println!("USB_REQ_SET_INTERFACE altsetting {}", this.cur_interface_num);
+                        crate::println_d!("USB_REQ_SET_INTERFACE altsetting {}", this.cur_interface_num);
                         this.ep0_send(0, 0, 0);
                     }
                     USB_REQ_GET_INTERFACE => {
-                        crate::println!("USB_REQ_GET_INTERFACE");
+                        crate::println_d!("USB_REQ_GET_INTERFACE");
                         let ep0_buf = unsafe {
                             core::slice::from_raw_parts_mut(
                                 this.ep0_buf.load(Ordering::SeqCst) as *mut u8,
@@ -438,7 +374,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         this.ep0_send(ep0_buf.as_ptr() as usize, 1, 0);
                     }
                     _ => {
-                        crate::println!(
+                        crate::println_d!(
                             "USB_REQ default b_request=0x{:x}, b_request_type=0x{:x}",
                             setup_pkt.b_request,
                             setup_pkt.b_request_type
@@ -449,7 +385,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
             } else if (setup_pkt.b_request_type & USB_TYPE_MASK) == USB_TYPE_CLASS {
                 match setup_pkt.b_request {
                     0xff => {
-                        crate::println!("Mass Storage Reset\r\n");
+                        crate::println_d!("Mass Storage Reset\r\n");
                         if (0 == w_value)
                             && (InterfaceDescriptor::default_mass_storage().b_interface_number
                                 == w_index as u8)
@@ -467,7 +403,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         }
                     }
                     0xfe => {
-                        crate::println!("Get Max LUN");
+                        crate::println_d!("Get Max LUN");
                         if w_index != 0 || w_value != 0 || w_length != 1 {
                             this.ep_halt(0, USB_RECV);
                         } else {
@@ -483,7 +419,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                     }
                     0x20 => {
                         // SET_LINE_CODING (host -> device, 7 bytes)
-                        crate::println!("CDC SET_LINE_CODING");
+                        crate::println_d!("CDC SET_LINE_CODING");
                         let length = w_length as usize;
                         if length == 7 {
                             // queue EP0 OUT to receive the line coding structure
@@ -495,7 +431,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                     }
                     0x21 => {
                         // GET_LINE_CODING (device -> host, 7 bytes)
-                        crate::println!("CDC GET_LINE_CODING");
+                        crate::println_d!("CDC GET_LINE_CODING");
                         let ep0_buf = unsafe {
                             core::slice::from_raw_parts_mut(
                                 this.ep0_buf.load(Ordering::SeqCst) as *mut u8,
@@ -511,14 +447,14 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                     }
                     0x22 => {
                         // SET_CONTROL_LINE_STATE (host -> device, 0 length)
-                        crate::println!("CDC SET_CONTROL_LINE_STATE, DTR/RTS = {:x}", w_value);
+                        crate::println_d!("CDC SET_CONTROL_LINE_STATE, DTR/RTS = {:x}", w_value);
                         // wValue bit0 = DTR, bit1 = RTS
                         // You can ignore since no real UART
 
                         this.ep0_send(0, 0, 0);
                     }
                     _ => {
-                        crate::println!("Unhandled class request bRequest=0x{:x}", setup_pkt.b_request);
+                        crate::println_d!("Unhandled class request bRequest=0x{:x}", setup_pkt.b_request);
                         this.ep_halt(0, USB_RECV);
                     }
                 }
@@ -532,7 +468,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
             panic!("data stage needs handling");
         }
         _ => {
-            crate::println!("Unexpected trb_type {:?}", event_trb.get_trb_type());
+            crate::println_d!("Unexpected trb_type {:?}", event_trb.get_trb_type());
         }
     }
     ret

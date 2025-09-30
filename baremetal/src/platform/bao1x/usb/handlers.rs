@@ -238,18 +238,18 @@ pub fn usb_ep1_bulk_out_complete(
             process_mass_storage_command(this, cbw);
             // invalid_cbw = 0;
         } else {
-            crate::println!("Invalid CBW, HALT");
+            crate::println_d!("Invalid CBW, HALT");
             this.ep_halt(1, USB_SEND);
             this.ep_halt(1, USB_RECV);
             // invalid_cbw = 1;
         }
     } else if UmsState::CommandPhase == this.ms_state && (length != 31) {
-        crate::println!("invalid command");
+        crate::println_d!("invalid command");
         this.ep_halt(1, USB_SEND);
         this.ep_halt(1, USB_RECV);
         // invalid_cbw = 1;
     } else if UmsState::DataPhase == this.ms_state {
-        crate::println!("data");
+        crate::println_d!("data");
         //DATA
         if let Some((write_offset, len)) = this.callback_wr.take() {
             let app_buf = conjure_app_buf();
@@ -266,10 +266,10 @@ pub fn usb_ep1_bulk_out_complete(
                 csw.send(this);
             }
         } else {
-            crate::println!("Data completion reached without destination for data copy! data dropped.");
+            crate::println_d!("Data completion reached without destination for data copy! data dropped.");
         }
     } else {
-        crate::println!("uhhh wtf");
+        crate::println_d!("uhhh wtf");
     }
 }
 
@@ -280,14 +280,14 @@ pub fn usb_ep1_bulk_in_complete(
     _error: u8,
     _residual: u16,
 ) {
-    // crate::println!("bulk IN handler");
+    // crate::println_d!("bulk IN handler");
     let length = info & 0xFFFF;
     if UmsState::DataPhase == this.ms_state {
         //DATA
         if let Some((offset, len)) = this.remaining_rd.take() {
             let app_buf = conjure_app_buf();
             let disk = conjure_disk();
-            this.setup_big_read(app_buf, disk, offset, len);
+            this.setup_big_read(app_buf, disk, offset, len, None);
             this.ms_state = UmsState::DataPhase;
         } else {
             this.bulk_xfer(1, USB_SEND, CSW_ADDR, 13, 0, 0);
@@ -308,7 +308,7 @@ pub fn usb_ep3_bulk_out_complete(
     _error: u8,
     residual: u16,
 ) {
-    // crate::println!("EP3 OUT: {:x} {:x}", info, _error);
+    // crate::println_d!("EP3 OUT: {:x} {:x}", info, _error);
 
     let actual = CRG_UDC_APP_BUF_LEN - residual as usize;
 
@@ -320,7 +320,7 @@ pub fn usb_ep3_bulk_out_complete(
     let buf = unsafe { core::slice::from_raw_parts(buf_addr as *const u8, actual as usize) };
 
     // For now: just print, or push into a ring buffer for your "virtual terminal"
-    // crate::println!("CDC OUT received {} bytes: {:?}", actual, &buf);
+    // crate::println_d!("CDC OUT received {} bytes: {:?}", actual, &buf);
 
     critical_section::with(|cs| {
         let mut queue = crate::USB_RX.borrow(cs).borrow_mut();
@@ -386,9 +386,9 @@ pub fn usb_ep3_bulk_in_complete(
     _error: u8,
     _residual: u16,
 ) {
-    // crate::println!("EP3 IN");
+    // crate::println_d!("EP3 IN");
     // let length = CRG_UDC_APP_BUF_LEN - residual as usize;
-    // crate::println!("CDC IN transfer complete, {} bytes sent", length);
+    // crate::println_d!("CDC IN transfer complete, {} bytes sent", length);
 
     // signal that more stuff can be put into the pipe
     TX_IDLE.store(true, Ordering::SeqCst);
@@ -405,9 +405,9 @@ pub fn usb_ep2_int_in_complete(
     _error: u8,
     _residual: u16,
 ) {
-    // crate::println!("EP2 INT");
+    // crate::println_d!("EP2 INT");
     // let length = CRG_UDC_APP_BUF_LEN - residual as usize;
-    // crate::println!("CDC notification sent, {} bytes", length);
+    // crate::println_d!("CDC notification sent, {} bytes", length);
 
     // Typically sends SERIAL_STATE bitmap (carrier detect etc).
     // Ignoring - this is a virtual terminal
@@ -489,7 +489,7 @@ fn process_request_sense(this: &mut CorigineUsb, cbw: Cbw) {
         csw.residue = 0;
         csw.status = 0;
         csw.send(this);
-        // crate::println!("UMS_STATE_STATUS_PHASE\r\n");
+        // crate::println_d!("UMS_STATE_STATUS_PHASE\r\n");
     } else if cbw.flags & 0x80 != 0 {
         if cbw.data_transfer_length < 18 {
             let ep1_in = unsafe { core::slice::from_raw_parts_mut(EP1_IN_BUF as *mut u8, EP1_IN_BUF_LEN) };
@@ -559,7 +559,7 @@ fn process_prevent_allow_medium_removal(this: &mut CorigineUsb, _cbw: Cbw) {
 }
 
 fn process_report_capacity(this: &mut CorigineUsb, cbw: Cbw) {
-    crate::println!("REPORT CAPACITY");
+    crate::println_d!("REPORT CAPACITY");
     let mut csw = Csw::derive();
     let rc_lba = RAMDISK_LEN / SECTOR_SIZE as usize - 1;
     let rc_bl: u32 = SECTOR_SIZE as u32;
@@ -633,7 +633,7 @@ fn process_read_command(this: &mut CorigineUsb, cbw: Cbw) {
         this.ms_state = UmsState::DataPhase;
         return;
     }
-    crate::println!(
+    crate::println_d!(
         "DISK READ address = 0x{:x}, length = 0x{:x}",
         RAMDISK_ADDRESS + lba as usize * SECTOR_SIZE as usize,
         length
@@ -656,7 +656,7 @@ fn process_read_command(this: &mut CorigineUsb, cbw: Cbw) {
         }
         let app_buf = conjure_app_buf();
         let disk = conjure_disk();
-        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize);
+        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize, None);
         this.ms_state = UmsState::DataPhase;
     }
 }
@@ -679,13 +679,13 @@ fn process_write_command(this: &mut CorigineUsb, cbw: Cbw) {
         csw.status = 2;
         let app_buf = conjure_app_buf();
         let disk = conjure_disk();
-        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize);
+        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize, None);
         this.ms_state = UmsState::DataPhase;
         csw.update_hw();
         return;
     }
 
-    crate::println!(
+    crate::println_d!(
         "Write address = 0x{:x}, length = 0x{:x}",
         RAMDISK_ADDRESS + lba as usize * SECTOR_SIZE as usize,
         length
@@ -734,7 +734,7 @@ fn process_write12_command(this: &mut CorigineUsb, cbw: Cbw) {
     length |= (cbw.cdb[9] as u32) << 0;
 
     length *= SECTOR_SIZE as u32;
-    crate::println!("write12 of {} bytes", length);
+    crate::println_d!("write12 of {} bytes", length);
 
     if cbw.flags & 0x80 != 0 {
         csw.residue = cbw.data_transfer_length;
@@ -743,7 +743,7 @@ fn process_write12_command(this: &mut CorigineUsb, cbw: Cbw) {
         // does
         let app_buf = conjure_app_buf();
         let disk = conjure_disk();
-        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize);
+        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize, None);
         this.ms_state = UmsState::DataPhase;
         csw.update_hw();
         return;
