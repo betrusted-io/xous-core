@@ -7,14 +7,6 @@ pub use handlers::*;
 
 use crate::irq::*;
 
-// Note that the trap handler is just placed one page below this, and it
-// needs to be manually updated in the assembly because we can't refer to
-// consts in that snippet of assembly. That handler also needs a default
-// stack area, which is right below that spare page.
-const SCRATCH_PAGE: usize = RAMDISK_ADDRESS - 4096;
-#[allow(dead_code)] // this reminds us there are two places this has to be changed in assembly-land
-const EXCEPTION_STACK: usize = SCRATCH_PAGE;
-
 const USB_TYPE_MASK: u8 = 0x03 << 5;
 const USB_TYPE_STANDARD: u8 = 0x00 << 5;
 const USB_TYPE_CLASS: u8 = 0x01 << 5;

@@ -10,36 +10,6 @@ use super::*;
 
 pub(crate) static mut USB: Option<CorigineUsb> = None;
 
-/// Safety issue: the loader itself doesn't have a loader. So, any .data required by
-/// the loader program can't be set up in advance for the loader.
-///
-/// The root problem: generally, a `static mut` in the loader will cause some .data
-/// to be allocated. The USB handler needs to be a `static mut` because
-/// the interrupt handler needs to be able to find it at a globally known location, and
-/// the data has to persist beyond the scope of a single interrupt.
-///
-/// The assumption: we don't have to include the data section in the loader's ROM image
-/// because 1) the data going into the `static mut` interrupt handler is assumed uninitialized
-/// (due to the wrapper being an Option<Usb> set to None); and 2) the RAM is fully zeroized by a
-/// small assembly routine that executes before the loader runs.
-///
-/// (1) means that in practice, the contents of the .data section is "almost 0".
-/// (2) means we can just whack a pointer at where the
-/// data section should go and the assumptions are met for the loader.
-///
-/// The inconsistency: inspecting the generated binary indicates that the `None` representation
-/// for USB is not `0`; it instead has the representation of `2`. This means that if we try to
-/// access `USB` prior to initialization, we will get UB.
-///
-/// Safe usage: init_usb() must be called before any attempt to access USB, including interrupts.
-/// Furthermore, we have to manually guarantee that there are no concurrency/race conditions accessing
-/// the USB structure (we are in no_std so we don't have a Mutex). Finally, we have to ensure that
-/// USB is initialized with no assumptions about what is in memory prior to any access to it.
-///
-/// Even then, we might have some risk of UB if the compiler decides it really wants to rely
-/// on some pre-initialized structure of the `USB` static mut `None`. In practice, we haven't
-/// seen this, but we run a risk of this breaking in future versions of Rust because the compiler
-/// is allowed to assume that `USB` has the correct value to represent a `None` on boot.
 pub unsafe fn init_usb() {
     let mut usb = unsafe {
         bao1x_hal::usb::driver::CorigineUsb::new(
@@ -248,20 +218,12 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                     USB_REQ_SET_ADDRESS => {
                         crate::println_d!("USB_REQ_SET_ADDRESS: {}, tag: {}", w_value, this.setup_tag);
                         this.set_addr(w_value as u8, CRG_INT_TARGET);
-                        // crate::println_d!(" ******* set address done {}", w_value & 0xff);
                     }
                     USB_REQ_SET_SEL => {
                         crate::println_d!("USB_REQ_SET_SEL");
                         this.ep0_receive(this.ep0_buf.load(Ordering::SeqCst) as usize, w_length as usize, 0);
                         delay(100);
-                        /* do set sel */
                         crate::println_d!("SEL_VALUE NOT HANDLED");
-                        /*
-                        crg_udc->sel_value.u1_sel_value = *ep0_buf;
-                        crg_udc->sel_value.u1_pel_value = *(ep0_buf+1);
-                        crg_udc->sel_value.u2_sel_value = *(uint16_t*)(ep0_buf+2);
-                        crg_udc->sel_value.u2_pel_value = *(uint16_t*)(ep0_buf+4);
-                        */
                     }
                     USB_REQ_SET_ISOCH_DELAY => {
                         crate::println_d!("USB_REQ_SET_ISOCH_DELAY");
@@ -272,21 +234,11 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         crate::println_d!("USB_REQ_CLEAR_FEATURE");
                         crate::println_d!("*** UNSUPPORTED (stall) ***");
                         this.ep_halt(0, USB_RECV);
-                        /* do clear feature */
-                        // clear_feature_request(setup_pkt.b_request_type, w_index, w_value);
                     }
                     USB_REQ_SET_FEATURE => {
                         crate::println_d!("USB_REQ_SET_FEATURE\r\n");
                         crate::println_d!("*** UNSUPPORTED (stall) ***");
                         this.ep_halt(0, USB_RECV);
-                        /* do set feature */
-                        /*
-                        if crg_udc_get_device_state() == USB_STATE_CONFIGURED {
-                            set_feature_request(setup_pkt.b_request_type, w_index, w_value);
-                        } else {
-                            crg_udc_ep_halt(0, USB_RECV);
-                        }
-                        */
                     }
                     USB_REQ_SET_CONFIGURATION => {
                         let mut pass = false;

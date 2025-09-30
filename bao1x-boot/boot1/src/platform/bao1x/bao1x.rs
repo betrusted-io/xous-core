@@ -333,13 +333,6 @@ pub fn clk_to_per(top_in_mhz: u32, perclk_in_mhz: u32) -> Option<(u8, u8, u32)> 
     }
 }
 
-// This function supercedes init_clock_asic() and needs to be back-ported
-// into xous-core
-// TODO:
-//  - [ ] Case of clocks <= 48MHz: turn off PLL, divide directly from OSC
-//  - [ ] Derive clock dividers from freq targets, instead of hard-coding them
-//  - [ ] Maybe improve dividers to optimize hclk/iclk/pclk settings in lower power?
-//  - [ ] Very maybe consider setting hclk/iclk/pclk in case of overclocking
 pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     use utra::sysctrl;
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
