@@ -198,7 +198,9 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> bao1x_api::Boar
             data_ptr.add(i).write_volatile(0);
         }
         for &(offset, data) in &statics_in_rom.poke_table[..statics_in_rom.valid_pokes as usize] {
-            data_ptr.add(offset as usize).write_volatile(data);
+            let offset = u16::from_le_bytes(offset) as usize;
+            let data = u32::from_le_bytes(data);
+            data_ptr.add(offset / size_of::<u32>()).write_volatile(data);
         }
     }
 

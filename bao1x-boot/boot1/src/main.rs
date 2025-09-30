@@ -56,6 +56,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     let mut board_type =
         one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error");
 
+    crate::println_d!("TX_IDLE: {:?}", crate::platform::usb::TX_IDLE.load(Ordering::SeqCst));
     board_type = crate::platform::early_init(board_type);
     crate::println!("\n~~Boot1 up!~~\n");
 
