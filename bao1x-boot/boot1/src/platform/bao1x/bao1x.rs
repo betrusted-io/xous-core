@@ -224,7 +224,7 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> bao1x_api::Boar
     enable_irq(utra::irqarray5::IRQARRAY5_IRQ);
 
     crate::debug::USE_CONSOLE.store(true, core::sync::atomic::Ordering::SeqCst);
-    crate::println!("boot1 udma console up!");
+    crate::println!("boot1 udma console up, CPU @ {}MHz!", fclk_freq / 2_000_000);
 
     board_type
 }
@@ -275,7 +275,6 @@ pub fn delay(ms: usize) {
     let mut timer = utralib::CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
     timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
     for _ in 0..ms {
-        // comment this out for testing on MPW
         while timer.rf(utra::timer0::EV_PENDING_ZERO) == 0 {}
         timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
     }

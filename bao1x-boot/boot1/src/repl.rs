@@ -148,6 +148,26 @@ impl Repl {
                     return Err(Error::help("bootwait [check | toggle]"));
                 }
             }
+            "boardtype" => {
+                let one_way = OneWayCounter::new();
+                if args.len() != 1 {
+                    return Err(Error::help("boardtype [dabao | baosec | oem]"));
+                }
+                let new_type = match args[0].as_str() {
+                    "dabao" => bao1x_api::BoardTypeCoding::Dabao,
+                    "baosec" => bao1x_api::BoardTypeCoding::Baosec,
+                    "oem" => bao1x_api::BoardTypeCoding::Oem,
+                    _ => return Err(Error::help("boardtype [dabao | baosec | oem]")),
+                };
+                let mut count = 0;
+                while one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
+                    != new_type
+                {
+                    one_way.inc_coded::<bao1x_api::BoardTypeCoding>().expect("increment error");
+                    count += 1;
+                }
+                crate::println!("Board type set to {:?} after {} increments", new_type, count);
+            }
             #[cfg(feature = "unsafe-debug")]
             "peek" => {
                 const COLUMNS: usize = 4;

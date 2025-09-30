@@ -10,7 +10,10 @@ mod secboot;
 mod uf2;
 
 use alloc::collections::VecDeque;
-use core::{cell::RefCell, sync::atomic::Ordering};
+use core::{
+    cell::RefCell,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use bao1x_api::{BoardTypeCoding, BootWaitCoding};
 use bao1x_hal::{board::KeyPress, iox::Iox, usb::driver::UsbDeviceState};
@@ -27,7 +30,8 @@ static UART_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque:
 #[allow(dead_code)]
 static USB_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
 static USB_TX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
-static USB_CONNECTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+static USB_CONNECTED: AtomicBool = AtomicBool::new(false);
+static DISK_BUSY: AtomicBool = AtomicBool::new(false);
 
 pub fn uart_irq_handler() {
     use crate::debug::SerialRead;
@@ -59,6 +63,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     crate::println_d!("TX_IDLE: {:?}", crate::platform::usb::TX_IDLE.load(Ordering::SeqCst));
     board_type = crate::platform::early_init(board_type);
     crate::println!("\n~~Boot1 up!~~\n");
+    crate::println!("Configured board type: {:?}", board_type);
 
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
@@ -163,7 +168,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                 }
                 _ => (),
             };
-            glue::flush_tx();
+            if !DISK_BUSY.load(Ordering::SeqCst) {
+                glue::flush_tx();
+            }
         } else {
             // Handle keyboard events.
             critical_section::with(|cs| {

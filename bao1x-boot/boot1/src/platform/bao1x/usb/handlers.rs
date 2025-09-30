@@ -185,47 +185,41 @@ pub fn usb_ep1_bulk_out_complete(
         if let Some((write_offset, len)) = this.callback_wr.take() {
             let app_buf = conjure_app_buf();
             let disk = conjure_disk();
-            if false {
-                // update the received data to the disk
+            // process the received data as if it were a uf2 sector
+            for (i, chunk) in app_buf[..len].chunks(512).enumerate() {
+                let (new_block, uf2_data) = critical_section::with(|cs| {
+                    super::glue::SECTOR
+                        .borrow(cs)
+                        .borrow_mut()
+                        .extend_from_slice(write_offset + i * 512, chunk)
+                });
+                // program the flash if a valid u2f block was found
+                if let Some(record) = uf2_data {
+                    if record.address() as usize >= bao1x_api::BAREMETAL_START
+                        && (record.address() as usize) < utralib::HW_RERAM_MEM + bao1x_api::RRAM_STORAGE_LEN
+                        && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
+                    {
+                        let mut rram = bao1x_hal::rram::Reram::new();
+                        let offset = record.address() as usize - utralib::HW_RERAM_MEM;
+                        rram.write_slice(offset, record.data());
+                        crate::println_d!(
+                            "Wrote {} to 0x{:x}: {:x?}",
+                            record.data().len(),
+                            record.address(),
+                            &record.data()[..8]
+                        );
+                    } else {
+                        crate::println_d!("Invalid write address {:x}, block ignored!", record.address());
+                    }
+                }
+                // replace the tracking block with the new one, if a new one was provided
+                if let Some(block) = new_block {
+                    critical_section::with(|cs| super::glue::SECTOR.borrow(cs).replace(block));
+                }
+            }
+            if write_offset + len < disk.len() {
+                // update the received data to the disk if it fits within the allocated region
                 disk[write_offset..write_offset + len].copy_from_slice(&app_buf[..len]);
-            } else {
-                // process the received data as if it were a uf2 sector
-                for (i, chunk) in app_buf[..len].chunks(512).enumerate() {
-                    let (new_block, uf2_data) = critical_section::with(|cs| {
-                        super::glue::SECTOR
-                            .borrow(cs)
-                            .borrow_mut()
-                            .extend_from_slice(write_offset + i * 512, chunk)
-                    });
-                    // program the flash if a valid u2f block was found
-                    if let Some(record) = uf2_data {
-                        if record.address() as usize >= bao1x_api::BAREMETAL_START
-                            && (record.address() as usize)
-                                < utralib::HW_RERAM_MEM + bao1x_api::RRAM_STORAGE_LEN
-                            && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
-                        {
-                            let mut rram = bao1x_hal::rram::Reram::new();
-                            let offset = record.address() as usize - utralib::HW_RERAM_MEM;
-                            rram.write_slice(offset, record.data());
-                            crate::println_d!(
-                                "Wrote {} to 0x{:x}: {:x?}",
-                                record.data().len(),
-                                record.address(),
-                                &record.data()[..8]
-                            );
-                        } else {
-                            crate::println_d!("Invalid write address {:x}, block ignored!", record.address());
-                        }
-                    }
-                    // replace the tracking block with the new one, if a new one was provided
-                    if let Some(block) = new_block {
-                        critical_section::with(|cs| super::glue::SECTOR.borrow(cs).replace(block));
-                    }
-                }
-                if write_offset + len < disk.len() {
-                    // update the received data to the disk if it fits within the allocated region
-                    disk[write_offset..write_offset + len].copy_from_slice(&app_buf[..len]);
-                }
             }
             if let Some((offset, remaining_len)) = this.remaining_wr.take() {
                 this.setup_big_write(app_buf_addr(), app_buf_len(), offset, remaining_len);
@@ -235,6 +229,7 @@ pub fn usb_ep1_bulk_out_complete(
                 csw.residue = 0;
                 csw.status = 0;
                 csw.send(this);
+                crate::DISK_BUSY.store(false, Ordering::SeqCst);
             }
         } else {
             crate::println_d!("Data completion reached without destination for data copy! data dropped.");
@@ -263,6 +258,7 @@ pub fn usb_ep1_bulk_in_complete(
         } else {
             this.bulk_xfer(1, USB_SEND, CSW_ADDR, 13, 0, 0);
             this.ms_state = UmsState::StatusPhase;
+            crate::DISK_BUSY.store(false, Ordering::SeqCst);
         }
     } else if UmsState::StatusPhase == this.ms_state && length == 13 {
         //CSW
@@ -315,10 +311,17 @@ pub fn flush() {
 }
 
 pub fn flush_tx(this: &mut CorigineUsb) {
+    const TIMEOUT: usize = 100_000;
     let mut written = 0;
 
-    while !crate::platform::usb::TX_IDLE.swap(false, core::sync::atomic::Ordering::SeqCst) {
-        // wait for tx to go idle
+    let mut timeout = 0;
+    while !crate::platform::usb::TX_IDLE.swap(false, core::sync::atomic::Ordering::SeqCst)
+        && timeout < TIMEOUT
+    {
+        timeout += 1;
+        if timeout % 20_000 == 0 {
+            crate::println!("txw {}", timeout);
+        }
     }
 
     let tx_buf = this.cdc_acm_tx_slice();
@@ -581,6 +584,7 @@ fn process_unsupported_command(this: &mut CorigineUsb, cbw: Cbw) {
 }
 
 fn process_read_command(this: &mut CorigineUsb, cbw: Cbw) {
+    crate::DISK_BUSY.store(true, Ordering::SeqCst);
     let mut csw = Csw::derive();
     let mut lba;
     let mut length;
@@ -605,7 +609,7 @@ fn process_read_command(this: &mut CorigineUsb, cbw: Cbw) {
         return;
     }
     crate::println_d!(
-        "DISK READ address = 0x{:x}, length = 0x{:x}",
+        "DISK READ @ 0x{:x} .. 0x{:x}",
         RAMDISK_ADDRESS + lba as usize * SECTOR_SIZE as usize,
         length
     );
@@ -639,6 +643,7 @@ fn process_read_command(this: &mut CorigineUsb, cbw: Cbw) {
 }
 
 fn process_write_command(this: &mut CorigineUsb, cbw: Cbw) {
+    crate::DISK_BUSY.store(true, Ordering::SeqCst);
     let mut csw = Csw::derive();
 
     let mut lba: u32;
@@ -669,7 +674,7 @@ fn process_write_command(this: &mut CorigineUsb, cbw: Cbw) {
     }
 
     crate::println_d!(
-        "Write address = 0x{:x}, length = 0x{:x}",
+        "DISK WRITE @ 0x{:x} .. 0x{:x}",
         RAMDISK_ADDRESS + lba as usize * SECTOR_SIZE as usize,
         length
     );
@@ -702,6 +707,7 @@ fn process_write_command(this: &mut CorigineUsb, cbw: Cbw) {
 }
 
 fn process_write12_command(this: &mut CorigineUsb, cbw: Cbw) {
+    crate::DISK_BUSY.store(true, Ordering::SeqCst);
     let mut csw = Csw::derive();
 
     let mut lba;
