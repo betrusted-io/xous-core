@@ -58,13 +58,25 @@ fn main() {
             valid_pokes: 0,
             data_origin: 0,
             data_size_bytes: 0,
-            poke_table: [(0u32, 0u32); 30],
+            poke_table: [([0u8; 2], [0u8; 4]); 40],
         };
         statics.data_origin = pd.data_offset;
         statics.data_size_bytes = pd.clear_size;
         statics.valid_pokes = pd.poke_table.len() as u16;
-        for (&entry, dest) in pd.poke_table.iter().zip(statics.poke_table.iter_mut()) {
-            *dest = entry;
+        assert!(size_of::<bao1x_api::StaticsInRom>() == 256, "StaticsInRom size assumption not met!");
+        if pd.poke_table.len() > 40 {
+            eprintln!("WARNING! handling capacity of statics table exceeded. Boot will fail!");
+            process::exit(1);
+        }
+        for (&(addr, data), (dest_addr, dest_data)) in pd.poke_table.iter().zip(statics.poke_table.iter_mut())
+        {
+            if addr > u16::MAX as u32 {
+                eprintln!("range of poke table exceeded! Poke to {:x} is greater than {:x}", addr, u16::MAX);
+                process::exit(1);
+            }
+            // println!("{:x}: {:x}", addr as u16, data);
+            dest_addr.copy_from_slice(&(addr as u16).to_le_bytes());
+            dest_data.copy_from_slice(&data.to_le_bytes());
         }
         f.write(statics.as_bytes()).unwrap_or_else(|e| {
             eprintln!("Couldn't write data to {}: {}", output_filename.display(), e);
@@ -77,7 +89,7 @@ fn main() {
     });
 
     println!("Data offset: {:08x}", pd.data_offset);
-    println!("Data size: {}", pd.data_size);
+    println!("Data reserved region: {:08x}", pd.clear_size);
     println!("Text offset: {:08x}", pd.text_offset);
     println!("Entrypoint: {:08x}", pd.entry_point);
     println!("Copied {} bytes of data to {}", pd.program.len(), output_filename.display());
