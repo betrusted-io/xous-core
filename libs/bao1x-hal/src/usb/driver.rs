@@ -971,7 +971,14 @@ impl CorigineUsb {
         if let Some(ap) = &self.app_ptr[pei] { Some(ap.ep as usize) } else { None }
     }
 
-    pub fn setup_big_read(&mut self, app_buf: &mut [u8], disk: &[u8], offset: usize, length: usize) {
+    pub fn setup_big_read(
+        &mut self,
+        app_buf: &mut [u8],
+        disk: &[u8],
+        offset: usize,
+        length: usize,
+        overflow_handler: Option<fn(&mut [u8], usize)>,
+    ) {
         crate::println!(
             "BIG READ offset {:x} len {:x} app_buf: {:x} disk: {:x?}",
             offset,
@@ -988,7 +995,17 @@ impl CorigineUsb {
             self.remaining_rd = None;
             0
         };
-        app_buf[..actual_len].copy_from_slice(&disk[offset..offset + actual_len as usize]);
+        if (offset + actual_len as usize) < disk.len() {
+            app_buf[..actual_len].copy_from_slice(&disk[offset..offset + actual_len as usize]);
+        } else {
+            if let Some(handler) = overflow_handler {
+                handler(&mut app_buf[..actual_len], offset);
+            } else {
+                // just return zeroes if we're reading "beyond" the actual disk (for uf2 oversized disk
+                // compatibility)
+                app_buf[..actual_len].fill(0);
+            }
+        }
         self.bulk_xfer(1, USB_SEND, app_buf.as_ptr() as usize, actual_len, 0, chain);
     }
 
