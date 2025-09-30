@@ -1,7 +1,7 @@
 mod driver;
+mod fat32_base;
 pub mod glue;
 mod handlers;
-
 pub use driver::*;
 pub use handlers::*;
 

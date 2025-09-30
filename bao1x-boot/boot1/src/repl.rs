@@ -123,17 +123,29 @@ impl Repl {
                     self.local_echo = false;
                 }
             }
-            "autoboot" => {
-                // this toggles the autoboot flag by incrementing the one-way counter associated with
-                // autobooting.
-                let one_way = OneWayCounter::new();
-                match one_way.inc_coded::<bao1x_api::BootWaitCoding>() {
-                    Ok(_) => {
-                        let autoboot_state =
-                            one_way.get_decoded::<bao1x_api::BootWaitCoding>().expect("couldn't fetch flag");
-                        crate::println!("autoboot is now set to {:?}", autoboot_state);
+            "bootwait" => {
+                if args.len() != 1 {
+                    return Err(Error::help("bootwait [check | toggle]"));
+                }
+                if args[0] == "toggle" {
+                    // this toggles the bootwait flag by incrementing its one-way counter
+                    let one_way = OneWayCounter::new();
+                    match one_way.inc_coded::<bao1x_api::BootWaitCoding>() {
+                        Ok(_) => {
+                            let state = one_way
+                                .get_decoded::<bao1x_api::BootWaitCoding>()
+                                .expect("couldn't fetch flag");
+                            crate::println!("bootwait is now set to {:?}", state);
+                        }
+                        Err(e) => crate::println!("Couldn't toggle bootwait: {:?}", e),
                     }
-                    Err(e) => crate::println!("Couldn't toggle autoboot: {:?}", e),
+                } else if args[0] == "check" {
+                    let one_way = OneWayCounter::new();
+                    let state =
+                        one_way.get_decoded::<bao1x_api::BootWaitCoding>().expect("couldn't fetch flag");
+                    crate::println!("bootwait is {:?}", state);
+                } else {
+                    return Err(Error::help("bootwait [check | toggle]"));
                 }
             }
             #[cfg(feature = "unsafe-debug")]
@@ -174,7 +186,7 @@ impl Repl {
             }
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
-                crate::print!("Commands include: reset, echo, boot, autoboot, localecho, uf2");
+                crate::print!("Commands include: reset, echo, boot, bootwait, localecho, uf2");
                 crate::println!("");
             }
         }

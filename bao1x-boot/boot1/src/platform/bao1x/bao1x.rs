@@ -25,6 +25,10 @@ pub const HEAP_LEN: usize = 1024 * 256;
 // total occupied area is [HEAP_START + HEAP_LEN..HEAP_START + HEAP_LEN + 8192]
 pub const SCRATCH_PAGE: usize = HEAP_START + HEAP_LEN + 4096;
 
+pub const FREE_MEM_START: usize = SCRATCH_PAGE + 16384;
+pub const STACK_LEN: usize = 128 * 1024; // 128k for stack is more than enough (usually <16k)
+pub const FREE_MEM_LEN: usize = (RAM_BASE + RAM_SIZE) - FREE_MEM_START - STACK_LEN;
+
 // NOTE: this forces the mapping to be the same on both baosec and dabao
 pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 

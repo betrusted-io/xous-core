@@ -84,7 +84,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     }
 
     if boot_wait == BootWaitCoding::Enable {
-        crate::println!("Boot bypassed because autoboot was disabled");
+        crate::println!("Boot bypassed because bootwait was enabled");
     } else if current_key.is_some() {
         crate::println!("Boot bypassed with keypress: {:?}", current_key);
     }
@@ -134,6 +134,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
 
         // provide feedback when connection is established
         if new_usb_state != last_usb_state {
+            crate::println_d!("new state {:?}", new_usb_state);
             if new_usb_state == UsbDeviceState::Configured {
                 crate::println!("USB is connected!");
                 last_usb_state = new_usb_state;
@@ -186,7 +187,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         // break out of the loop when USB is disconnected
         if new_portsc != portsc {
             portsc = new_portsc;
+            crate::println_d!("new portsc {:x}", portsc);
             if glue::is_disconnected(portsc) && new_usb_state == UsbDeviceState::Configured {
+                crate::println_d!("USB disconnected!");
                 USB_CONNECTED.store(false, core::sync::atomic::Ordering::SeqCst);
                 // last_usb_state = UsbDeviceState::NotAttached;
                 break;
