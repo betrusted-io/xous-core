@@ -84,7 +84,9 @@ pub fn early_init() {
             data_ptr.add(i).write_volatile(0);
         }
         for &(offset, data) in &statics_in_rom.poke_table[..statics_in_rom.valid_pokes as usize] {
-            data_ptr.add(offset as usize).write_volatile(data);
+            data_ptr
+                .add(u16::from_le_bytes(offset) as usize / size_of::<u32>())
+                .write_volatile(u32::from_le_bytes(data));
         }
     }
 
