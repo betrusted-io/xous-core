@@ -38,7 +38,7 @@ impl Reram {
             array: unsafe {
                 core::slice::from_raw_parts_mut(
                     utralib::HW_RERAM_MEM as *mut u32,
-                    utralib::HW_RERAM_MEM_LEN / core::mem::size_of::<u32>(),
+                    bao1x_api::RRAM_STORAGE_LEN / core::mem::size_of::<u32>(),
                 )
             },
         }

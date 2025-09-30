@@ -1,8 +1,6 @@
 MEMORY
 {
-  /* if the font location is adjusted, this needs to be updated in libs/blitstr2 codegen templates.go FONT_BASE value */
-  FONTS : ORIGIN = 0x60040000, LENGTH = 128k
-  FLASH : ORIGIN = 0x60001100, LENGTH = 252k - 256
+  FLASH : ORIGIN = 0x60060400, LENGTH = 255k
   RAM : ORIGIN = 0x61000000, LENGTH = 2M
 }
 
@@ -86,11 +84,6 @@ SECTIONS
     . = ALIGN(4);
     _edata = .;
   } > REGION_DATA AT > REGION_RODATA
-
-  .fonts : ALIGN(65536)
-  {
-      KEEP(*(.fontdata));
-  } > FONTS
 
   .bss (NOLOAD) :
   {

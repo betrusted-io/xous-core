@@ -9,8 +9,8 @@ use bao1x_hal::sh1107::{Mono, Oled128x128};
 use bao1x_hal::udma;
 use bao1x_hal::udma::*;
 use bao1x_hal::usb::driver::UsbDeviceState;
-use ed25519_dalek::{Digest, Signature, VerifyingKey};
-use sha2::Sha512;
+use ed25519_dalek_bao1x::{Digest, Signature, VerifyingKey};
+use sha2_bao1x::Sha512;
 use simple_fatfs::PathBuf;
 use utralib::generated::*;
 use ux_api::minigfx::{FrameBuffer, Point};
@@ -30,6 +30,8 @@ const TEXT_MIDLINE: isize = 51;
 // to detect if the device is unplugged.
 const DISCONNECT_STATE: u32 = 0x40b; //  01_0_0000_0_1_01_1
 const DISCONNECT_STATE_HS: u32 = 0xc6b; // 11_0_0011_0_1_01_1
+
+///// TODO: move updates into boot1. Make loader "generic" and just focus on loading the Xous kernel.
 
 // loader is not updateable here because we're XIP. But we can update these other images:
 const SWAP_NAME: &'static str = "SWAP.IMG";

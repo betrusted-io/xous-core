@@ -3,7 +3,6 @@ use bao1x_hal::iox::Iox;
 use bao1x_hal::udma;
 use utralib::CSR;
 use utralib::utra;
-use utralib::utra::sysctrl;
 
 use crate::platform::{
     debug::setup_rx,
@@ -15,157 +14,42 @@ static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::Loc
 
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
-#[allow(dead_code)]
-pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
+pub const SIGBLOCK_LEN: usize = 768; // this is adjusted inside builder.rs, in the sign-image invocation
 
 const DATA_SIZE_BYTES: usize = 0x6000;
 pub const HEAP_START: usize = RAM_BASE + DATA_SIZE_BYTES;
 pub const HEAP_LEN: usize = 1024 * 256;
 
-// scratch page for exceptions located at top of RAM
-// NOTE: there is an additional page above this for exception stack
-pub const SCRATCH_PAGE: usize = HEAP_START - 8192;
+// scratch page for exceptions
+//   - scratch data is stored in positive offsets from here
+//   - exception stack is stored in negative offsets from here, hence the +4096
+// total occupied area is [HEAP_START + HEAP_LEN..HEAP_START + HEAP_LEN + 8192]
+pub const SCRATCH_PAGE: usize = HEAP_START + HEAP_LEN + 4096;
 
 pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 
-// the 800_000_000 setting is tested to work at least on one sample
 pub const SYSTEM_CLOCK_FREQUENCY: u32 = 800_000_000;
 pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 pub fn early_init() {
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-    #[cfg(not(feature = "bao1x-evb"))]
-    {
-        // sets up the FET control for DCDC2 (only useful on boards that support it)
-        iox.set_gpio_pin_value(IoxPort::PA, 5, IoxValue::High);
-        iox.setup_pin(
-            IoxPort::PA,
-            5,
-            Some(IoxDir::Output),
-            Some(IoxFunction::Gpio),
-            None,
-            Some(IoxEnable::Enable),
-            None,
-            Some(IoxDriveStrength::Drive2mA),
-        );
-    }
 
-    let uart = crate::debug::Uart {};
-    uart.putc('*' as u32 as u8);
+    // ASSUME baosec target.
+    // ASSUME boot1:
+    //   - sets up all the keep-ons & basic pins
 
-    let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
-
-    unsafe {
-        // this block is mandatory in all cases to get clocks set into some consistent, expected mode
-        {
-            // conservative dividers
-            daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x7f7f);
-            daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x7f7f);
-            daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x3f7f);
-            daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x1f3f);
-            daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x0f1f);
-            // ungate all clocks
-            daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0xFF);
-            daric_cgu.add(utra::sysctrl::SFR_HCLKGR.offset()).write_volatile(0xFF);
-            daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0xFF);
-            daric_cgu.add(utra::sysctrl::SFR_PCLKGR.offset()).write_volatile(0xFF);
-            // commit clocks
-            daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
-        }
-        // enable DUART
-        let duart = utra::duart::HW_DUART_BASE as *mut u32;
-        duart.add(utra::duart::SFR_CR.offset()).write_volatile(0);
-        // based on ringosc trimming as measured by oscope. this will get precise after we set the PLL.
-        duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(34);
-        duart.add(utra::duart::SFR_CR.offset()).write_volatile(1);
-    }
-    // sram0 requires 1 wait state for writes
-    let mut sramtrm = CSR::new(utra::coresub_sramtrm::HW_CORESUB_SRAMTRM_BASE as *mut u32);
-    sramtrm.wo(utra::coresub_sramtrm::SFR_SRAM0, 0x8);
-    sramtrm.wo(utra::coresub_sramtrm::SFR_SRAM1, 0x8);
-
-    #[cfg(feature = "v0p9")]
-    {
-        /*
-        logic [15:0] trm_ram32kx72      ; assign trm_ram32kx72      = trmdat[0 ]; localparam t_trm IV_trm_ram32kx72      = IV_sram_sp_uhde_inst_sram0;
-        logic [15:0] trm_ram8kx72       ; assign trm_ram8kx72       = trmdat[1 ]; localparam t_trm IV_trm_ram8kx72       = IV_sram_sp_hde_inst_sram1;
-        logic [15:0] trm_rf1kx72        ; assign trm_rf1kx72        = trmdat[2 ]; localparam t_trm IV_trm_rf1kx72        = IV_rf_sp_hde_inst_cache;
-        logic [15:0] trm_rf256x27       ; assign trm_rf256x27       = trmdat[3 ]; localparam t_trm IV_trm_rf256x27       = IV_rf_sp_hde_inst_cache;
-        logic [15:0] trm_rf512x39       ; assign trm_rf512x39       = trmdat[4 ]; localparam t_trm IV_trm_rf512x39       = IV_rf_sp_hde_inst_cache;
-        logic [15:0] trm_rf128x31       ; assign trm_rf128x31       = trmdat[5 ]; localparam t_trm IV_trm_rf128x31       = IV_rf_sp_hde_inst_cache;
-        logic [15:0] trm_dtcm8kx36      ; assign trm_dtcm8kx36      = trmdat[6 ]; localparam t_trm IV_trm_dtcm8kx36      = IV_sram_sp_hde_inst_tcm;
-        logic [15:0] trm_itcm32kx18     ; assign trm_itcm32kx18     = trmdat[7 ]; localparam t_trm IV_trm_itcm32kx18     = IV_sram_sp_hde_inst_tcm;
-        logic [15:0] trm_ifram32kx36    ; assign trm_ifram32kx36    = trmdat[8 ]; localparam t_trm IV_trm_ifram32kx36    = IV_sram_sp_uhde_inst;
-        logic [15:0] trm_sce_sceram_10k ; assign trm_sce_sceram_10k = trmdat[9 ]; localparam t_trm IV_trm_sce_sceram_10k = IV_sram_sp_hde_inst;
-        logic [15:0] trm_sce_hashram_3k ; assign trm_sce_hashram_3k = trmdat[10]; localparam t_trm IV_trm_sce_hashram_3k = IV_rf_sp_hde_inst;
-        logic [15:0] trm_sce_aesram_1k  ; assign trm_sce_aesram_1k  = trmdat[11]; localparam t_trm IV_trm_sce_aesram_1k  = IV_rf_sp_hde_inst;
-        logic [15:0] trm_sce_pkeram_4k  ; assign trm_sce_pkeram_4k  = trmdat[12]; localparam t_trm IV_trm_sce_pkeram_4k  = IV_rf_sp_hde_inst;
-        logic [15:0] trm_sce_aluram_3k  ; assign trm_sce_aluram_3k  = trmdat[13]; localparam t_trm IV_trm_sce_aluram_3k  = IV_rf_sp_hde_inst;
-        logic [15:0] trm_sce_mimmdpram  ; assign trm_sce_mimmdpram  = trmdat[14]; localparam t_trm IV_trm_sce_mimmdpram  = IV_rf_2p_hdc_inst;
-        logic [15:0] trm_rdram1kx32     ; assign trm_rdram1kx32     = trmdat[15]; localparam t_trm IV_trm_rdram1kx32     = IV_rf_2p_hdc_inst_vex;
-        logic [15:0] trm_rdram512x64    ; assign trm_rdram512x64    = trmdat[16]; localparam t_trm IV_trm_rdram512x64    = IV_rf_2p_hdc_inst_vex;
-        logic [15:0] trm_rdram128x22    ; assign trm_rdram128x22    = trmdat[17]; localparam t_trm IV_trm_rdram128x22    = IV_rf_2p_hdc_inst_vex;
-        logic [15:0] trm_rdram32x16     ; assign trm_rdram32x16     = trmdat[18]; localparam t_trm IV_trm_rdram32x16     = IV_rf_2p_hdc_inst_vex;
-        logic [15:0] trm_bioram1kx32    ; assign trm_bioram1kx32    = trmdat[19]; localparam t_trm IV_trm_bioram1kx32    = IV_rf_sp_hde_inst_cache;
-        logic [15:0] trm_tx_fifo128x32  ; assign trm_tx_fifo128x32  = trmdat[20]; localparam t_trm IV_trm_tx_fifo128x32  = IV_rf_2p_hdc_inst;
-        logic [15:0] trm_rx_fifo128x32  ; assign trm_rx_fifo128x32  = trmdat[21]; localparam t_trm IV_trm_rx_fifo128x32  = IV_rf_2p_hdc_inst;
-        logic [15:0] trm_fifo32x19      ; assign trm_fifo32x19      = trmdat[22]; localparam t_trm IV_trm_fifo32x19      = IV_rf_2p_hdc_inst;
-        logic [15:0] trm_udcmem_share   ; assign trm_udcmem_share   = trmdat[23]; localparam t_trm IV_trm_udcmem_share   = IV_rf_2p_hdc_inst;
-        logic [15:0] trm_udcmem_odb     ; assign trm_udcmem_odb     = trmdat[24]; localparam t_trm IV_trm_udcmem_odb     = IV_rf_2p_hdc_inst;
-        logic [15:0] trm_udcmem_256x64  ; assign trm_udcmem_256x64  = trmdat[25]; localparam t_trm IV_trm_udcmem_256x64  = IV_rf_2p_hdc_inst;
-        logic [15:0] trm_acram2kx64     ; assign trm_acram2kx64     = trmdat[26]; localparam t_trm IV_trm_acram2kx64     = IV_sram_sp_uhde_inst_sram0;
-        logic [15:0] trm_aoram1kx36     ; assign trm_aoram1kx36     = trmdat[27]; localparam t_trm IV_trm_aoram1kx36     = IV_sram_sp_hde_inst;
-
-             */
-        crate::println!("setting 0.9v sramtrm");
-        let mut sramtrm = CSR::new(utra::coresub_sramtrm::HW_CORESUB_SRAMTRM_BASE as *mut u32);
-        sramtrm.wo(utra::coresub_sramtrm::SFR_CACHE, 0x3);
-        sramtrm.wo(utra::coresub_sramtrm::SFR_ITCM, 0x3);
-        sramtrm.wo(utra::coresub_sramtrm::SFR_DTCM, 0x3);
-        sramtrm.wo(utra::coresub_sramtrm::SFR_VEXRAM, 0x1);
-
-        let mut rbist = CSR::new(utra::rbist_wrp::HW_RBIST_WRP_BASE as *mut u32);
-        // bio 0.9v settings
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (19 << 16) | 0b011_000_01_0_0_000_0_00);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-
-        // vex 0.9v settings
-        for i in 0..4 {
-            rbist.wo(utra::rbist_wrp::SFRCR_TRM, ((15 + i) << 16) | 0b001_010_00_0_0_000_0_00);
-            rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-        }
-
-        // sram 0.9v settings
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (0 << 16) | 0b011_000_01_0_1_000_0_00);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (1 << 16) | 0b011_000_00_0_0_000_0_00);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-        crate::println!("setting other 0.9v trims");
-
-        // tcm 0.9v
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (6 << 16) | 0b011_000_00_0_0_000_0_00);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (7 << 16) | 0b011_000_00_0_0_000_0_00);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-
-        // ifram 0.9v
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (8 << 16) | 0b010_000_00_0_1_000_1_01);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-
-        // sce 0.9V
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (9 << 16) | 0b011_000_00_0_0_000_0_00);
-        rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-        for i in 0..4 {
-            rbist.wo(utra::rbist_wrp::SFRCR_TRM, ((10 + i) << 16) | 0b011_000_01_0_1_000_0_00);
-            rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
-        }
-        rbist.wo(utra::rbist_wrp::SFRCR_TRM, (14 << 16) | 0b001_010_00_0_0_000_0_00);
+    // Ensure SRAM timings are set for 900mV operation before setting fast clock frequency. We will
+    // be running at full tilt on baosec.
+    let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(900);
+    let mut rbist = CSR::new(utra::rbist_wrp::HW_RBIST_WRP_BASE as *mut u32);
+    for item in trim_table {
+        rbist.wo(utra::rbist_wrp::SFRCR_TRM, item.raw_value());
         rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
     }
 
     // Now that SRAM trims are setup, initialize all the statics by writing to memory.
     // For baremetal, the statics structure is just at the flash base.
-    const STATICS_LOC: usize = FLASH_BASE;
+    const STATICS_LOC: usize = bao1x_api::BAREMETAL_START + SIGBLOCK_LEN;
 
     // safety: this data structure is pre-loaded by the image loader and is guaranteed to
     // only have representable, valid values that are aligned according to the repr(C) spec
@@ -181,11 +65,13 @@ pub fn early_init() {
             data_ptr.add(i).write_volatile(0);
         }
         for &(offset, data) in &statics_in_rom.poke_table[..statics_in_rom.valid_pokes as usize] {
-            data_ptr.add(offset as usize).write_volatile(data);
+            data_ptr
+                .add(u16::from_le_bytes(offset) as usize / size_of::<u32>())
+                .write_volatile(u32::from_le_bytes(data));
         }
     }
 
-    // set the clock
+    // set the clock - should toggle us up to 800MHz FCLK mode.
     let perclk = unsafe { init_clock_asic(SYSTEM_CLOCK_FREQUENCY) };
 
     crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
@@ -200,10 +86,10 @@ pub fn early_init() {
     irq_setup();
     enable_irq(utra::irqarray5::IRQARRAY5_IRQ);
 
-    udma_uart.write("console up\r\n".as_bytes());
+    udma_uart.write("baremetal console up\r\n".as_bytes());
     crate::debug::USE_CONSOLE.store(true, core::sync::atomic::Ordering::SeqCst);
-    crate::println!("This debug print should be on the UDMA UART");
 
+    // Baosec specific:
     // Setup I/Os so things that should be powered off are actually off
     bao1x_hal::board::setup_display_pins(&iox);
     bao1x_hal::board::setup_memory_pins(&iox);
@@ -212,82 +98,6 @@ pub fn early_init() {
     bao1x_hal::board::setup_kb_pins(&iox);
     bao1x_hal::board::setup_oled_power_pin(&iox);
     bao1x_hal::board::setup_trng_power_pin(&iox);
-
-    #[cfg(not(feature = "bao1x-evb"))]
-    {
-        crate::println!("Engage DCDC2");
-        let i2c_channel = bao1x_hal::board::setup_i2c_pins(&iox);
-        use bao1x_hal::udma::GlobalConfig;
-        let udma_global = GlobalConfig::new();
-        udma_global.clock(PeriphId::from(i2c_channel), true);
-        let i2c_ifram = unsafe {
-            bao1x_hal::ifram::IframRange::from_raw_parts(
-                bao1x_hal::board::I2C_IFRAM_ADDR,
-                bao1x_hal::board::I2C_IFRAM_ADDR,
-                4096,
-            )
-        };
-        let mut i2c = unsafe {
-            bao1x_hal::udma::I2c::new_with_ifram(i2c_channel, 400_000, perclk, i2c_ifram, &udma_global)
-        };
-
-        if let Ok(mut pmic) = bao1x_hal::axp2101::Axp2101::new(&mut i2c) {
-            match pmic.set_dcdc(&mut i2c, Some((0.88, true)), bao1x_hal::axp2101::WhichDcDc::Dcdc2) {
-                Ok(_) => crate::println!("turned on DCDC2"),
-                Err(_) => crate::println!("couldn't turn off DCDC2"),
-            }
-            pmic.set_pwm_mode(&mut i2c, bao1x_hal::axp2101::WhichDcDc::Dcdc2, true).ok();
-        }
-        // this does nothing on boards without the FET rework
-        crate::println!("Engage DCDC2 FET");
-        iox.set_gpio_pin_value(IoxPort::PA, 5, IoxValue::Low);
-    }
-
-    // code to setup PWM, for testing the PWM pin
-    if false {
-        let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-        iox.setup_pin(IoxPort::PF, 9, Some(IoxDir::Input), Some(IoxFunction::Gpio), None, None, None, None);
-        iox.setup_pin(
-            IoxPort::PA,
-            0,
-            Some(IoxDir::Output),
-            Some(IoxFunction::Gpio),
-            None,
-            None,
-            Some(IoxEnable::Disable),
-            Some(IoxDriveStrength::Drive8mA),
-        );
-        iox.setup_pin(
-            IoxPort::PA,
-            0,
-            Some(IoxDir::Output),
-            Some(IoxFunction::AF3),
-            None,
-            None,
-            Some(IoxEnable::Disable),
-            Some(IoxDriveStrength::Drive8mA),
-        );
-        let mut timer = CSR::new(utra::pwm::HW_PWM_BASE as *mut u32);
-        timer.wo(utra::pwm::REG_CH_EN, 1);
-        timer.rmwf(utra::pwm::REG_TIM0_CFG_R_TIMER0_SAW, 1);
-        timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_TH, 0);
-        timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_MODE, 3);
-        let pwm = utra::pwm::HW_PWM_BASE as *mut u32;
-        // unsafe { pwm.add(2).write_volatile(1 << 16) };
-        unsafe { pwm.add(2).write_volatile(0) };
-        timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 1);
-        crate::println!("PWM running on PA0?");
-        for i in 0..12 {
-            crate::println!("0x{:2x}: 0x{:08x}", i, unsafe { pwm.add(i).read_volatile() })
-        }
-        crate::println!("0x{:2x}: 0x{:08x}", 65, unsafe { pwm.add(65).read_volatile() });
-        /*
-        for i in 80..84 {
-            crate::println!("0x{:2x}: 0x{:08x}", i, unsafe { pwm.add(i).read_volatile() })
-        }
-        */
-        crate::println!("");
-    }
 }
 
 pub fn setup_timer() {
@@ -486,13 +296,21 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     // commit dividers
     daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
 
-    // set voltage regulators to 0.893v. This is necessary because lp mode may set it lower.
-    crate::println!("setting vdd85 to 0.893v");
-    let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
-    ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08421FF1);
-    ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
-    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
-    crate::platform::delay_at_sysfreq(20, 48_000_000);
+    if freq_hz >= 600_000_000 {
+        crate::println!("setting vdd85 to 0.893v");
+        let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
+        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08421FF1);
+        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
+        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
+        crate::platform::delay_at_sysfreq(20, 48_000_000);
+    } else {
+        crate::println!("setting vdd85 to 0.80v");
+        let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
+        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08421080);
+        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
+        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
+        crate::platform::delay_at_sysfreq(20, 48_000_000);
+    }
     crate::println!("...done");
 
     // DARIC_CGU->cgusel1 = 1; // 0: RC, 1: XTAL

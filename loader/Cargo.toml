@@ -14,6 +14,10 @@ ed25519-dalek-loader = { path = "ed25519-dalek-loader", default-features = false
 curve25519-dalek-loader = { path = "curve25519-dalek-loader", default-features = false, features = [
     "u32e_backend",
 ], optional = true }
+ed25519-dalek-bao1x = { path = "../bao1x-boot/ed25519-dalek-bao1x", default-features = false, features = [
+    "digest",
+], optional = true }
+sha2-bao1x = { path = "../bao1x-boot/sha2-bao1x", optional = true, default-features = false }
 utralib = { version = "0.1.25", optional = true, default-features = false }
 armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", optional = true }
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", optional = true }
@@ -100,13 +104,17 @@ board-baosec = [
     "usb",
     "simple-fatfs",
     "linked_list_allocator",
-    "ed25519-dalek",
-    "sha2",
+    "ed25519-dalek-bao1x",
+    "sha2-bao1x",
     "digest",
     "ux-api/loader-baosec",
 ]
 board-baosor = ["bao1x-hal/loader-baosor"]
-board-dabao = ["bao1x-hal/loader-dabao", "bao1x-hal/board-dabao", "linked_list_allocator",]
+board-dabao = [
+    "bao1x-hal/loader-dabao",
+    "bao1x-hal/board-dabao",
+    "linked_list_allocator",
+]
 atsama5d27 = ["utralib/atsama5d27", "armv7", "dep:atsama5d27"]
 
 # precursor flags

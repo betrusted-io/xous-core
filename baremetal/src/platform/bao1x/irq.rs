@@ -47,7 +47,7 @@ pub unsafe extern "C" fn _start_trap() -> ! {
             #[rustfmt::skip]
             core::arch::asm!(
                 "csrw        mscratch, sp",
-                "li          sp, {scratch_page}", // crate::platform::SCRATCH_PAGE - has to be hard-coded
+                "li          sp, {scratch_page}", // scratch_page, grows up
                 "sw       x1, 0*4(sp)",
                 // Skip SP for now
                 "sw       x3, 2*4(sp)",
@@ -83,23 +83,17 @@ pub unsafe extern "C" fn _start_trap() -> ! {
                 // Save MEPC
                 "csrr        t0, mepc",
                 "sw       t0, 31*4(sp)",
-                // Save x1, which was used to calculate the offset.  Prior to
-                // calculating, it was stashed at 0x61006000.
-                //"li          t0, 0x61006000",
-                //"lw        t1, 0*4(t0)",
-                //"sw       t1, 0*4(sp)",
 
                 // Finally, save SP
                 "csrr        t0, mscratch",
                 "sw          t0, 1*4(sp)",
                 // Restore a default stack pointer
-                "li          sp, {heap_base}", // heap base, grows down
+                "li          sp, {scratch_page}", // scratch_page, grows down
 
                 // Note that registers $a0-$a7 still contain the arguments
                 "j           _start_trap_rust",
 
-                scratch_page = const SCRATCH_PAGE,
-                heap_base = const HEAP_START
+                scratch_page = const SCRATCH_PAGE
             );
         }
         _start_trap_aligned();

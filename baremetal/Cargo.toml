@@ -16,16 +16,17 @@ linked_list_allocator = { version = "0.10.5", optional = true }
 xous-bio-bdma = { path = "../libs/xous-bio-bdma", optional = true, default-features = false }
 critical-section = "1.2.0"
 ux-api = { path = "../libs/ux-api", optional = true, default-features = false }
-simple-fatfs = { git = "https://github.com/betrusted-io/simple-fatfs.git", branch = "baosec", optional = true, default-features = false }
 sha2 = { version = "0.10.8", optional = true, default-features = false }
 digest = { version = "0.10.7", optional = true }
-ed25519-dalek = { version = "=2.1.0", optional = true, default-features = false, features = [
-    "rand_core",
+ed25519-dalek = { package = "ed25519-dalek-bao1x", path = "../bao1x-boot/ed25519-dalek-bao1x", default-features = false, features = [
     "digest",
-] }
+    "zeroize",
+], optional = true }
 base64 = { version = "0.22.1", optional = true, default-features = false, features = [
     "alloc",
 ] }
+sha2-bao1x = { path = "../bao1x-boot/sha2-bao1x", optional = true, default-features = false }
+hex-literal = "1.0.0"
 
 [features]
 artybio = [
@@ -46,6 +47,8 @@ bao1x = [
     # "bao1x-hal/debug-print-usb",
     "bao1x-api",
     "v0p9",
+    "digest",
+    "sha2-bao1x",
 ]
 # activates BIO test suite
 bao1x-bio = [
@@ -57,10 +60,6 @@ bao1x-bio = [
 # selects features for EVB target (defaults to baosec)
 bao1x-evb = []
 bao1x-usb = [
-    "simple-fatfs",
-    "sha2",
-    "digest",
-    "ed25519-dalek",
     # "bao1x-hal/debug-print-usb",
     # "bao1x-hal/verbose-debug",
 ]

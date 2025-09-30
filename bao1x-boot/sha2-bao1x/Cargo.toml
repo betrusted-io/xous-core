@@ -1,0 +1,25 @@
+
+[package]
+name = "sha2-bao1x"
+version = "0.10.9"
+authors = ["bunnie <bunnie@baochip.com>"]
+edition = "2018"
+description = "sha2 hardware accelerator engine - specific to bao1x"
+
+# Dependency versions enforced by Cargo.lock.
+[dependencies]
+
+# Rust-standard digest API dependencies
+digest = "^0.10.7"
+utralib = { version = "0.1.25", default-features = false }
+bao1x-api = { path = "../../libs/bao1x-api" }
+
+[features]
+compress = []
+bao1x = ["utralib/bao1x"]
+oid = []
+precursor = ["utralib/precursor"]
+renode = ["utralib/renode"]
+std = []
+debug = []
+default = []

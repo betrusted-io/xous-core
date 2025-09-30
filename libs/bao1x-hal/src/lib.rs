@@ -29,9 +29,21 @@ pub mod usb;
 #[cfg(not(feature = "hosted-baosec"))]
 pub use shared_csr::*;
 #[cfg(not(feature = "hosted-baosec"))]
+pub mod acram;
+#[cfg(not(feature = "hosted-baosec"))]
 pub mod mbox;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod rram;
+// no signature checking in the kernel
+#[cfg(all(
+    not(feature = "hosted-baosec"),
+    not(feature = "kernel-baosec"),
+    not(feature = "kernel-dabao"),
+    not(feature = "kernel-baosor")
+))]
+pub mod sigcheck;
+#[cfg(not(feature = "hosted-baosec"))]
+pub mod sram_trim;
 
 #[inline(always)]
 pub fn cache_flush() {

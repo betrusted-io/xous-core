@@ -47,6 +47,9 @@ pub(crate) const TARGET_TRIPLE_RISCV32_KERNEL: &str = "riscv32imac-unknown-none-
 pub(crate) const TARGET_TRIPLE_ARM: &str = "armv7a-unknown-xous-elf";
 pub(crate) const TARGET_TRIPLE_ARM_KERNEL: &str = "armv7a-unknown-none-elf";
 
+/// Size of the "statics" region used to initialize baremetal targets
+const STATICS_LEN: usize = 0x100;
+
 // because I have nowhere else to note this. The commit that contains the rkyv-enum derive
 // refactor to work around warnings thrown by Rust 1.64.0 is: f815ed85b58b671178fbf53b4cea34186fc406eb
 // We could undo this if it turns out to be a compiler regression.
@@ -598,25 +601,64 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_artyvexii();
         }
 
-        Some("baremetal-bao1x") => {
-            builder.set_baremetal(true);
-            update_flash_origin("baremetal/src/platform/bao1x/link.x", 0x6000_0100)?;
-            builder.target_baremetal_bao1x();
+        Some("baremetal-bao1x") | Some("bao1x-baremetal") => {
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "baremetal/src/platform/bao1x/link.x",
+                (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder.set_baremetal(true).target_baremetal_bao1x("baremetal").set_sigblock_size(sigblock_size);
         }
 
         Some("baremetal-bao1x-evb") => {
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "baremetal/src/platform/bao1x/link.x",
+                (0x6100_0000 + sigblock_size + STATICS_LEN) as u32,
+            )?;
             builder.set_baremetal(true);
-            update_flash_origin("baremetal/src/platform/bao1x/link.x", 0x6100_0100)?;
             builder.add_loader_feature("bao1x-evb");
-            builder.target_baremetal_bao1x();
+            builder.set_sigblock_size(sigblock_size);
+            builder.target_baremetal_bao1x("baremetal");
+        }
+
+        Some("bao1x-boot0") => {
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "bao1x-boot/boot0/link.x",
+                (bao1x_api::BOOT0_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder
+                .set_baremetal(true)
+                .target_baremetal_bao1x("bao1x-boot0")
+                .set_sigblock_size(sigblock_size);
+        }
+
+        Some("bao1x-boot1") => {
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "bao1x-boot/boot1/src/platform/bao1x/link.x",
+                (bao1x_api::BOOT1_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            // builder.add_loader_feature("unsafe-debug");
+            builder
+                .set_baremetal(true)
+                .target_baremetal_bao1x("bao1x-boot1")
+                .set_sigblock_size(sigblock_size);
         }
 
         Some("baosec") => {
             let board = "board-baosec";
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "loader/src/platform/bao1x/link.x",
+                (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
             // select the board
             builder.add_feature(board);
             builder.add_loader_feature(board);
             builder.add_kernel_feature(board);
+            builder.set_sigblock_size(sigblock_size);
 
             // placement in flash is a tension between dev convenience and RAM usage. Things in flash
             // are resident, non-swapable, but end up making the slow kernel burn process take longer.
@@ -811,7 +853,9 @@ Hardware images:
  av-test                 automation framework for TRNG testing (AV directly, no CPRNG). [cratespecs] ignored.
  tiny                    Precursor tiny image. For testing with services built out-of-tree.
  baosec                  Baosec application target image.
- baremetal-bao1x         Baremetal image for baochip1x targets.
+ bao1x-baremetal         Baremetal image for baochip1x targets.
+ bao1x-boot0             Boot0 partition for baochip1x targets.
+ bao1x-boot1             Boot1 partition for baochip1x targets.
 
 Hosted emulation:
  run                     Run user image in hosted mode with release flags. [cratespecs] are apps

@@ -339,7 +339,7 @@ pub fn process_program(b: &[u8], rom_only: bool) -> Result<ProgramDescription, E
         for (i, chunk) in data_copy.chunks_exact(4).enumerate() {
             let word = u32::from_le_bytes(chunk.try_into().unwrap());
             if word != 0 {
-                poke_table.push((i as u32, word));
+                poke_table.push(((i as u32) * 4, word));
             }
         }
     } else {

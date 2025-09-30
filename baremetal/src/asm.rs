@@ -41,56 +41,6 @@ pub extern "C" fn _start() {
             // subtract four from sp to make room for a DMA "gutter"
             "addi        sp, sp, -4",
 
-            // twiddle duart
-            "li          t0, 0x40042000",
-            // setup etuc
-            "sw          x0, 0x4(t0)", // CR is 0
-            "li          t1, 34", // tuned based on ringosc & oscope. not guaranteed to be precise
-            "sw          t1, 0xc(t0)",
-            "li          t1, 0x1",
-            "sw          t1, 0x4(t0)", // CR is 1
-            // print 32 instances of 'Z' (0x5A) (provided to measure baud)
-            "li          t2, 32",
-            "li          t1, 0x5A",
-        "10:",
-            "sw          t1, 0x0(t0)",
-        "11:",
-            "lw          t3, 0x8(t0)", // check SR
-            "bne         x0, t3, 11b", // wait for 0
-            "addi        t2, t2, -1",
-            "bne         x0, t2, 10b",
-
-            /*
-            // test if ifram is cleared
-            "li          t0, 0x50000000",
-            "li          t1, 0x50040000",
-        "60:",
-            "lw          t2, 0(t0)",
-            // if not 0, jump to clearing routine
-            "bne         x0, t2, 30f",
-            "addi        t0, t0, 4",
-            // loop if we haven't checked all of ifram
-            "bltu        t0, t1, 60b",
-            // if we got here, all of ifram was 0, continue with boot
-            "j           50f",
-
-            // clear ifram
-        "30:",
-            "sw          x0, 0(t0)",
-            "addi        t0, t0, 4",
-            "bltu        t0, t1, 30b",
-            */
-            /*
-            // clear main ram
-            "li          t0, 0x61000000",
-            "li          t1, 0x61200000",
-        "20:",
-            "sw          x0, 0(t0)",
-            "addi        t0, t0, 4",
-            "bltu        t0, t1, 20b",
-
-            ".word       0x500f",
-            */
         "50:",
             // Install a machine mode trap handler
             "la          t0, abort",

@@ -1,0 +1,30 @@
+[package]
+name = "bao1x-boot0"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2021"
+description = "Boot0 partition"
+
+[dependencies]
+xous = "0.9.66"
+utralib = { version = "0.1.25", optional = true, default-features = false }
+bao1x-hal = { path = "../../libs/bao1x-hal", optional = true, default-features = false }
+bao1x-api = { path = "../../libs/bao1x-api", optional = true, default-features = false }
+vexriscv = { version = "0.5.6", package = "xous-riscv" }
+riscv = { version = "0.14.0", features = ["critical-section-single-hart"] }
+linked_list_allocator = { version = "0.10.5", optional = true }
+critical-section = "1.2.0"
+
+[features]
+# Baochip feature tree below
+bao1x = [
+    "utralib/bao1x",
+    "linked_list_allocator",
+    "bao1x-hal/loader-baosec",
+    "bao1x-api",
+]
+
+# turns on a bunch of developer debug features. No production build should have this feature activated!
+unsafe-dev = []
+
+default = ["bao1x"]

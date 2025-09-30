@@ -2,7 +2,11 @@
 
 use bao1x_api::*;
 
-// console uart buffer
+/// Run at 400MHz to ensure we can boot even without an external VDD85 regulator!
+pub const DEFAULT_FCLK_FREQUENCY: u32 = 400_000_000;
+
+// console uart buffer - needs to be fixed here because it matches dabao. Keeps the code base
+// simple between the two variants for shared paths in the bootloader.
 pub const UART_DMA_TX_BUF_PHYS: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096;
 
 // RAM needs two buffers of 1k + 16 bytes = 2048 + 16 = 2064 bytes; round up to one page
@@ -25,11 +29,12 @@ pub const CRG_UDC_MEMBASE: usize =
 pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 4, 31];
 pub const IFRAM1_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 0, 31];
 
-/// returns the USB SE0 port and pin number
-const SE0_PIN: u8 = 14;
+const SE0_PIN: u8 = 13;
+const SE0_PORT: IoxPort::PC;
+/// Sets the SE0 pin to drive and returns the port number. Note this side-effects the boot switch reading.
 pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     iox.setup_pin(
-        IoxPort::PB,
+        SE0_PORT,
         SE0_PIN,
         Some(IoxDir::Output),
         Some(IoxFunction::Gpio),
@@ -38,8 +43,46 @@ pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         Some(IoxEnable::Enable),
         Some(IoxDriveStrength::Drive2mA),
     );
-    iox.set_gpio_pin_value(IoxPort::PB, SE0_PIN, IoxValue::Low);
-    (IoxPort::PB, SE0_PIN)
+    (SE0_PORT, SE0_PIN)
+}
+
+/// Prep the boot switch for reading. Note this side-effects SE0.
+pub fn setup_boot_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    iox.setup_pin(
+        SE0_PORT,
+        SE0_PIN,
+        Some(IoxDir::Input),
+        Some(IoxFunction::Gpio),
+        Some(IoxEnable::Enable), // enable the schmitt trigger on this pad
+        Some(IoxEnable::Enable), // enable the pullup
+        None,
+        None,
+    );
+    (SE0_PORT, SE0_PIN)
+}
+
+pub fn setup_console_pins<T: IoSetup + IoGpio>(iox: &T) -> PeriphId {
+    iox.setup_pin(
+        IoxPort::PB,
+        13,
+        Some(IoxDir::Input),
+        Some(IoxFunction::AF1),
+        Some(IoxEnable::Enable),
+        Some(IoxEnable::Enable),
+        None,
+        None,
+    );
+    iox.setup_pin(
+        IoxPort::PB,
+        14,
+        Some(IoxDir::Output),
+        Some(IoxFunction::AF1),
+        None,
+        None,
+        Some(IoxEnable::Enable),
+        Some(IoxDriveStrength::Drive4mA),
+    );
+    PeriphId::Uart2
 }
 
 pub fn setup_i2c_pins(iox: &dyn IoSetup) -> bao1x_api::I2cChannel {

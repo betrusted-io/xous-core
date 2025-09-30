@@ -118,6 +118,9 @@ members = [
   "services/keystore",
   "libs/precursor-hal",
   "baremetal",
+  "bao1x-boot/boot0",
+  "bao1x-boot/boot1",
+  "bao1x-boot/sha2-bao1x",
 ]
 resolver = "2"
 

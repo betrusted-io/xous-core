@@ -12,6 +12,14 @@ pub mod api;
 pub use api::*;
 #[cfg(feature = "std")]
 pub mod keyboard;
+pub mod offsets;
+pub mod sce;
+pub mod signatures;
+pub use offsets::*;
+
+/// UF2 Family ID. Randomly generated, no collisions with the known list, still to be merged
+/// into the "official" list
+pub const BAOCHIP_1X_UF2_FAMILY: u32 = 0xa7d7_6373;
 
 /// Constants used by both emulation and hardware implementations
 pub const PERCLK: u32 = 100_000_000;
@@ -75,9 +83,10 @@ pub struct StaticsInRom {
     pub data_size_bytes: u32,
     // poke table of values to stick in the data segment. This is needed in particular
     // to initialize `static` variables, such as Atomics and Mutexes, required by the
-    // loader environment. Presented as (address, data) tuples, up to 30 of them.
+    // loader environment. Presented as (address, data) tuples, up to 40 of them.
     // Only entries from [0..valid_pokes] are processed.
-    pub poke_table: [(u32, u32); 30],
+    // The addresses and data are packed as u8's to avoid padding of the record.
+    pub poke_table: [([u8; 2], [u8; 4]); 40],
 }
 
 impl StaticsInRom {

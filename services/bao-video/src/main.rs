@@ -1,3 +1,8 @@
+// Maintainer's note: more character sets are added to baosec targets by modifying
+// the character map resolution macro in libs/blitstr2/src/style_macro.rs/english_rules
+// Including a resolver to a given character map also pulls the font data into the
+// bao-video binary, increasing its size.
+
 use ux_api::minigfx::*;
 
 mod gfx;
@@ -33,16 +38,13 @@ use bao1x_hal::{
 use bao1x_hal_service::{I2c, UdmaGlobal};
 #[cfg(feature = "b64-export")]
 use base64::{Engine as _, engine::general_purpose};
-use blitstr2::fontmap;
 #[cfg(feature = "board-baosec")]
 use num_traits::*;
 #[cfg(not(feature = "hosted-baosec"))]
 use utralib::utra;
 use ux_api::minigfx::{self, FrameBuffer};
 use ux_api::service::api::*;
-use xous::MemoryRange;
 use xous::sender::Sender;
-use xous_ipc::Buffer;
 
 // Scope of this crate: *No calls to modals* this can create dependency lockups.
 //
@@ -138,56 +140,6 @@ fn handle_irq(_irq_no: usize, arg: *mut usize) {
     .ok();
 }
 
-#[cfg(any(feature = "bao1x"))]
-fn map_fonts() -> MemoryRange {
-    log::trace!("mapping fonts");
-    // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
-    // because the reserved area is much larger
-    let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32 + 8) & 0xFFFF_F000) + 0x1000;
-    log::info!("requesting map of length 0x{:08x} at 0x{:08x}", fontlen, fontmap::FONT_BASE);
-    let fontregion = xous::syscall::map_memory(
-        xous::MemoryAddress::new(fontmap::FONT_BASE),
-        None,
-        fontlen as usize,
-        xous::MemoryFlags::R,
-    )
-    .expect("couldn't map fonts");
-    log::info!(
-        "font base at virtual 0x{:08x}, len of 0x{:08x}",
-        fontregion.as_ptr() as usize,
-        fontregion.len()
-    );
-
-    log::debug!(
-        "mapping tall font to 0x{:08x}",
-        fontregion.as_ptr() as usize + fontmap::TALL_OFFSET as usize
-    );
-    blitstr2::fonts::bold::GLYPH_LOCATION
-        .store((fontregion.as_ptr() as usize + fontmap::BOLD_OFFSET as usize) as u32, Ordering::SeqCst);
-    blitstr2::fonts::emoji::GLYPH_LOCATION
-        .store((fontregion.as_ptr() as usize + fontmap::EMOJI_OFFSET as usize) as u32, Ordering::SeqCst);
-    blitstr2::fonts::mono::GLYPH_LOCATION
-        .store((fontregion.as_ptr() as usize + fontmap::MONO_OFFSET as usize) as u32, Ordering::SeqCst);
-    blitstr2::fonts::tall::GLYPH_LOCATION
-        .store((fontregion.as_ptr() as usize + fontmap::TALL_OFFSET as usize) as u32, Ordering::SeqCst);
-    blitstr2::fonts::regular::GLYPH_LOCATION
-        .store((fontregion.as_ptr() as usize + fontmap::REGULAR_OFFSET as usize) as u32, Ordering::SeqCst);
-    blitstr2::fonts::small::GLYPH_LOCATION
-        .store((fontregion.as_ptr() as usize + fontmap::SMALL_OFFSET as usize) as u32, Ordering::SeqCst);
-
-    fontregion
-}
-
-#[cfg(not(target_os = "xous"))]
-fn map_fonts() -> MemoryRange {
-    // does nothing
-    let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32 + 8) & 0xFFFF_F000) + 0x1000;
-    let fontregion = xous::syscall::map_memory(None, None, fontlen as usize, xous::MemoryFlags::R)
-        .expect("couldn't map dummy memory for fonts");
-
-    fontregion
-}
-
 fn main() -> ! {
     let stack_size = 2 * 1024 * 1024;
     claim_main_thread(move |main_thread_token| {
@@ -222,8 +174,6 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     display.init();
     display.clear();
     display.draw();
-
-    let fontregion = map_fonts();
 
     // ---- panic handler - set up early so we can see panics quickly
     // install the graphical panic handler. It won't catch really early panics, or panics in this crate,
@@ -298,7 +248,6 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
     // ---- main loop variables
     let screen_clip = Rectangle::new(Point::new(0, 0), display.screen_size());
-    let mut bulkread = BulkRead::default(); // holding buffer for bulk reads; wastes ~8k when not in use, but saves a lot of copy/init for each iteration of the read
 
     // this will kick the hardware into the QR code scanning routine automatically. Eventually
     // this needs to be turned into a call that can invoke and abort the QR code scanning.
@@ -567,47 +516,10 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     }
                 }
                 GfxOpcode::RestartBulkRead => {
-                    if let Some(scalar) = msg.body.scalar_message_mut() {
-                        bulkread.from_offset = 0;
-                        scalar.arg1 = 0;
-                    } else {
-                        panic!("Incorrect message type");
-                    }
+                    unimplemented!("Not needed for bao1x target");
                 }
                 GfxOpcode::BulkReadFonts => {
-                    // this also needs to reflect in root-keys/src/implementation.rs @ sign_loader()
-                    let fontlen = fontmap::FONT_TOTAL_LEN as u32
-                        + 16  // minver
-                        + 16  // current ver
-                        + 8; // sig ver + len
-                    let mut buf =
-                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                    //let mut bulkread = buf.as_flat::<BulkRead, _>().unwrap(); // try to skip the copy/init
-                    // step by using a persistent structure Safety: `u8` contains no
-                    // undefined values
-                    let fontslice = unsafe { fontregion.as_slice::<u8>() };
-                    assert!(fontlen <= fontslice.len() as u32);
-                    if bulkread.from_offset >= fontlen {
-                        log::error!("BulkReadFonts attempt to read out of bound on the font area; ignoring!");
-                        continue;
-                    }
-                    let readlen = if bulkread.from_offset + bulkread.buf.len() as u32 > fontlen {
-                        // returns what is readable of the last bit; anything longer than the fontlen is
-                        // undefined/invalid
-                        fontlen as usize - bulkread.from_offset as usize
-                    } else {
-                        bulkread.buf.len()
-                    };
-                    for (&src, dst) in fontslice
-                        [bulkread.from_offset as usize..bulkread.from_offset as usize + readlen]
-                        .iter()
-                        .zip(bulkread.buf.iter_mut())
-                    {
-                        *dst = src;
-                    }
-                    bulkread.len = readlen as u32;
-                    bulkread.from_offset += readlen as u32;
-                    buf.replace(bulkread).unwrap();
+                    unimplemented!("Not needed for bao1x target");
                 }
                 GfxOpcode::TestPattern => {
                     if let Some(scalar) = msg.body.scalar_message_mut() {

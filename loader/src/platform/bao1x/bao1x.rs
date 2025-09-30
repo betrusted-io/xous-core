@@ -1,3 +1,4 @@
+use bao1x_api::signatures::SIGBLOCK_LEN;
 #[cfg(not(feature = "verilator-only"))]
 use bao1x_api::{
     udma::{PeriphId, UdmaGlobalConfig},
@@ -93,7 +94,7 @@ pub fn delay(quantum: usize) {
 
 pub fn early_init() -> u32 {
     // For the loader, the statics structure is located just after the signature block
-    const STATICS_LOC: usize = FLASH_BASE + 0x1000;
+    const STATICS_LOC: usize = bao1x_api::LOADER_START + SIGBLOCK_LEN;
 
     // safety: this data structure is pre-loaded by the image loader and is guaranteed to
     // only have representable, valid values that are aligned according to the repr(C) spec
@@ -112,7 +113,9 @@ pub fn early_init() -> u32 {
             data_ptr.add(i).write_volatile(0);
         }
         for &(offset, data) in &statics_in_rom.poke_table[..statics_in_rom.valid_pokes as usize] {
-            data_ptr.add(offset as usize).write_volatile(data);
+            data_ptr
+                .add(u16::from_le_bytes(offset) as usize / size_of::<u32>())
+                .write_volatile(u32::from_le_bytes(data));
         }
     }
 
@@ -286,8 +289,8 @@ pub fn early_init_hw() -> u32 {
     let mut iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
     // setup power to "shut down" - keyboard press should be what's keeping us on at this stage
-    let (port, pin) = bao1x_hal::board::setup_keep_on_pin(&iox);
-    iox.set_gpio_pin_value(port, pin, IoxValue::Low);
+    // let (port, pin) = bao1x_hal::board::setup_keep_on_pin(&iox);
+    // iox.set_gpio_pin_value(port, pin, IoxValue::Low);
     /*
     // allow for shutdown to process
     iox.setup_pin(

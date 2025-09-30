@@ -1,7 +1,7 @@
 use std::io::{Error, ErrorKind};
 
 use clap::{App, Arg, crate_version};
-use tools::sign_image::{load_pem, sign_file};
+use tools::sign_image::{convert_to_uf2, load_pem, sign_file};
 
 const DEVKEY_PATH: &str = "devkey/dev.key";
 
@@ -80,6 +80,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .takes_value(false)
                 .help("Insert a jump instruction in the signature block"),
         )
+        .arg(
+            Arg::with_name("sig-length")
+                .long("sig-length")
+                .takes_value(true)
+                .default_value("4096")
+                .help("Change the length of the signature block. Defaults to 4096.")
+                .required(false),
+        )
+        .arg(Arg::with_name("bao1x").long("bao1x").help("Generate images for the bao1x target"))
+        .arg(
+            Arg::with_name("function-code")
+            .long("function-code")
+            .takes_value(true)
+            .help("Function code to embed in the signature block. Only meaningful in combination with --bao1x")
+            .required(false)
+        )
         .get_matches();
 
     let minver =
@@ -91,6 +107,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             None
         };
 
+    let sig_length = usize::from_str_radix(matches.value_of("sig-length").unwrap_or("4096"), 10)
+        .expect("sig-length should be a decimal number");
     // Sign the loader, if an output file was specified
     if let Some(loader_output) = matches.value_of("loader-output") {
         let loader_key = matches.value_of("loader-key").expect("no loader key specified");
@@ -102,15 +120,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err("invalid loader private key type")?;
         }
         println!("Signing loader");
+        // bao1x can use pre-hash signatures because it's a clean-sheet bootloader
+        // precursor uses the older style because we are avoiding updating the boot ROM in the SoC to avoid
+        // bricking.
+        let version = if matches.is_present("bao1x") {
+            tools::sign_image::Version::Bao1xV1
+        } else {
+            tools::sign_image::Version::Loader
+        };
         sign_file(
             &loader_image,
             &loader_output,
             &loader_pkey,
             matches.is_present("defile"),
             &minver,
-            false,
+            version,
             matches.is_present("with-jump"),
+            sig_length,
+            matches.value_of("function-code"),
         )?;
+
+        if matches.is_present("bao1x") {
+            if loader_output.ends_with(".img") || loader_output.ends_with(".bin") {
+                let loader_uf2 = format!("{}uf2", &loader_output[..loader_output.len() - 3]);
+                // generate a uf2 file
+                convert_to_uf2(&loader_output, &loader_uf2, matches.value_of("function-code"), None)?;
+                println!("Created UF2 at {}", loader_uf2);
+            } else {
+                Err(
+                    "Can't generate UF2 file because the output file is not specified with a .img/.bin suffix",
+                )?;
+            }
+        }
     }
 
     if let Some(kernel_output) = matches.value_of("kernel-output") {
@@ -123,15 +164,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err("invalid kernel private key type")?;
         }
         println!("Signing kernel");
+        let version = if matches.is_present("bao1x") {
+            tools::sign_image::Version::Bao1xV1
+        } else {
+            tools::sign_image::Version::LoaderPrehash
+        };
         sign_file(
             &kernel_image,
             &kernel_output,
             &kernel_pkey,
             matches.is_present("defile"),
             &minver,
-            true,
+            version,
             matches.is_present("with-jump"),
+            sig_length,
+            Some(matches.value_of("function-code").unwrap_or("kernel")),
         )?;
+
+        if matches.is_present("bao1x") {
+            if kernel_output.ends_with(".img") {
+                let kernel_uf2 = format!("{}uf2", &kernel_output[..kernel_output.len() - 3]);
+                // generate a uf2 file
+                convert_to_uf2(&kernel_output, &kernel_uf2, matches.value_of("function-code"), None)?;
+                println!("Created UF2 at {}", kernel_uf2);
+            } else {
+                Err(
+                    "Can't generate UF2 file because the kernel output file is not specified with a .img suffix",
+                )?;
+            }
+        }
     }
     Ok(())
 }

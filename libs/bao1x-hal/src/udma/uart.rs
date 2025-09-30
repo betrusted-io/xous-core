@@ -23,7 +23,19 @@ pub enum UartChannel {
 impl Into<usize> for UartChannel {
     fn into(self) -> usize { self as usize }
 }
+impl TryFrom<PeriphId> for UartChannel {
+    type Error = xous::Error;
 
+    fn try_from(value: PeriphId) -> Result<Self, Self::Error> {
+        match value {
+            PeriphId::Uart0 => Ok(UartChannel::Uart0),
+            PeriphId::Uart1 => Ok(UartChannel::Uart1),
+            PeriphId::Uart2 => Ok(UartChannel::Uart2),
+            PeriphId::Uart3 => Ok(UartChannel::Uart3),
+            _ => Err(xous::Error::InvalidString),
+        }
+    }
+}
 /// UDMA UART wrapper. Contains all the warts on top of the Channel abstraction.
 pub struct Uart {
     /// This is assumed to point to the base of the peripheral's UDMA register set.

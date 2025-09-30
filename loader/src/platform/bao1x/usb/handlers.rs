@@ -304,7 +304,7 @@ pub fn usb_ep1_bulk_in_complete(
         if let Some((offset, len)) = this.remaining_rd.take() {
             let app_buf = conjure_app_buf();
             let disk = conjure_disk();
-            this.setup_big_read(app_buf, disk, offset, len);
+            this.setup_big_read(app_buf, disk, offset, len, None);
             this.ms_state = UmsState::DataPhase;
         } else {
             this.bulk_xfer(1, USB_SEND, CSW_ADDR, 13, 0, 0);
@@ -652,7 +652,7 @@ fn process_read_command(this: &mut CorigineUsb, cbw: Cbw) {
         }
         let app_buf = conjure_app_buf();
         let disk = conjure_disk();
-        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize);
+        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize, None);
         this.ms_state = UmsState::DataPhase;
     }
 }
@@ -675,7 +675,7 @@ fn process_write_command(this: &mut CorigineUsb, cbw: Cbw) {
         csw.status = 2;
         let app_buf = conjure_app_buf();
         let disk = conjure_disk();
-        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize);
+        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize, None);
         this.ms_state = UmsState::DataPhase;
         csw.update_hw();
         return;
@@ -739,7 +739,7 @@ fn process_write12_command(this: &mut CorigineUsb, cbw: Cbw) {
         // does
         let app_buf = conjure_app_buf();
         let disk = conjure_disk();
-        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize);
+        this.setup_big_read(app_buf, disk, lba as usize * SECTOR_SIZE as usize, length as usize, None);
         this.ms_state = UmsState::DataPhase;
         csw.update_hw();
         return;
