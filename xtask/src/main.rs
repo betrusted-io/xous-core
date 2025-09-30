@@ -601,7 +601,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_artyvexii();
         }
 
-        Some("baremetal-bao1x") => {
+        Some("baremetal-bao1x") | Some("bao1x-baremetal") => {
             let sigblock_size = 0x300;
             update_flash_origin(
                 "baremetal/src/platform/bao1x/link.x",
@@ -853,8 +853,9 @@ Hardware images:
  av-test                 automation framework for TRNG testing (AV directly, no CPRNG). [cratespecs] ignored.
  tiny                    Precursor tiny image. For testing with services built out-of-tree.
  baosec                  Baosec application target image.
- baremetal-bao1x         Baremetal image for baochip1x targets.
+ bao1x-baremetal         Baremetal image for baochip1x targets.
  bao1x-boot0             Boot0 partition for baochip1x targets.
+ bao1x-boot1             Boot1 partition for baochip1x targets.
 
 Hosted emulation:
  run                     Run user image in hosted mode with release flags. [cratespecs] are apps
