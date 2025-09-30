@@ -34,18 +34,6 @@ pub fn setup() -> (UsbDeviceState, u32) {
         if let Some(ref mut usb_ref) = crate::platform::bao1x::usb::USB {
             let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
             usb.reset();
-            let mut poweron = 0;
-            loop {
-                usb.udc_handle_interrupt();
-                if usb.pp() {
-                    poweron += 1; // .pp() is a sham. MPW has no way to tell if power is applied. This needs to be fixed for bao1x.
-                }
-                crate::platform::delay(100);
-                if poweron >= 4 {
-                    break;
-                }
-            }
-            usb.reset();
             usb.init();
             usb.start();
             usb.update_current_speed();
