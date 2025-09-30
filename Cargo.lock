@@ -561,7 +561,6 @@ dependencies = [
  "riscv",
  "sha2",
  "sha2-bao1x",
- "simple-fatfs",
  "utralib 0.1.25",
  "ux-api",
  "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
