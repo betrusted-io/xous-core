@@ -98,12 +98,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("sent shutdown to axp2101");
                 }
                 "keepon" => {
-                    use bao1x_api::*;
-                    let iox = bao1x_api::IoxHal::new();
-                    let (port, pin) = bao1x_hal::board::setup_keep_on_pin(&iox);
-                    iox.set_gpio_pin_value(port, pin, IoxValue::High);
-                    let _ = bao1x_hal::board::setup_kb_pins(&iox);
-                    log::info!("keepon got {:x?}", iox.get_gpio_pin_value(IoxPort::PF, 0));
+                    todo!("Fix this to use DCDC2 for keepon (as per baosec v2)");
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
