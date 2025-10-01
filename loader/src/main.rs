@@ -219,7 +219,12 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     }
 
     // the kernel arg buffer is SIG_BLOCK_SIZE into the signed region
-    let arg_buffer = (signed_buffer as u32 + SIGBLOCK_SIZE as u32) as *const usize;
+    #[cfg(not(feature = "bao1x"))]
+    let signature_size = SIGBLOCK_SIZE;
+    #[cfg(feature = "bao1x")]
+    let signature_size = bao1x_api::signatures::SIGBLOCK_LEN;
+    let arg_buffer = (signed_buffer as u32 + signature_size as u32) as *const usize;
+    println!("arg_buffer: {:x}", arg_buffer as usize);
 
     // perhaps later on in these sequences, individual sub-images may be validated
     // against sub-signatures; or the images may need to be re-validated after loading
