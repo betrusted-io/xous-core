@@ -5,7 +5,8 @@ pub const BOOT0_START: usize = 0x6000_0000;
 pub const BOOT1_START: usize = 0x6002_0000;
 pub const LOADER_START: usize = 0x6006_0000;
 pub const BAREMETAL_START: usize = LOADER_START;
-pub const KERNEL_START: usize = 0x6008_0000;
+// kernel needs to start on a page boundary, so eat into the loader area a bit to allow that to happen.
+pub const KERNEL_START: usize = 0x6008_0000 - crate::signatures::SIGBLOCK_LEN;
 
 // total storage area available in RRAM. Above this are reserved vectors for security apparatus.
 pub const RRAM_STORAGE_LEN: usize = 0x3D_A000;
