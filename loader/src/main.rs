@@ -148,9 +148,6 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     #[cfg(all(feature = "verilator-only", not(feature = "bao1x-mpw")))]
     platform::coreuser_config();
 
-    #[cfg(all(feature = "bao1x", feature = "updates"))]
-    crate::platform::process_update(perclk_freq);
-
     // initially validate the whole image on disk (including kernel args)
     // kernel args must be validated because tampering with them can change critical assumptions about
     // how data is loaded into memory
