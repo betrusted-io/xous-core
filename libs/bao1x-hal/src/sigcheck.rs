@@ -127,10 +127,16 @@ fn erase_secrets() {
 }
 
 pub fn jump_to(target: usize) -> ! {
+    // loader expects a0 to have the address of the kernel image pre-loaded
+    let kernel_loc = bao1x_api::offsets::KERNEL_START;
     unsafe {
         core::arch::asm!(
-            "jr {0}",
-            in(reg) target,
+            "mv t0, {target}",
+            "mv a0, {kernel_loc}",
+            "mv a1, x0",
+            "jr t0",
+            target = in(reg) target,
+            kernel_loc = in(reg) kernel_loc,
             options(noreturn)
         );
     }
