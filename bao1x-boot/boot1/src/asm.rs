@@ -54,13 +54,3 @@ pub extern "C" fn abort() -> ! {
         );
     }
 }
-
-#[link_section = ".text.init"]
-#[no_mangle]
-pub unsafe extern "C" fn jump_to(target: usize) -> ! {
-    core::arch::asm!(
-        "jr {0}",
-        in(reg) target,
-        options(noreturn)
-    );
-}

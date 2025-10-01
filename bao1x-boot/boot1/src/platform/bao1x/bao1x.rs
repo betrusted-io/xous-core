@@ -119,6 +119,9 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
                         // serves as a "debounce" of accidental butt-dials of the
                         // power button.
                         pmic.set_ldo(&mut i2c, Some(3.3), bao1x_hal::axp2101::WhichLdo::Bldo1).unwrap();
+
+                        // set PWM mode on DCDC2. greatly reduces noise on the regulator line
+                        pmic.set_pwm_mode(&mut i2c, bao1x_hal::axp2101::WhichDcDc::Dcdc2, true).unwrap();
                         // make sure the DCDC2 is set to 0.9V, which will allow us to enter high-speed run
                         // mode. It defaults to 0.85V on boot.
                         pmic.set_dcdc(&mut i2c, Some((0.9, true)), bao1x_hal::axp2101::WhichDcDc::Dcdc2)

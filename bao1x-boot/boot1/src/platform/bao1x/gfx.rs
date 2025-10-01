@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-use bao1x_hal::sh1107::Mono;
 use ux_api::minigfx::*;
 
 // The discipline for all the APIs in this module are that they act on a FrameBuffer which is
