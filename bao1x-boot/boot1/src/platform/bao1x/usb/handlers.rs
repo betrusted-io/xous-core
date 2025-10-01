@@ -202,12 +202,14 @@ pub fn usb_ep1_bulk_out_complete(
                         let mut rram = bao1x_hal::rram::Reram::new();
                         let offset = record.address() as usize - utralib::HW_RERAM_MEM;
                         rram.write_slice(offset, record.data());
+                        /*
                         crate::println_d!(
                             "Wrote {} to 0x{:x}: {:x?}",
                             record.data().len(),
                             record.address(),
                             &record.data()[..8]
                         );
+                        */
                     } else {
                         crate::println_d!("Invalid write address {:x}, block ignored!", record.address());
                     }
