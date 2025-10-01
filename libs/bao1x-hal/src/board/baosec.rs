@@ -233,6 +233,21 @@ pub fn setup_camera_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     (IoxPort::PC, 14)
 }
 
+pub fn setup_periph_reset_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    let (port, pin) = (IoxPort::PC, 6);
+    iox.setup_pin(
+        port,
+        pin,
+        Some(IoxDir::Output),
+        Some(IoxFunction::Gpio),
+        None,
+        Some(IoxEnable::Enable),
+        None,
+        Some(IoxDriveStrength::Drive2mA),
+    );
+    (port, pin)
+}
+
 /// returns the USB SE0 port and pin number
 pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     const SE0_PIN: u8 = 5;
