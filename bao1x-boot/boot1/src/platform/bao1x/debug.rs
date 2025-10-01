@@ -39,7 +39,7 @@ impl Uart {
                 });
             } else {
                 let buf: [u8; 1] = [c];
-                let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
+                let uart_buf_addr = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
                 let mut udma_uart = unsafe {
                     // safety: this is safe to call, because we set up clock and events prior to calling new.
                     udma::Uart::get_handle(
