@@ -708,10 +708,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // builder.add_kernel_feature("debug-swap-verbose");
             // builder.add_feature("quantum-timer"); // this isn't in bao1x..
             builder.add_kernel_feature("v2p");
-            builder.add_loader_feature("sram-margin");
-            builder.add_loader_feature("usb");
-            builder.add_loader_feature("updates");
-            // builder.add_loader_feature("cam-test");
             match task.as_deref() {
                 Some("baosec") => builder.target_bao1x_soc(),
                 _ => panic!("should be unreachable"),
