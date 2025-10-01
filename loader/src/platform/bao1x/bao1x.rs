@@ -30,9 +30,18 @@ pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 
-// location of kernel, as offset from the base of ReRAM. This needs to match up with what is in link.x.
-// exclusive of the signature block offset
-pub const KERNEL_OFFSET: usize = 0x6_0000;
+// location of kernel, as offset from the base of RRAM.
+pub const KERNEL_OFFSET: usize = bao1x_api::offsets::KERNEL_START - utralib::generated::HW_RERAM_MEM;
+
+const DATA_SIZE_BYTES: usize = 0x6000;
+pub const HEAP_START: usize = RAM_BASE + DATA_SIZE_BYTES;
+pub const HEAP_LEN: usize = 1024 * 256;
+
+// scratch page for exceptions
+//   - scratch data is stored in positive offsets from here
+//   - exception stack is stored in negative offsets from here, hence the +4096
+// total occupied area is [HEAP_START + HEAP_LEN..HEAP_START + HEAP_LEN + 8192]
+pub const SCRATCH_PAGE: usize = HEAP_START + HEAP_LEN + 4096;
 
 #[allow(dead_code)]
 pub fn delay(quantum: usize) {
@@ -105,6 +114,16 @@ pub fn early_init_hw() -> u32 {
 
     #[cfg(feature = "board-baosec")]
     {
+        // setup all the board pins to a known state
+        let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+        bao1x_hal::board::setup_display_pins(&iox);
+        bao1x_hal::board::setup_memory_pins(&iox);
+        bao1x_hal::board::setup_i2c_pins(&iox);
+        bao1x_hal::board::setup_camera_pins(&iox);
+        bao1x_hal::board::setup_kb_pins(&iox);
+        bao1x_hal::board::setup_oled_power_pin(&iox);
+        bao1x_hal::board::setup_trng_power_pin(&iox);
+
         use bao1x_api::{IoGpio, IoxValue};
         use bao1x_hal::udma::GlobalConfig;
         use ux_api::minigfx::FrameBuffer;
@@ -132,10 +151,21 @@ pub fn early_init_hw() -> u32 {
     glbl_csr.wo(utra::sce_glbsfr::SFR_FFEN, 0x30);
     glbl_csr.wo(utra::sce_glbsfr::SFR_FFCLR, 0xff05);
 
+    setup_alloc();
+
     // this should go to the serial console, because boot1 setup the console for us
     crate::println!("\n\r~~ Xous Loader ~~\n\r");
 
     perclk
+}
+
+pub fn setup_alloc() {
+    // Initialize the allocator with heap memory range
+    crate::println!("Setting up heap @ {:x}-{:x}", HEAP_START, HEAP_START + HEAP_LEN);
+    crate::println!("Stack @ {:x}-{:x}", HEAP_START + HEAP_LEN, RAM_BASE + RAM_SIZE);
+    unsafe {
+        ALLOCATOR.lock().init(HEAP_START as *mut u8, HEAP_LEN);
+    }
 }
 
 // returns the actual per_clk
