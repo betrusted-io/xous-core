@@ -107,6 +107,13 @@ const SDBG: bool = false; // swap debug
 #[cfg(test)]
 mod test;
 
+#[global_allocator]
+#[cfg(feature = "swap")]
+static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
+// just a small heap, big enough for us to use alloc to simplify argument processing
+#[cfg(feature = "swap")]
+const HEAP_LEN: usize = 4096;
+
 #[repr(C)]
 pub struct MemoryRegionExtra {
     start: u32,
@@ -159,29 +166,6 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     if !secboot::validate_xous_img(signed_buffer as *const u32, &mut fs_prehash) {
         loop {}
     };
-
-    #[cfg(feature = "bao1x")]
-    {
-        use bao1x_api::signatures::FunctionCode;
-        // validate using the bao1x signature scheme
-        match bao1x_hal::sigcheck::validate_image(
-            bao1x_api::KERNEL_START as *const u32,
-            bao1x_api::LOADER_START as *const u32,
-            bao1x_api::LOADER_REVOCATION_OFFSET,
-            &[
-                FunctionCode::Kernel as u32,
-                FunctionCode::UpdatedKernel as u32,
-                FunctionCode::Developer as u32,
-            ],
-            false,
-        ) {
-            Ok(k) => println!("Kernel signature check by key @ {} OK", k),
-            Err(e) => {
-                println!("Kernel failed signature check. Dying: {:?}", e);
-                bao1x_hal::sigcheck::die_no_std();
-            }
-        }
-    }
 
     #[cfg(all(feature = "vexii-test", not(feature = "verilator-only")))]
     {
@@ -262,9 +246,6 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
     // Store the initial boot config on the stack.  We don't know
     // where in heap this memory will go.
     #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
-    #[cfg(feature = "platform-tests")]
-    platform::platform_tests();
-
     let mut cfg = BootConfig { base_addr: args.base as *const usize, args, ..Default::default() };
     #[cfg(feature = "swap")]
     println!("Size of BootConfig: {:x}", core::mem::size_of::<BootConfig>());
@@ -285,10 +266,34 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
         println!("No suspend marker found, doing a cold boot!");
         #[cfg(feature = "simulation-only")]
         println!("Configured for simulation. Skipping RAM clear!");
-        #[cfg(not(any(feature = "bao1x")))]
-        // bao1x target clears RAM with assembly routine on boot
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
+
+        #[cfg(feature = "bao1x")]
+        {
+            // this is the soonest we can run the image validation because we need to
+            // have the heap setup first.
+            use bao1x_api::signatures::FunctionCode;
+            // validate using the bao1x signature scheme
+            match bao1x_hal::sigcheck::validate_image(
+                bao1x_api::KERNEL_START as *const u32,
+                bao1x_api::LOADER_START as *const u32,
+                bao1x_api::LOADER_REVOCATION_OFFSET,
+                &[
+                    FunctionCode::Kernel as u32,
+                    FunctionCode::UpdatedKernel as u32,
+                    FunctionCode::Developer as u32,
+                ],
+                false,
+            ) {
+                Ok(k) => println!("*** Kernel signature check by key @ {} OK ***", k),
+                Err(e) => {
+                    println!("Kernel failed signature check. Dying: {:?}", e);
+                    bao1x_hal::sigcheck::die_no_std();
+                }
+            }
+        }
+
         phase_2(&mut cfg, &fs_prehash);
         #[cfg(any(feature = "debug-print", feature = "swap"))]
         if VDBG || SDBG {
@@ -647,7 +652,7 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
 /// Clears all of RAM. This is a must for systems that have suspend-to-RAM for security.
 /// It is configured to be skipped in simulation only, to accelerate the simulation times
 /// since we can initialize the RAM to zero in simulation.
-#[cfg(all(not(feature = "simulation-only"), not(feature = "bao1x")))]
+#[cfg(all(not(feature = "simulation-only")))]
 fn clear_ram(cfg: &mut BootConfig) {
     // clear RAM on a cold boot.
     // RAM is persistent and battery-backed. This means secret material could potentially
@@ -655,7 +660,7 @@ fn clear_ram(cfg: &mut BootConfig) {
     // to a cold boot, but it's probably worth it. Note that it doesn't happen on a suspend/resume.
     let ram: *mut u32 = cfg.sram_start as *mut u32;
     #[cfg(feature = "swap")]
-    let clear_limit = ((2 * 4096 + core::mem::size_of::<BootConfig>()) + 4095) & !4095;
+    let clear_limit = GUARD_MEMORY_BYTES;
     #[cfg(not(feature = "swap"))]
     let clear_limit = ((4096 + core::mem::size_of::<BootConfig>()) + 4095) & !4095;
     if VDBG {

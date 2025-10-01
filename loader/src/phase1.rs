@@ -42,6 +42,20 @@ pub fn phase_1(cfg: &mut BootConfig) {
     cfg.init_size += GUARD_MEMORY_BYTES;
     println!("Loader runtime stack should not exceed: {:x}", cfg.get_top() as usize);
 
+    // Initialize the allocator with heap memory range
+    #[cfg(any(feature = "bao1x", feature = "swap"))]
+    {
+        crate::println!(
+            "Setting up heap @ {:x}-{:x}",
+            cfg.get_top() as usize,
+            cfg.get_top() as usize + HEAP_LEN
+        );
+        cfg.init_size += HEAP_LEN;
+        unsafe {
+            ALLOCATOR.lock().init(cfg.get_top() as *mut u8, HEAP_LEN);
+        }
+    }
+
     // The first region is defined as being "main RAM", which will be used
     // to keep track of allocations.
     println!("Allocating regions");

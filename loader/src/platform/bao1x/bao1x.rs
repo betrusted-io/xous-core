@@ -5,9 +5,6 @@ use bao1x_hal::iox::Iox;
 use bao1x_hal::udma;
 use utralib::generated::*;
 
-#[global_allocator]
-static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
-
 // Notes about the reset vector location
 // This can be set using fuses in the IFR (also called 'info') region
 // The offset is an 8-bit value, which is shifted into a final location
@@ -28,10 +25,6 @@ pub const FLASH_BASE: usize = utralib::generated::HW_RERAM_MEM;
 
 // location of kernel, as offset from the base of RRAM.
 pub const KERNEL_OFFSET: usize = bao1x_api::offsets::KERNEL_START - utralib::generated::HW_RERAM_MEM;
-
-const DATA_SIZE_BYTES: usize = 0x6000;
-pub const HEAP_START: usize = RAM_BASE + DATA_SIZE_BYTES;
-pub const HEAP_LEN: usize = 1024 * 256;
 
 #[allow(dead_code)]
 pub fn delay(quantum: usize) {
@@ -138,21 +131,10 @@ pub fn early_init_hw() -> u32 {
     glbl_csr.wo(utra::sce_glbsfr::SFR_FFEN, 0x30);
     glbl_csr.wo(utra::sce_glbsfr::SFR_FFCLR, 0xff05);
 
-    setup_alloc();
-
     // this should go to the serial console, because boot1 setup the console for us
     crate::println!("\n\r~~ Xous Loader ~~\n\r");
 
     perclk
-}
-
-pub fn setup_alloc() {
-    // Initialize the allocator with heap memory range
-    crate::println!("Setting up heap @ {:x}-{:x}", HEAP_START, HEAP_START + HEAP_LEN);
-    crate::println!("Stack @ {:x}-{:x}", HEAP_START + HEAP_LEN, RAM_BASE + RAM_SIZE);
-    unsafe {
-        ALLOCATOR.lock().init(HEAP_START as *mut u8, HEAP_LEN);
-    }
 }
 
 // returns the actual per_clk
