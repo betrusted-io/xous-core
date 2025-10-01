@@ -3,11 +3,7 @@ use bao1x_api::signatures::SIGBLOCK_LEN;
 use bao1x_hal::iox::Iox;
 #[cfg(feature = "bao1x")]
 use bao1x_hal::udma;
-#[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
-use bao1x_hal::{axp2101::Axp2101, udma::GlobalConfig};
 use utralib::generated::*;
-#[cfg(not(feature = "verilator-only"))]
-use utralib::utra::sysctrl;
 
 #[global_allocator]
 static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
@@ -36,12 +32,6 @@ pub const KERNEL_OFFSET: usize = bao1x_api::offsets::KERNEL_START - utralib::gen
 const DATA_SIZE_BYTES: usize = 0x6000;
 pub const HEAP_START: usize = RAM_BASE + DATA_SIZE_BYTES;
 pub const HEAP_LEN: usize = 1024 * 256;
-
-// scratch page for exceptions
-//   - scratch data is stored in positive offsets from here
-//   - exception stack is stored in negative offsets from here, hence the +4096
-// total occupied area is [HEAP_START + HEAP_LEN..HEAP_START + HEAP_LEN + 8192]
-pub const SCRATCH_PAGE: usize = HEAP_START + HEAP_LEN + 4096;
 
 #[allow(dead_code)]
 pub fn delay(quantum: usize) {
@@ -99,8 +89,6 @@ pub fn early_init() -> u32 {
 
 #[cfg(all(feature = "bao1x", not(feature = "verilator-only")))]
 pub fn early_init_hw() -> u32 {
-    let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
-
     // TODO: we might want to not clear this in the loader so the OS can read the wakeup reason?
     let mut ao_sysctrl = CSR::new(utra::ao_sysctrl::HW_AO_SYSCTRL_BASE as *mut u32);
     // clear any AO wakeup pending bits
@@ -124,7 +112,6 @@ pub fn early_init_hw() -> u32 {
         bao1x_hal::board::setup_oled_power_pin(&iox);
         bao1x_hal::board::setup_trng_power_pin(&iox);
 
-        use bao1x_api::{IoGpio, IoxValue};
         use bao1x_hal::udma::GlobalConfig;
         use ux_api::minigfx::FrameBuffer;
 
@@ -170,6 +157,7 @@ pub fn setup_alloc() {
 
 // returns the actual per_clk
 #[cfg(not(feature = "simulation-only"))]
+#[allow(dead_code)]
 pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     use utra::sysctrl;
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;

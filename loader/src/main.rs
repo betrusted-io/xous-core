@@ -175,9 +175,9 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
             ],
             false,
         ) {
-            Ok(k) => println!("Kernel signature check OK"),
+            Ok(k) => println!("Kernel signature check by key @ {} OK", k),
             Err(e) => {
-                println!("Kernel failed signature check. Dying.");
+                println!("Kernel failed signature check. Dying: {:?}", e);
                 bao1x_hal::sigcheck::die_no_std();
             }
         }
