@@ -160,6 +160,29 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
         loop {}
     };
 
+    #[cfg(feature = "bao1x")]
+    {
+        use bao1x_api::signatures::FunctionCode;
+        // validate using the bao1x signature scheme
+        match bao1x_hal::sigcheck::validate_image(
+            bao1x_api::KERNEL_START as *const u32,
+            bao1x_api::LOADER_START as *const u32,
+            bao1x_api::LOADER_REVOCATION_OFFSET,
+            &[
+                FunctionCode::Kernel as u32,
+                FunctionCode::UpdatedKernel as u32,
+                FunctionCode::Developer as u32,
+            ],
+            false,
+        ) {
+            Ok(k) => println!("Kernel signature check OK"),
+            Err(e) => {
+                println!("Kernel failed signature check. Dying.");
+                bao1x_hal::sigcheck::die_no_std();
+            }
+        }
+    }
+
     #[cfg(all(feature = "vexii-test", not(feature = "verilator-only")))]
     {
         // fake the prehash
