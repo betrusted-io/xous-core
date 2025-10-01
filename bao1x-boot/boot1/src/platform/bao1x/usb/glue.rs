@@ -51,6 +51,16 @@ pub fn setup() -> (UsbDeviceState, u32) {
     }
 }
 
+pub fn shutdown() {
+    unsafe {
+        if let Some(ref mut usb_ref) = crate::platform::bao1x::usb::USB {
+            let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
+            crate::irq::disable_all_irqs();
+            usb.stop();
+        }
+    }
+}
+
 pub fn usb_status() -> (UsbDeviceState, u32) {
     unsafe {
         if let Some(ref mut usb_ref) = crate::platform::bao1x::usb::USB {

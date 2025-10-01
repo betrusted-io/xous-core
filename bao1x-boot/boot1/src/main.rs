@@ -245,6 +245,10 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         marquee(sh1107, "Booting...");
     }
 
+    // stop the USB subsystem so it can be re-init'd by the next stage.
+    // without this, USB init will hang later on.
+    glue::shutdown();
+
     // when we get to this point, there's only two options...
     crate::secboot::boot_or_die();
 }
