@@ -17,10 +17,12 @@ use core::{
 
 use bao1x_api::{BoardTypeCoding, BootWaitCoding};
 use bao1x_hal::{board::KeyPress, iox::Iox, usb::driver::UsbDeviceState};
+use bao1x_hal::{sh1107::Oled128x128, udma::GlobalConfig};
 use critical_section::Mutex;
 use platform::*;
 #[allow(unused_imports)]
 use utralib::*;
+use ux_api::minigfx::{DrawStyle, FrameBuffer, Point, Rectangle};
 
 use crate::delay;
 use crate::platform::usb::glue;
@@ -61,7 +63,8 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error");
 
     crate::println_d!("TX_IDLE: {:?}", crate::platform::usb::TX_IDLE.load(Ordering::SeqCst));
-    board_type = crate::platform::early_init(board_type);
+    let perclk: u32;
+    (board_type, perclk) = crate::platform::early_init(board_type);
     crate::println!("\n~~Boot1 up!~~\n");
     crate::println!("Configured board type: {:?}", board_type);
 
@@ -95,14 +98,41 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         crate::println!("Boot bypassed with keypress: {:?}", current_key);
     }
 
+    // grab a handle to the OLED if it exists on the board.
+    let mut udma_global = GlobalConfig::new();
+    let mut oled_iox = iox.clone();
+    let mut oled = if board_type == BoardTypeCoding::Baosec {
+        Some(bao1x_hal::sh1107::Oled128x128::new(
+            bao1x_hal::sh1107::MainThreadToken::new(),
+            perclk,
+            &mut oled_iox,
+            &mut udma_global,
+        ))
+    } else {
+        None
+    };
+
     let (se0_port, se0_pin) = match board_type {
         BoardTypeCoding::Baosec => bao1x_hal::board::setup_usb_pins(&iox),
         _ => crate::platform::setup_dabao_se0_pin(&iox),
     };
     iox.set_gpio_pin(se0_port, se0_pin, bao1x_api::IoxValue::Low); // put the USB port into SE0
-    delay(500);
+    delay(100);
+    // use the USB disconnect time to initialize the display - at least 100ms is
+    // needed after reset for the display to initialize
+    if let Some(ref mut sh1107) = oled {
+        // show the boot logo
+        sh1107.init();
+        sh1107.buffer_mut().fill(0xFFFF_FFFF);
+        sh1107.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
+        sh1107.draw();
+    }
+    delay(400);
+
     // setup the USB port
     let (mut last_usb_state, mut portsc) = glue::setup();
+
+    // remainder of the 1-second total wait target time for USB disconnect
     delay(500);
     // release SE0
     iox.set_gpio_pin(se0_port, se0_pin, bao1x_api::IoxValue::High);
@@ -117,6 +147,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     }
     // USB should have a solid shot of connecting now.
     crate::println!("USB device ready");
+    if let Some(ref mut sh1107) = oled {
+        marquee(sh1107, "Update mode");
+    }
 
     // provide some feedback on the run state of the BIO by peeking at the program counter
     // value, and provide feedback on the CPU operation by flashing the RGB LEDs.
@@ -145,6 +178,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                 crate::println!("USB is connected!");
                 last_usb_state = new_usb_state;
                 USB_CONNECTED.store(true, core::sync::atomic::Ordering::SeqCst);
+                if let Some(ref mut sh1107) = oled {
+                    marquee(sh1107, "Connected");
+                }
             }
         }
 
@@ -205,6 +241,41 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         }
     }
 
+    if let Some(ref mut sh1107) = oled {
+        marquee(sh1107, "Booting...");
+    }
+
     // when we get to this point, there's only two options...
     crate::secboot::boot_or_die();
+}
+
+fn marquee(sh1107: &mut Oled128x128, msg: &str) {
+    use bao1x_hal::sh1107::{COLUMN, ROW};
+    use ux_api::bitmaps::baochip128x128::MARQUEE_BELOW;
+
+    // blank out the marquee
+    ux_api::minigfx::op::rectangle(
+        sh1107,
+        Rectangle::new_with_style(
+            Point::new(0, MARQUEE_BELOW as isize),
+            Point::new(COLUMN, ROW),
+            DrawStyle::new(ux_api::minigfx::PixelColor::Dark, ux_api::minigfx::PixelColor::Dark, 1),
+        ),
+        None,
+        false,
+    );
+
+    // now try best-effort to fit the message. No word-wrapping here.
+    let msg_width = msg.len() as isize * crate::gfx::CHAR_WIDTH;
+    let x_pos = (COLUMN - msg_width) / 2;
+    let y_midline = MARQUEE_BELOW as isize + (ROW - MARQUEE_BELOW as isize) / 2;
+    let y_pos = y_midline - crate::gfx::CHAR_HEIGHT / 2;
+    gfx::msg(
+        sh1107,
+        msg,
+        Point::new(x_pos, y_pos),
+        bao1x_hal::sh1107::Mono::White.into(),
+        bao1x_hal::sh1107::Mono::Black.into(),
+    );
+    sh1107.draw();
 }

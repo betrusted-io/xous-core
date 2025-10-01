@@ -69,7 +69,7 @@ pub fn setup_dabao_se0_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
 
 /// This can change the board type coding to a safer, simpler board type if the declared board type has
 /// problems booting.
-pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> bao1x_api::BoardTypeCoding {
+pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::BoardTypeCoding, u32) {
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
     // setup board-specific I/Os - early boot set. These are items that have to be
@@ -172,6 +172,18 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> bao1x_api::Boar
                 let (se0_port, se0_pin) = bao1x_hal::board::setup_usb_pins(&iox);
                 iox.set_gpio_pin(se0_port, se0_pin, IoxValue::Low); // put the USB port into SE0 while we initialize things
 
+                // setup display - turn on its power, reset the framebuffer
+                bao1x_hal::board::setup_display_pins(&iox);
+                // power on
+                let (oled_on_port, oled_on_pin) = bao1x_hal::board::setup_oled_power_pin(&iox);
+                iox.set_gpio_pin_value(oled_on_port, oled_on_pin, IoxValue::High);
+                // reset enable
+                let (peri_rst_port, peri_reset_pin) = bao1x_hal::board::setup_periph_reset_pin(&iox);
+                iox.set_gpio_pin_value(peri_rst_port, peri_reset_pin, IoxValue::Low);
+                // delay for reset assert
+                delay(1);
+                iox.set_gpio_pin_value(peri_rst_port, peri_reset_pin, IoxValue::High);
+
                 // keyboard can setup at keyboard read time
             }
         }
@@ -226,7 +238,7 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> bao1x_api::Boar
     crate::debug::USE_CONSOLE.store(true, core::sync::atomic::Ordering::SeqCst);
     crate::println!("boot1 udma console up, CPU @ {}MHz!", fclk_freq / 2_000_000);
 
-    board_type
+    (board_type, perclk)
 }
 
 pub fn setup_timer(sysclk_freq: u32) {

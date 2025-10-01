@@ -33,6 +33,8 @@ bao1x = [
     "bao1x-hal/loader-baosec",
     # "bao1x-hal/debug-print-usb",
     "bao1x-api",
+    # needed for the boot logo
+    "ux-api/loader-baosec",
 ]
 unsafe-debug = []
 verbose-debug = ["bao1x-hal/debug-print-usb", "bao1x-hal/verbose-debug"]
