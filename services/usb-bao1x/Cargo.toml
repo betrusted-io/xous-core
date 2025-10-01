@@ -15,7 +15,7 @@ num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 bao1x-hal = { path = "../../libs/bao1x-hal", features = [
     "std",
-    "debug-print-usb",
+    # "debug-print-usb",
     # "verbose-debug",
     "axp2101",
 ], optional = true }
@@ -66,6 +66,7 @@ hosted = ["utralib/hosted", "utralib/std"]
 renode = ["utralib/renode", "utralib/std"]
 mass-storage = []
 debug-print-usb = [
+    "bao1x-hal/debug-print-usb",
 ] # mutually exclusive feature with other crates that use the app UART
 verbose-debug = ["bao1x-hal/verbose-debug"]
 
@@ -77,4 +78,4 @@ usbd-debug = ["usb-device/baochip-debug"]
 prototyping = [
 ] # temporary feature-out for figuring out the code; remove this if you don't recognize it anymore
 
-default = ["debug-print-usb"]
+default = []
