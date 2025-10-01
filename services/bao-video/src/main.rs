@@ -191,6 +191,17 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     // ---- camera initialization
     #[cfg(not(feature = "hosted-baosec"))]
     {
+        // setup camera power
+        match bao1x_hal::axp2101::Axp2101::new(&mut i2c) {
+            Ok(mut pmic) => {
+                pmic.set_ldo(&mut i2c, Some(2.85), bao1x_hal::axp2101::WhichLdo::Bldo2).unwrap();
+                pmic.set_dcdc(&mut i2c, Some((1.8, false)), bao1x_hal::axp2101::WhichDcDc::Dcdc5).unwrap();
+            }
+            Err(e) => {
+                log::error!("Couldn't setup regulators for camera, camera will be non-functional: {:?}", e);
+            }
+        };
+
         // setup camera clock
         iox.setup_pin(IoxPort::PF, 9, Some(IoxDir::Input), Some(IoxFunction::Gpio), None, None, None, None);
         iox.setup_pin(
