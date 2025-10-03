@@ -151,6 +151,11 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         marquee(sh1107, "Update mode");
     }
 
+    // if Baosec, initialize the QPI SPI flash interface (for receiving updates)
+    if board_type == BoardTypeCoding::Baosec {
+        crate::glue::setup_spim(perclk);
+    }
+
     // provide some feedback on the run state of the BIO by peeking at the program counter
     // value, and provide feedback on the CPU operation by flashing the RGB LEDs.
     let mut repl = crate::repl::Repl::new();
@@ -248,6 +253,25 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // stop the USB subsystem so it can be re-init'd by the next stage.
     // without this, USB init will hang later on.
     glue::shutdown();
+
+    // check that all pages in the SPI memory page cache have been written out
+    critical_section::with(|cs| {
+        if let Some(assembler) = &mut *crate::glue::SECTOR_TRACKER.borrow(cs).borrow_mut() {
+            if assembler.active_pages() > 0 {
+                loop {
+                    if let Some((addr, data)) = assembler.take_next_incomplete() {
+                        // the "holes" will just have 0 in them, which is fine for these purposes
+                        // the primary case that triggers this is when the last sector written doesn't fill
+                        // up a whole page.
+                        crate::print_d!("Flushing final swap page at {:x}", addr);
+                        crate::glue::write_spim_page(addr, data);
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+    });
 
     // when we get to this point, there's only two options...
     crate::secboot::boot_or_die();

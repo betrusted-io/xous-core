@@ -1,3 +1,4 @@
+use core::convert::TryInto;
 use core::sync::atomic::Ordering;
 
 use bao1x_hal::usb::driver::CorigineUsb;
@@ -210,6 +211,32 @@ pub fn usb_ep1_bulk_out_complete(
                             &record.data()[..8]
                         );
                         */
+                    } else if record.address() as usize >= bao1x_api::SWAP_START_UF2
+                        && (record.address() as usize) < bao1x_api::SWAP_START_UF2 + bao1x_api::SWAP_UF2_LEN
+                        && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
+                    {
+                        let spim_addr = record.address() & (bao1x_api::SWAP_UF2_LEN as u32 - 1);
+                        /*
+                        crate::println_d!(
+                            "Received {} to 0x{:x}: {:x?}",
+                            record.data().len(),
+                            spim_addr,
+                            &record.data()[..8]
+                        );
+                        */
+                        match critical_section::with(|cs| {
+                            if let Some(assembler) = &mut *super::glue::SECTOR_TRACKER.borrow(cs).borrow_mut()
+                            {
+                                assembler.add_page(spim_addr as usize, record.data().try_into().unwrap())
+                            } else {
+                                Err(
+                                    "Write to swap received but no swap is available on this board. Ignoring!",
+                                )
+                            }
+                        }) {
+                            Ok(_) => (),
+                            Err(s) => crate::println_d!("Swap update error: {}", s),
+                        }
                     } else {
                         crate::println_d!("Invalid write address {:x}, block ignored!", record.address());
                     }
