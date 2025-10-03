@@ -23,7 +23,7 @@ armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "upd
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", optional = true }
 sha2-loader = { path = "./sha2-loader", default-features = false, optional = true }
 bao1x-hal = { path = "../libs/bao1x-hal", optional = true, default-features = false }
-bao1x-api = { path = "../libs/bao1x-api", optional = true, default-features = false }
+bao1x-api = { path = "../libs/bao1x-api", default-features = false }
 ux-api = { path = "../libs/ux-api", optional = true, default-features = false }
 xous-pl230 = { path = "../libs/xous-pl230", optional = true, features = [
     "tests",
@@ -93,7 +93,6 @@ bao1x = [
     # "bao1x-hal/debug-print-usb",
     "debug-print",
     "bao1x-hal",
-    "bao1x-api",
     "rand_chacha",
     # "boot-delay",
 ]

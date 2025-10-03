@@ -42,20 +42,6 @@ pub fn phase_1(cfg: &mut BootConfig) {
     cfg.init_size += GUARD_MEMORY_BYTES;
     println!("Loader runtime stack should not exceed: {:x}", cfg.get_top() as usize);
 
-    // Initialize the allocator with heap memory range
-    #[cfg(any(feature = "bao1x", feature = "swap"))]
-    {
-        crate::println!(
-            "Setting up heap @ {:x}-{:x}",
-            cfg.get_top() as usize,
-            cfg.get_top() as usize + HEAP_LEN
-        );
-        cfg.init_size += HEAP_LEN;
-        unsafe {
-            ALLOCATOR.lock().init(cfg.get_top() as *mut u8, HEAP_LEN);
-        }
-    }
-
     // The first region is defined as being "main RAM", which will be used
     // to keep track of allocations.
     println!("Allocating regions");
@@ -187,7 +173,7 @@ pub fn phase_1(cfg: &mut BootConfig) {
     // We also skip the an additional index as that is the clean suspend page. This
     // needs to be claimed by the susres server before the kernel allocates it.
     // Lower numbered indices corresponding to higher address pages.
-    println!("Marking pages as in-use");
+    println!("Marking loader pages as in-use");
     for i in ((GUARD_MEMORY_BYTES / PAGE_SIZE) + 1)..(cfg.init_size / PAGE_SIZE) {
         cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - i] = XousAlloc::from(1);
     }

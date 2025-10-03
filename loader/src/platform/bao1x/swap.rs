@@ -208,6 +208,15 @@ impl SwapHal {
                 println!("Swap key: {:x?}", &swap.key);
                 println!("Dest key: {:x?}", &dest_key);
             }
+            if swap.key == [0u8; 32] {
+                // TODO: check the signature of the swap region, because it was encrypted with the "null"
+                // key and the key imparts no security.
+            }
+
+            // TODO: do a trial decryption of block 0 with the swap.key. If it passes; great:
+            // proceed. If not, change out swap.key to the derived key for the swap key (which is
+            // still a process TBD) and try the decryption again. If it does not pass, then,
+            // the swap FS is either corrupted or non-existent.
             let mut hal = SwapHal {
                 image_start: SWAP_IMG_START as usize + 4096,
                 image_mac_start: SWAP_IMG_START as usize + 4096 + ssh.mac_offset as usize,

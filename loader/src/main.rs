@@ -107,12 +107,24 @@ const SDBG: bool = false; // swap debug
 #[cfg(test)]
 mod test;
 
+// Bao1x needs a heap because the signature checking code assumes its availability.
+// However the heap promises not to allocate any objects that are needed by the kernel,
+// so we stick it in a region in low RAM, just about the statics, and restrict it to
+// just 4k in size. Note that maybe we should strive to avoid the loader from allocating
+// into these regions - but actually, later in the loader, we should avoid using the heaps
+// and most data is done with, and it's nice to be able to reclaim these pages, so we
+// somewhat dangerously tell the loader to go ahead and allocate over this region by
+// telling it has the whole rest of SRAM to stick initial process pages in.
 #[global_allocator]
-#[cfg(feature = "swap")]
+#[cfg(feature = "bao1x")]
 static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
+// heap start is selected by looking at the total reserved .data + .bss region in the compiled loader.
+// it hovers at 0x5000 unless I start adding lots of statics to the loader (which there are not).
+#[cfg(feature = "bao1x")]
+const HEAP_OFFSET: usize = 0x5000;
 // just a small heap, big enough for us to use alloc to simplify argument processing
-#[cfg(feature = "swap")]
-const HEAP_LEN: usize = 4096;
+#[cfg(feature = "bao1x")]
+const HEAP_LEN: usize = 0x1000;
 
 #[repr(C)]
 pub struct MemoryRegionExtra {
@@ -225,6 +237,56 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
         );
     }
 
+    // Initialize the allocator with heap memory range. The heap memory is "throw-away"
+    // so we stick it near the bottom of RAM, with the assumption that the loader process
+    // won't smash over it.
+    #[cfg(any(feature = "bao1x"))]
+    {
+        let heap_start = utralib::HW_SRAM_MEM + HEAP_OFFSET;
+        crate::println!("Setting up heap @ {:x}-{:x}", heap_start, heap_start + HEAP_LEN);
+        unsafe {
+            ALLOCATOR.lock().init(heap_start as *mut u8, HEAP_LEN);
+        }
+    }
+
+    // Run kernel image validation now that the heap is set up.
+    #[cfg(feature = "bao1x")]
+    {
+        use bao1x_api::signatures::FunctionCode;
+        // validate using the bao1x signature scheme
+        match bao1x_hal::sigcheck::validate_image(
+            bao1x_api::KERNEL_START as *const u32,
+            bao1x_api::LOADER_START as *const u32,
+            bao1x_api::LOADER_REVOCATION_OFFSET,
+            &[
+                FunctionCode::Kernel as u32,
+                FunctionCode::UpdatedKernel as u32,
+                FunctionCode::Developer as u32,
+            ],
+            false,
+        ) {
+            Ok(k) => println!("*** Kernel signature check by key @ {} OK ***", k),
+            Err(e) => {
+                println!("Kernel failed signature check. Dying: {:?}", e);
+                bao1x_hal::sigcheck::die_no_std();
+            }
+        }
+        // todo: figure out how to do validation on the swap image. I think it should
+        // be something like this:
+        //   - if the first page can decrypt using the local encryption key, accept the swap as valid
+        //   - if it decrypts using the NULL key, do a hash + signature check of the whole thing
+        // The reason for the two-part test is that the signature check wouldn't work
+        // once the partition is re-encrypted (the signature is only on the NULL key
+        // image) and also it takes a lot of time to read in the partition twice and
+        // signature check it; also, the signature check itself is subject to a bit of
+        // a TOCTOU because of the block-by-block readout nature of the SPIM. This is
+        // why each block is encrypted anyways with an AEAD.
+        //
+        // So basically, the pubkey signature is only used to deliver an app for updates;
+        // the AEAD is for operation once the application has been accepted and re-encrypted
+        // to the device-specific key.
+    }
+
     // the kernel arg buffer is SIG_BLOCK_SIZE into the signed region
     #[cfg(not(feature = "bao1x"))]
     let signature_size = SIGBLOCK_SIZE;
@@ -268,32 +330,6 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
         println!("Configured for simulation. Skipping RAM clear!");
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
-
-        #[cfg(feature = "bao1x")]
-        {
-            // this is the soonest we can run the image validation because we need to
-            // have the heap setup first.
-            use bao1x_api::signatures::FunctionCode;
-            // validate using the bao1x signature scheme
-            match bao1x_hal::sigcheck::validate_image(
-                bao1x_api::KERNEL_START as *const u32,
-                bao1x_api::LOADER_START as *const u32,
-                bao1x_api::LOADER_REVOCATION_OFFSET,
-                &[
-                    FunctionCode::Kernel as u32,
-                    FunctionCode::UpdatedKernel as u32,
-                    FunctionCode::Developer as u32,
-                ],
-                false,
-            ) {
-                Ok(k) => println!("*** Kernel signature check by key @ {} OK ***", k),
-                Err(e) => {
-                    println!("Kernel failed signature check. Dying: {:?}", e);
-                    bao1x_hal::sigcheck::die_no_std();
-                }
-            }
-        }
-
         phase_2(&mut cfg, &fs_prehash);
         #[cfg(any(feature = "debug-print", feature = "swap"))]
         if VDBG || SDBG {
