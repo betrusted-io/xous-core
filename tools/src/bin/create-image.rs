@@ -5,9 +5,11 @@ extern crate crc;
 
 use std::convert::TryInto;
 use std::fs::File;
+use std::io::Read;
 
 use clap::{App, Arg};
 use tools::elf::{read_minielf, read_program};
+use tools::sign_image::convert_to_uf2;
 use tools::swap_writer::SwapWriter;
 use tools::tags::bflg::Bflg;
 use tools::tags::inie::IniE;
@@ -19,6 +21,8 @@ use tools::tags::swap::Swap;
 use tools::tags::xkrn::XousKernel;
 use tools::utils::{parse_csr_csv, parse_u32};
 use tools::xous_arguments::XousArguments;
+
+const DEVKEY_PATH: &str = "devkey/dev.key";
 
 struct RamConfig {
     offset: u32,
@@ -79,6 +83,14 @@ fn csr_to_config(hv: tools::utils::CsrConfig, ram_config: &mut RamConfig) {
         }
     }
     ram_config.regions.add(candidate_region);
+}
+
+pub fn load_pem(src: &str) -> Result<pem::Pem, Box<dyn std::error::Error>> {
+    let mut input = vec![];
+    let mut pemfile = std::fs::File::open(src)?;
+    pemfile.read_to_end(&mut input)?;
+
+    Ok(pem::parse(input)?)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -165,7 +177,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .long("swap")
                 .takes_value(true)
                 .value_name("OFFSET:SIZE")
-                .help("Swap offset and size, in the form of [offset]:[size]; note: offset and size have platform-dependent interpretations")
+                .help("Swap memory regions, in the form of [ram offset]:[ram size]; note: offset and size have platform-dependent interpretations")
         )
         .arg(
             Arg::with_name("swap-name")
@@ -193,6 +205,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .value_name("OUTPUT")
                 .required(true)
                 .help("Output file to store tag and init information"),
+        )
+        .arg(
+            Arg::with_name("swap-key")
+                .long("swap-key")
+                .takes_value(true)
+                .required(true)
+                .help("swap signing key")
+                .value_name("swap signing key")
+                .default_value(DEVKEY_PATH),
         )
         .get_matches();
 
@@ -469,6 +490,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Arguments: {}", args);
 
+    let swap_key = matches.value_of("swap-key").expect("no swap key specified");
+    let swap_pkey = load_pem(swap_key)?;
+    if swap_pkey.tag != "PRIVATE KEY" {
+        println!("Kernel key was a {}, not a PRIVATE KEY", swap_pkey.tag);
+        Err("invalid kernel private key type")?;
+    }
+
     if let Some(mut sargs) = swap_args {
         let mut swap_buffer = SwapWriter::new();
         // Transfer our unencrypted data inside sargs to swap_buffer
@@ -477,12 +505,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Create the swap target image and encrypt swap_buffer to it
         let swap_filename = matches.value_of("swap-name").expect("swap filename not present");
-        let sf = File::create(swap_filename)
-            .unwrap_or_else(|_| panic!("Couldn't create output file {}", swap_filename));
-        swap_buffer.encrypt_to(sf).expect("Couldn't flush swap buffer to disk");
+        {
+            let sf = File::create(swap_filename)
+                .unwrap_or_else(|_| panic!("Couldn't create output file {}", swap_filename));
+            swap_buffer.encrypt_to(sf, &swap_pkey).expect("Couldn't flush swap buffer to disk");
+        } // drop sf, so it closes
 
         println!("Swap arguments: {}", sargs);
         println!("Swap data created in file {}", swap_filename);
+
+        let swap_uf2 = format!("{}uf2", &swap_filename[..swap_filename.len() - 3]);
+        // generate a uf2 file
+        convert_to_uf2(&swap_filename, &swap_uf2, Some("swap"), None)?;
+        println!("Created UF2 at {}", swap_uf2);
 
         match matches.value_of("swap-debug-name") {
             Some(sf_dbg) => {
