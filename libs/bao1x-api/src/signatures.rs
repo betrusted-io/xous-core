@@ -29,6 +29,9 @@ pub enum FunctionCode {
     /// Kernel region
     Kernel = 0x1_00,
     UpdatedKernel = 0x1_01,
+    /// Swap region
+    Swap = 0x80_00,
+    UpdatedSwap = 0x80_01,
     /// Application region
     App = 0x10_0000,
     UpdatedApp = 0x10_0001,
@@ -91,5 +94,37 @@ pub struct SealedFields {
 }
 
 impl AsRef<[u8]> for SealedFields {
+    fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
+}
+
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+pub struct SwapSourceHeader {
+    pub version: u32,
+    pub partial_nonce: [u8; 8],
+    pub mac_offset: u32,
+    pub aad_len: u32,
+    // aad is limited to 64 bytes!
+    pub aad: [u8; 64],
+}
+impl AsRef<[u8]> for SwapSourceHeader {
+    fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
+}
+impl Default for SwapSourceHeader {
+    fn default() -> Self {
+        Self { version: 0, partial_nonce: [0; 8], mac_offset: 0, aad_len: 0, aad: [0; 64] }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable, Default)]
+pub struct SwapDescriptor {
+    pub ram_offset: u32,
+    pub ram_size: u32,
+    pub name: u32,
+    pub key: [u8; 32],
+    pub flash_offset: u32,
+}
+impl AsRef<[u8]> for SwapDescriptor {
     fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
 }
