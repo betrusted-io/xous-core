@@ -114,6 +114,10 @@ impl From<&str> for CrateSpec {
     }
 }
 
+pub struct SwapSpec {
+    pub offchip_ram_offset: u32,
+    pub offchip_ram_len: u32,
+}
 pub(crate) struct Builder {
     loader: CrateSpec,
     loader_features: Vec<String>,
@@ -144,8 +148,8 @@ pub(crate) struct Builder {
     dry_run: bool,
     /// when set to true, user selected packages are compiled but no image is created
     no_image: bool,
-    /// when Some, specifies a swap region as offset, size
-    swap: Option<(u32, u32)>,
+    /// when Some, specifies a swap region
+    swap: Option<SwapSpec>,
     change_target: bool,
     baremetal: bool,
     sigblock_size: usize,
@@ -212,7 +216,7 @@ impl Builder {
     }
 
     pub fn set_swap<'a>(&'a mut self, offset: u32, size: u32) -> &'a mut Builder {
-        self.swap = Some((offset, size));
+        self.swap = Some(SwapSpec { offchip_ram_offset: offset, offchip_ram_len: size });
         self
     }
 
@@ -1176,8 +1180,8 @@ impl Builder {
             args.push(i);
         }
 
-        let swap_spec = if let Some((offset, size)) = self.swap {
-            format!("0x{:x}:0x{:x}", offset, size) // create-image requires a base decorator, but the argument into xtask does not.
+        let swap_spec = if let Some(spec) = &self.swap {
+            format!("0x{:x}:0x{:x}", spec.offchip_ram_offset, spec.offchip_ram_len) // create-image requires a base decorator, but the argument into xtask does not.
         } else {
             String::new()
         };
