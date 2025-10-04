@@ -1,6 +1,8 @@
 use core::mem::size_of;
 
+use aes_gcm_siv::aead::Error;
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, KeyInit, Nonce, Tag};
+use bao1x_api::signatures::FunctionCode;
 use bao1x_api::udma::*;
 use bao1x_api::*;
 use bao1x_hal::board::{APP_UART_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR};
@@ -208,15 +210,6 @@ impl SwapHal {
                 println!("Swap key: {:x?}", &swap.key);
                 println!("Dest key: {:x?}", &dest_key);
             }
-            if swap.key == [0u8; 32] {
-                // TODO: check the signature of the swap region, because it was encrypted with the "null"
-                // key and the key imparts no security.
-            }
-
-            // TODO: do a trial decryption of block 0 with the swap.key. If it passes; great:
-            // proceed. If not, change out swap.key to the derived key for the swap key (which is
-            // still a process TBD) and try the decryption again. If it does not pass, then,
-            // the swap FS is either corrupted or non-existent.
             let mut hal = SwapHal {
                 image_start: SWAP_IMG_START as usize + 4096,
                 image_mac_start: SWAP_IMG_START as usize + 4096 + ssh.mac_offset as usize,
@@ -236,6 +229,45 @@ impl SwapHal {
             hal.aad_storage[..ssh.aad_len as usize].copy_from_slice(&ssh.aad[..ssh.aad_len as usize]);
             hal.aad_len = ssh.aad_len as usize;
             hal.partial_nonce.copy_from_slice(&ssh.partial_nonce);
+
+            // trial decryption with swap key to see if it's valid
+            match hal.decrypt_src_page_at(0) {
+                Ok(_) => {
+                    // check signature only if the swap key is all 0's
+                    if swap.key == [0u8; 32] {
+                        crate::println!("Fresh swap image found - checking signature before proceeding");
+                        if bao1x_hal::sigcheck::validate_image(
+                            (bao1x_api::offsets::baosec::SWAP_HEADER_LEN
+                                - bao1x_api::signatures::SIGBLOCK_LEN)
+                                as *const u32,
+                            bao1x_api::LOADER_START as *const u32,
+                            bao1x_api::LOADER_REVOCATION_OFFSET,
+                            &[FunctionCode::Swap as u32, FunctionCode::UpdatedSwap as u32],
+                            false,
+                            Some(&mut hal.flash_spim),
+                        )
+                        .is_err()
+                        {
+                            crate::println!("Fresh swap image did not pass public key validation");
+                            bao1x_hal::sigcheck::die_no_std();
+                        }
+                        crate::println!("...passed!");
+                    }
+                }
+                Err(_) => {
+                    let swap_key = [1u8; 32]; // THIS IS FAKE replace it with the correct API call
+                    // replace the cipher with the new key
+                    hal.src_cipher = Aes256GcmSiv::new((&swap_key).into());
+                    if hal.decrypt_src_page_at(0).is_err() {
+                        crate::println!("Swap image failed cryptographic integrity checks!");
+                        bao1x_hal::sigcheck::die_no_std();
+                    }
+                    todo!(
+                        "Fall back to retrieving the derived key for re-encrypted swap, and attempting a trial decryption!"
+                    );
+                }
+            }
+
             Some(hal)
         } else {
             None
@@ -247,7 +279,9 @@ impl SwapHal {
     fn aad(&self) -> &[u8] { &self.aad_storage[..self.aad_len] }
 
     /// `offset` is the offset from the beginning of the encrypted region (not full disk region)
-    pub fn decrypt_src_page_at(&mut self, offset: usize) -> &[u8] {
+    /// Generally a caller should just .unwrap() the result; an encryption failure is a fatal error
+    /// in most cases except when testing the key.
+    pub fn decrypt_src_page_at(&mut self, offset: usize) -> Result<&[u8], Error> {
         assert!((offset & 0xFFF) == 0, "offset is not page-aligned");
         self.buf_addr = offset;
         self.flash_spim.mem_read((self.image_start + offset) as u32, &mut self.buf.data, false);
@@ -286,8 +320,11 @@ impl SwapHal {
             &mut self.buf.data,
             (&tag).into(),
         ) {
-            Ok(_) => &self.buf.data,
-            Err(e) => panic!("Decryption error from swap image: {:?}", e),
+            Ok(_) => Ok(&self.buf.data),
+            Err(e) => {
+                println!("Decryption error from swap image: {:?}", e);
+                Err(e)
+            }
         }
     }
 
