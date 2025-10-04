@@ -270,6 +270,9 @@ pub(crate) fn main_hw() -> ! {
     let mut pmic = bao1x_hal::axp2101::Axp2101::new(&mut i2c).expect("couldn't open PMIC");
     pmic.setup_vbus_irq(&mut i2c, bao1x_hal::axp2101::VbusIrq::Remove).expect("couldn't setup IRQ");
 
+    let (se0_port, se0_pin) = bao1x_hal::board::setup_usb_pins(&iox);
+    iox.set_gpio_pin_value(se0_port, se0_pin, bao1x_api::IoxValue::High); // release SE0 state, allowing for enumeration
+
     log::info!("Entering main loop");
 
     let mut msg_opt = None;
