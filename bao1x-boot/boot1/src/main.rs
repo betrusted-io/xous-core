@@ -12,7 +12,7 @@ mod uf2;
 use alloc::collections::VecDeque;
 use core::{
     cell::RefCell,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicU32, Ordering},
 };
 
 use bao1x_api::{BoardTypeCoding, BootWaitCoding};
@@ -34,6 +34,13 @@ static USB_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::
 static USB_TX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
 static USB_CONNECTED: AtomicBool = AtomicBool::new(false);
 static DISK_BUSY: AtomicBool = AtomicBool::new(false);
+
+// telemetry for updates. Has to be accessible in an interrupt context, hence the Atomics
+static BAREMETAL_BYTES: AtomicU32 = AtomicU32::new(0);
+static KERNEL_BYTES: AtomicU32 = AtomicU32::new(0);
+static SWAP_BYTES: AtomicU32 = AtomicU32::new(0);
+static APP_BYTES: AtomicU32 = AtomicU32::new(0);
+static IS_BAOSEC: AtomicBool = AtomicBool::new(false);
 
 pub fn uart_irq_handler() {
     use crate::debug::SerialRead;
@@ -67,6 +74,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     (board_type, perclk) = crate::platform::early_init(board_type);
     crate::println!("\n~~Boot1 up!~~\n");
     crate::println!("Configured board type: {:?}", board_type);
+    if board_type == BoardTypeCoding::Baosec {
+        IS_BAOSEC.store(true, Ordering::SeqCst);
+    }
 
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
@@ -253,6 +263,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // stop the USB subsystem so it can be re-init'd by the next stage.
     // without this, USB init will hang later on.
     glue::shutdown();
+    iox.set_gpio_pin(se0_port, se0_pin, bao1x_api::IoxValue::Low); // put the USB port into SE0, so we re-enumerate with the OS stack
 
     // check that all pages in the SPI memory page cache have been written out
     critical_section::with(|cs| {
@@ -277,7 +288,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     crate::secboot::boot_or_die();
 }
 
-fn marquee(sh1107: &mut Oled128x128, msg: &str) {
+pub fn marquee(sh1107: &mut Oled128x128, msg: &str) {
     use bao1x_hal::sh1107::{COLUMN, ROW};
     use ux_api::bitmaps::baochip128x128::MARQUEE_BELOW;
 
