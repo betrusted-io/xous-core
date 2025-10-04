@@ -1,3 +1,5 @@
+use xous::arch::PAGE_SIZE;
+
 // we actually have 16MiB on the initial prototypes, but constraining to smaller for cost reduction
 pub const SPI_FLASH_LEN: usize = 8192 * 1024;
 pub const SPI_FLASH_ID_MASK: u32 = 0xff_ff_ff;
@@ -19,9 +21,12 @@ pub const SWAP_RAM_ID_MASK: u32 = 0xff_ff;
 // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
 pub const SWAP_RAM_IDS: [u32; 2] = [0x5d9d, 0x559d];
 
-// "Partition table" of external SPI FLASH
+// Location of things in external SPIM flash
 pub const SWAP_FLASH_ORIGIN: usize = 0x0000_0000;
+// maximum length of a swap image
 pub const SWAP_FLASH_RESERVED_LEN: usize = 4096 * 1024;
+// Total area reserved for the swap header, including the signature block.
+pub const SWAP_HEADER_LEN: usize = PAGE_SIZE;
 
 // PDDB takes up "the rest of the space" - about 4MiB envisioned. Should be
 // "enough" for storing a few hundred, passwords, dozens of x.509 certs, dozens of private keys, etc.
