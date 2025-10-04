@@ -134,8 +134,12 @@ impl Repl {
                 crate::println!("");
             }
             "check" => match bao1x_hal::sigcheck::validate_image(
-                crate::FLASH_BASE as *const u32,
+                bao1x_api::BOOT0_START as *const u32,
+                bao1x_api::BOOT0_START as *const u32,
                 bao1x_api::BOOT0_REVOCATION_OFFSET,
+                &[FunctionCode::Boot0 as u32], // only boot0 is allowed for boot0
+                false,
+                None,
             ) {
                 Ok(key_number) => crate::println!("sigcheck passed on key {}", key_number),
                 Err(e) => crate::println!("sigcheck failed: {}", e),
@@ -159,8 +163,12 @@ impl Repl {
                         break;
                     }
                     bao1x_hal::sigcheck::validate_image(
-                        crate::FLASH_BASE as *const u32,
+                        bao1x_api::BOOT0_START as *const u32,
+                        bao1x_api::BOOT0_START as *const u32,
                         bao1x_api::BOOT0_REVOCATION_OFFSET,
+                        &[FunctionCode::Boot0 as u32], // only boot0 is allowed for boot0
+                        false,
+                        None,
                     )
                     .ok();
                     count += 1;
