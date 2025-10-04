@@ -57,6 +57,22 @@ pub struct SignatureInFlash {
 }
 unsafe impl Zeroable for SignatureInFlash {}
 unsafe impl Pod for SignatureInFlash {}
+impl AsRef<[u8]> for SignatureInFlash {
+    fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
+}
+impl AsMut<[u8]> for SignatureInFlash {
+    fn as_mut(&mut self) -> &mut [u8] { bytemuck::bytes_of_mut(self) }
+}
+impl Default for SignatureInFlash {
+    fn default() -> Self {
+        Self {
+            _jal_instruction: 0,
+            signature: [0u8; SIGNATURE_LENGTH],
+            sealed_data: SealedFields::default(),
+            padding: [0u8; PADDING_LEN],
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable)]
@@ -95,6 +111,19 @@ pub struct SealedFields {
 
 impl AsRef<[u8]> for SealedFields {
     fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
+}
+impl Default for SealedFields {
+    fn default() -> Self {
+        Self {
+            version: 0,
+            signed_len: 0,
+            function_code: 0,
+            reserved: 0,
+            min_semver: [0u8; 16],
+            semver: [0u8; 16],
+            pubkeys: [[0u8; PUBLIC_KEY_LENGTH]; 4],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
