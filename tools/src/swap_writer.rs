@@ -56,10 +56,9 @@ impl SwapHeader {
     }
 
     /// Returns exactly a page of data with the header format serialized
-    /// Header format is in loader/src/swap.rs/SwapSourceHeader
-    pub fn serialize(&self) -> Result<[u8; 4096]> {
+    pub fn serialize(&self) -> Result<[u8; bao1x_api::offsets::baosec::SWAP_HEADER_LEN]> {
         let mut data = Cursor::new(Vec::<u8>::new());
-        let mut output = [0u8; 4096];
+        let mut output = [0u8; bao1x_api::offsets::baosec::SWAP_HEADER_LEN];
 
         let mut ssh = SwapSourceHeader::default();
         ssh.version = SWAP_VERSION;
@@ -140,7 +139,10 @@ impl SwapWriter {
         )
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Can't sign swap image"))?;
         // write the header, less space for the signature
-        f.write(&unsigned_header[..4096 - bao1x_api::signatures::SIGBLOCK_LEN])?;
+        f.write(
+            &unsigned_header
+                [..bao1x_api::offsets::baosec::SWAP_HEADER_LEN - bao1x_api::signatures::SIGBLOCK_LEN],
+        )?;
 
         f.write(&signed)
     }
