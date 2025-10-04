@@ -679,7 +679,8 @@ fn copy_processes(cfg: &mut BootConfig) {
                                 cfg.swap_hal
                                     .as_mut()
                                     .expect("swap HAL uninit")
-                                    .decrypt_src_page_at(src_swap_img_page);
+                                    .decrypt_src_page_at(src_swap_img_page)
+                                    .unwrap();
                             }
                             let decrypt_avail = remaining_in_page(src_swap_img_addr);
                             let dst_page_avail = remaining_in_page(dst_page_vaddr);

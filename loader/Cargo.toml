@@ -94,7 +94,6 @@ bao1x = [
     "debug-print",
     "bao1x-hal",
     "rand_chacha",
-    # "boot-delay",
 ]
 board-baosec = [
     "bao1x-hal/loader-baosec",

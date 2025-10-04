@@ -264,6 +264,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                 FunctionCode::Developer as u32,
             ],
             false,
+            None,
         ) {
             Ok(k) => println!("*** Kernel signature check by key @ {} OK ***", k),
             Err(e) => {
@@ -610,7 +611,7 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
 #[cfg(feature = "swap")]
 pub fn read_swap_config(cfg: &mut BootConfig) {
     // Read in the swap arguments: should be located at beginning of the encrypted image in swap.
-    let page0 = cfg.swap_hal.as_mut().unwrap().decrypt_src_page_at(0x0);
+    let page0 = cfg.swap_hal.as_mut().unwrap().decrypt_src_page_at(0x0).unwrap();
     let swap_args = KernelArguments::new(page0.as_ptr() as *const usize);
     for tag in swap_args.iter() {
         if tag.name == u32::from_le_bytes(*b"IniS") {
