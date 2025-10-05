@@ -4,6 +4,7 @@ pub mod glue;
 mod handlers;
 pub use driver::*;
 pub use handlers::*;
+mod page_defrag;
 
 use crate::irq::*;
 

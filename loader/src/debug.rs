@@ -17,10 +17,14 @@ impl Uart {
 
     #[cfg(any(feature = "bao1x"))]
     pub fn putc(&self, c: u8) {
-        let base = utra::duart::HW_DUART_BASE as *mut u32;
-        let mut uart = CSR::new(base);
-        while uart.r(utra::duart::SFR_SR) != 0 {}
-        uart.wo(utra::duart::SFR_TXD, c as u32);
+        use bao1x_hal::udma;
+        let buf: [u8; 1] = [c];
+        let uart_buf_addr = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
+        let mut udma_uart = unsafe {
+            // safety: this is safe to call, because boot1 setup the console for us
+            udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
+        };
+        udma_uart.write(&buf);
     }
 }
 

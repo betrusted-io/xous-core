@@ -1,4 +1,7 @@
 #![cfg_attr(rustfmt, rustfmt_skip)]
+// This is the line below which any marquee information can be displayed
+pub const MARQUEE_BELOW: usize = 100;
+
 pub const BITMAP: [u32; 512] = [
   0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
   0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,

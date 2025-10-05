@@ -29,6 +29,9 @@ pub enum FunctionCode {
     /// Kernel region
     Kernel = 0x1_00,
     UpdatedKernel = 0x1_01,
+    /// Swap region
+    Swap = 0x80_00,
+    UpdatedSwap = 0x80_01,
     /// Application region
     App = 0x10_0000,
     UpdatedApp = 0x10_0001,
@@ -54,6 +57,22 @@ pub struct SignatureInFlash {
 }
 unsafe impl Zeroable for SignatureInFlash {}
 unsafe impl Pod for SignatureInFlash {}
+impl AsRef<[u8]> for SignatureInFlash {
+    fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
+}
+impl AsMut<[u8]> for SignatureInFlash {
+    fn as_mut(&mut self) -> &mut [u8] { bytemuck::bytes_of_mut(self) }
+}
+impl Default for SignatureInFlash {
+    fn default() -> Self {
+        Self {
+            _jal_instruction: 0,
+            signature: [0u8; SIGNATURE_LENGTH],
+            sealed_data: SealedFields::default(),
+            padding: [0u8; PADDING_LEN],
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable)]
@@ -91,5 +110,50 @@ pub struct SealedFields {
 }
 
 impl AsRef<[u8]> for SealedFields {
+    fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
+}
+impl Default for SealedFields {
+    fn default() -> Self {
+        Self {
+            version: 0,
+            signed_len: 0,
+            function_code: 0,
+            reserved: 0,
+            min_semver: [0u8; 16],
+            semver: [0u8; 16],
+            pubkeys: [[0u8; PUBLIC_KEY_LENGTH]; 4],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+pub struct SwapSourceHeader {
+    pub version: u32,
+    pub partial_nonce: [u8; 8],
+    pub mac_offset: u32,
+    pub aad_len: u32,
+    // aad is limited to 64 bytes!
+    pub aad: [u8; 64],
+}
+impl AsRef<[u8]> for SwapSourceHeader {
+    fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
+}
+impl Default for SwapSourceHeader {
+    fn default() -> Self {
+        Self { version: 0, partial_nonce: [0; 8], mac_offset: 0, aad_len: 0, aad: [0; 64] }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable, Default)]
+pub struct SwapDescriptor {
+    pub ram_offset: u32,
+    pub ram_size: u32,
+    pub name: u32,
+    pub key: [u8; 32],
+    pub flash_offset: u32,
+}
+impl AsRef<[u8]> for SwapDescriptor {
     fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
 }

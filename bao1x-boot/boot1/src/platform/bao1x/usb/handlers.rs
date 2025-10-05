@@ -1,12 +1,21 @@
+use core::convert::TryInto;
 use core::sync::atomic::Ordering;
 
+use bao1x_api::*;
+use bao1x_api::{BAREMETAL_START, KERNEL_START};
+use bao1x_hal::iox::Iox;
+use bao1x_hal::sh1107::Oled128x128;
+use bao1x_hal::udma::*;
 use bao1x_hal::usb::driver::CorigineUsb;
 use bao1x_hal::usb::driver::*;
-use utralib::HW_IFRAM1_MEM;
+use utralib::*;
 
 use super::*;
+use crate::{APP_BYTES, BAREMETAL_BYTES, IS_BAOSEC, KERNEL_BYTES, SWAP_BYTES};
 
 pub static TX_IDLE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(true);
+
+const UX_UPDATE_INTERVAL_BYTES: u32 = 0x1_0000;
 
 // Locate the "disk"
 pub(crate) const RAMDISK_ADDRESS: usize = crate::FREE_MEM_START;
@@ -193,23 +202,128 @@ pub fn usb_ep1_bulk_out_complete(
                         .borrow_mut()
                         .extend_from_slice(write_offset + i * 512, chunk)
                 });
+                const APP_RAM_ADDR: usize =
+                    utralib::HW_RERAM_MEM + bao1x_api::offsets::dabao::APP_RRAM_OFFSET;
+                const STORAGE_END_ADDR: usize = utralib::HW_RERAM_MEM + bao1x_api::RRAM_STORAGE_LEN;
+                const SWAP_END_ADDR: usize =
+                    bao1x_api::offsets::SWAP_START_UF2 + bao1x_api::offsets::SWAP_UF2_LEN;
+
                 // program the flash if a valid u2f block was found
                 if let Some(record) = uf2_data {
-                    if record.address() as usize >= bao1x_api::BAREMETAL_START
-                        && (record.address() as usize) < utralib::HW_RERAM_MEM + bao1x_api::RRAM_STORAGE_LEN
+                    if matches!(record.address() as usize, bao1x_api::BAREMETAL_START..=STORAGE_END_ADDR)
                         && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
                     {
                         let mut rram = bao1x_hal::rram::Reram::new();
                         let offset = record.address() as usize - utralib::HW_RERAM_MEM;
                         rram.write_slice(offset, record.data());
+                        /*
                         crate::println_d!(
                             "Wrote {} to 0x{:x}: {:x?}",
                             record.data().len(),
                             record.address(),
                             &record.data()[..8]
                         );
+                        */
+                    } else if record.address() as usize >= bao1x_api::SWAP_START_UF2
+                        && (record.address() as usize) < bao1x_api::SWAP_START_UF2 + bao1x_api::SWAP_UF2_LEN
+                        && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
+                    {
+                        let spim_addr = record.address() & (bao1x_api::SWAP_UF2_LEN as u32 - 1);
+                        /*
+                        crate::println_d!(
+                            "Received {} to 0x{:x}: {:x?}",
+                            record.data().len(),
+                            spim_addr,
+                            &record.data()[..8]
+                        );
+                        */
+                        match critical_section::with(|cs| {
+                            if let Some(assembler) = &mut *super::glue::SECTOR_TRACKER.borrow(cs).borrow_mut()
+                            {
+                                assembler.add_page(spim_addr as usize, record.data().try_into().unwrap())
+                            } else {
+                                Err(
+                                    "Write to swap received but no swap is available on this board. Ignoring!",
+                                )
+                            }
+                        }) {
+                            Ok(_) => (),
+                            Err(s) => crate::println_d!("Swap update error: {}", s),
+                        }
                     } else {
                         crate::println_d!("Invalid write address {:x}, block ignored!", record.address());
+                    }
+                    // do some bookkeeping for the UI
+                    let (partition, status) = if !IS_BAOSEC.load(Ordering::SeqCst) {
+                        if matches!(record.address() as usize, BAREMETAL_START..=APP_RAM_ADDR) {
+                            ("core", BAREMETAL_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
+                        } else if matches!(record.address() as usize, APP_RAM_ADDR..=STORAGE_END_ADDR) {
+                            ("app", APP_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
+                        } else {
+                            ("none", 0)
+                        }
+                    } else {
+                        if matches!(record.address() as usize, BAREMETAL_START..=KERNEL_START) {
+                            (
+                                "loader",
+                                BAREMETAL_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst),
+                            )
+                        } else if matches!(record.address() as usize, KERNEL_START..=STORAGE_END_ADDR) {
+                            ("kernel", KERNEL_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
+                        } else if matches!(
+                            record.address() as usize,
+                            bao1x_api::offsets::SWAP_START_UF2..=SWAP_END_ADDR
+                        ) {
+                            ("swap", SWAP_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
+                        } else {
+                            ("none", 0)
+                        }
+                    };
+                    if status != 0 && status % UX_UPDATE_INTERVAL_BYTES == 0 {
+                        if IS_BAOSEC.load(Ordering::SeqCst) {
+                            // conjure a pointer to the sh1107 object
+                            let iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
+                            let (channel, _, _, _) = bao1x_hal::board::get_display_pins();
+                            // these parameters are copied out of the sh1107 driver. Maybe we should just
+                            // create a convenience function that "just sets
+                            // these" since hardware peripherals don't
+                            // spontaneously move around, and when they do you'd like to have a single spot to
+                            // maintain the changes...
+                            let mut sh1107 = unsafe {
+                                Oled128x128::from_raw_parts(
+                                    (
+                                        match channel {
+                                            SpimChannel::Channel0 => utra::udma_spim_0::HW_UDMA_SPIM_0_BASE,
+                                            SpimChannel::Channel1 => utra::udma_spim_1::HW_UDMA_SPIM_1_BASE,
+                                            SpimChannel::Channel2 => utra::udma_spim_2::HW_UDMA_SPIM_2_BASE,
+                                            SpimChannel::Channel3 => utra::udma_spim_3::HW_UDMA_SPIM_3_BASE,
+                                        },
+                                        SpimCs::Cs0,
+                                        0,
+                                        0,
+                                        None,
+                                        SpimMode::Standard,
+                                        SpimByteAlign::Disable,
+                                        bao1x_hal::ifram::IframRange::from_raw_parts(
+                                            bao1x_hal::board::DISPLAY_IFRAM_ADDR,
+                                            bao1x_hal::board::DISPLAY_IFRAM_ADDR,
+                                            4096 * 2,
+                                        ),
+                                        2048 + 256,
+                                        2048,
+                                        0,
+                                    ),
+                                    &iox,
+                                )
+                            };
+                            // have to restore this because the frame buffer is lost on the raw-parts
+                            // conversion
+                            sh1107.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
+                            let msg = alloc::format!("{} - {}k", partition, status / 1024);
+                            crate::marquee(&mut sh1107, &msg);
+                        } else {
+                            crate::println_d!("{} - {}k", partition, status / 1024);
+                        }
                     }
                 }
                 // replace the tracking block with the new one, if a new one was provided

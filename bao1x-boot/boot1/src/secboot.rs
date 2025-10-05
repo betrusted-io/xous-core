@@ -30,6 +30,7 @@ pub fn boot_or_die() -> ! {
         bao1x_api::BOOT1_REVOCATION_OFFSET,
         &ALLOWED_FUNCTIONS,
         true,
+        None,
     ) {
         Ok(k) => crate::println!("**should be unreachable** Booted with key {}", k),
         Err(e) => crate::println!("Image did not validate: {:?}", e),

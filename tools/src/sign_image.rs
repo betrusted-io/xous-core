@@ -203,8 +203,10 @@ pub fn sign_image(
             let function_code = match function_code {
                 Some("boot0") => FunctionCode::Boot0,
                 Some("boot1") => FunctionCode::Boot1,
-                Some("loader") => FunctionCode::Boot1,
+                Some("loader") => FunctionCode::Loader,
                 Some("kernel") => FunctionCode::Kernel,
+                Some("app") => FunctionCode::App,
+                Some("swap") => FunctionCode::Swap,
                 _ => FunctionCode::Developer,
             };
             let mut sealed_fields = SealedFields {
@@ -292,7 +294,7 @@ pub fn convert_to_uf2<S, T>(
     input: &S,
     output: &T,
     function_code: Option<&str>,
-    app_id: Option<u8>,
+    offset: Option<usize>,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     S: AsRef<Path>,
@@ -309,14 +311,16 @@ where
         Some("loader") => bao1x_api::LOADER_START,
         Some("baremetal") => bao1x_api::BAREMETAL_START,
         Some("kernel") => bao1x_api::KERNEL_START,
-        Some("app") => {
-            bao1x_api::APP_START_UF2
-                | ((app_id.expect("app region specified without ID") as usize) & 0xF) << 24
-        }
+        Some("swap") => bao1x_api::SWAP_START_UF2,
+        Some("app") => bao1x_api::dabao::APP_RRAM_START,
         _ => return Err(String::from("UF2 Image Requires a function code").into()),
     };
 
-    match bin_to_uf2(&source, bao1x_api::BAOCHIP_1X_UF2_FAMILY, app_start_addr as u32) {
+    match bin_to_uf2(
+        &source,
+        bao1x_api::BAOCHIP_1X_UF2_FAMILY,
+        app_start_addr as u32 + offset.unwrap_or(0) as u32,
+    ) {
         Ok(u2f_blob) => {
             dest_file.write_all(&u2f_blob)?;
             Ok(())

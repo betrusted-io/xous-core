@@ -6,6 +6,9 @@ use aes_gcm_siv::{
     Aes256GcmSiv, Nonce,
     aead::{Aead, KeyInit, Payload},
 };
+use bao1x_api::signatures::SwapSourceHeader;
+
+use crate::sign_image::{Version, sign_image};
 
 const SWAP_VERSION: u32 = 0x01_01_0000;
 
@@ -53,21 +56,21 @@ impl SwapHeader {
     }
 
     /// Returns exactly a page of data with the header format serialized
-    pub fn serialize(&self) -> Result<[u8; 4096]> {
+    pub fn serialize(&self) -> Result<[u8; bao1x_api::offsets::baosec::SWAP_HEADER_LEN]> {
         let mut data = Cursor::new(Vec::<u8>::new());
-        let mut output = [0u8; 4096];
+        let mut output = [0u8; bao1x_api::offsets::baosec::SWAP_HEADER_LEN];
 
-        data.write(&SWAP_VERSION.to_le_bytes())?;
-        // note that the nonce is in big-endian format, as is expected for cryptographic matter
-        data.write(&self.partial_nonce.to_be_bytes())?;
-
-        // serialize the MAC data offset
-        data.write(&(self.mac_offset as u32).to_le_bytes())?; // LE because this is a size field
-
-        // serialize the AAD
+        let mut ssh = SwapSourceHeader::default();
+        ssh.version = SWAP_VERSION;
+        ssh.partial_nonce.copy_from_slice(&self.partial_nonce.to_be_bytes());
+        ssh.mac_offset = self.mac_offset as u32;
         assert!(self.aad.len() < 64, "AAD is limited to 64 bytes");
-        data.write(&(self.aad.len() as u32).to_le_bytes())?; // LE because this is a size field
-        data.write(&self.aad)?; // BE because this is cryptographic matter
+        ssh.aad_len = self.aad.len() as u32;
+        for (dst, &src) in ssh.aad.iter_mut().zip(self.aad.iter()) {
+            *dst = src;
+        }
+
+        data.write(ssh.as_ref())?;
 
         output[..data.position() as usize].copy_from_slice(&data.into_inner());
 
@@ -80,14 +83,16 @@ impl SwapWriter {
 
     /// Take the swap file and wrap it data structures that facilitate per-device encryption
     /// after deployment to a user device.
-    pub fn encrypt_to<T>(&mut self, mut f: T) -> Result<usize>
+    pub fn encrypt_to<T>(&mut self, mut f: T, private_key: &pem::Pem) -> Result<usize>
     where
         T: Write + Seek,
     {
         let header = SwapHeader::new(self.buffer.get_ref().len());
         let mut macs = Vec::<u8>::new();
 
-        f.write(&header.serialize()?)?;
+        let unsigned_header = header.serialize()?;
+
+        let mut image = Vec::new();
 
         // encrypt using the "zero key" for the default distribution. The intention is not to
         // provide security, but to lay out the data structure so that a future re-encryption to a
@@ -114,11 +119,32 @@ impl SwapWriter {
             assert!(enc.len() == 0x1010);
             // println!("data: {:x?}", &enc[..32]);
             // println!("tag: {:x?}", &enc[0x1000..]);
-            f.write(&enc[..0x1000])?;
+            image.write(&enc[..0x1000])?;
             macs.extend_from_slice(&enc[0x1000..]);
         }
 
-        f.write(&macs)
+        image.write(&macs)?;
+
+        let function = Some("swap");
+        let signed = sign_image(
+            &image,
+            private_key,
+            false,
+            &None,
+            None,
+            true,
+            bao1x_api::signatures::SIGBLOCK_LEN,
+            Version::Bao1xV1,
+            function,
+        )
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Can't sign swap image"))?;
+        // write the header, less space for the signature
+        f.write(
+            &unsigned_header
+                [..bao1x_api::offsets::baosec::SWAP_HEADER_LEN - bao1x_api::signatures::SIGBLOCK_LEN],
+        )?;
+
+        f.write(&signed)
     }
 }
 

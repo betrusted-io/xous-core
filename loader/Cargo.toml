@@ -23,7 +23,7 @@ armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "upd
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", optional = true }
 sha2-loader = { path = "./sha2-loader", default-features = false, optional = true }
 bao1x-hal = { path = "../libs/bao1x-hal", optional = true, default-features = false }
-bao1x-api = { path = "../libs/bao1x-api", optional = true, default-features = false }
+bao1x-api = { path = "../libs/bao1x-api", default-features = false }
 ux-api = { path = "../libs/ux-api", optional = true, default-features = false }
 xous-pl230 = { path = "../libs/xous-pl230", optional = true, features = [
     "tests",
@@ -51,7 +51,7 @@ nalgebra = { version = "0.33", default-features = false, features = [
     "libm",
 ], optional = true }
 simple-fatfs = { git = "https://github.com/betrusted-io/simple-fatfs.git", branch = "baosec", optional = true, default-features = false }
-linked_list_allocator = { version = "0.10.5", optional = true }
+linked_list_allocator = { version = "0.10.5" }
 sha2 = { version = "0.10.8", optional = true, default-features = false }
 digest = { version = "0.10.7", optional = true }
 critical-section = { version = "1.2.0", optional = true }
@@ -90,31 +90,21 @@ bao1x = [
     "dep:aes",
     "aes/bao1x",
     "utralib/bao1x",
+    # caution: leaving this on will force debug-print-usb in *all* bao1x-hal configs!!
     # "bao1x-hal/debug-print-usb",
     "debug-print",
     "bao1x-hal",
-    "bao1x-api",
     "rand_chacha",
-    "sram-margin",
-    # "boot-delay",
 ]
 board-baosec = [
     "bao1x-hal/loader-baosec",
-    "updates",
-    "usb",
-    "simple-fatfs",
-    "linked_list_allocator",
     "ed25519-dalek-bao1x",
     "sha2-bao1x",
     "digest",
     "ux-api/loader-baosec",
 ]
 board-baosor = ["bao1x-hal/loader-baosor"]
-board-dabao = [
-    "bao1x-hal/loader-dabao",
-    "bao1x-hal/board-dabao",
-    "linked_list_allocator",
-]
+board-dabao = ["bao1x-hal/loader-dabao", "bao1x-hal/board-dabao"]
 atsama5d27 = ["utralib/atsama5d27", "armv7", "dep:atsama5d27"]
 
 # precursor flags
@@ -129,31 +119,19 @@ swap = ["dep:aes-gcm-siv"]
 
 # bao1x target flags
 board-bringup = []
-sh1107-bringup = []                                          # used to discover FB parameters
-sram-margin = []
-boot-delay = []
 simulation-only = []
 verilator-only = []
-quantum-timer-test = ["pio", "pio-proc"]
 spim-test = []
 irq-test = []
-usb-test = []
-trng-test = []
-dump-trng = []
 fast-fclk = []
 clock-tests = []
 reset-debug = []
-cam-test = ["nalgebra", "libm", "bao1x-hal/debug-print-usb"]
-usb = ["critical-section"]
-qr = ["nalgebra", "libm"]
-updates = []
 bao1x-mpw = ["bao1x-hal/mpw"]
-userspace-swap-debug = []                                    # sets up app UART mapping.
-always-update = []                                           # always go into update mode, for fast dev loops
+userspace-swap-debug = []     # sets up app UART mapping.
 
 # general flags
 debug-print = []
 early-printk = []
 resume = []       # suspend/resume pathway code
 
-default = ["usb"]
+default = []

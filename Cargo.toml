@@ -121,6 +121,8 @@ members = [
   "bao1x-boot/boot0",
   "bao1x-boot/boot1",
   "bao1x-boot/sha2-bao1x",
+  "apps-dabao/helloworld",
+  "apps-dabao/dabao-console",
 ]
 resolver = "2"
 

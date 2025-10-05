@@ -30,7 +30,7 @@ pub struct InitialProcess {
 /// We don't memorize the allocated results (in part because we don't have malloc/alloc to stick
 /// the table, and we don't know a priori how big it will be); we simply memorize the maximum extent,
 /// after which we allocate the book-keeping tables.
-pub fn phase_1(cfg: &mut BootConfig) {
+pub fn phase_1(cfg: &mut BootConfig, detached_app: bool) {
     // Allocate space for the stack pointer.
     // The bootloader should have placed the stack pointer at the end of RAM
     // prior to jumping to our program. Reserve space for the stack, so that it does not smash
@@ -56,7 +56,19 @@ pub fn phase_1(cfg: &mut BootConfig) {
         // TODO: place args into cfg.args
     } else {
         println!("Copying args");
-        copy_args(cfg);
+        copy_args(cfg, detached_app);
+    }
+    if VDBG {
+        let check_iter = cfg.args.iter();
+        for a in check_iter {
+            crate::println!(
+                "{}: base {:x} size {:x} data {:x?}",
+                core::str::from_utf8(&a.name.to_le_bytes()).unwrap_or("invalid name"),
+                a.this as usize,
+                a.size,
+                a.data
+            );
+        }
     }
 
     // All further allocations must be page-aligned.
@@ -173,7 +185,7 @@ pub fn phase_1(cfg: &mut BootConfig) {
     // We also skip the an additional index as that is the clean suspend page. This
     // needs to be claimed by the susres server before the kernel allocates it.
     // Lower numbered indices corresponding to higher address pages.
-    println!("Marking pages as in-use");
+    println!("Marking loader pages as in-use");
     for i in ((GUARD_MEMORY_BYTES / PAGE_SIZE) + 1)..(cfg.init_size / PAGE_SIZE) {
         cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - i] = XousAlloc::from(1);
     }
@@ -351,116 +363,94 @@ pub fn allocate_swap(cfg: &mut BootConfig) {
     }
 }
 
-#[cfg(feature = "swap")]
-pub fn copy_args(cfg: &mut BootConfig) {
+#[cfg(all(feature = "swap", feature = "bao1x"))]
+pub fn copy_args(cfg: &mut BootConfig, _detached_app: bool) {
     // With swap enabled, copy_args also merges the IniS arguments from the swap region into the kernel
     // arguments, and patches the length field accordingly.
-    //
-    // So much terrible, no-good awful code. This is basically not Rust code, because the whole thing
-    // is operating on pointers conjured out of thin air and confused senses of what is a byte-size
-    // versus a word-size. Deserves a re-write, but it would also require reworking a bunch of other
-    // bootloader code because the core issue is the way the kernel arguments are defined for parsing and
-    // iteration.
-    //
-    // Suspect many bugs in this code.
 
     // Read in the swap arguments: should be located at beginning of the first page of swap.
     // Safety: only safe because we know that the decrypt was setup by read_swap_config(), and no pages
     // were decrypted between then and now!
     let page0 = unsafe { cfg.swap_hal.as_mut().unwrap().get_decrypt() };
     let swap_args = KernelArguments::new(page0.as_ptr() as *const usize);
-    let mut j = swap_args.iter();
-    // skip the first argument
-    let swap_xarg = j.next().expect("couldn't read initial swap tag");
 
-    // Merge the args list to target RAM
-    // Reserve space for the primary arg list + swap args - swap's XArg structure (7 words long)
-    let final_len = cfg.args.size() / size_of::<u32>() + swap_xarg.data[0] as usize - 7;
-    cfg.init_size += final_len * 4;
-    let runtime_arg_buffer = cfg.get_top();
-    // places the boot image kernel arguments
-    unsafe {
-        #[allow(clippy::cast_ptr_alignment)]
-        memcpy(runtime_arg_buffer, cfg.args.base as *const usize, cfg.args.size() as usize)
+    // Carve out a much larger region than anticipated for argument processing. A "typical" target for
+    // the new argument stack is around 1800 bytes.
+    //
+    // It's assumed we have at least 4 pages of RAM at this point because we haven't allocated anything and
+    // our target should have more memory than that. So, pass a total of 16,384 bytes region with the
+    // anticipation that the actual allocation will be much smaller than that.
+    let dest_region = unsafe {
+        core::slice::from_raw_parts_mut(
+            (cfg.get_top() as usize - PAGE_SIZE * 4) as *mut u32,
+            PAGE_SIZE * 4 / size_of::<u32>(),
+        )
     };
-    // safety: this should be aligned, allowing this conversion. Note that we do violate a safety condition
-    // in that we haven't fully initialized the region (the swap arg extension area is uninit), but I think
-    // it's OK because we will write only to that region (but I suppose in practice, Rust could assume the
-    // untouched data is 0 or something and try an optimization based on that).
-    let merged_arg_slice =
-        unsafe { core::slice::from_raw_parts_mut(runtime_arg_buffer as *mut usize, final_len) };
-    let mut arg_index = cfg.args.size() / size_of::<u32>();
 
-    // append the swap arguments, and patch the size field accordingly
-    for a in j {
-        // turn the argument into a raw slice
-        // this is safe because:
-        //  - arguments are always guaranteed to be aligned to a word boundary by the image creator
-        //  - arguments are fully initialized with no UB fields under this transformation
-        // +2 is for the tag field
-        if a.name == u32::from_le_bytes(*b"IniS") {
-            let arg_slice = unsafe {
-                core::slice::from_raw_parts(
-                    a.data.as_ptr().sub(2) as *const usize, // backup by 2 to accommodate the tag field
-                    a.size as usize / size_of::<usize>() + 2,
-                )
-            };
-            if SDBG {
-                println!(
-                    "Extending args with: 0x{:x}, size: {}. index: {}, len: {}, data: {:x?}",
-                    a.name,
-                    a.size,
-                    arg_index,
-                    arg_slice.len(),
-                    arg_slice
-                );
-            }
-            merged_arg_slice[arg_index..arg_index + arg_slice.len()].copy_from_slice(arg_slice);
-            arg_index += arg_slice.len();
-        } else {
-            println!("Unhandled arg type: {:x}", a.name);
-        }
-    }
-
-    // redirect the arg buffer to point at the newly copied arguments
-    cfg.args = KernelArguments::new(runtime_arg_buffer);
-
-    // extract the new XArg field, pointing into RAM
-    let args = cfg.args;
-    let mut i = args.iter();
-    let xarg = i.next().expect("couldn't read initial tag");
-    // patch the total length of the arguments - just jam the value into the data field of the XArg by
-    // dead-reckoning to the offset
-    assert!(merged_arg_slice[2] == xarg.data[0] as usize); // sanity checks the dead-reckoning
-    merged_arg_slice[2] = arg_index;
-    use crc::{Hasher16, crc16};
-    // compute the new CRC
-    let mut digest = crc16::Digest::new(crc16::X25);
-    // safe because we know the entire region can map into a u8 slice with no UB
-    let xarg_data = unsafe {
-        core::slice::from_raw_parts(xarg.data.as_ptr() as *const u8, xarg.data.len() * size_of::<u32>())
+    // Replace the original args pointer in FLASH with a new copy in RAM that incorporates any merged
+    // regions that the kernel should be aware of.
+    let args_size: usize;
+    (cfg.args, args_size) = unsafe {
+        cfg.args
+            .merge_args(&[swap_args], &[u32::from_le_bytes(*b"IniS")], dest_region)
+            .expect("Couldn't merge kernel arguments")
     };
-    digest.write(&xarg_data);
-    // patch the CRC
-    let merged_arg_slice_u8 = unsafe {
-        core::slice::from_raw_parts_mut(runtime_arg_buffer as *mut u8, final_len * size_of::<u32>())
-    };
-    merged_arg_slice_u8[4..6].copy_from_slice(&digest.sum16().to_le_bytes());
 
-    if SDBG {
-        println!(
-            " -> Patched kernel args range: {:x} - {:x}",
-            runtime_arg_buffer as usize,
-            runtime_arg_buffer as usize + final_len * size_of::<usize>()
+    // Advance the init_size pointer by the actual allocation consumed by the merge_args() function.
+    cfg.init_size += args_size;
+    crate::println!("Argument merge done, total size consumed: {}", args_size);
+}
+
+/// No swap but bao1x implies a dabao configuration. Check for a detached-app image.
+#[cfg(all(not(feature = "swap"), feature = "bao1x"))]
+pub fn copy_args(cfg: &mut BootConfig, detached_app: bool) {
+    if detached_app {
+        // Read in the detached app arguments.
+        // Safety: only safe because the image is aligned.
+        let app_args = KernelArguments::new(
+            (bao1x_api::offsets::dabao::APP_RRAM_START + bao1x_api::signatures::SIGBLOCK_LEN) as *const usize,
         );
+
+        // Carve out a much larger region than anticipated for argument processing. A "typical" target for
+        // the new argument stack is around 1800 bytes.
+        //
+        // It's assumed we have at least 4 pages of RAM at this point because we haven't allocated
+        // anything and our target should have more memory than that. So, pass a total of
+        // 16,384 bytes region with the anticipation that the actual allocation will be much
+        // smaller than that.
+        let dest_region = unsafe {
+            core::slice::from_raw_parts_mut(
+                (cfg.get_top() as usize - PAGE_SIZE * 4) as *mut u32,
+                PAGE_SIZE * 4 / size_of::<u32>(),
+            )
+        };
+
+        // Replace the original args pointer in FLASH with a new copy in RAM that incorporates any merged
+        // regions that the kernel should be aware of.
+        let args_size: usize;
+        (cfg.args, args_size) = unsafe {
+            cfg.args
+                .merge_args(&[app_args], &[u32::from_le_bytes(*b"IniF")], dest_region)
+                .expect("Couldn't merge kernel arguments")
+        };
+
+        // Advance the init_size pointer by the actual allocation consumed by the merge_args() function.
+        cfg.init_size += args_size;
+        crate::println!("Argument merge done, total size consumed: {}", args_size);
+    } else {
+        // Straight copy of the kernel arguments to RAM, no merging.
+        cfg.init_size += cfg.args.size();
+        let runtime_arg_buffer = cfg.get_top();
+        unsafe { memcpy(runtime_arg_buffer, cfg.args.base as *const usize, cfg.args.size() as usize) };
+        cfg.args = KernelArguments::new(runtime_arg_buffer);
     }
 }
 
 #[cfg(feature = "swap")]
 fn remaining_in_page(addr: usize) -> usize { PAGE_SIZE - (addr & (PAGE_SIZE - 1)) }
 
-#[cfg(not(feature = "swap"))]
-pub fn copy_args(cfg: &mut BootConfig) {
+#[cfg(all(not(feature = "swap"), not(feature = "bao1x")))]
+pub fn copy_args(cfg: &mut BootConfig, _detached_app: bool) {
     // Copy the args list to target RAM
     cfg.init_size += cfg.args.size();
     let runtime_arg_buffer = cfg.get_top();
@@ -746,7 +736,8 @@ fn copy_processes(cfg: &mut BootConfig) {
                                 cfg.swap_hal
                                     .as_mut()
                                     .expect("swap HAL uninit")
-                                    .decrypt_src_page_at(src_swap_img_page);
+                                    .decrypt_src_page_at(src_swap_img_page)
+                                    .unwrap();
                             }
                             let decrypt_avail = remaining_in_page(src_swap_img_addr);
                             let dst_page_avail = remaining_in_page(dst_page_vaddr);
@@ -891,7 +882,7 @@ fn copy_processes(cfg: &mut BootConfig) {
     }
 }
 
-unsafe fn memcpy<T>(dest: *mut T, src: *const T, count: usize)
+pub unsafe fn memcpy<T>(dest: *mut T, src: *const T, count: usize)
 where
     T: Copy,
 {

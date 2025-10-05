@@ -2,8 +2,7 @@
 
 use bao1x_api::*;
 
-/// Run at 400MHz to ensure we can boot even without an external VDD85 regulator!
-pub const DEFAULT_FCLK_FREQUENCY: u32 = 400_000_000;
+pub const DEFAULT_FCLK_FREQUENCY: u32 = bao1x_api::offsets::dabao::DEFAULT_FCLK_FREQUENCY;
 
 // console uart buffer - needs to be fixed here because it matches dabao. Keeps the code base
 // simple between the two variants for shared paths in the bootloader.
@@ -30,7 +29,7 @@ pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 4, 31];
 pub const IFRAM1_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 0, 31];
 
 const SE0_PIN: u8 = 13;
-const SE0_PORT: IoxPort::PC;
+const SE0_PORT: IoxPort = IoxPort::PC;
 /// Sets the SE0 pin to drive and returns the port number. Note this side-effects the boot switch reading.
 pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     iox.setup_pin(
@@ -117,3 +116,12 @@ pub const SPINOR_PAGE_LEN: u32 = 0x100;
 pub const SPINOR_ERASE_SIZE: u32 = 0x1000; // this is the smallest sector size.
 pub const SPINOR_BULK_ERASE_SIZE: u32 = 0x1_0000; // this is the bulk erase size.
 pub const SPINOR_LEN: u32 = 16384 * 1024;
+
+// sentinel used by test infrastructure to assist with parsing
+// The format of any test infrastructure output to recover is as follows:
+// _|TT|_<ident>,<data separated by commas>,_|TE|_
+// where _|TT|_ and _|TE|_ are bookends around the data to be reported
+// <ident> is a single-word identifier that routes the data to a given parser
+// <data> is free-form data, which will be split at comma boundaries by the parser
+pub const BOOKEND_START: &str = "_|TT|_";
+pub const BOOKEND_END: &str = "_|TE|_";

@@ -84,6 +84,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         bao1x_api::BOOT0_REVOCATION_OFFSET,
         &[FunctionCode::Boot0 as u32], // only boot0 is allowed for boot0
         false,
+        None,
     )
     .is_ok()
     {
@@ -100,6 +101,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                     bao1x_api::BOOT0_REVOCATION_OFFSET,
                     &allowed_functions,
                     true,
+                    None,
                 )
                 .ok();
                 bao1x_hal::sigcheck::validate_image(
@@ -108,6 +110,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                     bao1x_api::BOOT0_REVOCATION_OFFSET,
                     &allowed_functions,
                     true,
+                    None,
                 )
                 .ok();
             }
@@ -119,6 +122,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                     bao1x_api::BOOT0_REVOCATION_OFFSET,
                     &allowed_functions,
                     true,
+                    None,
                 )
                 .ok();
                 bao1x_hal::sigcheck::validate_image(
@@ -127,6 +131,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                     bao1x_api::BOOT0_REVOCATION_OFFSET,
                     &allowed_functions,
                     true,
+                    None,
                 )
                 .ok();
             }

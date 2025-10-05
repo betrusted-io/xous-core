@@ -4,8 +4,10 @@ use alloc::string::String;
 use bao1x_api::signatures::*;
 use digest::Digest;
 use sha2_bao1x::Sha512;
+use xous::arch::PAGE_SIZE;
 
 use crate::acram::OneWayCounter;
+use crate::udma::Spim;
 
 /// Current draw @ 200MHz CPU ACLK (400MHz FCLK), VDD85 = 0.80V nom (measured @0.797V): ~71mA peak @ 27C,
 /// measured on VDD33 (LDO path places strict upper bounds on IDD85). Target: < 100mA under all PVT.
@@ -17,7 +19,8 @@ use crate::acram::OneWayCounter;
 /// IDD85 > 100mA. Thus we can't boot at max speed config, as not all system configurations have the
 /// external regulator. So, we have to work at reduced VDD/frequency and make sure this constraint is met.
 ///
-/// `img_offset` is a pointer to untrusted image data
+/// `img_offset` is a pointer to untrusted image data. It's assumed that the 0-offset of the pointer is
+/// a `SignatureInFlash` structure.
 ///
 /// `pubkeys_offset` is a pointer to trusted public key data. Because 'pubkeys_offset` is assumed to be
 /// trusted minimal validation is done on this pointer. It's important that the caller has vetted this
@@ -38,18 +41,23 @@ pub fn validate_image(
     revocation_offset: usize,
     function_codes: &[u32],
     auto_jump: bool,
+    mut spim: Option<&mut Spim>,
 ) -> Result<usize, String> {
-    // conjure the signature struct directly out of memory. super unsafe.
-    let sig_ptr = img_offset as *const SignatureInFlash;
-    let sig: &SignatureInFlash = unsafe { sig_ptr.as_ref().unwrap() };
+    // Copy the signature into a structure so we can unpack it.
+    let mut sig = SignatureInFlash::default();
+    if let Some(ref mut spim) = spim {
+        spim.mem_read(img_offset as u32, sig.as_mut(), false);
+    } else {
+        // safety: `u8` can represent all values within the pointer.
+        let sig_slice =
+            unsafe { core::slice::from_raw_parts(img_offset as *const u8, size_of::<SignatureInFlash>()) };
+        sig.as_mut().copy_from_slice(sig_slice);
+    };
 
     let pubkey_ptr = pubkeys_offset as *const SignatureInFlash;
     let pk_src: &SignatureInFlash = unsafe { pubkey_ptr.as_ref().unwrap() };
 
     let signed_len = sig.sealed_data.signed_len;
-    let image: &[u8] = unsafe {
-        core::slice::from_raw_parts((img_offset as usize + UNSIGNED_LEN) as *const u8, signed_len as usize)
-    };
 
     if sig.sealed_data.version != BAOCHIP_SIG_VERSION {
         crate::println!(
@@ -81,14 +89,33 @@ pub fn validate_image(
             crate::println!("Key at index {} is revoked ({}), skipping", i, revocation_value);
             continue;
         }
-
         let verifying_key =
             ed25519_dalek::VerifyingKey::from_bytes(key).or(Err(String::from("invalid public key")))?;
 
         let ed25519_signature = ed25519_dalek::Signature::from(sig.signature);
-        // crate::println!("Verifying image {:x?} with {:x?}", &image[..16], &key);
         let mut h: Sha512 = Sha512::new();
-        h.update(&image);
+        if let Some(ref mut spim) = spim {
+            // need to read the data out page by page and hash it.
+            // ASSUME: the SPIM driver has allocated a read buffer that is actually PAGE_SIZE. If the SPIM
+            // driver has a smaller buffer, reads get less efficient.
+            let end = img_offset as usize + UNSIGNED_LEN + signed_len as usize;
+            for offset in ((img_offset as usize + UNSIGNED_LEN)..end).step_by(PAGE_SIZE) {
+                let mut buf = [0u8; PAGE_SIZE];
+                spim.mem_read(offset as u32, &mut buf, false);
+                let valid_length = if offset + PAGE_SIZE < end { PAGE_SIZE } else { end - offset };
+                h.update(&buf[..valid_length]);
+            }
+        } else {
+            // easy peasy
+            let image: &[u8] = unsafe {
+                core::slice::from_raw_parts(
+                    (img_offset as usize + UNSIGNED_LEN) as *const u8,
+                    signed_len as usize,
+                )
+            };
+            // crate::println!("Verifying image {:x?} with {:x?}", &image[..16], &key);
+            h.update(&image);
+        }
         // debugging note: h.clone() does *not* work. You have to print the hash by modifying
         // the function inside the ed25519 crate.
         match verifying_key.verify_prehashed(h, None, &ed25519_signature) {
@@ -127,10 +154,16 @@ fn erase_secrets() {
 }
 
 pub fn jump_to(target: usize) -> ! {
+    // loader expects a0 to have the address of the kernel image pre-loaded
+    let kernel_loc = bao1x_api::offsets::KERNEL_START;
     unsafe {
         core::arch::asm!(
-            "jr {0}",
-            in(reg) target,
+            "mv t0, {target}",
+            "mv a0, {kernel_loc}",
+            "mv a1, x0",
+            "jr t0",
+            target = in(reg) target,
+            kernel_loc = in(reg) kernel_loc,
             options(noreturn)
         );
     }

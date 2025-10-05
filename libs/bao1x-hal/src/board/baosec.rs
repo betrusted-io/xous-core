@@ -1,19 +1,22 @@
 // Constants that define pin locations, RAM offsets, etc. for the BaoSec board
 use bao1x_api::*;
 
-pub const DEFAULT_FCLK_FREQUENCY: u32 = 800_000_000;
+pub const DEFAULT_FCLK_FREQUENCY: u32 = bao1x_api::offsets::baosec::DEFAULT_FCLK_FREQUENCY;
 
 pub const I2C_AXP2101_ADR: u8 = 0x34;
 pub const I2C_TUSB320_ADR: u8 = 0x47;
 pub const I2C_BQ27427_ADR: u8 = 0x55;
 
-// location and organization of SPINOR should be board-specific
-pub const SPINOR_PAGE_LEN: u32 = 0x100;
-pub const SPINOR_ERASE_SIZE: u32 = 0x1000; // this is the smallest sector size.
-pub const SPINOR_BULK_ERASE_SIZE: u32 = 0x1_0000; // this is the bulk erase size.
-pub const SPINOR_LEN: u32 = 16384 * 1024;
-pub const PDDB_LOC: u32 = 4096 * 1024; // located 4MiB in, after the swap image
-pub const PDDB_LEN: u32 = 4096 * 1024; // 4MiB data for the PDDB total
+// re-export these constants from the API crate
+// the API crate has to list *all* offsets, not just those targeting the
+// current build. This re-export allows us to have "generic" offsets
+// independent of builds.
+pub const SPINOR_PAGE_LEN: u32 = bao1x_api::offsets::baosec::SPINOR_PAGE_LEN;
+pub const SPINOR_ERASE_SIZE: u32 = bao1x_api::offsets::baosec::SPINOR_ERASE_SIZE;
+pub const SPINOR_BULK_ERASE_SIZE: u32 = bao1x_api::offsets::baosec::SPINOR_BULK_ERASE_SIZE;
+pub const SPINOR_LEN: u32 = bao1x_api::offsets::baosec::SPI_FLASH_LEN as _;
+pub const PDDB_LOC: u32 = bao1x_api::offsets::baosec::PDDB_ORIGIN as _;
+pub const PDDB_LEN: u32 = bao1x_api::offsets::baosec::PDDB_LEN as _;
 
 // Define the virtual region that memory-mapped FLASH should go to
 // top 8 megs are reserved for staging updates, backups, etc.
@@ -58,6 +61,8 @@ const SPI_CLK_PIN: u8 = 0;
 const SPI_DAT_PIN: u8 = 1;
 const SPI_CD_PIN: u8 = 2;
 const SPI_PORT: IoxPort = IoxPort::PC;
+
+pub const SPI_MEM_CHANNEL: SpimChannel = SpimChannel::Channel1;
 
 /// Returns just the pin mappings without setting anything up.
 pub fn get_display_pins() -> (SpimChannel, IoxPort, u8, u8) {
@@ -162,7 +167,7 @@ pub fn setup_memory_pins(iox: &dyn IoSetup) -> SpimChannel {
         Some(IoxEnable::Disable),
         Some(IoxDriveStrength::Drive8mA),
     );
-    SpimChannel::Channel1
+    SPI_MEM_CHANNEL
 }
 
 /// This also sets up I2C-adjacent interrupt inputs as well
@@ -231,6 +236,21 @@ pub fn setup_camera_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         );
     }
     (IoxPort::PC, 14)
+}
+
+pub fn setup_periph_reset_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    let (port, pin) = (IoxPort::PC, 6);
+    iox.setup_pin(
+        port,
+        pin,
+        Some(IoxDir::Output),
+        Some(IoxFunction::Gpio),
+        None,
+        Some(IoxEnable::Enable),
+        None,
+        Some(IoxDriveStrength::Drive2mA),
+    );
+    (port, pin)
 }
 
 /// returns the USB SE0 port and pin number

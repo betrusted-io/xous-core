@@ -191,6 +191,62 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     // ---- camera initialization
     #[cfg(not(feature = "hosted-baosec"))]
     {
+        // setup camera power
+        match bao1x_hal::axp2101::Axp2101::new(&mut i2c) {
+            Ok(mut pmic) => {
+                pmic.set_ldo(&mut i2c, Some(2.85), bao1x_hal::axp2101::WhichLdo::Bldo2).unwrap();
+                pmic.set_dcdc(&mut i2c, Some((1.8, false)), bao1x_hal::axp2101::WhichDcDc::Dcdc5).unwrap();
+            }
+            Err(e) => {
+                log::error!("Couldn't setup regulators for camera, camera will be non-functional: {:?}", e);
+            }
+        };
+
+        // setup camera clock
+        iox.setup_pin(IoxPort::PF, 9, Some(IoxDir::Input), Some(IoxFunction::Gpio), None, None, None, None);
+        iox.setup_pin(
+            IoxPort::PA,
+            0,
+            Some(IoxDir::Output),
+            Some(IoxFunction::Gpio),
+            None,
+            None,
+            Some(IoxEnable::Disable),
+            Some(IoxDriveStrength::Drive8mA),
+        );
+        iox.setup_pin(
+            IoxPort::PA,
+            0,
+            Some(IoxDir::Output),
+            Some(IoxFunction::AF3),
+            None,
+            None,
+            Some(IoxEnable::Disable),
+            Some(IoxDriveStrength::Drive8mA),
+        );
+        let timer_range = xous::map_memory(
+            xous::MemoryAddress::new(utra::pwm::HW_PWM_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map PWM range");
+        let mut timer = utralib::CSR::new(timer_range.as_ptr() as usize as *mut u32);
+        timer.wo(utra::pwm::REG_CH_EN, 1);
+        timer.rmwf(utra::pwm::REG_TIM0_CFG_R_TIMER0_SAW, 1);
+        timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_TH, 0);
+        timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_MODE, 3);
+        let pwm = timer_range.as_mut_ptr() as *mut u32;
+        unsafe { pwm.add(2).write_volatile(0) }; // for some reason the register extraction didn't get this register...
+        timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 1);
+        log::info!("PWM running on PA0");
+        /* // register debug
+        for i in 0..12 {
+            println!("0x{:2x}: 0x{:08x}", i, unsafe { pwm.add(i).read_volatile() })
+        }
+        println!("0x{:2x}: 0x{:08x}", 65, unsafe { pwm.add(65).read_volatile() });
+        */
+
         // setup camera pins
         let (cam_pdwn_bnk, cam_pdwn_pin) = bao1x_hal::board::setup_camera_pins(&iox);
         // disable camera powerdown

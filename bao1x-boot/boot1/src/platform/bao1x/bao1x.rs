@@ -69,7 +69,7 @@ pub fn setup_dabao_se0_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
 
 /// This can change the board type coding to a safer, simpler board type if the declared board type has
 /// problems booting.
-pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> bao1x_api::BoardTypeCoding {
+pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::BoardTypeCoding, u32) {
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
     // setup board-specific I/Os - early boot set. These are items that have to be
@@ -79,8 +79,10 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> bao1x_api::Boar
             // setup the dabao 'boot' read pin for reading. This also connects the USB port temporarily.
             setup_dabao_boot_pin(&iox);
 
-            // we're running at 0.8V, setup the RAMs for that
-            let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(800);
+            // setup the RAMs for our trim voltage
+            let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(
+                bao1x_api::offsets::dabao::CPU_VDD_LDO_BOOT_MV,
+            );
             let mut rbist = CSR::new(utra::rbist_wrp::HW_RBIST_WRP_BASE as *mut u32);
             for item in trim_table {
                 rbist.wo(utra::rbist_wrp::SFRCR_TRM, item.raw_value());
@@ -119,6 +121,9 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> bao1x_api::Boar
                         // serves as a "debounce" of accidental butt-dials of the
                         // power button.
                         pmic.set_ldo(&mut i2c, Some(3.3), bao1x_hal::axp2101::WhichLdo::Bldo1).unwrap();
+
+                        // set PWM mode on DCDC2. greatly reduces noise on the regulator line
+                        pmic.set_pwm_mode(&mut i2c, bao1x_hal::axp2101::WhichDcDc::Dcdc2, true).unwrap();
                         // make sure the DCDC2 is set to 0.9V, which will allow us to enter high-speed run
                         // mode. It defaults to 0.85V on boot.
                         pmic.set_dcdc(&mut i2c, Some((0.9, true)), bao1x_hal::axp2101::WhichDcDc::Dcdc2)
@@ -139,7 +144,9 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> bao1x_api::Boar
                 setup_dabao_boot_pin(&iox);
 
                 // we're running at 0.8V, setup the RAMs for that
-                let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(800);
+                let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(
+                    bao1x_api::offsets::dabao::CPU_VDD_LDO_BOOT_MV,
+                );
                 let mut rbist = CSR::new(utra::rbist_wrp::HW_RBIST_WRP_BASE as *mut u32);
                 for item in trim_table {
                     rbist.wo(utra::rbist_wrp::SFRCR_TRM, item.raw_value());
@@ -162,7 +169,9 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> bao1x_api::Boar
                 sramtrm.wo(utra::coresub_sramtrm::SFR_VEXRAM, 0x1);
 
                 // we should be in 0.9v mode, setup SRAM trimmings for that
-                let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(900);
+                let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(
+                    bao1x_api::offsets::baosec::CPU_VDD_LDO_BOOT_MV,
+                );
                 let mut rbist = CSR::new(utra::rbist_wrp::HW_RBIST_WRP_BASE as *mut u32);
                 for item in trim_table {
                     rbist.wo(utra::rbist_wrp::SFRCR_TRM, item.raw_value());
@@ -171,6 +180,18 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> bao1x_api::Boar
 
                 let (se0_port, se0_pin) = bao1x_hal::board::setup_usb_pins(&iox);
                 iox.set_gpio_pin(se0_port, se0_pin, IoxValue::Low); // put the USB port into SE0 while we initialize things
+
+                // setup display - turn on its power, reset the framebuffer
+                bao1x_hal::board::setup_display_pins(&iox);
+                // power on
+                let (oled_on_port, oled_on_pin) = bao1x_hal::board::setup_oled_power_pin(&iox);
+                iox.set_gpio_pin_value(oled_on_port, oled_on_pin, IoxValue::High);
+                // reset enable
+                let (peri_rst_port, peri_reset_pin) = bao1x_hal::board::setup_periph_reset_pin(&iox);
+                iox.set_gpio_pin_value(peri_rst_port, peri_reset_pin, IoxValue::Low);
+                // delay for reset assert
+                delay(1);
+                iox.set_gpio_pin_value(peri_rst_port, peri_reset_pin, IoxValue::High);
 
                 // keyboard can setup at keyboard read time
             }
@@ -206,8 +227,9 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> bao1x_api::Boar
 
     // set the clock
     let fclk_freq = match board_type {
-        BoardTypeCoding::Baosec => bao1x_hal::board::DEFAULT_FCLK_FREQUENCY,
-        BoardTypeCoding::Dabao | BoardTypeCoding::Oem => SAFE_FCLK_FREQUENCY,
+        BoardTypeCoding::Baosec => bao1x_api::offsets::baosec::DEFAULT_FCLK_FREQUENCY,
+        BoardTypeCoding::Oem => SAFE_FCLK_FREQUENCY,
+        BoardTypeCoding::Dabao => bao1x_api::offsets::dabao::DEFAULT_FCLK_FREQUENCY,
     };
     let perclk = unsafe { init_clock_asic(fclk_freq) };
 
@@ -226,7 +248,7 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> bao1x_api::Boar
     crate::debug::USE_CONSOLE.store(true, core::sync::atomic::Ordering::SeqCst);
     crate::println!("boot1 udma console up, CPU @ {}MHz!", fclk_freq / 2_000_000);
 
-    board_type
+    (board_type, perclk)
 }
 
 pub fn setup_timer(sysclk_freq: u32) {

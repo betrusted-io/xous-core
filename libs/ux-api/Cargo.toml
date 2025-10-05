@@ -54,6 +54,7 @@ default-widgets = [
 
 # board definition is used to define things like the size of the screen.
 board-baosec = ["blitstr2/board-baosec"]
+board-dabao = []
 loader-baosec = []
 board-baosor = []
 loader-baosor = []
