@@ -1,0 +1,20 @@
+[package]
+name = "auth-sign-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hex = "0.4"
+
+ctap-hid-fido2 = "3.5.5"
+
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+base64 = "0.22.1"
+
+# For Windows USB support
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.48", features = [
+    "Win32_Devices_HumanInterfaceDevice",
+] }
