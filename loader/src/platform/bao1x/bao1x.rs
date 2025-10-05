@@ -1,5 +1,5 @@
 use bao1x_api::signatures::SIGBLOCK_LEN;
-#[cfg(not(feature = "verilator-only"))]
+#[allow(unused_imports)]
 use bao1x_hal::iox::Iox;
 #[cfg(feature = "bao1x")]
 use bao1x_hal::udma;

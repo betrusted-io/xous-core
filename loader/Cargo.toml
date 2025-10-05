@@ -90,6 +90,7 @@ bao1x = [
     "dep:aes",
     "aes/bao1x",
     "utralib/bao1x",
+    # caution: leaving this on will force debug-print-usb in *all* bao1x-hal configs!!
     # "bao1x-hal/debug-print-usb",
     "debug-print",
     "bao1x-hal",
@@ -97,7 +98,6 @@ bao1x = [
 ]
 board-baosec = [
     "bao1x-hal/loader-baosec",
-    "simple-fatfs",
     "ed25519-dalek-bao1x",
     "sha2-bao1x",
     "digest",

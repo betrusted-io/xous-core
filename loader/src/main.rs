@@ -251,7 +251,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
 
     // Run kernel image validation now that the heap is set up.
     #[cfg(feature = "bao1x")]
-    {
+    let detached_app = {
         use bao1x_api::signatures::FunctionCode;
         // validate using the bao1x signature scheme
         match bao1x_hal::sigcheck::validate_image(
@@ -272,21 +272,35 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                 bao1x_hal::sigcheck::die_no_std();
             }
         }
-        // todo: figure out how to do validation on the swap image. I think it should
-        // be something like this:
-        //   - if the first page can decrypt using the local encryption key, accept the swap as valid
-        //   - if it decrypts using the NULL key, do a hash + signature check of the whole thing
-        // The reason for the two-part test is that the signature check wouldn't work
-        // once the partition is re-encrypted (the signature is only on the NULL key
-        // image) and also it takes a lot of time to read in the partition twice and
-        // signature check it; also, the signature check itself is subject to a bit of
-        // a TOCTOU because of the block-by-block readout nature of the SPIM. This is
-        // why each block is encrypted anyways with an AEAD.
-        //
-        // So basically, the pubkey signature is only used to deliver an app for updates;
-        // the AEAD is for operation once the application has been accepted and re-encrypted
-        // to the device-specific key.
-    }
+
+        let one_way = bao1x_hal::acram::OneWayCounter::new();
+        if one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error")
+            == bao1x_api::BoardTypeCoding::Dabao
+        {
+            match bao1x_hal::sigcheck::validate_image(
+                bao1x_api::offsets::dabao::APP_RRAM_START as *const u32,
+                bao1x_api::LOADER_START as *const u32,
+                bao1x_api::LOADER_REVOCATION_OFFSET,
+                &[FunctionCode::App as u32, FunctionCode::UpdatedApp as u32],
+                false,
+                None,
+            ) {
+                Ok(k) => {
+                    println!("*** Detached app signature check by key @ {} OK ***", k);
+                    true
+                }
+                Err(_e) => {
+                    println!("No valid detached app found");
+                    false
+                }
+            }
+        } else {
+            // no detached apps on other boards
+            false
+        }
+    };
+    #[cfg(not(feature = "bao1x"))]
+    let detached_app = false;
 
     // the kernel arg buffer is SIG_BLOCK_SIZE into the signed region
     #[cfg(not(feature = "bao1x"))]
@@ -302,10 +316,16 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // But for now, the basic "validate everything as a blob" is perhaps good enough to
     // armor code-at-rest against front-line patching attacks.
     let kab = KernelArguments::new(arg_buffer);
-    boot_sequence(kab, signature, fs_prehash, perclk_freq);
+    boot_sequence(kab, signature, fs_prehash, perclk_freq, detached_app);
 }
 
-fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _perclk_freq: u32) -> ! {
+fn boot_sequence(
+    args: KernelArguments,
+    _signature: u32,
+    fs_prehash: [u8; 64],
+    _perclk_freq: u32,
+    detached_app: bool,
+) -> ! {
     // Store the initial boot config on the stack.  We don't know
     // where in heap this memory will go.
     #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
@@ -319,6 +339,9 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
         cfg.swap_hal = SwapHal::new(&cfg, _perclk_freq);
         read_swap_config(&mut cfg);
     }
+    if detached_app {
+        read_detached_app_config(&mut cfg);
+    }
 
     // check to see if we are recovering from a clean suspend or not
     #[cfg(feature = "resume")]
@@ -330,7 +353,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
         #[cfg(feature = "simulation-only")]
         println!("Configured for simulation. Skipping RAM clear!");
         clear_ram(&mut cfg);
-        phase_1(&mut cfg);
+        phase_1(&mut cfg, detached_app);
         phase_2(&mut cfg, &fs_prehash);
         #[cfg(any(feature = "debug-print", feature = "swap"))]
         if VDBG || SDBG {
@@ -344,7 +367,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
         // cold boot path
         println!("No suspend marker found, doing a cold boot!");
         clear_ram(&mut cfg);
-        phase_1(&mut cfg);
+        phase_1(&mut cfg, detached_app);
         phase_2(&mut cfg, &fs_prehash);
         #[cfg(any(feature = "debug-print", feature = "swap"))]
         if VDBG || SDBG {
@@ -626,6 +649,18 @@ pub fn read_swap_config(cfg: &mut BootConfig) {
             }
         } else {
             println!("Unhandled argument in swap: {:x}", tag.name);
+        }
+    }
+}
+
+pub fn read_detached_app_config(cfg: &mut BootConfig) {
+    let app_args = KernelArguments::new(
+        (bao1x_api::offsets::dabao::APP_RRAM_START + bao1x_api::signatures::SIGBLOCK_LEN) as *const usize,
+    );
+    for tag in app_args.iter() {
+        if tag.name == u32::from_le_bytes(*b"IniF") {
+            assert!(tag.size >= 4, "invalid Init size");
+            cfg.init_process_count += 1;
         }
     }
 }

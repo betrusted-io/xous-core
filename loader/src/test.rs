@@ -276,7 +276,7 @@ fn full_boot() {
     let mut env = TestEnvironment::new(0);
 
     println!("Running phase_1");
-    crate::phase_1(&mut env.cfg);
+    crate::phase_1(&mut env.cfg, false);
     println!("Running phase_2");
     crate::phase_2(&mut env.cfg);
     println!("Done with phases");
@@ -304,7 +304,7 @@ fn spanning_section() {
     let mut env = TestEnvironment::new(1);
 
     println!("Running phase_1");
-    crate::phase_1(&mut env.cfg);
+    crate::phase_1(&mut env.cfg, false);
     println!("Running phase_2");
     crate::phase_2(&mut env.cfg);
     println!("Done with phases");
@@ -331,7 +331,7 @@ fn spanning_section() {
 fn tracker_sane() {
     let mut env = TestEnvironment::new(0);
 
-    crate::phase_1(&mut env.cfg);
+    crate::phase_1(&mut env.cfg, false);
     crate::phase_2(&mut env.cfg);
 
     let mut max_pid = 0;
