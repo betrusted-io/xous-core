@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use api::*;
 use bao1x_api::keyboard::KeyMap;
+#[cfg(feature = "board-baosec")]
 use bao1x_hal::axp2101::VbusIrq;
 use bao1x_hal::usb::driver::{CorigineUsb, CorigineWrapper};
 use hw::Bao1xUsb;
@@ -59,10 +60,6 @@ fn main() -> ! {
 }
 
 pub(crate) fn main_hw() -> ! {
-    // confirm that the app UART is initialized in our PID - this needs to happen in a userspace call
-    // before any IRQ calls try to use it.
-    crate::println!("APP UART in PID {}", xous::process::id());
-
     #[cfg(feature = "usbd-debug")]
     // bind the duart
     let duart_mapping = xous::syscall::map_memory(
@@ -263,12 +260,21 @@ pub(crate) fn main_hw() -> ! {
         }
     });
 
-    log::info!("Registering PMIC handler to detect USB plug/unplug events");
     let iox = bao1x_api::IoxHal::new();
-    bao1x_hal::board::setup_pmic_irq(&iox, api::SERVER_NAME_USB_DEVICE, Opcode::PmicIrq.to_usize().unwrap());
+    #[cfg(feature = "board-baosec")]
     let mut i2c = bao1x_hal_service::I2c::new();
-    let mut pmic = bao1x_hal::axp2101::Axp2101::new(&mut i2c).expect("couldn't open PMIC");
-    pmic.setup_vbus_irq(&mut i2c, bao1x_hal::axp2101::VbusIrq::Remove).expect("couldn't setup IRQ");
+    #[cfg(feature = "board-baosec")]
+    let pmic = {
+        log::info!("Registering PMIC handler to detect USB plug/unplug events");
+        bao1x_hal::board::setup_pmic_irq(
+            &iox,
+            api::SERVER_NAME_USB_DEVICE,
+            Opcode::PmicIrq.to_usize().unwrap(),
+        );
+        let mut pmic = bao1x_hal::axp2101::Axp2101::new(&mut i2c).expect("couldn't open PMIC");
+        pmic.setup_vbus_irq(&mut i2c, bao1x_hal::axp2101::VbusIrq::Remove).expect("couldn't setup IRQ");
+        pmic
+    };
 
     let (se0_port, se0_pin) = bao1x_hal::board::setup_usb_pins(&iox);
     iox.set_gpio_pin_value(se0_port, se0_pin, bao1x_api::IoxValue::High); // release SE0 state, allowing for enumeration
@@ -282,6 +288,7 @@ pub(crate) fn main_hw() -> ! {
         let opcode = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidCall);
         log::debug!("{:?}", opcode);
         match opcode {
+            #[cfg(feature = "board-baosec")]
             Opcode::PmicIrq => match pmic.get_vbus_irq_status(&mut i2c).unwrap() {
                 VbusIrq::Insert => {
                     log::error!("VBUS insert reported by PMIC, but we didn't ask for the event!");
