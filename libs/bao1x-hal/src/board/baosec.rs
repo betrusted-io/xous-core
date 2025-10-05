@@ -1,7 +1,7 @@
 // Constants that define pin locations, RAM offsets, etc. for the BaoSec board
 use bao1x_api::*;
 
-pub const DEFAULT_FCLK_FREQUENCY: u32 = 800_000_000;
+pub const DEFAULT_FCLK_FREQUENCY: u32 = bao1x_api::offsets::baosec::DEFAULT_FCLK_FREQUENCY;
 
 pub const I2C_AXP2101_ADR: u8 = 0x34;
 pub const I2C_TUSB320_ADR: u8 = 0x47;

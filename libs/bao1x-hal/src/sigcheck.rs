@@ -43,7 +43,6 @@ pub fn validate_image(
     auto_jump: bool,
     mut spim: Option<&mut Spim>,
 ) -> Result<usize, String> {
-    crate::println!("validate_image");
     // Copy the signature into a structure so we can unpack it.
     let mut sig = SignatureInFlash::default();
     if let Some(ref mut spim) = spim {
@@ -90,7 +89,6 @@ pub fn validate_image(
             crate::println!("Key at index {} is revoked ({}), skipping", i, revocation_value);
             continue;
         }
-
         let verifying_key =
             ed25519_dalek::VerifyingKey::from_bytes(key).or(Err(String::from("invalid public key")))?;
 
