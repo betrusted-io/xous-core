@@ -37,7 +37,7 @@ use utralib::generated::*;
 
 #[cfg(feature = "tests")]
 pub mod bio_tests;
-
+pub(crate) mod debug;
 pub mod i2c;
 
 #[repr(usize)]

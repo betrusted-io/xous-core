@@ -47,10 +47,9 @@ renode = []
 # ATSAMA5D27 ARMv7A SoC
 atsama5d27 = []
 
-# Cramium SoC & FPGA model
-cramium-soc = []
-cramium-fpga = []
-# Emulation for cramium
+# Baochip-1x SoC & FPGA model
+bao1x = []
+# Emulation for bao1x
 hosted-baosec = []
 
 # Arty targets

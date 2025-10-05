@@ -8357,22 +8357,22 @@ pub const CODEPOINTS: [u32; 8181] = [
 0x0FF60,
 ];
 
-#[cfg(any(feature="precursor", feature="renode", feature="cramium-soc", feature="board-baosec"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 pub static GLYPH_LOCATION: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 pub const GLYPH_LEN: usize = 65448;
 
 pub fn glyphs() -> &'static [u32] {
-    #[cfg(any(feature="precursor", feature="renode", feature="cramium-soc", feature="board-baosec"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     unsafe {
         let data: *const u32 = core::mem::transmute(GLYPH_LOCATION.load(core::sync::atomic::Ordering::SeqCst));
         core::slice::from_raw_parts(data, GLYPH_LEN)
     }
 
-    #[cfg(not(target_os = "xous"))]
+    #[cfg(any(not(target_os = "xous"), feature="bao1x"))]
     &GLYPHS
 }
 
-#[cfg(not(target_os = "xous"))]
+#[cfg(any(not(target_os = "xous"), feature = "bao1x"))]
 /// Packed 16px * 16px glyph pattern data.
 /// Pixels are packed in row-major order with LSB of first pixel word
 /// containing the top left pixel. Bit of 0 means clear, 1 means set

@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use cram_hal_service::trng;
+use bao1x_hal_service::trng;
 use usb_device_xous::{UsbDeviceState, UsbDeviceType, UsbHid};
 
 use crate::{CommonEnv, ShellCmdApi};

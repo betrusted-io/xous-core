@@ -8,13 +8,25 @@ description = "Baremetal target"
 [dependencies]
 xous = "0.9.66"
 utralib = { version = "0.1.25", optional = true, default-features = false }
-cramium-hal = { path = "../libs/cramium-hal", optional = true, default-features = false }
-cramium-api = { path = "../libs/cramium-api", optional = true, default-features = false }
+bao1x-hal = { path = "../libs/bao1x-hal", optional = true, default-features = false }
+bao1x-api = { path = "../libs/bao1x-api", optional = true, default-features = false }
 vexriscv = { version = "0.5.6", package = "xous-riscv" }
 riscv = { version = "0.14.0", features = ["critical-section-single-hart"] }
 linked_list_allocator = { version = "0.10.5", optional = true }
 xous-bio-bdma = { path = "../libs/xous-bio-bdma", optional = true, default-features = false }
 critical-section = "1.2.0"
+ux-api = { path = "../libs/ux-api", optional = true, default-features = false }
+sha2 = { version = "0.10.8", optional = true, default-features = false }
+digest = { version = "0.10.7", optional = true }
+ed25519-dalek = { package = "ed25519-dalek-bao1x", path = "../bao1x-boot/ed25519-dalek-bao1x", default-features = false, features = [
+    "digest",
+    "zeroize",
+], optional = true }
+base64 = { version = "0.22.1", optional = true, default-features = false, features = [
+    "alloc",
+] }
+sha2-bao1x = { path = "../bao1x-boot/sha2-bao1x", optional = true, default-features = false }
+hex-literal = "1.0.0"
 
 [features]
 artybio = [
@@ -22,29 +34,44 @@ artybio = [
     "linked_list_allocator",
     "xous-bio-bdma/artybio",
     "xous-bio-bdma/baremetal",
-    "nto-bio",
+    "bao1x-bio",
 ]
 artyvexii = ["utralib/artyvexii", "linked_list_allocator"]
 
 # Baochip feature tree below
 v0p9 = [] # selects RAM timings for VDD core = 0.9V
-cramium-soc = [
-    "utralib/cramium-soc",
+bao1x = [
+    "utralib/bao1x",
     "linked_list_allocator",
-    "cramium-hal/loader-baosec",
-    # "cramium-hal/debug-print-usb",
-    "cramium-api",
+    "bao1x-hal/loader-baosec",
+    # "bao1x-hal/debug-print-usb",
+    "bao1x-api",
     "v0p9",
+    "digest",
+    "sha2-bao1x",
 ]
 # activates BIO test suite
-nto-bio = [
+bao1x-bio = [
     "xous-bio-bdma/bio-mul",
     "xous-bio-bdma/baremetal",
-    "xous-bio-bdma/cramium-soc",
+    "xous-bio-bdma/bao1x",
     "xous-bio-bdma/tests",
 ]
 # selects features for EVB target (defaults to baosec)
-nto-evb = []
+bao1x-evb = []
+bao1x-usb = [
+    # "bao1x-hal/debug-print-usb",
+    # "bao1x-hal/verbose-debug",
+]
+bao1x-buttons = []
+bao1x-trng = [
+    "bao1x-usb",
+    "base64",
+    "xous-bio-bdma/baremetal",
+    "xous-bio-bdma/bao1x",
+]
+trng-debug = []
+verbose-debug = []
 
 verilator-only = []
-default = ["artyvexii", "nto-bio"]
+default = ["bao1x-usb", "bao1x-trng"]

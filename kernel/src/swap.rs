@@ -3,7 +3,7 @@
 
 use core::cmp::Ordering;
 
-use cramium_hal::udma::FLASH_SECTOR_LEN;
+use bao1x_hal::udma::FLASH_SECTOR_LEN;
 use loader::SWAP_FLG_WIRED;
 use xous_kernel::SWAPPER_PID;
 use xous_kernel::arch::EXCEPTION_STACK_TOP;

@@ -1,5 +1,5 @@
-#[cfg(feature = "cramium-soc")]
-use cramium_hal::board::SPINOR_ERASE_SIZE;
+#[cfg(feature = "bao1x")]
+use bao1x_hal::board::SPINOR_ERASE_SIZE;
 #[cfg(any(feature = "precursor", feature = "renode"))]
 use precursor_hal::board::SPINOR_ERASE_SIZE;
 
@@ -102,7 +102,7 @@ impl Swapper {
     /// `offset` is transmitted with the address bank mask for MMAP_VIRT attached to avoid
     /// the first sector falling foul of the NonZero requirement.
     pub fn write_page(&self, offset: usize, page: &FlashPage) -> Result<xous::Result, xous::Error> {
-        if (offset & (cramium_hal::board::SPINOR_ERASE_SIZE as usize - 1)) != 0 {
+        if (offset & (bao1x_hal::board::SPINOR_ERASE_SIZE as usize - 1)) != 0 {
             return Err(xous::Error::BadAddress);
         }
         let msg = MemoryMessage {
@@ -121,9 +121,9 @@ impl Swapper {
     }
 
     pub fn block_erase(&self, offset: usize, len: usize) -> Result<xous::Result, xous::Error> {
-        if (offset & (cramium_hal::board::SPINOR_BULK_ERASE_SIZE as usize - 1) != 0)
+        if (offset & (bao1x_hal::board::SPINOR_BULK_ERASE_SIZE as usize - 1) != 0)
             || len == 0
-            || (len & (cramium_hal::board::SPINOR_BULK_ERASE_SIZE as usize - 1)) != 0
+            || (len & (bao1x_hal::board::SPINOR_BULK_ERASE_SIZE as usize - 1)) != 0
         {
             return Err(xous::Error::BadAddress);
         }

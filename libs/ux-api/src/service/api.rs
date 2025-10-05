@@ -82,7 +82,7 @@ pub enum GfxOpcode {
     TestPattern,
 
     /// SuspendResume callback
-    #[cfg(not(feature = "cramium-soc"))]
+    #[cfg(not(feature = "bao1x"))]
     SuspendResume,
 
     /// draw the boot logo (for continuity as apps initialize)

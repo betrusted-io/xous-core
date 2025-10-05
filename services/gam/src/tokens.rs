@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
-#[cfg(feature = "cramium-soc")]
-use cram_hal_service::trng;
+#[cfg(feature = "bao1x")]
+use bao1x_hal_service::trng;
 use gam::{EXPECTED_APP_CONTEXTS, EXPECTED_BOOT_CONTEXTS};
 
 /*

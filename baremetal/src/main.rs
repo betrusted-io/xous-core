@@ -9,7 +9,11 @@ mod platform;
 mod repl;
 use alloc::collections::VecDeque;
 use core::cell::RefCell;
+#[cfg(feature = "bao1x-usb")]
+use core::sync::atomic::Ordering;
 
+#[cfg(feature = "bao1x-usb")]
+use bao1x_hal::{iox::Iox, usb::driver::UsbDeviceState};
 use critical_section::Mutex;
 use platform::*;
 #[allow(unused_imports)]
@@ -17,9 +21,16 @@ use utralib::*;
 #[cfg(feature = "artybio")]
 use xous_bio_bdma::*;
 
+#[allow(unused_imports)]
 use crate::delay;
+#[cfg(feature = "bao1x-usb")]
+use crate::usb::glue;
 
 static UART_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
+#[allow(dead_code)]
+static USB_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
+static USB_TX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
+static USB_CONNECTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 pub fn uart_irq_handler() {
     use crate::debug::SerialRead;
@@ -65,6 +76,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // The green LEDs flash whenever the FPGA is configured with the Arty BIO design.
     // The RGB LEDs flash when the CPU is running this code.
     #[allow(unused_variables)]
+    #[allow(unused_mut)]
     let mut count = 0;
     #[cfg(any(feature = "artyvexii", feature = "artybio"))]
     let mut rgb = CSR::new(utra::rgb::HW_RGB_BASE as *mut u32);
@@ -72,8 +84,86 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // provide some feedback on the run state of the BIO by peeking at the program counter
     // value, and provide feedback on the CPU operation by flashing the RGB LEDs.
     let mut repl = crate::repl::Repl::new();
-    #[cfg(feature = "nto-bio")]
-    repl.init_cmd("bio"); // do a power-on BIO test
+
+    #[cfg(feature = "bao1x-usb")]
+    let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+    #[cfg(feature = "bao1x-usb")]
+    let (mut last_usb_state, mut portsc) = crate::platform::usb::glue::hotplug_usb(&iox);
+
+    crate::println!(
+        "  [usb connected {:?}] [tx idle {:?}]",
+        USB_CONNECTED.load(Ordering::SeqCst),
+        crate::platform::usb::TX_IDLE.load(Ordering::SeqCst)
+    );
+    #[cfg(feature = "bao1x-usb")]
+    // do the main loop through either USB interface or serial port
+    loop {
+        let (new_usb_state, new_portsc) = glue::usb_status();
+
+        // provide feedback when connection is established
+        if new_usb_state != last_usb_state {
+            crate::println_d!("new state {:?}", new_usb_state);
+            if new_usb_state == UsbDeviceState::Configured {
+                crate::println!("USB is connected!");
+                last_usb_state = new_usb_state;
+                USB_CONNECTED.store(true, core::sync::atomic::Ordering::SeqCst);
+            }
+        }
+
+        // repl handling; USB is entirely interrupt driven, so there is no loop to handle it
+        if USB_CONNECTED.load(Ordering::SeqCst) {
+            // fetch characters from the Rx buffer
+            critical_section::with(|cs| {
+                let mut queue = USB_RX.borrow(cs).borrow_mut();
+                while let Some(byte) = queue.pop_front() {
+                    repl.rx_char(byte);
+                }
+            });
+
+            // Process any command line requests
+            match repl.process() {
+                Err(e) => {
+                    if let Some(m) = e.message {
+                        crate::println!("{}", m);
+                        repl.abort_cmd();
+                    }
+                }
+                _ => (),
+            };
+            glue::flush_tx();
+        } else {
+            // Handle keyboard events.
+            critical_section::with(|cs| {
+                let mut queue = UART_RX.borrow(cs).borrow_mut();
+                while let Some(byte) = queue.pop_front() {
+                    repl.rx_char(byte);
+                }
+            });
+
+            // Process any command line requests
+            match repl.process() {
+                Err(e) => {
+                    if let Some(m) = e.message {
+                        crate::println!("{}", m);
+                        repl.abort_cmd();
+                    }
+                }
+                _ => (),
+            };
+        }
+
+        // return control to hard-wired serial port when USB is disconnected
+        if new_portsc != portsc {
+            portsc = new_portsc;
+            if glue::is_disconnected(portsc) && new_usb_state == UsbDeviceState::Configured {
+                crate::println_d!("USB disconnected!");
+                USB_CONNECTED.store(false, core::sync::atomic::Ordering::SeqCst);
+            }
+        }
+    }
+
+    #[cfg(not(feature = "bao1x-usb"))]
+    // do the main loop through only the serial port
     loop {
         // Handle keyboard events.
         critical_section::with(|cs| {
@@ -169,7 +259,7 @@ pub fn fifo_basic() -> usize {
 
     // The code readback is broken on the Arty BIO target due to a pipeline stage
     // in the code readback path that causes the previous read's data to show up
-    // on the current read access. On the NTO-BIO (full chip version), the BIO runs
+    // on the current read access. On the bao1x-BIO (full chip version), the BIO runs
     // at a much higher speed than the bus framework and thus the data is returned
     // on time for the read. However in the FPGA for simplicity the BIO is geared
     // at 2:1 BIO speed to CPU core speed, and the bus fabric runs at a single speed

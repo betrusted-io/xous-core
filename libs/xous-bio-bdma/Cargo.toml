@@ -14,17 +14,17 @@ utralib = { version = "0.1.25", default-features = false }
 xous = "0.9.66"
 
 [features]
-cramium-soc = ["utralib/cramium-soc"]
-cramium-fpga = ["utralib/cramium-fpga"]
+bao1x = ["utralib/bao1x"]
 artybio = ["utralib/artybio"]
 precursor = []
 hosted = []
 renode = []
-# may be activated in conjunction with "cramium-soc", "rp2040" targets when not running Xous
+# may be activated in conjunction with "bao1x", "rp2040" targets when not running Xous
 baremetal = []
 std = []
 arty = []
 bio-mul = []
+debug-print = []
 
 tests = []
-default = ["tests", "cramium-soc"]
+default = ["tests", "bao1x"]

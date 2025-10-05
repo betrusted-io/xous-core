@@ -1,3 +1,7 @@
+# Precursor Apps
+
+This directory contains a collection of apps that target Precursor configurations.
+
 # Xous Apps and the Manifest Format
 
 You can add apps to Xous by creating crates in this directory and adding them to the workspace.

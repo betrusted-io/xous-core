@@ -39,8 +39,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                 }
                 #[cfg(feature = "bmp180")]
                 "temp" => {
-                    use cram_hal_service::I2c;
-                    use cramium_hal::bmp180::Bmp180;
+                    use bao1x_hal::bmp180::Bmp180;
+                    use bao1x_hal_service::I2c;
                     let mut i2c = I2c::new();
 
                     match Bmp180::new(&mut i2c) {
@@ -57,7 +57,49 @@ impl<'a> ShellCmdApi<'a> for Test {
                         }
                     }
                 }
+                "shutdown" => {
+                    use bao1x_api::*;
+                    use bao1x_hal_service::I2c;
+                    let iox = bao1x_api::IoxHal::new();
+                    let mut i2c = I2c::new();
+                    iox.setup_pin(
+                        IoxPort::PF,
+                        0,
+                        Some(IoxDir::Output),
+                        Some(IoxFunction::Gpio),
+                        None,
+                        Some(IoxEnable::Disable),
+                        None,
+                        Some(IoxDriveStrength::Drive8mA),
+                    );
+                    iox.set_gpio_pin_value(IoxPort::PF, 0, IoxValue::Low);
+                    log::info!(
+                        "shutdown got {:x?}, {:x?}",
+                        iox.get_gpio_pin_value(IoxPort::PF, 0),
+                        iox.get_gpio_bank_value(IoxPort::PF)
+                    );
 
+                    let axp2101 = bao1x_hal::axp2101::Axp2101::new(&mut i2c).expect("couldn't get AXP2101");
+                    log::info!("sending shutdown to axp2101 pmic...in four seconds");
+                    let tt = ticktimer::Ticktimer::new().unwrap();
+                    tt.sleep_ms(4000).ok();
+                    axp2101.powerdown(&mut i2c).ok();
+                    iox.setup_pin(
+                        IoxPort::PF,
+                        6,
+                        Some(IoxDir::Output),
+                        Some(IoxFunction::Gpio),
+                        None,
+                        Some(IoxEnable::Disable),
+                        None,
+                        Some(IoxDriveStrength::Drive8mA),
+                    );
+                    iox.set_gpio_pin_value(IoxPort::PF, 6, IoxValue::Low);
+                    log::info!("sent shutdown to axp2101");
+                }
+                "keepon" => {
+                    todo!("Fix this to use DCDC2 for keepon (as per baosec v2)");
+                }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
                 }

@@ -20,7 +20,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
 
 [features]
 # selection of board settings for display resolution
-cramium-soc = []
+bao1x = []
 board-baosec = []
 board-baosor = []
 hosted-baosec = []

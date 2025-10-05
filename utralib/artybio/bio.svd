@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
-    <vendor>cramium</vendor>
+    <vendor>bao1x</vendor>
     <name>SOC</name>
-    <description><![CDATA[Cramium SoC]]></description>
+    <description><![CDATA[bao1x SoC]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>

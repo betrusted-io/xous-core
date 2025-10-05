@@ -1,7 +1,7 @@
-#[cfg(any(feature = "cramium-soc"))]
-pub mod cramium;
-#[cfg(any(feature = "cramium-soc"))]
-pub use cramium::hw::*;
+#[cfg(any(feature = "bao1x"))]
+pub mod bao1x;
+#[cfg(any(feature = "bao1x"))]
+pub use bao1x::hw::*;
 
 #[cfg(any(feature = "precursor", feature = "renode"))]
 pub mod precursor;

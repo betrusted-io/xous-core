@@ -4,12 +4,26 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 #[allow(unused_imports)]
-#[cfg(feature = "cramium-soc")]
-use cramium_api::*;
+#[cfg(feature = "bao1x")]
+use bao1x_api::*;
 #[allow(unused_imports)]
 use utralib::*;
-#[cfg(any(feature = "artybio", feature = "nto-bio"))]
+#[cfg(any(feature = "artybio", feature = "bao1x-bio"))]
 use xous_bio_bdma::*;
+
+#[cfg(feature = "bao1x-trng")]
+static TRNG_INIT: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+// courtesy of claude
+#[cfg(feature = "bao1x")]
+const K_DATA: &'static [u8; 853] = b"The quick brown fox jumps over the lazy dog while contemplating \
+the meaning of existence in a digital world. Numbers like 123456789 and symbols @#$%^&*() add variety to this test \
+message. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore \
+magna aliqua. Testing patterns: ABCDEFGHIJKLMNOPQRSTUVWXYZ and abcdefghijklmnopqrstuvwxyz provide full alphabet coverage. \
+Special characters !@#$%^&*()_+-=[]{}|;':.,.<>?/ enhance the diversity of this sample text. The year 2024 brings new \
+challenges and opportunities for software development and testing methodologies. Random words like elephant, butterfly, \
+quantum, nebula, crystalline, harmonic, and serendipity fill the remaining space. Pi equals 3.14159265358979323846 \
+approximately. This text serves as a placeholder for various testing scenarios!!!";
 
 pub struct Error {
     pub message: Option<&'static str>,
@@ -71,7 +85,7 @@ impl Repl {
         let cmd = parts.next().unwrap_or("").to_string();
         let args: Vec<String> = parts.map(|s| s.to_string()).collect();
         match cmd.as_str() {
-            #[cfg(not(feature = "cramium-soc"))]
+            #[cfg(not(feature = "bao1x"))]
             "mon" => {
                 #[cfg(feature = "artybio")]
                 let bio_ss = BioSharedState::new();
@@ -153,7 +167,7 @@ impl Repl {
                     ));
                 }
             }
-            #[cfg(feature = "cramium-soc")]
+            #[cfg(feature = "bao1x")]
             "rram" => {
                 if args.len() == 2 || args.len() == 3 {
                     let addr = usize::from_str_radix(&args[0], 16)
@@ -181,7 +195,7 @@ impl Repl {
                                 poke.len() * core::mem::size_of::<u32>(),
                             )
                         };
-                        let mut rram = cramium_hal::rram::Reram::new();
+                        let mut rram = bao1x_hal::rram::Reram::new();
                         rram.write_slice(addr, poke_inner);
                         crate::println!("RRAM written {:x} into {:x}, {} times", value, addr, count);
                     } else {
@@ -195,7 +209,7 @@ impl Repl {
                     ));
                 }
             }
-            #[cfg(feature = "cramium-soc")]
+            #[cfg(feature = "bao1x")]
             "bogomips" => {
                 crate::println!("start test");
                 // start the RTC
@@ -235,7 +249,7 @@ impl Repl {
                 crate::platform::setup_timer();
             }
 
-            #[cfg(feature = "nto-bio")]
+            #[cfg(feature = "bao1x-bio")]
             "bio" => {
                 const BIO_TESTS: usize =
                     // get_id
@@ -288,7 +302,7 @@ impl Repl {
                 }
 
                 // map the BIO ports to GPIO pins
-                // let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                // let iox = bao1x_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
                 // iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
 
                 crate::println!("Resetting block");
@@ -340,7 +354,7 @@ impl Repl {
                 // Final report
                 crate::println!("\n--- BIO Tests Complete: {}/{} passed. ---\n", passing_tests, BIO_TESTS);
             }
-            #[cfg(feature = "nto-bio")]
+            #[cfg(feature = "bao1x-bio")]
             "bdma" => {
                 let mut seed = 0;
                 loop {
@@ -357,7 +371,7 @@ impl Repl {
                 rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
                 // rcurst.wo(utra::sysctrl::SFR_RCURST1, 0x55AA);
             }
-            #[cfg(feature = "cramium-soc")]
+            #[cfg(feature = "bao1x")]
             "clocks" => {
                 if args.len() == 1 {
                     let f = u32::from_str_radix(&args[0], 10)
@@ -374,104 +388,21 @@ impl Repl {
                     return Err(Error::help("clocks <CPU freq in MHz, 100-1600>"));
                 }
             }
-            #[cfg(feature = "cramium-soc")]
-            "usb" => {
-                crate::println!("USB basic test...");
-                let csr = cramium_hal::usb::compat::AtomicCsr::new(
-                    cramium_hal::usb::utra::CORIGINE_USB_BASE as *mut u32,
-                );
-                let irq_csr = cramium_hal::usb::compat::AtomicCsr::new(
-                    utralib::utra::irqarray1::HW_IRQARRAY1_BASE as *mut u32,
-                );
-                crate::println!("inspect USB region...");
-                let usbregs = 0x50202400 as *const u32;
-                for i in 0..32 {
-                    crate::println!("{:x}, {:08x}", i, unsafe {
-                        usbregs
-                            .add(cramium_hal::usb::utra::CORIGINE_DEV_OFFSET / size_of::<u32>() + i)
-                            .read_volatile()
-                    });
-                }
-                // safety: this is safe because we are in machine mode, and vaddr/paddr always pairs up
-                crate::println!("Getting pointer...");
-                let mut usb = unsafe {
-                    cramium_hal::usb::driver::CorigineUsb::new(
-                        cramium_hal::board::CRG_UDC_MEMBASE,
-                        csr.clone(),
-                        irq_csr.clone(),
-                    )
-                };
-                crate::println!("Reset");
-                usb.reset();
-                let mut idle_timer = 0;
-                let mut vbus_on = false;
-                let mut vbus_on_count = 0;
-                let mut in_u0 = false;
-                let mut last_sc = 0;
+            #[cfg(feature = "bao1x-buttons")]
+            "buttons" => {
+                use bao1x_hal::iox::Iox;
+                let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                let (rows, cols) = bao1x_hal::board::baosec::setup_kb_pins(&iox);
                 loop {
-                    let next_sc = csr.r(cramium_hal::usb::utra::PORTSC);
-                    if last_sc != next_sc {
-                        last_sc = next_sc;
-                        crate::println!("**** SC update {:x?}", cramium_hal::usb::driver::PortSc(next_sc));
-                        /*
-                        if cramium_hal::usb::driver::PortSc(next_sc).pr() {
-                            crate::println!("  >>reset<<");
-                            usb.start();
-                            in_u0 = false;
-                            vbus_on_count = 0;
+                    let kps = crate::scan_keyboard(&iox, &rows, &cols);
+                    for kp in kps {
+                        if kp != crate::KeyPress::None {
+                            crate::println!("Got key: {:?}", kp);
                         }
-                        */
-                    }
-                    let event = usb.udc_handle_interrupt();
-                    if event == cramium_hal::usb::driver::CrgEvent::None {
-                        idle_timer += 1;
-                    } else {
-                        crate::println!("*Event {:?} at {}", event, idle_timer);
-                        idle_timer = 0;
-                    }
-
-                    if !vbus_on && vbus_on_count == 4 {
-                        crate::println!("*Vbus on");
-                        usb.reset();
-                        usb.init();
-                        usb.start();
-                        vbus_on = true;
-                        in_u0 = false;
-
-                        let irq1 = irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
-                        crate::println!(
-                            "irq1: {:x}, status: {:x}",
-                            irq1,
-                            csr.r(cramium_hal::usb::utra::USBSTS)
-                        );
-                        irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, irq1);
-                        // restore this to go on to boot
-                        // break;
-                    } else if usb.pp() && !vbus_on {
-                        vbus_on_count += 1;
-                        crate::println!("*Vbus_on_count: {}", vbus_on_count);
-                        // mdelay(100);
-                    } else if !usb.pp() && vbus_on {
-                        crate::println!("*Vbus off");
-                        usb.stop();
-                        usb.reset();
-                        vbus_on_count = 0;
-                        vbus_on = false;
-                        in_u0 = false;
-                    } else if in_u0 && vbus_on {
-                        // usb.udc_handle_interrupt();
-                        // TODO
-                    } else if usb.ccs() && vbus_on {
-                        // usb.print_status(usb.csr.r(cramium_hal::usb::utra::PORTSC));
-                        crate::println!("*Enter U0");
-                        in_u0 = true;
-                        let irq1 = irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
-                        // usb.print_status(csr.r(cramium_hal::usb::utra::PORTSC));
-                        irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, irq1);
                     }
                 }
             }
-            #[cfg(feature = "nto-bio")]
+            #[cfg(feature = "bao1x-bio")]
             "pin" => {
                 // We need at least a subcommand.
                 if args.is_empty() {
@@ -482,7 +413,7 @@ impl Repl {
 
                 // Initialize BIO and IOX once, as they are common to all subcommands.
                 let mut bio_ss = BioSharedState::new();
-                let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                let iox = bao1x_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
                 iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
 
                 match subcommand {
@@ -638,29 +569,29 @@ impl Repl {
                     }
                 }
             }
-            #[cfg(all(feature = "cramium-soc", not(feature = "nto-evb")))]
+            #[cfg(all(feature = "bao1x", not(feature = "bao1x-evb")))]
             "ldo" => {
                 if args.len() != 1 {
                     return Err(Error::help("vdd85 [on|off]"));
                 }
-                use cramium_hal::iox::Iox;
+                use bao1x_hal::iox::Iox;
                 let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
                 if args[0] == "off" {
                     crate::println!("Check DCDC2");
-                    let i2c_channel = cramium_hal::board::setup_i2c_pins(&iox);
-                    use cramium_hal::udma::GlobalConfig;
+                    let i2c_channel = bao1x_hal::board::setup_i2c_pins(&iox);
+                    use bao1x_hal::udma::GlobalConfig;
                     let udma_global = GlobalConfig::new();
                     udma_global.clock(PeriphId::from(i2c_channel), true);
                     let i2c_ifram = unsafe {
-                        cramium_hal::ifram::IframRange::from_raw_parts(
-                            cramium_hal::board::I2C_IFRAM_ADDR,
-                            cramium_hal::board::I2C_IFRAM_ADDR,
+                        bao1x_hal::ifram::IframRange::from_raw_parts(
+                            bao1x_hal::board::I2C_IFRAM_ADDR,
+                            bao1x_hal::board::I2C_IFRAM_ADDR,
                             4096,
                         )
                     };
                     let perclk = 100_000_000; // assume this value
                     let mut i2c = unsafe {
-                        cramium_hal::udma::I2c::new_with_ifram(
+                        bao1x_hal::udma::I2c::new_with_ifram(
                             i2c_channel,
                             400_000,
                             perclk,
@@ -669,16 +600,20 @@ impl Repl {
                         )
                     };
 
-                    if let Ok(mut pmic) = cramium_hal::axp2101::Axp2101::new(&mut i2c) {
+                    if let Ok(mut pmic) = bao1x_hal::axp2101::Axp2101::new(&mut i2c) {
                         pmic.update(&mut i2c).ok();
-                        if let Some((voltage, _dvm)) = pmic.get_dcdc(cramium_hal::axp2101::WhichDcDc::Dcdc2) {
-                            crate::println!("DCDC2 is on and {:.2}v", voltage);
+                        if let Some((voltage, _dvm)) = pmic.get_dcdc(bao1x_hal::axp2101::WhichDcDc::Dcdc2) {
+                            crate::println!(
+                                "DCDC2 is on and {}.{}v",
+                                voltage as i32,
+                                (voltage * 100.0) as i32 % 100
+                            );
                         } else {
                             crate::println!("DCDC is off, turning it on!");
                             match pmic.set_dcdc(
                                 &mut i2c,
                                 Some((0.88, true)),
-                                cramium_hal::axp2101::WhichDcDc::Dcdc2,
+                                bao1x_hal::axp2101::WhichDcDc::Dcdc2,
                             ) {
                                 Ok(_) => crate::println!("turned on DCDC2"),
                                 Err(_) => {
@@ -701,9 +636,9 @@ impl Repl {
                     iox.set_gpio_pin_value(IoxPort::PA, 5, IoxValue::High);
                 }
             }
-            #[cfg(all(feature = "cramium-soc", not(feature = "nto-evb")))]
+            #[cfg(all(feature = "bao1x", not(feature = "bao1x-evb")))]
             "wfi" => {
-                let iox = cramium_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                let iox = bao1x_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
                 let ao_bkupreg = CSR::new(utralib::HW_AOBUREG_BASE as *mut u32);
                 for i in 0..8 {
@@ -791,19 +726,19 @@ impl Repl {
                 crate::println!("clocks @ 100MHz");
 
                 // configure PMIC to be off
-                let i2c_channel = cramium_hal::board::setup_i2c_pins(&iox);
-                use cramium_hal::udma::GlobalConfig;
+                let i2c_channel = bao1x_hal::board::setup_i2c_pins(&iox);
+                use bao1x_hal::udma::GlobalConfig;
                 let udma_global = GlobalConfig::new();
                 udma_global.clock(PeriphId::from(i2c_channel), true);
                 let i2c_ifram = unsafe {
-                    cramium_hal::ifram::IframRange::from_raw_parts(
-                        cramium_hal::board::I2C_IFRAM_ADDR,
-                        cramium_hal::board::I2C_IFRAM_ADDR,
+                    bao1x_hal::ifram::IframRange::from_raw_parts(
+                        bao1x_hal::board::I2C_IFRAM_ADDR,
+                        bao1x_hal::board::I2C_IFRAM_ADDR,
                         4096,
                     )
                 };
                 let mut i2c = unsafe {
-                    cramium_hal::udma::I2c::new_with_ifram(
+                    bao1x_hal::udma::I2c::new_with_ifram(
                         i2c_channel,
                         400_000,
                         perclk,
@@ -812,8 +747,8 @@ impl Repl {
                     )
                 };
 
-                if let Ok(mut pmic) = cramium_hal::axp2101::Axp2101::new(&mut i2c) {
-                    match pmic.set_dcdc(&mut i2c, None, cramium_hal::axp2101::WhichDcDc::Dcdc2) {
+                if let Ok(mut pmic) = bao1x_hal::axp2101::Axp2101::new(&mut i2c) {
+                    match pmic.set_dcdc(&mut i2c, None, bao1x_hal::axp2101::WhichDcDc::Dcdc2) {
                         Ok(_) => crate::println!("turned off DCDC2"),
                         Err(_) => crate::println!("couldn't turn off DCDC2"),
                     }
@@ -860,6 +795,216 @@ impl Repl {
                 crate::platform::clockset_wrapper(800_000_000);
                 crate::println!("exiting wfi");
             }
+            #[cfg(feature = "bao1x-trng")]
+            "trngro" => {
+                use base64::{Engine as _, engine::general_purpose};
+                fn encode_base64(input: &[u8]) -> String { general_purpose::STANDARD.encode(input) }
+                fn as_u8_slice(slice: &[u32]) -> &[u8] {
+                    let len = slice.len() * size_of::<u32>();
+                    unsafe { core::slice::from_raw_parts(slice.as_ptr() as *const u8, len) }
+                }
+
+                let mut trng = bao1x_hal::sce::trng::Trng::new(utralib::utra::trng::HW_TRNG_BASE);
+                if TRNG_INIT.swap(true, core::sync::atomic::Ordering::SeqCst) == false {
+                    crate::println!("setting up TRNG");
+                    trng.setup_raw_generation(256);
+                    trng.start();
+                } else {
+                    // safety: the handle is already initialized
+                    unsafe {
+                        trng.force_mode(bao1x_hal::sce::trng::Mode::Raw);
+                    }
+                }
+                crate::println!("====ROSTART====");
+                const BUFLEN: usize = 256;
+                // test code for checking performance & alignment of decode data - eliminates
+                // encoding & trng generation overhead
+                // let b64_as_slice =
+                // b"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn+AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnJ2en6ChoqOkpaanqKmqq6ytrq+wsbKztLW2t7i5uru8vb6/
+                // wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs7e7v8PHy8/T19vf4+fr7/P3+/w==";
+
+                loop {
+                    let mut buf = [0u32; BUFLEN / size_of::<u32>()];
+                    #[cfg(not(feature = "trng-debug"))]
+                    for d in buf.iter_mut() {
+                        loop {
+                            if let Some(word) = trng.get_u32() {
+                                *d = word;
+                                break;
+                            }
+                        }
+                    }
+                    #[cfg(feature = "trng-debug")]
+                    crate::trng_ro(
+                        0x0000001F,
+                        0x0000FFFF,
+                        0x00000002,
+                        crate::TrngOpt::RngB,
+                        0xFFFFFFFF,
+                        0xFFFFFFFF,
+                        0xFFFFFFFF,
+                        0xFFFFFFFF,
+                        &mut buf,
+                        true,
+                    );
+                    let buf_u8 = as_u8_slice(&buf);
+                    let b64 = encode_base64(buf_u8);
+                    unsafe {
+                        if let Some(ref mut usb_ref) = crate::platform::usb::USB {
+                            let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
+                            let tx_buf = usb.cdc_acm_tx_slice();
+                            let b64_as_slice = b64.as_bytes();
+                            assert!(b64_as_slice.len() + 1 < tx_buf.len()); // this is ensured by adjusting BUFLEN
+                            tx_buf[..b64_as_slice.len()].copy_from_slice(b64_as_slice);
+                            tx_buf[b64_as_slice.len()] = '\n' as char as u32 as u8;
+                            while !crate::platform::usb::TX_IDLE
+                                .swap(false, core::sync::atomic::Ordering::SeqCst)
+                            {
+                                // wait for tx to go idle
+                            }
+                            usb.bulk_xfer(
+                                3,
+                                bao1x_hal::usb::driver::USB_SEND,
+                                tx_buf.as_ptr() as usize,
+                                b64_as_slice.len() + 1,
+                                0,
+                                0,
+                            );
+                        } else {
+                            panic!("USB core not allocated, can't proceed!");
+                        }
+                    }
+                }
+            }
+            #[cfg(feature = "bao1x-trng")]
+            "trngav" => {
+                use base64::{Engine as _, engine::general_purpose};
+                fn encode_base64(input: &[u8]) -> String { general_purpose::STANDARD.encode(input) }
+                fn as_u8_slice(slice: &[u32]) -> &[u8] {
+                    let len = slice.len() * size_of::<u32>();
+                    unsafe { core::slice::from_raw_parts(slice.as_ptr() as *const u8, len) }
+                }
+
+                use bao1x_hal::iox::Iox;
+                use xous_bio_bdma::*;
+
+                let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                let (power_port, power_pin) = bao1x_hal::board::setup_trng_power_pin(&iox);
+                let bio_input = bao1x_hal::board::setup_trng_input_pin(&iox);
+                // turn on the system
+                iox.set_gpio_pin_value(power_port, power_pin, IoxValue::High);
+
+                let mut bio_ss = BioSharedState::new();
+                bio_ss.init();
+                crate::println!("bio_input: {}", bio_input);
+                crate::avtrng::setup(&mut bio_ss, bio_input);
+
+                crate::println!("====AVSTART====");
+                const BUFLEN: usize = 256;
+
+                crate::usb::flush();
+
+                const BITS_PER_SAMPLE: usize = 4;
+                loop {
+                    let mut buf = [0u32; BUFLEN / size_of::<u32>()];
+                    for d in buf.iter_mut() {
+                        let mut raw32 = 0;
+                        for _ in 0..(size_of::<u32>() * 8) / BITS_PER_SAMPLE {
+                            // wait for the next interval to arrive
+                            while bio_ss.bio.rf(utra::bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL0) == 0 {}
+                            let raw = bio_ss.bio.r(utra::bio_bdma::SFR_RXF0);
+                            // crate::println!("raw: {:x}", raw);
+                            raw32 <<= BITS_PER_SAMPLE;
+                            // shift right by one because bit 0 always samples as 0, due to instruction timing
+                            raw32 |= (raw >> 1) & ((1 << BITS_PER_SAMPLE) - 1)
+                        }
+                        *d = raw32;
+                    }
+                    let buf_u8 = as_u8_slice(&buf);
+                    let b64 = encode_base64(buf_u8);
+                    unsafe {
+                        if let Some(ref mut usb_ref) = crate::platform::usb::USB {
+                            let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
+                            let tx_buf = usb.cdc_acm_tx_slice();
+                            let b64_as_slice = b64.as_bytes();
+                            assert!(b64_as_slice.len() + 1 < tx_buf.len()); // this is ensured by adjusting BUFLEN
+                            tx_buf[..b64_as_slice.len()].copy_from_slice(b64_as_slice);
+                            tx_buf[b64_as_slice.len()] = '\n' as char as u32 as u8;
+                            while !crate::platform::usb::TX_IDLE
+                                .swap(false, core::sync::atomic::Ordering::SeqCst)
+                            {
+                                // wait for tx to go idle
+                            }
+                            usb.bulk_xfer(
+                                3,
+                                bao1x_hal::usb::driver::USB_SEND,
+                                tx_buf.as_ptr() as usize,
+                                b64_as_slice.len() + 1,
+                                0,
+                                0,
+                            );
+                        } else {
+                            panic!("USB core not allocated, can't proceed!");
+                        }
+                    }
+                }
+            }
+            #[cfg(feature = "bao1x")]
+            "sha2" => {
+                use digest::Digest;
+                use hex_literal::hex;
+                use sha2_bao1x::Sha256;
+
+                const K_EXPECTED_DIGEST_256: [u8; 32] =
+                    hex!("de1b3b58e16d6b12c906898025d4bc5a594075f4fd4252fa88128b2e0b7a266a");
+
+                let mut pass: bool = true;
+                let mut hasher = Sha256::new();
+
+                hasher.update(K_DATA);
+                // hasher.update(data);
+                let digest = hasher.finalize();
+
+                for (&expected, result) in K_EXPECTED_DIGEST_256.iter().zip(digest) {
+                    if expected != result {
+                        pass = false;
+                    }
+                }
+                if pass {
+                    crate::println!("Sha256 passed.");
+                } else {
+                    crate::println!("Sha256 failed: {:x?}", digest);
+                }
+            }
+            #[cfg(feature = "bao1x")]
+            "sha5" => {
+                use digest::Digest;
+                use hex_literal::hex;
+                use sha2_bao1x::Sha512;
+
+                // generated by claude.
+                const K_EXPECTED_DIGEST_512: [u8; 64] = hex!(
+                    "e827276a7d5f2653fe27abc0b0c86533e75acfd4d75253b1229bf86aee19e4a0722691e9ef60510892dc60f4edff795d7875d0d8293a39a7a327a7e1bf07000a"
+                );
+
+                let mut pass: bool = true;
+                let mut hasher = Sha512::new();
+
+                hasher.update(K_DATA);
+                // hasher.update(data);
+                let digest = hasher.finalize();
+
+                for (&expected, result) in K_EXPECTED_DIGEST_512.iter().zip(digest) {
+                    if expected != result {
+                        pass = false;
+                    }
+                }
+                if pass {
+                    crate::println!("Sha512 passed.");
+                } else {
+                    crate::println!("Sha512 failed: {:x?}", digest);
+                }
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);
@@ -869,14 +1014,18 @@ impl Repl {
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!("Commands include: echo, poke, peek, bogomips");
-                #[cfg(feature = "cramium-soc")]
-                crate::print!(", rram, clocks, usb");
-                #[cfg(not(feature = "cramium-soc"))]
+                #[cfg(feature = "bao1x")]
+                crate::print!(", rram, clocks");
+                #[cfg(not(feature = "bao1x"))]
                 crate::print!(", mon");
-                #[cfg(feature = "nto-bio")]
+                #[cfg(feature = "bao1x-bio")]
                 crate::print!(", bio, bdma, pin");
-                #[cfg(all(feature = "cramium-soc", not(feature = "nto-evb")))]
+                #[cfg(all(feature = "bao1x", not(feature = "bao1x-evb")))]
                 crate::print!(", ldo, wfi");
+                #[cfg(feature = "bao1x-usb")]
+                crate::print!(", usb");
+                #[cfg(feature = "bao1x-trng")]
+                crate::print!(", trngro, trngav");
                 crate::println!("");
             }
         }

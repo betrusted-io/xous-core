@@ -12,9 +12,9 @@ impl DebugUart {
         csr.wfo(utra::app_uart::RXTX_RXTX, c as u32);
     }
 
-    #[cfg(all(feature = "debug-print-swapper", any(feature = "cramium-soc")))]
+    #[cfg(all(feature = "debug-print-swapper", any(feature = "bao1x")))]
     pub fn putc(&mut self, c: u8) {
-        use cramium_hal::udma;
+        use bao1x_hal::udma;
         // safety: safe to call as long as the raw parts are initialized and we exclusively
         // own it; and the UART has been initialized. For this peripheral, initialization
         // is handled by the loader and tossed to us, and exclusivity of access is something
@@ -22,7 +22,7 @@ impl DebugUart {
         let mut uart = unsafe {
             udma::Uart::get_handle(
                 xous::arch::SWAP_APP_UART_VADDR as usize,
-                cramium_hal::board::APP_UART_IFRAM_ADDR as usize,
+                bao1x_hal::board::APP_UART_IFRAM_ADDR as usize,
                 xous::arch::SWAP_APP_UART_IFRAM_VADDR as usize,
             )
         };

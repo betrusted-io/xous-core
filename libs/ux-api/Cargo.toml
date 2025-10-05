@@ -54,6 +54,7 @@ default-widgets = [
 
 # board definition is used to define things like the size of the screen.
 board-baosec = ["blitstr2/board-baosec"]
+board-dabao = []
 loader-baosec = []
 board-baosor = []
 loader-baosor = []
@@ -62,7 +63,7 @@ hosted-baosec = ["blitstr2/hosted-baosec"]
 # Used by font codegen routine
 hosted = ["blitstr2/hosted"]
 renode = ["blitstr2/renode"]
-cramium-soc = []
+bao1x = []
 precursor = ["blitstr2/precursor"]
 derive-rkyv = ["rkyv"]
 

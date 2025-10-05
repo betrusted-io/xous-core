@@ -20,17 +20,16 @@ num-traits = { version = "0.2.14", default-features = false }
 # xous-pl230 = { path = "../../libs/xous-pl230", optional = true }
 # this is temporary, until we get GAM/modals pulled in
 ux-api = { path = "../../libs/ux-api" }
-modals = { path = "../modals", features = ["cramium-soc"] }
+modals = { path = "../modals", features = ["bao1x"] }
 locales = { path = "../../locales" }
 usb-device-xous = { path = "../usb-device-xous", default-features = false, optional = true }
-cramium-hal = { path = "../../libs/cramium-hal", features = ["std"] }
-cram-hal-service = { path = "../cram-hal-service" }
+bao1x-hal = { path = "../../libs/bao1x-hal", features = ["std"] }
+bao1x-hal-service = { path = "../bao1x-hal-service" }
 ime-plugin-shell = { path = "../ime-plugin-shell" }
 xous-swapper = { path = "../xous-swapper" }
 
 [features]
-"cramium-fpga" = ["utralib/cramium-fpga"]
-"cramium-soc" = ["utralib/cramium-soc"]
+"bao1x" = ["utralib/bao1x"]
 "board-baosec" = ["modals/board-baosec"]
 "hosted-baosec" = ["modals/hosted-baosec"]
 

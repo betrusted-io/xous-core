@@ -38,6 +38,7 @@ pub struct TrngErrors {
 }
 
 #[derive(Debug, flatipc::Ipc)]
+#[allow(dead_code)]
 /// Note that this structure is mirrored in imports/getrandom/src/xous.rs
 #[repr(C)]
 pub struct TrngBuf {

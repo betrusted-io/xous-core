@@ -47,6 +47,9 @@ pub(crate) const TARGET_TRIPLE_RISCV32_KERNEL: &str = "riscv32imac-unknown-none-
 pub(crate) const TARGET_TRIPLE_ARM: &str = "armv7a-unknown-xous-elf";
 pub(crate) const TARGET_TRIPLE_ARM_KERNEL: &str = "armv7a-unknown-none-elf";
 
+/// Size of the "statics" region used to initialize baremetal targets
+const STATICS_LEN: usize = 0x100;
+
 // because I have nowhere else to note this. The commit that contains the rkyv-enum derive
 // refactor to work around warnings thrown by Rust 1.64.0 is: f815ed85b58b671178fbf53b4cea34186fc406eb
 // We could undo this if it turns out to be a compiler regression.
@@ -150,7 +153,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(o) => o,
             Err(e) => {
                 return Err(format!(
-                    "Error: offset should be hex number without 0x prefix {}: {:?}",
+                    "Error: size should be hex number without 0x prefix {}: {:?}",
                     swap_parts[1], e
                 )
                 .into());
@@ -184,6 +187,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let loader_features = get_flag("--loader-feature")?;
     for feature in loader_features {
         builder.add_loader_feature(&feature);
+    }
+    let detached_app_features = get_flag("--app-feature")?;
+    for feature in detached_app_features {
+        builder.add_detached_app_feature(&feature);
     }
 
     if !language_set {
@@ -261,7 +268,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 builder.set_swap(0x4020_0000, 4 * 1024 * 1024);
             }
             builder.target_renode();
-            // builder.target_cramium_soc();
+            // builder.target_bao1x_soc();
             builder.add_loader_feature("debug-print");
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
@@ -290,7 +297,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "ime-plugin-shell",
                 "ime-frontend",
                 "test-swapper",
-                // "cram-console",
+                // "bao1x-console",
             ]
             .to_vec();
             for service in swap_pkgs {
@@ -318,7 +325,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "xous-names",
                 "modals",
                 "bao-video",
-                "cramium-emu",
+                "bao1x-emu",
                 "bao-console",
                 "pddb",
                 // "usb-cramium",
@@ -491,30 +498,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_precursor_no_image(PRECURSOR_SOC_VERSION).add_services(&gfx_base_pkgs);
         }
 
-        // ------ Cramium hardware image configs ------
-        Some("cramium-sim") | Some("cramium-soc") => {
+        // ------ bao1x hardware image configs ------
+        Some("bao1x-sim") | Some("bao1x") => {
             match task.as_deref() {
-                Some("cramium-soc") => {
+                Some("bao1x") => {
                     let board = "board-dabao";
                     // select the board
                     builder.add_feature(board);
                     builder.add_loader_feature(board);
                     builder.add_kernel_feature(board);
                 }
-                _ => (), // don't add any board because this is simulation
+                Some("bao1x-sim") => {
+                    let board = "board-dabao";
+                    // select the board
+                    builder.add_feature(board);
+                    builder.add_loader_feature(board);
+                    builder.add_kernel_feature(board);
+                    builder.kernel_disable_defaults(); // need to turn of kernel DUART exclusive access so console can work!
+                }
+                _ => panic!("unhandled configuration"),
             };
 
             // placement in flash is a tension between dev convenience and RAM usage. Things in flash
             // are resident, non-swapable, but end up making the slow kernel burn process take longer.
-            let cramium_flash_pkgs = [
+            let bao1x_flash_pkgs = [
                 "xous-log",
                 "xous-names",
                 "xous-ticktimer",
-                "cram-mbox1",
-                "cram-mbox2", /* "cram-hal-service" */
+                "bao1x-mbox1",
+                "bao1x-mbox2", /* "bao1x-hal-service" */
             ]
             .to_vec();
-            let cramium_swap_pkgs = [].to_vec();
+            let bao1x_swap_pkgs = [].to_vec();
 
             builder.add_loader_feature("debug-print");
             builder.add_loader_feature("verilator-only");
@@ -530,16 +545,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             builder.add_loader_feature("sram-margin");
             match task.as_deref() {
-                Some("cramium-sim") => builder.target_cramium_fpga(),
-                Some("cramium-soc") => builder.target_cramium_soc(),
+                Some("bao1x-sim") => builder.target_bao1x_soc(),
+                Some("bao1x") => builder.target_bao1x_soc(),
                 _ => panic!("should be unreachable"),
             };
 
-            for service in cramium_flash_pkgs {
+            for service in bao1x_flash_pkgs {
                 builder.add_service(service, LoaderRegion::Flash);
             }
             builder.add_services(&get_cratespecs());
-            for service in cramium_swap_pkgs {
+            for service in bao1x_swap_pkgs {
                 builder.add_service(service, LoaderRegion::Swap);
             }
         }
@@ -592,47 +607,97 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_artyvexii();
         }
 
-        Some("baremetal-cramsoc") => {
-            builder.set_baremetal(true);
-            update_flash_origin("baremetal/src/platform/cramium/link.x", 0x6000_0000)?;
-            builder.target_baremetal_cramsoc();
+        Some("baremetal-bao1x") | Some("bao1x-baremetal") => {
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "baremetal/src/platform/bao1x/link.x",
+                (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder.set_baremetal(true).target_baremetal_bao1x("baremetal").set_sigblock_size(sigblock_size);
         }
 
-        Some("baremetal-cramsoc-evb") => {
+        Some("baremetal-bao1x-evb") => {
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "baremetal/src/platform/bao1x/link.x",
+                (0x6100_0000 + sigblock_size + STATICS_LEN) as u32,
+            )?;
             builder.set_baremetal(true);
-            update_flash_origin("baremetal/src/platform/cramium/link.x", 0x6100_0000)?;
-            builder.add_loader_feature("nto-evb");
-            builder.target_baremetal_cramsoc();
+            builder.add_loader_feature("bao1x-evb");
+            builder.set_sigblock_size(sigblock_size);
+            builder.target_baremetal_bao1x("baremetal");
+        }
+
+        Some("bao1x-boot0") => {
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "bao1x-boot/boot0/link.x",
+                (bao1x_api::BOOT0_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder
+                .set_baremetal(true)
+                .target_baremetal_bao1x("bao1x-boot0")
+                .set_sigblock_size(sigblock_size);
+        }
+
+        Some("bao1x-boot1") => {
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "bao1x-boot/boot1/src/platform/bao1x/link.x",
+                (bao1x_api::BOOT1_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            // builder.add_loader_feature("unsafe-debug");
+            builder
+                .set_baremetal(true)
+                .target_baremetal_bao1x("bao1x-boot1")
+                .set_sigblock_size(sigblock_size);
         }
 
         Some("baosec") => {
             let board = "board-baosec";
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "loader/src/platform/bao1x/link.x",
+                (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
             // select the board
+            builder.set_board(board);
             builder.add_feature(board);
             builder.add_loader_feature(board);
             builder.add_kernel_feature(board);
+            builder.set_sigblock_size(sigblock_size);
 
             // placement in flash is a tension between dev convenience and RAM usage. Things in flash
             // are resident, non-swapable, but end up making the slow kernel burn process take longer.
             // Layout:
             //   - kernel, ticktimer, log, names, swapper are essential services and stay resident. Must be <1
             //     MiB total.
-            //   - usb-cramium is latency-sensitive and runs a handler in a non-swappable IRQ context, and
-            //     thus cannot be swapped out. It contains the USB stack and API layer. It needs to maintain a
+            //   - usb-bao1x is latency-sensitive and runs a handler in a non-swappable IRQ context, and thus
+            //     cannot be swapped out. It contains the USB stack and API layer. It needs to maintain a
             //     mutex with bao-video as the camera cannot run simultaneously with the USB stack due to
             //     sharing of the IFRAM space.
-            //   - cram-hal-service contains all the non-latency sensitive hardware APIs
+            //   - bao1x-hal-service contains all the non-latency sensitive hardware APIs
             //   - bao-video pulls camera + display + qr decoding into a single package single memory space to
-            //     optimize performance. Must maintain a mutex with usb-cramium on the camera IFRAM space.
+            //     optimize performance. Must maintain a mutex with usb-bao1x on the camera IFRAM space.
             //   - bao-console is the serial debug console handler
             //   - [planned] pddb server
             //   - [planned] vault application
-            let bao_rram_pkgs =
-                ["xous-ticktimer", "xous-log", "xous-names", "keystore" /* "usb-cramium" */].to_vec(); /* "usb-cramium" */
-            let bao_swap_pkgs =
-                ["cram-hal-service", "bao-console", "modals", /* "pddb", */ "bao-video"].to_vec(); /* "bao-video" */
+            let bao_rram_pkgs = [
+                "xous-ticktimer",
+                "xous-log",
+                "xous-names",
+                "keystore",
+                "usb-bao1x",
+                "bao1x-hal-service",
+                "bao-console",
+                "modals",
+                "pddb",
+            ]
+            .to_vec();
+            let bao_swap_pkgs = ["bao-video"].to_vec();
             if !builder.is_swap_set() {
-                builder.set_swap(0, 8 * 1024 * 1024);
+                // reserve 3MiB for system services: ultimately, "pddb, modals, and bao-video"
+                builder.set_swap(0, bao1x_api::offsets::baosec::SWAP_RAM_LEN as _);
             }
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
@@ -651,14 +716,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // builder.add_kernel_feature("debug-swap");
             // builder.add_kernel_feature("debug-print");
             // builder.add_kernel_feature("debug-swap-verbose");
-            // builder.add_feature("quantum-timer"); // this isn't in NTO..
+            // builder.add_feature("quantum-timer"); // this isn't in bao1x..
             builder.add_kernel_feature("v2p");
-            builder.add_loader_feature("sram-margin");
-            builder.add_loader_feature("usb");
-            builder.add_loader_feature("updates");
-            // builder.add_loader_feature("cam-test");
             match task.as_deref() {
-                Some("baosec") => builder.target_cramium_soc(),
+                Some("baosec") => builder.target_bao1x_soc(),
                 _ => panic!("should be unreachable"),
             };
 
@@ -672,7 +733,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for service in bao_swap_pkgs {
                 builder.add_service(service, LoaderRegion::Swap);
             }
+            for app in get_cratespecs() {
+                builder.add_service(&app, LoaderRegion::Swap);
+            }
             // builder.add_feature("modal-testing");
+        }
+
+        Some("dabao") => {
+            let board = "board-dabao";
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "loader/src/platform/bao1x/link.x",
+                (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            // select the board
+            builder.set_board(board);
+            builder.add_feature(board);
+            builder.add_loader_feature(board);
+            builder.add_kernel_feature(board);
+            builder.add_detached_app_feature(board);
+            builder.set_sigblock_size(sigblock_size);
+
+            // minimal set of services for app development on a dabao. Need to save space for the app itself!
+            let bao_rram_pkgs =
+                ["xous-ticktimer", "xous-log", "xous-names", "usb-bao1x", "bao1x-hal-service"].to_vec();
+            let bao_app_pkgs = ["dabao-console", "helloworld"].to_vec();
+
+            builder.add_loader_feature("debug-print");
+            builder.add_kernel_feature("v2p");
+            match task.as_deref() {
+                Some("dabao") => builder.target_bao1x_soc(),
+                _ => panic!("should be unreachable"),
+            };
+
+            for service in bao_rram_pkgs {
+                builder.add_service(service, LoaderRegion::Flash);
+            }
+            builder.add_apps(&bao_app_pkgs);
+            builder.add_apps(&get_cratespecs());
         }
 
         // ------ ARM hardware image configs ------
@@ -696,7 +794,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("generate-locales") => generate_locales()?,
         Some("wycheproof-import") => wycheproof_import()?,
         Some("dummy-template") => generate_app_menus(&Vec::new()),
-        _ => print_help(),
+        task => {
+            if let Some(task) = task {
+                eprintln!("error: task {task:?} not recognized");
+            }
+
+            print_help();
+            std::process::exit(1);
+        }
     }
     builder.build()?;
 
@@ -738,6 +843,9 @@ fn print_help() {
     eprintln!(
 "cargo xtask [verb] [cratespecs ..]
     [--feature [feature name]]
+    [--loader-feature [loader feature name]]
+    [--kernel-feature [kernel feature name]]
+    [--app-feature [detached app feature name]]
     [--lkey [loader key]] [--kkey [kernel key]]
     [--swap [offset:size]]
     [--app [cratespec]]
@@ -790,9 +898,11 @@ Hardware images:
  ro-test                 automation framework for TRNG testing (RO directly, no CPRNG). [cratespecs] ignored.
  av-test                 automation framework for TRNG testing (AV directly, no CPRNG). [cratespecs] ignored.
  tiny                    Precursor tiny image. For testing with services built out-of-tree.
- cramium-soc             BSP validation image for Cramium. Contains a superset of features, in various states of testing.
- cramium-sim             Tiny target for verilator simulation
  baosec                  Baosec application target image.
+ dabao                   Dabao application target image.
+ bao1x-baremetal         Baremetal image for baochip1x targets.
+ bao1x-boot0             Boot0 partition for baochip1x targets.
+ bao1x-boot1             Boot1 partition for baochip1x targets.
 
 Hosted emulation:
  run                     Run user image in hosted mode with release flags. [cratespecs] are apps

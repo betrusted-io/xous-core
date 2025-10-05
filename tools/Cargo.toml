@@ -26,6 +26,9 @@ pkcs8 = { version = "0.8.0", features = ["pem"] }
 base64 = "0.20.0"
 rand = "0.8.5"
 aes-gcm-siv = "0.11.1"
+bao1x-api = { path = "../libs/bao1x-api" }
+hex-literal = "1.0.0"
+byteorder = "1.2"
 
 [[bin]]
 name = "copy-object"
@@ -45,9 +48,12 @@ name = "read-tags"
 [[bin]]
 name = "sign-image"
 
+[[bin]]
+name = "create-detached-app"
+
 [features]
 precursor = []
 renode = []
-cramium-soc = []
+bao1x = []
 atsama5d2 = []
 default = []

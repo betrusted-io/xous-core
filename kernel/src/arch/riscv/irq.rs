@@ -50,10 +50,10 @@ fn sip_read() -> usize {
     existing
 }
 
-// using verilator-only as a proxy for the cramium-soc config;
+// using verilator-only as a proxy for the bao1x config;
 // when the flag is off, assume precursor config
 #[cfg(all(feature = "vexii-test", feature = "verilator-only"))]
-use crate::platform::cramium::{
+use crate::platform::bao1x::{
     LEGACY_INT_VMEM,
     legacy_int::{SUPER_MASK, SUPER_PENDING},
 };
@@ -217,6 +217,7 @@ pub extern "C" fn trap_handler(
     {
         let pid = current_pid();
         let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
+        MemoryMapping::current().print_map();
         panic!("KERNEL({}): RISC-V fault: {} - maybe ran out of kernel stack?", pid, ex);
     }
 

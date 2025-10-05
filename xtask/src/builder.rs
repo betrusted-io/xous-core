@@ -114,6 +114,10 @@ impl From<&str> for CrateSpec {
     }
 }
 
+pub struct SwapSpec {
+    pub offchip_ram_offset: u32,
+    pub offchip_ram_len: u32,
+}
 pub(crate) struct Builder {
     loader: CrateSpec,
     loader_features: Vec<String>,
@@ -144,10 +148,13 @@ pub(crate) struct Builder {
     dry_run: bool,
     /// when set to true, user selected packages are compiled but no image is created
     no_image: bool,
-    /// when Some, specifies a swap region as offset, size
-    swap: Option<(u32, u32)>,
+    /// when Some, specifies a swap region
+    swap: Option<SwapSpec>,
     change_target: bool,
     baremetal: bool,
+    sigblock_size: usize,
+    board: String,
+    detached_app_features: Vec<String>,
 }
 
 impl Builder {
@@ -178,7 +185,16 @@ impl Builder {
             swap: None,
             change_target: false,
             baremetal: false,
+            sigblock_size: 4096,
+            board: String::new(),
+            detached_app_features: Vec::new(),
         }
+    }
+
+    /// Sets up the signature block size
+    pub fn set_sigblock_size<'a>(&'a mut self, size: usize) -> &'a mut Builder {
+        self.sigblock_size = size;
+        self
     }
 
     /// Sets a flag if the build is just for a baremetal testing target
@@ -204,7 +220,7 @@ impl Builder {
     }
 
     pub fn set_swap<'a>(&'a mut self, offset: u32, size: u32) -> &'a mut Builder {
-        self.swap = Some((offset, size));
+        self.swap = Some(SwapSpec { offchip_ram_offset: offset, offchip_ram_len: size });
         self
     }
 
@@ -224,7 +240,7 @@ impl Builder {
         self
     }
 
-    /// Disable default features on the loader
+    /// Disable default features on the kernel
     #[allow(dead_code)]
     pub fn kernel_disable_defaults(&mut self) -> &mut Builder {
         self.kernel_disable_defaults = true;
@@ -329,23 +345,11 @@ impl Builder {
         self
     }
 
-    /// Configure various Cramium targets
-    pub fn target_cramium_fpga(&mut self) -> &mut Builder {
+    pub fn target_bao1x_soc(&mut self) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
-        self.utra_target = "cramium-fpga".to_string();
-        self.run_svd2repl = false;
-        self.loader = CrateSpec::Local("loader".to_string(), LoaderRegion::Ram);
-        self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
-        self
-    }
-
-    pub fn target_cramium_soc(&mut self) -> &mut Builder {
-        self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
-        self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
-        self.stream = BuildStream::Release;
-        self.utra_target = "cramium-soc".to_string();
+        self.utra_target = "bao1x".to_string();
         self.run_svd2repl = false;
         self.loader = CrateSpec::Local("loader".to_string(), LoaderRegion::Ram);
         self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
@@ -379,13 +383,13 @@ impl Builder {
     }
 
     /// Configure for baremetal bringup
-    pub fn target_baremetal_cramsoc(&mut self) -> &mut Builder {
+    pub fn target_baremetal_bao1x(&mut self, subtype: &str) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
-        self.utra_target = "cramium-soc".to_string();
+        self.utra_target = "bao1x".to_string();
         self.run_svd2repl = false;
-        self.loader = CrateSpec::Local("baremetal".to_string(), LoaderRegion::Ram);
+        self.loader = CrateSpec::Local(subtype.to_string(), LoaderRegion::Ram);
         // this is actually a dummy, there is no kernel in baremetal
         self.kernel = CrateSpec::Local("xous-kernel".to_string(), LoaderRegion::Ram);
         self
@@ -463,6 +467,12 @@ impl Builder {
         self
     }
 
+    pub fn set_board(&mut self, board: &str) -> &mut Builder {
+        assert!(self.board.len() == 0, "attempt to set board parameter twice!");
+        self.board.push_str(board);
+        self
+    }
+
     /// remove a feature previously added by a previous call
     #[allow(dead_code)]
     pub fn remove_feature(&mut self, feature: &str) -> &mut Builder {
@@ -476,6 +486,11 @@ impl Builder {
     /// add a feature to be passed on to just the loader
     pub fn add_loader_feature(&mut self, feature: &str) -> &mut Builder {
         self.loader_features.push(feature.into());
+        self
+    }
+
+    pub fn add_detached_app_feature(&mut self, feature: &str) -> &mut Builder {
+        self.detached_app_features.push(feature.into());
         self
     }
 
@@ -705,19 +720,14 @@ impl Builder {
         } else if self.utra_target.contains("atsama5d2") {
             self.kernel_features.push("atsama5d27".into());
             self.loader_features.push("atsama5d27".into());
-        } else if self.utra_target.contains("cramium-fpga") {
-            self.features.push("cramium-fpga".into());
+        } else if self.utra_target.contains("bao1x") {
+            self.features.push("bao1x".into());
             self.features.push(format!("utralib/{}", &self.utra_target));
-            self.kernel_features.push("cramium-fpga".into());
+            self.detached_app_features.push("bao1x".into());
+            self.detached_app_features.push(format!("utralib/{}", &self.utra_target));
+            self.kernel_features.push("bao1x".into());
             self.kernel_features.push(format!("utralib/{}", &self.utra_target));
-            self.loader_features.push("cramium-fpga".into());
-            self.loader_features.push(format!("utralib/{}", &self.utra_target));
-        } else if self.utra_target.contains("cramium-soc") {
-            self.features.push("cramium-soc".into());
-            self.features.push(format!("utralib/{}", &self.utra_target));
-            self.kernel_features.push("cramium-soc".into());
-            self.kernel_features.push(format!("utralib/{}", &self.utra_target));
-            self.loader_features.push("cramium-soc".into());
+            self.loader_features.push("bao1x".into());
             self.loader_features.push(format!("utralib/{}", &self.utra_target));
         } else if self.utra_target.contains("hosted-baosec") {
             self.features.push("hosted-baosec".into());
@@ -749,15 +759,20 @@ impl Builder {
                 _ => {}
             }
         }
-        generate_app_menus(&app_names);
-        let mut services_path = self.builder(
-            &[&self.services[..], &self.apps[..]].concat(),
-            &self.features,
-            &self.target.as_deref(),
-            self.stream,
-            &[],
-            false,
-        )?;
+        let mut services_path = if self.board == "board-dabao" {
+            // apps are built separately on dabao
+            self.builder(&self.services, &self.features, &self.target.as_deref(), self.stream, &[], false)?
+        } else {
+            generate_app_menus(&app_names);
+            self.builder(
+                &[&self.services[..], &self.apps[..]].concat(),
+                &self.features,
+                &self.target.as_deref(),
+                self.stream,
+                &[],
+                false,
+            )?
+        };
 
         // ------ either stop here, create an image, or launch hosted mode ------
         if self.no_image {
@@ -844,6 +859,7 @@ impl Builder {
             if self.change_target {
                 std::fs::remove_file(&svd_spec_path).ok(); // don't fail if the file does not exist
             }
+            let is_bao = if self.utra_target == "bao1x" { "--bao1x" } else { "" };
 
             // ------ build the loader ------
             // stash any LTO settings applied to the kernel; proper layout of the loader
@@ -881,7 +897,10 @@ impl Builder {
                 output_file.push("target");
                 output_file.push(self.target_kernel.as_ref().expect("target"));
                 output_file.push(stream);
-                output_file.push("baremetal.img");
+                let mut presign_file = output_file.clone();
+                output_file.push(format!("{}.img", self.loader.name().unwrap_or("baremetal".to_string())));
+                presign_file
+                    .push(format!("{}-presign.img", self.loader.name().unwrap_or("baremetal".to_string())));
 
                 let status = Command::new(cargo())
                     .current_dir(project_root())
@@ -893,14 +912,68 @@ impl Builder {
                         "copy-object",
                         "--",
                         &loader[0],
-                        output_file.as_os_str().to_str().unwrap(),
+                        presign_file.as_os_str().to_str().unwrap(),
+                        is_bao,
                     ])
                     .status()?;
                 if !status.success() {
                     return Err("cargo build failed".into());
                 } else {
+                    // bao1x bootloader targets. Figure out if it's boot0 or boot1
+                    let function_code = match self.loader {
+                        CrateSpec::Local(name, _) => {
+                            if name == "bao1x-boot0" {
+                                "boot0"
+                            } else if name == "bao1x-boot1" {
+                                "boot1"
+                            } else if name == "baremetal" {
+                                "baremetal"
+                            } else {
+                                return Err(String::from("Target subtype not supported").into());
+                            }
+                        }
+                        _ => return Err(String::from("Can't determine bootloader region").into()),
+                    };
+                    Command::new(cargo())
+                        .current_dir(project_root())
+                        .args([
+                            "run",
+                            "--package",
+                            "tools",
+                            "--bin",
+                            "sign-image",
+                            "--",
+                            "--loader-image",
+                            presign_file.to_str().unwrap(),
+                            "--loader-key",
+                            &self.loader_key,
+                            "--loader-output",
+                            output_file.to_str().unwrap(),
+                            "--min-xous-ver",
+                            &self.min_ver,
+                            "--sig-length",
+                            &self.sigblock_size.to_string(),
+                            "--with-jump", // bao1x target has a jump inserted in the loader sig block
+                            "--bao1x",
+                            "--function-code",
+                            function_code,
+                        ])
+                        .status()?;
                     return Ok(());
                 }
+            }
+
+            // ------ build "detached" apps ------
+            if self.board == "board-dabao" {
+                let detached_app_path = self.builder(
+                    &self.apps,
+                    &self.detached_app_features,
+                    &self.target.as_deref(),
+                    self.stream,
+                    &[],
+                    false,
+                )?;
+                self.create_detached_image(&detached_app_path)?;
             }
 
             // ------ build the kernel ------
@@ -966,13 +1039,14 @@ impl Builder {
                     "--",
                     &loader[0],
                     loader_presign.as_os_str().to_str().unwrap(),
+                    is_bao,
                 ])
                 .status()?;
             if !status.success() {
                 return Err("cargo build failed".into());
             }
 
-            let status = if self.utra_target.contains("cramium") {
+            let status = if self.utra_target.contains("bao1x") {
                 Command::new(cargo())
                     .current_dir(project_root())
                     .args([
@@ -990,7 +1064,12 @@ impl Builder {
                         loader_bin.to_str().unwrap(),
                         "--min-xous-ver",
                         &self.min_ver,
-                        "--with-jump", // cramium target has a jump inserted in the loader sig block
+                        "--sig-length",
+                        &self.sigblock_size.to_string(),
+                        "--with-jump", // bao1x target has a jump inserted in the loader sig block
+                        "--bao1x",
+                        "--function-code",
+                        "loader",
                     ])
                     .status()?
             } else {
@@ -1021,26 +1100,55 @@ impl Builder {
             let mut xous_img_path = output_bundle.parent().unwrap().to_owned();
             xous_img_path.push("xous.img");
 
-            let status = Command::new(cargo())
-                .current_dir(project_root())
-                .args([
-                    "run",
-                    "--package",
-                    "tools",
-                    "--bin",
-                    "sign-image",
-                    "--",
-                    "--kernel-image",
-                    output_bundle.to_str().unwrap(),
-                    "--kernel-key",
-                    &self.kernel_key,
-                    "--kernel-output",
-                    xous_img_path.to_str().unwrap(),
-                    "--min-xous-ver",
-                    &self.min_ver,
-                    // "--defile",
-                ])
-                .status()?;
+            let status = if self.utra_target.contains("bao1x") {
+                Command::new(cargo())
+                    .current_dir(project_root())
+                    .args([
+                        "run",
+                        "--package",
+                        "tools",
+                        "--bin",
+                        "sign-image",
+                        "--",
+                        "--kernel-image",
+                        output_bundle.to_str().unwrap(),
+                        "--kernel-key",
+                        &self.kernel_key,
+                        "--kernel-output",
+                        xous_img_path.to_str().unwrap(),
+                        "--min-xous-ver",
+                        &self.min_ver,
+                        "--sig-length",
+                        &self.sigblock_size.to_string(),
+                        "--with-jump", // bao1x target has a jump inserted in the sig block
+                        "--bao1x",
+                        "--function-code",
+                        "kernel",
+                        // "--defile",
+                    ])
+                    .status()?
+            } else {
+                Command::new(cargo())
+                    .current_dir(project_root())
+                    .args([
+                        "run",
+                        "--package",
+                        "tools",
+                        "--bin",
+                        "sign-image",
+                        "--",
+                        "--kernel-image",
+                        output_bundle.to_str().unwrap(),
+                        "--kernel-key",
+                        &self.kernel_key,
+                        "--kernel-output",
+                        xous_img_path.to_str().unwrap(),
+                        "--min-xous-ver",
+                        &self.min_ver,
+                        // "--defile",
+                    ])
+                    .status()?
+            };
             if !status.success() {
                 return Err("kernel image sign failed".into());
             }
@@ -1071,10 +1179,8 @@ impl Builder {
             args.push("precursor");
         } else if self.utra_target.contains("atsama5d2") {
             args.push("atsama5d2");
-        } else if self.utra_target.contains("cramium-soc") {
-            args.push("cramium-soc")
-        } else if self.utra_target.contains("cramium-fpga") {
-            args.push("cramium-soc")
+        } else if self.utra_target.contains("bao1x") {
+            args.push("bao1x")
         }
         args.push("--");
 
@@ -1109,8 +1215,8 @@ impl Builder {
             args.push(i);
         }
 
-        let swap_spec = if let Some((offset, size)) = self.swap {
-            format!("0x{:x}:0x{:x}", offset, size) // create-image requires a base decorator, but the argument into xtask does not.
+        let swap_spec = if let Some(spec) = &self.swap {
+            format!("0x{:x}:0x{:x}", spec.offchip_ram_offset, spec.offchip_ram_len) // create-image requires a base decorator, but the argument into xtask does not.
         } else {
             String::new()
         };
@@ -1150,6 +1256,71 @@ impl Builder {
         if !status.success() {
             return Err("cargo build failed".into());
         }
+        Ok(project_root().join(output_file))
+    }
+
+    fn create_detached_image(&self, inif: &[String]) -> Result<PathBuf, DynError> {
+        assert!(self.board == "board-dabao", "Detached app images are only supported on dabao target");
+        let stream = self.stream.as_str();
+        let mut args = vec!["run", "--package", "tools", "--bin", "create-detached-app"];
+        args.push("--features");
+        args.push("bao1x");
+        args.push("--");
+
+        let mut output_file = PathBuf::new();
+        output_file.push("target");
+        output_file.push(self.target.as_ref().expect("target"));
+        output_file.push(stream);
+        output_file.push("app-presign.img");
+        args.push(output_file.to_str().unwrap());
+
+        for i in inif {
+            args.push("--inif");
+            // strip '@' version specifiers out of the package names, if they exist.
+            let i = if i.contains('@') { i.split('@').next().unwrap() } else { i };
+            args.push(i);
+        }
+
+        args.push("--detached-offset");
+        let detached_offset =
+            format!("{}", bao1x_api::offsets::dabao::APP_RRAM_START - bao1x_api::offsets::KERNEL_START);
+        args.push(&detached_offset);
+        let status = Command::new(cargo()).current_dir(project_root()).args(&args).status()?;
+
+        if !status.success() {
+            return Err("cargo build failed".into());
+        }
+
+        let mut app_img_path = output_file.parent().unwrap().to_owned();
+        app_img_path.push("app.img");
+
+        Command::new(cargo())
+            .current_dir(project_root())
+            .args([
+                "run",
+                "--package",
+                "tools",
+                "--bin",
+                "sign-image",
+                "--",
+                "--kernel-image",
+                output_file.to_str().unwrap(),
+                "--kernel-key",
+                &self.kernel_key,
+                "--kernel-output",
+                app_img_path.to_str().unwrap(),
+                "--min-xous-ver",
+                &self.min_ver,
+                "--sig-length",
+                &self.sigblock_size.to_string(),
+                "--with-jump", // bao1x target has a jump inserted in the sig block
+                "--bao1x",
+                "--function-code",
+                "app",
+                // "--defile",
+            ])
+            .status()?;
+
         Ok(project_root().join(output_file))
     }
 

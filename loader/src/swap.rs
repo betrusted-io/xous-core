@@ -2,6 +2,7 @@ use core::fmt;
 use core::mem::size_of;
 
 use aes_gcm_siv::Tag;
+pub use bao1x_api::signatures::{SwapDescriptor, SwapSourceHeader};
 
 use crate::PAGE_SIZE;
 use crate::SWAP_FLG_DIRTY;
@@ -34,26 +35,6 @@ use crate::SWAPPER_PID;
 ///    - The bottom 10 bits are flags
 ///    - The top 2 bits of the physical address are 0
 ///    - The middle 20 bits the PA are the MSB of the address to the PA of the target page
-
-#[repr(C)]
-pub struct SwapDescriptor {
-    pub ram_offset: u32,
-    pub ram_size: u32,
-    pub name: u32,
-    pub key: [u8; 32],
-    pub flash_offset: u32,
-}
-
-#[derive(Debug)]
-#[repr(C)]
-pub struct SwapSourceHeader {
-    pub version: u32,
-    pub partial_nonce: [u8; 8],
-    pub mac_offset: u32,
-    pub aad_len: u32,
-    // aad is limited to 64 bytes!
-    pub aad: [u8; 64],
-}
 
 #[repr(C, align(16))]
 pub struct RawPage {

@@ -2,12 +2,12 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 
+use bao1x_api::{EventChannel, IoxHal};
+use bao1x_hal::ifram::IframRange;
+use bao1x_hal::sh1107::{Mono, Oled128x128};
+use bao1x_hal::udma;
 use blitstr2::ClipRect;
 use blitstr2::NULL_GLYPH_SPRITE;
-use cramium_api::{EventChannel, IoxHal};
-use cramium_hal::ifram::IframRange;
-use cramium_hal::sh1107::{Mono, Oled128x128};
-use cramium_hal::udma;
 /// THIS NEEDS SUBSTANTIAL REWORK, THE DRIVER HERE TARGETS A DIFFERENT DISPLAY THAN THE SH1107.
 
 /// We can have no allocations inside this, and ideally, it's as minimal as possible.
@@ -29,25 +29,14 @@ use cramium_hal::udma;
 /// Note that the frame buffer is 336 px wide, which is 10.5 32-bit words.
 /// The excess 16 bits are the dirty bit field.
 use ux_api::minigfx::*;
-use ux_api::platform::*;
 
 pub const PANIC_STD_SERVER: &'static str = "panic-to-screen!";
 
-/// How far down the screen the panic box draws
-const TOP_OFFSET: isize = 48;
-/// Width and height of the panic box in characters
-const WIDTH_CHARS: isize = 16;
-const HEIGHT_CHARS: isize = 16;
 /// these are fixed by the monospace font
 const GLYPH_HEIGHT: isize = 15;
 const GLYPH_WIDTH: isize = 7;
 /// this can be adjusted to create more border around the panic box
-const TEXT_MARGIN: isize = 2;
-
-/// some derived constants to help with layout
-const BOTTOM_LINE: isize = TOP_OFFSET + HEIGHT_CHARS * GLYPH_HEIGHT + TEXT_MARGIN * 2;
-const LEFT_EDGE: isize = (WIDTH - (WIDTH_CHARS * GLYPH_WIDTH + TEXT_MARGIN * 2)) / 2; // 24
-const RIGHT_EDGE: isize = WIDTH - LEFT_EDGE; // 312
+const TEXT_MARGIN: isize = 0;
 
 pub(crate) fn panic_handler_thread(
     is_panic: Arc<AtomicBool>,
@@ -92,7 +81,7 @@ pub(crate) fn panic_handler_thread(
                         cr,
                     );
                     x += GLYPH_WIDTH;
-                    if x >= WIDTH_CHARS * GLYPH_WIDTH {
+                    if x > 128 {
                         x = TEXT_MARGIN;
                         y += GLYPH_HEIGHT;
                     }
@@ -111,8 +100,8 @@ pub(crate) fn panic_handler_thread(
                     is_panic.store(true, Ordering::Relaxed);
 
                     // draw the "panic rectangle"
-                    for y in TOP_OFFSET..BOTTOM_LINE {
-                        for x in LEFT_EDGE..RIGHT_EDGE {
+                    for y in 0..128 {
+                        for x in 0..128 {
                             display.put_pixel(Point::new(x, y), Mono::White.into());
                         }
                     }

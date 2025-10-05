@@ -46,6 +46,7 @@ pub struct XousArguments {
     pub ram_length: XousSize,
     ram_name: u32,
     pub arguments: Vec<Box<dyn XousArgument>>,
+    pub detached_offset: Option<XousSize>,
 }
 
 impl fmt::Display for XousArguments {
@@ -72,11 +73,14 @@ impl fmt::Display for XousArguments {
 
 impl XousArguments {
     pub fn new(ram_start: XousSize, ram_length: XousSize, ram_name: u32) -> XousArguments {
-        XousArguments { ram_start, ram_length, ram_name, arguments: vec![] }
+        XousArguments { ram_start, ram_length, ram_name, arguments: vec![], detached_offset: None }
     }
 
+    pub fn set_detached_offset(&mut self, offset: XousSize) { self.detached_offset = Some(offset); }
+
     pub fn finalize(&mut self) {
-        let mut running_offset = crate::tags::align_size_up(self.len() as usize, 0);
+        let mut running_offset =
+            crate::tags::align_size_up(self.len() as usize, 0) + self.detached_offset.unwrap_or(0) as usize;
         // println!("offset: {:x}, alignment_offset: {:x}", running_offset, 0);
         for arg in &mut self.arguments {
             running_offset = crate::tags::align_size_up(running_offset, arg.alignment_offset());

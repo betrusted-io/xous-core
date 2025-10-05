@@ -17,6 +17,7 @@ struct AppManifest {
     submenu: Option<u8>,
 }
 #[derive(Deserialize, Serialize, Debug)]
+#[allow(dead_code)]
 struct Locales {
     locales: HashMap<String, HashMap<String, String>>,
 }

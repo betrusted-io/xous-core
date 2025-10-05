@@ -55,7 +55,7 @@
 // Vex-II implements compliant AES instructions to the -Zkn standards (unlike Vex-I).
 // The AES library has flags that recognize the "vexii-testing" feature, and implements acceleration
 // for AES-256 (but falls back to software for AES-128). This will need to be revisited regardless
-// for the NTO/daric bring-up.
+// for the bao1x/bao1x bring-up.
 //
 // ** Testing features **
 //   -[ ] libs/precursor/hal/src/board/precursors.rs - PDDB_LEN is shortened for vexii-test target
@@ -107,6 +107,25 @@ const SDBG: bool = false; // swap debug
 #[cfg(test)]
 mod test;
 
+// Bao1x needs a heap because the signature checking code assumes its availability.
+// However the heap promises not to allocate any objects that are needed by the kernel,
+// so we stick it in a region in low RAM, just about the statics, and restrict it to
+// just 4k in size. Note that maybe we should strive to avoid the loader from allocating
+// into these regions - but actually, later in the loader, we should avoid using the heaps
+// and most data is done with, and it's nice to be able to reclaim these pages, so we
+// somewhat dangerously tell the loader to go ahead and allocate over this region by
+// telling it has the whole rest of SRAM to stick initial process pages in.
+#[global_allocator]
+#[cfg(feature = "bao1x")]
+static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
+// heap start is selected by looking at the total reserved .data + .bss region in the compiled loader.
+// it hovers at 0x5000 unless I start adding lots of statics to the loader (which there are not).
+#[cfg(feature = "bao1x")]
+const HEAP_OFFSET: usize = 0x5000;
+// just a small heap, big enough for us to use alloc to simplify argument processing
+#[cfg(feature = "bao1x")]
+const HEAP_LEN: usize = 0x1000;
+
 #[repr(C)]
 pub struct MemoryRegionExtra {
     start: u32,
@@ -142,18 +161,11 @@ pub enum IniType {
 /// This function is safe to call exactly once.
 #[export_name = "rust_entry"]
 pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32) -> ! {
-    #[cfg(all(feature = "cramium-soc", not(feature = "verilator-only")))]
     let perclk_freq = crate::platform::early_init(); // sets up PLLs so we're not running at 16MHz...
-    // need to make this "official" for NTO, the feature flag combo below works around some simulation config
-    // conflicts.
-    #[cfg(all(feature = "verilator-only", not(feature = "cramium-mpw")))]
+    // need to make this "official" for bao1x, the feature flag combo below works around some simulation
+    // config conflicts.
+    #[cfg(all(feature = "verilator-only", not(feature = "bao1x-mpw")))]
     platform::coreuser_config();
-
-    #[cfg(not(all(feature = "cramium-soc", not(feature = "verilator-only"))))]
-    let perclk_freq = 0;
-
-    #[cfg(all(feature = "cramium-soc", feature = "updates"))]
-    crate::platform::process_update(perclk_freq);
 
     // initially validate the whole image on disk (including kernel args)
     // kernel args must be validated because tampering with them can change critical assumptions about
@@ -161,7 +173,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     #[cfg(all(feature = "secboot", not(feature = "vexii-test")))]
     let mut fs_prehash = [0u8; 64];
     #[cfg(not(all(feature = "secboot", not(feature = "vexii-test"))))]
-    let mut fs_prehash = [0u8; 64];
+    let fs_prehash = [0u8; 64];
     #[cfg(all(feature = "secboot", not(feature = "vexii-test")))]
     if !secboot::validate_xous_img(signed_buffer as *const u32, &mut fs_prehash) {
         loop {}
@@ -225,8 +237,78 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
         );
     }
 
+    // Initialize the allocator with heap memory range. The heap memory is "throw-away"
+    // so we stick it near the bottom of RAM, with the assumption that the loader process
+    // won't smash over it.
+    #[cfg(any(feature = "bao1x"))]
+    {
+        let heap_start = utralib::HW_SRAM_MEM + HEAP_OFFSET;
+        crate::println!("Setting up heap @ {:x}-{:x}", heap_start, heap_start + HEAP_LEN);
+        unsafe {
+            ALLOCATOR.lock().init(heap_start as *mut u8, HEAP_LEN);
+        }
+    }
+
+    // Run kernel image validation now that the heap is set up.
+    #[cfg(feature = "bao1x")]
+    let detached_app = {
+        use bao1x_api::signatures::FunctionCode;
+        // validate using the bao1x signature scheme
+        match bao1x_hal::sigcheck::validate_image(
+            bao1x_api::KERNEL_START as *const u32,
+            bao1x_api::LOADER_START as *const u32,
+            bao1x_api::LOADER_REVOCATION_OFFSET,
+            &[
+                FunctionCode::Kernel as u32,
+                FunctionCode::UpdatedKernel as u32,
+                FunctionCode::Developer as u32,
+            ],
+            false,
+            None,
+        ) {
+            Ok(k) => println!("*** Kernel signature check by key @ {} OK ***", k),
+            Err(e) => {
+                println!("Kernel failed signature check. Dying: {:?}", e);
+                bao1x_hal::sigcheck::die_no_std();
+            }
+        }
+
+        let one_way = bao1x_hal::acram::OneWayCounter::new();
+        if one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error")
+            == bao1x_api::BoardTypeCoding::Dabao
+        {
+            match bao1x_hal::sigcheck::validate_image(
+                bao1x_api::offsets::dabao::APP_RRAM_START as *const u32,
+                bao1x_api::LOADER_START as *const u32,
+                bao1x_api::LOADER_REVOCATION_OFFSET,
+                &[FunctionCode::App as u32, FunctionCode::UpdatedApp as u32],
+                false,
+                None,
+            ) {
+                Ok(k) => {
+                    println!("*** Detached app signature check by key @ {} OK ***", k);
+                    true
+                }
+                Err(_e) => {
+                    println!("No valid detached app found");
+                    false
+                }
+            }
+        } else {
+            // no detached apps on other boards
+            false
+        }
+    };
+    #[cfg(not(feature = "bao1x"))]
+    let detached_app = false;
+
     // the kernel arg buffer is SIG_BLOCK_SIZE into the signed region
-    let arg_buffer = (signed_buffer as u32 + SIGBLOCK_SIZE as u32) as *const usize;
+    #[cfg(not(feature = "bao1x"))]
+    let signature_size = SIGBLOCK_SIZE;
+    #[cfg(feature = "bao1x")]
+    let signature_size = bao1x_api::signatures::SIGBLOCK_LEN;
+    let arg_buffer = (signed_buffer as u32 + signature_size as u32) as *const usize;
+    println!("arg_buffer: {:x}", arg_buffer as usize);
 
     // perhaps later on in these sequences, individual sub-images may be validated
     // against sub-signatures; or the images may need to be re-validated after loading
@@ -234,16 +316,19 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // But for now, the basic "validate everything as a blob" is perhaps good enough to
     // armor code-at-rest against front-line patching attacks.
     let kab = KernelArguments::new(arg_buffer);
-    boot_sequence(kab, signature, fs_prehash, perclk_freq);
+    boot_sequence(kab, signature, fs_prehash, perclk_freq, detached_app);
 }
 
-fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _perclk_freq: u32) -> ! {
+fn boot_sequence(
+    args: KernelArguments,
+    _signature: u32,
+    fs_prehash: [u8; 64],
+    _perclk_freq: u32,
+    detached_app: bool,
+) -> ! {
     // Store the initial boot config on the stack.  We don't know
     // where in heap this memory will go.
     #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
-    #[cfg(feature = "platform-tests")]
-    platform::platform_tests();
-
     let mut cfg = BootConfig { base_addr: args.base as *const usize, args, ..Default::default() };
     #[cfg(feature = "swap")]
     println!("Size of BootConfig: {:x}", core::mem::size_of::<BootConfig>());
@@ -253,6 +338,9 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
     {
         cfg.swap_hal = SwapHal::new(&cfg, _perclk_freq);
         read_swap_config(&mut cfg);
+    }
+    if detached_app {
+        read_detached_app_config(&mut cfg);
     }
 
     // check to see if we are recovering from a clean suspend or not
@@ -264,10 +352,8 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
         println!("No suspend marker found, doing a cold boot!");
         #[cfg(feature = "simulation-only")]
         println!("Configured for simulation. Skipping RAM clear!");
-        #[cfg(not(any(feature = "cramium-soc", feature = "cramium-fpga")))]
-        // cramium target clears RAM with assembly routine on boot
         clear_ram(&mut cfg);
-        phase_1(&mut cfg);
+        phase_1(&mut cfg, detached_app);
         phase_2(&mut cfg, &fs_prehash);
         #[cfg(any(feature = "debug-print", feature = "swap"))]
         if VDBG || SDBG {
@@ -281,7 +367,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
         // cold boot path
         println!("No suspend marker found, doing a cold boot!");
         clear_ram(&mut cfg);
-        phase_1(&mut cfg);
+        phase_1(&mut cfg, detached_app);
         phase_2(&mut cfg, &fs_prehash);
         #[cfg(any(feature = "debug-print", feature = "swap"))]
         if VDBG || SDBG {
@@ -411,7 +497,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64], _
 
         #[cfg(not(feature = "atsama5d27"))]
         {
-            #[cfg(not(any(feature = "cramium-soc", feature = "cramium-fpga")))]
+            #[cfg(not(any(feature = "bao1x")))]
             {
                 // uart mux only exists on the FPGA variant
                 use utralib::generated::*;
@@ -548,7 +634,7 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
 #[cfg(feature = "swap")]
 pub fn read_swap_config(cfg: &mut BootConfig) {
     // Read in the swap arguments: should be located at beginning of the encrypted image in swap.
-    let page0 = cfg.swap_hal.as_mut().unwrap().decrypt_src_page_at(0x0);
+    let page0 = cfg.swap_hal.as_mut().unwrap().decrypt_src_page_at(0x0).unwrap();
     let swap_args = KernelArguments::new(page0.as_ptr() as *const usize);
     for tag in swap_args.iter() {
         if tag.name == u32::from_le_bytes(*b"IniS") {
@@ -563,6 +649,18 @@ pub fn read_swap_config(cfg: &mut BootConfig) {
             }
         } else {
             println!("Unhandled argument in swap: {:x}", tag.name);
+        }
+    }
+}
+
+pub fn read_detached_app_config(cfg: &mut BootConfig) {
+    let app_args = KernelArguments::new(
+        (bao1x_api::offsets::dabao::APP_RRAM_START + bao1x_api::signatures::SIGBLOCK_LEN) as *const usize,
+    );
+    for tag in app_args.iter() {
+        if tag.name == u32::from_le_bytes(*b"IniF") {
+            assert!(tag.size >= 4, "invalid Init size");
+            cfg.init_process_count += 1;
         }
     }
 }
@@ -626,7 +724,7 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
 /// Clears all of RAM. This is a must for systems that have suspend-to-RAM for security.
 /// It is configured to be skipped in simulation only, to accelerate the simulation times
 /// since we can initialize the RAM to zero in simulation.
-#[cfg(all(not(feature = "simulation-only"), not(feature = "cramium-soc")))]
+#[cfg(all(not(feature = "simulation-only")))]
 fn clear_ram(cfg: &mut BootConfig) {
     // clear RAM on a cold boot.
     // RAM is persistent and battery-backed. This means secret material could potentially
@@ -634,7 +732,7 @@ fn clear_ram(cfg: &mut BootConfig) {
     // to a cold boot, but it's probably worth it. Note that it doesn't happen on a suspend/resume.
     let ram: *mut u32 = cfg.sram_start as *mut u32;
     #[cfg(feature = "swap")]
-    let clear_limit = ((2 * 4096 + core::mem::size_of::<BootConfig>()) + 4095) & !4095;
+    let clear_limit = GUARD_MEMORY_BYTES;
     #[cfg(not(feature = "swap"))]
     let clear_limit = ((4096 + core::mem::size_of::<BootConfig>()) + 4095) & !4095;
     if VDBG {

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
+#[cfg(feature = "bao1x")]
+use bao1x_hal_service::trng;
 use blitstr2::GlyphStyle;
-#[cfg(feature = "cramium-soc")]
-use cram_hal_service::trng;
 use ux_api::minigfx::*;
 use ux_api::service::api::*;
 

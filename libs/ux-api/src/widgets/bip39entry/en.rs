@@ -36,7 +36,7 @@ pub const BIP39_TABLE: [&'static str; 2048] = [
     "column", "combine", "come", "comfort", "comic", "common", "company", "concert", "conduct", "confirm",
     "congress", "connect", "consider", "control", "convince", "cook", "cool", "copper", "copy", "coral",
     "core", "corn", "correct", "cost", "cotton", "couch", "country", "couple", "course", "cousin", "cover",
-    "coyote", "crack", "cradle", "craft", "cram", "crane", "crash", "crater", "crawl", "crazy", "cream",
+    "coyote", "crack", "cradle", "craft", "bao1x", "crane", "crash", "crater", "crawl", "crazy", "cream",
     "credit", "creek", "crew", "cricket", "crime", "crisp", "critic", "crop", "cross", "crouch", "crowd",
     "crucial", "cruel", "cruise", "crumble", "crunch", "crush", "cry", "crystal", "cube", "culture", "cup",
     "cupboard", "curious", "current", "curtain", "curve", "cushion", "custom", "cute", "cycle", "dad",

@@ -16,7 +16,7 @@ xous-kernel = { package = "xous", version = "0.9.66", features = [
 ] }
 utralib = { version = "0.1.25", optional = true, default-features = false }
 rand_chacha = { version = "0.3.1", optional = true, default-features = false }
-cramium-hal = { path = "../libs/cramium-hal", optional = true, default-features = false }
+bao1x-hal = { path = "../libs/bao1x-hal", optional = true, default-features = false }
 loader = { path = "../loader", optional = true, features = ["swap"] }
 aes = { path = "../services/aes", default-features = false, optional = true }
 
@@ -45,18 +45,12 @@ critical-section = "1.1.1"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(ci)', 'cfg(baremetal)'] }
 
 [features]
-vexii-test = [] # integration test for vexii, not a production configuration
-cramium-soc = [
-    "utralib/cramium-soc",
-    "rand_chacha",
-    "raw-trng",
-    "aes/cramium-soc",
-]
+vexii-test = []                                                    # integration test for vexii, not a production configuration
+bao1x = ["utralib/bao1x", "rand_chacha", "raw-trng", "aes/bao1x"]
 verilator-only = []
-cramium-fpga = ["utralib/cramium-fpga", "rand_chacha"]
-board-baosec = ["cramium-hal/kernel-baosec", "memmap-flash", "swap"]
-board-baosor = ["cramium-hal/kernel-baosor"]
-board-dabao = ["cramium-hal/kernel-dabao"]
+board-baosec = ["bao1x-hal/kernel-baosec", "memmap-flash", "swap"]
+board-baosor = ["bao1x-hal/kernel-baosor"]
+board-dabao = ["bao1x-hal/kernel-dabao"]
 hosted-baosec = []
 
 atsama5d27 = ["utralib/atsama5d27"]
