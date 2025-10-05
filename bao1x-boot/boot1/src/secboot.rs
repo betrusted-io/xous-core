@@ -32,7 +32,11 @@ pub fn boot_or_die() -> ! {
         true,
         None,
     ) {
-        Ok(k) => crate::println!("**should be unreachable** Booted with key {}", k),
+        Ok((k, tag)) => crate::println!(
+            "**should be unreachable** Booted with key {}({})",
+            k,
+            core::str::from_utf8(&tag.to_le_bytes()).unwrap_or("invalid tag")
+        ),
         Err(e) => crate::println!("Image did not validate: {:?}", e),
     }
     crate::println!("No valid loader or baremetal image found. Halting!");
