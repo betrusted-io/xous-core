@@ -18,20 +18,19 @@ impl Trng {
 
     /// This is copied out of the 0.5 API for rand_core
     pub fn fill_bytes_via_next(&mut self, dest: &mut [u8]) {
-        use core::mem::transmute;
         let mut left = dest;
         while left.len() >= 8 {
             let (l, r) = { left }.split_at_mut(8);
             left = r;
-            let chunk: [u8; 8] = unsafe { transmute(rand::thread_rng().next_u64().to_le()) };
+            let chunk: [u8; 8] = u64::to_ne_bytes(rand::thread_rng().next_u64().to_le());
             l.copy_from_slice(&chunk);
         }
         let n = left.len();
         if n > 4 {
-            let chunk: [u8; 8] = unsafe { transmute(rand::thread_rng().next_u64().to_le()) };
+            let chunk: [u8; 8] = u64::to_ne_bytes(rand::thread_rng().next_u64().to_le());
             left.copy_from_slice(&chunk[..n]);
         } else if n > 0 {
-            let chunk: [u8; 4] = unsafe { transmute(rand::thread_rng().next_u32().to_le()) };
+            let chunk: [u8; 4] = u32::to_ne_bytes(rand::thread_rng().next_u32().to_le());
             left.copy_from_slice(&chunk[..n]);
         }
     }
