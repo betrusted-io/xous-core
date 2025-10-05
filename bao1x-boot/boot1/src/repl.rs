@@ -206,7 +206,7 @@ impl Repl {
             }
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
-                crate::print!("Commands include: reset, echo, boot, bootwait, localecho, uf2");
+                crate::print!("Commands include: reset, echo, boot, bootwait, localecho, uf2, boardtype");
                 crate::println!("");
             }
         }
