@@ -473,6 +473,7 @@ dependencies = [
  "digest 0.10.7",
  "ed25519-dalek-bao1x",
  "either",
+ "linked_list_allocator",
  "log",
  "num-derive 0.4.2",
  "num-traits",
@@ -1594,6 +1595,27 @@ dependencies = [
  "subtle",
  "utralib 0.1.25",
  "zeroize",
+]
+
+[[package]]
+name = "dabao-console"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "bao1x-api",
+ "bao1x-emu",
+ "bao1x-hal",
+ "bao1x-hal-service",
+ "log",
+ "num-derive 0.4.2",
+ "num-traits",
+ "usb-bao1x",
+ "utralib 0.1.25",
+ "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+ "xous-usb-hid",
 ]
 
 [[package]]
@@ -2796,6 +2818,20 @@ dependencies = [
  "num-traits",
  "tts-frontend",
  "ux-api",
+ "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-ipc 0.10.6 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "helloworld"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "num-derive 0.4.2",
+ "num-traits",
+ "utralib 0.1.25",
  "xous 0.9.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
