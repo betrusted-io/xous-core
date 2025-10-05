@@ -1,9 +1,7 @@
 use std::io::{Read, Write};
 use std::path::Path;
 
-use bao1x_api::signatures::{
-    FunctionCode, PADDING_LEN, PUBLIC_KEY_LENGTH, SIGBLOCK_LEN, SealedFields, UNSIGNED_LEN,
-};
+use bao1x_api::signatures::{FunctionCode, PADDING_LEN, Pubkey, SIGBLOCK_LEN, SealedFields, UNSIGNED_LEN};
 use ed25519_dalek::{DigestSigner, SigningKey};
 use pkcs8::PrivateKeyInfo;
 use pkcs8::der::Decodable;
@@ -216,14 +214,12 @@ pub fn sign_image(
                 reserved: 0,
                 min_semver: minver_bytes,
                 semver,
-                pubkeys: [
-                    [0u8; PUBLIC_KEY_LENGTH],
-                    [0u8; PUBLIC_KEY_LENGTH],
-                    [0u8; PUBLIC_KEY_LENGTH],
-                    [0u8; PUBLIC_KEY_LENGTH],
-                ],
+                pubkeys: [Pubkey::default(), Pubkey::default(), Pubkey::default(), Pubkey::default()],
             };
-            sealed_fields.pubkeys[3].copy_from_slice(sk.public_key().as_ref());
+            sealed_fields.pubkeys[3].aad_len = 0;
+            sealed_fields.pubkeys[3].pk.copy_from_slice(sk.public_key().as_ref());
+            sealed_fields.pubkeys[3].tag =
+                u32::from_le_bytes(*bao1x_api::signatures::KEYSLOT_INITIAL_TAGS[3]);
 
             let mut protected = Vec::new();
             protected.extend_from_slice(sealed_fields.as_ref());
