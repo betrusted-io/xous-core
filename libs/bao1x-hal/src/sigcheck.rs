@@ -1,9 +1,10 @@
 extern crate alloc;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use bao1x_api::signatures::*;
 use digest::Digest;
-use sha2_bao1x::Sha512;
+use sha2_bao1x::{Sha256, Sha512};
 use xous::arch::PAGE_SIZE;
 
 use crate::acram::OneWayCounter;
@@ -33,7 +34,7 @@ use crate::udma::Spim;
 /// the wrong phase of the boot sequence. Passed as a list of u32-values that are allowed.
 ///
 /// `auto_jump` is a flag which, when `true`, causes the code to diverge into the signed block.
-/// If `false` the function returns the key index of the first passing public key, or an error
+/// If `false` the function returns the `(key_index, tag)` of the first passing public key, or an error
 /// if none were found.
 pub fn validate_image(
     img_offset: *const u32,
@@ -42,7 +43,7 @@ pub fn validate_image(
     function_codes: &[u32],
     auto_jump: bool,
     mut spim: Option<&mut Spim>,
-) -> Result<usize, String> {
+) -> Result<(usize, u32), String> {
     // Copy the signature into a structure so we can unpack it.
     let mut sig = SignatureInFlash::default();
     if let Some(ref mut spim) = spim {
@@ -81,7 +82,7 @@ pub fn validate_image(
     let mut secure = false;
     let mut passing_key: Option<usize> = None;
     for (i, key) in pk_src.sealed_data.pubkeys.iter().enumerate() {
-        if key.iter().all(|&x| x == 0) {
+        if key.tag == 0 {
             continue;
         }
         let revocation_value = one_way_counters.get(revocation_offset + i).expect("internal error");
@@ -90,47 +91,91 @@ pub fn validate_image(
             continue;
         }
         let verifying_key =
-            ed25519_dalek::VerifyingKey::from_bytes(key).or(Err(String::from("invalid public key")))?;
+            ed25519_dalek::VerifyingKey::from_bytes(&key.pk).or(Err(String::from("invalid public key")))?;
 
         let ed25519_signature = ed25519_dalek::Signature::from(sig.signature);
-        let mut h: Sha512 = Sha512::new();
-        if let Some(ref mut spim) = spim {
-            // need to read the data out page by page and hash it.
-            // ASSUME: the SPIM driver has allocated a read buffer that is actually PAGE_SIZE. If the SPIM
-            // driver has a smaller buffer, reads get less efficient.
-            let end = img_offset as usize + UNSIGNED_LEN + signed_len as usize;
-            for offset in ((img_offset as usize + UNSIGNED_LEN)..end).step_by(PAGE_SIZE) {
-                let mut buf = [0u8; PAGE_SIZE];
-                spim.mem_read(offset as u32, &mut buf, false);
-                let valid_length = if offset + PAGE_SIZE < end { PAGE_SIZE } else { end - offset };
-                h.update(&buf[..valid_length]);
+
+        if key.aad_len == 0 {
+            let mut h: Sha512 = Sha512::new();
+            // this code has to be implemented *twice* because we can't make `h` a generic trait due
+            // to the type bounds reasonably imposed by `verify_prehashed`.
+            if let Some(ref mut spim) = spim {
+                // need to read the data out page by page and hash it.
+                // ASSUME: the SPIM driver has allocated a read buffer that is actually PAGE_SIZE. If the SPIM
+                // driver has a smaller buffer, reads get less efficient.
+                let end = img_offset as usize + UNSIGNED_LEN + signed_len as usize;
+                for offset in ((img_offset as usize + UNSIGNED_LEN)..end).step_by(PAGE_SIZE) {
+                    let mut buf = [0u8; PAGE_SIZE];
+                    spim.mem_read(offset as u32, &mut buf, false);
+                    let valid_length = if offset + PAGE_SIZE < end { PAGE_SIZE } else { end - offset };
+                    h.update(&buf[..valid_length]);
+                }
+            } else {
+                // easy peasy
+                let image: &[u8] = unsafe {
+                    core::slice::from_raw_parts(
+                        (img_offset as usize + UNSIGNED_LEN) as *const u8,
+                        signed_len as usize,
+                    )
+                };
+                // crate::println!("Verifying image {:x?} with {:x?}", &image[..16], &key);
+                h.update(&image);
+            }
+            // debugging note: h.clone() does *not* work. You have to print the hash by modifying
+            // the function inside the ed25519 crate.
+            match verifying_key.verify_prehashed(h, None, &ed25519_signature) {
+                Ok(_) => {
+                    passing_key = Some(i);
+                    if i != sig.sealed_data.pubkeys.len() - 1 {
+                        secure = true;
+                        break;
+                    } else if i == sig.sealed_data.pubkeys.len() - 1 {
+                        // this is the developer key slot
+                        secure = false;
+                        break;
+                    }
+                }
+                _ => {}
             }
         } else {
-            // easy peasy
-            let image: &[u8] = unsafe {
-                core::slice::from_raw_parts(
-                    (img_offset as usize + UNSIGNED_LEN) as *const u8,
-                    signed_len as usize,
-                )
-            };
-            // crate::println!("Verifying image {:x?} with {:x?}", &image[..16], &key);
-            h.update(&image);
-        }
-        // debugging note: h.clone() does *not* work. You have to print the hash by modifying
-        // the function inside the ed25519 crate.
-        match verifying_key.verify_prehashed(h, None, &ed25519_signature) {
-            Ok(_) => {
-                passing_key = Some(i);
-                if i != sig.sealed_data.pubkeys.len() - 1 {
-                    secure = true;
-                    break;
-                } else if i == sig.sealed_data.pubkeys.len() - 1 {
-                    // this is the developer key slot
-                    secure = false;
-                    break;
+            let mut h: Sha256 = Sha256::new();
+            // this code has to be implemented *twice* because we can't make `h` a generic trait due
+            // to the type bounds reasonably imposed by `verify_prehashed`.
+            if let Some(ref mut spim) = spim {
+                let end = img_offset as usize + UNSIGNED_LEN + signed_len as usize;
+                for offset in ((img_offset as usize + UNSIGNED_LEN)..end).step_by(PAGE_SIZE) {
+                    let mut buf = [0u8; PAGE_SIZE];
+                    spim.mem_read(offset as u32, &mut buf, false);
+                    let valid_length = if offset + PAGE_SIZE < end { PAGE_SIZE } else { end - offset };
+                    h.update(&buf[..valid_length]);
                 }
+            } else {
+                let image: &[u8] = unsafe {
+                    core::slice::from_raw_parts(
+                        (img_offset as usize + UNSIGNED_LEN) as *const u8,
+                        signed_len as usize,
+                    )
+                };
+                h.update(&image);
             }
-            _ => {}
+            let mut msg: Vec<u8> = Vec::new();
+            msg.extend_from_slice(&key.aad[..key.aad_len as usize]);
+            msg.extend_from_slice(h.finalize().as_slice());
+
+            match verifying_key.verify_strict(&msg, &ed25519_signature) {
+                Ok(_) => {
+                    passing_key = Some(i);
+                    if i != sig.sealed_data.pubkeys.len() - 1 {
+                        secure = true;
+                        break;
+                    } else if i == sig.sealed_data.pubkeys.len() - 1 {
+                        // this is the developer key slot
+                        secure = false;
+                        break;
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
@@ -141,7 +186,7 @@ pub fn validate_image(
         if auto_jump {
             jump_to(img_offset as usize);
         }
-        Ok(valid_key)
+        Ok((valid_key, pk_src.sealed_data.pubkeys[valid_key].tag))
     } else {
         Err(String::from("No valid pubkeys found or signature invalid"))
     }

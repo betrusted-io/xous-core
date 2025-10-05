@@ -13,7 +13,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
 ], optional = true }
-bytemuck = { version = "1.0", features = ["derive"] }
+bytemuck = { version = "1.24", features = ["derive"] }
 bitbybit = "1.4.0"
 
 [features]

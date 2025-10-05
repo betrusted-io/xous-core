@@ -1,11 +1,27 @@
 use bytemuck::{Pod, Zeroable};
-pub const SIGBLOCK_LEN: usize = 768; // this is adjusted inside builder.rs, in the sign-image invocation
-// The jump instruction and the signature itself are not protected
+
+/// Total reserved space for the signature block
+pub const SIGBLOCK_LEN: usize = 768;
+/// The jump instruction and the signature itself are not protected
 pub const UNSIGNED_LEN: usize = size_of::<u32>() + SIGNATURE_LENGTH;
 
 // These are vendored in so we don't have a circular dependency on ed25519 crate
 pub const SIGNATURE_LENGTH: usize = 64; // length of an ed25519 signature.
 pub const PUBLIC_KEY_LENGTH: usize = 32; // length of an ed25519 public key.
+
+/// Nominal purposes of pub key slots:
+///   - slot 0 is Baochip secured signing key 1
+///   - slot 1 is Baochip secured signing key 2
+///   - slot 2 is a Beta signing key. It's kept in a secured token but also available in a development
+///     environment.
+///   - slot 3 is the Developer signing key. It's a well-known key that anyone can use to sign an image. If
+///     revoked, it is not a valid signing key. When not revoked, upon being presented with an image signed by
+///     this, the bootloader will automatically erase all device-local secrets.
+///
+/// The dual signing keys for Baochip allows for a laddered upgrade path in case a signing key
+/// needs to be replaced, upgraded, or cycled out for any reason.
+pub const KEYSLOT_INITIAL_TAGS: [&'static [u8; 4]; 4] = [b"bao1", b"bao2", b"beta", b"dev "];
+
 /// These are notional and subject to change
 #[repr(u32)]
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -75,6 +91,27 @@ impl Default for SignatureInFlash {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone)]
+pub struct Pubkey {
+    pub pk: [u8; PUBLIC_KEY_LENGTH],
+    pub tag: u32,
+    /// `aad_len` also specifies the signing protocol. If it is `0`, then a pure `ed25519ph`
+    /// signature is assumed. If it is greater than `0`, then it's assumed to be a
+    /// FIDO2/WebAuthn signature format using ed25519, where the signature is computed as:
+    /// `signature = Ed25519.sign(authenticatorData || SHA-256(clientData))`
+    /// `authenticatorData` is a field that is at least 37 bytes in size, and can be much
+    /// larger if optional extentions are enabled. 59 bytes are made available since this
+    /// pads nicely into the record format, and gives us some wiggle room for compatibility
+    pub aad_len: u8,
+    pub aad: [u8; 59],
+}
+unsafe impl Zeroable for Pubkey {}
+unsafe impl Pod for Pubkey {}
+impl Default for Pubkey {
+    fn default() -> Self { Self { pk: [0u8; PUBLIC_KEY_LENGTH], tag: 0, aad_len: 0, aad: [0u8; 59] } }
+}
+
+#[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable)]
 pub struct SealedFields {
     /// Version number of this signature record
@@ -106,7 +143,7 @@ pub struct SealedFields {
     /// is erased and boot is allowed to proceed.
     ///
     /// If no valid keys are found, the device is effectively bricked and goes into a "die" state.
-    pub pubkeys: [[u8; PUBLIC_KEY_LENGTH]; 4],
+    pub pubkeys: [Pubkey; 4],
 }
 
 impl AsRef<[u8]> for SealedFields {
@@ -121,7 +158,7 @@ impl Default for SealedFields {
             reserved: 0,
             min_semver: [0u8; 16],
             semver: [0u8; 16],
-            pubkeys: [[0u8; PUBLIC_KEY_LENGTH]; 4],
+            pubkeys: [Pubkey::default(); 4],
         }
     }
 }
