@@ -279,48 +279,51 @@ pub fn usb_ep1_bulk_out_complete(
                             ("none", 0)
                         }
                     };
-                    if status != 0
-                        && status % UX_UPDATE_INTERVAL_BYTES == 0
-                        && IS_BAOSEC.load(Ordering::SeqCst)
-                    {
-                        // conjure a pointer to the sh1107 object
-                        let iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
-                        let (channel, _, _, _) = bao1x_hal::board::get_display_pins();
-                        // these parameters are copied out of the sh1107 driver. Maybe we should just create
-                        // a convenience function that "just sets these" since hardware peripherals don't
-                        // spontaneously move around, and when they do you'd like to have a single spot to
-                        // maintain the changes...
-                        let mut sh1107 = unsafe {
-                            Oled128x128::from_raw_parts(
-                                (
-                                    match channel {
-                                        SpimChannel::Channel0 => utra::udma_spim_0::HW_UDMA_SPIM_0_BASE,
-                                        SpimChannel::Channel1 => utra::udma_spim_1::HW_UDMA_SPIM_1_BASE,
-                                        SpimChannel::Channel2 => utra::udma_spim_2::HW_UDMA_SPIM_2_BASE,
-                                        SpimChannel::Channel3 => utra::udma_spim_3::HW_UDMA_SPIM_3_BASE,
-                                    },
-                                    SpimCs::Cs0,
-                                    0,
-                                    0,
-                                    None,
-                                    SpimMode::Standard,
-                                    SpimByteAlign::Disable,
-                                    bao1x_hal::ifram::IframRange::from_raw_parts(
-                                        bao1x_hal::board::DISPLAY_IFRAM_ADDR,
-                                        bao1x_hal::board::DISPLAY_IFRAM_ADDR,
-                                        4096 * 2,
+                    if status != 0 && status % UX_UPDATE_INTERVAL_BYTES == 0 {
+                        if IS_BAOSEC.load(Ordering::SeqCst) {
+                            // conjure a pointer to the sh1107 object
+                            let iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
+                            let (channel, _, _, _) = bao1x_hal::board::get_display_pins();
+                            // these parameters are copied out of the sh1107 driver. Maybe we should just
+                            // create a convenience function that "just sets
+                            // these" since hardware peripherals don't
+                            // spontaneously move around, and when they do you'd like to have a single spot to
+                            // maintain the changes...
+                            let mut sh1107 = unsafe {
+                                Oled128x128::from_raw_parts(
+                                    (
+                                        match channel {
+                                            SpimChannel::Channel0 => utra::udma_spim_0::HW_UDMA_SPIM_0_BASE,
+                                            SpimChannel::Channel1 => utra::udma_spim_1::HW_UDMA_SPIM_1_BASE,
+                                            SpimChannel::Channel2 => utra::udma_spim_2::HW_UDMA_SPIM_2_BASE,
+                                            SpimChannel::Channel3 => utra::udma_spim_3::HW_UDMA_SPIM_3_BASE,
+                                        },
+                                        SpimCs::Cs0,
+                                        0,
+                                        0,
+                                        None,
+                                        SpimMode::Standard,
+                                        SpimByteAlign::Disable,
+                                        bao1x_hal::ifram::IframRange::from_raw_parts(
+                                            bao1x_hal::board::DISPLAY_IFRAM_ADDR,
+                                            bao1x_hal::board::DISPLAY_IFRAM_ADDR,
+                                            4096 * 2,
+                                        ),
+                                        2048 + 256,
+                                        2048,
+                                        0,
                                     ),
-                                    2048 + 256,
-                                    2048,
-                                    0,
-                                ),
-                                &iox,
-                            )
-                        };
-                        // have to restore this because the frame buffer is lost on the raw-parts conversion
-                        sh1107.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
-                        let msg = alloc::format!("{} - {}k", partition, status / 1024);
-                        crate::marquee(&mut sh1107, &msg);
+                                    &iox,
+                                )
+                            };
+                            // have to restore this because the frame buffer is lost on the raw-parts
+                            // conversion
+                            sh1107.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
+                            let msg = alloc::format!("{} - {}k", partition, status / 1024);
+                            crate::marquee(&mut sh1107, &msg);
+                        } else {
+                            crate::println_d!("{} - {}k", partition, status / 1024);
+                        }
                     }
                 }
                 // replace the tracking block with the new one, if a new one was provided
