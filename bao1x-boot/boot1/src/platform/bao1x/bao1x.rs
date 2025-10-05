@@ -79,8 +79,10 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
             // setup the dabao 'boot' read pin for reading. This also connects the USB port temporarily.
             setup_dabao_boot_pin(&iox);
 
-            // we're running at 0.8V, setup the RAMs for that
-            let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(800);
+            // setup the RAMs for our trim voltage
+            let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(
+                bao1x_api::offsets::dabao::CPU_VDD_LDO_BOOT_MV,
+            );
             let mut rbist = CSR::new(utra::rbist_wrp::HW_RBIST_WRP_BASE as *mut u32);
             for item in trim_table {
                 rbist.wo(utra::rbist_wrp::SFRCR_TRM, item.raw_value());
@@ -142,7 +144,9 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
                 setup_dabao_boot_pin(&iox);
 
                 // we're running at 0.8V, setup the RAMs for that
-                let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(800);
+                let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(
+                    bao1x_api::offsets::dabao::CPU_VDD_LDO_BOOT_MV,
+                );
                 let mut rbist = CSR::new(utra::rbist_wrp::HW_RBIST_WRP_BASE as *mut u32);
                 for item in trim_table {
                     rbist.wo(utra::rbist_wrp::SFRCR_TRM, item.raw_value());
@@ -165,7 +169,9 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
                 sramtrm.wo(utra::coresub_sramtrm::SFR_VEXRAM, 0x1);
 
                 // we should be in 0.9v mode, setup SRAM trimmings for that
-                let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(900);
+                let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(
+                    bao1x_api::offsets::baosec::CPU_VDD_LDO_BOOT_MV,
+                );
                 let mut rbist = CSR::new(utra::rbist_wrp::HW_RBIST_WRP_BASE as *mut u32);
                 for item in trim_table {
                     rbist.wo(utra::rbist_wrp::SFRCR_TRM, item.raw_value());
@@ -221,8 +227,9 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
 
     // set the clock
     let fclk_freq = match board_type {
-        BoardTypeCoding::Baosec => bao1x_hal::board::DEFAULT_FCLK_FREQUENCY,
-        BoardTypeCoding::Dabao | BoardTypeCoding::Oem => SAFE_FCLK_FREQUENCY,
+        BoardTypeCoding::Baosec => bao1x_api::offsets::baosec::DEFAULT_FCLK_FREQUENCY,
+        BoardTypeCoding::Oem => SAFE_FCLK_FREQUENCY,
+        BoardTypeCoding::Dabao => bao1x_api::offsets::dabao::DEFAULT_FCLK_FREQUENCY,
     };
     let perclk = unsafe { init_clock_asic(fclk_freq) };
 

@@ -24,9 +24,9 @@ use platform::*;
 use utralib::*;
 use ux_api::minigfx::{DrawStyle, FrameBuffer, Point, Rectangle};
 
-use crate::delay;
 use crate::platform::usb::glue;
 use crate::secboot::boot_or_die;
+use crate::{delay, platform::irq::disable_all_irqs};
 
 static UART_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
 #[allow(dead_code)]
@@ -98,6 +98,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     let boot_wait = one_way.get_decoded::<BootWaitCoding>().expect("internal error");
 
     if boot_wait == BootWaitCoding::Disable && current_key.is_none() {
+        disable_all_irqs();
         // this should diverge, rest of code is not run
         boot_or_die();
     }
@@ -284,6 +285,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         }
     });
 
+    disable_all_irqs();
     // when we get to this point, there's only two options...
     crate::secboot::boot_or_die();
 }

@@ -145,6 +145,7 @@ pub fn shutdown() {
         if let Some(ref mut usb_ref) = crate::platform::bao1x::usb::USB {
             let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
             crate::irq::disable_all_irqs();
+            crate::println!("Stopping USB...");
             usb.stop();
         }
     }
