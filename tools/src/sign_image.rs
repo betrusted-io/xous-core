@@ -312,6 +312,7 @@ where
         Some("baremetal") => bao1x_api::BAREMETAL_START,
         Some("kernel") => bao1x_api::KERNEL_START,
         Some("swap") => bao1x_api::SWAP_START_UF2,
+        Some("app") => bao1x_api::dabao::APP_RRAM_START,
         _ => return Err(String::from("UF2 Image Requires a function code").into()),
     };
 

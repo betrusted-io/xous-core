@@ -48,6 +48,9 @@ name = "read-tags"
 [[bin]]
 name = "sign-image"
 
+[[bin]]
+name = "create-detached-app"
+
 [features]
 precursor = []
 renode = []
