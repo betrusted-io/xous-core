@@ -1,3 +1,5 @@
+use crate::VDBG;
+
 /// Convert a four-letter string into a 32-bit int.
 #[macro_export]
 macro_rules! make_type {
@@ -39,15 +41,6 @@ pub struct XargArg {
 #[derive(Clone, Copy)]
 pub struct KernelArguments {
     pub base: *const u32,
-}
-
-/// The arguments iterator is constructed by reading into kernel arguments structure, assuming
-/// it is a well-formed structure where the first meta-tag is placed correctly, allowing the
-/// extraction of a `size` field.
-pub struct KernelArgumentsIterator {
-    base: *const u32,
-    size: usize,
-    offset: u32,
 }
 
 // Alignment target of the resulting KernelArguments structure. I think we can trim it more
@@ -98,27 +91,21 @@ impl KernelArguments {
         tag_filter: &[u32],
         dest_region: &mut [u32],
     ) -> Option<(KernelArguments, usize)> {
-        // computes an upper bound on size. It's an upper bound because we will filter the incoming
-        // merged arguments according to `tag_filter`, but we want to make sure that we have space
-        // potentially for all elements before starting the operation.
-        //
-        // The final argument list will "waste" the space of the filtered out arguments, but this is
-        // anticipated to be just a few dozen bytes per argument list, and I'm willing to pay that
-        // inefficiency for simplicity and safety.
-        //
-        // Note that the reason we have to "waste" some space is that free space allocated *down*
-        // in addresses in the loader, but the argument list has to be copied from low-to-high addresses.
-        // `dest_region` is a huge area of free space handed to us, and simply placing the argument
-        // list at the bottom of `dest_region` can't work. So we have to pick & align a spot at the top of
-        // memory that is large enough to hold the final list before we begin populating it.
-        //
-        // Later on we could make this fancier and traverse the incoming argument lists and compute
-        // an exact size if we wanted to be super fancy. At the moment, we're leaving about 160 bytes
-        // per merged region on the table by using the simple method of summing together the argument regions.
-        // I'm not going to lose sleep over this - it's worth revisiting maybe if we get to about ten merged
-        // regions, but in practice I'm imagining we'll merge 2-3 regions at most.
-        let size_bound =
-            self.size() + incoming_args.iter().map(|x| x.size() * size_of::<u32>()).sum::<usize>();
+        // compute the incoming size. Requires iterating through the incoming list once. This
+        // means we iterate through the list a total of two times, once to figure out the size,
+        // and once to do the copy. This is a space-time trade-off: if we wanted O(1) time for
+        // this step we could just take the whole size of the incoming argument list as an
+        // upper bound and call it a day. But the arg lists are tiny so the extra computation
+        // is trivial, and book-keeping bytes used in the loader are bytes lost to application space.
+        let mut incoming_size = 0;
+        for arg_list in incoming_args.iter() {
+            for arg in arg_list.iter() {
+                if tag_filter.iter().any(|&t| t == arg.name) {
+                    incoming_size += arg.size as usize + size_of::<Tag>();
+                }
+            }
+        }
+        let size_bound = self.size() + incoming_size;
         if size_bound > dest_region.len() * size_of::<u32>() {
             return None;
         }
@@ -154,17 +141,33 @@ impl KernelArguments {
             for arg in arg_list.iter() {
                 // filter the argument based on the list of tags to include in the copy
                 if tag_filter.iter().any(|&t| t == arg.name) {
-                    let extra_size = arg.size as usize * size_of::<u32>() + size_of::<Tag>();
-                    assert!(extra_size % size_of::<usize>() == 0, "Argument did not conform to size spec!");
+                    let extra_size_bytes = arg.size as usize + size_of::<Tag>();
+                    assert!(
+                        extra_size_bytes % size_of::<usize>() == 0,
+                        "Argument did not conform to size spec!"
+                    );
+                    if VDBG {
+                        crate::println!(
+                            "copying new args total size {} / {:x?}, {:x}, {:x?}",
+                            extra_size_bytes,
+                            arg.this as usize,
+                            arg.name,
+                            arg.data
+                        );
+                    }
                     // safety:
                     //  - all new arguments meet the alignment criteria (as checked by the assert above)
                     //  - all values are representable
                     //  - space at incoming_arg_ptr is guaranteed to be available
                     unsafe {
-                        crate::phase1::memcpy(incoming_arg_ptr as *mut u32, arg.base as *mut u32, extra_size);
+                        crate::phase1::memcpy(
+                            incoming_arg_ptr as *mut u32,
+                            arg.this as *mut u32,
+                            extra_size_bytes,
+                        );
                     }
                     // increment the arg pointer to the next argument slot
-                    incoming_arg_ptr += extra_size;
+                    incoming_arg_ptr += extra_size_bytes;
                 }
             }
         }
@@ -220,6 +223,8 @@ pub struct KernelArgument {
 
     // Data section, as a slice of 32-bit ints
     pub data: &'static [u32],
+
+    pub this: *const u32,
 }
 
 impl KernelArgument {
@@ -232,8 +237,23 @@ impl KernelArgument {
             unsafe { core::slice::from_raw_parts((tag as *const Tag).add(1) as *const u32, size as usize) };
         // Return the stack-allocated KernelArgument, which embeds a reference to the now base/bounds
         // protected data slice.
-        KernelArgument { base, name, size: size * size_of::<u32>() as u32, data }
+        KernelArgument {
+            base,
+            name,
+            size: size * size_of::<u32>() as u32,
+            data,
+            this: unsafe { base.add(offset as usize / size_of::<u32>()) },
+        }
     }
+}
+
+/// The arguments iterator is constructed by reading into kernel arguments structure, assuming
+/// it is a well-formed structure where the first meta-tag is placed correctly, allowing the
+/// extraction of a `size` field.
+pub struct KernelArgumentsIterator {
+    base: *const u32,
+    size: usize,
+    offset: u32,
 }
 
 impl Iterator for KernelArgumentsIterator {
@@ -244,7 +264,7 @@ impl Iterator for KernelArgumentsIterator {
             None
         } else {
             let new_arg = KernelArgument::new(self.base, self.offset);
-            self.offset += new_arg.size + 8;
+            self.offset += new_arg.size + size_of::<Tag>() as u32;
             Some(new_arg)
         }
     }
