@@ -30,7 +30,7 @@ pub struct InitialProcess {
 /// We don't memorize the allocated results (in part because we don't have malloc/alloc to stick
 /// the table, and we don't know a priori how big it will be); we simply memorize the maximum extent,
 /// after which we allocate the book-keeping tables.
-pub fn phase_1(cfg: &mut BootConfig) {
+pub fn phase_1(cfg: &mut BootConfig, detached_app: bool) {
     // Allocate space for the stack pointer.
     // The bootloader should have placed the stack pointer at the end of RAM
     // prior to jumping to our program. Reserve space for the stack, so that it does not smash
@@ -56,7 +56,19 @@ pub fn phase_1(cfg: &mut BootConfig) {
         // TODO: place args into cfg.args
     } else {
         println!("Copying args");
-        copy_args(cfg);
+        copy_args(cfg, detached_app);
+    }
+    if VDBG {
+        let check_iter = cfg.args.iter();
+        for a in check_iter {
+            crate::println!(
+                "{}: base {:x} size {:x} data {:x?}",
+                core::str::from_utf8(&a.name.to_le_bytes()).unwrap_or("invalid name"),
+                a.this as usize,
+                a.size,
+                a.data
+            );
+        }
     }
 
     // All further allocations must be page-aligned.
@@ -351,8 +363,8 @@ pub fn allocate_swap(cfg: &mut BootConfig) {
     }
 }
 
-#[cfg(feature = "swap")]
-pub fn copy_args(cfg: &mut BootConfig) {
+#[cfg(all(feature = "swap", feature = "bao1x"))]
+pub fn copy_args(cfg: &mut BootConfig, _detached_app: bool) {
     // With swap enabled, copy_args also merges the IniS arguments from the swap region into the kernel
     // arguments, and patches the length field accordingly.
 
@@ -389,11 +401,56 @@ pub fn copy_args(cfg: &mut BootConfig) {
     crate::println!("Argument merge done, total size consumed: {}", args_size);
 }
 
+/// No swap but bao1x implies a dabao configuration. Check for a detached-app image.
+#[cfg(all(not(feature = "swap"), feature = "bao1x"))]
+pub fn copy_args(cfg: &mut BootConfig, detached_app: bool) {
+    if detached_app {
+        // Read in the detached app arguments.
+        // Safety: only safe because the image is aligned.
+        let app_args = KernelArguments::new(
+            (bao1x_api::offsets::dabao::APP_RRAM_START + bao1x_api::signatures::SIGBLOCK_LEN) as *const usize,
+        );
+
+        // Carve out a much larger region than anticipated for argument processing. A "typical" target for
+        // the new argument stack is around 1800 bytes.
+        //
+        // It's assumed we have at least 4 pages of RAM at this point because we haven't allocated
+        // anything and our target should have more memory than that. So, pass a total of
+        // 16,384 bytes region with the anticipation that the actual allocation will be much
+        // smaller than that.
+        let dest_region = unsafe {
+            core::slice::from_raw_parts_mut(
+                (cfg.get_top() as usize - PAGE_SIZE * 4) as *mut u32,
+                PAGE_SIZE * 4 / size_of::<u32>(),
+            )
+        };
+
+        // Replace the original args pointer in FLASH with a new copy in RAM that incorporates any merged
+        // regions that the kernel should be aware of.
+        let args_size: usize;
+        (cfg.args, args_size) = unsafe {
+            cfg.args
+                .merge_args(&[app_args], &[u32::from_le_bytes(*b"IniF")], dest_region)
+                .expect("Couldn't merge kernel arguments")
+        };
+
+        // Advance the init_size pointer by the actual allocation consumed by the merge_args() function.
+        cfg.init_size += args_size;
+        crate::println!("Argument merge done, total size consumed: {}", args_size);
+    } else {
+        // Straight copy of the kernel arguments to RAM, no merging.
+        cfg.init_size += cfg.args.size();
+        let runtime_arg_buffer = cfg.get_top();
+        unsafe { memcpy(runtime_arg_buffer, cfg.args.base as *const usize, cfg.args.size() as usize) };
+        cfg.args = KernelArguments::new(runtime_arg_buffer);
+    }
+}
+
 #[cfg(feature = "swap")]
 fn remaining_in_page(addr: usize) -> usize { PAGE_SIZE - (addr & (PAGE_SIZE - 1)) }
 
-#[cfg(not(feature = "swap"))]
-pub fn copy_args(cfg: &mut BootConfig) {
+#[cfg(all(not(feature = "swap"), not(feature = "bao1x")))]
+pub fn copy_args(cfg: &mut BootConfig, _detached_app: bool) {
     // Copy the args list to target RAM
     cfg.init_size += cfg.args.size();
     let runtime_arg_buffer = cfg.get_top();
