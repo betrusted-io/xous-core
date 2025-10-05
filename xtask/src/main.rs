@@ -153,7 +153,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(o) => o,
             Err(e) => {
                 return Err(format!(
-                    "Error: offset should be hex number without 0x prefix {}: {:?}",
+                    "Error: size should be hex number without 0x prefix {}: {:?}",
                     swap_parts[1], e
                 )
                 .into());
@@ -187,6 +187,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let loader_features = get_flag("--loader-feature")?;
     for feature in loader_features {
         builder.add_loader_feature(&feature);
+    }
+    let detached_app_features = get_flag("--app-feature")?;
+    for feature in detached_app_features {
+        builder.add_detached_app_feature(&feature);
     }
 
     if !language_set {
@@ -655,6 +659,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
             )?;
             // select the board
+            builder.set_board(board);
             builder.add_feature(board);
             builder.add_loader_feature(board);
             builder.add_kernel_feature(board);
@@ -683,11 +688,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "usb-bao1x",
                 "bao1x-hal-service",
                 "bao-console",
+                "modals",
+                "pddb",
             ]
             .to_vec();
-            let bao_swap_pkgs = ["modals", /* "pddb", */ "bao-video"].to_vec();
+            let bao_swap_pkgs = ["bao-video"].to_vec();
             if !builder.is_swap_set() {
-                builder.set_swap(0, 8 * 1024 * 1024);
+                // reserve 3MiB for system services: ultimately, "pddb, modals, and bao-video"
+                builder.set_swap(0, bao1x_api::offsets::baosec::SWAP_RAM_LEN as _);
             }
             builder.add_loader_feature("swap");
             builder.add_kernel_feature("swap");
@@ -723,7 +731,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for service in bao_swap_pkgs {
                 builder.add_service(service, LoaderRegion::Swap);
             }
+            for app in get_cratespecs() {
+                builder.add_service(&app, LoaderRegion::Swap);
+            }
             // builder.add_feature("modal-testing");
+        }
+
+        Some("dabao") => {
+            let board = "board-dabao";
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "loader/src/platform/bao1x/link.x",
+                (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            // select the board
+            builder.set_board(board);
+            builder.add_feature(board);
+            builder.add_loader_feature(board);
+            builder.add_kernel_feature(board);
+            builder.add_detached_app_feature(board);
+            builder.set_sigblock_size(sigblock_size);
+
+            // minimal set of services for app development on a dabao. Need to save space for the app itself!
+            let bao_rram_pkgs =
+                ["xous-ticktimer", "xous-log", "xous-names", "usb-bao1x", "bao1x-hal-service"].to_vec();
+            let bao_app_pkgs = ["dabao-console", "helloworld"].to_vec();
+
+            builder.add_loader_feature("debug-print");
+            builder.add_kernel_feature("v2p");
+            match task.as_deref() {
+                Some("dabao") => builder.target_bao1x_soc(),
+                _ => panic!("should be unreachable"),
+            };
+
+            for service in bao_rram_pkgs {
+                builder.add_service(service, LoaderRegion::Flash);
+            }
+            builder.add_apps(&bao_app_pkgs);
+            builder.add_apps(&get_cratespecs());
         }
 
         // ------ ARM hardware image configs ------
@@ -796,6 +841,9 @@ fn print_help() {
     eprintln!(
 "cargo xtask [verb] [cratespecs ..]
     [--feature [feature name]]
+    [--loader-feature [loader feature name]]
+    [--kernel-feature [kernel feature name]]
+    [--app-feature [detached app feature name]]
     [--lkey [loader key]] [--kkey [kernel key]]
     [--swap [offset:size]]
     [--app [cratespec]]
@@ -849,6 +897,7 @@ Hardware images:
  av-test                 automation framework for TRNG testing (AV directly, no CPRNG). [cratespecs] ignored.
  tiny                    Precursor tiny image. For testing with services built out-of-tree.
  baosec                  Baosec application target image.
+ dabao                   Dabao application target image.
  bao1x-baremetal         Baremetal image for baochip1x targets.
  bao1x-boot0             Boot0 partition for baochip1x targets.
  bao1x-boot1             Boot1 partition for baochip1x targets.
