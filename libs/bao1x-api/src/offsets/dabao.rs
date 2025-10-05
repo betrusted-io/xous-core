@@ -21,4 +21,9 @@ pub const PDDB_LEN: usize = 0;
 
 // Location of on-chip application segment, as offset from RRAM start
 pub const APP_RRAM_OFFSET: usize = 0x30_0000;
-pub const APP_RRAM_LEN: usize = 0xD_A000;
+pub const APP_RRAM_START: usize = 0x6000_0000 + APP_RRAM_OFFSET - crate::signatures::SIGBLOCK_LEN;
+pub const APP_RRAM_LEN: usize = 0xD_A000 + crate::signatures::SIGBLOCK_LEN;
+
+// Regulator voltage target at boot
+pub const CPU_VDD_LDO_BOOT_MV: u32 = 900;
+pub const DEFAULT_FCLK_FREQUENCY: u32 = 800_000_000;
