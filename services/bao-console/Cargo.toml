@@ -19,7 +19,7 @@ bao1x-api = { path = "../../libs/bao1x-api" }
 bao1x-hal-service = { path = "../bao1x-hal-service", optional = true }
 bao1x-emu = { path = "../bao1x-emu", optional = true }
 usb-bao1x = { path = "../usb-bao1x" }
-modals = { path = "../modals", default-features = false }
+modals = { path = "../modals", default-features = false, optional = true }
 ux-api = { path = "../../libs/ux-api", optional = true }
 pddb = { path = "../pddb", optional = true }
 xous-swapper = { path = "../xous-swapper", optional = true }
@@ -35,12 +35,7 @@ xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branc
 
 # aes testing
 [features]
-bao1x = [
-    "utralib/bao1x",
-    "modals/bao1x",
-    "usb-bao1x/bao1x",
-    "aes/bao1x",
-]
+bao1x = ["utralib/bao1x", "usb-bao1x/bao1x", "aes/bao1x"]
 board-baosec = [
     "modals/board-baosec",
     "bao1x-hal-service",
@@ -56,6 +51,12 @@ hosted-baosec = [
     "pddb/hosted-baosec",
     "bao1x-hal/hosted-baosec",
 ]
+# Don't use this for dabao. Use apps-dabao/dabao-console instead!
+# board-dabao = [
+#     "bao1x-hal-service",
+#     "bao1x-hal/board-dabao",
+#     "usb-bao1x/board-dabao",
+# ]
 bmp180 = ["bao1x-hal/bmp180", "bao1x-hal-service"]
 usb = []
 aestests = ["aes"]
