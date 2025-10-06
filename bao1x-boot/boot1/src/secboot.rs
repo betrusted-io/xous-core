@@ -1,6 +1,6 @@
 use bao1x_api::signatures::FunctionCode;
 
-const ALLOWED_FUNCTIONS: [u32; 5] = [
+pub const ALLOWED_FUNCTIONS: [u32; 5] = [
     FunctionCode::Baremetal as u32,
     FunctionCode::UpdatedBaremetal as u32,
     FunctionCode::Loader as u32,
