@@ -1217,6 +1217,8 @@ fn main() -> ! {
 }
 
 fn parse_version(com: &mut crate::implementation::XousCom) -> u32 {
+    use std::str::FromStr;
+
     use xous_semver::SemVer;
 
     // this feature was only introduced since 0.9.6. Unfortunately, there is no good way to figure out

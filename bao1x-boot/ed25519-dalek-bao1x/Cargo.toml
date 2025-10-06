@@ -45,7 +45,7 @@ serde = { version = "1.0", default-features = false, optional = true }
 zeroize = { version = "1.5", default-features = false, optional = true }
 
 # HW interface for print debugging
-utralib = { version = "0.1.25", optional = true, default-features = false }
+utralib = { version = "0.1.26", optional = true, default-features = false }
 
 [dev-dependencies]
 curve25519-dalek = { package = "curve25519-dalek-bao1x", path = "../curve25519-dalek-bao1x", default-features = false, features = [

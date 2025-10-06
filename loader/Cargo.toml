@@ -9,7 +9,7 @@ edition = "2018"
 description = "Initial kernel loader for Xous"
 
 [dependencies]
-xous = "0.9.66"
+xous = "0.9.67"
 ed25519-dalek-loader = { path = "ed25519-dalek-loader", default-features = false, optional = true }
 curve25519-dalek-loader = { path = "curve25519-dalek-loader", default-features = false, features = [
     "u32e_backend",
@@ -18,7 +18,7 @@ ed25519-dalek-bao1x = { path = "../bao1x-boot/ed25519-dalek-bao1x", default-feat
     "digest",
 ], optional = true }
 sha2-bao1x = { path = "../bao1x-boot/sha2-bao1x", optional = true, default-features = false }
-utralib = { version = "0.1.25", optional = true, default-features = false }
+utralib = { version = "0.1.26", optional = true, default-features = false }
 armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", optional = true }
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", optional = true }
 sha2-loader = { path = "./sha2-loader", default-features = false, optional = true }

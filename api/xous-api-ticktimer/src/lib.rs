@@ -2,6 +2,8 @@
 
 pub mod api;
 
+use std::str::FromStr;
+
 use num_traits::ToPrimitive;
 use xous::{CID, Error, send_message};
 use xous_semver::SemVer;
