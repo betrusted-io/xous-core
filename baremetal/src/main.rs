@@ -89,7 +89,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
     #[cfg(feature = "bao1x-usb")]
     let (mut last_usb_state, mut portsc) = crate::platform::usb::glue::hotplug_usb(&iox);
-
+    #[cfg(feature = "bao1x-usb")]
     crate::println!(
         "  [usb connected {:?}] [tx idle {:?}]",
         USB_CONNECTED.load(Ordering::SeqCst),
