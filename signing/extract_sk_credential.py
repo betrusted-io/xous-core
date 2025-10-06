@@ -91,7 +91,7 @@ def main():
     print(f"pub const {name}_PUB: [u8; 32] = [{pubkey_formatted}];")
     print(f"pubkey base64: {base64.b64encode(pubkey_blob)}")
     key_handle_formatted = ', '.join(f"0x{byte:02x}" for byte in key_handle)
-    print(f"pub const {name}_CRED_ID: [u8; 32] = [{key_handle_formatted}];")
+    print(f"pub const {name}_CRED_ID: [u8; {len(key_handle)}] = [{key_handle_formatted}];")
     print(f"cred id base64: {base64.b64encode(key_handle)}")
 
 if __name__ == "__main__":
