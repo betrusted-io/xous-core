@@ -43,7 +43,7 @@ pub fn validate_image(
     function_codes: &[u32],
     auto_jump: bool,
     mut spim: Option<&mut Spim>,
-) -> Result<(usize, u32), String> {
+) -> Result<(usize, [u8; 4]), String> {
     // Copy the signature into a structure so we can unpack it.
     let mut sig = SignatureInFlash::default();
     if let Some(ref mut spim) = spim {
@@ -82,7 +82,7 @@ pub fn validate_image(
     let mut secure = false;
     let mut passing_key: Option<usize> = None;
     for (i, key) in pk_src.sealed_data.pubkeys.iter().enumerate() {
-        if key.tag == 0 {
+        if key.tag == [0u8; 4] {
             continue;
         }
         let revocation_value = one_way_counters.get(revocation_offset + i).expect("internal error");

@@ -9,19 +9,6 @@ pub const UNSIGNED_LEN: usize = size_of::<u32>() + SIGNATURE_LENGTH;
 pub const SIGNATURE_LENGTH: usize = 64; // length of an ed25519 signature.
 pub const PUBLIC_KEY_LENGTH: usize = 32; // length of an ed25519 public key.
 
-/// Nominal purposes of pub key slots:
-///   - slot 0 is Baochip secured signing key 1
-///   - slot 1 is Baochip secured signing key 2
-///   - slot 2 is a Beta signing key. It's kept in a secured token but also available in a development
-///     environment.
-///   - slot 3 is the Developer signing key. It's a well-known key that anyone can use to sign an image. If
-///     revoked, it is not a valid signing key. When not revoked, upon being presented with an image signed by
-///     this, the bootloader will automatically erase all device-local secrets.
-///
-/// The dual signing keys for Baochip allows for a laddered upgrade path in case a signing key
-/// needs to be replaced, upgraded, or cycled out for any reason.
-pub const KEYSLOT_INITIAL_TAGS: [&'static [u8; 4]; 4] = [b"bao1", b"bao2", b"beta", b"dev "];
-
 /// These are notional and subject to change
 #[repr(u32)]
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -94,7 +81,7 @@ impl Default for SignatureInFlash {
 #[derive(Copy, Clone)]
 pub struct Pubkey {
     pub pk: [u8; PUBLIC_KEY_LENGTH],
-    pub tag: u32,
+    pub tag: [u8; 4],
     /// `aad_len` also specifies the signing protocol. If it is `0`, then a pure `ed25519ph`
     /// signature is assumed. If it is greater than `0`, then it's assumed to be a
     /// FIDO2/WebAuthn signature format using ed25519, where the signature is computed as:
@@ -108,7 +95,15 @@ pub struct Pubkey {
 unsafe impl Zeroable for Pubkey {}
 unsafe impl Pod for Pubkey {}
 impl Default for Pubkey {
-    fn default() -> Self { Self { pk: [0u8; PUBLIC_KEY_LENGTH], tag: 0, aad_len: 0, aad: [0u8; 59] } }
+    fn default() -> Self { Self { pk: [0u8; PUBLIC_KEY_LENGTH], tag: [0u8; 4], aad_len: 0, aad: [0u8; 59] } }
+}
+impl Pubkey {
+    pub fn populate_from(&mut self, record: &Pubkey) {
+        self.pk.copy_from_slice(&record.pk);
+        self.tag.copy_from_slice(&record.tag);
+        self.aad_len = record.aad_len;
+        self.aad.copy_from_slice(&record.aad);
+    }
 }
 
 #[repr(C)]
