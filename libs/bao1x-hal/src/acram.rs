@@ -9,9 +9,11 @@ pub const ACRAM_DATASLOT_START: usize = 0x603D_C000;
 pub const ACRAM_KEYSLOT_START: usize = 0x603D_E000;
 // pub const ACRAM_GKEYSLOT_START: usize = 0x603D_E400; // This is mentioned in the docs but I don't see it in
 // the code?
-pub const ONEWAY_START: usize = 0x603D_A000;
-pub const ONEWAY2_START: usize = 0x603D_B000;
-pub const ONEWAY_LEN: usize = 2048; // in u32-sized elements
+pub const ONEWAY_START: usize = 0x603D_A000; // page with 128 counters
+pub const ONEWAY2_START: usize = 0x603D_B000; // page with another 128 counters
+const ONEWAY_LEN: usize = 256 / 8; // in bytes
+const COUNTER_STRIDE_U32: usize = ONEWAY_LEN / size_of::<u32>();
+pub const MAX_ONEWAY_COUNTERS: usize = 8192 / ONEWAY_LEN;
 pub const CODESEL_END: usize = 0x603D_A000;
 
 #[bitfield(u32)]
@@ -94,7 +96,6 @@ pub struct OneWayCounter {
     #[cfg(feature = "std")]
     mapping: MemoryRange,
 }
-const COUNTER_STRIDE_U32: usize = 8;
 impl OneWayCounter {
     pub fn new() -> Self {
         #[cfg(not(feature = "std"))]
@@ -103,9 +104,9 @@ impl OneWayCounter {
         #[cfg(feature = "std")]
         let ret = OneWayCounter {
             mapping: xous::syscall::map_memory(
-                xous::MemoryAddress::new(ONEWAY2_START),
+                xous::MemoryAddress::new(ONEWAY_START),
                 None,
-                ONEWAY_LEN * size_of::<u32>(),
+                ONEWAY_LEN * MAX_ONEWAY_COUNTERS,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map oneway range"),
@@ -119,7 +120,7 @@ impl OneWayCounter {
         let base = ONEWAY_START as *const u32;
         #[cfg(feature = "std")]
         let base = self.mapping.as_ptr() as *const u32;
-        if offset < ONEWAY_LEN {
+        if offset < MAX_ONEWAY_COUNTERS {
             // safety: only safe because the pointer is length-checked
             // we use this form to access the array because we need to read_volatile()
             Ok(unsafe { base.add(offset * COUNTER_STRIDE_U32).read_volatile() })
@@ -139,7 +140,7 @@ impl OneWayCounter {
         #[cfg(feature = "std")]
         let base = self.mapping.as_mut_ptr() as *mut u32;
 
-        if offset < ONEWAY_LEN {
+        if offset < MAX_ONEWAY_COUNTERS {
             let starting_value = self.get(offset).unwrap(); // offset is already checked
             // this will cause the increment in hardware
             unsafe { base.add(offset * COUNTER_STRIDE_U32).write_volatile(0) }
@@ -165,7 +166,7 @@ impl OneWayCounter {
         let base = self.mapping.as_mut_ptr() as *mut u32;
 
         let offset = T::OFFSET;
-        if offset < ONEWAY_LEN {
+        if offset < MAX_ONEWAY_COUNTERS {
             let starting_value = self.get(offset).unwrap(); // offset is already checked
             // this will cause the increment in hardware
             unsafe { base.add(offset * COUNTER_STRIDE_U32).write_volatile(0) }
