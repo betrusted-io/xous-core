@@ -5,6 +5,8 @@ use tools::sign_image::{convert_to_uf2, load_pem, sign_file};
 
 const DEVKEY_PATH: &str = "devkey/dev.key";
 
+use std::str::FromStr;
+
 use xous_semver::SemVer;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

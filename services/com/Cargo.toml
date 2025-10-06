@@ -26,7 +26,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "alloc",
 ] }
 
-xous-semver = "0.1.2"
+xous-semver = "0.1.5"
 
 utralib = { version = "0.1.25", optional = true, default-features = false }
 

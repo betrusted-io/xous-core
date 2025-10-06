@@ -34,7 +34,7 @@ utralib = { version = "0.1.25", optional = true, default-features = false }
 # for automatic SSID management and AP list storage
 pddb = { path = "../pddb" }
 
-xous-semver = "0.1.2"
+xous-semver = "0.1.5"
 
 [dependencies.smoltcp]
 version = "0.11.0"

@@ -7361,8 +7361,6 @@ dependencies = [
 [[package]]
 name = "xous-api-ticktimer"
 version = "0.9.65"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "033f7c2e99be732f306635541de965b93affc7923f31055eea2c9b85fdd0c478"
 dependencies = [
  "log",
  "num-derive 0.4.2",
@@ -7505,9 +7503,9 @@ dependencies = [
 
 [[package]]
 name = "xous-semver"
-version = "0.1.3"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b79d97eaeab0fdf766f7f2c8d3b88bdae67ad36fac9694e2857defca345178c"
+checksum = "906500be0c4ed13afc3c8743e4d40337bfbe08e7dadfa216c39907aaa06cc8c2"
 
 [[package]]
 name = "xous-susres"

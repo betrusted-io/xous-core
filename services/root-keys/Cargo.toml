@@ -17,7 +17,7 @@ trng = { path = "../trng" }
 spinor = { path = "../spinor" }
 llio = { path = "../llio" }
 com = { path = "../com" }
-xous-semver = "0.1.2"
+xous-semver = "0.1.5"
 utralib = { version = "0.1.25", optional = true, default-features = false }
 blitstr2 = { path = "../../libs/blitstr2" }
 keystore-api = { path = "../../libs/keystore-api" }
