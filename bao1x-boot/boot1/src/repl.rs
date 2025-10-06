@@ -3,6 +3,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use bao1x_api::signatures::FunctionCode;
 #[allow(unused_imports)]
 use bao1x_api::*;
 use bao1x_hal::acram::OneWayCounter;
@@ -21,10 +22,13 @@ pub struct Repl {
     cmdline: String,
     do_cmd: bool,
     local_echo: bool,
+    lockdown_armed: bool,
 }
 
 impl Repl {
-    pub fn new() -> Self { Self { cmdline: String::new(), do_cmd: false, local_echo: true } }
+    pub fn new() -> Self {
+        Self { cmdline: String::new(), do_cmd: false, local_echo: true, lockdown_armed: false }
+    }
 
     #[allow(dead_code)]
     pub fn init_cmd(&mut self, cmd: &str) {
@@ -69,6 +73,32 @@ impl Repl {
         let mut parts = self.cmdline.split_whitespace();
         let cmd = parts.next().unwrap_or("").to_string();
         let args: Vec<String> = parts.map(|s| s.to_string()).collect();
+
+        // process two-phase lockdown command
+        if self.lockdown_armed {
+            if args.len() == 0 && cmd.as_str() == "YES" {
+                let owc = OneWayCounter::new();
+                let devkey_offsets = [
+                    ("loader", LOADER_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("boot0", BOOT0_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("boot1", BOOT1_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                ];
+                for &(desc, devkey) in devkey_offsets.iter() {
+                    match unsafe { owc.inc(devkey) } {
+                        Ok(_) => crate::println!("{} locked", desc),
+                        Err(e) => crate::println!("Couldn't lock {}: {:?}", desc, e),
+                    }
+                }
+            } else {
+                crate::println!("Lockdown aborted.");
+            }
+            self.lockdown_armed = false;
+            self.abort_cmd();
+            return Ok(());
+        }
+        self.lockdown_armed = false;
+
+        // now process any further commands
         match cmd.as_str() {
             "reset" => {
                 let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
@@ -168,6 +198,120 @@ impl Repl {
                 }
                 crate::println!("Board type set to {:?} after {} increments", new_type, count);
             }
+            "audit" => {
+                let owc = OneWayCounter::new();
+                crate::println!(
+                    "Board type reads as: {:?}",
+                    owc.get_decoded::<bao1x_api::offsets::BoardTypeCoding>()
+                );
+                crate::println!(
+                    "Boot partition is: {:?}",
+                    owc.get_decoded::<bao1x_api::offsets::AltBootCoding>()
+                );
+                crate::println!("Revocations:");
+                crate::println!("Stage       key0     key1     key2     key3");
+                let key_array = [
+                    ("boot0       ", BOOT0_REVOCATION_OFFSET),
+                    ("boot1       ", BOOT1_REVOCATION_OFFSET),
+                    ("next stage  ", LOADER_REVOCATION_OFFSET),
+                ];
+                for (img_type, start) in key_array {
+                    crate::print!("{}", img_type);
+                    for offset in start..(start + PUBKEY_SLOTS) {
+                        if owc.get(offset).unwrap_or(1) == 0 {
+                            crate::print!("enabled  ");
+                        } else {
+                            crate::print!("revoked  ");
+                        }
+                    }
+                    crate::println!("");
+                }
+
+                match bao1x_hal::sigcheck::validate_image(
+                    bao1x_api::BOOT0_START as *const u32,
+                    bao1x_api::BOOT0_START as *const u32,
+                    bao1x_api::BOOT0_REVOCATION_OFFSET,
+                    &[FunctionCode::Boot0 as u32],
+                    false,
+                    None,
+                ) {
+                    Ok((k, tag)) => crate::println!(
+                        "Boot0: key {} ({})",
+                        k,
+                        core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                    ),
+                    Err(e) => crate::println!("Boot0 did not validate: {:?}", e),
+                }
+                match bao1x_hal::sigcheck::validate_image(
+                    bao1x_api::BOOT1_START as *const u32,
+                    bao1x_api::BOOT0_START as *const u32,
+                    bao1x_api::BOOT0_REVOCATION_OFFSET,
+                    &[
+                        FunctionCode::Boot1 as u32,
+                        FunctionCode::UpdatedBoot1 as u32,
+                        FunctionCode::Developer as u32,
+                    ],
+                    false,
+                    None,
+                ) {
+                    Ok((k, tag)) => crate::println!(
+                        "Boot1: key {} ({})",
+                        k,
+                        core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                    ),
+                    Err(e) => crate::println!("Boot1 did not validate: {:?}", e),
+                }
+                match bao1x_hal::sigcheck::validate_image(
+                    bao1x_api::LOADER_START as *const u32,
+                    bao1x_api::BOOT1_START as *const u32,
+                    bao1x_api::BOOT1_REVOCATION_OFFSET,
+                    &crate::secboot::ALLOWED_FUNCTIONS,
+                    false,
+                    None,
+                ) {
+                    Ok((k, tag)) => crate::println!(
+                        "Next stage: key {} ({})",
+                        k,
+                        core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                    ),
+                    Err(e) => crate::println!("Next stage did not validate: {:?}", e),
+                }
+                // TODO:
+                //   - devboot seen
+                //   - oem keys erased
+                //   - uuid
+            }
+            "lockdown" => {
+                match bao1x_hal::sigcheck::validate_image(
+                    bao1x_api::BOOT1_START as *const u32,
+                    bao1x_api::BOOT0_START as *const u32,
+                    bao1x_api::BOOT0_REVOCATION_OFFSET,
+                    &[
+                        FunctionCode::Boot1 as u32,
+                        FunctionCode::UpdatedBoot1 as u32,
+                        FunctionCode::Developer as u32,
+                    ],
+                    false,
+                    None,
+                ) {
+                    Ok((k, _tag)) => {
+                        if k != bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
+                            crate::println!(
+                                "This will permanently disable developer mode. It cannot be undone!"
+                            );
+                            crate::println!("Proceed? (type 'YES' in all caps to proceed)");
+                            self.lockdown_armed = true;
+                        } else {
+                            crate::println!(
+                                "Boot1 is signed with the developer key. Refusing to lockdown, as that would brick the chip."
+                            )
+                        }
+                    }
+                    Err(_e) => {
+                        crate::println!("Boot1 has no valid signature, lockdown would brick the chip.")
+                    }
+                }
+            }
             #[cfg(feature = "unsafe-debug")]
             "peek" => {
                 const COLUMNS: usize = 4;
@@ -206,7 +350,9 @@ impl Repl {
             }
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
-                crate::print!("Commands include: reset, echo, boot, bootwait, localecho, uf2, boardtype");
+                crate::print!(
+                    "Commands include: reset, echo, boot, bootwait, localecho, uf2, boardtype, audit, lockdown"
+                );
                 crate::println!("");
             }
         }
