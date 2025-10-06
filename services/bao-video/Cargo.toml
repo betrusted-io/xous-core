@@ -7,11 +7,11 @@ edition = "2021"
 bao1x-hal = { path = "../../libs/bao1x-hal", features = [
     "std",
 ], optional = true, default-features = false }
-utralib = { version = "0.1.25", optional = true, default-features = false }
-xous-names = { package = "xous-api-names", version = "0.9.67" }
-ticktimer = { package = "xous-api-ticktimer", version = "0.9.65" }
-xous = "0.9.66"
-log-server = { package = "xous-api-log", version = "0.1.65" }
+utralib = { version = "0.1.26", optional = true, default-features = false }
+xous-names = { package = "xous-api-names", version = "0.9.68" }
+ticktimer = { package = "xous-api-ticktimer", version = "0.9.66" }
+xous = "0.9.67"
+log-server = { package = "xous-api-log", version = "0.1.66" }
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
@@ -20,7 +20,7 @@ ux-api = { path = "../../libs/ux-api" }
 bao1x-emu = { path = "../bao1x-emu", optional = true }
 bao1x-api = { path = "../../libs/bao1x-api" }
 blitstr2 = { path = "../../libs/blitstr2" }
-xous-ipc = "0.10.6"
+xous-ipc = "0.10.7"
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",

@@ -3088,6 +3088,8 @@ impl<'a> RootKeys {
     }
 
     pub fn staged_semver(&self) -> SemVer {
+        use std::str::FromStr;
+
         let staging_meta = self.fetch_gw_metadata(GatewareRegion::Staging);
         if staging_meta.magic == 0x6174656d {
             let tag_str =
@@ -3112,6 +3114,7 @@ impl<'a> RootKeys {
     /// The main utility of this function is to simplify the out of the box experience
     /// before root keys have been added.
     pub fn try_nokey_soc_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> bool {
+        use std::str::FromStr;
         if self.is_initialized() {
             log::warn!("No-touch update attempted, but keys are initialized. Aborting.");
             return false;
