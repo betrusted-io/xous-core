@@ -3,11 +3,12 @@ use bytemuck::{Pod, Zeroable};
 /// Total reserved space for the signature block
 pub const SIGBLOCK_LEN: usize = 768;
 /// The jump instruction and the signature itself are not protected
-pub const UNSIGNED_LEN: usize = size_of::<u32>() + SIGNATURE_LENGTH;
+pub const UNSIGNED_LEN: usize = SignatureInFlash::sealed_data_offset();
 
 // These are vendored in so we don't have a circular dependency on ed25519 crate
 pub const SIGNATURE_LENGTH: usize = 64; // length of an ed25519 signature.
 pub const PUBLIC_KEY_LENGTH: usize = 32; // length of an ed25519 public key.
+pub const AAD_LENGTH: usize = 60; // at least 37 bytes, rounded up to the nearest 32-byte boundary
 
 /// These are notional and subject to change
 #[repr(u32)]
@@ -43,7 +44,8 @@ pub enum FunctionCode {
 }
 
 pub const BAOCHIP_SIG_VERSION: u32 = 0x1_00;
-pub const PADDING_LEN: usize = SIGBLOCK_LEN - size_of::<SealedFields>() - SIGNATURE_LENGTH - size_of::<u32>();
+pub const PADDING_LEN: usize = SIGBLOCK_LEN - size_of::<SignatureInFlash>();
+pub const MAGIC_NUMBER: [u32; 2] = [u32::from_be_bytes(*b"yumy"), u32::from_be_bytes(*b"Bao3")];
 /// Representation of the signature block in memory.
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -53,10 +55,17 @@ pub struct SignatureInFlash {
     pub _jal_instruction: u32,
     /// The actual signature.
     pub signature: [u8; SIGNATURE_LENGTH],
+    /// `aad_len` also specifies the signing protocol. If it is `0`, then a pure `ed25519ph`
+    /// signature is assumed. If it is greater than `0`, then it's assumed to be a
+    /// FIDO2/WebAuthn signature format using ed25519, where the signature is computed as:
+    /// `signature = Ed25519.sign(authenticatorData || SHA-256(clientData))`
+    /// `authenticatorData` is a field that is at least 37 bytes in size. The size is influenced
+    /// by the type of signing and operation, but for our implementation I think it stays
+    /// fixed at 37 bytes.
+    pub aad_len: u32,
+    pub aad: [u8; AAD_LENGTH],
     /// All data from this point onward are included in the signature computation.
     pub sealed_data: SealedFields,
-    /// Padding to target length
-    pub padding: [u8; PADDING_LEN],
 }
 unsafe impl Zeroable for SignatureInFlash {}
 unsafe impl Pod for SignatureInFlash {}
@@ -71,9 +80,16 @@ impl Default for SignatureInFlash {
         Self {
             _jal_instruction: 0,
             signature: [0u8; SIGNATURE_LENGTH],
+            aad_len: 0,
+            aad: [0u8; AAD_LENGTH],
             sealed_data: SealedFields::default(),
-            padding: [0u8; PADDING_LEN],
         }
+    }
+}
+impl SignatureInFlash {
+    // The offset is after the jal instruction + signature.
+    pub const fn sealed_data_offset() -> usize {
+        size_of::<u32>() + SIGNATURE_LENGTH + size_of::<u32>() + AAD_LENGTH
     }
 }
 
@@ -82,27 +98,16 @@ impl Default for SignatureInFlash {
 pub struct Pubkey {
     pub pk: [u8; PUBLIC_KEY_LENGTH],
     pub tag: [u8; 4],
-    /// `aad_len` also specifies the signing protocol. If it is `0`, then a pure `ed25519ph`
-    /// signature is assumed. If it is greater than `0`, then it's assumed to be a
-    /// FIDO2/WebAuthn signature format using ed25519, where the signature is computed as:
-    /// `signature = Ed25519.sign(authenticatorData || SHA-256(clientData))`
-    /// `authenticatorData` is a field that is at least 37 bytes in size, and can be much
-    /// larger if optional extentions are enabled. 59 bytes are made available since this
-    /// pads nicely into the record format, and gives us some wiggle room for compatibility
-    pub aad_len: u8,
-    pub aad: [u8; 59],
 }
 unsafe impl Zeroable for Pubkey {}
 unsafe impl Pod for Pubkey {}
 impl Default for Pubkey {
-    fn default() -> Self { Self { pk: [0u8; PUBLIC_KEY_LENGTH], tag: [0u8; 4], aad_len: 0, aad: [0u8; 59] } }
+    fn default() -> Self { Self { pk: [0u8; PUBLIC_KEY_LENGTH], tag: [0u8; 4] } }
 }
 impl Pubkey {
     pub fn populate_from(&mut self, record: &Pubkey) {
         self.pk.copy_from_slice(&record.pk);
         self.tag.copy_from_slice(&record.tag);
-        self.aad_len = record.aad_len;
-        self.aad.copy_from_slice(&record.aad);
     }
 }
 
@@ -111,6 +116,8 @@ impl Pubkey {
 pub struct SealedFields {
     /// Version number of this signature record
     pub version: u32,
+    /// Magic number, to quickly differentiate uninitialized memory from a valid signature record
+    pub magic: [u32; 2],
     /// Length of the signed code.
     pub signed_len: u32,
     /// Function code of the signed block. Used to provide metadata about what is inside the signed
@@ -147,7 +154,8 @@ impl AsRef<[u8]> for SealedFields {
 impl Default for SealedFields {
     fn default() -> Self {
         Self {
-            version: 0,
+            version: BAOCHIP_SIG_VERSION,
+            magic: MAGIC_NUMBER,
             signed_len: 0,
             function_code: 0,
             reserved: 0,

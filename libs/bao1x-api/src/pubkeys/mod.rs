@@ -23,7 +23,9 @@ pub const DEVELOPER_KEY_SLOT: usize = 3;
 /// needs to be replaced, upgraded, or cycled out for any reason.
 pub const KEYSLOT_INITIAL_TAGS: [&'static [u8; 4]; 4] = [b"bao1", b"bao2", b"beta", b"dev "];
 
-// helper function to pad arrays out, useful for the auth_data
+// helper function to pad arrays out, if needed. Previously used for auth_data until
+// I realized that auth_data changes with every signing.
+#[allow(dead_code)]
 const fn pad_array<const N: usize, const M: usize>(input: &[u8; N]) -> [u8; M] {
     let mut result = [0u8; M];
     let mut i = 0;

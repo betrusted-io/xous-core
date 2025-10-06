@@ -6,14 +6,7 @@ pub const ID_ED25519_SK_PUB: [u8; 32] = [
     0x80, 0x97, 0x99, 0x29, 0xed, 0xd0, 0x4e, 0x40, 0x12, 0x4b, 0x52, 0xca, 0xe9, 0xae, 0x54, 0xb2, 0x4b,
     0xdf, 0xf7, 0x2a, 0x7b, 0x8a, 0x00, 0x4c, 0x41, 0x06, 0x5b, 0xd1, 0x40, 0x20, 0x78, 0xa7,
 ];
-/// Beta public key auth_data - needed to validate an image. Extracted by a trial run of
-/// signing/fido_signer with `cargo run -- --credential-file ..\credentials\beta.json --file .\test.bin`
-/// inside the fido_signer directory. Needs to have the token & key connected to generate this.
-pub const ID_ED25519_SK_AUTH_DATA: [u8; 37] = [
-    0xe3, 0x06, 0x10, 0xe8, 0xa1, 0x62, 0x11, 0x59, 0x60, 0xfe, 0x1e, 0xc2, 0x23, 0xe6, 0x52, 0x9c, 0x9f,
-    0x4b, 0x6e, 0x80, 0x20, 0x0d, 0xcb, 0x5e, 0x5c, 0x32, 0x1c, 0x8a, 0xf1, 0xe2, 0xb1, 0xbf, 0x05, 0x00,
-    0x00, 0x02, 0x0f,
-];
+
 /// Beta public key "key handle" - used to retrieve the key for signing from the token.
 /// Extracted from signing/beta_id_ed25519_sk using extract_sk_credential.py
 pub const ID_ED25519_SK_CRED_ID: [u8; 241] = [
@@ -37,9 +30,4 @@ pub const ID_ED25519_SK_CRED_ID: [u8; 241] = [
 /// Extracted from signing/beta_id_ed25519_sk using extract_sk_credential.py
 pub const ID_ED25519_SK_RP: &'static str = "ssh:";
 
-pub const PUBKEY: Pubkey = Pubkey {
-    pk: ID_ED25519_SK_PUB,
-    tag: *KEYSLOT_INITIAL_TAGS[BETA_KEY_SLOT],
-    aad_len: ID_ED25519_SK_AUTH_DATA.len() as u8,
-    aad: pad_array(&ID_ED25519_SK_AUTH_DATA),
-};
+pub const PUBKEY: Pubkey = Pubkey { pk: ID_ED25519_SK_PUB, tag: *KEYSLOT_INITIAL_TAGS[BETA_KEY_SLOT] };

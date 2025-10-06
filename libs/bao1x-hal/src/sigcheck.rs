@@ -57,9 +57,15 @@ pub fn validate_image(
 
     let pubkey_ptr = pubkeys_offset as *const SignatureInFlash;
     let pk_src: &SignatureInFlash = unsafe { pubkey_ptr.as_ref().unwrap() };
+    if pk_src.sealed_data.magic != MAGIC_NUMBER {
+        return Err(String::from("Invalid magic number in verifying key record"));
+    }
 
     let signed_len = sig.sealed_data.signed_len;
 
+    if sig.sealed_data.magic != MAGIC_NUMBER {
+        return Err(String::from("Invalid magic number on incoming record to be verified"));
+    }
     if sig.sealed_data.version != BAOCHIP_SIG_VERSION {
         crate::println!(
             "Version {:x} sig found, should be {:x}",
@@ -78,6 +84,7 @@ pub fn validate_image(
 
     let developer = sig.sealed_data.function_code == FunctionCode::Developer as u32;
 
+    // crate::println!("Signature: {:x?}", sig.signature);
     let one_way_counters = OneWayCounter::new();
     let mut secure = false;
     let mut passing_key: Option<usize> = None;
@@ -95,36 +102,35 @@ pub fn validate_image(
 
         let ed25519_signature = ed25519_dalek::Signature::from(sig.signature);
 
-        if key.aad_len == 0 {
-            let mut h: Sha512 = Sha512::new();
-            // this code has to be implemented *twice* because we can't make `h` a generic trait due
-            // to the type bounds reasonably imposed by `verify_prehashed`.
-            if let Some(ref mut spim) = spim {
-                // need to read the data out page by page and hash it.
-                // ASSUME: the SPIM driver has allocated a read buffer that is actually PAGE_SIZE. If the SPIM
-                // driver has a smaller buffer, reads get less efficient.
-                let end = img_offset as usize + UNSIGNED_LEN + signed_len as usize;
-                for offset in ((img_offset as usize + UNSIGNED_LEN)..end).step_by(PAGE_SIZE) {
-                    let mut buf = [0u8; PAGE_SIZE];
-                    spim.mem_read(offset as u32, &mut buf, false);
-                    let valid_length = if offset + PAGE_SIZE < end { PAGE_SIZE } else { end - offset };
-                    h.update(&buf[..valid_length]);
-                }
-            } else {
-                // easy peasy
-                let image: &[u8] = unsafe {
-                    core::slice::from_raw_parts(
-                        (img_offset as usize + UNSIGNED_LEN) as *const u8,
-                        signed_len as usize,
-                    )
-                };
-                // crate::println!("Verifying image {:x?} with {:x?}", &image[..16], &key);
-                h.update(&image);
+        let mut h: Sha512 = Sha512::new();
+        if let Some(ref mut spim) = spim {
+            // need to read the data out page by page and hash it.
+            // ASSUME: the SPIM driver has allocated a read buffer that is actually PAGE_SIZE. If the SPIM
+            // driver has a smaller buffer, reads get less efficient.
+            let end = img_offset as usize + UNSIGNED_LEN + signed_len as usize;
+            for offset in ((img_offset as usize + UNSIGNED_LEN)..end).step_by(PAGE_SIZE) {
+                let mut buf = [0u8; PAGE_SIZE];
+                spim.mem_read(offset as u32, &mut buf, false);
+                let valid_length = if offset + PAGE_SIZE < end { PAGE_SIZE } else { end - offset };
+                h.update(&buf[..valid_length]);
             }
+        } else {
+            // easy peasy
+            let image: &[u8] = unsafe {
+                core::slice::from_raw_parts(
+                    (img_offset as usize + UNSIGNED_LEN) as *const u8,
+                    signed_len as usize,
+                )
+            };
+            h.update(&image);
+        }
+        if sig.aad_len == 0 {
+            // crate::println!("ed25519ph verifying with {:x?}", &key.pk);
             // debugging note: h.clone() does *not* work. You have to print the hash by modifying
             // the function inside the ed25519 crate.
             match verifying_key.verify_prehashed(h, None, &ed25519_signature) {
                 Ok(_) => {
+                    crate::println!("ed25519ph verification passed");
                     passing_key = Some(i);
                     if i != sig.sealed_data.pubkeys.len() - 1 {
                         secure = true;
@@ -135,35 +141,28 @@ pub fn validate_image(
                         break;
                     }
                 }
-                _ => {}
+                _ => {
+                    crate::println!("ed25519ph verification failed");
+                }
             }
         } else {
+            let sha512_hashed_image = h.finalize();
+            // create a *new* hasher because a token can only sign a hash, not the full image.
             let mut h: Sha256 = Sha256::new();
-            // this code has to be implemented *twice* because we can't make `h` a generic trait due
-            // to the type bounds reasonably imposed by `verify_prehashed`.
-            if let Some(ref mut spim) = spim {
-                let end = img_offset as usize + UNSIGNED_LEN + signed_len as usize;
-                for offset in ((img_offset as usize + UNSIGNED_LEN)..end).step_by(PAGE_SIZE) {
-                    let mut buf = [0u8; PAGE_SIZE];
-                    spim.mem_read(offset as u32, &mut buf, false);
-                    let valid_length = if offset + PAGE_SIZE < end { PAGE_SIZE } else { end - offset };
-                    h.update(&buf[..valid_length]);
-                }
-            } else {
-                let image: &[u8] = unsafe {
-                    core::slice::from_raw_parts(
-                        (img_offset as usize + UNSIGNED_LEN) as *const u8,
-                        signed_len as usize,
-                    )
-                };
-                h.update(&image);
-            }
+            // hash dat hash!
+            // crate::println!("verifying base hash {:x?}", &sha512_hashed_image.as_slice());
+            h.update(&sha512_hashed_image.as_slice());
+            let hashed_hash = h.finalize();
+            // crate::println!("hashed hash: {:x?}", hashed_hash.as_slice());
+
             let mut msg: Vec<u8> = Vec::new();
-            msg.extend_from_slice(&key.aad[..key.aad_len as usize]);
-            msg.extend_from_slice(h.finalize().as_slice());
+            msg.extend_from_slice(&sig.aad[..sig.aad_len as usize]);
+            msg.extend_from_slice(hashed_hash.as_slice());
+            // crate::println!("assembled msg({}): {:x?}", msg.len(), msg);
 
             match verifying_key.verify_strict(&msg, &ed25519_signature) {
                 Ok(_) => {
+                    crate::println!("FIDO2 ed25519 verification passed");
                     passing_key = Some(i);
                     if i != sig.sealed_data.pubkeys.len() - 1 {
                         secure = true;
@@ -174,7 +173,9 @@ pub fn validate_image(
                         break;
                     }
                 }
-                _ => {}
+                _ => {
+                    crate::println!("FIDO2 verification failed");
+                }
             }
         }
     }
