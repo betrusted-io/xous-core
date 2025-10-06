@@ -111,6 +111,7 @@ pub fn usb_ep3_bulk_out_complete(
     this.bulk_xfer(3, USB_RECV, acm_buf.as_ptr() as usize, acm_buf.len(), 0, 0);
 }
 
+#[allow(dead_code)]
 pub fn flush() {
     unsafe {
         if let Some(ref mut usb_ref) = crate::platform::usb::USB {
