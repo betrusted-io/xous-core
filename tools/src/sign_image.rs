@@ -194,9 +194,13 @@ pub fn sign_image(
             // Now we can use the private key data.
             let signing_key = SigningKey::from_bytes(&secbytes);
 
-            // derive a private key
-            let sk = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&private_key.contents)
-                .map_err(|e| format!("{}", e))?;
+            // This is handy code to remember - a quick way to get the public key from the private key. Just
+            // in case I need this in the future to sanity check some values.
+            /*
+                let sk = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&private_key.contents)
+                    .map_err(|e| format!("{}", e))?;
+                let pubkey = sk.public_key();
+            */
 
             let function_code = match function_code {
                 Some("boot0") => FunctionCode::Boot0,
@@ -216,10 +220,11 @@ pub fn sign_image(
                 semver,
                 pubkeys: [Pubkey::default(), Pubkey::default(), Pubkey::default(), Pubkey::default()],
             };
-            sealed_fields.pubkeys[3].aad_len = 0;
-            sealed_fields.pubkeys[3].pk.copy_from_slice(sk.public_key().as_ref());
-            sealed_fields.pubkeys[3].tag =
-                u32::from_le_bytes(*bao1x_api::signatures::KEYSLOT_INITIAL_TAGS[3]);
+
+            // whack in all the public keys, defined in the bao1x-api crate
+            for (dst, src) in sealed_fields.pubkeys.iter_mut().zip(bao1x_api::pubkeys::PUBKEY_HEADER.iter()) {
+                dst.populate_from(src);
+            }
 
             let mut protected = Vec::new();
             protected.extend_from_slice(sealed_fields.as_ref());
