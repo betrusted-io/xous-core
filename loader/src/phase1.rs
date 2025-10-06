@@ -60,13 +60,13 @@ pub fn phase_1(cfg: &mut BootConfig, detached_app: bool) {
     }
     if VDBG {
         let check_iter = cfg.args.iter();
-        for a in check_iter {
+        for _a in check_iter {
             crate::println!(
                 "{}: base {:x} size {:x} data {:x?}",
-                core::str::from_utf8(&a.name.to_le_bytes()).unwrap_or("invalid name"),
-                a.this as usize,
-                a.size,
-                a.data
+                core::str::from_utf8(&_a.name.to_le_bytes()).unwrap_or("invalid name"),
+                _a.this as usize,
+                _a.size,
+                _a.data
             );
         }
     }

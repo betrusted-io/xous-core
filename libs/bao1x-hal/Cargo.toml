@@ -6,10 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-xous-api-names = { version = "0.9.67", optional = true }
-xous-api-ticktimer = { version = "0.9.65", optional = true }
+xous-api-names = { version = "0.9.68", optional = true }
+xous-api-ticktimer = { version = "0.9.66", optional = true }
 log = { version = "0.4.14", optional = true }
-utralib = { version = "0.1.25", default-features = false, optional = true }
+utralib = { version = "0.1.26", default-features = false, optional = true }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
@@ -42,7 +42,7 @@ sha2-bao1x = { path = "../../bao1x-boot/sha2-bao1x", optional = true, default-fe
 linked_list_allocator = { version = "0.10.5", optional = true }
 
 # [target.'cfg(target_os = "xous")'.dependencies]
-xous = { version = "0.9.66", features = ["v2p"] }
+xous = { version = "0.9.67", features = ["v2p"] }
 
 bitflags = "1.2.1"
 # TODO: migrate from bitflags to this crate
