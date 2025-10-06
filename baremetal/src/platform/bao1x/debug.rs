@@ -205,8 +205,10 @@ pub fn setup_rx(perclk: u32) -> bao1x_hal::udma::Uart {
 
 // ==== DUART-only debug print ==== -> this is used for USB feedback to avoid Tx loops on USB
 /// Placeholder for debug
+#[allow(dead_code)]
 pub struct Duart {}
 
+#[allow(dead_code)]
 impl Duart {
     /// Print a character
     pub fn putc(&self, c: u8) {
