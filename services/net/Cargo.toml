@@ -7,15 +7,15 @@ description = "Network middleware"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.66"
-xous-ipc = "0.10.6"
-log-server = { package = "xous-api-log", version = "0.1.65" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.65" }
-xous-names = { package = "xous-api-names", version = "0.9.67" }
+xous = "0.9.67"
+xous-ipc = "0.10.7"
+log-server = { package = "xous-api-log", version = "0.1.66" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.66" }
+xous-names = { package = "xous-api-names", version = "0.9.68" }
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-susres = { package = "xous-api-susres", version = "0.9.65" }
+susres = { package = "xous-api-susres", version = "0.9.66" }
 rkyv = { version = "0.8.8", default-features = false, features = [
   "std",
   "alloc",
@@ -29,7 +29,7 @@ modals = { path = "../modals" }
 locales = { path = "../../locales" }
 precursor-hal = { path = "../../libs/precursor-hal" }
 
-utralib = { version = "0.1.25", optional = true, default-features = false }
+utralib = { version = "0.1.26", optional = true, default-features = false }
 
 # for automatic SSID management and AP list storage
 pddb = { path = "../pddb" }

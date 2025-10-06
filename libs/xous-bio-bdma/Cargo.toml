@@ -8,10 +8,10 @@ edition = "2021"
 [dependencies]
 log = "0.4.14"
 defmt = { version = "0.3", optional = true }
-utralib = { version = "0.1.25", default-features = false }
+utralib = { version = "0.1.26", default-features = false }
 
 [target.'cfg(target_os = "xous")'.dependencies]
-xous = "0.9.66"
+xous = "0.9.67"
 
 [features]
 bao1x = ["utralib/bao1x"]

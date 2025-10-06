@@ -10,17 +10,17 @@ version = "0.1.0"
 com = { path = "../com" }
 content-plugin-api = { path = "../content-plugin-api" }
 log = "0.4.14"
-log-server = { package = "xous-api-log", version = "0.1.65" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.65" }
+log-server = { package = "xous-api-log", version = "0.1.66" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.66" }
 trng = { path = "../trng" }
 llio = { path = "../llio" }
-xous = "0.9.66"
-xous-ipc = "0.10.6"
-xous-names = { package = "xous-api-names", version = "0.9.67" }
+xous = "0.9.67"
+xous-ipc = "0.10.7"
+xous-names = { package = "xous-api-names", version = "0.9.68" }
 ux-api = { path = "../../libs/ux-api" }
 gam = { path = "../gam" }
 locales = { path = "../../locales" }
-susres = { package = "xous-api-susres", version = "0.9.65" }
+susres = { package = "xous-api-susres", version = "0.9.66" }
 root-keys = { path = "../root-keys" }
 keystore-api = { path = "../../libs/keystore-api", features = ["gen1"] }
 modals = { path = "../modals" }
@@ -50,7 +50,7 @@ digest = "0.10.7"
 xous-semver = "0.1.5"
 com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 
-utralib = { version = "0.1.25", optional = true, default-features = false }
+utralib = { version = "0.1.26", optional = true, default-features = false }
 
 # short circuit the datetime call on hosted mode
 [target.'cfg(any(windows,unix))'.dependencies]

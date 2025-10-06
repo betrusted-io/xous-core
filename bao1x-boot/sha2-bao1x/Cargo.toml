@@ -11,7 +11,7 @@ description = "sha2 hardware accelerator engine - specific to bao1x"
 
 # Rust-standard digest API dependencies
 digest = "^0.10.7"
-utralib = { version = "0.1.25", default-features = false }
+utralib = { version = "0.1.26", default-features = false }
 bao1x-api = { path = "../../libs/bao1x-api" }
 
 [features]
