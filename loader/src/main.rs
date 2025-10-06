@@ -269,7 +269,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
             Ok((k, tag)) => println!(
                 "*** Kernel signature check by key @ {}({}) OK ***",
                 k,
-                core::str::from_utf8(&tag.to_le_bytes()).unwrap_or("invalid tag")
+                core::str::from_utf8(&tag).unwrap_or("invalid tag")
             ),
             Err(e) => {
                 println!("Kernel failed signature check. Dying: {:?}", e);
@@ -293,7 +293,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                     println!(
                         "*** Detached app signature check by key @ {}({}) OK ***",
                         k,
-                        core::str::from_utf8(&tag.to_le_bytes()).unwrap_or("invalid tag")
+                        core::str::from_utf8(&tag).unwrap_or("invalid tag")
                     );
                     true
                 }
