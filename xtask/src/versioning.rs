@@ -10,16 +10,9 @@ use chrono::Local;
 
 pub(crate) fn generate_version(add_timestamp: bool) {
     let output = if cfg!(target_os = "windows") {
-        Command::new("cmd")
-            .args(["/C", "git describe --tags --long"])
-            .output()
-            .expect("failed to execute process")
+        Command::new("cmd").args(["/C", "git describe --long"]).output().expect("failed to execute process")
     } else {
-        Command::new("sh")
-            .arg("-c")
-            .arg("git describe --tags --long")
-            .output()
-            .expect("failed to execute process")
+        Command::new("sh").arg("-c").arg("git describe --long").output().expect("failed to execute process")
     };
     let gitver = output.stdout;
     let semver = String::from_utf8_lossy(&gitver);
