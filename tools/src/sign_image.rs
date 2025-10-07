@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 use bao1x_api::signatures::{
-    FunctionCode, PADDING_LEN, PUBLIC_KEY_LENGTH, SIGBLOCK_LEN, SealedFields, UNSIGNED_LEN,
+    FunctionCode, PADDING_LEN, SIGBLOCK_LEN, SealedFields, SignatureInFlash, UNSIGNED_LEN,
 };
 use ed25519_dalek::{DigestSigner, SigningKey};
 use pkcs8::PrivateKeyInfo;
@@ -196,9 +196,13 @@ pub fn sign_image(
             // Now we can use the private key data.
             let signing_key = SigningKey::from_bytes(&secbytes);
 
-            // derive a private key
-            let sk = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&private_key.contents)
-                .map_err(|e| format!("{}", e))?;
+            // This is handy code to remember - a quick way to get the public key from the private key. Just
+            // in case I need this in the future to sanity check some values.
+            /*
+                let sk = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&private_key.contents)
+                    .map_err(|e| format!("{}", e))?;
+                let pubkey = sk.public_key();
+            */
 
             let function_code = match function_code {
                 Some("boot0") => FunctionCode::Boot0,
@@ -209,24 +213,23 @@ pub fn sign_image(
                 Some("swap") => FunctionCode::Swap,
                 _ => FunctionCode::Developer,
             };
-            let mut sealed_fields = SealedFields {
-                version: version as u32,
-                signed_len: (source.len() + SIGBLOCK_LEN - UNSIGNED_LEN) as u32,
-                function_code: function_code as u32,
-                reserved: 0,
-                min_semver: minver_bytes,
-                semver,
-                pubkeys: [
-                    [0u8; PUBLIC_KEY_LENGTH],
-                    [0u8; PUBLIC_KEY_LENGTH],
-                    [0u8; PUBLIC_KEY_LENGTH],
-                    [0u8; PUBLIC_KEY_LENGTH],
-                ],
-            };
-            sealed_fields.pubkeys[3].copy_from_slice(sk.public_key().as_ref());
+            let mut header = SignatureInFlash::default();
+            header.sealed_data.version = version as u32;
+            header.sealed_data.signed_len = (source.len() + SIGBLOCK_LEN - UNSIGNED_LEN) as u32;
+            header.sealed_data.function_code = function_code as u32;
+            header.sealed_data.reserved = 0;
+            header.sealed_data.min_semver = minver_bytes;
+            header.sealed_data.semver = semver;
+
+            // whack in all the public keys, defined in the bao1x-api crate
+            for (dst, src) in
+                header.sealed_data.pubkeys.iter_mut().zip(bao1x_api::pubkeys::PUBKEY_HEADER.iter())
+            {
+                dst.populate_from(src);
+            }
 
             let mut protected = Vec::new();
-            protected.extend_from_slice(sealed_fields.as_ref());
+            protected.extend_from_slice(header.sealed_data.as_ref());
             protected.resize(protected.len() + PADDING_LEN, 0);
             protected.extend_from_slice(&source);
 
@@ -235,12 +238,14 @@ pub fn sign_image(
             h.update(&protected);
 
             let sig = signing_key.sign_digest(h.clone()).to_bytes();
+            header._jal_instruction = generate_jal_x0(SIGBLOCK_LEN as isize)?;
+            header.signature.copy_from_slice(&sig);
+            // no AAD on this type of signature
+            header.aad_len = 0;
 
-            let jal = generate_jal_x0(length as isize)?;
-            dest_file.write_all(&jal.to_le_bytes())?;
-
-            // Write the signature data
-            dest_file.write_all(&sig)?;
+            // Write the header
+            dest_file.write_all(&header.as_ref()[..UNSIGNED_LEN])?;
+            println!("dest_file wrote {}, {}", dest_file.len(), UNSIGNED_LEN);
 
             if defile {
                 println!(
@@ -305,6 +310,12 @@ where
     let mut dest_file = std::fs::File::create(output)?;
     source_file.read_to_end(&mut source)?;
 
+    // maintenance note: there is a mirror of this code in signing/fido-signer/src/main.rs
+    // if you're editing this, maybe consider also trying to librarify these routines?
+    // the key challenge is that fido-signer has to be out of workspace because it relies
+    // on cryptographic primitives that are pinned to versions that are not compatible
+    // with the baochip hardware, e.g. the FIDO2 libraries pin to an incompatible version
+    // with xous-core, so it's a little awkward spanning/sharing crates this way.
     let app_start_addr = match function_code {
         Some("boot0") => bao1x_api::BOOT0_START,
         Some("boot1") => bao1x_api::BOOT1_START,

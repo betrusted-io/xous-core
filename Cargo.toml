@@ -144,6 +144,8 @@ exclude = [
   "libs/mass-storage/packing",
   # This directory is dedicated to out-of-tree tests and examples
   "planning/",
+  # This is for signing images, and requires dependencies that are incompatible with Xous
+  "signing/fido-signer"
 ]
 
 [profile.release]

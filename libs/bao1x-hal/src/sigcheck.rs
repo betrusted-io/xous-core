@@ -1,9 +1,10 @@
 extern crate alloc;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use bao1x_api::signatures::*;
 use digest::Digest;
-use sha2_bao1x::Sha512;
+use sha2_bao1x::{Sha256, Sha512};
 use xous::arch::PAGE_SIZE;
 
 use crate::acram::OneWayCounter;
@@ -33,7 +34,7 @@ use crate::udma::Spim;
 /// the wrong phase of the boot sequence. Passed as a list of u32-values that are allowed.
 ///
 /// `auto_jump` is a flag which, when `true`, causes the code to diverge into the signed block.
-/// If `false` the function returns the key index of the first passing public key, or an error
+/// If `false` the function returns the `(key_index, tag)` of the first passing public key, or an error
 /// if none were found.
 pub fn validate_image(
     img_offset: *const u32,
@@ -42,7 +43,7 @@ pub fn validate_image(
     function_codes: &[u32],
     auto_jump: bool,
     mut spim: Option<&mut Spim>,
-) -> Result<usize, String> {
+) -> Result<(usize, [u8; 4]), String> {
     // Copy the signature into a structure so we can unpack it.
     let mut sig = SignatureInFlash::default();
     if let Some(ref mut spim) = spim {
@@ -56,9 +57,15 @@ pub fn validate_image(
 
     let pubkey_ptr = pubkeys_offset as *const SignatureInFlash;
     let pk_src: &SignatureInFlash = unsafe { pubkey_ptr.as_ref().unwrap() };
+    if pk_src.sealed_data.magic != MAGIC_NUMBER {
+        return Err(String::from("Invalid magic number in verifying key record"));
+    }
 
     let signed_len = sig.sealed_data.signed_len;
 
+    if sig.sealed_data.magic != MAGIC_NUMBER {
+        return Err(String::from("Invalid magic number on incoming record to be verified"));
+    }
     if sig.sealed_data.version != BAOCHIP_SIG_VERSION {
         crate::println!(
             "Version {:x} sig found, should be {:x}",
@@ -77,11 +84,12 @@ pub fn validate_image(
 
     let developer = sig.sealed_data.function_code == FunctionCode::Developer as u32;
 
+    // crate::println!("Signature: {:x?}", sig.signature);
     let one_way_counters = OneWayCounter::new();
     let mut secure = false;
     let mut passing_key: Option<usize> = None;
     for (i, key) in pk_src.sealed_data.pubkeys.iter().enumerate() {
-        if key.iter().all(|&x| x == 0) {
+        if key.tag == [0u8; 4] {
             continue;
         }
         let revocation_value = one_way_counters.get(revocation_offset + i).expect("internal error");
@@ -90,9 +98,10 @@ pub fn validate_image(
             continue;
         }
         let verifying_key =
-            ed25519_dalek::VerifyingKey::from_bytes(key).or(Err(String::from("invalid public key")))?;
+            ed25519_dalek::VerifyingKey::from_bytes(&key.pk).or(Err(String::from("invalid public key")))?;
 
         let ed25519_signature = ed25519_dalek::Signature::from(sig.signature);
+
         let mut h: Sha512 = Sha512::new();
         if let Some(ref mut spim) = spim {
             // need to read the data out page by page and hash it.
@@ -113,24 +122,61 @@ pub fn validate_image(
                     signed_len as usize,
                 )
             };
-            // crate::println!("Verifying image {:x?} with {:x?}", &image[..16], &key);
             h.update(&image);
         }
-        // debugging note: h.clone() does *not* work. You have to print the hash by modifying
-        // the function inside the ed25519 crate.
-        match verifying_key.verify_prehashed(h, None, &ed25519_signature) {
-            Ok(_) => {
-                passing_key = Some(i);
-                if i != sig.sealed_data.pubkeys.len() - 1 {
-                    secure = true;
-                    break;
-                } else if i == sig.sealed_data.pubkeys.len() - 1 {
-                    // this is the developer key slot
-                    secure = false;
-                    break;
+        if sig.aad_len == 0 {
+            // crate::println!("ed25519ph verifying with {:x?}", &key.pk);
+            // debugging note: h.clone() does *not* work. You have to print the hash by modifying
+            // the function inside the ed25519 crate.
+            match verifying_key.verify_prehashed(h, None, &ed25519_signature) {
+                Ok(_) => {
+                    crate::println!("ed25519ph verification passed");
+                    passing_key = Some(i);
+                    if i != sig.sealed_data.pubkeys.len() - 1 {
+                        secure = true;
+                        break;
+                    } else if i == sig.sealed_data.pubkeys.len() - 1 {
+                        // this is the developer key slot
+                        secure = false;
+                        break;
+                    }
+                }
+                _ => {
+                    crate::println!("ed25519ph verification failed");
                 }
             }
-            _ => {}
+        } else {
+            let sha512_hashed_image = h.finalize();
+            // create a *new* hasher because a token can only sign a hash, not the full image.
+            let mut h: Sha256 = Sha256::new();
+            // hash dat hash!
+            // crate::println!("verifying base hash {:x?}", &sha512_hashed_image.as_slice());
+            h.update(&sha512_hashed_image.as_slice());
+            let hashed_hash = h.finalize();
+            // crate::println!("hashed hash: {:x?}", hashed_hash.as_slice());
+
+            let mut msg: Vec<u8> = Vec::new();
+            msg.extend_from_slice(&sig.aad[..sig.aad_len as usize]);
+            msg.extend_from_slice(hashed_hash.as_slice());
+            // crate::println!("assembled msg({}): {:x?}", msg.len(), msg);
+
+            match verifying_key.verify_strict(&msg, &ed25519_signature) {
+                Ok(_) => {
+                    crate::println!("FIDO2 ed25519 verification passed");
+                    passing_key = Some(i);
+                    if i != sig.sealed_data.pubkeys.len() - 1 {
+                        secure = true;
+                        break;
+                    } else if i == sig.sealed_data.pubkeys.len() - 1 {
+                        // this is the developer key slot
+                        secure = false;
+                        break;
+                    }
+                }
+                _ => {
+                    crate::println!("FIDO2 verification failed");
+                }
+            }
         }
     }
 
@@ -141,7 +187,7 @@ pub fn validate_image(
         if auto_jump {
             jump_to(img_offset as usize);
         }
-        Ok(valid_key)
+        Ok((valid_key, pk_src.sealed_data.pubkeys[valid_key].tag))
     } else {
         Err(String::from("No valid pubkeys found or signature invalid"))
     }

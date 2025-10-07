@@ -8,11 +8,11 @@
         "--target-dir",
         "target/analyzer",
         "--features",
-        "precursor",
+        "bao1x",
         "--features",
-        "utralib/precursor",
+        "utralib/bao1x",
         "--features",
-        "utralib/precursor-pvt",
+        "board-baosec",
         "--message-format",
         "json"
     ],
@@ -20,9 +20,9 @@
         "XOUS_SVD_FILE": "../precursors/soc.svd"
     },
     "rust-analyzer.cargo.features": [
-        "precursor",
+        "bao1x",
+        "board-baosec",
         "swap",
-        "mass-storage"
     ],
     "rust-analyzer.files.excludeDirs": [
         "./loader/**"

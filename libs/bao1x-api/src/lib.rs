@@ -16,6 +16,7 @@ pub mod offsets;
 pub mod sce;
 pub mod signatures;
 pub use offsets::*;
+pub mod pubkeys;
 
 /// UF2 Family ID. Randomly generated, no collisions with the known list, still to be merged
 /// into the "official" list

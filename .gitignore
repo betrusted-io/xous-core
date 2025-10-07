@@ -84,3 +84,8 @@ share/python-wheels/
 *.egg
 *.pyc
 MANIFEST
+
+# Deployment credentials
+signing/credentials
+# Signer target directory
+signing/fido-signer/target

@@ -96,3 +96,5 @@ pub const BOOT1_REVOCATION_OFFSET: usize = LOADER_REVOCATION_OFFSET + PUBKEY_SLO
 /// Offset in the one-way counter array for boot0 key revocations. Provisions for up to four
 /// key slots, from [124..=127].
 pub const BOOT0_REVOCATION_OFFSET: usize = BOOT1_REVOCATION_OFFSET + PUBKEY_SLOTS;
+
+// slots from 128..=255 are totally unused by the boot logic

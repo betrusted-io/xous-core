@@ -1,6 +1,6 @@
 use bao1x_api::signatures::FunctionCode;
 
-const ALLOWED_FUNCTIONS: [u32; 5] = [
+pub const ALLOWED_FUNCTIONS: [u32; 5] = [
     FunctionCode::Baremetal as u32,
     FunctionCode::UpdatedBaremetal as u32,
     FunctionCode::Loader as u32,
@@ -32,7 +32,11 @@ pub fn boot_or_die() -> ! {
         true,
         None,
     ) {
-        Ok(k) => crate::println!("**should be unreachable** Booted with key {}", k),
+        Ok((k, tag)) => crate::println!(
+            "**should be unreachable** Booted with key {}({})",
+            k,
+            core::str::from_utf8(&tag).unwrap_or("invalid tag")
+        ),
         Err(e) => crate::println!("Image did not validate: {:?}", e),
     }
     crate::println!("No valid loader or baremetal image found. Halting!");
