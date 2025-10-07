@@ -56,6 +56,7 @@ bao1x-bio = [
     "xous-bio-bdma/baremetal",
     "xous-bio-bdma/bao1x",
     "xous-bio-bdma/tests",
+    "xous-bio-bdma/debug-print",
 ]
 # selects features for EVB target (defaults to baosec)
 bao1x-evb = []
@@ -74,4 +75,4 @@ trng-debug = []
 verbose-debug = []
 
 verilator-only = []
-default = ["bao1x-usb", "bao1x-trng"]
+default = ["bao1x-usb", "bao1x-trng", "bao1x-bio"]

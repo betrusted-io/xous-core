@@ -438,7 +438,6 @@ dependencies = [
  "utralib 0.1.26",
  "ux-api",
  "xous 0.9.67 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-bio-bdma",
  "xous-riscv",
 ]
 
