@@ -286,6 +286,7 @@ impl Repl {
                     + 1;
 
                 crate::println!("--- Starting On-Demand BIO Test Suite ---");
+                crate::println!("** Debug output is on DUART, not console **");
                 // Local counter to replace `self.passing_tests` from the TestRunner
                 let mut passing_tests = 0;
 
@@ -367,9 +368,8 @@ impl Repl {
                 }
             }
             "reset" => {
-                let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
-                rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
-                // rcurst.wo(utra::sysctrl::SFR_RCURST1, 0x55AA);
+                let mut csr = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+                csr.wo(utra::sysctrl::SFR_RCURST0, 0x0000_55aa);
             }
             #[cfg(feature = "bao1x")]
             "clocks" => {

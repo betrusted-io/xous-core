@@ -257,7 +257,7 @@ pub fn bdma_coincident_test(_args: &Vec<String>, seed: u32) -> usize {
     passing += coincident_u32(&mut bio_ss, ifram_src, ifram_dst, seed + 0x500, "i0->i1");
     println!("0->1");
 
-    println!("DMA coincident done.");
+    println!("DMA coincident done, passing {}/4", passing);
     passing
 }
 

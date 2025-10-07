@@ -22,10 +22,6 @@ pub unsafe fn init_usb() {
 
     // install the interrupt handler
     enable_irq(utralib::utra::irqarray1::IRQARRAY1_IRQ);
-    // for testing
-    enable_irq(utralib::utra::irqarray19::IRQARRAY19_IRQ);
-    let mut irqarray19 = utralib::CSR::new(utralib::utra::irqarray19::HW_IRQARRAY19_BASE as *mut u32);
-    irqarray19.wo(utralib::utra::irqarray19::EV_ENABLE, 0x80);
 
     unsafe {
         USB = Some(usb);

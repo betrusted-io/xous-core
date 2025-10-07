@@ -13,7 +13,6 @@ bao1x-api = { path = "../../libs/bao1x-api", optional = true, default-features =
 vexriscv = { version = "0.5.6", package = "xous-riscv" }
 riscv = { version = "0.14.0", features = ["critical-section-single-hart"] }
 linked_list_allocator = { version = "0.10.5", optional = true }
-xous-bio-bdma = { path = "../../libs/xous-bio-bdma", optional = true, default-features = false }
 critical-section = "1.2.0"
 ux-api = { path = "../../libs/ux-api", optional = true, default-features = false }
 simple-fatfs = { git = "https://github.com/betrusted-io/simple-fatfs.git", branch = "baosec", default-features = false }
