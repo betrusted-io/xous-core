@@ -208,6 +208,14 @@ impl Repl {
                     "Boot partition is: {:?}",
                     owc.get_decoded::<bao1x_api::offsets::AltBootCoding>()
                 );
+                crate::println!("Semver is: {}", crate::version::SEMVER);
+                crate::println!("Description is: {}", crate::RELEASE_DESCRIPTION);
+                // TODO: replace this with a proper API, this is a hack to allow an initial
+                // alpha run of boards to be churned out on short notice. The hard-coded number
+                // below ostensibly belongs to "data slot 0". For this run, it's just an incrementing
+                // number, but in the future it might be a truncated hash, or randomly generated number.
+                let sn = unsafe { core::slice::from_raw_parts(0x603d_c000 as *const u32, 4) };
+                crate::println!("Device serializer: {:08x}-{:08x}-{:08x}-{:08x}", sn[3], sn[2], sn[1], sn[0]);
                 crate::println!("Revocations:");
                 crate::println!("Stage       key0     key1     key2     key3");
                 let key_array = [
