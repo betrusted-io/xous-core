@@ -245,7 +245,7 @@ pub fn sign_image(
 
             // Write the header
             dest_file.write_all(&header.as_ref()[..UNSIGNED_LEN])?;
-            println!("dest_file wrote {}, {}", dest_file.len(), UNSIGNED_LEN);
+            // println!("dest_file wrote {}, {}", dest_file.len(), UNSIGNED_LEN);
 
             if defile {
                 println!(
