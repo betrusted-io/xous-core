@@ -18,7 +18,8 @@ pub(crate) fn generate_version(add_timestamp: bool) {
     let semver = String::from_utf8_lossy(&gitver);
 
     let version_file = "services/xous-ticktimer/src/version.rs";
-    let boot_version_file = "bao1x-boot/boot1/src/version.rs";
+    let boot0_version_file = "bao1x-boot/boot0/src/version.rs";
+    let boot1_version_file = "bao1x-boot/boot1/src/version.rs";
 
     // Read the existing file to see if it needs to be updated.
     let mut existing_data = Vec::new();
@@ -63,7 +64,15 @@ pub(crate) fn generate_version(add_timestamp: bool) {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(boot_version_file)
+            .open(boot0_version_file)
+            .expect("Can't open our version file for writing");
+        vfile.write_all(&semver_code).expect("couldn't write semver to version.rs");
+        let mut vfile = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(boot1_version_file)
             .expect("Can't open our version file for writing");
         vfile.write_all(&semver_code).expect("couldn't write semver to version.rs");
     }

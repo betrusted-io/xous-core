@@ -8,6 +8,7 @@ mod asm;
 mod platform;
 #[cfg(feature = "unsafe-dev")]
 mod repl;
+mod version;
 #[cfg(feature = "unsafe-dev")]
 use alloc::collections::VecDeque;
 #[cfg(feature = "unsafe-dev")]
@@ -51,7 +52,7 @@ pub fn uart_irq_handler() {
 #[export_name = "rust_entry"]
 pub unsafe extern "C" fn rust_entry() -> ! {
     crate::platform::early_init();
-    crate::println!("\n~~boot0 up!~~\n");
+    crate::println!("\n~~boot0 up! ({})~~\n", crate::version::SEMVER);
 
     #[cfg(feature = "unsafe-dev")]
     let mut repl = crate::repl::Repl::new();
