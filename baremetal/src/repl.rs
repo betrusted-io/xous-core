@@ -1005,6 +1005,10 @@ impl Repl {
                     crate::println!("Sha512 failed: {:x?}", digest);
                 }
             }
+            #[cfg(feature = "dabao-selftest")]
+            "dbtest" => {
+                crate::dabao_selftest::dabao_selftest();
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);
@@ -1026,6 +1030,8 @@ impl Repl {
                 crate::print!(", usb");
                 #[cfg(feature = "bao1x-trng")]
                 crate::print!(", trngro, trngav");
+                #[cfg(feature = "dabao-selftest")]
+                crate::print!(", dbtest");
                 crate::println!("");
             }
         }
