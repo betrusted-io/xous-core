@@ -7,6 +7,7 @@ mod asm;
 
 mod platform;
 mod repl;
+
 use alloc::collections::VecDeque;
 use core::cell::RefCell;
 #[cfg(feature = "bao1x-usb")]
@@ -95,6 +96,10 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         USB_CONNECTED.load(Ordering::SeqCst),
         crate::platform::usb::TX_IDLE.load(Ordering::SeqCst)
     );
+
+    #[cfg(feature = "dabao-selftest")]
+    let mut self_test_ran = false;
+
     #[cfg(feature = "bao1x-usb")]
     // do the main loop through either USB interface or serial port
     loop {
@@ -107,6 +112,13 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                 crate::println!("USB is connected!");
                 last_usb_state = new_usb_state;
                 USB_CONNECTED.store(true, core::sync::atomic::Ordering::SeqCst);
+                #[cfg(feature = "dabao-selftest")]
+                {
+                    if !self_test_ran {
+                        crate::dabao_selftest::dabao_selftest();
+                        self_test_ran = true;
+                    }
+                }
             }
         }
 

@@ -38,5 +38,5 @@ pub const APP_RRAM_OFFSET: usize = 0;
 pub const APP_RRAM_LEN: usize = 0;
 
 // Regulator voltage target at boot
-pub const CPU_VDD_LDO_BOOT_MV: u32 = 900;
-pub const DEFAULT_FCLK_FREQUENCY: u32 = 800_000_000;
+pub const CPU_VDD_LDO_BOOT_MV: u32 = 810;
+pub const DEFAULT_FCLK_FREQUENCY: u32 = 700_000_000;
