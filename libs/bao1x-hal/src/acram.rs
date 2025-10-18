@@ -3,10 +3,18 @@ use bitbybit::*;
 #[cfg(feature = "std")]
 use xous::MemoryRange;
 
-pub const KEYSEL_START: usize = 0x603F_0000;
-pub const DATASEL_START: usize = 0x603E_0000;
+pub const KEY_SLOT_START: usize = 0x603F_0000;
+pub const KEY_SLOT_LEN: usize = 0x1_0000;
+pub const MAX_KEY_SLOTS: usize = KEY_SLOT_LEN / SLOT_ELEMENT_LEN_BYTES;
+pub const DATA_SLOT_START: usize = 0x603E_0000;
+pub const DATA_SLOT_LEN: usize = 0x1_0000;
+pub const MAX_DATA_SLOTS: usize = DATA_SLOT_LEN / SLOT_ELEMENT_LEN_BYTES;
+pub const SLOT_ELEMENT_LEN_BYTES: usize = 256 / 8;
+
 pub const ACRAM_DATASLOT_START: usize = 0x603D_C000;
+pub const ACRAM_DATASLOT_LEN: usize = 0x2000;
 pub const ACRAM_KEYSLOT_START: usize = 0x603D_E000;
+pub const ACRAM_KEYSLOT_LEN: usize = 0x2000;
 // pub const ACRAM_GKEYSLOT_START: usize = 0x603D_E400; // This is mentioned in the docs but I don't see it in
 // the code?
 pub const ONEWAY_START: usize = 0x603D_A000; // page with 128 counters
@@ -17,6 +25,7 @@ pub const MAX_ONEWAY_COUNTERS: usize = 8192 / ONEWAY_LEN;
 pub const CODESEL_END: usize = 0x603D_A000;
 
 #[bitfield(u32)]
+#[derive(PartialEq, Eq)]
 pub struct DataSlotAccess {
     #[bit(24, rw)]
     write_mode: bool,
@@ -52,6 +61,7 @@ impl DataSlotAccess {
 }
 
 #[bitfield(u32)]
+#[derive(PartialEq, Eq)]
 pub struct KeySlotAccess {
     #[bits(24..=31, rw)]
     akey_id: u8,
