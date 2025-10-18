@@ -32,7 +32,7 @@ pub const FREE_MEM_LEN: usize = (RAM_BASE + RAM_SIZE) - FREE_MEM_START - STACK_L
 // NOTE: this forces the mapping to be the same on both baosec and dabao
 pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 
-const SAFE_FCLK_FREQUENCY: u32 = 400_000_000;
+const SAFE_FCLK_FREQUENCY: u32 = 350_000_000;
 pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 // Dabao port/pin constants have to be vendored in because this crate is compiled with baosec as the target.
@@ -229,7 +229,7 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
     let fclk_freq = match board_type {
         BoardTypeCoding::Baosec => bao1x_api::offsets::baosec::DEFAULT_FCLK_FREQUENCY,
         BoardTypeCoding::Oem => SAFE_FCLK_FREQUENCY,
-        BoardTypeCoding::Dabao => bao1x_api::offsets::dabao::DEFAULT_FCLK_FREQUENCY,
+        BoardTypeCoding::Dabao => SAFE_FCLK_FREQUENCY,
     };
     let perclk = unsafe { init_clock_asic(fclk_freq) };
 
@@ -447,10 +447,17 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
         cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
         crate::platform::delay_at_sysfreq(20, 48_000_000);
-    } else {
+    } else if freq_hz > 350_000_000 {
         crate::println!("setting vdd85 to 0.81v");
         let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
         ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08421290);
+        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
+        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
+        crate::platform::delay_at_sysfreq(20, 48_000_000);
+    } else {
+        crate::println!("setting vdd85 to 0.72v");
+        let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
+        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08420420);
         ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
         cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
         crate::platform::delay_at_sysfreq(20, 48_000_000);
