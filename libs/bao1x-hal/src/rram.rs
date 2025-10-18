@@ -1,8 +1,30 @@
 use utralib::{CSR, utra};
 
+#[cfg(not(feature = "std"))]
 pub struct Reram {
     csr: CSR<u32>,
     array: &'static mut [u32],
+}
+
+#[cfg(feature = "std")]
+pub struct Reram {
+    csr: CSR<u32>,
+
+    /// Replace this with a heap-allocated object that tracks a set of
+    /// memory ranges that we are allowed to write to. The Reram object has to be owned/managed
+    /// by the highest security process in Xous. This is because the process that can initiate
+    /// writes also has to have page-level access to the memory that's write-able; therefore,
+    /// it must be managed by the most privileged process in the system.
+    ///
+    /// Upon write, the allowed memory ranges are checked, and an error is thrown if the area
+    /// is not mapped. In particular, program areas are not writeable in Xous run-time mode
+    /// because they are mapped into the process' memory space (to allow for XIP code access).
+    ///
+    /// Another quirk for `std` memory access is that the core write needs to happen inside an
+    /// interrupt context: if the write is interrupted and another process touches memory
+    /// between the staging and the commit of data, we can have an inconsistency in write state
+    /// and corruption will result.
+    range_map: RangeMap<xous::MemoryRange>,
 }
 
 /// Matches the alignment requirement of the RRC write buffer
@@ -14,6 +36,7 @@ impl AlignedBuffer {
         // safety: this is safe because the #repr(align) ensures that our alignment is correct,
         // and the length of the internal data structure is set correctly by design. Furthermore,
         // all values in both the source and destination transmutation are representable and valid.
+        // The structure has no concurrent uses and no need for a Drop.
         unsafe { core::slice::from_raw_parts(self.0.as_ptr() as *const u32, self.0.len() / 4) }
     }
 }
@@ -32,16 +55,50 @@ const RRC_CR_WRITE_DATA: u32 = 0;
 const RRC_CR_WRITE_CMD: u32 = 2;
 
 impl Reram {
+    #[cfg(not(feature = "std"))]
     pub fn new() -> Self {
+        let mut csr = CSR::new(utra::rrc::HW_RRC_BASE as *mut u32);
+        // this enables access control protections. In metal-mask stepping A1, this will
+        // be hard-wired as enabled without an option to turn it off.
+        csr.wo(utra::rrc::SFR_RRCCR, SECURITY_MODE);
+
         Reram {
-            csr: CSR::new(utra::rrc::HW_RRC_BASE as *mut u32),
+            csr,
             array: unsafe {
                 core::slice::from_raw_parts_mut(
                     utralib::HW_RERAM_MEM as *mut u32,
-                    bao1x_api::RRAM_STORAGE_LEN / core::mem::size_of::<u32>(),
+                    utralib::HW_RERAM_MEM_LEN / core::mem::size_of::<u32>(),
                 )
             },
         }
+    }
+
+    #[cfg(feature = "std")]
+    /// This returns an object that has a handle to manage the RRAM, but no memory
+    /// ranges mapped that are valid for writing. Memory ranges need to be added
+    /// with `add_range()` before any writes can occur.
+    pub fn new() -> Self {
+        let mut csr = CSR::new(utra::rrc::HW_RRC_BASE as *mut u32);
+        // this enables access control protections. In metal-mask stepping A1, this will
+        // be hard-wired as enabled without an option to turn it off.
+        csr.wo(utra::rrc::SFR_RRCCR_SFR_RRCCR, SECURITY_MODE);
+
+        // register an IRQ handler for atomic updates of RRAM
+        todo!(
+            "Build the IRQ subsystem. IRQ11 looks available for software interrupts/mapping to this function."
+        );
+
+        Reram { csr, range_map: RangeMap::new() }
+    }
+
+    #[cfg(feature = "std")]
+    /// `base` specifies the actual offset from the beginning of the RRAM array
+    /// to where this range maps to. This is necessary because `range` is virtually
+    /// mapped and we cannot infer the actual offset into the RRAM array from
+    /// that artifact alone.
+    pub fn add_range(&'a mut self, base: usize, range: xous::MemoryRange) -> &'a self {
+        let top = base + range.len();
+        self.range_map.insert(base..top, value);
     }
 
     pub fn read_slice(&self) -> &[u32] { self.array }
@@ -83,18 +140,35 @@ impl Reram {
 
     /// This is a general unaligned write primitive for the RRAM that can handle any length
     /// slice and alignment of data.
-    pub fn write_slice(&mut self, offset: usize, data: &[u8]) {
+    ///
+    /// ASSUME: offset has been bounds checked by a wrapper function.
+    /// SAFETY: this is only safe in non-concurrent contexts. This means that in Xous this must be
+    /// called from an interrupt context.
+    unsafe fn write_slice_inner(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
         let mut buffer = AlignedBuffer([0u8; ALIGNMENT]);
 
         // ragged start
         let start_len = ALIGNMENT - (offset % ALIGNMENT);
         if start_len != 0 {
             let start_offset = offset & !(ALIGNMENT - 1);
+            #[cfg(not(feature = "std"))]
             let dest_slice = unsafe {
                 core::slice::from_raw_parts(
                     (start_offset + utralib::HW_RERAM_MEM) as *const u8,
                     buffer.0.len(),
                 )
+            };
+            #[cfg(feature = "std")]
+            let dest_slice = {
+                if let Some((start_offset, range)) = self.range_map.get(offset) {
+                    // safety: all values of u8 are valid; data is strictly read-only and static
+                    // so there are no concurrency or Drop issues
+                    let range_slice: &[u8] = unsafe { range.as_slice() };
+                    // offset is based from bottom of RRAM. Correct for this.
+                    &range_slice[offset - start_offset..offset - start_offset + buffer.0.len()]
+                } else {
+                    return Err(xous::Error::BadAddress);
+                }
             };
             // populate from old data first
             buffer.0.copy_from_slice(&dest_slice);
@@ -117,11 +191,24 @@ impl Reram {
                         self.write_u32_aligned(cur_offset, &buffer.as_slice_u32());
                     }
                 } else {
+                    #[cfg(not(feature = "std"))]
                     let dest_slice = unsafe {
                         core::slice::from_raw_parts(
                             (cur_offset + utralib::HW_RERAM_MEM) as *const u8,
                             buffer.0.len(),
                         )
+                    };
+                    #[cfg(feature = "std")]
+                    let dest_slice = {
+                        if let Some((start_offset, range)) = self.range_map.get(offset) {
+                            // safety: all values of u8 are valid
+                            let range_slice: &[u8] = unsafe { range.as_slice() };
+                            // offset is based from bottom of RRAM. Correct for this.
+                            &range_slice
+                                [cur_offset - start_offset..cur_offset - start_offset + buffer.0.len()]
+                        } else {
+                            return Err(xous::Error::BadAddress);
+                        }
                     };
                     // read in the destination full contents
                     buffer.0.copy_from_slice(&dest_slice);
@@ -135,5 +222,79 @@ impl Reram {
                 cur_offset += chunk.len();
             }
         }
+
+        // QUESTION: do we want to add a mandatory readback-verify here?
+        Ok(data.len())
+    }
+
+    /// Bounds-check regular writes to make sure they are in the "standard" memory array region
+    /// Boot0 region is also disallowed for writing because it should be hardware write-protected.
+    /// For testing purposes, that check may be commented out just to make sure the write protection
+    /// is there.
+    #[cfg(not(feature = "std"))]
+    pub fn write_slice(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
+        if offset < bao1x_api::offsets::BOOT1_START - utralib::HW_RERAM_MEM
+            || offset >= bao1x_api::RRAM_STORAGE_LEN
+        {
+            return Err(xous::Error::AccessDenied);
+        }
+        // Safety: no-std is not multi-threaded. There is a possibility of interrupts, so if
+        // we intend to call this outside of an interrupt context we have to consider what happens
+        // if an interrupt is taken while the write is in progress.
+        unsafe { self.write_slice_inner(offset, data) }
+    }
+
+    /// This has a separate API not to enforce security but to avoid fat-fingering data
+    /// into secure sectors. Hence this is just a simple bounds check on the requested offset.
+    /// There are nominally other hardware mechanisms at play to disallow writes from ineligible
+    /// processes, but they only come into effect after the OS is booted.
+    #[cfg(not(feature = "std"))]
+    pub fn protected_write_slice(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
+        if offset < bao1x_api::RRAM_STORAGE_LEN || offset >= utralib::HW_RERAM_MEM_LEN {
+            return Err(xous::Error::AccessDenied);
+        }
+        // Safety: no-std is not multi-threaded. There is a possibility of interrupts, so if
+        // we intend to call this outside of an interrupt context we have to consider what happens
+        // if an interrupt is taken while the write is in progress.
+        unsafe { self.write_slice_inner(offset, data) }
+    }
+
+    // TODO: write interrupt-handler based variant of the above that happens in an interrupt
+    // context.
+}
+
+#[cfg(feature = "std")]
+use std::ops::Range;
+
+#[derive(Debug)]
+#[cfg(feature = "std")]
+struct RangeMap<T> {
+    ranges: Vec<(Range<usize>, T)>,
+}
+
+#[cfg(feature = "std")]
+impl<T> RangeMap<T> {
+    pub fn new() -> Self { Self { ranges: Vec::new() } }
+
+    pub fn insert(&mut self, range: Range<usize>, value: T) { self.ranges.push((range, value)); }
+
+    /// Binary search. Ranges must be non-overlapping *and sorted* in ascending order. I think
+    /// we don't have to get this fancy as the number of ranges is probably small, and we can't
+    /// guarantee the sorted order of ranges without some sort of "finalize" operation.
+    #[allow(dead_code)]
+    pub fn get_binary(&self, x: usize) -> Option<(usize, &T)> {
+        let idx = self.ranges.binary_search_by_key(&x, |(r, _)| r.start).unwrap_or_else(|i| i);
+        let i = if idx == 0 { 0 } else { idx - 1 };
+        self.ranges.get(i).and_then(|(r, v)| (r.start <= x && x < r.end).then_some((r.start, v)))
+    }
+
+    // linear search. Ranges must be non-overlappping but can be presented in any order.
+    pub fn get(&self, x: usize) -> Option<(usize, &T)> {
+        self.ranges.iter().find(|(r, _)| r.start <= x && x < r.end).map(|(r, v)| (r.start, v))
+    }
+
+    // linear get_mut
+    pub fn get_mut(&mut self, x: usize) -> Option<(usize, &mut T)> {
+        self.ranges.iter_mut().find(|(r, _)| r.start <= x && x < r.end).map(|(r, v)| (r.start, v))
     }
 }
