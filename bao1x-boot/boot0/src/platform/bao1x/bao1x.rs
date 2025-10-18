@@ -29,10 +29,10 @@ pub const SCRATCH_PAGE: usize = HEAP_START + HEAP_LEN + 4096;
 
 pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 
-/// Run at 400MHz to ensure we can boot even without an external VDD85 regulator!
+/// Run at 350MHz to ensure we can boot even without an external VDD85 regulator!
 /// Also relying on the IFR region setting the SRAM trimming to work at this safe default
 /// so we don't have to initialize it in boot0.
-pub const DEFAULT_FCLK_FREQUENCY: u32 = 400_000_000;
+pub const DEFAULT_FCLK_FREQUENCY: u32 = 350_000_000;
 pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
 
 pub fn early_init() {
@@ -325,10 +325,17 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
         cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
         crate::platform::delay_at_sysfreq(20, 48_000_000);
-    } else {
+    } else if freq_hz > 350_000_000 {
         crate::println!("setting vdd85 to 0.81v");
         let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
         ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08421290);
+        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
+        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
+        crate::platform::delay_at_sysfreq(20, 48_000_000);
+    } else {
+        crate::println!("setting vdd85 to 0.72v");
+        let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
+        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08420420);
         ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
         cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
         crate::platform::delay_at_sysfreq(20, 48_000_000);
