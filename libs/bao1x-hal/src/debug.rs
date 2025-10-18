@@ -8,15 +8,32 @@ pub static mut SWAP_APP_UART_VADDR: usize = 0;
 pub static mut SWAP_APP_UART_IFRAM_VADDR: usize = 0;
 
 impl Uart {
-    #[cfg(all(feature = "debug-print-usb", not(target_os = "xous")))]
+    #[cfg(all(feature = "debug-print", not(target_os = "xous")))]
     pub fn putc(&self, c: u8) {
-        let base = utra::duart::HW_DUART_BASE as *mut u32;
-        let mut uart = CSR::new(base);
-        while uart.r(utra::duart::SFR_SR) != 0 {}
-        uart.wo(utra::duart::SFR_TXD, c as u32);
+        #[cfg(feature = "debug-print-uart")]
+        {
+            let buf: [u8; 1] = [c];
+            let uart_buf_addr = crate::board::UART_DMA_TX_BUF_PHYS;
+            let mut udma_uart = unsafe {
+                // safety: this is safe to call, because we set up clock and events prior to calling new.
+                crate::udma::Uart::get_handle(
+                    utra::udma_uart_2::HW_UDMA_UART_2_BASE,
+                    uart_buf_addr,
+                    uart_buf_addr,
+                )
+            };
+            udma_uart.write(&buf);
+        }
+        #[cfg(feature = "debug-print-duart")]
+        {
+            let base = utra::duart::HW_DUART_BASE as *mut u32;
+            let mut uart = CSR::new(base);
+            while uart.r(utra::duart::SFR_SR) != 0 {}
+            uart.wo(utra::duart::SFR_TXD, c as u32);
+        }
     }
 
-    #[cfg(all(feature = "debug-print-usb", target_os = "xous"))]
+    #[cfg(all(feature = "debug-print", target_os = "xous"))]
     pub fn putc(&mut self, c: u8) {
         if unsafe { SWAP_APP_UART_VADDR } == 0 {
             match xous::syscall::map_memory(
@@ -60,18 +77,18 @@ impl Uart {
         uart.write(&[c]);
     }
 
-    #[cfg(not(feature = "debug-print-usb"))]
+    #[cfg(not(feature = "debug-print"))]
     pub fn putc(&mut self, _c: u8) {}
 }
 
 use core::fmt::{Error, Write};
 impl Write for Uart {
     fn write_str(&mut self, _s: &str) -> Result<(), Error> {
-        #[cfg(not(all(feature = "std", not(feature = "debug-print-usb"))))]
+        #[cfg(not(all(feature = "std", not(feature = "debug-print"))))]
         for c in _s.bytes() {
             self.putc(c);
         }
-        // #[cfg(all(feature = "std", not(feature = "debug-print-usb")))]
+        // #[cfg(all(feature = "std", not(feature = "debug-print")))]
         // log::info!("{}", _s);
         Ok(())
     }

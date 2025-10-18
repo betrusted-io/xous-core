@@ -96,7 +96,9 @@ verilator-only = ["utralib/bao1x"]
 mpw = ["utralib/bao1x"]
 hdl-test = ["utralib/bao1x"]
 verbose-debug = []
-debug-print-usb = []
+debug-print = []
+debug-print-duart = ["debug-print"]
+debug-print-uart = ["debug-print"]
 
 udma-stress-test = [
 ] # For RTL simulation testing - aggravates a key corner case
