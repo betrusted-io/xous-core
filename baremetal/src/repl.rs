@@ -196,7 +196,7 @@ impl Repl {
                             )
                         };
                         let mut rram = bao1x_hal::rram::Reram::new();
-                        rram.write_slice(addr, poke_inner);
+                        rram.write_slice(addr, poke_inner).ok();
                         crate::println!("RRAM written {:x} into {:x}, {} times", value, addr, count);
                     } else {
                         return Err(Error::help(
@@ -1008,6 +1008,17 @@ impl Repl {
             #[cfg(feature = "dabao-selftest")]
             "dbtest" => {
                 crate::dabao_selftest::dabao_selftest();
+            }
+            "actest" => {
+                let slot_man = bao1x_hal::protected_rram::SlotManager::new();
+                crate::println!(
+                    "Slot 0(d): {:x?}",
+                    slot_man.read(&bao1x_hal::protected_rram::SlotIndex::Data(0))
+                );
+                crate::println!(
+                    "Slot 1(d): {:x?}",
+                    slot_man.read(&bao1x_hal::protected_rram::SlotIndex::Data(1))
+                );
             }
             "echo" => {
                 for word in args {
