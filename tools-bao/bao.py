@@ -8,6 +8,7 @@ Usage examples:
 """
 
 import argparse
+from re import sub
 import sys
 
 # Subcommand imports
@@ -16,15 +17,30 @@ from commands.monitor import cmd_monitor
 from commands.flash import cmd_flash
 from commands.doctor import cmd_doctor
 from commands.build import cmd_build
+from commands.artifacts import cmd_artifacts
+from commands.update_all import cmd_update_all
 
 def main():
     ap = argparse.ArgumentParser(prog="bao.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
+    # artifacts
+    a = sub.add_parser("artifacts", help="List newest UF2 images (release only)")
+    a.add_argument("--json", action="store_true")
+    a.set_defaults(func=cmd_artifacts)
+
     # ports
     s = sub.add_parser("ports", help="List serial ports")
     s.add_argument("-v", "--verbose", action="store_true")
     s.set_defaults(func=cmd_ports)
+
+    # update-all
+    ua = sub.add_parser("update-all", help="Return true if board Xous/loader version differs from local")
+    ua.add_argument("-p", "--port", required=True, help="Monitor serial port")
+    ua.add_argument("-b", "--baud", type=int, default=115200)
+    ua.add_argument("--timeout", type=float, default=3.0, help="Seconds to wait for version response")
+    ua.add_argument("--json", action="store_true", help='Emit {"updateAll": bool, "current": "...", "board": "..."}')
+    ua.set_defaults(func=cmd_update_all)
 
     # monitor
     m = sub.add_parser("monitor", help="Open a serial monitor")
@@ -46,12 +62,10 @@ def main():
     d = sub.add_parser("doctor", help="Check Python environment and ports")
     d.set_defaults(func=cmd_doctor)
 
-    # flash (stub)
-    f = sub.add_parser("flash", help="Flash a built image (stub)")
-    f.add_argument("-p", "--port", required=True)
-    f.add_argument("-b", "--baud", type=int, default=115200)
-    f.add_argument("--addr", type=lambda x: int(x, 0), default=0x0)
-    f.add_argument("--file", help="Binary to flash")
+    # flash
+    f = sub.add_parser("flash", help="Copy UF2 file(s) to a mounted drive")
+    f.add_argument("--dest", required=True, help="Mount path of the UF2 boot drive (e.g., D:\\ or /Volumes/BAOBOOT)")
+    f.add_argument("files", nargs="+", help="One or more UF2 files to copy (e.g., loader.uf2 xous.uf2 app.uf2)")
     f.set_defaults(func=cmd_flash)
 
     args = ap.parse_args()
