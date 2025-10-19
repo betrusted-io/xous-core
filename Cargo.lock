@@ -397,6 +397,7 @@ dependencies = [
 name = "bao1x-api"
 version = "0.1.0"
 dependencies = [
+ "arbitrary-int",
  "bitbybit",
  "bytemuck",
  "num-derive 0.4.2",
