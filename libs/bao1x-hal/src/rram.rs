@@ -54,7 +54,7 @@ const RRC_CR_POWERDOWN: u32 = 1;
 const RRC_CR_WRITE_DATA: u32 = 0;
 const RRC_CR_WRITE_CMD: u32 = 2;
 
-impl Reram {
+impl<'a> Reram {
     #[cfg(not(feature = "std"))]
     pub fn new() -> Self {
         let mut csr = CSR::new(utra::rrc::HW_RRC_BASE as *mut u32);
@@ -81,7 +81,7 @@ impl Reram {
         let mut csr = CSR::new(utra::rrc::HW_RRC_BASE as *mut u32);
         // this enables access control protections. In metal-mask stepping A1, this will
         // be hard-wired as enabled without an option to turn it off.
-        csr.wo(utra::rrc::SFR_RRCCR_SFR_RRCCR, SECURITY_MODE);
+        csr.wfo(utra::rrc::SFR_RRCCR_SFR_RRCCR, SECURITY_MODE);
 
         // register an IRQ handler for atomic updates of RRAM
         todo!(
@@ -96,9 +96,9 @@ impl Reram {
     /// to where this range maps to. This is necessary because `range` is virtually
     /// mapped and we cannot infer the actual offset into the RRAM array from
     /// that artifact alone.
-    pub fn add_range(&'a mut self, base: usize, range: xous::MemoryRange) -> &'a self {
+    pub fn add_range(&'a mut self, base: usize, range: xous::MemoryRange) -> &'a Self {
         let top = base + range.len();
-        self.range_map.insert(base..top, value);
+        self.range_map.insert(base..top, base);
     }
 
     pub fn read_slice(&self) -> &[u32] { self.array }
@@ -261,6 +261,13 @@ impl Reram {
 
     // TODO: write interrupt-handler based variant of the above that happens in an interrupt
     // context.
+    #[cfg(feature = "std")]
+    pub fn write_slice(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> { todo!() }
+
+    #[cfg(feature = "std")]
+    pub fn protected_write_slice(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
+        todo!()
+    }
 }
 
 #[cfg(feature = "std")]

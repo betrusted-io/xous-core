@@ -1,4 +1,7 @@
-use crate::protected_rram::{AccessSettings, AccessType};
+#[cfg(not(feature = "std"))]
+use utralib::*;
+
+use crate::acram::{AccessSettings, AccessType};
 
 #[repr(usize)]
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -29,6 +32,16 @@ impl From<u32> for CoreuserId {
         }
     }
 }
+impl CoreuserId {
+    pub fn as_dense(&self) -> u32 {
+        match self {
+            Self::Boot0 => 0,
+            Self::Boot1 => 1,
+            Self::Fw0 => 2,
+            Self::Fw1 => 3,
+        }
+    }
+}
 
 // what I want is a function that, given a DataSlotAccess, returns if access
 // is allowable for a given CoreuserId
@@ -56,5 +69,85 @@ impl CoreuserId {
     }
 }
 
-/// This is the PID of the process that is designated to have trusted access to keys.
-pub const TRUSTED_PID: u32 = 3;
+/// This is the PID of the process that is designated to have trusted access to keys. This should be
+/// the PID of the `keystore` service.
+pub const TRUSTED_PID: u8 = 3;
+/// This is the "user" of the trusted process. There's four regions defined which have
+/// meanings in two different contexts:
+///   1. Read/write control of a hardware-defined region of the main RRAM array. These are hard-defined
+///      constants burned into a bank of memory that is only accessible at wafer probe, and then is sealed.
+///      The main use of this r/w control is actually just to enforce read-only for the 'boot0' region, so
+///      that the public keys that verify a firmware image can't be modified.
+///   2. Access control of a key or data slot. These are managed by a totally different piece of hardware,
+///      even though the naming terminology is the same. In the case of the RV32 CPU, the mapping of the four
+///      possible regions are dynamically mapped using a LUT, from a given ASID (address space ID) to one of
+///      teh four user states. An exploit chain would nominally need to gain code execution in machine mode
+///      (e.g. the kernel) to modify the ASID; an ASID-mod gadget can force any process to masquerade as the
+///      'trusted' process.
+///
+/// In the context for this constant, we are defining (2), i.e., the trusted user target for the access
+/// control hardware. Note that boot0 is the default boot state of the machine - so in theory, the bootloader
+/// doesn't (easily) have access to the key slots. Nominally one would need to boot into Xous and run
+/// the `keystore`; but of course, in bootloader (machine mode), you have the power to conjure any ASID
+/// out of thin air so with arbitrary code exec in bootloader one can bypass the controls.
+///
+/// Thus there are two attack surfaces of concern: the bootloader, and the kernel. Arbitrary code execution
+/// in either environment is game over for the hardware access control.
+pub const TRUSTED_USER: CoreuserId = CoreuserId::Fw0;
+pub const LEAST_TRUSTED_USER: CoreuserId = CoreuserId::Fw1;
+
+#[cfg(not(feature = "std"))]
+pub struct Coreuser {
+    csr: CSR<u32>,
+}
+
+#[cfg(not(feature = "std"))]
+#[derive(Copy, Clone)]
+pub struct AsidMapping {
+    asid: u8,
+    uid: CoreuserId,
+}
+
+/// Methods are only defined for no-std operation. In all cases, these tables should be
+/// set up before Xous runs.
+#[cfg(not(feature = "std"))]
+impl Coreuser {
+    pub fn new() -> Self { Self { csr: CSR::new(utra::coreuser::HW_COREUSER_BASE as *mut u32) } }
+
+    /// Sets up the coreuser mappings. There's...really no options or arguments, I think this should
+    /// more or less be a hard-coded table.
+    ///
+    /// Safety: only safe if `protect()` is called after these are set. `protect` is provided as
+    /// a "split" call to allow for debugging/testing of this API.
+    pub unsafe fn set(&mut self) {
+        // set to 0 so we can safely mask it later on
+        self.csr.wo(utra::coreuser::USERVALUE, 0);
+        self.csr.rmwf(utra::coreuser::USERVALUE_DEFAULT, CoreuserId::Fw1.as_dense());
+        let trusted_asids = [
+            AsidMapping { asid: 1, uid: LEAST_TRUSTED_USER }, // kernel - untrusted
+            AsidMapping { asid: 2, uid: LEAST_TRUSTED_USER }, // swapper - untrusted
+            AsidMapping { asid: TRUSTED_PID, uid: TRUSTED_USER }, // this is the one trusted PID
+            AsidMapping { asid: 4, uid: LEAST_TRUSTED_USER }, // fillers - untrusted
+            AsidMapping { asid: 5, uid: LEAST_TRUSTED_USER },
+            AsidMapping { asid: 6, uid: LEAST_TRUSTED_USER },
+            AsidMapping { asid: 7, uid: LEAST_TRUSTED_USER },
+        ];
+        let asid_fields = [
+            (utra::coreuser::MAP_LO_LUT0, utra::coreuser::USERVALUE_USER0),
+            (utra::coreuser::MAP_LO_LUT1, utra::coreuser::USERVALUE_USER1),
+            (utra::coreuser::MAP_LO_LUT2, utra::coreuser::USERVALUE_USER2),
+            (utra::coreuser::MAP_LO_LUT3, utra::coreuser::USERVALUE_USER3),
+            (utra::coreuser::MAP_HI_LUT4, utra::coreuser::USERVALUE_USER4),
+            (utra::coreuser::MAP_HI_LUT5, utra::coreuser::USERVALUE_USER5),
+            (utra::coreuser::MAP_HI_LUT6, utra::coreuser::USERVALUE_USER6),
+            (utra::coreuser::MAP_HI_LUT7, utra::coreuser::USERVALUE_USER7),
+        ];
+        for (&mapping, (map_field, uservalue_field)) in trusted_asids.iter().zip(asid_fields) {
+            self.csr.rmwf(map_field, mapping.asid as u32);
+            self.csr.rmwf(uservalue_field, mapping.uid.as_dense());
+        }
+    }
+
+    /// Sets a "one way door" that disallows any further updating to these fields.
+    pub fn protect(&mut self) { self.csr.wo(utra::coreuser::PROTECT, 1); }
+}

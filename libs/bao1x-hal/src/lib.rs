@@ -35,8 +35,6 @@ pub mod coreuser;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod mbox;
 #[cfg(not(feature = "hosted-baosec"))]
-pub mod protected_rram;
-#[cfg(not(feature = "hosted-baosec"))]
 pub mod rram;
 // no signature checking in the kernel
 #[cfg(all(

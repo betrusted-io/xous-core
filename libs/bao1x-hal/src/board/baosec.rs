@@ -55,6 +55,10 @@ pub const CAM_IFRAM_ADDR: usize =
 pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 9 - CRG_IFRAM_PAGES, 31];
 pub const IFRAM1_RESERVED_PAGE_RANGE: [usize; 2] = [31 - CAM_IFRAM_LEN_PAGES, 31];
 
+// Re-export all of the offsets exposed in the API
+pub use bao1x_api::offsets::baosec::*;
+pub use bao1x_api::offsets::*;
+
 // Display pins
 const SPI_CS_PIN: u8 = 3;
 const SPI_CLK_PIN: u8 = 0;
