@@ -70,6 +70,8 @@ pub fn setup_dabao_se0_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
 /// This can change the board type coding to a safer, simpler board type if the declared board type has
 /// problems booting.
 pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::BoardTypeCoding, u32) {
+    crate::platform::slots::check_slots(&board_type);
+
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
     // setup board-specific I/Os - early boot set. These are items that have to be

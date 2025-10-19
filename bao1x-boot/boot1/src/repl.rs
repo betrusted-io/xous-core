@@ -201,6 +201,8 @@ impl Repl {
                     count += 1;
                 }
                 crate::println!("Board type set to {:?} after {} increments", new_type, count);
+                crate::platform::slots::check_slots(&new_type);
+                crate::println!("Key & data slots checked according to the new type");
             }
             "audit" => {
                 let owc = OneWayCounter::new();
@@ -214,9 +216,8 @@ impl Repl {
                 );
                 crate::println!("Semver is: {}", crate::version::SEMVER);
                 crate::println!("Description is: {}", crate::RELEASE_DESCRIPTION);
-                let slot_mgr = bao1x_hal::protected_rram::SlotManager::new();
-                // TODO: replace with a proper `const` value once we have the slots defined properly
-                let sn = slot_mgr.read(&bao1x_hal::protected_rram::SlotIndex::Data(0)).unwrap();
+                let slot_mgr = bao1x_hal::acram::SlotManager::new();
+                let sn = slot_mgr.read(&bao1x_hal::board::SERIAL_NUMBER).unwrap();
                 crate::println!(
                     "Device serializer: {:08x}-{:08x}-{:08x}-{:08x}",
                     u32::from_le_bytes(sn[12..16].try_into().unwrap()),
