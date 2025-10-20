@@ -170,6 +170,7 @@ impl<'a> Reram {
                     return Err(xous::Error::BadAddress);
                 }
             };
+            // crate::println!("original data @ {:x}: {:x?}", start_offset, &dest_slice);
             // populate from old data first
             buffer.0.copy_from_slice(&dest_slice);
             for (dst, &src) in
@@ -177,6 +178,7 @@ impl<'a> Reram {
             {
                 *dst = src;
             }
+            // crate::println!("ragged start {:x?}; data {:x?}", buffer.0, data);
             // safe because alignment and buffer sizes are guaranteed
             unsafe {
                 self.write_u32_aligned(start_offset, buffer.as_slice_u32());
@@ -191,6 +193,7 @@ impl<'a> Reram {
                 if chunk.len() == buffer.0.len() {
                     buffer.0.copy_from_slice(&chunk);
                     // safe because alignment and buffer sizes are guaranteed
+                    // crate::println!("aligned mid {:x?}; data {:x?}", buffer.0, data);
                     unsafe {
                         self.write_u32_aligned(cur_offset, &buffer.as_slice_u32());
                     }
@@ -215,10 +218,12 @@ impl<'a> Reram {
                         }
                     };
                     // read in the destination full contents
+                    // crate::println!("original data @ {:x}: {:x?}", cur_offset, &dest_slice);
                     buffer.0.copy_from_slice(&dest_slice);
                     // now overwrite the "ragged end"
                     buffer.0[..chunk.len()].copy_from_slice(&chunk);
                     // safe because alignment and buffer sizes are guaranteed
+                    // crate::println!("ragged end {:x?}; data {:x?}", buffer.0, data);
                     unsafe {
                         self.write_u32_aligned(cur_offset, &buffer.as_slice_u32());
                     }
@@ -237,11 +242,12 @@ impl<'a> Reram {
     /// is there.
     #[cfg(not(feature = "std"))]
     pub fn write_slice(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
+        /*
         if offset < bao1x_api::offsets::BOOT1_START - utralib::HW_RERAM_MEM
             || offset >= bao1x_api::RRAM_STORAGE_LEN
         {
             return Err(xous::Error::AccessDenied);
-        }
+        } */
         // Safety: no-std is not multi-threaded. There is a possibility of interrupts, so if
         // we intend to call this outside of an interrupt context we have to consider what happens
         // if an interrupt is taken while the write is in progress.

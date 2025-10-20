@@ -92,6 +92,18 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
         unsafe { owc.inc(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() };
         crate::println!("Secret ID init done.");
     }
+
+    // test code for figuring out if boot0 write-protect is working or not.
+    /*
+    print_ifr();
+    crate::println!("test boot0 write");
+    let test = [7u8; 32];
+    let test_data = unsafe { core::slice::from_raw_parts(0x6001_0000 as *const u8, 32) };
+    crate::println!("orig: {:x?}", test_data);
+    rram.write_slice(0x1_0000, &test).unwrap();
+    crate::println!("update: {:x?} vs {:x?}", test_data, test);
+    */
+
     print_slots(&slot_mgr, &bao1x_hal::board::DATA_SLOTS);
     check_and_fix_acls(&mut rram, &mut slot_mgr, &bao1x_hal::board::DATA_SLOTS);
     if *board_type == bao1x_api::BoardTypeCoding::Baosec {
@@ -100,6 +112,20 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
         check_and_fix_acls(&mut rram, &mut slot_mgr, &bao1x_hal::board::KEY_SLOTS);
     }
 }
+
+/*
+fn print_ifr() {
+    let ifr = unsafe { core::slice::from_raw_parts(0x6040_0000 as *const u32, 0x100) };
+    for (i, &d) in ifr.iter().enumerate() {
+        if i % 8 == 0 {
+            crate::println!("");
+            crate::print!("{:04x}: ", i * 4);
+        }
+        crate::print!("{:08x} ", d);
+    }
+    crate::println!("");
+}
+*/
 
 fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &[SlotIndex]) {
     // now check & set any ACL bits that aren't set yet
@@ -119,7 +145,19 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
         };
         let (pa, rw) = slot_element.get_access_spec();
         let is_correct = match acl {
-            AccessSettings::Data(sa) => sa.get_partition_access() == pa && sa.get_rw_permissions() == rw,
+            AccessSettings::Data(sa) => {
+                /*
+                crate::println!(
+                    "sa: {:x?}, sa.pa: {:?} pa: {:?}, sa.rw: {:?}, rw: {:?}",
+                    sa,
+                    sa.get_partition_access(),
+                    pa,
+                    sa.get_rw_permissions(),
+                    rw
+                );
+                */
+                sa.get_partition_access() == pa && sa.get_rw_permissions() == rw
+            }
             AccessSettings::Key(sa) => sa.get_partition_access() == pa && sa.get_rw_permissions() == rw,
         };
         if !is_correct || !is_consistent {
@@ -139,6 +177,7 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
                     sa.set_rw_permissions(rw);
                 }
             }
+            crate::println!("Fixed ACL raw value: {:x?}", acl);
             slot_mgr.set_acl(rram, slot_element, &acl).unwrap();
         }
     }
