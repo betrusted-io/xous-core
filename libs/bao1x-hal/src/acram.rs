@@ -253,41 +253,55 @@ impl SlotManager {
             // safety: the unsafes below remind us to check that all values are valid during
             // the pointer type cast. In this case, there are no invalid values for a `u8`.
             Ok(match slot {
-                SlotIndex::Data(_, _) => unsafe {
-                    let ptr: *const u8 = &self.data_range.as_slice::<u8>()[offset] as *const u8;
-                    crate::println!("data loc: {:x}", ptr as usize);
+                SlotIndex::Data(_, _, _) => unsafe {
                     &self.data_range.as_slice()[offset..offset + SLOT_ELEMENT_LEN_BYTES]
                 },
-                SlotIndex::Key(_, _) => unsafe {
-                    let ptr: *const u8 = &self.data_range.as_slice::<u8>()[offset] as *const u8;
-                    crate::println!("data loc: {:x}", ptr as usize);
+                SlotIndex::Key(_, _, _) => unsafe {
                     &self.key_range.as_slice()[offset..offset + SLOT_ELEMENT_LEN_BYTES]
                 },
-                _ => return Err(AccessError::TypeError),
+                SlotIndex::DataRange(range, _, _) => unsafe {
+                    &self.data_range.as_slice()[offset..offset + SLOT_ELEMENT_LEN_BYTES * range.len()]
+                },
+                SlotIndex::KeyRange(range, _, _) => unsafe {
+                    &self.key_range.as_slice()[offset..offset + SLOT_ELEMENT_LEN_BYTES * range.len()]
+                },
             })
         } else {
             Err(AccessError::AccessDenied)
         }
     }
 
-    pub fn write(
-        &self,
-        writer: &mut Reram,
-        slot: &SlotIndex,
-        value: &[u8; SLOT_ELEMENT_LEN_BYTES],
-    ) -> Result<(), AccessError> {
+    /// Safety: the caller must resolve the index into either the data or the key array correctly.
+    /// There is access or type checking done. This is a "raw read" primitive mostly used for debugging.
+    pub unsafe fn read_data_slot(&self, absolute_offset: usize) -> &[u8] {
+        let ptr: *const u8 = &self.data_range.as_slice::<u8>()[absolute_offset] as *const u8;
+        crate::println!("data loc: {:x}", ptr as usize);
+        &self.data_range.as_slice()[absolute_offset..absolute_offset + SLOT_ELEMENT_LEN_BYTES]
+    }
+
+    /// Safety: the caller must resolve the index into either the data or the key array correctly.
+    /// There is access or type checking done. This is a "raw read" primitive mostly used for debugging.
+    pub unsafe fn read_key_slot(&self, absolute_offset: usize) -> &[u8] {
+        let ptr: *const u8 = &self.key_range.as_slice::<u8>()[absolute_offset] as *const u8;
+        crate::println!("key loc: {:x}", ptr as usize);
+        &self.key_range.as_slice()[absolute_offset..absolute_offset + SLOT_ELEMENT_LEN_BYTES]
+    }
+
+    pub fn write(&self, writer: &mut Reram, slot: &SlotIndex, value: &[u8]) -> Result<(), AccessError> {
         let acl = self.get_acl(slot)?;
         if self.user_id.is_accessible(&acl, &AccessType::Write) {
             let offset = slot.try_into_data_offset()?;
 
             let range = match slot {
-                SlotIndex::Data(_, _) => &self.data_range,
-                SlotIndex::Key(_, _) => &self.key_range,
-                _ => return Err(AccessError::TypeError),
+                SlotIndex::Data(_, _, _) | SlotIndex::DataRange(_, _, _) => &self.data_range,
+                SlotIndex::Key(_, _, _) | SlotIndex::KeyRange(_, _, _) => &self.key_range,
             };
 
+            if value.len() != slot.len() * SLOT_ELEMENT_LEN_BYTES {
+                return Err(AccessError::SizeError);
+            }
             writer
-                .protected_write_slice(range.as_ptr() as usize + offset, value)
+                .protected_write_slice(range.as_ptr() as usize + offset - utralib::HW_RERAM_MEM, value)
                 .map_err(|_| AccessError::WriteError)?;
             crate::cache_flush();
         }
@@ -302,22 +316,74 @@ impl SlotManager {
     }
 
     pub fn get_acl(&self, slot: &SlotIndex) -> Result<AccessSettings, AccessError> {
-        let offset = slot.try_into_acl_offset()?;
         // safety: the unsafe blocks here are concerned that the data types of the resulting
         // slice are all representable. In this case, all bits are valid in the final representation.
         Ok(match slot {
-            SlotIndex::Data(_, _) => {
+            SlotIndex::Data(_, _, _) => {
+                let offset = slot.try_into_acl_offset()?;
                 AccessSettings::Data(DataSlotAccess::new_with_raw_value(u32::from_le_bytes(unsafe {
                     self.data_acl_range.as_slice()[offset..offset + size_of::<u32>()].try_into().unwrap()
                 })))
             }
-            SlotIndex::Key(_, _) => {
+            SlotIndex::Key(_, _, _) => {
+                let offset = slot.try_into_acl_offset()?;
                 AccessSettings::Key(KeySlotAccess::new_with_raw_value(u32::from_le_bytes(unsafe {
                     self.key_acl_range.as_slice()[offset..offset + size_of::<u32>()].try_into().unwrap()
                 })))
             }
-            _ => return Err(AccessError::TypeError),
+            SlotIndex::DataRange(_, _, _) => {
+                let mut range = slot.try_into_acl_iter()?;
+                let offset = range.next().unwrap();
+                let prototype = DataSlotAccess::new_with_raw_value(u32::from_le_bytes(unsafe {
+                    self.data_acl_range.as_slice()[offset..offset + size_of::<u32>()].try_into().unwrap()
+                }));
+                for offset in range {
+                    let successor = DataSlotAccess::new_with_raw_value(u32::from_le_bytes(unsafe {
+                        self.data_acl_range.as_slice()[offset..offset + size_of::<u32>()].try_into().unwrap()
+                    }));
+                    if prototype != successor {
+                        return Err(AccessError::DataAclInconsistency(prototype));
+                    }
+                }
+                AccessSettings::Data(prototype)
+            }
+            SlotIndex::KeyRange(_, _, _) => {
+                let mut range = slot.try_into_acl_iter()?;
+                let offset = range.next().unwrap();
+                let prototype = KeySlotAccess::new_with_raw_value(u32::from_le_bytes(unsafe {
+                    self.key_acl_range.as_slice()[offset..offset + size_of::<u32>()].try_into().unwrap()
+                }));
+                for offset in range {
+                    let successor = KeySlotAccess::new_with_raw_value(u32::from_le_bytes(unsafe {
+                        self.key_acl_range.as_slice()[offset..offset + size_of::<u32>()].try_into().unwrap()
+                    }));
+                    if prototype != successor {
+                        return Err(AccessError::KeyAclInconsistency(prototype));
+                    }
+                }
+                AccessSettings::Key(prototype)
+            }
         })
+    }
+
+    /// Safety: the caller must resolve the index into either the data or the key array correctly.
+    /// There is access or type checking done. This is a "raw read" primitive mostly used for debugging.
+    pub unsafe fn get_data_acl(&self, absolute_offset: usize) -> DataSlotAccess {
+        DataSlotAccess::new_with_raw_value(u32::from_le_bytes(unsafe {
+            self.data_acl_range.as_slice()[absolute_offset..absolute_offset + size_of::<u32>()]
+                .try_into()
+                .unwrap()
+        }))
+    }
+
+    /// Safety: the caller must resolve the index into either the data or the key array correctly.
+    /// There is access or type checking done. This is a "raw read" primitive mostly used for debugging.
+    pub unsafe fn get_key_acl(&self, absolute_offset: usize) -> KeySlotAccess {
+        KeySlotAccess::new_with_raw_value(u32::from_le_bytes(unsafe {
+            self.key_acl_range.as_slice()[absolute_offset..absolute_offset + size_of::<u32>()]
+                .try_into()
+                .unwrap()
+        }))
     }
 
     pub fn set_acl(
@@ -326,25 +392,53 @@ impl SlotManager {
         slot: &SlotIndex,
         setting: &AccessSettings,
     ) -> Result<(), AccessError> {
-        let offset = slot.try_into_acl_offset()?;
         // safety: the unsafe blocks here are concerned that the data types of the resulting
         // slice are all representable. In this case, all bits are valid in the final representation.
         match slot {
-            SlotIndex::Data(_, _) => writer
-                .protected_write_slice(
-                    self.data_acl_range.as_ptr() as usize - utralib::HW_RERAM_MEM + offset,
-                    &setting.raw_u32().to_le_bytes(),
-                )
-                .map(|_| ())
-                .map_err(|_| AccessError::WriteError),
-            SlotIndex::Key(_, _) => writer
-                .protected_write_slice(
-                    self.key_acl_range.as_ptr() as usize - utralib::HW_RERAM_MEM + offset,
-                    &setting.raw_u32().to_le_bytes(),
-                )
-                .map(|_| ())
-                .map_err(|_| AccessError::WriteError),
-            _ => return Err(AccessError::TypeError),
+            SlotIndex::Data(_, _, _) => {
+                let offset = slot.try_into_acl_offset()?;
+                writer
+                    .protected_write_slice(
+                        self.data_acl_range.as_ptr() as usize - utralib::HW_RERAM_MEM + offset,
+                        &setting.raw_u32().to_le_bytes(),
+                    )
+                    .map(|_| ())
+                    .map_err(|_| AccessError::WriteError)
+            }
+            SlotIndex::Key(_, _, _) => {
+                let offset = slot.try_into_acl_offset()?;
+                writer
+                    .protected_write_slice(
+                        self.key_acl_range.as_ptr() as usize - utralib::HW_RERAM_MEM + offset,
+                        &setting.raw_u32().to_le_bytes(),
+                    )
+                    .map(|_| ())
+                    .map_err(|_| AccessError::WriteError)
+            }
+            SlotIndex::DataRange(_, _, _) => {
+                for offset in slot.try_into_acl_iter()? {
+                    writer
+                        .protected_write_slice(
+                            self.data_acl_range.as_ptr() as usize - utralib::HW_RERAM_MEM + offset,
+                            &setting.raw_u32().to_le_bytes(),
+                        )
+                        .map(|_| ())
+                        .map_err(|_| AccessError::WriteError)?
+                }
+                Ok(())
+            }
+            SlotIndex::KeyRange(_, _, _) => {
+                for offset in slot.try_into_acl_iter()? {
+                    writer
+                        .protected_write_slice(
+                            self.key_acl_range.as_ptr() as usize - utralib::HW_RERAM_MEM + offset,
+                            &setting.raw_u32().to_le_bytes(),
+                        )
+                        .map(|_| ())
+                        .map_err(|_| AccessError::WriteError)?
+                }
+                Ok(())
+            }
         }
     }
 }

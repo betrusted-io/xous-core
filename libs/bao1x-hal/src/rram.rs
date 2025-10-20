@@ -148,7 +148,7 @@ impl<'a> Reram {
         let mut buffer = AlignedBuffer([0u8; ALIGNMENT]);
 
         // ragged start
-        let start_len = ALIGNMENT - (offset % ALIGNMENT);
+        let start_len = (ALIGNMENT - (offset % ALIGNMENT)) % ALIGNMENT;
         if start_len != 0 {
             let start_offset = offset & !(ALIGNMENT - 1);
             #[cfg(not(feature = "std"))]
@@ -172,7 +172,11 @@ impl<'a> Reram {
             };
             // populate from old data first
             buffer.0.copy_from_slice(&dest_slice);
-            buffer.0[offset % ALIGNMENT..].copy_from_slice(&data[..start_len]);
+            for (dst, &src) in
+                buffer.0[offset % ALIGNMENT..].iter_mut().zip(data[..start_len.min(data.len())].iter())
+            {
+                *dst = src;
+            }
             // safe because alignment and buffer sizes are guaranteed
             unsafe {
                 self.write_u32_aligned(start_offset, buffer.as_slice_u32());
@@ -181,7 +185,7 @@ impl<'a> Reram {
 
         // aligned middle & end
         let mut cur_offset = offset + start_len;
-        if data.len() - start_len > 0 {
+        if data.len().saturating_sub(start_len) > 0 {
             for chunk in data[start_len..].chunks(buffer.0.len()) {
                 // full chunk
                 if chunk.len() == buffer.0.len() {
