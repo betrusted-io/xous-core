@@ -186,11 +186,13 @@ impl Uf2Sector {
     /// Takes in a slice of incoming data, and a notional "disk address" into which it should be writing
     pub fn extend_from_slice(&mut self, address: usize, slice: &[u8]) -> (Option<Self>, Option<Uf2Block>) {
         if address != self.address + self.progress {
+            /*
             crate::println!(
                 "Resetting sector address tracker, expected {:x} got {:x}",
                 self.address + self.progress,
                 address
             );
+            */
             self.address = address % 512;
         }
 

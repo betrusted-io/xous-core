@@ -1010,7 +1010,7 @@ impl Repl {
                 crate::dabao_selftest::dabao_selftest();
             }
             "actest" => {
-                let slot_man = bao1x_hal::protected_rram::SlotManager::new();
+                let slot_man = bao1x_hal::acram::SlotManager::new();
                 crate::println!(
                     "Slot 0(d): {:x?}",
                     slot_man.read(&bao1x_api::offsets::SlotIndex::Data(

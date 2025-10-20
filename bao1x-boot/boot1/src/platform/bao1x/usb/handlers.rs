@@ -437,7 +437,9 @@ pub fn flush_tx(this: &mut CorigineUsb) {
     {
         timeout += 1;
         if timeout % 20_000 == 0 {
-            crate::println!("txw {}", timeout);
+            // suppress this unless actively debugging because this can pollute the
+            // tx queue with data and eventually cause an overflow
+            // crate::println!("txw {}", timeout);
         }
     }
 
