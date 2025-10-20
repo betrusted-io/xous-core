@@ -105,13 +105,6 @@ pub fn early_init() {
     // malleable (no hardware lock to prevent update), which is a potential vulnerability.
     init_hash();
 
-    // this is a security-critical initialization. Failure to do this correctly breaks
-    // the hardware access control scheme for key/data slots.
-    let mut cu = bao1x_hal::coreuser::Coreuser::new();
-    // safety: this is safe because it's followed by a `protect()` call.
-    unsafe { cu.set() };
-    cu.protect();
-
     // TxRx setup
     #[cfg(feature = "unsafe-dev")]
     let mut udma_uart = {
