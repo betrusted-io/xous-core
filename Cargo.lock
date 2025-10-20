@@ -433,12 +433,14 @@ dependencies = [
  "digest 0.10.7",
  "ed25519-dalek-bao1x",
  "linked_list_allocator",
+ "rand_chacha 0.3.1",
  "riscv",
- "sha2",
+ "sha2-bao1x",
  "simple-fatfs",
  "utralib 0.1.26",
  "ux-api",
  "xous 0.9.67 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-bio-bdma",
  "xous-riscv",
 ]
 

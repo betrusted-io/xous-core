@@ -1013,11 +1013,19 @@ impl Repl {
                 let slot_man = bao1x_hal::protected_rram::SlotManager::new();
                 crate::println!(
                     "Slot 0(d): {:x?}",
-                    slot_man.read(&bao1x_api::offsets::SlotIndex::Data(0, PartitionAccess::All))
+                    slot_man.read(&bao1x_api::offsets::SlotIndex::Data(
+                        0,
+                        PartitionAccess::Unspecified,
+                        RwPerms::Unspecified
+                    ))
                 );
                 crate::println!(
                     "Slot 1(d): {:x?}",
-                    slot_man.read(&bao1x_api::offsets::SlotIndex::Data(1, PartitionAccess::All))
+                    slot_man.read(&bao1x_api::offsets::SlotIndex::Data(
+                        1,
+                        PartitionAccess::Unspecified,
+                        RwPerms::Unspecified
+                    ))
                 );
             }
             "echo" => {
