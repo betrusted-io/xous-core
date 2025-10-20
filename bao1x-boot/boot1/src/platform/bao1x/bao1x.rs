@@ -70,7 +70,12 @@ pub fn setup_dabao_se0_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
 /// This can change the board type coding to a safer, simpler board type if the declared board type has
 /// problems booting.
 pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::BoardTypeCoding, u32) {
-    crate::platform::slots::check_slots(&board_type);
+    // This is a security-critical initialization. Failure to do this correctly breaks
+    // the hardware access control scheme for key/data slots.
+    let mut cu = bao1x_hal::coreuser::Coreuser::new();
+    // safety: this is safe because it's followed by a `protect()` call.
+    unsafe { cu.set() };
+    cu.protect(); // locks out future modifications to the Coreuser setting
 
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
@@ -241,6 +246,9 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
     setup_alloc();
 
     setup_timer(fclk_freq);
+
+    // check key slots for integrity
+    crate::platform::slots::check_slots(&board_type);
 
     // Rx setup
     let _udma_uart = setup_console(&board_type, &iox, perclk);
