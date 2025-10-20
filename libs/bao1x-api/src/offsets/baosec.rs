@@ -1,6 +1,6 @@
 use xous::arch::PAGE_SIZE;
 
-use crate::offsets::{PartitionAccess, SlotIndex};
+use crate::offsets::{PartitionAccess, RwPerms, SlotIndex};
 
 // we actually have 16MiB on the initial prototypes, but constraining to smaller for cost reduction
 pub const SPI_FLASH_LEN: usize = 8192 * 1024;
@@ -48,35 +48,40 @@ pub const DEFAULT_FCLK_FREQUENCY: u32 = 700_000_000;
 /// are derived from. The seed may be blended with other bits of data scattered about
 /// the RRAM array, other device identifiers and hardware measurements to create the final
 /// device secret key.
-pub const ROOT_SEED: SlotIndex = SlotIndex::Key(256, PartitionAccess::Fw0);
+pub const ROOT_SEED: SlotIndex = SlotIndex::Key(256, PartitionAccess::Fw0, RwPerms::ReadOnly);
 
 /// The `RMA_KEY` is a secret parameter that is unique per-device secret which is recorded
 /// at manufacturing time. Its purpose is to facilitate the creation of a signed RMA
 /// authorization certificate which upon receipt would blank the device and unlock various
 /// features for debugging failed hardware.
-pub const RMA_KEY: SlotIndex = SlotIndex::Key(257, PartitionAccess::Fw0);
+pub const RMA_KEY: SlotIndex = SlotIndex::Key(257, PartitionAccess::Fw0, RwPerms::ReadOnly);
 
 /// Reserved for use as a CP to FT tracking cookie. This is used to help track inventory
 /// between CP and FT, if such a feature is desired in the supply chain.
-pub const CP_COOKIE: SlotIndex = SlotIndex::Key(258, PartitionAccess::Fw0);
+pub const CP_COOKIE: SlotIndex = SlotIndex::Key(258, PartitionAccess::Fw0, RwPerms::ReadOnly);
 
 /// `NUISANCE_KEYS` are hashed together with `ROOT_SEED` to derive the core secret.
 /// Their primary purpose is to annoy microscopists trying to read the secret key by
 /// directly imaging the RRAM array. They also exist to reduce power side channels
 /// created upon accessing keys in combination with `CHAFF_KEYS`. Note there is ECC
 /// on the data (2C2D on top of 128 bits) so any readout with better than 97% accuracy
-/// can trivially rely on ECC to repair the results.
+/// can trivially rely on ECC to repair the results (and now you have a metric for how
+/// reliable your readout needs to be).
 ///
 /// The placement is picked based upon two competing theories:
 ///   - Data stored next to each other will be harder to read out because the simultaneous activation of
-///     read-out word lines via secondary electron leakage will cause the data in adjacent cells to
-///     super-impose on the bitline.
+///     read-out word line transistors via secondary electron leakage will cause the data in adjacent cells to
+///     super-impose on the bitline. You want to have several random bits superimposed to defeat probabilistic
+///     models of leakage behavior.
 ///   - Data stored far from each other will be harder to read out based on the difficulty of achieving
 ///     flatness & uniformity in delayering over long distances.
 ///
-/// Thus 2x 4k pages on either end of the key range are carved out for the nuisance keys.
-pub const NUISANCE_KEYS_0: SlotIndex = SlotIndex::KeyRange(0..128, PartitionAccess::Fw0);
-pub const NUISANCE_KEYS_1: SlotIndex = SlotIndex::KeyRange(1920..2048, PartitionAccess::Fw0);
+/// Thus 2x 4k pages on either end of the key range are carved out for the nuisance keys. 4k page size
+/// is convenient because that's the natural page size over which the key range will be carved up before
+/// handing to other processes.
+pub const NUISANCE_KEYS_0: SlotIndex = SlotIndex::KeyRange(0..128, PartitionAccess::Fw0, RwPerms::ReadOnly);
+pub const NUISANCE_KEYS_1: SlotIndex =
+    SlotIndex::KeyRange(1920..2048, PartitionAccess::Fw0, RwPerms::ReadOnly);
 pub const NUISANCE_KEYS: [SlotIndex; 2] = [NUISANCE_KEYS_0, NUISANCE_KEYS_1];
 
 /// `CHAFF_KEYS` are a bank of keys that are hashed into the key array, but instead of
@@ -86,19 +91,15 @@ pub const NUISANCE_KEYS: [SlotIndex; 2] = [NUISANCE_KEYS_0, NUISANCE_KEYS_1];
 /// the key read-out, the CHAFF_KEYS have a random ordering that frustrates attempts to
 /// correlate the power signature over repeated reboots. The read-out of the CHAFF_KEYS
 /// needs to be strictly constant time, i.e. the permutation function can't leak a
-/// side channel that reveals what the ordering is.
-pub const CHAFF_KEYS: SlotIndex = SlotIndex::KeyRange(128..256, PartitionAccess::Fw0);
+/// side channel that reveals what the ordering is. Better yet, CHAFF_KEYS can be read
+/// out interleaved with the NUISANCE_KEY readout, where the selection to read a CHAFF_KEY
+/// or a NUISANCE_KEY is done randomly, thus introducing some disorder in the power side
+/// channel timing of the NUISANCE_KEY readout.
+pub const CHAFF_KEYS: SlotIndex = SlotIndex::KeyRange(128..256, PartitionAccess::Fw0, RwPerms::ReadOnly);
 
 /// All the slots of concern located in a single iterator. The idea is that everything is
 /// condensed here and used to check for access integrity using the array below.
-pub const ALL_SLOTS: [SlotIndex; 9] = [
-    crate::offsets::SERIAL_NUMBER,
-    crate::offsets::UUID,
-    crate::offsets::IFR_HASH,
-    ROOT_SEED,
-    RMA_KEY,
-    CP_COOKIE,
-    NUISANCE_KEYS_0,
-    NUISANCE_KEYS_1,
-    CHAFF_KEYS,
-];
+pub const DATA_SLOTS: [SlotIndex; 4] =
+    [crate::offsets::SERIAL_NUMBER, crate::offsets::UUID, crate::offsets::IFR_HASH, crate::offsets::CP_ID];
+pub const KEY_SLOTS: [SlotIndex; 6] =
+    [ROOT_SEED, RMA_KEY, CP_COOKIE, NUISANCE_KEYS_0, NUISANCE_KEYS_1, CHAFF_KEYS];

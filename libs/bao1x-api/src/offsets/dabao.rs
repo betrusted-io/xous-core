@@ -32,5 +32,6 @@ pub const DEFAULT_FCLK_FREQUENCY: u32 = 700_000_000;
 
 /// All the slots of concern located in a single iterator. The idea is that everything is
 /// condensed here and used to check for access integrity using the array below.
-pub const ALL_SLOTS: [SlotIndex; 3] =
-    [crate::offsets::SERIAL_NUMBER, crate::offsets::UUID, crate::offsets::IFR_HASH];
+pub const DATA_SLOTS: [SlotIndex; 4] =
+    [crate::offsets::SERIAL_NUMBER, crate::offsets::UUID, crate::offsets::IFR_HASH, crate::offsets::CP_ID];
+pub const KEY_SLOTS: [SlotIndex; 0] = [];
