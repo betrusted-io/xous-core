@@ -118,9 +118,8 @@ pub const BOOT0_REVOCATION_OFFSET: usize = BOOT1_REVOCATION_OFFSET + PUBKEY_SLOT
 /// uniqueness, in that there is nothing essentially that prevents duplicates, forgeries
 /// or procedural errors replicating this. The serial number also is not strictly incrementing
 /// nor does it have any guarantee of being a monotonic or smoothly spaced out. It could
-/// even be all zeros (in which case LOT_CODE should be used). Its primary
-/// purpose is to serve as a debugging hint for practical manufacturing issues. You are
-/// free to read it and use it, but beware.
+/// even be all zeros (in which case LOT_CODE should be used). However, nominally, the plan
+/// is for SERIAL_NUMBER to be exactly the CP_ID field.
 pub const SERIAL_NUMBER: SlotIndex = SlotIndex::Data(0, PartitionAccess::All, RwPerms::ReadOnly);
 
 /// `UUID` is a 256-bit random number that can be used as a UUID for the chip. It is publicly

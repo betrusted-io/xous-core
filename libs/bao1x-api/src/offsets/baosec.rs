@@ -57,8 +57,9 @@ pub const ROOT_SEED: SlotIndex = SlotIndex::Key(256, PartitionAccess::Fw0, RwPer
 pub const RMA_KEY: SlotIndex = SlotIndex::Key(257, PartitionAccess::Fw0, RwPerms::ReadOnly);
 
 /// Reserved for use as a CP to FT tracking cookie. This is used to help track inventory
-/// between CP and FT, if such a feature is desired in the supply chain.
-pub const CP_COOKIE: SlotIndex = SlotIndex::Key(258, PartitionAccess::Fw0, RwPerms::ReadOnly);
+/// between CP and FT, if such a feature is desired in the supply chain. Blanked on entry
+/// to developer mode.
+pub const CP_COOKIE: SlotIndex = SlotIndex::Key(258, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// `NUISANCE_KEYS` are hashed together with `ROOT_SEED` to derive the core secret.
 /// Their primary purpose is to annoy microscopists trying to read the secret key by
@@ -95,7 +96,15 @@ pub const NUISANCE_KEYS: [SlotIndex; 2] = [NUISANCE_KEYS_0, NUISANCE_KEYS_1];
 /// out interleaved with the NUISANCE_KEY readout, where the selection to read a CHAFF_KEY
 /// or a NUISANCE_KEY is done randomly, thus introducing some disorder in the power side
 /// channel timing of the NUISANCE_KEY readout.
-pub const CHAFF_KEYS: SlotIndex = SlotIndex::KeyRange(128..256, PartitionAccess::Fw0, RwPerms::ReadOnly);
+///
+/// This block has ReadWrite permissions because it's what gets blanked when the system
+/// goes to developer mode. We don't blank *all* the keys because write-permission on a key
+/// can lead to "oracle" attacks where portions of the key can be guessed by setting individual
+/// bits. But this is enough bits that it should make the original key unrecoverable. Once
+/// the chaff is cleared, we also don't care as much about side channels since we're now operating
+/// in a fundamentally insecure regime (e.g. developer mode - you can just read out the data by
+/// running your own code on the device).
+pub const CHAFF_KEYS: SlotIndex = SlotIndex::KeyRange(128..256, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// All the slots of concern located in a single iterator. The idea is that everything is
 /// condensed here and used to check for access integrity using the array below.
