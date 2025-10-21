@@ -116,10 +116,7 @@ impl Coreuser {
 
     /// Sets up the coreuser mappings. There's...really no options or arguments, I think this should
     /// more or less be a hard-coded table.
-    ///
-    /// Safety: only safe if `protect()` is called after these are set. `protect` is provided as
-    /// a "split" call to allow for debugging/testing of this API.
-    pub unsafe fn set(&mut self) {
+    pub fn set(&mut self) {
         // set to 0 so we can safely mask it later on
         self.csr.wo(utra::coreuser::USERVALUE, 0);
         self.csr.rmwf(utra::coreuser::USERVALUE_DEFAULT, CoreuserId::Fw1.as_dense());
@@ -131,6 +128,8 @@ impl Coreuser {
             AsidMapping { asid: 5, uid: LEAST_TRUSTED_USER },
             AsidMapping { asid: 6, uid: LEAST_TRUSTED_USER },
             AsidMapping { asid: 7, uid: LEAST_TRUSTED_USER },
+            AsidMapping { asid: 0, uid: CoreuserId::Boot0 }, /* this is for boot - ASID 0 is not valid in
+                                                              * Xous */
         ];
         let asid_fields = [
             (utra::coreuser::MAP_LO_LUT0, utra::coreuser::USERVALUE_USER0),
@@ -146,8 +145,25 @@ impl Coreuser {
             self.csr.rmwf(map_field, mapping.asid as u32);
             self.csr.rmwf(uservalue_field, mapping.uid.as_dense());
         }
+        // turn on the mappings
+        self.csr.rmwf(utra::coreuser::CONTROL_ENABLE, 1);
+    }
+
+    /// This allows boot1 to read/write keys. This setting is necessary to be able to *erase* keys
+    /// before going into developer mode. Eliminating this function doesn't mean that cheating
+    /// isn't possible - an adversary could always write this code. Cheating is always possible
+    /// until protect() is called!
+    pub unsafe fn bootloader_cheat(&mut self) {
+        // this is a manual patch of the table inside `set()`: entry 7 is for the boot value,
+        // and we're patching this up to the trusted user setting.
+        self.csr.rmwf(utra::coreuser::MAP_HI_LUT7, 0);
+        self.csr.rmwf(utra::coreuser::USERVALUE_USER7, CoreuserId::TRUSTED_USER.as_dense());
     }
 
     /// Sets a "one way door" that disallows any further updating to these fields.
-    pub fn protect(&mut self) { self.csr.wo(utra::coreuser::PROTECT, 1); }
+    pub fn protect(&mut self) {
+        // invert sense for Xous mode - User process 3 is trusted, the kernel is not!
+        self.csr.rmwf(utra::coreuser::CONTROL_INVERT_PRIV, 1);
+        self.csr.wo(utra::coreuser::PROTECT, 1);
+    }
 }
