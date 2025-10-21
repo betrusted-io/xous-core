@@ -110,5 +110,8 @@ pub const CHAFF_KEYS: SlotIndex = SlotIndex::KeyRange(128..256, PartitionAccess:
 /// condensed here and used to check for access integrity using the array below.
 pub const DATA_SLOTS: [SlotIndex; 4] =
     [crate::offsets::SERIAL_NUMBER, crate::offsets::UUID, crate::offsets::IFR_HASH, crate::offsets::CP_ID];
+
+/// In addition to these KEY_SLOTS, the DEVELOPER_MODE one way counter is a security-important parameter
+/// that should be included as domain separation in any KDF.
 pub const KEY_SLOTS: [SlotIndex; 6] =
     [ROOT_SEED, RMA_KEY, CP_COOKIE, NUISANCE_KEYS_0, NUISANCE_KEYS_1, CHAFF_KEYS];

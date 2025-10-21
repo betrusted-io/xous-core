@@ -98,14 +98,17 @@ impl<'a> Reram {
     /// that artifact alone.
     pub fn add_range(&'a mut self, base: usize, range: xous::MemoryRange) -> &'a Self {
         let top = base + range.len();
-        self.range_map.insert(base..top, base);
+        self.range_map.insert(base..top, range);
+        self
     }
 
+    #[cfg(not(feature = "std"))]
     pub fn read_slice(&self) -> &[u32] { self.array }
 
     /// This is a crappy "unsafe" initial version that requires the write
     /// destination address to be aligned to a 256-bit boundary, and the data
     /// to be exactly 256 bits long.
+    #[cfg(not(feature = "std"))]
     pub unsafe fn write_u32_aligned(&mut self, addr: usize, data: &[u32]) {
         assert!(addr % 0x20 == 0, "unaligned destination address!");
         assert!(data.len() % 8 == 0, "unaligned source data!");
@@ -144,6 +147,7 @@ impl<'a> Reram {
     /// ASSUME: offset has been bounds checked by a wrapper function.
     /// SAFETY: this is only safe in non-concurrent contexts. This means that in Xous this must be
     /// called from an interrupt context.
+    #[cfg(not(feature = "std"))]
     unsafe fn write_slice_inner(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
         let mut buffer = AlignedBuffer([0u8; ALIGNMENT]);
 

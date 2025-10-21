@@ -149,17 +149,6 @@ impl Coreuser {
         self.csr.rmwf(utra::coreuser::CONTROL_ENABLE, 1);
     }
 
-    /// This allows boot1 to read/write keys. This setting is necessary to be able to *erase* keys
-    /// before going into developer mode. Eliminating this function doesn't mean that cheating
-    /// isn't possible - an adversary could always write this code. Cheating is always possible
-    /// until protect() is called!
-    pub unsafe fn bootloader_cheat(&mut self) {
-        // this is a manual patch of the table inside `set()`: entry 7 is for the boot value,
-        // and we're patching this up to the trusted user setting.
-        self.csr.rmwf(utra::coreuser::MAP_HI_LUT7, 0);
-        self.csr.rmwf(utra::coreuser::USERVALUE_USER7, TRUSTED_USER.as_dense());
-    }
-
     /// Sets a "one way door" that disallows any further updating to these fields.
     pub fn protect(&mut self) {
         // invert sense for Xous mode - User process 3 is trusted, the kernel is not!

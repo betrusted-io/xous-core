@@ -98,6 +98,21 @@ pub const CP_BOOT_SETUP_DONE: usize = 83;
 /// derived from a blend of entropy sources. It's only useful on platforms like baosec.
 pub const IN_SYSTEM_BOOT_SETUP_DONE: usize = 84;
 
+/// When non-zero, the system had, at least one point in time, been challenged to boot
+/// from a developer image. Thus, the state of the system cannot be attested to based on
+/// the original signing keys burned from the factory. The value of this is also
+/// included as AAD in key derivations.
+pub const DEVELOPER_MODE: usize = 85;
+
+/// This is flipped when a trust transfer happens to a third party. i.e. any OEMs that
+/// come to Baochip to sign an image (that may then have their public keys in it) are
+/// required to set this bit as part of their signed code. It's a half-baked work-around
+/// for folks that are paranoid about DEVELOPER_MODE and for whatever reason think it's
+/// more trustworthy if someone they've never met used some cryptography to bless a bag
+/// of bits, but at the least they can say that a person they don't know or trust most likely
+/// did bless the bag of bits.
+pub const OEM_MODE: usize = 86;
+
 /// Total number of public key slots in the system. Pubkey revocations are at the "top of range"
 pub const PUBKEY_SLOTS: usize = 4;
 /// Offset in the one-way counter array for loader key revocations. Provisions for up to four
