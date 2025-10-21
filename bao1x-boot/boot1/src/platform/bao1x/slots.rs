@@ -93,9 +93,9 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
         crate::println!("Secret ID init done.");
     }
 
+    // print_ifr();
     // test code for figuring out if boot0 write-protect is working or not.
     /*
-    print_ifr();
     crate::println!("test boot0 write");
     let test = [7u8; 32];
     let test_data = unsafe { core::slice::from_raw_parts(0x6001_0000 as *const u8, 32) };
@@ -115,6 +115,10 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
 
 /*
 fn print_ifr() {
+    let coreuser = utralib::CSR::new(utralib::utra::coreuser::HW_COREUSER_BASE as *mut u32);
+    // needs to be 0x118 for IFR to be readable when the protection bit is set.
+    crate::println!("coreuser status: {:x}", coreuser.r(utralib::utra::coreuser::STATUS));
+
     let ifr = unsafe { core::slice::from_raw_parts(0x6040_0000 as *const u32, 0x100) };
     for (i, &d) in ifr.iter().enumerate() {
         if i % 8 == 0 {
@@ -158,7 +162,9 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
                 */
                 sa.get_partition_access() == pa && sa.get_rw_permissions() == rw
             }
-            AccessSettings::Key(sa) => sa.get_partition_access() == pa && sa.get_rw_permissions() == rw,
+            AccessSettings::Key(sa) => {
+                sa.get_partition_access() == pa && sa.get_rw_permissions() == rw && sa.akey_id() == 31
+            }
         };
         if !is_correct || !is_consistent {
             crate::println!(
@@ -175,6 +181,7 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
                 AccessSettings::Key(sa) => {
                     sa.set_partition_access(&pa);
                     sa.set_rw_permissions(rw);
+                    sa.set_akey_id(31); // testing ID
                 }
             }
             crate::println!("Fixed ACL raw value: {:x?}", acl);
@@ -197,12 +204,22 @@ fn print_slots(slot_mgr: &SlotManager, slot_list: &[SlotIndex]) {
                 SlotType::Data => unsafe {
                     let bytes = slot_mgr.read_data_slot(data_index);
                     let acl = slot_mgr.get_data_acl(acl_index);
-                    crate::println!("    Data {} ({:?}): {:x?}", data_index, acl, bytes);
+                    crate::println!(
+                        "    Data {} ({:x?}): {:x?}",
+                        data_index / SLOT_ELEMENT_LEN_BYTES,
+                        acl,
+                        bytes
+                    );
                 },
                 SlotType::Key => unsafe {
                     let bytes = slot_mgr.read_key_slot(data_index);
                     let acl = slot_mgr.get_key_acl(acl_index);
-                    crate::println!("    Key {} ({:?}): {:x?}", data_index, acl, bytes);
+                    crate::println!(
+                        "    Key {} ({:x?}): {:x?}",
+                        data_index / SLOT_ELEMENT_LEN_BYTES,
+                        acl,
+                        bytes
+                    );
                 },
             }
         }

@@ -70,13 +70,6 @@ pub fn setup_dabao_se0_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
 /// This can change the board type coding to a safer, simpler board type if the declared board type has
 /// problems booting.
 pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::BoardTypeCoding, u32) {
-    // This is a security-critical initialization. Failure to do this correctly breaks
-    // the hardware access control scheme for key/data slots.
-    let mut cu = bao1x_hal::coreuser::Coreuser::new();
-    // safety: this is safe because it's followed by a `protect()` call.
-    unsafe { cu.set() };
-    cu.protect(); // locks out future modifications to the Coreuser setting
-
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
     // setup board-specific I/Os - early boot set. These are items that have to be
@@ -247,8 +240,15 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
 
     setup_timer(fclk_freq);
 
-    // check key slots for integrity
+    // check key slots for integrity. Has to be done late in boot because we might
+    // have to generate keys, and that requires a lot of stuff to be working correctly:
+    // in particular, we'll need `alloc` (to store the random vectors) and `timer`
+    // (to detect disconnected/failed TRNG).
+    let mut cu = bao1x_hal::coreuser::Coreuser::new();
+    // Coreuser needs to be set up correctly for check_slots to succeed.
+    cu.set();
     crate::platform::slots::check_slots(&board_type);
+    // protect() is called inside sigcheck on boot!
 
     // Rx setup
     let _udma_uart = setup_console(&board_type, &iox, perclk);

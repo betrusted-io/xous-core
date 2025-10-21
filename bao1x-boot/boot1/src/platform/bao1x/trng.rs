@@ -48,6 +48,7 @@ impl ManagedTrng {
             bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, trng_pin as u32); // start the sampling
 
             // check if the TRNG seems to be working. If not, reject the board setting and reboot
+            /*
             let mut timer = utralib::CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
             timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
             let av_good: bool;
@@ -91,7 +92,8 @@ impl ManagedTrng {
                 rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
                 // this is actually unreachable
                 None
-            }
+            }*/
+            None
         } else {
             None
         };
