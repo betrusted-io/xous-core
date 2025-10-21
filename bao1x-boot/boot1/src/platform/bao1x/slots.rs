@@ -106,10 +106,15 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
 
     print_slots(&slot_mgr, &bao1x_hal::board::DATA_SLOTS);
     check_and_fix_acls(&mut rram, &mut slot_mgr, &bao1x_hal::board::DATA_SLOTS);
-    if *board_type == bao1x_api::BoardTypeCoding::Baosec {
+
+    // only check & fix key ACLs if we haven't been into developer mode. This is necessary to avoid
+    // wear-out on the ACL entries as every time a transition is made into a developer images, a set
+    // of keys are checked to be erased. While it is possible to bypass the ACL checks by flipping
+    // the developer mode bit, the key check/erasure would still happen upon launch into developer mode.
+    if *board_type == bao1x_api::BoardTypeCoding::Baosec && owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0 {
         #[cfg(feature = "unsafe-debug")]
-        print_slots(&slot_mgr, &bao1x_hal::board::KEY_SLOTS);
-        check_and_fix_acls(&mut rram, &mut slot_mgr, &bao1x_hal::board::KEY_SLOTS);
+        print_slots(&slot_mgr, &bao1x_api::baosec::KEY_SLOTS);
+        check_and_fix_acls(&mut rram, &mut slot_mgr, &bao1x_api::baosec::KEY_SLOTS);
     }
 }
 
@@ -149,19 +154,7 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
         };
         let (pa, rw) = slot_element.get_access_spec();
         let is_correct = match acl {
-            AccessSettings::Data(sa) => {
-                /*
-                crate::println!(
-                    "sa: {:x?}, sa.pa: {:?} pa: {:?}, sa.rw: {:?}, rw: {:?}",
-                    sa,
-                    sa.get_partition_access(),
-                    pa,
-                    sa.get_rw_permissions(),
-                    rw
-                );
-                */
-                sa.get_partition_access() == pa && sa.get_rw_permissions() == rw
-            }
+            AccessSettings::Data(sa) => sa.get_partition_access() == pa && sa.get_rw_permissions() == rw,
             AccessSettings::Key(sa) => {
                 sa.get_partition_access() == pa && sa.get_rw_permissions() == rw && sa.akey_id() == 31
             }
@@ -181,7 +174,6 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
                 AccessSettings::Key(sa) => {
                     sa.set_partition_access(&pa);
                     sa.set_rw_permissions(rw);
-                    sa.set_akey_id(31); // testing ID
                 }
             }
             crate::println!("Fixed ACL raw value: {:x?}", acl);
@@ -196,6 +188,14 @@ fn print_slots(slot_mgr: &SlotManager, slot_list: &[SlotIndex]) {
         crate::println!("== Slot starting at {} ==", slot.get_base());
         crate::println!("  Spec permissions: {:?}", access);
         let slot_type = slot.get_type();
+        #[cfg(feature = "unsafe-debug")]
+        // clear the ACL so we can read the key
+        if slot_type == SlotType::Key {
+            let mut rram = Reram::new();
+            slot_mgr
+                .set_acl(&mut rram, slot, &AccessSettings::Key(KeySlotAccess::new_with_raw_value(0)))
+                .expect("couldn't reset ACL");
+        }
         for (data_index, acl_index) in
             slot.try_into_data_iter().unwrap().zip(slot.try_into_acl_iter().unwrap())
         {

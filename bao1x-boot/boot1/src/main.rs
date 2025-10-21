@@ -29,7 +29,10 @@ use crate::platform::usb::glue;
 use crate::secboot::boot_or_die;
 use crate::{delay, platform::irq::disable_all_irqs};
 
-const RELEASE_DESCRIPTION: &'static str = "Dabao Alpha-0 Sample";
+// Notes:
+// - "Towards" - not a release yet, but working towards the stated milestone
+// - Eliminating "Towards" is done at the tag-out point.
+const RELEASE_DESCRIPTION: &'static str = "Towards Alpha-1";
 
 static UART_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
 #[allow(dead_code)]
