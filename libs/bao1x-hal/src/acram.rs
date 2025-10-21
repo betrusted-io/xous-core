@@ -397,16 +397,6 @@ impl SlotManager {
         match slot {
             SlotIndex::Data(_, _, _) => {
                 let offset = slot.try_into_acl_offset()?;
-                /*
-                // data slots aren't updating - but I think this might be a misunderstanding of how
-                // the HW works, and not actually a code bug. Keep this around until resolved.
-                crate::println!(
-                    "updating ACL at offset {:x} with {:?}; final address: {:x}",
-                    offset,
-                    setting,
-                    self.data_acl_range.as_ptr() as usize - utralib::HW_RERAM_MEM + offset
-                );
-                */
                 writer
                     .protected_write_slice(
                         self.data_acl_range.as_ptr() as usize - utralib::HW_RERAM_MEM + offset,
