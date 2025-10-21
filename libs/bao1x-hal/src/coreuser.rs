@@ -157,7 +157,7 @@ impl Coreuser {
         // this is a manual patch of the table inside `set()`: entry 7 is for the boot value,
         // and we're patching this up to the trusted user setting.
         self.csr.rmwf(utra::coreuser::MAP_HI_LUT7, 0);
-        self.csr.rmwf(utra::coreuser::USERVALUE_USER7, CoreuserId::TRUSTED_USER.as_dense());
+        self.csr.rmwf(utra::coreuser::USERVALUE_USER7, TRUSTED_USER.as_dense());
     }
 
     /// Sets a "one way door" that disallows any further updating to these fields.
