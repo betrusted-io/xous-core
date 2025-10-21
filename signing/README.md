@@ -24,7 +24,7 @@ Here is the flow for generating and deploying signatures:
 
 Example command line of `fido-signer`, as run from the `signing/fido-signer` directory:
 
-`cargo run -- --credential-file ..\credentials\bao2.json --file ..\..\target\riscv32imac-unknown-none-elf\release\bao1x-boot0.img --function-code boot0`
+`cargo run -- --credential-file ..\credentials\beta.json --file ..\..\target\riscv32imac-unknown-none-elf\release\bao1x-boot1.img --function-code boot1`
 
 The `--function-code` argument is necessary to create the .uf2 file. Without it, only a .img file is updated.
 
