@@ -1,4 +1,7 @@
-import sys, shutil
+import os
+import sys
+import shutil
+import logging
 from pathlib import Path
 
 def _is_dir_writable(p: Path) -> bool:
@@ -10,36 +13,41 @@ def _is_dir_writable(p: Path) -> bool:
     except Exception:
         return False
 
-def cmd_flash(args):
+def cmd_flash(args) -> None:
     dest = Path(args.dest)
     if not dest.exists() or not dest.is_dir():
-        print(f"[bao] destination not found or not a directory: {dest}", file=sys.stderr)
+        logging.error(f"[bao] destination not found or not a directory: {dest}")
         sys.exit(2)
     if not _is_dir_writable(dest):
-        print(f"[bao] destination is not writable: {dest}", file=sys.stderr)
+        logging.error(f"[bao] destination is not writable: {dest}")
         sys.exit(2)
 
     files = [Path(f) for f in args.files]
     if not files:
-        print("[bao] no files to copy", file=sys.stderr)
+        logging.error("[bao] no files to copy")
         sys.exit(2)
 
-    print(f"[bao] Flash destination: {dest}")
+    logging.info(f"[bao] Flash destination: {dest}")
     copied = 0
     for src in files:
         if not src.exists() or not src.is_file():
-            print(f"[bao] skip (not found): {src}", file=sys.stderr)
+            logging.warning(f"[bao] skip (not found): {src}")
+            continue
+        if src.suffix.lower() != ".uf2":
+            logging.warning(f"[bao] skip (not a .uf2): {src}")
             continue
         dst = dest / src.name
-        print(f"[bao] copy {src} -> {dst}")
+        logging.info(f"[bao] copy {src} -> {dst}")
         try:
-            shutil.copyfile(src, dst)
+            tmp = dest / f".{src.name}.tmp"
+            shutil.copyfile(src, tmp)
+            os.replace(tmp, dst)
             copied += 1
         except Exception as e:
-            print(f"[bao] copy failed for {src}: {e}", file=sys.stderr)
+            logging.error(f"[bao] copy failed for {src}: {e}")
 
     if copied == 0:
-        print("[bao] nothing copied", file=sys.stderr)
+        logging.error("[bao] nothing copied")
         sys.exit(1)
 
     print(f"[bao] copied {copied} file(s)")

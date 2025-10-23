@@ -1,11 +1,12 @@
+import logging
 from serial.tools import list_ports
 
-def cmd_ports(args):
+def cmd_ports(args) -> None:
     ports = list(list_ports.comports())
-    if args.verbose:
-        print(f"[bao] pyserial found {len(ports)} port(s)")
+    if getattr(args, "verbose", False):
+        logging.info(f"[bao] pyserial found {len(ports)} port(s)")
     if not ports:
-        print("[bao] No serial ports found.")
+        logging.warning("[bao] No serial ports found.")
         print("      Try: python -m serial.tools.list_ports -v")
         return
     for p in ports:

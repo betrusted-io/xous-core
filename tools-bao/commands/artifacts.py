@@ -1,40 +1,50 @@
 """
-Return release UF2 images for flashing:
+Return release UF2 images for flashing.
 
-<xous-core>/target/riscv32imac-unknown-xous-elf/release/{loader.uf2,xous.uf2,app.uf2}
+Scans the release directory for UF2 images:
+    <xous-core>/target/riscv32imac-unknown-xous-elf/release/{loader.uf2,xous.uf2,app.uf2}
 
-JSON:
-  { "images": [
-      { "path": ".../loader.uf2", "role": "loader" },
-      { "path": ".../xous.uf2",   "role": "xous"   },
-      { "path": ".../app.uf2",    "role": "app"    }
-    ] }
+Outputs JSON if --json is set:
+    {
+        "images": [
+            { "path": ".../loader.uf2", "role": "loader" },
+            { "path": ".../xous.uf2",   "role": "xous"   },
+            { "path": ".../app.uf2",    "role": "app"    }
+        ]
+    }
 
 Only files that actually exist are included.
 """
 
 import json
 import sys
-from pathlib import Path
-from typing import List, Dict
+import logging
+from typing import List, Dict, Tuple
+from utils.common import project_root
 
-TRIPLE = "riscv32imac-unknown-xous-elf"
-FILENAMES = [
+TRIPLE: str = "riscv32imac-unknown-xous-elf"
+FILENAMES: List[Tuple[str, str]] = [
     ("loader.uf2", "loader"),
     ("xous.uf2",   "xous"),
     ("app.uf2",    "app"),
 ]
 
-def cmd_artifacts(args):
-    root = Path(__file__).resolve().parents[2]
+EXIT_OK = 0
+EXIT_NOT_FOUND = 2
+
+def cmd_artifacts(args) -> None:
+    """Command to list release UF2 images for flashing."""
+    root = project_root()
     release_dir = root / "target" / TRIPLE / "release"
 
     images: List[Dict[str, str]] = []
     if not release_dir.exists():
         # No error: just report empty so callers can prompt “build first”
-        print(json.dumps({"images": images}) if getattr(args, "json", False)
-              else f"[bao] release dir not found: {release_dir}")
-        sys.exit(0)
+        if getattr(args, "json", False):
+            print(json.dumps({"images": images}))
+        else:
+            logging.warning(f"[bao] release dir not found: {release_dir}")
+        sys.exit(EXIT_OK)
 
     for fname, role in FILENAMES:
         p = release_dir / fname
@@ -45,7 +55,7 @@ def cmd_artifacts(args):
         print(json.dumps({"images": images}))
     else:
         if not images:
-            print(f"[bao] no UF2 images found in {release_dir}")
+            logging.warning(f"[bao] no UF2 images found in {release_dir}")
         else:
             for i in images:
                 print(f"{i['path']} ({i['role']})")

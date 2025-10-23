@@ -2,14 +2,15 @@
 Baochip CLI — entry point for host-side utilities.
 
 Usage examples:
-  python tools-bao/bao.py ports
-  python tools-bao/bao.py monitor -p COM3 -b 115200 --ts
-  python tools-bao/bao.py build --target dabao
+    python tools-bao/bao.py ports
+    python tools-bao/bao.py monitor -p COM3 -b 115200 --ts
+    python tools-bao/bao.py build --target dabao
 """
 
 import argparse
-from re import sub
 import sys
+import logging
+import traceback
 
 # Subcommand imports
 from commands.ports import cmd_ports
@@ -20,8 +21,15 @@ from commands.build import cmd_build
 from commands.artifacts import cmd_artifacts
 from commands.update_all import cmd_update_all
 
+VERSION = "0.1.0"  # Update as needed
+
 def main():
-    ap = argparse.ArgumentParser(prog="bao.py")
+    ap = argparse.ArgumentParser(
+        prog="bao.py",
+        description="Baochip CLI — host-side utilities for Baochip development."
+    )
+    ap.add_argument("--version", action="version", version=f"%(prog)s {VERSION}", help="Show version and exit.")
+    ap.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output (debug logging and tracebacks)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     # artifacts
@@ -31,7 +39,6 @@ def main():
 
     # ports
     s = sub.add_parser("ports", help="List serial ports")
-    s.add_argument("-v", "--verbose", action="store_true")
     s.set_defaults(func=cmd_ports)
 
     # update-all
@@ -64,20 +71,27 @@ def main():
 
     # flash
     f = sub.add_parser("flash", help="Copy UF2 file(s) to a mounted drive")
-    f.add_argument("--dest", required=True, help="Mount path of the UF2 boot drive (e.g., D:\\ or /Volumes/BAOBOOT)")
+    f.add_argument("--dest", required=True, help="Mount path of the UF2 boot drive (e.g., D:\\)")
     f.add_argument("files", nargs="+", help="One or more UF2 files to copy (e.g., loader.uf2 xous.uf2 app.uf2)")
     f.set_defaults(func=cmd_flash)
 
     args = ap.parse_args()
+
+    log_level = logging.DEBUG if getattr(args, "verbose", False) else logging.WARNING
+    logging.basicConfig(level=log_level, format="[bao] %(levelname)s: %(message)s")
+
     try:
         args.func(args)
     except KeyboardInterrupt:
         print("\n[bao] aborted by user.")
         sys.exit(1)
     except Exception as e:
-        print(f"[bao] error: {e}", file=sys.stderr)
+        if getattr(args, "verbose", False):
+            print(f"[bao] error: {e}", file=sys.stderr)
+            traceback.print_exc()
+        else:
+            print(f"[bao] error: {e}", file=sys.stderr)
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
