@@ -684,7 +684,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "xous-ticktimer",
                 "xous-log",
                 "xous-names",
-                "keystore",
                 "usb-bao1x",
                 "bao1x-hal-service",
                 "bao-console",
@@ -723,6 +722,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // It is important that this is the first service added, because the swapper *must* be in PID 2
             builder.add_service("xous-swapper", LoaderRegion::Flash);
+            // It is important that this is the second service added, as keystore *must* be in PID 3
+            // (as constrained by the coreuser setting that is locked out by the time Xous runs)
+            builder.add_service("keystore", LoaderRegion::Flash);
 
             for service in bao_rram_pkgs {
                 builder.add_service(service, LoaderRegion::Flash);
