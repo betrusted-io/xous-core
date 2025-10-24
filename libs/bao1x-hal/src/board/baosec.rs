@@ -2,6 +2,8 @@
 use bao1x_api::*;
 
 pub const DEFAULT_FCLK_FREQUENCY: u32 = bao1x_api::offsets::baosec::DEFAULT_FCLK_FREQUENCY;
+pub const DEFAULT_CPU_VOLTAGE_MV: u32 = 820;
+pub const VDD85_SWITCH_MARGIN_MV: u32 = 20; // margin, in mV, for the transistor power switch
 
 pub const I2C_AXP2101_ADR: u8 = 0x34;
 pub const I2C_TUSB320_ADR: u8 = 0x47;

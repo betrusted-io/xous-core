@@ -124,10 +124,21 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
 
                         // set PWM mode on DCDC2. greatly reduces noise on the regulator line
                         pmic.set_pwm_mode(&mut i2c, bao1x_hal::axp2101::WhichDcDc::Dcdc2, true).unwrap();
-                        // make sure the DCDC2 is set to 0.9V, which will allow us to enter high-speed run
-                        // mode. It defaults to 0.85V on boot.
-                        pmic.set_dcdc(&mut i2c, Some((0.9, true)), bao1x_hal::axp2101::WhichDcDc::Dcdc2)
-                            .unwrap();
+                        // make sure the DCDC2 is set. Target 20mV above the acceptable run threshold because
+                        // we have to take into account the transistor loss on the
+                        // power switch.
+                        pmic.set_dcdc(
+                            &mut i2c,
+                            Some((
+                                (bao1x_hal::board::DEFAULT_CPU_VOLTAGE_MV
+                                    + bao1x_hal::board::VDD85_SWITCH_MARGIN_MV)
+                                    as f32
+                                    / 1000.0,
+                                true,
+                            )),
+                            bao1x_hal::axp2101::WhichDcDc::Dcdc2,
+                        )
+                        .unwrap();
 
                         break;
                     }
