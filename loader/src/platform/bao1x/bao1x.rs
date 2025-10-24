@@ -103,7 +103,8 @@ pub fn early_init_hw() -> u32 {
         bao1x_hal::board::setup_camera_pins(&iox);
         bao1x_hal::board::setup_kb_pins(&iox);
         bao1x_hal::board::setup_oled_power_pin(&iox);
-        bao1x_hal::board::setup_trng_power_pin(&iox);
+        let trng_power = bao1x_hal::board::setup_trng_power_pin(&iox);
+        iox.set_gpio_pin(trng_power.0, trng_power.1, bao1x_api::IoxValue::High);
 
         use bao1x_hal::udma::GlobalConfig;
         use ux_api::minigfx::FrameBuffer;
