@@ -99,12 +99,6 @@ impl SwapHal {
             let ram_id = ram_spim.mem_read_id_ram();
             crate::println!("flash ID (init): {:x}", flash_id);
             crate::println!("ram ID: {:x}", ram_id);
-            // density 18, memory type 20, mfg ID C2 ==> MX25L128833F
-            // density 38, memory type 25, mfg ID C2 ==> MX25U12832F
-            assert!(flash_id & 0xFF_FF_FF == 0x1820C2 || flash_id & 0xFF_FF_FF == 0x38_25_C2);
-            // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
-            assert!((ram_id & 0xFF_FF == 0x5D9D) || (ram_id & 0xFF_FF == 0x559d));
-
             // setup FLASH
             //  - QE enable
             //  - dummy cycles = 6
