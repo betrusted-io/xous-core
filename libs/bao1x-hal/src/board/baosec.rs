@@ -276,8 +276,8 @@ pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
 
 const KB_PORT: IoxPort = IoxPort::PF;
 const R_PINS: [u8; 2] = [6, 7];
-const C_PINS: [u8; 4] = [2, 3, 4, 5];
-pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 2], [(IoxPort, u8); 4]) {
+const C_PINS: [u8; 3] = [2, 3, 4];
+pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 2], [(IoxPort, u8); 3]) {
     for r in R_PINS {
         iox.setup_pin(
             KB_PORT,
@@ -306,7 +306,7 @@ pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 2], [(Iox
     }
     (
         [(KB_PORT, R_PINS[0]), (KB_PORT, R_PINS[1])],
-        [(KB_PORT, C_PINS[0]), (KB_PORT, C_PINS[1]), (KB_PORT, C_PINS[2]), (KB_PORT, C_PINS[3])],
+        [(KB_PORT, C_PINS[0]), (KB_PORT, C_PINS[1]), (KB_PORT, C_PINS[2])],
     )
 }
 
@@ -404,7 +404,7 @@ pub fn setup_trng_input_pin<T: IoSetup + IoGpio>(iox: &T) -> u8 {
 }
 
 pub fn setup_dcdc2_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
-    let (port, pin) = (IoxPort::PF, 5);
+    let (port, pin) = (IoxPort::PF, 0);
     iox.setup_pin(
         port,
         pin,
