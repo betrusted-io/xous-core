@@ -29,7 +29,7 @@ pub const SCRATCH_PAGE: usize = HEAP_START + HEAP_LEN + 4096;
 pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 
 pub const SYSTEM_CLOCK_FREQUENCY: u32 = 700_000_000;
-pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
+use bao1x_api::SYSTEM_TICK_INTERVAL_MS;
 
 pub fn early_init() {
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
