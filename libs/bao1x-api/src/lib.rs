@@ -22,6 +22,9 @@ pub mod pubkeys;
 /// into the "official" list
 pub const BAOCHIP_1X_UF2_FAMILY: u32 = 0xa7d7_6373;
 
+// system preemption interval
+pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
+
 /// Constants used by both emulation and hardware implementations
 pub const PERCLK: u32 = 100_000_000;
 pub const SERVER_NAME_KBD: &str = "_Matrix keyboard driver_";

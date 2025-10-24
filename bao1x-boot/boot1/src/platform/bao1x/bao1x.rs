@@ -33,7 +33,7 @@ pub const FREE_MEM_LEN: usize = (RAM_BASE + RAM_SIZE) - FREE_MEM_START - STACK_L
 pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 
 const SAFE_FCLK_FREQUENCY: u32 = 350_000_000;
-pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
+use bao1x_api::SYSTEM_TICK_INTERVAL_MS;
 
 // Dabao port/pin constants have to be vendored in because this crate is compiled with baosec as the target.
 const DABAO_SE0_PIN: u8 = 13;

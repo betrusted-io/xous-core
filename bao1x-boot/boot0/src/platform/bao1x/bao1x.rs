@@ -33,7 +33,7 @@ pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 /// Also relying on the IFR region setting the SRAM trimming to work at this safe default
 /// so we don't have to initialize it in boot0.
 pub const DEFAULT_FCLK_FREQUENCY: u32 = 350_000_000;
-pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
+use bao1x_api::SYSTEM_TICK_INTERVAL_MS;
 
 pub fn early_init() {
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
