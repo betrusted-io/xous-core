@@ -151,6 +151,10 @@ impl Coreuser {
 
     /// Sets a "one way door" that disallows any further updating to these fields.
     pub fn protect(&mut self) {
+        // map default ASID into the least trusted user (away from boot0)
+        self.csr.rmwf(utra::coreuser::MAP_HI_LUT7, 0);
+        self.csr.rmwf(utra::coreuser::USERVALUE_USER7, LEAST_TRUSTED_USER.as_dense());
+
         // invert sense for Xous mode - User process 3 is trusted, the kernel is not!
         self.csr.rmwf(utra::coreuser::CONTROL_INVERT_PRIV, 1);
         self.csr.wo(utra::coreuser::PROTECT, 1);
