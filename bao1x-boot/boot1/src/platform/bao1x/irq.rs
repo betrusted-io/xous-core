@@ -205,7 +205,7 @@ pub extern "C" fn trap_handler(
         // external interrupt. find out which ones triggered it, and clear the source.
         let irqs_pending = mip::read();
         if (irqs_pending & (1 << utra::timer0::TIMER0_IRQ)) != 0 {
-            let ms = SYSTEM_TICK_INTERVAL_MS;
+            let ms = bao1x_api::SYSTEM_TICK_INTERVAL_MS;
             let mut timer0 = CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
             timer0.wfo(utra::timer0::EV_PENDING_ZERO, 1);
             // TODO: link this to dabao targets. Right now this value is correct for baosec only.
