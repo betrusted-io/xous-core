@@ -81,6 +81,7 @@ board-baosec = [
     "keystore-api/gen2",
     "modals/no-gam",
     "modals/bao1x",
+    "bao1x-hal",
 ] # USB form factor token
 loader-baosec = ["ux-api/loader-baosec"]
 test-baosec = ["ux-api/loader-baosec"]
@@ -94,10 +95,7 @@ board-baosor = [
     "modals/bao1x",
 ] # Precursor form factor
 loader-baosor = []
-board-dabao = [
-    "utralib/bao1x",
-    "keystore-api/gen2",
-] # Dev board form factor
+board-dabao = ["utralib/bao1x", "keystore-api/gen2"] # Dev board form factor
 loader-dabao = []
 
 policy-menu = [
