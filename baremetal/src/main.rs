@@ -66,6 +66,27 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     crate::platform::early_init();
     crate::println!("\n~~Baremetal up!~~\n");
 
+    // test code for figuring out if boot0 write-protect is working or not.
+    // we can get rid of this once we've got the settings right on the IFR for this feature.
+    // need to program in the updated IFR protection bits to test this.
+    // also, this only works once we're in baremetal - boot0 can always write boot0, and
+    // the coreuser setup doesn't take us out of boot0 until this stage.
+    if false {
+        crate::println!("Write protection test");
+        let mut rram = bao1x_hal::rram::Reram::new();
+        // boot0 should end at 0x2_0000; boot1 ends at 0x6_0000
+        let regions = [0xF000, 0x1_1000, 0x1_F000, 0x2_1000, 0x5_0000];
+        for (i, &region) in regions.iter().enumerate() {
+            let test_data =
+                unsafe { core::slice::from_raw_parts((region + utralib::HW_RERAM_MEM) as *const u8, 32) };
+            let base = test_data[0]; // increment whatever is in the original area
+            let test = [base + 1 + i as u8; 32];
+            crate::println!("orig ({:x}): {:x?}", region, test_data);
+            rram.write_slice(region, &test).unwrap();
+            crate::println!("update ({:x}): {:x?} vs {:x?}", region, test_data, test);
+        }
+    }
+
     #[cfg(feature = "artyvexii")]
     crate::platform::test_virtual_memory();
 
@@ -103,6 +124,14 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     #[cfg(feature = "bao1x-usb")]
     // do the main loop through either USB interface or serial port
     loop {
+        #[cfg(feature = "dabao-selftest")]
+        {
+            if !self_test_ran {
+                crate::dabao_selftest::dabao_selftest();
+                self_test_ran = true;
+            }
+        }
+
         let (new_usb_state, new_portsc) = glue::usb_status();
 
         // provide feedback when connection is established
@@ -112,13 +141,6 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                 crate::println!("USB is connected!");
                 last_usb_state = new_usb_state;
                 USB_CONNECTED.store(true, core::sync::atomic::Ordering::SeqCst);
-                #[cfg(feature = "dabao-selftest")]
-                {
-                    if !self_test_ran {
-                        crate::dabao_selftest::dabao_selftest();
-                        self_test_ran = true;
-                    }
-                }
             }
         }
 
