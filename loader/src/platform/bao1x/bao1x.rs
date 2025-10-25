@@ -125,6 +125,14 @@ pub fn early_init_hw() -> u32 {
         sh1107.draw();
     }
 
+    #[cfg(feature = "board-dabao")]
+    {
+        // this needs to be set here because alpha-0 boot1 images set it to the wrong frequency
+        unsafe {
+            init_clock_asic(bao1x_api::dabao::DEFAULT_FCLK_FREQUENCY);
+        }
+    }
+
     // Setup some global control registers that will allow the TRNG to operate once the kernel is
     // booted. This is done so the kernel doesn't have to exclusively have rights to the SCE global
     // registers just for this purpose.
