@@ -180,6 +180,10 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     // but it'll do the job 90% of the time and it's way better than having none at all.
     let is_panic = Arc::new(AtomicBool::new(false));
 
+    // ---- boot logo
+    display.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
+    display.redraw();
+
     // This is safe because the SPIM is finished with initialization, and the handler is
     // Mutex-protected.
     #[cfg(feature = "board-baosec")]
@@ -191,6 +195,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     // ---- camera initialization
     #[cfg(not(feature = "hosted-baosec"))]
     {
+        // wait for other inits to finish so we can do this roughly atomically
+        tt.sleep_ms(1000).ok();
+
         // setup camera power
         match bao1x_hal::axp2101::Axp2101::new(&mut i2c) {
             Ok(mut pmic) => {
@@ -297,10 +304,6 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
         // enable camera Rx IRQ
         irq_csr.wfo(utra::irqarray8::EV_ENABLE_CAM_RX, 1);
     }
-
-    // ---- boot logo
-    display.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
-    display.redraw();
 
     // ---- main loop variables
     let screen_clip = Rectangle::new(Point::new(0, 0), display.screen_size());
