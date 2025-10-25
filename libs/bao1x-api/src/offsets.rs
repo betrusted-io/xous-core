@@ -232,10 +232,8 @@ impl PartitionAccess {
     /// Takes in a raw u32 pattern from either DataSlotAccess or KeySlotAccess and
     /// extracts the PartitionAccess code
     pub fn from_raw_u32(raw: u32) -> Self {
-        // raw is inverted because a 0 means access is allowed. Inverting the pattern
-        // such that 1 means allowed makes the code more readable below.
-        // the bitfield coding is fw1:fw0:boot1:boot0 from MSB to LSB.
-        let code: u4 = u4::new(((!raw >> 20) & 0xF) as u8);
+        // The bitfield coding is fw1:fw0:boot1:boot0 from MSB to LSB.
+        let code: u4 = u4::new(((raw >> 20) & 0xF) as u8);
         match code.value() {
             0b0000 => Self::None,
             0b1111 => Self::All,
@@ -253,14 +251,14 @@ impl PartitionAccess {
     // can be shifted into place.
     fn to_raw_u4(&self) -> u4 {
         match self {
-            Self::None => u4::new(!0b0000 & 0xF),
-            Self::All => u4::new(!0b1111 & 0xF),
-            Self::Boot0 => u4::new(!0b0001 & 0xF),
-            Self::Boot1 => u4::new(!0b0010 & 0xF),
-            Self::Fw0 => u4::new(!0b0100 & 0xF),
-            Self::Fw1 => u4::new(!0b1000 & 0xF),
-            Self::AllBoots => u4::new(!0b0011 & 0xF),
-            Self::AllFws => u4::new(!0b1100 & 0xF),
+            Self::None => u4::new(0b0000 & 0xF),
+            Self::All => u4::new(0b1111 & 0xF),
+            Self::Boot0 => u4::new(0b0001 & 0xF),
+            Self::Boot1 => u4::new(0b0010 & 0xF),
+            Self::Fw0 => u4::new(0b0100 & 0xF),
+            Self::Fw1 => u4::new(0b1000 & 0xF),
+            Self::AllBoots => u4::new(0b0011 & 0xF),
+            Self::AllFws => u4::new(0b1100 & 0xF),
             // Panic is the correct behavior here because it's a static code bug to try and use this coding in
             // this fashion.
             Self::Unspecified => panic!("Attempt to resolve an unspecified access pattern"),
