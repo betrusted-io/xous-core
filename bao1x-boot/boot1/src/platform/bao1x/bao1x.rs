@@ -240,7 +240,7 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
     let fclk_freq = match board_type {
         BoardTypeCoding::Baosec => bao1x_api::offsets::baosec::DEFAULT_FCLK_FREQUENCY,
         BoardTypeCoding::Oem => SAFE_FCLK_FREQUENCY,
-        BoardTypeCoding::Dabao => SAFE_FCLK_FREQUENCY,
+        BoardTypeCoding::Dabao => bao1x_api::offsets::dabao::DEFAULT_FCLK_FREQUENCY,
     };
     let perclk = unsafe { init_clock_asic(fclk_freq) };
 
