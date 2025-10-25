@@ -66,15 +66,21 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     crate::platform::early_init();
     crate::println!("\n~~Baremetal up!~~\n");
 
-    // test code for figuring out if boot0 write-protect is working or not.
-    // we can get rid of this once we've got the settings right on the IFR for this feature.
-    // need to program in the updated IFR protection bits to test this.
-    // also, this only works once we're in baremetal - boot0 can always write boot0, and
-    // the coreuser setup doesn't take us out of boot0 until this stage.
-    if false {
+    // Test code for figuring out if boot0 write-protect is working or not.
+    // Keep this around because it's a quick test to make sure that the fuses were set correctly
+    // on a device.
+    //
+    // The test only passes when the IFR protection bits are set.
+    // Also, this only works once we're in baremetal - boot0 can always write boot0, and
+    // the coreuser setup doesn't take us out of boot0 until this stage (note that boot1,
+    // despite being named this, actually operates in the boot0 privilege level).
+    #[cfg(feature = "test-boot0-writeprotect")]
+    {
         crate::println!("Write protection test");
         let mut rram = bao1x_hal::rram::Reram::new();
         // boot0 should end at 0x2_0000; boot1 ends at 0x6_0000
+        // expected result: the first four should have the update fail
+        // the fifth value (in boot1) should update
         let regions = [0xF000, 0x1_1000, 0x1_F000, 0x2_1000, 0x5_0000];
         for (i, &region) in regions.iter().enumerate() {
             let test_data =
