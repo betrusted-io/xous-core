@@ -4,4 +4,4 @@ This is the Baochip CLI used by the VS Code extension. It will be moved under `t
 
 ## Install
 ```bash
-python -m pip install -r tools-bao/requirements.txt
+python -m pip install --force-reinstall -r tools-bao/requirements.txt
