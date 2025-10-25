@@ -151,7 +151,9 @@ impl Coreuser {
 
     /// Sets a "one way door" that disallows any further updating to these fields.
     pub fn protect(&mut self) {
-        // map default ASID into the least trusted user (away from boot0)
+        // map default ASID of 0 into the least trusted user (away from boot0)
+        // this is necessary to ensure that the boot0 partition is write-protected
+        // from this point going forward.
         self.csr.rmwf(utra::coreuser::MAP_HI_LUT7, 0);
         self.csr.rmwf(utra::coreuser::USERVALUE_USER7, LEAST_TRUSTED_USER.as_dense());
 
