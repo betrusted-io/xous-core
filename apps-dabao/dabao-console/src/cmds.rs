@@ -90,8 +90,6 @@ mod aes_cmd;
 use aes_cmd::*;
 mod i2cdetect;
 use i2cdetect::*;
-mod cute;
-use cute::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
@@ -142,7 +140,6 @@ impl CmdEnv {
         let mut ver_cmd = Ver {};
         let mut console_cmd = Test {};
         let mut i2cdetect_cmd = I2cDetect {};
-        let mut cute_cmd = Cute {};
 
         let commands: &mut [&mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
@@ -150,7 +147,6 @@ impl CmdEnv {
             &mut ver_cmd,
             &mut self.trng_cmd,
             &mut i2cdetect_cmd,
-            &mut cute_cmd,
             &mut console_cmd,
             #[cfg(feature = "usb")]
             &mut self.usb,

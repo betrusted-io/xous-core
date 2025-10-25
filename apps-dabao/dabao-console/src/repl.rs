@@ -84,7 +84,7 @@ impl Repl {
         if let Some(local) = &mut self.input {
             println!("[console] {}", local);
             if let Some(res) = self.env.dispatch(Some(local), None).expect("command dispatch failed") {
-                println!("{}", res);
+                println!("{}\r", res);
             }
         } else if let Some(msg) = &self.msg {
             log::trace!("processing callback msg: {:?}", msg);

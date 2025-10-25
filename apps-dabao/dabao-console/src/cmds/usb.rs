@@ -21,13 +21,13 @@ impl<'a> ShellCmdApi<'a> for Usb {
     fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::new();
-        let helpstring = "usb [send <string>]";
+        let helpstring = "usb [type <string>]";
 
         let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
-                "send" => {
+                "type" => {
                     let mut val = String::new();
                     join_tokens(&mut val, &mut tokens);
                     match self.usb_dev.send_str(&val) {
