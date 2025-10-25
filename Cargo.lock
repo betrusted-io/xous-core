@@ -7553,6 +7553,7 @@ dependencies = [
 name = "xous-ticktimer"
 version = "0.1.32"
 dependencies = [
+ "bao1x-api",
  "loader",
  "log",
  "num-derive 0.4.2",
