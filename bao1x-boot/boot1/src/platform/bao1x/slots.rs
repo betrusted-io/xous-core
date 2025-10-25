@@ -93,16 +93,8 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
         crate::println!("Secret ID init done.");
     }
 
-    // print_ifr();
-    // test code for figuring out if boot0 write-protect is working or not.
-    /*
-    crate::println!("test boot0 write");
-    let test = [7u8; 32];
-    let test_data = unsafe { core::slice::from_raw_parts(0x6001_0000 as *const u8, 32) };
-    crate::println!("orig: {:x?}", test_data);
-    rram.write_slice(0x1_0000, &test).unwrap();
-    crate::println!("update: {:x?} vs {:x?}", test_data, test);
-    */
+    #[cfg(feature = "print-ifr")]
+    print_ifr();
 
     print_slots(&slot_mgr, &bao1x_hal::board::DATA_SLOTS);
     check_and_fix_acls(&mut rram, &mut slot_mgr, &bao1x_hal::board::DATA_SLOTS);
@@ -111,6 +103,8 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
     // wear-out on the ACL entries as every time a transition is made into a developer images, a set
     // of keys are checked to be erased. While it is possible to bypass the ACL checks by flipping
     // the developer mode bit, the key check/erasure would still happen upon launch into developer mode.
+    #[cfg(feature = "unsafe-debug")]
+    print_slots(&slot_mgr, &bao1x_api::baosec::KEY_SLOTS); // this prints all the keys as they are created
     if *board_type == bao1x_api::BoardTypeCoding::Baosec && owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0 {
         #[cfg(feature = "unsafe-debug")]
         print_slots(&slot_mgr, &bao1x_api::baosec::KEY_SLOTS);
@@ -118,7 +112,7 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
     }
 }
 
-/*
+#[cfg(feature = "print-ifr")]
 fn print_ifr() {
     let coreuser = utralib::CSR::new(utralib::utra::coreuser::HW_COREUSER_BASE as *mut u32);
     // needs to be 0x118 for IFR to be readable when the protection bit is set.
@@ -134,7 +128,6 @@ fn print_ifr() {
     }
     crate::println!("");
 }
-*/
 
 fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &[SlotIndex]) {
     // now check & set any ACL bits that aren't set yet
@@ -174,6 +167,7 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
                 AccessSettings::Key(sa) => {
                     sa.set_partition_access(&pa);
                     sa.set_rw_permissions(rw);
+                    sa.set_akey_id(0xFF); // 0xff disables key chaining to access the key
                 }
             }
             crate::println!("Fixed ACL raw value: {:x?}", acl);
