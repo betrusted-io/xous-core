@@ -26,6 +26,7 @@ num-traits = { version = "0.2.14", default-features = false }
 xous-semver = "0.1.5"
 utralib = { version = "0.1.26", optional = true, default-features = false }
 loader = { path = "../../loader", optional = true }
+bao1x-api = { path = "../../libs/bao1x-api", optional = true }
 
 # TODO: fix this
 #[target.'cfg(target_arch = "arm")'.dependencies]
@@ -40,7 +41,9 @@ precursor = ["utralib/precursor", "susres/precursor", "watchdog"]
 hosted = ["utralib/hosted", "susres/hosted", "watchdog"]
 renode = ["utralib/renode", "susres/renode", "watchdog"]
 
-bao1x = ["utralib/bao1x", "utralib/std", "loader/bao1x"]
+board-dabao = []
+board-baosec = []
+bao1x = ["utralib/bao1x", "utralib/std", "bao1x-api"]
 hosted-baosec = []
 
 susres = []
