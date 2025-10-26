@@ -38,7 +38,7 @@ notes/
 
 # pddb debug files
 tools/pddb-images/
-tools/__pycache__
+__pycache__/
 
 # PDDB backup files
 *.pddb
