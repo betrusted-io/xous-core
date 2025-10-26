@@ -4,6 +4,7 @@ mod ctap;
 mod repl;
 mod shell;
 use cmds::*;
+#[cfg(feature = "usb")]
 use usb_bao1x::UsbHid;
 
 fn main() {
@@ -11,6 +12,10 @@ fn main() {
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
     let tt = ticktimer::Ticktimer::new().unwrap();
+
+    let hal = bao1x_hal_service::Hal::new();
+    // allow preemption in the dabao console environment
+    hal.set_preemption(true);
 
     #[cfg(feature = "usb")]
     {

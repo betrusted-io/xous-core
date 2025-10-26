@@ -83,13 +83,21 @@ impl Repl {
         // take the input and pass it on to the various command parsers, and attach result
         if let Some(local) = &mut self.input {
             println!("[console] {}", local);
-            if let Some(res) = self.env.dispatch(Some(local), None).expect("command dispatch failed") {
-                println!("{}\r", res);
+            match self.env.dispatch(Some(local), None) {
+                Ok(Some(res)) => println!("{}\r", res),
+                Ok(None) => println!("\r"),
+                Err(e) => {
+                    println!("Command error: {:?}", e);
+                }
             }
         } else if let Some(msg) = &self.msg {
             log::trace!("processing callback msg: {:?}", msg);
-            if let Some(res) = self.env.dispatch(None, Some(msg)).expect("callback failed") {
-                println!("{}", res);
+            match self.env.dispatch(None, Some(msg)) {
+                Ok(Some(res)) => println!("{}\r", res),
+                Ok(None) => println!("\r"),
+                Err(e) => {
+                    println!("Command error: {:?}", e);
+                }
             }
         }
 
