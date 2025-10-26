@@ -334,7 +334,7 @@ impl Repl {
                 const COLUMNS: usize = 4;
                 if args.len() == 1 || args.len() == 2 {
                     let addr = usize::from_str_radix(&args[0], 16)
-                        .map_err(|_| Error::help("Peek address is in hex"))?;
+                        .map_err(|_| Error::help("Peek address is in hex, no leading 0x"))?;
 
                     if addr >= utralib::HW_RERAM_MEM + bao1x_api::RRAM_STORAGE_LEN
                         && addr < utralib::HW_RERAM_MEM + utralib::HW_RERAM_MEM_LEN

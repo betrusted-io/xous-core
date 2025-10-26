@@ -7,4 +7,4 @@ pub mod slots;
 pub mod trng;
 pub mod usb;
 
-pub const UART_BAUD: u32 = 1_000_000;
+pub const UART_BAUD: u32 = bao1x_api::UART_BAUD;
