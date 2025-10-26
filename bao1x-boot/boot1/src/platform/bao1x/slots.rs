@@ -84,7 +84,12 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
             for chunk in storage.chunks_mut(SLOT_ELEMENT_LEN_BYTES) {
                 chunk.copy_from_slice(&trng.generate_key());
             }
-            slot_mgr.write(&mut rram, key_range, &storage).unwrap();
+            match slot_mgr.write(&mut rram, key_range, &storage) {
+                Ok(_) => {}
+                Err(e) => {
+                    crate::println!("Couldn't initialize slot {:?}: {:?}", key_range, e);
+                }
+            }
         }
         // once all values are written, advance the IN_SYSTEM_BOOT_SETUP_DONE state
         // safety: the offset is correct because we're pulling it from our pre-defined constants and
