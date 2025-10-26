@@ -3,6 +3,7 @@
 // Including a resolver to a given character map also pulls the font data into the
 // bao-video binary, increasing its size.
 
+use bao1x_hal_service::Hal;
 use ux_api::minigfx::*;
 
 mod gfx;
@@ -169,6 +170,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let iox = IoxHal::new();
     let udma_global = UdmaGlobal::new();
     let mut i2c = I2c::new();
+    let hal = Hal::new();
 
     let mut display = Oled128x128::new(main_thread_token, bao1x_api::PERCLK, &iox, &udma_global);
     display.init();
@@ -314,8 +316,10 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     {
         log::info!("initiating auto test");
         cam.capture_async();
+        // cam_irq serves as a preemption timer source, every time it fires a different
+        // task can run after cam_irq is handled.
+        hal.set_preemption(false);
     }
-
     #[cfg(feature = "no-gam")]
     let modals = modals::Modals::new(&xns).unwrap();
     let mut modal_queue = VecDeque::<Sender>::new();
