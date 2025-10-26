@@ -39,14 +39,12 @@ artybio = [
 artyvexii = ["utralib/artyvexii", "linked_list_allocator"]
 
 # Baochip feature tree below
-v0p9 = [] # selects RAM timings for VDD core = 0.9V
 bao1x = [
     "utralib/bao1x",
     "linked_list_allocator",
     "bao1x-hal/loader-baosec",
-    # "bao1x-hal/debug-print-usb",
+    "bao1x-hal/debug-print-uart",
     "bao1x-api",
-    "v0p9",
     "digest",
     "sha2-bao1x",
 ]
@@ -73,6 +71,12 @@ bao1x-trng = [
 ]
 trng-debug = []
 verbose-debug = []
+dabao-selftest = [
+    "xous-bio-bdma/bio-mul",
+    "xous-bio-bdma/baremetal",
+    "xous-bio-bdma/bao1x",
+]
+test-boot0-writeprotect = []
 
 verilator-only = []
-default = ["bao1x-usb", "bao1x-trng", "bao1x-bio"]
+default = ["bao1x-usb", "dabao-selftest"]

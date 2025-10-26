@@ -131,8 +131,8 @@ fn reader_thread(arg: usize) {
                                 usb_str.push(*c as char);
                             }
                             write!(usb_str, ": ").ok();
-                            for c in args_slice {
-                                usb_str.push(*c as char);
+                            unsafe {
+                                usb_str.push_str(std::str::from_utf8_unchecked(args_slice));
                             }
                             write!(usb_str, " (").ok();
                             for c in file_slice {
@@ -141,7 +141,7 @@ fn reader_thread(arg: usize) {
                             if let Some(line) = lr.line {
                                 write!(usb_str, ":{}", line.get()).ok();
                             }
-                            writeln!(usb_str, ")").ok();
+                            writeln!(usb_str, ")\r").ok();
                             usb_send_str(conn, &usb_str);
                         }
                     }
@@ -180,7 +180,8 @@ fn reader_thread(arg: usize) {
                             // safety: this routine will just blow up if you try to pass non utf-8 to it,
                             // so it's not very safe. On the other hand, it's fast and shame on you for
                             // sending non-utf8 to this API.
-                            usb_send_str(conn, unsafe { std::str::from_utf8_unchecked(buffer) });
+                            let s = unsafe { std::str::from_utf8_unchecked(buffer) }.to_string();
+                            usb_send_str(conn, &s.replace("\n", "\r\n"));
                         }
                     }
                     _ => {

@@ -4,9 +4,11 @@ pub use bao1x::*;
 pub mod avtrng;
 #[cfg(feature = "bao1x-bio")]
 pub mod bio;
+#[cfg(feature = "dabao-selftest")]
+pub mod dabao_selftest;
 pub mod debug;
 pub mod irq;
 #[cfg(feature = "bao1x-usb")]
 pub mod usb;
 
-pub const UART_BAUD: u32 = 1_000_000;
+pub const UART_BAUD: u32 = bao1x_api::UART_BAUD;

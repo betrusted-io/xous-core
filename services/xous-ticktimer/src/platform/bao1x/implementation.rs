@@ -114,10 +114,15 @@ impl XousTickTimer {
             #[cfg(feature = "watchdog")]
             wdt: CSR::new(wdt.as_mut_ptr() as *mut u32),
         };
-        // TODO: base this off of some system-level constant
+        #[cfg(feature = "board-dabao")]
         xtt.csr.wo(
             utra::ticktimer::CLOCKS_PER_TICK,
-            (loader::SYSTEM_CLOCK_FREQUENCY / 2) / (1000 * TICKS_PER_MS as u32),
+            (bao1x_api::dabao::DEFAULT_FCLK_FREQUENCY / 2) / (1000 * TICKS_PER_MS as u32),
+        );
+        #[cfg(feature = "board-baosec")]
+        xtt.csr.wo(
+            utra::ticktimer::CLOCKS_PER_TICK,
+            (bao1x_api::baosec::DEFAULT_FCLK_FREQUENCY / 2) / (1000 * TICKS_PER_MS as u32),
         );
 
         #[cfg(feature = "watchdog")]

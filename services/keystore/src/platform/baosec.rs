@@ -12,8 +12,12 @@ use xous_ipc::Buffer;
 const WELL_KNOWN_KEY: &'static str = "0000000000000000000000000000000000000000000000000000000000000000";
 
 pub fn keystore(sid: SID) -> ! {
+    let hal = bao1x_hal_service::Hal::new();
+
     let mut msg_opt = None;
 
+    // allow preemption once the keystore has claimed locks on all its critical resources
+    hal.set_preemption(true);
     loop {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();

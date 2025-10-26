@@ -4,6 +4,8 @@ target
 /emulation/obj
 # auto-generated
 services/xous-ticktimer/src/version.rs
+bao1x-boot/boot0/src/version.rs
+bao1x-boot/boot1/src/version.rs
 apps/i18n.json
 services/gam/src/apps.rs
 services/status/src/app_autogen.rs
@@ -36,7 +38,7 @@ notes/
 
 # pddb debug files
 tools/pddb-images/
-tools/__pycache__
+__pycache__/
 
 # PDDB backup files
 *.pddb

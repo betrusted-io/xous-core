@@ -8,6 +8,7 @@ mod platform;
 mod repl;
 mod secboot;
 mod uf2;
+mod version;
 
 use alloc::collections::VecDeque;
 use core::{
@@ -27,6 +28,11 @@ use ux_api::minigfx::{DrawStyle, FrameBuffer, Point, Rectangle};
 use crate::platform::usb::glue;
 use crate::secboot::boot_or_die;
 use crate::{delay, platform::irq::disable_all_irqs};
+
+// Notes:
+// - "Towards" - not a release yet, but working towards the stated milestone
+// - Eliminating "Towards" is done at the tag-out point.
+const RELEASE_DESCRIPTION: &'static str = "Towards Alpha-1";
 
 static UART_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
 #[allow(dead_code)]
@@ -72,7 +78,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     crate::println_d!("TX_IDLE: {:?}", crate::platform::usb::TX_IDLE.load(Ordering::SeqCst));
     let perclk: u32;
     (board_type, perclk) = crate::platform::early_init(board_type);
-    crate::println!("\n~~Boot1 up!~~\n");
+    crate::println!("\n~~Boot1 up! ({}: {})~~\n", crate::version::SEMVER, RELEASE_DESCRIPTION);
     crate::println!("Configured board type: {:?}", board_type);
     if board_type == BoardTypeCoding::Baosec {
         IS_BAOSEC.store(true, Ordering::SeqCst);

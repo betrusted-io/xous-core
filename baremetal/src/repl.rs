@@ -123,7 +123,7 @@ impl Repl {
             "peek" => {
                 if args.len() == 1 || args.len() == 2 {
                     let addr = usize::from_str_radix(&args[0], 16)
-                        .map_err(|_| Error::help("Peek address is in hex"))?;
+                        .map_err(|_| Error::help("Peek address is in hex, no leading 0x"))?;
 
                     let count = if args.len() == 2 {
                         if let Ok(count) = u32::from_str_radix(&args[1], 10) { count } else { 1 }
@@ -146,10 +146,10 @@ impl Repl {
             "poke" => {
                 if args.len() == 2 || args.len() == 3 {
                     let addr = u32::from_str_radix(&args[0], 16)
-                        .map_err(|_| Error::help("Poke address is in hex"))?;
+                        .map_err(|_| Error::help("Poke address is in hex, no leading 0x"))?;
 
-                    let value =
-                        u32::from_str_radix(&args[1], 16).map_err(|_| Error::help("Poke value is in hex"))?;
+                    let value = u32::from_str_radix(&args[1], 16)
+                        .map_err(|_| Error::help("Poke value is in hex, no leading 0x"))?;
                     let count = if args.len() == 3 {
                         if let Ok(count) = u32::from_str_radix(&args[2], 10) { count } else { 1 }
                     } else {
@@ -196,7 +196,7 @@ impl Repl {
                             )
                         };
                         let mut rram = bao1x_hal::rram::Reram::new();
-                        rram.write_slice(addr, poke_inner);
+                        rram.write_slice(addr, poke_inner).ok();
                         crate::println!("RRAM written {:x} into {:x}, {} times", value, addr, count);
                     } else {
                         return Err(Error::help(
@@ -1005,6 +1005,29 @@ impl Repl {
                     crate::println!("Sha512 failed: {:x?}", digest);
                 }
             }
+            #[cfg(feature = "dabao-selftest")]
+            "dbtest" => {
+                crate::dabao_selftest::dabao_selftest();
+            }
+            "actest" => {
+                let slot_man = bao1x_hal::acram::SlotManager::new();
+                crate::println!(
+                    "Slot 0(d): {:x?}",
+                    slot_man.read(&bao1x_api::offsets::SlotIndex::Data(
+                        0,
+                        PartitionAccess::Unspecified,
+                        RwPerms::Unspecified
+                    ))
+                );
+                crate::println!(
+                    "Slot 1(d): {:x?}",
+                    slot_man.read(&bao1x_api::offsets::SlotIndex::Data(
+                        1,
+                        PartitionAccess::Unspecified,
+                        RwPerms::Unspecified
+                    ))
+                );
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);
@@ -1026,6 +1049,8 @@ impl Repl {
                 crate::print!(", usb");
                 #[cfg(feature = "bao1x-trng")]
                 crate::print!(", trngro, trngav");
+                #[cfg(feature = "dabao-selftest")]
+                crate::print!(", dbtest");
                 crate::println!("");
             }
         }

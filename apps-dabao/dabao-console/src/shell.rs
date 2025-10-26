@@ -1,4 +1,6 @@
 use bao1x_api::*;
+#[cfg(feature = "usb")]
+use usb_bao1x::UsbHid;
 use xous::msg_scalar_unpack;
 
 pub fn start_shell() {
@@ -35,6 +37,9 @@ fn shell() {
     let mut was_callback = false;
     let mut history_index: isize = 0;
 
+    #[cfg(feature = "usb")]
+    let usb = UsbHid::new();
+
     let mut input = String::new();
     loop {
         let msg = xous::receive_message(shch_sid).unwrap();
@@ -43,6 +48,8 @@ fn shell() {
         match console_op {
             Some(ConsoleOp::Keypress) => msg_scalar_unpack!(msg, k1, _k2, _k3, _k4, {
                 let k = char::from_u32(k1 as u32).unwrap_or('\u{0000}');
+                #[cfg(feature = "usb")]
+                usb.serial_send(&[k1 as u8]).ok();
                 if k1 == 0x08 {
                     // backspace character
                     input.pop(); // returns None if empty

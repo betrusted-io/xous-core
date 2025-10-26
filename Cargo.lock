@@ -347,6 +347,7 @@ dependencies = [
  "bao1x-emu",
  "bao1x-hal",
  "bao1x-hal-service",
+ "bytemuck",
  "log",
  "modals",
  "num-derive 0.4.2",
@@ -397,6 +398,7 @@ dependencies = [
 name = "bao1x-api"
 version = "0.1.0"
 dependencies = [
+ "arbitrary-int",
  "bitbybit",
  "bytemuck",
  "num-derive 0.4.2",
@@ -432,12 +434,14 @@ dependencies = [
  "digest 0.10.7",
  "ed25519-dalek-bao1x",
  "linked_list_allocator",
+ "rand_chacha 0.3.1",
  "riscv",
- "sha2",
+ "sha2-bao1x",
  "simple-fatfs",
  "utralib 0.1.26",
  "ux-api",
  "xous 0.9.67 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-bio-bdma",
  "xous-riscv",
 ]
 
@@ -469,6 +473,7 @@ dependencies = [
  "bitbybit",
  "bitfield",
  "bitflags 1.3.2",
+ "bytemuck",
  "digest 0.10.7",
  "ed25519-dalek-bao1x",
  "either",
@@ -1605,6 +1610,7 @@ dependencies = [
  "bao1x-emu",
  "bao1x-hal",
  "bao1x-hal-service",
+ "bytemuck",
  "log",
  "num-derive 0.4.2",
  "num-traits",
@@ -7590,6 +7596,7 @@ dependencies = [
 name = "xous-ticktimer"
 version = "0.1.32"
 dependencies = [
+ "bao1x-api",
  "loader",
  "log",
  "num-derive 0.4.2",

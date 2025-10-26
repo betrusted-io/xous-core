@@ -3,11 +3,15 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use bao1x_api::signatures::*;
+#[cfg(not(feature = "std"))]
+use bao1x_api::{DEVELOPER_MODE, KeySlotAccess, RwPerms, SLOT_ELEMENT_LEN_BYTES, SlotType};
 use digest::Digest;
 use sha2_bao1x::{Sha256, Sha512};
 use xous::arch::PAGE_SIZE;
 
 use crate::acram::OneWayCounter;
+#[cfg(not(feature = "std"))]
+use crate::acram::{AccessSettings, SlotManager};
 use crate::udma::Spim;
 
 /// Current draw @ 200MHz CPU ACLK (400MHz FCLK), VDD85 = 0.80V nom (measured @0.797V): ~71mA peak @ 27C,
@@ -180,11 +184,11 @@ pub fn validate_image(
         }
     }
 
-    if !secure || developer {
-        erase_secrets();
-    }
     if let Some(valid_key) = passing_key {
         if auto_jump {
+            if !secure || developer {
+                erase_secrets();
+            }
             jump_to(img_offset as usize);
         }
         Ok((valid_key, pk_src.sealed_data.pubkeys[valid_key].tag))
@@ -193,10 +197,79 @@ pub fn validate_image(
     }
 }
 
-fn erase_secrets() {
-    // actually, this should check first if the data is 0, then 0 it. Can't afford
-    // to wear-out the memory every boot by repeatedly overwriting it...
-    crate::println!("TODO: erase secret data stores on boot to devmode!");
+#[cfg(feature = "std")]
+pub fn erase_secrets() {
+    unimplemented!(
+        "erase_secrets() is not available in the run-time environment; access permissions are insufficient."
+    );
+}
+
+#[cfg(not(feature = "std"))]
+pub fn erase_secrets() {
+    // An erase value of 0 is conflateable with access permissions being incorrect. Choose a non-0 value
+    // for the erase value, but also, don't pick a 0-1-0-1 dense pattern because that can assist with
+    // calibrating microscopy techniques.
+    const ERASE_VALUE: u8 = 0x03;
+
+    // ensure coreuser settings, as we could enter from a variety of loader stages
+    let mut cu = crate::coreuser::Coreuser::new();
+    cu.set();
+
+    let slot_mgr = SlotManager::new();
+    let mut rram = crate::rram::Reram::new();
+
+    let mut zero_key_count = 0;
+    // statistically speaking, I suppose, maybe we could have "a" set of keys that are 0 out of a randomly
+    // generated set. But if we see more than the threshold below of zero keys, conclude that we don't
+    // have access permissions, and panic instead of allowing a boot.
+    const ZERO_ERR_THRESH: usize = 2;
+    for slot in crate::board::KEY_SLOTS.iter() {
+        if slot.get_type() == SlotType::Key {
+            let (_pa, rw_perms) = slot.get_access_spec();
+            for data_index in slot.try_into_data_iter().unwrap() {
+                match rw_perms {
+                    RwPerms::ReadWrite | RwPerms::WriteOnly => {
+                        // clear the ACL so we can operate on the data
+                        slot_mgr
+                            .set_acl(
+                                &mut rram,
+                                slot,
+                                &AccessSettings::Key(KeySlotAccess::new_with_raw_value(0)),
+                            )
+                            .expect("couldn't reset ACL");
+                        let bytes = unsafe { slot_mgr.read_key_slot(data_index) };
+                        if bytes.iter().all(|&b| b == 0) {
+                            zero_key_count += 1;
+                        }
+                        if !bytes.iter().all(|&b| b == ERASE_VALUE) {
+                            let mut eraser =
+                                alloc::vec::Vec::with_capacity(slot.len() * SLOT_ELEMENT_LEN_BYTES);
+                            eraser.resize(slot.len() * SLOT_ELEMENT_LEN_BYTES, ERASE_VALUE);
+
+                            slot_mgr.write(&mut rram, slot, &eraser).expect("couldn't erase key");
+                        }
+                        let check = unsafe { slot_mgr.read_key_slot(data_index) };
+                        if !check.iter().all(|&b| b == ERASE_VALUE) {
+                            panic!("Key erasure did not succeed, refusing to boot!");
+                        } else {
+                            crate::println!("Key range at {} confirmed erased", slot.get_base());
+                        }
+                    }
+                    _ => {}
+                }
+                if zero_key_count > ZERO_ERR_THRESH {
+                    panic!(
+                        "Saw too many zero-keys. Insufficient privilege to erase keys, panicing instead of allowing a boot!"
+                    );
+                }
+            }
+        }
+    }
+    let owc = OneWayCounter::new();
+    // once all secrets are erased, advance the DEVELOPER_MODE state
+    // safety: the offset is correct because we're pulling it from our pre-defined constants and
+    // those are manually checked.
+    unsafe { owc.inc(DEVELOPER_MODE).unwrap() };
 }
 
 pub fn jump_to(target: usize) -> ! {

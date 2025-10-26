@@ -7,6 +7,7 @@ mod asm;
 
 mod platform;
 mod repl;
+
 use alloc::collections::VecDeque;
 use core::cell::RefCell;
 #[cfg(feature = "bao1x-usb")]
@@ -65,6 +66,33 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     crate::platform::early_init();
     crate::println!("\n~~Baremetal up!~~\n");
 
+    // Test code for figuring out if boot0 write-protect is working or not.
+    // Keep this around because it's a quick test to make sure that the fuses were set correctly
+    // on a device.
+    //
+    // The test only passes when the IFR protection bits are set.
+    // Also, this only works once we're in baremetal - boot0 can always write boot0, and
+    // the coreuser setup doesn't take us out of boot0 until this stage (note that boot1,
+    // despite being named this, actually operates in the boot0 privilege level).
+    #[cfg(feature = "test-boot0-writeprotect")]
+    {
+        crate::println!("Write protection test");
+        let mut rram = bao1x_hal::rram::Reram::new();
+        // boot0 should end at 0x2_0000; boot1 ends at 0x6_0000
+        // expected result: the first four should have the update fail
+        // the fifth value (in boot1) should update
+        let regions = [0xF000, 0x1_1000, 0x1_F000, 0x2_1000, 0x5_0000];
+        for (i, &region) in regions.iter().enumerate() {
+            let test_data =
+                unsafe { core::slice::from_raw_parts((region + utralib::HW_RERAM_MEM) as *const u8, 32) };
+            let base = test_data[0]; // increment whatever is in the original area
+            let test = [base + 1 + i as u8; 32];
+            crate::println!("orig ({:x}): {:x?}", region, test_data);
+            rram.write_slice(region, &test).unwrap();
+            crate::println!("update ({:x}): {:x?} vs {:x?}", region, test_data, test);
+        }
+    }
+
     #[cfg(feature = "artyvexii")]
     crate::platform::test_virtual_memory();
 
@@ -95,9 +123,21 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         USB_CONNECTED.load(Ordering::SeqCst),
         crate::platform::usb::TX_IDLE.load(Ordering::SeqCst)
     );
+
+    #[cfg(feature = "dabao-selftest")]
+    let mut self_test_ran = false;
+
     #[cfg(feature = "bao1x-usb")]
     // do the main loop through either USB interface or serial port
     loop {
+        #[cfg(feature = "dabao-selftest")]
+        {
+            if !self_test_ran {
+                crate::dabao_selftest::dabao_selftest();
+                self_test_ran = true;
+            }
+        }
+
         let (new_usb_state, new_portsc) = glue::usb_status();
 
         // provide feedback when connection is established

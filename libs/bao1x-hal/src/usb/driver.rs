@@ -2542,7 +2542,7 @@ impl UsbBus for CorigineWrapper {
                 return Err(UsbError::WouldBlock);
             };
             let hw_buf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, CRG_UDC_APP_BUF_LEN) };
-            assert!(buf.len() < CRG_UDC_APP_BUF_LEN, "write buffer size exceeded");
+            assert!(buf.len() <= CRG_UDC_APP_BUF_LEN, "write buffer size exceeded");
             hw_buf[..buf.len()].copy_from_slice(&buf);
             let pei = CorigineUsb::pei(ep_addr.index() as u8, CRG_IN);
             let _ = self.core().app_ptr[pei - 2].take(); // remove the app ptr if it's queued - for now we do nothing with it

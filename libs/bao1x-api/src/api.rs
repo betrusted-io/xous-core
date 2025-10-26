@@ -51,6 +51,9 @@ pub enum HalOpcode {
     ConfigureIoxIrq = 11,
     IrqLocalHandler = 12,
 
+    /// Manipulate the OS timer
+    SetPreemptionState = 64,
+
     /// Exit server
     Quit = 255,
 
