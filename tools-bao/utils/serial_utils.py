@@ -4,9 +4,9 @@ import serial
 from serial.serialutil import SerialException
 
 
-def open_serial(port: str, baud: int, *, timeout: float = 0.1, reset: bool = False) -> serial.Serial:
+def open_serial(port: str, baud: int, *, timeout: float = 0.1, reset: bool = False, **kwargs) -> serial.Serial:
     try:
-        ser = serial.Serial(port, baud, timeout=timeout)
+        ser = serial.Serial(port, baud, timeout=timeout, **kwargs)
     except Exception as e:
         raise SerialException(f"cannot open {port}: {e}")
 

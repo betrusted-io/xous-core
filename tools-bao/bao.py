@@ -51,11 +51,17 @@ def main():
 
     # monitor
     m = sub.add_parser("monitor", help="Open a serial monitor")
-    m.add_argument("-p", "--port", required=True)
-    m.add_argument("-b", "--baud", type=int, default=115200)
-    m.add_argument("--ts", action="store_true", help="Show timestamps")
+    m.add_argument("-p", "--port", required=True, help="Serial port (e.g., COM5, /dev/ttyUSB0)")
+    m.add_argument("-b", "--baud", type=int, default=115200, help="Baud rate")
+    m.add_argument("--ts", action="store_true", help="Show timestamps on received lines")
     m.add_argument("--save", help="Append output to a file")
     m.add_argument("--reset", action="store_true", help="Toggle DTR/RTS on open")
+    m.add_argument("--crlf", action="store_true", help="Use CRLF as TX line ending in line mode (default LF)")
+    m.add_argument("--raw", action="store_true", help="Send keystrokes immediately (raw mode)")
+    m.add_argument("--no-echo", action="store_true", help="Do not locally echo typed input")
+    m.add_argument("--rtscts",  action="store_true", help="Enable RTS/CTS hardware flow control")
+    m.add_argument("--xonxoff", action="store_true", help="Enable XON/XOFF software flow control")
+    m.add_argument("--dsrdtr",  action="store_true", help="Enable DSR/DTR hardware flow control")
     m.set_defaults(func=cmd_monitor)
 
     # build (Xous via cargo xtask)
