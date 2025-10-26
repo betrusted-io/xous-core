@@ -1,4 +1,8 @@
+#[allow(unused_imports)]
+use core::convert::TryInto;
+
 use bao1x_api::signatures::SIGBLOCK_LEN;
+use bao1x_api::*;
 #[allow(unused_imports)]
 use bao1x_hal::iox::Iox;
 #[cfg(feature = "bao1x")]
@@ -127,10 +131,13 @@ pub fn early_init_hw() -> u32 {
 
     #[cfg(feature = "board-dabao")]
     {
+        let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+
         // this needs to be set here because alpha-0 boot1 images set it to the wrong frequency
-        unsafe {
-            init_clock_asic(bao1x_api::dabao::DEFAULT_FCLK_FREQUENCY);
-        }
+        let perclk = unsafe { init_clock_asic(bao1x_api::dabao::DEFAULT_FCLK_FREQUENCY) };
+        // fixup the UART baud rate
+        let _udma_uart = setup_console(&bao1x_api::BoardTypeCoding::Dabao, &iox, perclk);
+        bao1x_hal::board::setup_console_pins(&iox);
     }
 
     // Setup some global control registers that will allow the TRNG to operate once the kernel is
@@ -145,6 +152,50 @@ pub fn early_init_hw() -> u32 {
     crate::println!("\n\r~~ Xous Loader ~~\n\r");
 
     perclk
+}
+
+#[cfg(feature = "board-dabao")]
+pub fn setup_console<T: IoSetup + IoGpio>(
+    board_type: &bao1x_api::BoardTypeCoding,
+    iox: &T,
+    perclk: u32,
+) -> bao1x_hal::udma::Uart {
+    use bao1x_hal::udma::{GlobalConfig, UartIrq};
+
+    let uart_id = match board_type {
+        BoardTypeCoding::Baosec => bao1x_hal::board::setup_console_pins(iox),
+        BoardTypeCoding::Dabao | BoardTypeCoding::Oem => {
+            // note: we can borrow the baosec console setup only because they
+            // happen to map to the same pins. OEM variants that choose different
+            // pins will need to add their own case here.
+            bao1x_hal::board::setup_console_pins(iox)
+        }
+    };
+    let udma_global = GlobalConfig::new();
+
+    udma_global.clock_on(uart_id);
+    udma_global.map_event(uart_id, PeriphEventType::Uart(EventUartOffset::Rx), EventChannel::Channel0);
+    udma_global.map_event(uart_id, PeriphEventType::Uart(EventUartOffset::Tx), EventChannel::Channel1);
+
+    let baudrate: u32 = bao1x_api::UART_BAUD;
+    let freq: u32 = perclk / 2;
+
+    // the address of the UART buffer is "hard-allocated" at an offset one page from the top of
+    // IFRAM0. This is a convention that must be respected by the UDMA UART library implementation
+    // for things to work.
+    let uart_buf_addr = crate::UART_IFRAM_ADDR;
+    let mut udma_uart = unsafe {
+        // safety: this is safe to call, because we set up clock and events prior to calling new.
+        udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
+    };
+    udma_uart.set_baud(baudrate, freq);
+    udma_uart.setup_async_read();
+
+    // setup interrupt here
+    let mut uart_irq = UartIrq::new();
+    uart_irq.rx_irq_ena(uart_id.try_into().expect("couldn't convert uart_id"), true);
+
+    udma_uart
 }
 
 // returns the actual per_clk
