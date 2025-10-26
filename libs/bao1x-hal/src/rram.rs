@@ -6,9 +6,14 @@ pub struct Reram {
     array: &'static mut [u32],
 }
 
+/// Matches the alignment requirement of the RRC write buffer
+const ALIGNMENT: usize = 32;
 #[cfg(feature = "std")]
 pub struct Reram {
     csr: CSR<u32>,
+    irq_csr: CSR<u32>,
+    offset: usize,
+    buf: [u32; ALIGNMENT / size_of::<u32>()],
 
     /// Replace this with a heap-allocated object that tracks a set of
     /// memory ranges that we are allowed to write to. The Reram object has to be owned/managed
@@ -27,8 +32,6 @@ pub struct Reram {
     range_map: RangeMap<xous::MemoryRange>,
 }
 
-/// Matches the alignment requirement of the RRC write buffer
-const ALIGNMENT: usize = 32;
 #[repr(align(4))]
 struct AlignedBuffer([u8; ALIGNMENT]);
 impl AlignedBuffer {
@@ -54,6 +57,37 @@ const RRC_CR_POWERDOWN: u32 = 1;
 const RRC_CR_WRITE_DATA: u32 = 0;
 const RRC_CR_WRITE_CMD: u32 = 2;
 
+#[cfg(feature = "std")]
+fn rram_handler(_irq_no: usize, arg: *mut usize) {
+    let rram = unsafe { &mut *(arg as *mut Reram) };
+    // clear the interrupt pending
+    rram.irq_csr.wo(utra::irqarray11::EV_PENDING, rram.irq_csr.r(utra::irqarray11::EV_PENDING));
+
+    assert!(rram.offset % 0x20 == 0, "unaligned destination address!");
+    assert!(rram.buf.len() % 8 == 0, "unaligned source data!");
+
+    // local copies of the RRAM data so we can do a mut reference in the loop below
+    let offset = rram.offset;
+    let mut buf = [0u32; ALIGNMENT / size_of::<u32>()];
+    buf.copy_from_slice(&rram.buf);
+    let base_ptr = rram.array_mut(offset).unwrap().as_mut_ptr();
+    for (inner, &datum) in buf.iter().enumerate() {
+        unsafe {
+            base_ptr.add(inner).write_volatile(datum);
+        }
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+    rram.csr.rmwf(utra::rrc::SFR_RRCCR_SFR_RRCCR, RRC_CR_WRITE_CMD | SECURITY_MODE);
+    unsafe {
+        base_ptr.write_volatile(RRC_LOAD_BUFFER);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        base_ptr.write_volatile(RRC_WRITE_BUFFER);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        rram.csr.rmwf(utra::rrc::SFR_RRCCR_SFR_RRCCR, RRC_CR_NORMAL | SECURITY_MODE);
+    }
+    crate::cache_flush();
+}
+
 impl<'a> Reram {
     #[cfg(not(feature = "std"))]
     pub fn new() -> Self {
@@ -78,17 +112,50 @@ impl<'a> Reram {
     /// ranges mapped that are valid for writing. Memory ranges need to be added
     /// with `add_range()` before any writes can occur.
     pub fn new() -> Self {
-        let mut csr = CSR::new(utra::rrc::HW_RRC_BASE as *mut u32);
+        let rram_page = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::rrc::HW_RRC_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't claim rram page");
+
+        let mut csr = CSR::new(rram_page.as_mut_ptr() as *mut u32);
         // this enables access control protections. In metal-mask stepping A1, this will
         // be hard-wired as enabled without an option to turn it off.
         csr.wfo(utra::rrc::SFR_RRCCR_SFR_RRCCR, SECURITY_MODE);
 
-        // register an IRQ handler for atomic updates of RRAM
-        todo!(
-            "Build the IRQ subsystem. IRQ11 looks available for software interrupts/mapping to this function."
-        );
+        let irq_page = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::irqarray11::HW_IRQARRAY11_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't claim irq page");
+        let mut irq_csr = CSR::new(irq_page.as_mut_ptr() as *mut u32);
 
-        Reram { csr, range_map: RangeMap::new() }
+        // pin the structure on the heap so that it doesn't move around on us.
+        let mut rram = Reram {
+            csr,
+            irq_csr,
+            offset: 0,
+            buf: [0u32; ALIGNMENT / size_of::<u32>()],
+            range_map: RangeMap::new(),
+        };
+
+        xous::claim_interrupt(
+            utra::irqarray11::IRQARRAY11_IRQ,
+            rram_handler,
+            &mut rram as *mut Reram as *mut usize,
+        )
+        .expect("couldn't claim RRAM handler interrupt");
+        irq_csr.wo(utra::irqarray11::EV_PENDING, 0xFFFF_FFFF);
+        irq_csr.wo(utra::irqarray11::EV_EDGE_TRIGGERED, 1 << 15);
+        irq_csr.wo(utra::irqarray11::EV_POLARITY, 1 << 15);
+        // enable just bit 15 for use as the software interrupt field
+        irq_csr.wfo(utra::irqarray11::EV_ENABLE_NC_B11S15, 1);
+
+        rram
     }
 
     #[cfg(feature = "std")]
@@ -96,18 +163,19 @@ impl<'a> Reram {
     /// to where this range maps to. This is necessary because `range` is virtually
     /// mapped and we cannot infer the actual offset into the RRAM array from
     /// that artifact alone.
-    pub fn add_range(&'a mut self, base: usize, range: xous::MemoryRange) -> &'a Self {
-        let top = base + range.len();
-        self.range_map.insert(base..top, range);
+    pub fn add_range(&'a mut self, base_offset: usize, range: xous::MemoryRange) -> &'a Self {
+        let top = base_offset + range.len();
+        self.range_map.insert(base_offset..top, range);
         self
     }
 
     #[cfg(not(feature = "std"))]
     pub fn read_slice(&self) -> &[u32] { self.array }
 
-    /// This is a crappy "unsafe" initial version that requires the write
-    /// destination address to be aligned to a 256-bit boundary, and the data
-    /// to be exactly 256 bits long.
+    /// Safety: the write destination address must be aligned to a 256-bit boundary, and the data
+    /// must be exactly 256 bits long.
+    ///
+    /// It's also not safe to call in any context where there can be concurrency.
     #[cfg(not(feature = "std"))]
     pub unsafe fn write_u32_aligned(&mut self, addr: usize, data: &[u32]) {
         assert!(addr % 0x20 == 0, "unaligned destination address!");
@@ -141,14 +209,64 @@ impl<'a> Reram {
         crate::cache_flush();
     }
 
+    #[cfg(feature = "std")]
+    /// Safety: the write destination address must be aligned to a 256-bit boundary, and the data
+    /// must be exactly 256 bits long.
+    unsafe fn write_u32_aligned(&mut self, addr: usize, data: &[u32]) {
+        // copy artifacts for the interrupt handler
+        self.offset = addr;
+        self.buf.copy_from_slice(&data);
+        // trigger the interrupt
+        self.irq_csr.wo(utra::irqarray11::EV_SOFT, 1 << 15);
+    }
+
+    #[cfg(feature = "std")]
+    /// This returns u8-slice for filling in missing data
+    pub fn array(&self, offset: usize) -> Result<&[u8], xous::Error> {
+        if let Some((start_offset, range)) = self.range_map.get(offset) {
+            // safety: all values of u8 are valid; data is strictly read-only and static
+            // so there are no concurrency or Drop issues
+            let range_slice: &[u8] = unsafe { range.as_slice() };
+            /*
+            crate::println!(
+                "array found {:x} mapping for offset {:x}",
+                start_offset,
+                range_slice.as_ptr() as usize
+            ); */
+            // offset is based from bottom of RRAM. Correct for this.
+            Ok(&range_slice[offset - start_offset..offset - start_offset + ALIGNMENT])
+        } else {
+            Err(xous::Error::AccessDenied)
+        }
+    }
+
+    #[cfg(feature = "std")]
+    /// This returns u32-slice for doing writes
+    fn array_mut(&mut self, offset: usize) -> Result<&mut [u32], xous::Error> {
+        if let Some((start_offset, range)) = self.range_map.get_mut(offset) {
+            // safety: all values of u8 are valid; data is strictly read-only and static
+            // so there are no concurrency or Drop issues
+            let range_slice: &mut [u32] = unsafe { range.as_slice_mut() };
+            // offset is based from bottom of RRAM. Correct for this.
+            let offset_words = (offset - start_offset) / size_of::<u32>();
+            /*
+            crate::println!(
+                "mut array found {:x} mapping for offset {:x} (as word {:x}",
+                start_offset,
+                range_slice.as_ptr() as usize,
+                offset_words
+            ); */
+            Ok(&mut range_slice[offset_words..offset_words + ALIGNMENT / size_of::<u32>()])
+        } else {
+            Err(xous::Error::AccessDenied)
+        }
+    }
+
     /// This is a general unaligned write primitive for the RRAM that can handle any length
     /// slice and alignment of data.
     ///
     /// ASSUME: offset has been bounds checked by a wrapper function.
-    /// SAFETY: this is only safe in non-concurrent contexts. This means that in Xous this must be
-    /// called from an interrupt context.
-    #[cfg(not(feature = "std"))]
-    unsafe fn write_slice_inner(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
+    fn write_slice_inner(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
         let mut buffer = AlignedBuffer([0u8; ALIGNMENT]);
 
         // ragged start
@@ -163,17 +281,7 @@ impl<'a> Reram {
                 )
             };
             #[cfg(feature = "std")]
-            let dest_slice = {
-                if let Some((start_offset, range)) = self.range_map.get(offset) {
-                    // safety: all values of u8 are valid; data is strictly read-only and static
-                    // so there are no concurrency or Drop issues
-                    let range_slice: &[u8] = unsafe { range.as_slice() };
-                    // offset is based from bottom of RRAM. Correct for this.
-                    &range_slice[offset - start_offset..offset - start_offset + buffer.0.len()]
-                } else {
-                    return Err(xous::Error::BadAddress);
-                }
-            };
+            let dest_slice = self.array(offset)?;
             // crate::println!("original data @ {:x}: {:x?}", start_offset, &dest_slice);
             // populate from old data first
             buffer.0.copy_from_slice(&dest_slice);
@@ -210,17 +318,7 @@ impl<'a> Reram {
                         )
                     };
                     #[cfg(feature = "std")]
-                    let dest_slice = {
-                        if let Some((start_offset, range)) = self.range_map.get(offset) {
-                            // safety: all values of u8 are valid
-                            let range_slice: &[u8] = unsafe { range.as_slice() };
-                            // offset is based from bottom of RRAM. Correct for this.
-                            &range_slice
-                                [cur_offset - start_offset..cur_offset - start_offset + buffer.0.len()]
-                        } else {
-                            return Err(xous::Error::BadAddress);
-                        }
-                    };
+                    let dest_slice = self.array(offset)?;
                     // read in the destination full contents
                     // crate::println!("original data @ {:x}: {:x?}", cur_offset, &dest_slice);
                     buffer.0.copy_from_slice(&dest_slice);
@@ -244,43 +342,27 @@ impl<'a> Reram {
     /// Boot0 region is also disallowed for writing because it should be hardware write-protected.
     /// For testing purposes, that check may be commented out just to make sure the write protection
     /// is there.
-    #[cfg(not(feature = "std"))]
     pub fn write_slice(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
-        /*
+        // This needs to be disabled for CI tests that check if boot0 is actually hardware
+        // write-protected (because otherwise software would just fail at this check).
+        #[cfg(not(feature = "redteam"))]
         if offset < bao1x_api::offsets::BOOT1_START - utralib::HW_RERAM_MEM
             || offset >= bao1x_api::RRAM_STORAGE_LEN
         {
             return Err(xous::Error::AccessDenied);
-        } */
-        // Safety: no-std is not multi-threaded. There is a possibility of interrupts, so if
-        // we intend to call this outside of an interrupt context we have to consider what happens
-        // if an interrupt is taken while the write is in progress.
-        unsafe { self.write_slice_inner(offset, data) }
+        }
+        self.write_slice_inner(offset, data)
     }
 
     /// This has a separate API not to enforce security but to avoid fat-fingering data
     /// into secure sectors. Hence this is just a simple bounds check on the requested offset.
     /// There are nominally other hardware mechanisms at play to disallow writes from ineligible
     /// processes, but they only come into effect after the OS is booted.
-    #[cfg(not(feature = "std"))]
     pub fn protected_write_slice(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
         if offset < bao1x_api::RRAM_STORAGE_LEN || offset >= utralib::HW_RERAM_MEM_LEN {
             return Err(xous::Error::AccessDenied);
         }
-        // Safety: no-std is not multi-threaded. There is a possibility of interrupts, so if
-        // we intend to call this outside of an interrupt context we have to consider what happens
-        // if an interrupt is taken while the write is in progress.
-        unsafe { self.write_slice_inner(offset, data) }
-    }
-
-    // TODO: write interrupt-handler based variant of the above that happens in an interrupt
-    // context.
-    #[cfg(feature = "std")]
-    pub fn write_slice(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> { todo!() }
-
-    #[cfg(feature = "std")]
-    pub fn protected_write_slice(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
-        todo!()
+        self.write_slice_inner(offset, data)
     }
 }
 

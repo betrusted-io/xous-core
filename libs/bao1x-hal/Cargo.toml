@@ -48,6 +48,7 @@ bitflags = "1.2.1"
 # TODO: migrate from bitflags to this crate
 bitbybit = "1.4.0"
 arbitrary-int = "1.2"
+bytemuck = "1.24.0"
 
 [features]
 camera-ov2640 = []
@@ -113,4 +114,8 @@ std = [
     "bao1x-api/std",
 ]
 derive-rkyv = ["rkyv"]
+
+# flag for bypassing extra software checks so that hardware can be redteamed
+redteam = []
+
 default = []
