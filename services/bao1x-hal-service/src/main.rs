@@ -216,7 +216,8 @@ fn main() {
     )
     .expect("couldn't claim IRQ");
 
-    // start the OS timer running
+    // setup the OS timer
+    let mut timer_run = false;
     let mut os_timer = CSR::new(ostimer_csr.as_ptr() as *mut u32);
     let ms = bao1x_api::SYSTEM_TICK_INTERVAL_MS;
     os_timer.wfo(utra::timer0::EN_EN, 0b0); // disable the timer
@@ -226,8 +227,10 @@ fn main() {
     // enable the timer
     os_timer.wfo(utra::timer0::EN_EN, 0b1);
 
-    // Set EV_ENABLE, this starts pre-emption
-    os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0b1);
+    // Set EV_ENABLE according to timer_run
+    // timer is OFF at boot to help insure that processes 2 & 3 get larger time slices
+    // to operate & claim critical resources
+    os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, if timer_run { 1 } else { 0 });
 
     // ---- "own" the Iox IRQ bank. This might need revision once bao1x aliasing is available. ---
     let irq_page = xous::syscall::map_memory(
@@ -548,6 +551,14 @@ fn main() {
                     }
                 }
                 buf.replace(list).expect("I2c message format error");
+            }
+            HalOpcode::SetPreemptionState => {
+                // this is done as a blocking message because we want confirmation that
+                // this bit has been set before entering a critical section.
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    timer_run = scalar.arg1 != 0;
+                    os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, if timer_run { 1 } else { 0 });
+                }
             }
             HalOpcode::InvalidCall => {
                 log::error!("Invalid opcode received: {:?}", msg);

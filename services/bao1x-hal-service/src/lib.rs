@@ -73,6 +73,33 @@ impl UdmaGlobal {
     }
 }
 
+pub struct Hal {
+    conn: xous::CID,
+}
+impl Hal {
+    pub fn new() -> Self {
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
+        let xns = xous_names::XousNames::new().unwrap();
+        let conn =
+            xns.request_connection(SERVER_NAME_BAO1X_HAL).expect("Couldn't connect to bao1x HAL server");
+        Hal { conn }
+    }
+
+    pub fn set_preemption(&self, on: bool) {
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                HalOpcode::SetPreemptionState.to_usize().unwrap(),
+                if on { 1 } else { 0 },
+                0,
+                0,
+                0,
+            ),
+        )
+        .expect("Couldn't setup preemption state");
+    }
+}
+
 impl UdmaGlobalConfig for UdmaGlobal {
     fn clock(&self, peripheral: PeriphId, enable: bool) { self.udma_clock_config(peripheral, enable); }
 
