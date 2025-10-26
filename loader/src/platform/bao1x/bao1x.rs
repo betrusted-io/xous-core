@@ -2,6 +2,7 @@
 use core::convert::TryInto;
 
 use bao1x_api::signatures::SIGBLOCK_LEN;
+#[allow(unused_imports)]
 use bao1x_api::*;
 #[allow(unused_imports)]
 use bao1x_hal::iox::Iox;
