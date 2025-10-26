@@ -22,8 +22,11 @@ pub mod pubkeys;
 /// into the "official" list
 pub const BAOCHIP_1X_UF2_FAMILY: u32 = 0xa7d7_6373;
 
-// system preemption interval
-pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
+/// system preemption interval
+pub const SYSTEM_TICK_INTERVAL_MS: u32 = 10;
+
+/// standard baud rate
+pub const UART_BAUD: u32 = 1_000_000;
 
 /// Constants used by both emulation and hardware implementations
 pub const PERCLK: u32 = 100_000_000;
