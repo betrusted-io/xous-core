@@ -29,7 +29,7 @@ pub const SCRATCH_PAGE: usize = HEAP_START + HEAP_LEN + 4096;
 pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 
 pub const SYSTEM_CLOCK_FREQUENCY: u32 = 700_000_000;
-pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
+use bao1x_api::SYSTEM_TICK_INTERVAL_MS;
 
 pub fn early_init() {
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
@@ -72,10 +72,9 @@ pub fn early_init() {
         }
     }
 
-    // set the clock - should toggle us up to 800MHz FCLK mode.
-    let perclk = unsafe { init_clock_asic(SYSTEM_CLOCK_FREQUENCY) };
-
-    crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
+    // set the clock
+    let fclk = SYSTEM_CLOCK_FREQUENCY;
+    let perclk = unsafe { init_clock_asic(fclk) };
 
     // setup heap alloc
     setup_alloc();
@@ -99,6 +98,8 @@ pub fn early_init() {
     bao1x_hal::board::setup_kb_pins(&iox);
     bao1x_hal::board::setup_oled_power_pin(&iox);
     bao1x_hal::board::setup_trng_power_pin(&iox);
+    crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
+    crate::println!("CPU freq: {} MHz", SYSTEM_CLOCK_FREQUENCY / 2);
 }
 
 pub fn setup_timer() {
@@ -304,10 +305,17 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
         cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
         crate::platform::delay_at_sysfreq(20, 48_000_000);
-    } else {
+    } else if freq_hz > 350_000_000 {
         crate::println!("setting vdd85 to 0.81v");
         let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
         ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08421290);
+        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
+        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
+        crate::platform::delay_at_sysfreq(20, 48_000_000);
+    } else {
+        crate::println!("setting vdd85 to 0.72v");
+        let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
+        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08420420);
         ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
         cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
         crate::platform::delay_at_sysfreq(20, 48_000_000);

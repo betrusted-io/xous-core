@@ -2,7 +2,7 @@ use utralib::*;
 use xous_bio_bdma::*;
 
 // pinmask 29 is not mapped out. This is tested by pushing the button to allow boot
-const DABAO_PINMASK: u32 = 0b0001_1111_1000_1111_0111_1000_011_1110; // 0x1F8F783E;
+const DABAO_PINMASK: u32 = 0b0001_1111_1000_1111_0111_1000_0011_1110; // 0x1F8F783E;
 
 pub fn dabao_selftest() {
     let mut bio_ss = BioSharedState::new();
@@ -19,8 +19,8 @@ pub fn dabao_selftest() {
         "Starting dabao mini self-test: sets each pin sequentially, in a counter-clockwise order."
     );
     crate::usb::flush();
-    crate::delay(100);
-    const TOTAL_ITERS: usize = 4;
+    crate::delay(30);
+    const TOTAL_ITERS: usize = 2;
     for i in 0..TOTAL_ITERS {
         crate::println!("Iter {}/{}", i + 1, TOTAL_ITERS);
         crate::usb::flush();

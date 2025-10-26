@@ -7,6 +7,14 @@ pub extern "C" fn _start() {
     unsafe {
         #[rustfmt::skip]
         asm! (
+            // zero memory
+            "mv          t0, {ram_base}",
+            "mv          t2, {ram_top}",
+        "100:",
+            "sw          x0, 0(t0)",
+            "addi        t0, t0, 4",
+            "bltu        t0, t2, 100b",
+
             // Place the stack pointer at the end of RAM
             "mv          sp, {ram_top}",
             // subtract four from sp to make room for a DMA "gutter"
@@ -20,8 +28,8 @@ pub extern "C" fn _start() {
             "sw          t1, 0xc(t0)",
             "li          t1, 0x1",
             "sw          t1, 0x4(t0)", // CR is 1
-            // print 8 instances of 'Z' (0x5A) (provided to help measure baud)
-            "li          t2, 8",
+            // print 4 instances of 'Z' (0x5A) (provided to help measure baud)
+            "li          t2, 4",
             "li          t1, 0x5A",
         "10:",
             "sw          t1, 0x0(t0)",
@@ -30,7 +38,8 @@ pub extern "C" fn _start() {
             "bne         x0, t3, 11b", // wait for 0
             "addi        t2, t2, -1",
             "bne         x0, t2, 10b",
-        "50:",
+
+            "50:",
             // Install a machine mode trap handler
             "la          t0, abort",
             "csrw        mtvec, t0",
@@ -39,6 +48,7 @@ pub extern "C" fn _start() {
             "j   rust_entry",
 
             ram_top = in(reg) (platform::RAM_BASE + platform::RAM_SIZE),
+            ram_base = in(reg) (platform::RAM_BASE),
             options(noreturn)
         );
     }

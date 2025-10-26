@@ -158,8 +158,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// Using the ctap-hid crate (Pure Rust, no C dependencies)
-// #[cfg(feature = "pure-rust")]
 fn sign_ed25519_hash(
     credential_id: &[u8],
     hash: &[u8],
@@ -214,7 +212,10 @@ fn patch_signature_in_file(
     Ok(())
 }
 
-fn read_header_from_file(file: &mut std::fs::File, offset: usize) -> Result<SignatureInFlash, Box<dyn std::error::Error>> {
+fn read_header_from_file(
+    file: &mut std::fs::File,
+    offset: usize,
+) -> Result<SignatureInFlash, Box<dyn std::error::Error>> {
     // Ensure we're at the beginning of the file
     file.seek(SeekFrom::Start(offset as u64))?;
 

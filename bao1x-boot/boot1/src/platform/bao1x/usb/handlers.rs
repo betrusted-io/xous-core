@@ -215,7 +215,10 @@ pub fn usb_ep1_bulk_out_complete(
                     {
                         let mut rram = bao1x_hal::rram::Reram::new();
                         let offset = record.address() as usize - utralib::HW_RERAM_MEM;
-                        rram.write_slice(offset, record.data());
+                        match rram.write_slice(offset, record.data()) {
+                            Err(e) => crate::print_d!("Write error {:?} @ {:x}", e, offset),
+                            Ok(_) => (),
+                        };
                         /*
                         crate::println_d!(
                             "Wrote {} to 0x{:x}: {:x?}",
@@ -434,7 +437,9 @@ pub fn flush_tx(this: &mut CorigineUsb) {
     {
         timeout += 1;
         if timeout % 20_000 == 0 {
-            crate::println!("txw {}", timeout);
+            // suppress this unless actively debugging because this can pollute the
+            // tx queue with data and eventually cause an overflow
+            // crate::println!("txw {}", timeout);
         }
     }
 

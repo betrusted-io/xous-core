@@ -9,6 +9,8 @@ fn main() {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
+    #[cfg(feature = "duart-debug-hal")]
+    bao1x_hal::claim_duart();
 
     let tt = ticktimer::Ticktimer::new().unwrap();
     shell::start_shell();

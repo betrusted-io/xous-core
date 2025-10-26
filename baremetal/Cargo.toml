@@ -43,7 +43,7 @@ bao1x = [
     "utralib/bao1x",
     "linked_list_allocator",
     "bao1x-hal/loader-baosec",
-    # "bao1x-hal/debug-print-usb",
+    "bao1x-hal/debug-print-uart",
     "bao1x-api",
     "digest",
     "sha2-bao1x",
@@ -76,6 +76,7 @@ dabao-selftest = [
     "xous-bio-bdma/baremetal",
     "xous-bio-bdma/bao1x",
 ]
+test-boot0-writeprotect = []
 
 verilator-only = []
 default = ["bao1x-usb", "dabao-selftest"]

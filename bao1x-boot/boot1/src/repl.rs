@@ -2,6 +2,7 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::convert::TryInto;
 
 use bao1x_api::signatures::FunctionCode;
 #[allow(unused_imports)]
@@ -123,7 +124,10 @@ impl Repl {
                             {
                                 let mut rram = bao1x_hal::rram::Reram::new();
                                 let offset = record.address() as usize - utralib::HW_RERAM_MEM;
-                                rram.write_slice(offset, record.data());
+                                match rram.write_slice(offset, record.data()) {
+                                    Err(e) => crate::print_d!("Write error {:?} @ {:x}", e, offset),
+                                    Ok(_) => (),
+                                };
                                 crate::println!("Wrote {} to 0x{:x}", record.data().len(), record.address());
                                 crate::println_d!("{:x}", record.address());
                             } else {
@@ -197,6 +201,8 @@ impl Repl {
                     count += 1;
                 }
                 crate::println!("Board type set to {:?} after {} increments", new_type, count);
+                crate::platform::slots::check_slots(&new_type);
+                crate::println!("Key & data slots checked according to the new type");
             }
             "audit" => {
                 let owc = OneWayCounter::new();
@@ -210,12 +216,15 @@ impl Repl {
                 );
                 crate::println!("Semver is: {}", crate::version::SEMVER);
                 crate::println!("Description is: {}", crate::RELEASE_DESCRIPTION);
-                // TODO: replace this with a proper API, this is a hack to allow an initial
-                // alpha run of boards to be churned out on short notice. The hard-coded number
-                // below ostensibly belongs to "data slot 0". For this run, it's just an incrementing
-                // number, but in the future it might be a truncated hash, or randomly generated number.
-                let sn = unsafe { core::slice::from_raw_parts(0x603d_c000 as *const u32, 4) };
-                crate::println!("Device serializer: {:08x}-{:08x}-{:08x}-{:08x}", sn[3], sn[2], sn[1], sn[0]);
+                let slot_mgr = bao1x_hal::acram::SlotManager::new();
+                let sn = slot_mgr.read(&bao1x_hal::board::SERIAL_NUMBER).unwrap();
+                crate::println!(
+                    "Device serializer: {:08x}-{:08x}-{:08x}-{:08x}",
+                    u32::from_le_bytes(sn[12..16].try_into().unwrap()),
+                    u32::from_le_bytes(sn[8..12].try_into().unwrap()),
+                    u32::from_le_bytes(sn[4..8].try_into().unwrap()),
+                    u32::from_le_bytes(sn[..4].try_into().unwrap())
+                );
                 crate::println!("Revocations:");
                 crate::println!("Stage       key0     key1     key2     key3");
                 let key_array = [
@@ -325,7 +334,7 @@ impl Repl {
                 const COLUMNS: usize = 4;
                 if args.len() == 1 || args.len() == 2 {
                     let addr = usize::from_str_radix(&args[0], 16)
-                        .map_err(|_| Error::help("Peek address is in hex"))?;
+                        .map_err(|_| Error::help("Peek address is in hex, no leading 0x"))?;
 
                     if addr >= utralib::HW_RERAM_MEM + bao1x_api::RRAM_STORAGE_LEN
                         && addr < utralib::HW_RERAM_MEM + utralib::HW_RERAM_MEM_LEN

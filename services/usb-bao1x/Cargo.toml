@@ -67,7 +67,7 @@ hosted = ["utralib/hosted", "utralib/std"]
 renode = ["utralib/renode", "utralib/std"]
 mass-storage = []
 debug-print-usb = [
-    "bao1x-hal/debug-print-usb",
+    "bao1x-hal/debug-print-duart",
 ] # mutually exclusive feature with other crates that use the app UART
 verbose-debug = ["bao1x-hal/verbose-debug"]
 

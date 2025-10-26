@@ -32,8 +32,8 @@ pub const FREE_MEM_LEN: usize = (RAM_BASE + RAM_SIZE) - FREE_MEM_START - STACK_L
 // NOTE: this forces the mapping to be the same on both baosec and dabao
 pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 
-const SAFE_FCLK_FREQUENCY: u32 = 400_000_000;
-pub const SYSTEM_TICK_INTERVAL_MS: u32 = 1;
+const SAFE_FCLK_FREQUENCY: u32 = 350_000_000;
+use bao1x_api::SYSTEM_TICK_INTERVAL_MS;
 
 // Dabao port/pin constants have to be vendored in because this crate is compiled with baosec as the target.
 const DABAO_SE0_PIN: u8 = 13;
@@ -124,10 +124,21 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
 
                         // set PWM mode on DCDC2. greatly reduces noise on the regulator line
                         pmic.set_pwm_mode(&mut i2c, bao1x_hal::axp2101::WhichDcDc::Dcdc2, true).unwrap();
-                        // make sure the DCDC2 is set to 0.9V, which will allow us to enter high-speed run
-                        // mode. It defaults to 0.85V on boot.
-                        pmic.set_dcdc(&mut i2c, Some((0.9, true)), bao1x_hal::axp2101::WhichDcDc::Dcdc2)
-                            .unwrap();
+                        // make sure the DCDC2 is set. Target 20mV above the acceptable run threshold because
+                        // we have to take into account the transistor loss on the
+                        // power switch.
+                        pmic.set_dcdc(
+                            &mut i2c,
+                            Some((
+                                (bao1x_hal::board::DEFAULT_CPU_VOLTAGE_MV
+                                    + bao1x_hal::board::VDD85_SWITCH_MARGIN_MV)
+                                    as f32
+                                    / 1000.0,
+                                true,
+                            )),
+                            bao1x_hal::axp2101::WhichDcDc::Dcdc2,
+                        )
+                        .unwrap();
 
                         break;
                     }
@@ -239,6 +250,16 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
     setup_alloc();
 
     setup_timer(fclk_freq);
+
+    // check key slots for integrity. Has to be done late in boot because we might
+    // have to generate keys, and that requires a lot of stuff to be working correctly:
+    // in particular, we'll need `alloc` (to store the random vectors) and `timer`
+    // (to detect disconnected/failed TRNG).
+    let mut cu = bao1x_hal::coreuser::Coreuser::new();
+    // Coreuser needs to be set up correctly for check_slots to succeed.
+    cu.set();
+    crate::platform::slots::check_slots(&board_type);
+    // protect() is called inside sigcheck on boot!
 
     // Rx setup
     let _udma_uart = setup_console(&board_type, &iox, perclk);
@@ -447,10 +468,17 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
         ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
         cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
         crate::platform::delay_at_sysfreq(20, 48_000_000);
-    } else {
+    } else if freq_hz > 350_000_000 {
         crate::println!("setting vdd85 to 0.81v");
         let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
         ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08421290);
+        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
+        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
+        crate::platform::delay_at_sysfreq(20, 48_000_000);
+    } else {
+        crate::println!("setting vdd85 to 0.72v");
+        let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
+        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08420420);
         ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
         cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
         crate::platform::delay_at_sysfreq(20, 48_000_000);

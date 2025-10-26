@@ -99,6 +99,10 @@ mod i2cdetect;
 use i2cdetect::*;
 mod cute;
 use cute::*;
+#[cfg(feature = "rramtests")]
+mod rram;
+#[cfg(feature = "rramtests")]
+use rram::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
@@ -111,6 +115,8 @@ pub struct CmdEnv {
     pddb_cmd: PddbCmd,
     #[cfg(feature = "aestests")]
     aes_cmd: Aes,
+    #[cfg(feature = "rramtests")]
+    rram: Rram,
 }
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
@@ -125,6 +131,8 @@ impl CmdEnv {
         };
         #[cfg(feature = "aestests")]
         let aes_cmd = Aes::new(&xns, &mut _common);
+        #[cfg(feature = "rramtests")]
+        let rram = Rram::new(&xns, &mut _common);
         CmdEnv {
             common_env: _common,
             lastverb: String::new(),
@@ -139,6 +147,8 @@ impl CmdEnv {
             pddb_cmd: PddbCmd::new(),
             #[cfg(feature = "aestests")]
             aes_cmd,
+            #[cfg(feature = "rramtests")]
+            rram,
         }
     }
 
@@ -169,6 +179,8 @@ impl CmdEnv {
             &mut self.pddb_cmd,
             #[cfg(feature = "aestests")]
             &mut self.aes_cmd,
+            #[cfg(feature = "rramtests")]
+            &mut self.rram,
         ];
 
         if let Some(cmdline) = maybe_cmdline {
