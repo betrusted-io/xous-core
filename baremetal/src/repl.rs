@@ -123,7 +123,7 @@ impl Repl {
             "peek" => {
                 if args.len() == 1 || args.len() == 2 {
                     let addr = usize::from_str_radix(&args[0], 16)
-                        .map_err(|_| Error::help("Peek address is in hex"))?;
+                        .map_err(|_| Error::help("Peek address is in hex, no leading 0x"))?;
 
                     let count = if args.len() == 2 {
                         if let Ok(count) = u32::from_str_radix(&args[1], 10) { count } else { 1 }
@@ -146,10 +146,10 @@ impl Repl {
             "poke" => {
                 if args.len() == 2 || args.len() == 3 {
                     let addr = u32::from_str_radix(&args[0], 16)
-                        .map_err(|_| Error::help("Poke address is in hex"))?;
+                        .map_err(|_| Error::help("Poke address is in hex, no leading 0x"))?;
 
-                    let value =
-                        u32::from_str_radix(&args[1], 16).map_err(|_| Error::help("Poke value is in hex"))?;
+                    let value = u32::from_str_radix(&args[1], 16)
+                        .map_err(|_| Error::help("Poke value is in hex, no leading 0x"))?;
                     let count = if args.len() == 3 {
                         if let Ok(count) = u32::from_str_radix(&args[2], 10) { count } else { 1 }
                     } else {
