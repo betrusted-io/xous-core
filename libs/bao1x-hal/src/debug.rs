@@ -33,7 +33,28 @@ impl Uart {
         }
     }
 
-    #[cfg(all(feature = "debug-print", target_os = "xous"))]
+    #[cfg(all(feature = "debug-print-duart", target_os = "xous"))]
+    pub fn putc(&self, c: u8) {
+        if unsafe { SWAP_APP_UART_VADDR } == 0 {
+            match xous::syscall::map_memory(
+                xous::MemoryAddress::new(utralib::utra::duart::HW_DUART_BASE),
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            ) {
+                Ok(uart) => {
+                    unsafe { SWAP_APP_UART_VADDR = uart.as_mut_ptr() as usize };
+                }
+                _ => return,
+            }
+        }
+        let base = unsafe { SWAP_APP_UART_VADDR as *mut u32 };
+        let mut uart = CSR::new(base);
+        while uart.r(utra::duart::SFR_SR) != 0 {}
+        uart.wo(utra::duart::SFR_TXD, c as u32);
+    }
+
+    #[cfg(all(feature = "debug-print-uart", target_os = "xous"))]
     pub fn putc(&mut self, c: u8) {
         if unsafe { SWAP_APP_UART_VADDR } == 0 {
             match xous::syscall::map_memory(
