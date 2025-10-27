@@ -106,7 +106,7 @@ impl Repl {
                 rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
             }
             "boot" => {
-                crate::secboot::boot_or_die();
+                crate::secboot::try_boot(true);
             }
             "uf2" => {
                 use base64::{Engine as _, engine::general_purpose};

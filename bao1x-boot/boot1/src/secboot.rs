@@ -22,7 +22,7 @@ fn seal_boot1_keys() {
     cu.protect();
 }
 
-pub fn boot_or_die() -> ! {
+pub fn try_boot(or_die: bool) {
     // loader is at the same offset as baremetal. Accept either as valid boot.
     // This diverges if the signature check is successful
     match bao1x_hal::sigcheck::validate_image(
@@ -39,6 +39,10 @@ pub fn boot_or_die() -> ! {
                 k,
                 core::str::from_utf8(&tag).unwrap_or("invalid tag")
             );
+
+            // disable IRQs in preparation for next phase
+            crate::platform::irq::disable_all_irqs();
+
             // the tag is from signed, trusted data
             // k is just a nominal slot number. If either match, assume we are dealing with a
             // developer image.
@@ -56,6 +60,8 @@ pub fn boot_or_die() -> ! {
         }
         Err(e) => crate::println!("Image did not validate: {:?}", e),
     }
-    crate::println!("No valid loader or baremetal image found. Halting!");
-    bao1x_hal::sigcheck::die_no_std();
+    if or_die {
+        crate::println!("No valid loader or baremetal image found. Halting!");
+        bao1x_hal::sigcheck::die_no_std();
+    }
 }

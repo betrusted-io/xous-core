@@ -76,8 +76,8 @@ encode_oneway! {
 encode_oneway! {
     #[offset = 81]
     pub enum BoardTypeCoding {
-        Baosec,
         Dabao,
+        Baosec,
         Oem,
     }
 }
@@ -150,6 +150,14 @@ pub const IFR_HASH: SlotIndex = SlotIndex::Data(2, PartitionAccess::All, RwPerms
 /// `WAFER_ID` is a copy of the lot ID + wafer ID + x/y position data that should be captured
 /// during CP.
 pub const CP_ID: SlotIndex = SlotIndex::Data(3, PartitionAccess::All, RwPerms::ReadOnly);
+
+/// Indelible versions of the public keys. The problem with the pubkeys in boot0 region is that
+/// boot0 itself has the ability to modify its own memory. A copy here can have a bit set in
+/// the IFR that blocks any attempt to modify these keys.
+pub const BAO1_PUBKEY: SlotIndex = SlotIndex::Data(4, PartitionAccess::All, RwPerms::ReadOnly);
+pub const BAO2_PUBKEY: SlotIndex = SlotIndex::Data(5, PartitionAccess::All, RwPerms::ReadOnly);
+pub const BETA_PUBKEY: SlotIndex = SlotIndex::Data(6, PartitionAccess::All, RwPerms::ReadOnly);
+pub const DEV_PUBKEY: SlotIndex = SlotIndex::Data(7, PartitionAccess::All, RwPerms::ReadOnly);
 
 // Notes on defining the boot0 IFR region.
 // RISC-V boot0 region start is defined by IFR slot 6, bits [55:48]
