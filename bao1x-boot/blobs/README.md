@@ -9,7 +9,7 @@ This directory contains a collection of binary objects that get written into the
 * `ifr_0x340.bin`: sets write-protect on the public keys stored in data slots 4-7
 
 ## Data blocks
-* `pubkey-block.bin`: contains the public keys to be burned into data slots. Write to offset 0x3dc080 in the main array.
+* `pubkey-block.bin`: contains the public keys to be burned into data slots. Write to offset 0x3e0080 in the main array.
 
 ## One-Way Counter Defaults
 
