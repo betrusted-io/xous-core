@@ -6,11 +6,6 @@ from serial.serialutil import SerialException
 from utils.serial_utils import open_serial, safe_close
 
 def _stdin_to_serial(ser, args, stop_event: threading.Event):
-    """
-    Writer thread: read from stdin and write to serial.
-    - Line mode (default): blocks waiting for a line, appends LF or CRLF.
-    - Raw mode (--raw): sends characters immediately without waiting for newline.
-    """
     try:
         if getattr(args, "raw", False):
             # Raw mode: read larger chunks for smooth pastes when available

@@ -4,10 +4,6 @@ import logging
 from utils.common import project_root
 
 def cmd_build(args) -> None:
-    """
-    Run cargo xtask <target> to build a Xous image for Baochip.
-    Exits with the cargo process exit code on failure.
-    """
     target = args.target
     cargo_cmd = ["cargo", "xtask", target]
     if args.release:

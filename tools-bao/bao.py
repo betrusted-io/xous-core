@@ -1,12 +1,3 @@
-"""
-Baochip CLI — entry point for host-side utilities.
-
-Usage examples:
-    python tools-bao/bao.py ports
-    python tools-bao/bao.py monitor -p COM3 -b 115200 --ts
-    python tools-bao/bao.py build --target dabao
-"""
-
 import argparse
 import sys
 import logging
@@ -21,7 +12,7 @@ from commands.build import cmd_build
 from commands.artifacts import cmd_artifacts
 from commands.update_all import cmd_update_all
 
-VERSION = "0.1.0"  # Update as needed
+VERSION = "0.1.0"
 
 def main():
     ap = argparse.ArgumentParser(
