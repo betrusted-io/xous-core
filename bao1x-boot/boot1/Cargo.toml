@@ -43,5 +43,7 @@ unsafe-debug = []
 verbose-debug = ["bao1x-hal/debug-print-uart", "bao1x-hal/verbose-debug"]
 print-ifr = []
 
+test-boot0-keys = []
+
 verilator-only = []
-default = []
+default = ["test-boot0-keys"]
