@@ -16,11 +16,20 @@ Here is the flow for generating and deploying signatures:
 5. Copy the base-64 representation of the cred-id into e.g. `credentials/bao2.json` so that `fido-signer` can refer to it. Note that the token also needs to have a PIN setup.
 
 ## Signing
-2. The image to be signed is fed into `fido-signer`:
+
+The `baosign.ps1` script in the root of the repository automatically executes the procedure below on a set of deployment images.
+
+1. Check that the `CredentialFile` parameter matches the desired token
+2. Check that `Target` matches the desired burner.
+3. Run with e.g. `.\baosign.ps1 -Config dabao`
+
+The procedure inside the script above does the following for each partition:
+
+4. The image to be signed is fed into `fido-signer`:
    1. The signing token must be connected to the computer
    2. The PIN must be provided by the signer
    3. Depending on the host, this may need to run at an elevated privilege level (Windows in particular enforces that)
-3. Assuming the prequisites are met, `fido-signer` patches a unified signed Baochip image to inject the `signature` and `auth_data` into the designated key slot. It also generates a `.uf2` file for convenience.
+5. Assuming the prequisites are met, `fido-signer` patches a unified signed Baochip image to inject the `signature` and `auth_data` into the designated key slot. It also generates a `.uf2` file for convenience.
 
 Example command line of `fido-signer`, as run from the `signing/fido-signer` directory:
 
