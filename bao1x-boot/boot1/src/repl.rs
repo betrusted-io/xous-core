@@ -184,7 +184,14 @@ impl Repl {
             }
             "boardtype" => {
                 let one_way = OneWayCounter::new();
-                if args.len() != 1 {
+                if args.len() == 0 {
+                    crate::println!(
+                        "Board type is set to: {:?}",
+                        one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
+                    );
+                    self.abort_cmd();
+                    return Ok(());
+                } else if args.len() != 1 {
                     return Err(Error::help("boardtype [dabao | baosec | oem]"));
                 }
                 let new_type = match args[0].as_str() {
