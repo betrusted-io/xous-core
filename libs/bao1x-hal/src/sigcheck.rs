@@ -40,6 +40,8 @@ use crate::udma::Spim;
 /// `auto_jump` is a flag which, when `true`, causes the code to diverge into the signed block.
 /// If `false` the function returns the `(key_index, tag)` of the first passing public key, or an error
 /// if none were found.
+///
+/// `spim`, when Some, informs validate_image to check an image contained in SPI flash.
 pub fn validate_image(
     img_offset: *const u32,
     pubkeys_offset: *const u32,
@@ -229,18 +231,23 @@ pub fn erase_secrets() {
             for data_index in slot.try_into_data_iter().unwrap() {
                 match rw_perms {
                     RwPerms::ReadWrite | RwPerms::WriteOnly => {
-                        // clear the ACL so we can operate on the data
-                        slot_mgr
-                            .set_acl(
-                                &mut rram,
-                                slot,
-                                &AccessSettings::Key(KeySlotAccess::new_with_raw_value(0)),
-                            )
-                            .expect("couldn't reset ACL");
+                        // only clear ACL if it isn't already cleared
+                        if slot_mgr.get_acl(slot).unwrap().raw_u32() != 0 {
+                            // clear the ACL so we can operate on the data
+                            slot_mgr
+                                .set_acl(
+                                    &mut rram,
+                                    slot,
+                                    &AccessSettings::Key(KeySlotAccess::new_with_raw_value(0)),
+                                )
+                                .expect("couldn't reset ACL");
+                        }
                         let bytes = unsafe { slot_mgr.read_key_slot(data_index) };
                         if bytes.iter().all(|&b| b == 0) {
                             zero_key_count += 1;
                         }
+                        // only erase if the key hasn't already been erased, to avoid stressing the RRAM array
+                        // erase_secrets() may be called on every boot in some modes.
                         if !bytes.iter().all(|&b| b == ERASE_VALUE) {
                             let mut eraser =
                                 alloc::vec::Vec::with_capacity(slot.len() * SLOT_ELEMENT_LEN_BYTES);
@@ -250,6 +257,7 @@ pub fn erase_secrets() {
                         }
                         let check = unsafe { slot_mgr.read_key_slot(data_index) };
                         if !check.iter().all(|&b| b == ERASE_VALUE) {
+                            crate::println!("Failed to erase key at {}: {:x?}", data_index, check);
                             panic!("Key erasure did not succeed, refusing to boot!");
                         } else {
                             crate::println!("Key range at {} confirmed erased", slot.get_base());

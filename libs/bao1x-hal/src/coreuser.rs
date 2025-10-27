@@ -49,9 +49,9 @@ impl CoreuserId {
     pub fn is_accessible(&self, acl: &AccessSettings, access_type: &AccessType) -> bool {
         // these values are read out directly from the definition of DataSlotAccess
         let bitmask = (acl.raw_u32() >> 20) & 0xF;
-        // the bitmask is stored as 0 == allowed. Invert the bits so that we can
-        // do a simple AND bitmask against our own coding to determine if access is allowed.
-        let as_allowed = bitmask ^ 0xF;
+        // this is a legacy of the confusion (?) in the documentation about the polarity
+        // of access allowed vs not allowed.
+        let as_allowed = if bitmask == 0 { 0xF } else { bitmask ^ 0x0 };
 
         // take advantage of the fact that our bit-coding of the enum matches
         // exactly the layout of the bit coding in the access control structure.
