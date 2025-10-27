@@ -80,7 +80,13 @@ pub const CP_COOKIE: SlotIndex = SlotIndex::Key(258, PartitionAccess::Fw0, RwPer
 /// Thus 2x 4k pages on either end of the key range are carved out for the nuisance keys. 4k page size
 /// is convenient because that's the natural page size over which the key range will be carved up before
 /// handing to other processes.
-pub const NUISANCE_KEYS_0: SlotIndex = SlotIndex::KeyRange(0..128, PartitionAccess::Fw0, RwPerms::ReadOnly);
+///
+/// The first 8 keys in bank 0 of NUISANCE_KEYS is not used. This is because due to an ECO in the A1
+/// spin of silicon, the JTAG-wired access control on these is going to be tied to those on the similarly
+/// numbered data slots. Some of the data slots in the first 8 slots will be read-only at CP time, and
+/// thus they can't be initialized with random data and be used as a nuisance key. This is a minor degradation
+/// in security margin.
+pub const NUISANCE_KEYS_0: SlotIndex = SlotIndex::KeyRange(8..128, PartitionAccess::Fw0, RwPerms::ReadOnly);
 pub const NUISANCE_KEYS_1: SlotIndex =
     SlotIndex::KeyRange(1920..2048, PartitionAccess::Fw0, RwPerms::ReadOnly);
 pub const NUISANCE_KEYS: [SlotIndex; 2] = [NUISANCE_KEYS_0, NUISANCE_KEYS_1];
@@ -108,8 +114,16 @@ pub const CHAFF_KEYS: SlotIndex = SlotIndex::KeyRange(128..256, PartitionAccess:
 
 /// All the slots of concern located in a single iterator. The idea is that everything is
 /// condensed here and used to check for access integrity using the array below.
-pub const DATA_SLOTS: [SlotIndex; 4] =
-    [crate::offsets::SERIAL_NUMBER, crate::offsets::UUID, crate::offsets::IFR_HASH, crate::offsets::CP_ID];
+pub const DATA_SLOTS: [SlotIndex; 8] = [
+    crate::offsets::SERIAL_NUMBER,
+    crate::offsets::UUID,
+    crate::offsets::IFR_HASH,
+    crate::offsets::CP_ID,
+    crate::offsets::BAO1_PUBKEY,
+    crate::offsets::BAO2_PUBKEY,
+    crate::offsets::BETA_PUBKEY,
+    crate::offsets::DEV_PUBKEY,
+];
 
 /// In addition to these KEY_SLOTS, the DEVELOPER_MODE one way counter is a security-important parameter
 /// that should be included as domain separation in any KDF.

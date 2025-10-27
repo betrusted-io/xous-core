@@ -113,6 +113,10 @@ pub const DEVELOPER_MODE: usize = 85;
 /// did bless the bag of bits.
 pub const OEM_MODE: usize = 86;
 
+/// This is incremented if the boot0 public keys failed to compare against the static keys in
+/// the data store.
+pub const BOOT0_PUBKEY_FAIL: usize = 87;
+
 /// Total number of public key slots in the system. Pubkey revocations are at the "top of range"
 pub const PUBKEY_SLOTS: usize = 4;
 /// Offset in the one-way counter array for loader key revocations. Provisions for up to four
