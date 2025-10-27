@@ -8,7 +8,6 @@ from commands.ports import cmd_ports
 from commands.monitor import cmd_monitor
 from commands.flash import cmd_flash
 from commands.doctor import cmd_doctor
-from commands.build import cmd_build
 from commands.artifacts import cmd_artifacts
 from commands.update_all import cmd_update_all
 
@@ -54,13 +53,6 @@ def main():
     m.add_argument("--xonxoff", action="store_true", help="Enable XON/XOFF software flow control")
     m.add_argument("--dsrdtr",  action="store_true", help="Enable DSR/DTR hardware flow control")
     m.set_defaults(func=cmd_monitor)
-
-    # build (Xous via cargo xtask)
-    b = sub.add_parser("build", help="Build Xous image for Baochip via cargo xtask")
-    b.add_argument("--target", required=True, help="Bao target (e.g. dabao, baosec)")
-    b.add_argument("--release", action="store_true", help="Use release build")
-    b.add_argument("--extra-args", help="Extra args to pass to cargo xtask")
-    b.set_defaults(func=cmd_build)
 
     # doctor
     d = sub.add_parser("doctor", help="Check Python environment and ports")
