@@ -157,6 +157,13 @@ pub fn early_init_hw() -> u32 {
         // fixup the UART baud rate
         let _udma_uart = setup_console(&bao1x_api::BoardTypeCoding::Dabao, &iox, perclk);
         bao1x_hal::board::setup_console_pins(&iox);
+
+        // set bootwait exactly once - this makes the default behavior to bootwait,
+        // but allows devs to override it by incrementing the value
+        let one_way = bao1x_hal::acram::OneWayCounter::new();
+        if one_way.get(bao1x_api::BootWaitCoding::OFFSET).unwrap() == 0 {
+            one_way.inc_coded::<bao1x_api::BootWaitCoding>().ok();
+        }
     }
 
     // Setup some global control registers that will allow the TRNG to operate once the kernel is
