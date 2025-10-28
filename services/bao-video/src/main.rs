@@ -3,6 +3,7 @@
 // Including a resolver to a given character map also pulls the font data into the
 // bao-video binary, increasing its size.
 
+use bao1x_hal_service::Hal;
 use ux_api::minigfx::*;
 
 mod gfx;
@@ -169,6 +170,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let iox = IoxHal::new();
     let udma_global = UdmaGlobal::new();
     let mut i2c = I2c::new();
+    let hal = Hal::new();
 
     let mut display = Oled128x128::new(main_thread_token, bao1x_api::PERCLK, &iox, &udma_global);
     display.init();
@@ -179,6 +181,10 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     // install the graphical panic handler. It won't catch really early panics, or panics in this crate,
     // but it'll do the job 90% of the time and it's way better than having none at all.
     let is_panic = Arc::new(AtomicBool::new(false));
+
+    // ---- boot logo
+    display.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
+    display.redraw();
 
     // This is safe because the SPIM is finished with initialization, and the handler is
     // Mutex-protected.
@@ -191,6 +197,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     // ---- camera initialization
     #[cfg(not(feature = "hosted-baosec"))]
     {
+        // wait for other inits to finish so we can do this roughly atomically
+        tt.sleep_ms(1000).ok();
+
         // setup camera power
         match bao1x_hal::axp2101::Axp2101::new(&mut i2c) {
             Ok(mut pmic) => {
@@ -298,10 +307,6 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
         irq_csr.wfo(utra::irqarray8::EV_ENABLE_CAM_RX, 1);
     }
 
-    // ---- boot logo
-    display.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
-    display.redraw();
-
     // ---- main loop variables
     let screen_clip = Rectangle::new(Point::new(0, 0), display.screen_size());
 
@@ -311,8 +316,10 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     {
         log::info!("initiating auto test");
         cam.capture_async();
+        // cam_irq serves as a preemption timer source, every time it fires a different
+        // task can run after cam_irq is handled.
+        hal.set_preemption(false);
     }
-
     #[cfg(feature = "no-gam")]
     let modals = modals::Modals::new(&xns).unwrap();
     let mut modal_queue = VecDeque::<Sender>::new();

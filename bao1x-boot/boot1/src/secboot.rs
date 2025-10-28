@@ -9,19 +9,20 @@ pub const ALLOWED_FUNCTIONS: [u32; 5] = [
 ];
 
 fn seal_boot1_keys() {
-    // TODO:
-    //  - setup an initial coreuser table
-    //  - set an ASID that locks out any boot0 secrets (currently none, as it's PK based)
-    //  - this does not offer strong security, but prevents someone with an arbitrary read primitive from
-    //    accessing any boot0 secrets. An arbitrary-exec primitive at this point can, of course, undo the ASID
-    //    mapping.
+    // This is a security-critical initialization. Failure to do this correctly totally breaks
+    // the hardware access control scheme for key/data slots.
     //
-    // Only necessary if we have secrets to seal. The current implementation only contains a public key,
-    // so there's no secrets to seal.
+    // However, this does not offer unbreakable security. Rather, it prevents someone with an arbitrary read
+    // primitive from accessing secret keys. An arbitrary-exec primitive can, of course, forge the ASID
+    // and work around the coreuser mechanism.
+    let mut cu = bao1x_hal::coreuser::Coreuser::new();
+    cu.set(); // re-sets the coreuser settings. Just in case they got modified along the way...
+    // locks out future modifications to the Coreuser setting. Also inverts mm sense, which means you must
+    // enter a virtual memory user state to access sealed keys.
+    cu.protect();
 }
 
-pub fn boot_or_die() -> ! {
-    seal_boot1_keys();
+pub fn try_boot(or_die: bool) {
     // loader is at the same offset as baremetal. Accept either as valid boot.
     // This diverges if the signature check is successful
     match bao1x_hal::sigcheck::validate_image(
@@ -29,16 +30,38 @@ pub fn boot_or_die() -> ! {
         bao1x_api::BOOT1_START as *const u32,
         bao1x_api::BOOT1_REVOCATION_OFFSET,
         &ALLOWED_FUNCTIONS,
-        true,
+        false,
         None,
     ) {
-        Ok((k, tag)) => crate::println!(
-            "**should be unreachable** Booted with key {}({})",
-            k,
-            core::str::from_utf8(&tag).unwrap_or("invalid tag")
-        ),
+        Ok((k, tag)) => {
+            crate::println!(
+                "Booting with key {}({})",
+                k,
+                core::str::from_utf8(&tag).unwrap_or("invalid tag")
+            );
+
+            // disable IRQs in preparation for next phase
+            crate::platform::irq::disable_all_irqs();
+
+            // the tag is from signed, trusted data
+            // k is just a nominal slot number. If either match, assume we are dealing with a
+            // developer image.
+            if tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
+                || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+            {
+                crate::println!("Developer key detected, ensuring secret are erased");
+                bao1x_hal::sigcheck::erase_secrets();
+            }
+            // this has to be called *after* erase_secrets, because we can't erase the secrets
+            // once the mappings have been sealed off. This is why we can't use the auto-jump method
+            // like we do in boot0.
+            seal_boot1_keys();
+            bao1x_hal::sigcheck::jump_to(bao1x_api::LOADER_START);
+        }
         Err(e) => crate::println!("Image did not validate: {:?}", e),
     }
-    crate::println!("No valid loader or baremetal image found. Halting!");
-    bao1x_hal::sigcheck::die_no_std();
+    if or_die {
+        crate::println!("No valid loader or baremetal image found. Halting!");
+        bao1x_hal::sigcheck::die_no_std();
+    }
 }

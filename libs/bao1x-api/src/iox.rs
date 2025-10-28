@@ -209,36 +209,30 @@ impl IoxHal {
         }
     }
 
-    /// This function takes a 32-bit bitmask, corresponding to PIO 31 through 0, where
-    /// a `1` indicates to map that PIO to a GPIO.
+    /// This function takes a 32-bit bitmask, corresponding to BIO 31 through 0, where
+    /// a `1` indicates to map that BIO to a GPIO.
     ///
-    /// This function will automatically remap the AF and PIO settings for the PIO pins
-    /// specified in the bitmask, corresponding to the PIO GPIO pin number. If a `0` is
-    /// present in a bit position, it will turn off the PIO mux, but not change the AF setting.
+    /// This function will automatically remap the AF and BIO settings for the BIO pins
+    /// specified in the bitmask, corresponding to the BIO GPIO pin number. If a `0` is
+    /// present in a bit position, it will turn off the BIO mux, but not change the AF setting.
     ///
-    /// VERY IMPORTANT: Note that the PIO GPIO number is *not* consistent with the
+    /// VERY IMPORTANT: Note that the BIO GPIO number is *not* consistent with the
     /// numbering order of the GPIO ports: in fact, it is reverse-order for PORT B and in-order with skips for
-    /// PORT C. Also, bits 22, 27, 30 and 31 are not mappable for the PIO.
+    /// PORT C. Also, bits 22, 27, 30 and 31 are not mappable for the BIO.
     ///
     /// Returns: a 32-entry array which records which GPIO bank and pin number was affected
     /// by the mapping request. The index of the array corresponds to the bit position in
     /// the bitmask. You may use this to pass as arguments to further functions
     /// that do things like control slew rate or apply pull-ups.
-    pub fn set_ports_from_pio_bitmask(&self, _enable_bitmask: u32) -> [Option<(IoxPort, u8)>; 32] {
-        todo!("Do this when we get around to filling in the PIO drivers")
+    pub fn set_ports_from_bio_bitmask(&self, _enable_bitmask: u32) -> [Option<(IoxPort, u8)>; 32] {
+        todo!("Do this when we get around to filling in the BIO drivers")
     }
 
-    /// Returns the PIO bit that was enabled based on the port and pin specifier given;
-    /// returns `None` if the proposed mapping is invalid.
-    pub fn set_bio_bit_from_port_and_pin(&self, _port: IoxPort, _pin: u8) -> Option<u8> {
-        todo!("Do this when we get around to filling in the PIO drivers")
-    }
-
-    /// Returns the PIO bit that was disabled based on the port and pin specifier given;
+    /// Returns the BIO bit that was disabled based on the port and pin specifier given;
     /// returns `None` if the proposed mapping is invalid. Does not change the AF mapping,
-    /// simply disables the bit in the PIO mux register.
+    /// simply disables the bit in the BIO mux register.
     pub fn unset_bio_bit_from_port_and_pin(&self, _port: IoxPort, _pin: u8) -> Option<u8> {
-        todo!("Do this when we get around to filling in the PIO drivers")
+        todo!("Do this when we get around to filling in the BIO drivers")
     }
 }
 
@@ -272,7 +266,7 @@ impl IoSetup for IoxHal {
                 0,
             ),
         ) {
-            Ok(xous::Result::Scalar2(code, ok)) => {
+            Ok(xous::Result::Scalar5(_, code, ok, _, _)) => {
                 if ok != 0 {
                     Some(code as u8)
                 } else {

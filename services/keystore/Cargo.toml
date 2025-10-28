@@ -31,6 +31,7 @@ keystore-api = { path = "../../libs/keystore-api" }
 
 zeroize = { version = "1.7.0", features = ["zeroize_derive"] }
 rand_core = "0.6.4"
+rand = "0.8.5"
 
 aes-kw = { version = "0.2.1", features = ["alloc"] }
 
@@ -81,6 +82,8 @@ board-baosec = [
     "keystore-api/gen2",
     "modals/no-gam",
     "modals/bao1x",
+    "bao1x-hal",
+    "bao1x-hal-service/board-baosec",
 ] # USB form factor token
 loader-baosec = ["ux-api/loader-baosec"]
 test-baosec = ["ux-api/loader-baosec"]
@@ -92,11 +95,13 @@ board-baosor = [
     "utralib/bao1x",
     "keystore-api/gen2",
     "modals/bao1x",
+    "bao1x-hal-service/board-baosor",
 ] # Precursor form factor
 loader-baosor = []
 board-dabao = [
     "utralib/bao1x",
     "keystore-api/gen2",
+    "bao1x-hal-service/board-dabao",
 ] # Dev board form factor
 loader-dabao = []
 

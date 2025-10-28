@@ -19,6 +19,7 @@ bao1x-api = { path = "../../libs/bao1x-api" }
 bao1x-hal-service = { path = "../../services/bao1x-hal-service", optional = true }
 bao1x-emu = { path = "../../services/bao1x-emu", optional = true }
 usb-bao1x = { path = "../../services/usb-bao1x" }
+bytemuck = "1.24.0"
 
 aes = { path = "../../services/aes", default-features = false, optional = true }
 
@@ -29,8 +30,9 @@ xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branc
 [features]
 bao1x = ["utralib/bao1x", "usb-bao1x/bao1x", "aes/bao1x"]
 board-dabao = [
-    "bao1x-hal-service",
+    "bao1x-hal-service/board-dabao",
     "bao1x-hal/board-dabao",
+    # "bao1x-hal/debug-print-duart",
     "usb-bao1x/board-dabao",
 ]
 ctap-bringup = []

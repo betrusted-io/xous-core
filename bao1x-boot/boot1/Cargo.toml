@@ -16,13 +16,17 @@ linked_list_allocator = { version = "0.10.5", optional = true }
 critical-section = "1.2.0"
 ux-api = { path = "../../libs/ux-api", optional = true, default-features = false }
 simple-fatfs = { git = "https://github.com/betrusted-io/simple-fatfs.git", branch = "baosec", default-features = false }
-sha2 = { version = "0.10.8", default-features = false }
+sha2-bao1x = { path = "../sha2-bao1x", default-features = false }
 digest = { version = "0.10.7" }
 ed25519-dalek = { package = "ed25519-dalek-bao1x", path = "../ed25519-dalek-bao1x", default-features = false, features = [
     "digest",
     "zeroize",
 ], optional = true }
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+xous-bio-bdma = { path = "../../libs/xous-bio-bdma", default-features = false, features = [
+    "baremetal",
+] }
+rand_chacha = { version = "0.3.1", default-features = false }
 
 [features]
 # Baochip feature tree below
@@ -30,13 +34,17 @@ bao1x = [
     "utralib/bao1x",
     "linked_list_allocator",
     "bao1x-hal/loader-baosec",
-    # "bao1x-hal/debug-print-usb",
+    # "bao1x-hal/debug-print-duart",
     "bao1x-api",
     # needed for the boot logo
     "ux-api/loader-baosec",
 ]
 unsafe-debug = []
-verbose-debug = ["bao1x-hal/debug-print-usb", "bao1x-hal/verbose-debug"]
+verbose-debug = ["bao1x-hal/debug-print-uart", "bao1x-hal/verbose-debug"]
+print-ifr = []
+
+test-boot0-keys = []
+alt-boot1 = []
 
 verilator-only = []
 default = []

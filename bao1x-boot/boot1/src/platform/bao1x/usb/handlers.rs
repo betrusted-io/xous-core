@@ -1,8 +1,8 @@
 use core::convert::TryInto;
 use core::sync::atomic::Ordering;
 
+use bao1x_api::KERNEL_START;
 use bao1x_api::*;
-use bao1x_api::{BAREMETAL_START, KERNEL_START};
 use bao1x_hal::iox::Iox;
 use bao1x_hal::sh1107::Oled128x128;
 use bao1x_hal::udma::*;
@@ -208,14 +208,21 @@ pub fn usb_ep1_bulk_out_complete(
                 const SWAP_END_ADDR: usize =
                     bao1x_api::offsets::SWAP_START_UF2 + bao1x_api::offsets::SWAP_UF2_LEN;
 
+                #[cfg(not(feature = "alt-boot1"))]
+                const START_RANGE: usize = bao1x_api::BAREMETAL_START;
+                #[cfg(feature = "alt-boot1")]
+                const START_RANGE: usize = bao1x_api::BOOT1_START;
                 // program the flash if a valid u2f block was found
                 if let Some(record) = uf2_data {
-                    if matches!(record.address() as usize, bao1x_api::BAREMETAL_START..=STORAGE_END_ADDR)
+                    if matches!(record.address() as usize, START_RANGE..=STORAGE_END_ADDR)
                         && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
                     {
                         let mut rram = bao1x_hal::rram::Reram::new();
                         let offset = record.address() as usize - utralib::HW_RERAM_MEM;
-                        rram.write_slice(offset, record.data());
+                        match rram.write_slice(offset, record.data()) {
+                            Err(e) => crate::print_d!("Write error {:?} @ {:x}", e, offset),
+                            Ok(_) => (),
+                        };
                         /*
                         crate::println_d!(
                             "Wrote {} to 0x{:x}: {:x?}",
@@ -255,7 +262,7 @@ pub fn usb_ep1_bulk_out_complete(
                     }
                     // do some bookkeeping for the UI
                     let (partition, status) = if !IS_BAOSEC.load(Ordering::SeqCst) {
-                        if matches!(record.address() as usize, BAREMETAL_START..=APP_RAM_ADDR) {
+                        if matches!(record.address() as usize, START_RANGE..=APP_RAM_ADDR) {
                             ("core", BAREMETAL_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
                         } else if matches!(record.address() as usize, APP_RAM_ADDR..=STORAGE_END_ADDR) {
                             ("app", APP_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
@@ -263,7 +270,7 @@ pub fn usb_ep1_bulk_out_complete(
                             ("none", 0)
                         }
                     } else {
-                        if matches!(record.address() as usize, BAREMETAL_START..=KERNEL_START) {
+                        if matches!(record.address() as usize, START_RANGE..=KERNEL_START) {
                             (
                                 "loader",
                                 BAREMETAL_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst),
@@ -434,7 +441,9 @@ pub fn flush_tx(this: &mut CorigineUsb) {
     {
         timeout += 1;
         if timeout % 20_000 == 0 {
-            crate::println!("txw {}", timeout);
+            // suppress this unless actively debugging because this can pollute the
+            // tx queue with data and eventually cause an overflow
+            // crate::println!("txw {}", timeout);
         }
     }
 

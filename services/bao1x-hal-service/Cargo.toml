@@ -16,16 +16,18 @@ xous-ipc = "0.10.7"
 log-server = { package = "xous-api-log", version = "0.1.66" }
 log = "0.4.14"
 bao1x-hal = { path = "../../libs/bao1x-hal", default-features = false }
-bao1x-api = { path = "../../libs/bao1x-api", features = [
-    "derive-rkyv",
+bao1x-api = { path = "../../libs/bao1x-api", features = ["derive-rkyv", "std"] }
+# xous-pl230 = { path = "../../libs/xous-pl230", features = ["bao1x"] }
+xous-bio-bdma = { path = "../../libs/xous-bio-bdma", default-features = false, features = [
+    "bao1x",
+    "bio-mul",
     "std",
 ] }
-# xous-pl230 = { path = "../../libs/xous-pl230", features = ["bao1x"] }
-# xous-pio = { path = "../../libs/xous-pio", default-features = false, features = [
-#     "bao1x",
-# ] }
-# pio-proc = "0.2.2"
-# pio = "0.2.1"
+# I'm not entirely in love with the aborted attempt to use flatipc in Xous, but we use
+# this because it makes the API backward-compatible with older Xous code.
+flatipc = { path = "../../libs/flatipc" }
+flatipc-derive = { path = "../../libs/flatipc-derive" }
+rand = "0.8.5"
 rand_core = "0.6.4"
 rand_chacha = "0.3.1"
 bitfield = "0.13.2"
@@ -39,8 +41,6 @@ rkyv = { version = "0.8.8", default-features = false, features = [
 
 [features]
 app-uart = []
-pio = []
-pio-memlcd = []
 rawserial = []
 pinger = []
 swap = []
@@ -49,6 +49,4 @@ bmp180 = ["bao1x-hal/bmp180"]
 board-baosec = ["bao1x-hal/board-baosec"]
 board-baosor = ["bao1x-hal/board-baosor"]
 board-dabao = ["bao1x-hal/board-dabao"]
-# add this feature to enable pre-emption
-quantum-timer = ["utralib", "pio"]
 default = ["app-uart", "utralib"]

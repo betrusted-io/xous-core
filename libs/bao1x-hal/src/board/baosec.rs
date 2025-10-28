@@ -2,6 +2,8 @@
 use bao1x_api::*;
 
 pub const DEFAULT_FCLK_FREQUENCY: u32 = bao1x_api::offsets::baosec::DEFAULT_FCLK_FREQUENCY;
+pub const DEFAULT_CPU_VOLTAGE_MV: u32 = 820;
+pub const VDD85_SWITCH_MARGIN_MV: u32 = 20; // margin, in mV, for the transistor power switch
 
 pub const I2C_AXP2101_ADR: u8 = 0x34;
 pub const I2C_TUSB320_ADR: u8 = 0x47;
@@ -54,6 +56,10 @@ pub const CAM_IFRAM_ADDR: usize =
 // inclusive numbering - we allocate pages from the top-down, so the last number should generally be 31
 pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 9 - CRG_IFRAM_PAGES, 31];
 pub const IFRAM1_RESERVED_PAGE_RANGE: [usize; 2] = [31 - CAM_IFRAM_LEN_PAGES, 31];
+
+// Re-export all of the offsets exposed in the API
+pub use bao1x_api::offsets::baosec::*;
+pub use bao1x_api::offsets::*;
 
 // Display pins
 const SPI_CS_PIN: u8 = 3;
@@ -272,8 +278,8 @@ pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
 
 const KB_PORT: IoxPort = IoxPort::PF;
 const R_PINS: [u8; 2] = [6, 7];
-const C_PINS: [u8; 4] = [2, 3, 4, 5];
-pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 2], [(IoxPort, u8); 4]) {
+const C_PINS: [u8; 3] = [2, 3, 4];
+pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 2], [(IoxPort, u8); 3]) {
     for r in R_PINS {
         iox.setup_pin(
             KB_PORT,
@@ -302,7 +308,7 @@ pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 2], [(Iox
     }
     (
         [(KB_PORT, R_PINS[0]), (KB_PORT, R_PINS[1])],
-        [(KB_PORT, C_PINS[0]), (KB_PORT, C_PINS[1]), (KB_PORT, C_PINS[2]), (KB_PORT, C_PINS[3])],
+        [(KB_PORT, C_PINS[0]), (KB_PORT, C_PINS[1]), (KB_PORT, C_PINS[2])],
     )
 }
 
@@ -400,7 +406,7 @@ pub fn setup_trng_input_pin<T: IoSetup + IoGpio>(iox: &T) -> u8 {
 }
 
 pub fn setup_dcdc2_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
-    let (port, pin) = (IoxPort::PF, 5);
+    let (port, pin) = (IoxPort::PF, 0);
     iox.setup_pin(
         port,
         pin,

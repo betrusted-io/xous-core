@@ -1,42 +1,18 @@
 mod api;
-mod hw;
+mod servers;
+#[cfg(feature = "board-baosec")]
+use std::sync::{Arc, Mutex};
 
 use bao1x_api::*;
 use bao1x_hal::{iox::Iox, udma::GlobalConfig};
 use bitfield::*;
 use num_traits::*;
 use udma::UdmaGlobalConfig;
-use utralib::CSR;
-#[cfg(feature = "quantum-timer")]
 use utralib::utra;
-#[cfg(feature = "quantum-timer")]
 use utralib::*;
 #[cfg(feature = "swap")]
 use xous::SWAPPER_PID;
 use xous::{ScalarMessage, sender::Sender};
-#[cfg(feature = "pio")]
-use xous_pio::*;
-
-#[cfg(feature = "quantum-timer")]
-struct PreemptionHw {
-    pub timer_sm: PioSm,
-    pub irq_csr: CSR<u32>,
-}
-
-#[cfg(feature = "quantum-timer")]
-fn timer_tick(_irq_no: usize, arg: *mut usize) {
-    let ptimer = unsafe { &mut *(arg as *mut PreemptionHw) };
-    // this call forces preemption every timer tick
-    // rsyscalls are "raw syscalls" -- used for syscalls that don't have a friendly wrapper around them
-    // since ReturnToParent is only used here, we haven't wrapped it, so we use an rsyscall
-    xous::rsyscall(xous::SysCall::ReturnToParent(xous::PID::new(1).unwrap(), 0))
-        .expect("couldn't return to parent");
-
-    // acknowledge the timer
-    ptimer.timer_sm.sm_interrupt_clear(0);
-    // clear the pending bit
-    ptimer.irq_csr.wo(utra::irqarray18::EV_PENDING, ptimer.irq_csr.r(utra::irqarray18::EV_PENDING));
-}
 
 #[repr(u32)]
 #[allow(dead_code)]
@@ -87,6 +63,19 @@ fn iox_irq_handler(_irq_no: usize, arg: *mut usize) {
         )),
     )
     .ok();
+}
+
+/// Preemption timer call
+fn timer_tick(_irq_no: usize, arg: *mut usize) {
+    let mut timer = CSR::new(arg as *mut u32);
+    // this call forces preemption every timer tick
+    // rsyscalls are "raw syscalls" -- used for syscalls that don't have a friendly wrapper around them
+    // since ReturnToParent is only used here, we haven't wrapped it, so we use an rsyscall
+    xous::rsyscall(xous::SysCall::ReturnToParent(xous::PID::new(1).unwrap(), 0))
+        .expect("couldn't return to parent");
+
+    // acknowledge the timer
+    timer.wfo(utra::timer0::EV_PENDING_ZERO, 0b1);
 }
 
 fn try_alloc(ifram_allocs: &mut Vec<Option<Sender>>, size: usize, sender: Sender) -> Option<usize> {
@@ -214,58 +203,36 @@ fn main() {
         bao1x_hal::udma::I2c::new_with_ifram(i2c_channel, 400_000, bao1x_api::PERCLK, i2c_ifram, &udma_global)
     };
 
-    // -------------------- begin timer workaround code
-    // This code should go away with bao1x as we have a proper, private ticktimer unit.
-    #[cfg(feature = "pio")]
-    {
-        let mut pio_ss = xous_pio::PioSharedState::new();
-        // map and enable the interrupt for the PIO system timer
-        let irq18_page = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utralib::generated::HW_IRQARRAY18_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't claim irq18 csr");
-        let mut ptimer = PreemptionHw {
-            timer_sm: pio_ss.alloc_sm().unwrap(),
-            irq_csr: CSR::new(irq18_page.as_mut_ptr() as *mut u32),
-        };
+    // os timer initializations
+    let ostimer_csr = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utra::timer0::HW_TIMER0_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map Ticktimer CSR range");
+    xous::claim_interrupt(
+        utralib::utra::timer0::TIMER0_IRQ,
+        timer_tick,
+        ostimer_csr.as_mut_ptr() as *mut usize,
+    )
+    .expect("couldn't claim IRQ");
 
-        // claim the IRQ for the quanta timer
-        xous::claim_interrupt(
-            utralib::LITEX_IRQARRAY18_INTERRUPT,
-            timer_tick,
-            &mut ptimer as *mut PreemptionHw as *mut usize,
-        )
-        .expect("couldn't claim IRQ");
+    // setup the OS timer
+    let mut timer_run = false;
+    let mut os_timer = CSR::new(ostimer_csr.as_ptr() as *mut u32);
+    let ms = bao1x_api::SYSTEM_TICK_INTERVAL_MS;
+    os_timer.wfo(utra::timer0::EN_EN, 0b0); // disable the timer
+    // load its values
+    os_timer.wfo(utra::timer0::LOAD_LOAD, (bao1x_hal::board::DEFAULT_FCLK_FREQUENCY / 1_000) * ms);
+    os_timer.wfo(utra::timer0::RELOAD_RELOAD, (bao1x_hal::board::DEFAULT_FCLK_FREQUENCY / 1_000) * ms);
+    // enable the timer
+    os_timer.wfo(utra::timer0::EN_EN, 0b1);
 
-        pio_ss.clear_instruction_memory();
-        pio_ss.pio.rmwf(utra::rp_pio::SFR_CTRL_EN, 0);
-        #[rustfmt::skip]
-        let timer_code = pio_proc::pio_asm!(
-            "restart:",
-            "set x, 6",  // 4 cycles overhead gets us to 10 iterations per pulse
-            "waitloop:",
-            "jmp x-- waitloop",
-            "irq set 0",
-            "jmp restart",
-        );
-        let a_prog = LoadedProg::load(timer_code.program, &mut pio_ss).unwrap();
-        ptimer.timer_sm.sm_set_enabled(false);
-        a_prog.setup_default_config(&mut ptimer.timer_sm);
-        ptimer.timer_sm.config_set_clkdiv(50_000.0f32); // set to 1ms per cycle
-        ptimer.timer_sm.sm_init(a_prog.entry());
-        ptimer.timer_sm.sm_irq0_source_enabled(PioIntSource::Sm, true);
-        ptimer.timer_sm.sm_set_enabled(true);
-
-        #[cfg(feature = "quantum-timer")]
-        {
-            ptimer.irq_csr.wfo(utra::irqarray18::EV_ENABLE_PIOIRQ0_DUPE, 1);
-            log::info!("Quantum timer setup!");
-        }
-    }
-    // -------------------- end timer workaround code
+    // Set EV_ENABLE according to timer_run
+    // timer is OFF at boot to help insure that processes 2 & 3 get larger time slices
+    // to operate & claim critical resources
+    os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, if timer_run { 1 } else { 0 });
 
     // ---- "own" the Iox IRQ bank. This might need revision once bao1x aliasing is available. ---
     let irq_page = xous::syscall::map_memory(
@@ -290,7 +257,14 @@ fn main() {
     let mut irq_table: [Option<IrqLocalRegistration>; 8] = [None; 8];
 
     // start keyboard emulator service
-    hw::keyboard::start_keyboard_service();
+    servers::keyboard::start_keyboard_service();
+
+    // claim BIO
+    #[cfg(feature = "board-baosec")]
+    let bio_ss = Arc::new(Mutex::new(xous_bio_bdma::BioSharedState::new()));
+    // setup TRNG server - baosec only because it has an external AV generator
+    #[cfg(feature = "board-baosec")]
+    servers::trng::start_trng_service(&bio_ss);
 
     let mut msg_opt = None;
     log::debug!("Starting main loop");
@@ -586,6 +560,14 @@ fn main() {
                     }
                 }
                 buf.replace(list).expect("I2c message format error");
+            }
+            HalOpcode::SetPreemptionState => {
+                // this is done as a blocking message because we want confirmation that
+                // this bit has been set before entering a critical section.
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    timer_run = scalar.arg1 != 0;
+                    os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, if timer_run { 1 } else { 0 });
+                }
             }
             HalOpcode::InvalidCall => {
                 log::error!("Invalid opcode received: {:?}", msg);

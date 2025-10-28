@@ -22,9 +22,11 @@ bao1x = [
     "linked_list_allocator",
     "bao1x-hal/loader-baosec",
     "bao1x-api",
+    # "bao1x-hal/debug-print-duart",
 ]
 
 # turns on a bunch of developer debug features. No production build should have this feature activated!
 unsafe-dev = []
+print-ifr = []
 
 default = ["bao1x"]

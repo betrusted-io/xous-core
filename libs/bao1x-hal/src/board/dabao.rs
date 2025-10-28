@@ -28,6 +28,10 @@ pub const CRG_UDC_MEMBASE: usize =
 pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 4, 31];
 pub const IFRAM1_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 0, 31];
 
+// Re-export all of the offsets exposed in the API
+pub use bao1x_api::offsets::dabao::*;
+pub use bao1x_api::offsets::*;
+
 const SE0_PIN: u8 = 13;
 const SE0_PORT: IoxPort = IoxPort::PC;
 /// Sets the SE0 pin to drive and returns the port number. Note this side-effects the boot switch reading.

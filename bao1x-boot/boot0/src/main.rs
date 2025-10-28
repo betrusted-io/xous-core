@@ -14,7 +14,8 @@ use alloc::collections::VecDeque;
 #[cfg(feature = "unsafe-dev")]
 use core::cell::RefCell;
 
-use bao1x_api::signatures::FunctionCode;
+use bao1x_api::{BOOT0_PUBKEY_FAIL, signatures::FunctionCode};
+use bao1x_hal::acram::OneWayCounter;
 #[cfg(feature = "unsafe-dev")]
 use critical_section::Mutex;
 use platform::*;
@@ -51,6 +52,14 @@ pub fn uart_irq_handler() {
 /// This function is safe to call exactly once.
 #[export_name = "rust_entry"]
 pub unsafe extern "C" fn rust_entry() -> ! {
+    // set the security bits on the RRAM - without these set, most security is bypassed
+    // this issue is fixed on A1 silicon stepping (which is production silicon).
+    let mut rram = CSR::new(utra::rrc::HW_RRC_BASE as *mut u32);
+    rram.wfo(utra::rrc::SFR_RRCCR_SFR_RRCCR, bao1x_hal::rram::SECURITY_MODE);
+    // set user level so we can access keys
+    let mut cu = bao1x_hal::coreuser::Coreuser::new();
+    cu.set();
+
     crate::platform::early_init();
     crate::println!("\n~~boot0 up! ({})~~\n", crate::version::SEMVER);
 
@@ -77,6 +86,33 @@ pub unsafe extern "C" fn rust_entry() -> ! {
             }
             _ => (),
         };
+    }
+
+    // useful for CI, checking samples - print the IFR region
+    #[cfg(feature = "print-ifr")]
+    print_ifr();
+
+    // check that the boot0 pub keys match those burned into the indelible key area
+    let pubkey_ptr = bao1x_api::BOOT0_START as *const bao1x_api::signatures::SignatureInFlash;
+    let pk_src: &bao1x_api::signatures::SignatureInFlash = unsafe { pubkey_ptr.as_ref().unwrap() };
+    let reference_keys =
+        [bao1x_api::BAO1_PUBKEY, bao1x_api::BAO2_PUBKEY, bao1x_api::BETA_PUBKEY, bao1x_api::DEV_PUBKEY];
+    let slot_mgr = bao1x_hal::acram::SlotManager::new();
+    let mut good_compare = true;
+    for (boot0_key, ref_key) in pk_src.sealed_data.pubkeys.iter().zip(reference_keys.iter()) {
+        let ref_data = slot_mgr.read(&ref_key).unwrap();
+        if ref_data != &boot0_key.pk {
+            good_compare = false;
+        }
+    }
+    if !good_compare {
+        let owc = OneWayCounter::new();
+        // safety: the offset is from a pre-validated constant, which meets the safety requirement
+        unsafe {
+            owc.inc(BOOT0_PUBKEY_FAIL).unwrap();
+        }
+        // erase secrets if the boot0 pubkey doesn't check out.
+        bao1x_hal::sigcheck::erase_secrets();
     }
     // self-validate the image with the keys we put in, just to make sure our code wasn't tampered with
     if bao1x_hal::sigcheck::validate_image(
@@ -146,8 +182,6 @@ pub unsafe extern "C" fn rust_entry() -> ! {
 }
 
 fn seal_boot0_keys() {
-    // TODO:
-    //  - setup an initial coreuser table
     //  - set an ASID that locks out any boot0 secrets (currently none, as it's PK based)
     //  - this does not offer strong security, but prevents someone with an arbitrary read primitive from
     //    accessing any boot0 secrets. An arbitrary-exec primitive at this point can, of course, undo the ASID
@@ -155,4 +189,21 @@ fn seal_boot0_keys() {
     //
     // Only necessary if we have secrets to seal. The current implementation only contains a public key,
     // so there's no secrets to seal.
+}
+
+#[cfg(feature = "print-ifr")]
+fn print_ifr() {
+    let coreuser = utralib::CSR::new(utralib::utra::coreuser::HW_COREUSER_BASE as *mut u32);
+    // needs to be 0x118 for IFR to be readable when the protection bit is set.
+    crate::println!("coreuser status: {:x}", coreuser.r(utralib::utra::coreuser::STATUS));
+
+    let ifr = unsafe { core::slice::from_raw_parts(0x6040_0000 as *const u32, 0x100) };
+    for (i, &d) in ifr.iter().enumerate() {
+        if i % 8 == 0 {
+            crate::println!("");
+            crate::print!("{:04x}: ", i * 4);
+        }
+        crate::print!("{:08x} ", d);
+    }
+    crate::println!("");
 }

@@ -23,6 +23,7 @@ modals = { path = "../modals", default-features = false, optional = true }
 ux-api = { path = "../../libs/ux-api", optional = true }
 pddb = { path = "../pddb", optional = true }
 xous-swapper = { path = "../xous-swapper", optional = true }
+bytemuck = "1.24.0"
 
 # pddb testing
 rand = { version = "0.8.5", features = ["getrandom"], optional = true }
@@ -69,4 +70,12 @@ modal-testing = ["ux-api", "modals/modal-testing"]
 test-scrollbars = []
 test-flash = []
 ctap-bringup = ["xous-usb-hid"]
+# this is mutually exclusive with the keystore, as keystore owns rram
+rramtests = []
+
+# Activating this makes this crate *try* to grab the DUART. To improve its odds
+# of winning the race, shift its position to first in the list in the PIDs to be
+# loaded and run.
+duart-debug-hal = ["bao1x-hal/debug-print-duart"]
+
 default = []

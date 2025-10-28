@@ -745,20 +745,10 @@ pub(crate) fn main_hw() -> ! {
                         let buffer = unsafe { Buffer::from_memory_message(mem_msg) };
                         match buffer.to_original::<api::UsbString, _>() {
                             Ok(usb_send) => {
-                                // this is implemented as a "blocking write": the routine will block until the
-                                // data has all been written.
-                                let send_data = usb_send.s.as_bytes();
-                                let to_send = usb_send.s.len();
-                                let mut sent = 0;
-                                while sent < to_send {
-                                    match cu.serial_port.write(&send_data[sent..to_send]) {
-                                        Ok(written) => {
-                                            sent += written;
-                                        }
-                                        Err(_) => {
-                                            // just drop characters
-                                        }
-                                    }
+                                for chunk in
+                                    usb_send.s.as_bytes().chunks(bao1x_hal::usb::driver::CRG_UDC_APP_BUFSIZE)
+                                {
+                                    cu.serial_port.write(&chunk).ok();
                                     cu.serial_port.flush().ok(); // just drop characters on error
                                 }
                             }

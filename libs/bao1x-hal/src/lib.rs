@@ -31,6 +31,8 @@ pub use shared_csr::*;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod acram;
 #[cfg(not(feature = "hosted-baosec"))]
+pub mod coreuser;
+#[cfg(not(feature = "hosted-baosec"))]
 pub mod mbox;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod rram;
@@ -94,4 +96,12 @@ pub unsafe fn read_sp() -> usize {
     let sp: usize;
     core::arch::asm!("mv {0}, sp", out(reg) sp);
     sp
+}
+
+/// DUART is first-come, first-served in Xous environment. This stub
+/// can be called early in a server's initialization process so that it can get
+/// exclusive access to the DUART (assuming the kernel is configured to relinquish it)
+#[cfg(feature = "std")]
+pub fn claim_duart() {
+    crate::println!("PID {} got duart", xous::process::id());
 }

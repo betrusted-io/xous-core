@@ -1,4 +1,4 @@
-/// ===== PLACEHOLDER - bao2 signing HSM ceremony pending ======
+/// ===== PLACEHOLDER - bao1 signing HSM ceremony pending ======
 #[allow(unused_imports)]
 use super::*;
 use crate::signatures::Pubkey;
