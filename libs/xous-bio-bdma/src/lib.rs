@@ -99,7 +99,10 @@ pub fn lfsr_next_u32(state: u32) -> u32 {
 pub const BIO_PRIVATE_MEM_LEN: usize = 4096;
 
 pub struct BioSharedState {
+    #[cfg(feature = "baremetal")]
     pub bio: CSR<u32>,
+    #[cfg(not(feature = "baremetal"))]
+    pub bio: AtomicCsr<u32>,
     pub imem_slice: [&'static mut [u32]; 4],
 }
 impl BioSharedState {
@@ -170,9 +173,30 @@ impl BioSharedState {
         .unwrap();
 
         BioSharedState {
-            bio: CSR::new(csr.as_mut_ptr() as *mut u32),
+            bio: AtomicCsr::new(csr.as_mut_ptr() as *mut u32),
+            // safety: MemoryRange does not de-allocate the mapping on Drop. So the maps live the
+            // lifetime of the process (or until `unmap_memory` is called: please don't do that).
+            // Since the range maps to some underlying hardware and it's aligned for the data types,
+            // it's as safe as any naked slice can be (i.e. you still have to think about concurrency etc.).
             imem_slice: unsafe {
-                [imem0.as_slice_mut(), imem1.as_slice_mut(), imem2.as_slice_mut(), imem3.as_slice_mut()]
+                [
+                    core::slice::from_raw_parts_mut(
+                        imem0.as_mut_ptr() as *mut u32,
+                        utralib::HW_BIO_IMEM0_MEM_LEN / size_of::<u32>(),
+                    ),
+                    core::slice::from_raw_parts_mut(
+                        imem1.as_mut_ptr() as *mut u32,
+                        utralib::HW_BIO_IMEM1_MEM_LEN / size_of::<u32>(),
+                    ),
+                    core::slice::from_raw_parts_mut(
+                        imem2.as_mut_ptr() as *mut u32,
+                        utralib::HW_BIO_IMEM2_MEM_LEN / size_of::<u32>(),
+                    ),
+                    core::slice::from_raw_parts_mut(
+                        imem3.as_mut_ptr() as *mut u32,
+                        utralib::HW_BIO_IMEM3_MEM_LEN / size_of::<u32>(),
+                    ),
+                ]
             },
         }
     }
