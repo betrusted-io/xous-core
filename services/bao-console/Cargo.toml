@@ -70,6 +70,7 @@ modal-testing = ["ux-api", "modals/modal-testing"]
 test-scrollbars = []
 test-flash = []
 ctap-bringup = ["xous-usb-hid"]
+# this is mutually exclusive with the keystore, as keystore owns rram
 rramtests = []
 
 # Activating this makes this crate *try* to grab the DUART. To improve its odds
@@ -77,4 +78,4 @@ rramtests = []
 # loaded and run.
 duart-debug-hal = ["bao1x-hal/debug-print-duart"]
 
-default = ["rramtests"]
+default = []

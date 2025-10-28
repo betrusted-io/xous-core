@@ -30,7 +30,7 @@ xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branc
 [features]
 bao1x = ["utralib/bao1x", "usb-bao1x/bao1x", "aes/bao1x"]
 board-dabao = [
-    "bao1x-hal-service",
+    "bao1x-hal-service/board-dabao",
     "bao1x-hal/board-dabao",
     # "bao1x-hal/debug-print-duart",
     "usb-bao1x/board-dabao",

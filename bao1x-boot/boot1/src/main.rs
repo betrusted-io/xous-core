@@ -25,9 +25,9 @@ use platform::*;
 use utralib::*;
 use ux_api::minigfx::{DrawStyle, FrameBuffer, Point, Rectangle};
 
+use crate::delay;
 use crate::platform::usb::glue;
-use crate::secboot::boot_or_die;
-use crate::{delay, platform::irq::disable_all_irqs};
+use crate::secboot::try_boot;
 
 // Notes:
 // - "Towards" - not a release yet, but working towards the stated milestone
@@ -104,9 +104,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     let boot_wait = one_way.get_decoded::<BootWaitCoding>().expect("internal error");
 
     if boot_wait == BootWaitCoding::Disable && current_key.is_none() {
-        disable_all_irqs();
-        // this should diverge, rest of code is not run
-        boot_or_die();
+        // diverges if there is code to run
+        try_boot(false);
+        // or_die == false means the rest of this gets run if there is no valid image
     }
 
     if boot_wait == BootWaitCoding::Enable {
@@ -291,9 +291,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         }
     });
 
-    disable_all_irqs();
     // when we get to this point, there's only two options...
-    crate::secboot::boot_or_die();
+    try_boot(true);
+    unreachable!("`or_die = true` means this should be unreachable");
 }
 
 pub fn marquee(sh1107: &mut Oled128x128, msg: &str) {

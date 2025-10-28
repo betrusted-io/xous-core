@@ -10,15 +10,15 @@ pub enum HalOpcode {
     /// Deallocate an IFRAM block
     UnmapIfram = 1,
 
-    /// Manage PIO behaviors. PIO requires real-time behaviors, so
+    /// Manage BIO behaviors. BIO requires real-time behaviors, so
     /// the idea is that this service encodes a set of "behaviors" that
     /// are API extensions which are modular. The behaviors are set up as
     /// feature flags. Fast bulk data transfer to/from the behaviors is
     /// done using IFRAM blocks, which are managed by the above API calls;
-    /// otherwise "singleton" peeks and pokes to the PIO should be handled
+    /// otherwise "singleton" peeks and pokes to the BIO should be handled
     /// with specific ScalarMessage calls to minimize OS overhead in
     /// context-switching to the block.
-    #[cfg(feature = "pio")]
+    #[cfg(feature = "bio")]
     ConfigurePioBehavior = 2,
 
     /// Gutter for Invalid Calls
@@ -58,12 +58,12 @@ pub enum HalOpcode {
     Quit = 255,
 
     /// Behavior opcode base
-    #[cfg(feature = "pio")]
+    #[cfg(feature = "bio")]
     BehaviorBase0 = 0x1000,
-    #[cfg(feature = "pio")]
+    #[cfg(feature = "bio")]
     BehaviorBase1 = 0x2000,
-    #[cfg(feature = "pio")]
+    #[cfg(feature = "bio")]
     BehaviorBase2 = 0x3000,
-    #[cfg(feature = "pio")]
+    #[cfg(feature = "bio")]
     BehaviorBase3 = 0x4000,
 }

@@ -76,8 +76,8 @@ encode_oneway! {
 encode_oneway! {
     #[offset = 81]
     pub enum BoardTypeCoding {
-        Baosec,
         Dabao,
+        Baosec,
         Oem,
     }
 }
@@ -112,6 +112,10 @@ pub const DEVELOPER_MODE: usize = 85;
 /// of bits, but at the least they can say that a person they don't know or trust most likely
 /// did bless the bag of bits.
 pub const OEM_MODE: usize = 86;
+
+/// This is incremented if the boot0 public keys failed to compare against the static keys in
+/// the data store.
+pub const BOOT0_PUBKEY_FAIL: usize = 87;
 
 /// Total number of public key slots in the system. Pubkey revocations are at the "top of range"
 pub const PUBKEY_SLOTS: usize = 4;
@@ -150,6 +154,14 @@ pub const IFR_HASH: SlotIndex = SlotIndex::Data(2, PartitionAccess::All, RwPerms
 /// `WAFER_ID` is a copy of the lot ID + wafer ID + x/y position data that should be captured
 /// during CP.
 pub const CP_ID: SlotIndex = SlotIndex::Data(3, PartitionAccess::All, RwPerms::ReadOnly);
+
+/// Indelible versions of the public keys. The problem with the pubkeys in boot0 region is that
+/// boot0 itself has the ability to modify its own memory. A copy here can have a bit set in
+/// the IFR that blocks any attempt to modify these keys.
+pub const BAO1_PUBKEY: SlotIndex = SlotIndex::Data(4, PartitionAccess::All, RwPerms::ReadOnly);
+pub const BAO2_PUBKEY: SlotIndex = SlotIndex::Data(5, PartitionAccess::All, RwPerms::ReadOnly);
+pub const BETA_PUBKEY: SlotIndex = SlotIndex::Data(6, PartitionAccess::All, RwPerms::ReadOnly);
+pub const DEV_PUBKEY: SlotIndex = SlotIndex::Data(7, PartitionAccess::All, RwPerms::ReadOnly);
 
 // Notes on defining the boot0 IFR region.
 // RISC-V boot0 region start is defined by IFR slot 6, bits [55:48]

@@ -5,7 +5,8 @@ use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, KeyInit, Nonce, Tag};
 use bao1x_api::signatures::FunctionCode;
 use bao1x_api::udma::*;
 use bao1x_api::*;
-use bao1x_hal::board::{APP_UART_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR};
+use bao1x_hal::acram::SlotManager;
+use bao1x_hal::board::{APP_UART_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR, SWAP_KEY};
 use bao1x_hal::ifram::IframRange;
 use bao1x_hal::iox::Iox;
 use bao1x_hal::sce;
@@ -230,7 +231,7 @@ impl SwapHal {
                     // check signature only if the swap key is all 0's
                     if swap.key == [0u8; 32] {
                         crate::println!("Fresh swap image found - checking signature before proceeding");
-                        if bao1x_hal::sigcheck::validate_image(
+                        match bao1x_hal::sigcheck::validate_image(
                             (bao1x_api::offsets::baosec::SWAP_HEADER_LEN
                                 - bao1x_api::signatures::SIGBLOCK_LEN)
                                 as *const u32,
@@ -239,26 +240,43 @@ impl SwapHal {
                             &[FunctionCode::Swap as u32, FunctionCode::UpdatedSwap as u32],
                             false,
                             Some(&mut hal.flash_spim),
-                        )
-                        .is_err()
-                        {
-                            crate::println!("Fresh swap image did not pass public key validation");
-                            bao1x_hal::sigcheck::die_no_std();
+                        ) {
+                            Ok((k, tag)) => {
+                                println!(
+                                    "*** Swap signature check by key @ {}({}) OK ***",
+                                    k,
+                                    core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                                );
+                                // k is just a nominal slot number. If either match, assume we are dealing
+                                // with a developer image.
+                                if tag
+                                    == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS
+                                        [bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
+                                    || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                                {
+                                    crate::println!("Developer key detected, ensuring secret are erased");
+                                    bao1x_hal::sigcheck::erase_secrets();
+                                }
+                            }
+                            Err(e) => {
+                                crate::println!(
+                                    "Fresh swap image did not pass public key validation: {:?}",
+                                    e
+                                );
+                                bao1x_hal::sigcheck::die_no_std();
+                            }
                         }
-                        crate::println!("...passed!");
                     }
                 }
                 Err(_) => {
-                    let swap_key = [1u8; 32]; // THIS IS FAKE replace it with the correct API call
+                    let slot_mgr = SlotManager::new();
+                    let swap_key = slot_mgr.read(&SWAP_KEY).unwrap();
                     // replace the cipher with the new key
-                    hal.src_cipher = Aes256GcmSiv::new((&swap_key).into());
+                    hal.src_cipher = Aes256GcmSiv::new((*swap_key).into());
                     if hal.decrypt_src_page_at(0).is_err() {
                         crate::println!("Swap image failed cryptographic integrity checks!");
                         bao1x_hal::sigcheck::die_no_std();
                     }
-                    todo!(
-                        "Fall back to retrieving the derived key for re-encrypted swap, and attempting a trial decryption!"
-                    );
                 }
             }
 

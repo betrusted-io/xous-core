@@ -51,6 +51,11 @@ impl OneWayCounter {
         ret
     }
 
+    #[cfg(feature = "std")]
+    pub fn register_mapping(&self, rram: &mut Reram) {
+        rram.add_range(ONEWAY_START - utralib::HW_RERAM_MEM, self.mapping);
+    }
+
     pub fn get(&self, offset: usize) -> Result<u32, OneWayErr> {
         #[cfg(not(feature = "std"))]
         let base = ONEWAY_START as *const u32;
@@ -242,6 +247,14 @@ impl SlotManager {
         let user_id = crate::coreuser::TRUSTED_USER;
 
         Self { data_range, data_acl_range, key_range, key_acl_range, user_id }
+    }
+
+    #[cfg(feature = "std")]
+    pub fn register_mapping(&self, rram: &mut Reram) {
+        rram.add_range(DATA_SLOT_START - utralib::HW_RERAM_MEM, self.data_range);
+        rram.add_range(ACRAM_DATASLOT_START - utralib::HW_RERAM_MEM, self.data_acl_range);
+        rram.add_range(KEY_SLOT_START - utralib::HW_RERAM_MEM, self.key_range);
+        rram.add_range(ACRAM_KEYSLOT_START - utralib::HW_RERAM_MEM, self.key_acl_range);
     }
 
     pub fn read(&self, slot: &SlotIndex) -> Result<&[u8], AccessError> {

@@ -100,6 +100,24 @@ pub fn early_init_hw() -> u32 {
 
     #[cfg(feature = "board-baosec")]
     {
+        // if board type is the default (dabao), reset to baosec, and reboot so that key
+        // provisioning can run. This should only happen if the avalanche generator is known to be good.
+        // TODO: implement avalanche generator test?
+        let one_way = bao1x_hal::acram::OneWayCounter::new();
+        let board_type =
+            one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error");
+        if board_type != bao1x_api::BoardTypeCoding::Baosec {
+            crate::println!("Board type is not Baosec; resetting it and rebooting!");
+            while one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
+                != bao1x_api::BoardTypeCoding::Baosec
+            {
+                one_way.inc_coded::<bao1x_api::BoardTypeCoding>().expect("increment error");
+            }
+            crate::println!("Board type set to baosec, rebooting so boot1 can provision keys!");
+            let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+            rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
+        }
+
         // setup all the board pins to a known state
         let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
         bao1x_hal::board::setup_display_pins(&iox);
