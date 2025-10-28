@@ -45,6 +45,7 @@ print-ifr = []
 
 test-boot0-keys = []
 alt-boot1 = []
+force-dabao = []
 
 verilator-only = []
 default = []
