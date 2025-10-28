@@ -61,6 +61,9 @@ pub const RMA_KEY: SlotIndex = SlotIndex::Key(257, PartitionAccess::Fw0, RwPerms
 /// to developer mode.
 pub const CP_COOKIE: SlotIndex = SlotIndex::Key(258, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
+/// The swap encryption key. Used to protect swap images beyond the signing key, if we so desire.
+pub const SWAP_KEY: SlotIndex = SlotIndex::Key(259, PartitionAccess::Fw0, RwPerms::ReadOnly);
+
 /// `NUISANCE_KEYS` are hashed together with `ROOT_SEED` to derive the core secret.
 /// Their primary purpose is to annoy microscopists trying to read the secret key by
 /// directly imaging the RRAM array. They also exist to reduce power side channels
