@@ -107,6 +107,7 @@ pub fn early_init_hw() -> u32 {
         let board_type =
             one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error");
         if board_type != bao1x_api::BoardTypeCoding::Baosec {
+            crate::println!("Board type is not Baosec; resetting it and rebooting!");
             while one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
                 != bao1x_api::BoardTypeCoding::Baosec
             {
