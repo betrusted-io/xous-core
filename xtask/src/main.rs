@@ -917,6 +917,8 @@ Hardware images:
  bao1x-baremetal         Baremetal image for baochip1x targets.
  bao1x-boot0             Boot0 partition for baochip1x targets.
  bao1x-boot1             Boot1 partition for baochip1x targets.
+ bao1x-alt-boot1         Alterante boot1 partition for baochip1x targets. Burns into the 'loader/baremetal' region
+                         and allows for updating of boot1 when this partition is active.
 
 Hosted emulation:
  run                     Run user image in hosted mode with release flags. [cratespecs] are apps
