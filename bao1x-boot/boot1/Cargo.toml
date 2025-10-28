@@ -46,4 +46,4 @@ print-ifr = []
 test-boot0-keys = []
 
 verilator-only = []
-default = ["test-boot0-keys"]
+default = []
