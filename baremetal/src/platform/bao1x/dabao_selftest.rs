@@ -7,7 +7,7 @@ const DABAO_PINMASK: u32 = 0b0001_1111_1000_1111_0111_1000_0011_1110; // 0x1F8F7
 pub fn dabao_selftest() {
     let mut bio_ss = BioSharedState::new();
     let iox = bao1x_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-    iox.set_ports_from_pio_bitmask(DABAO_PINMASK);
+    iox.set_ports_from_bio_bitmask(DABAO_PINMASK);
     bio_ss.init();
     bio_ss.load_code(db_pin_test_code(), 0, BioCore::Core0);
     bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x1_0001);
@@ -34,7 +34,7 @@ pub fn dabao_selftest() {
     }
     crate::println!("Done; pin state reverted");
     crate::usb::flush();
-    iox.set_ports_from_pio_bitmask(0x0);
+    iox.set_ports_from_bio_bitmask(0x0);
 }
 
 #[rustfmt::skip]
