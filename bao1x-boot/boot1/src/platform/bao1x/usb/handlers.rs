@@ -44,6 +44,12 @@ fn fill_sparse_data(dest: &mut [u8], offset: usize) {
         let copy_len = (dest.len().saturating_sub(write_start_in_dest)).min(block.len());
 
         dest[write_start_in_dest..write_start_in_dest + copy_len].copy_from_slice(&block[..copy_len]);
+        #[cfg(feature = "alt-boot1")]
+        // patch the volume name so we can tell alt-boot apart
+        if addr == 0x410000 {
+            // patch ALT over BAO. Assumes that the block is aligned.
+            dest[write_start_in_dest..write_start_in_dest + 3].copy_from_slice(&[0x41, 0x4c, 0x54])
+        }
     }
 }
 
