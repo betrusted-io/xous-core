@@ -106,7 +106,7 @@ impl Repl {
                 rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
             }
             "boot" => {
-                crate::secboot::boot_or_die();
+                crate::secboot::try_boot(true);
             }
             "uf2" => {
                 use base64::{Engine as _, engine::general_purpose};
@@ -184,7 +184,14 @@ impl Repl {
             }
             "boardtype" => {
                 let one_way = OneWayCounter::new();
-                if args.len() != 1 {
+                if args.len() == 0 {
+                    crate::println!(
+                        "Board type is set to: {:?}",
+                        one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
+                    );
+                    self.abort_cmd();
+                    return Ok(());
+                } else if args.len() != 1 {
                     return Err(Error::help("boardtype [dabao | baosec | oem]"));
                 }
                 let new_type = match args[0].as_str() {
@@ -204,16 +211,26 @@ impl Repl {
                 crate::platform::slots::check_slots(&new_type);
                 crate::println!("Key & data slots checked according to the new type");
             }
+            "altboot" => {
+                let owc = OneWayCounter::new();
+                if args.len() == 0 {
+                    crate::println!("Boot partition is: {:?}", owc.get_decoded::<AltBootCoding>());
+                    self.abort_cmd();
+                    return Ok(());
+                } else if args.len() != 1 {
+                    return Err(Error::help("altboot [toggle]"));
+                }
+                if args[0] == "toggle" {
+                    owc.inc_coded::<bao1x_api::AltBootCoding>().unwrap();
+                    crate::println!("Boot partition is now: {:?}", owc.get_decoded::<AltBootCoding>());
+                } else {
+                    return Err(Error::help("altboot [toggle]"));
+                }
+            }
             "audit" => {
                 let owc = OneWayCounter::new();
-                crate::println!(
-                    "Board type reads as: {:?}",
-                    owc.get_decoded::<bao1x_api::offsets::BoardTypeCoding>()
-                );
-                crate::println!(
-                    "Boot partition is: {:?}",
-                    owc.get_decoded::<bao1x_api::offsets::AltBootCoding>()
-                );
+                crate::println!("Board type reads as: {:?}", owc.get_decoded::<BoardTypeCoding>());
+                crate::println!("Boot partition is: {:?}", owc.get_decoded::<AltBootCoding>());
                 crate::println!("Semver is: {}", crate::version::SEMVER);
                 crate::println!("Description is: {}", crate::RELEASE_DESCRIPTION);
                 let slot_mgr = bao1x_hal::acram::SlotManager::new();
@@ -293,10 +310,59 @@ impl Repl {
                     ),
                     Err(e) => crate::println!("Next stage did not validate: {:?}", e),
                 }
-                // TODO:
-                //   - devboot seen
-                //   - oem keys erased
-                //   - uuid
+
+                // detailed state checks
+                let mut secure = true;
+                // check that boot1 pubkeys match the indelible entries
+                let pubkey_ptr = bao1x_api::BOOT1_START as *const bao1x_api::signatures::SignatureInFlash;
+                let pk_src: &bao1x_api::signatures::SignatureInFlash =
+                    unsafe { pubkey_ptr.as_ref().unwrap() };
+                let reference_keys = [
+                    bao1x_api::BAO1_PUBKEY,
+                    bao1x_api::BAO2_PUBKEY,
+                    bao1x_api::BETA_PUBKEY,
+                    bao1x_api::DEV_PUBKEY,
+                ];
+                let slot_mgr = bao1x_hal::acram::SlotManager::new();
+                let mut good_compare = true;
+                for (boot0_key, ref_key) in pk_src.sealed_data.pubkeys.iter().zip(reference_keys.iter()) {
+                    let ref_data = slot_mgr.read(&ref_key).unwrap();
+                    if ref_data != &boot0_key.pk {
+                        good_compare = false;
+                    }
+                }
+                if !good_compare {
+                    crate::println!("== BOOT1 FAILED PUBKEY CHECK ==");
+                    // this may "not" be a security failure if boot1 was intentionally replaced
+                    // but in that case, the developer customizing the image should have also edited this
+                    // check out.
+                    secure = false;
+                }
+                // check developer mode
+                if owc.get(DEVELOPER_MODE).unwrap() != 0 {
+                    crate::println!("== IN DEVELOPER MODE ==");
+                    secure = false;
+                }
+                if owc.get(BOOT0_PUBKEY_FAIL).unwrap() != 0 {
+                    crate::println!("== BOOT0 REPORTED PUBKEY CHECK FAILURE ==");
+                    secure = false;
+                }
+                if owc.get(CP_BOOT_SETUP_DONE).unwrap() == 0 {
+                    crate::println!("== CP SETUP FAILED ==");
+                    secure = false;
+                }
+                if owc.get(IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0 {
+                    crate::println!("In-system keys have NOT been generated");
+                    if owc.get_decoded::<BoardTypeCoding>().unwrap() == BoardTypeCoding::Baosec {
+                        // this is only a security failure on baosec systems
+                        secure = false;
+                    }
+                } else {
+                    crate::println!("In-system keys have been generated");
+                }
+                if !secure {
+                    crate::println!("** System did not meet minimum requirements for security **");
+                }
             }
             "lockdown" => {
                 match bao1x_hal::sigcheck::validate_image(
@@ -328,6 +394,61 @@ impl Repl {
                         crate::println!("Boot1 has no valid signature, lockdown would brick the chip.")
                     }
                 }
+            }
+            #[cfg(feature = "test-boot0-keys")]
+            "publock" => {
+                let rram = CSR::new(utra::rrc::HW_RRC_BASE as *mut u32);
+                crate::println!("RRAM security settings: {:x}", rram.rf(utra::rrc::SFR_RRCCR_SFR_RRCCR));
+
+                use bao1x_hal::acram::AccessSettings;
+                let keys = [
+                    bao1x_api::BAO1_PUBKEY,
+                    bao1x_api::BAO2_PUBKEY,
+                    bao1x_api::BETA_PUBKEY,
+                    bao1x_api::DEV_PUBKEY,
+                ];
+                let ifr_slot = unsafe { core::slice::from_raw_parts(0x6040_0340 as *const u8, 32) };
+                crate::println!("IFR permissions at 0x340: {:x?}", ifr_slot);
+                let slot_mgr = bao1x_hal::acram::SlotManager::new();
+                let mut rram = bao1x_hal::rram::Reram::new();
+                // some value that's not 0, so we can differentiate it from access denied state
+                const ERASE_VALUE: u8 = 7;
+                let mut pass = true;
+                // remember: we call these keys, but they live in data slots, because they are public keys.
+                for key in keys {
+                    // first print the key
+                    let access = key.get_access_spec();
+                    crate::println!("Permissions (spec): {:?}", access);
+                    let acl = slot_mgr.get_acl(&key).unwrap();
+                    crate::println!("Permissions (actual): {:x?}", acl);
+                    // attempt to clear the permissions, making the keys malleable
+                    slot_mgr
+                        .set_acl(&mut rram, &key, &AccessSettings::Key(KeySlotAccess::new_with_raw_value(0)))
+                        .ok(); // if we can't clear, that's by design
+
+                    let acl = slot_mgr.get_acl(&key).unwrap();
+                    crate::println!("Permissions (attacked): {:x?}", acl);
+                    crate::println!("Data: {:x?}", slot_mgr.read(&key).ok());
+                    let eraser = [ERASE_VALUE; SLOT_ELEMENT_LEN_BYTES];
+                    match slot_mgr.write(&mut rram, &key, &eraser) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            crate::println!("Couldn't erase pubkey in data slot {}: {:?}", key.get_base(), e)
+                        }
+                    }
+                    let check = slot_mgr.read(&key).unwrap();
+                    if check.iter().all(|&b| b == ERASE_VALUE) {
+                        crate::println!("Data at {} was mutable, failure!", key.get_base());
+                        pass = false;
+                    }
+                }
+                use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
+                crate::println!(
+                    "{}PUB_MUT,{},{}",
+                    BOOKEND_START,
+                    if pass { "PASS" } else { "FAIL" },
+                    BOOKEND_END
+                );
             }
             #[cfg(feature = "unsafe-debug")]
             "peek" => {
@@ -368,8 +489,10 @@ impl Repl {
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!(
-                    "Commands include: reset, echo, boot, bootwait, localecho, uf2, boardtype, audit, lockdown"
+                    "Commands include: reset, echo, altboot, boot, bootwait, localecho, uf2, boardtype, audit, lockdown"
                 );
+                #[cfg(feature = "test-boot0-keys")]
+                crate::print!(", publock");
                 crate::println!("");
             }
         }

@@ -304,7 +304,7 @@ impl Repl {
 
                 // map the BIO ports to GPIO pins
                 // let iox = bao1x_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-                // iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
+                // iox.set_ports_from_bio_bitmask(0xFFFF_FFFF);
 
                 crate::println!("Resetting block");
                 let mut bio_ss = BioSharedState::new();
@@ -414,7 +414,7 @@ impl Repl {
                 // Initialize BIO and IOX once, as they are common to all subcommands.
                 let mut bio_ss = BioSharedState::new();
                 let iox = bao1x_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
-                iox.set_ports_from_pio_bitmask(0xFFFF_FFFF);
+                iox.set_ports_from_bio_bitmask(0xFFFF_FFFF);
 
                 match subcommand {
                     "set" => {

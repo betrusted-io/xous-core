@@ -653,6 +653,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .set_sigblock_size(sigblock_size);
         }
 
+        Some("bao1x-alt-boot1") => {
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "bao1x-boot/boot1/src/platform/bao1x/link.x",
+                (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder.add_loader_feature("alt-boot1");
+            builder
+                .set_baremetal(true)
+                .target_baremetal_bao1x("bao1x-alt-boot1")
+                .set_sigblock_size(sigblock_size);
+        }
+
         Some("baosec") => {
             let board = "board-baosec";
             let sigblock_size = 0x300;
@@ -759,10 +772,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // minimal set of services for app development on a dabao. Need to save space for the app itself!
             let bao_rram_pkgs =
                 ["xous-ticktimer", "xous-log", "xous-names", "usb-bao1x", "bao1x-hal-service"].to_vec();
-            let bao_app_pkgs = ["dabao-console", "helloworld"].to_vec();
+            let bao_app_pkgs: Vec<&'static str> = [].to_vec();
 
             builder.add_loader_feature("debug-print");
             builder.add_kernel_feature("v2p");
+            builder.add_detached_app_feature("usb");
             match task.as_deref() {
                 Some("dabao") => builder.target_bao1x_soc(),
                 _ => panic!("should be unreachable"),
@@ -905,6 +919,8 @@ Hardware images:
  bao1x-baremetal         Baremetal image for baochip1x targets.
  bao1x-boot0             Boot0 partition for baochip1x targets.
  bao1x-boot1             Boot1 partition for baochip1x targets.
+ bao1x-alt-boot1         Alterante boot1 partition for baochip1x targets. Burns into the 'loader/baremetal' region
+                         and allows for updating of boot1 when this partition is active.
 
 Hosted emulation:
  run                     Run user image in hosted mode with release flags. [cratespecs] are apps

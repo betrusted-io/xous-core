@@ -47,7 +47,7 @@ impl AlignedBuffer {
 /// This is the code that enables the security modes. Must be written into
 /// RRCR on every update - kind of dangerous design, because it is too easy
 /// to overlook setting this in a compound register.
-const SECURITY_MODE: u32 = 0b1111_1100_0000_0000;
+pub const SECURITY_MODE: u32 = 0b1111_1100_0000_0000;
 const RRC_LOAD_BUFFER: u32 = 0x5200;
 const RRC_WRITE_BUFFER: u32 = 0x9528;
 const RRC_CR_NORMAL: u32 = 0;

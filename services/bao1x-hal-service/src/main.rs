@@ -1,5 +1,7 @@
 mod api;
-mod hw;
+mod servers;
+#[cfg(feature = "board-baosec")]
+use std::sync::{Arc, Mutex};
 
 use bao1x_api::*;
 use bao1x_hal::{iox::Iox, udma::GlobalConfig};
@@ -255,7 +257,14 @@ fn main() {
     let mut irq_table: [Option<IrqLocalRegistration>; 8] = [None; 8];
 
     // start keyboard emulator service
-    hw::keyboard::start_keyboard_service();
+    servers::keyboard::start_keyboard_service();
+
+    // claim BIO
+    #[cfg(feature = "board-baosec")]
+    let bio_ss = Arc::new(Mutex::new(xous_bio_bdma::BioSharedState::new()));
+    // setup TRNG server - baosec only because it has an external AV generator
+    #[cfg(feature = "board-baosec")]
+    servers::trng::start_trng_service(&bio_ss);
 
     let mut msg_opt = None;
     log::debug!("Starting main loop");

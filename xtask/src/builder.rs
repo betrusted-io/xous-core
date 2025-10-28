@@ -874,8 +874,19 @@ impl Builder {
             if self.loader_disable_defaults {
                 loader_extra.push("--no-default-features".to_string());
             }
+            // substitute bao1x-alt-boot1 for bao1x-boot1
+            let adjusted_loader = match &self.loader {
+                CrateSpec::Local(name, region) => {
+                    if name == "bao1x-alt-boot1" {
+                        CrateSpec::Local("bao1x-boot1".to_string(), *region)
+                    } else {
+                        self.loader.clone()
+                    }
+                }
+                _ => self.loader.clone(),
+            };
             let loader = self.builder(
-                &[self.loader.clone()],
+                &[adjusted_loader],
                 &self.loader_features,
                 &self.target_kernel.as_deref(),
                 BuildStream::Release, // loader doesn't fit if you build with Debug
@@ -926,7 +937,7 @@ impl Builder {
                                 "boot0"
                             } else if name == "bao1x-boot1" {
                                 "boot1"
-                            } else if name == "baremetal" {
+                            } else if name == "baremetal" || name == "bao1x-alt-boot1" {
                                 "baremetal"
                             } else {
                                 return Err(String::from("Target subtype not supported").into());

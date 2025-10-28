@@ -159,8 +159,9 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
         };
         if !is_correct || !is_consistent {
             crate::println!(
-                "Fixing ACL for {:?} (is_correct: {:?}, is_consistent: {:?})",
+                "Fixing ACL for {:?} {:x?}: is_correct: {:?}, is_consistent: {:?}",
                 slot_element,
+                acl,
                 is_correct,
                 is_consistent
             );

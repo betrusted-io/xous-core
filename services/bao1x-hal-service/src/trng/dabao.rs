@@ -1,3 +1,7 @@
+//! Dabao's TRNG implementation pulls directly from the kernel TRNG, which is
+//! a pass-through from the on-chip ring-oscillator based TRNG. Characterization
+//! indicates it's a reasonable source of entropy on its own.
+
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicU32, Ordering};
 
