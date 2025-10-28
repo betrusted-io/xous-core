@@ -14,12 +14,13 @@ impl<'a> ShellCmdApi<'a> for TrngCmd {
     fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::new();
-        let helpstring = "trng [pump]";
+        let helpstring = "trng [pump] [u32] [u64]";
 
         let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                // used to test reseeding of the TRNG API
                 "pump" => {
                     const ROUNDS: usize = 16;
                     for i in 0..ROUNDS {
@@ -29,6 +30,12 @@ impl<'a> ShellCmdApi<'a> for TrngCmd {
                         log::info!("pump samples: {:x}, {:x}, {:x}", buf[0], buf[512], buf[1019]);
                     }
                     write!(ret, "Pumped {}x1k values out of the engine", ROUNDS).unwrap();
+                }
+                "u32" => {
+                    log::info!("A u32 trng value: {:x}", env.trng.get_u32().unwrap());
+                }
+                "u64" => {
+                    log::info!("A u64 trng value: {:x}", env.trng.get_u64().unwrap());
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
