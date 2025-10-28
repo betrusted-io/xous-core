@@ -211,6 +211,22 @@ impl Repl {
                 crate::platform::slots::check_slots(&new_type);
                 crate::println!("Key & data slots checked according to the new type");
             }
+            "altboot" => {
+                let owc = OneWayCounter::new();
+                if args.len() == 0 {
+                    crate::println!("Boot partition is: {:?}", owc.get_decoded::<AltBootCoding>());
+                    self.abort_cmd();
+                    return Ok(());
+                } else if args.len() != 1 {
+                    return Err(Error::help("altboot [toggle]"));
+                }
+                if args[0] == "toggle" {
+                    owc.inc_coded::<bao1x_api::AltBootCoding>().unwrap();
+                    crate::println!("Boot partition is now: {:?}", owc.get_decoded::<AltBootCoding>());
+                } else {
+                    return Err(Error::help("altboot [toggle]"));
+                }
+            }
             "audit" => {
                 let owc = OneWayCounter::new();
                 crate::println!("Board type reads as: {:?}", owc.get_decoded::<BoardTypeCoding>());
@@ -473,7 +489,7 @@ impl Repl {
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!(
-                    "Commands include: reset, echo, boot, bootwait, localecho, uf2, boardtype, audit, lockdown"
+                    "Commands include: reset, echo, altboot, boot, bootwait, localecho, uf2, boardtype, audit, lockdown"
                 );
                 #[cfg(feature = "test-boot0-keys")]
                 crate::print!(", publock");
