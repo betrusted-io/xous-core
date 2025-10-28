@@ -82,6 +82,16 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     crate::println!("Configured board type: {:?}", board_type);
     if board_type == BoardTypeCoding::Baosec {
         IS_BAOSEC.store(true, Ordering::SeqCst);
+        #[cfg(all(feature = "force-dabao", feature = "alt-boot1"))]
+        {
+            while one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
+                != bao1x_api::BoardTypeCoding::Dabao
+            {
+                one_way.inc_coded::<bao1x_api::BoardTypeCoding>().expect("increment error");
+            }
+            board_type = one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error");
+            crate::println!("Re-configured board type: {:?}", board_type);
+        }
     }
 
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
