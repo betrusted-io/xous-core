@@ -266,11 +266,21 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
             false,
             None,
         ) {
-            Ok((k, tag)) => println!(
-                "*** Kernel signature check by key @ {}({}) OK ***",
-                k,
-                core::str::from_utf8(&tag).unwrap_or("invalid tag")
-            ),
+            Ok((k, tag)) => {
+                println!(
+                    "*** Kernel signature check by key @ {}({}) OK ***",
+                    k,
+                    core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                );
+                // k is just a nominal slot number. If either match, assume we are dealing with a
+                // developer image.
+                if tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
+                    || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                {
+                    crate::println!("Developer key detected, ensuring secret are erased");
+                    bao1x_hal::sigcheck::erase_secrets();
+                }
+            }
             Err(e) => {
                 println!("Kernel failed signature check. Dying: {:?}", e);
                 bao1x_hal::sigcheck::die_no_std();
@@ -295,6 +305,15 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                         k,
                         core::str::from_utf8(&tag).unwrap_or("invalid tag")
                     );
+                    // k is just a nominal slot number. If either match, assume we are dealing with a
+                    // developer image.
+                    if tag
+                        == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
+                        || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                    {
+                        crate::println!("Developer key detected, ensuring secret are erased");
+                        bao1x_hal::sigcheck::erase_secrets();
+                    }
                     true
                 }
                 Err(_e) => {
