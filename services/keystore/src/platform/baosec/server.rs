@@ -2,17 +2,22 @@ use std::convert::TryInto;
 
 use aes::Aes256;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
+use bao1x_hal::rram::Reram;
 use hkdf::Hkdf;
 use keystore_api::*;
 use sha2::Sha256;
 use xous::SID;
 use xous_ipc::Buffer;
 
+use crate::platform::KeyStore;
+
 /// Any old key for the hosted mode testing. 0 is as good a number as any other.
 const WELL_KNOWN_KEY: &'static str = "0000000000000000000000000000000000000000000000000000000000000000";
 
 pub fn keystore(sid: SID) -> ! {
     let hal = bao1x_hal_service::Hal::new();
+    let mut rram = Reram::new();
+    let storage = KeyStore::init_from_hw(&mut rram);
 
     let mut msg_opt = None;
 
