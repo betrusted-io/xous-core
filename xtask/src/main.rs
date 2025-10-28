@@ -651,6 +651,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .set_sigblock_size(sigblock_size);
         }
 
+        Some("bao1x-alt-boot1") => {
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "bao1x-boot/boot1/src/platform/bao1x/link.x",
+                (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder.add_loader_feature("alt-boot1");
+            builder
+                .set_baremetal(true)
+                .target_baremetal_bao1x("bao1x-alt-boot1")
+                .set_sigblock_size(sigblock_size);
+        }
+
         Some("baosec") => {
             let board = "board-baosec";
             let sigblock_size = 0x300;
