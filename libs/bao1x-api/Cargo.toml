@@ -20,5 +20,5 @@ arbitrary-int = "1.2"
 [features]
 std = ["derive-rkyv", "xous-names", "xous-ipc"]
 derive-rkyv = ["rkyv"]
-pio = []
+bio = []
 default = []
