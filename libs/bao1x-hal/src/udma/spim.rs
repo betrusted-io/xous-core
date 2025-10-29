@@ -82,6 +82,27 @@ pub enum SpimWaitType {
     Event(EventChannel),
     Cycles(u8),
 }
+#[repr(u8)]
+#[derive(Debug, Copy, Clone)]
+pub enum CommandSet {
+    Macronix = 0xc2,
+    Xtx = 0x0b,
+}
+// be sure to update this when updating the command set above! this is used to iterate
+// through all valid types by other routines.
+pub const ALL_COMMAND_SETS: [CommandSet; 2] = [CommandSet::Macronix, CommandSet::Xtx];
+impl TryFrom<u8> for CommandSet {
+    type Error = xous::Error;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0xc2 => Ok(CommandSet::Macronix),
+            0x0b => Ok(CommandSet::Xtx),
+            _ => Err(xous::Error::BadAddress),
+        }
+    }
+}
+
 #[derive(Copy, Clone)]
 pub enum SpimCmd {
     /// pol, pha, clkdiv
@@ -185,6 +206,8 @@ pub struct Spim {
     endianness: SpimEndian,
     // length of a pending txrx, if any
     pending_txrx: Option<usize>,
+    // type of command set to use - inferred from ID read
+    command_set: Option<CommandSet>,
 }
 
 // length of the command buffer
@@ -320,6 +343,7 @@ impl Spim {
             dummy_cycles: dummy_cycles.unwrap_or(0),
             endianness: SpimEndian::MsbFirst,
             pending_txrx: None,
+            command_set: None,
         };
         // setup the interface using a UDMA command
         spim.send_cmd_list(&[SpimCmd::Config(pol, pha, clk_div as u8)]);
@@ -347,6 +371,7 @@ impl Spim {
         tx_buf_len_bytes: usize,
         rx_buf_len_bytes: usize,
         dummy_cycles: u8,
+        command_set: Option<CommandSet>,
     ) -> Self {
         Spim {
             csr: CSR::new(csr as *mut u32),
@@ -362,6 +387,7 @@ impl Spim {
             dummy_cycles,
             endianness: SpimEndian::MsbFirst,
             pending_txrx: None,
+            command_set,
         }
     }
 
@@ -371,8 +397,20 @@ impl Spim {
     /// a piece of hardware, not some arbitrary block of memory.
     pub unsafe fn into_raw_parts(
         &self,
-    ) -> (usize, SpimCs, u8, u8, Option<EventChannel>, SpimMode, SpimByteAlign, IframRange, usize, usize, u8)
-    {
+    ) -> (
+        usize,
+        SpimCs,
+        u8,
+        u8,
+        Option<EventChannel>,
+        SpimMode,
+        SpimByteAlign,
+        IframRange,
+        usize,
+        usize,
+        u8,
+        Option<CommandSet>,
+    ) {
         (
             self.csr.base() as usize,
             self.cs,
@@ -389,7 +427,24 @@ impl Spim {
             self.tx_buf_len_bytes,
             self.rx_buf_len_bytes,
             self.dummy_cycles,
+            self.command_set,
         )
+    }
+
+    pub fn identify_flash_reset_qpi(&mut self) -> u32 {
+        let mut id = self.mem_read_id_flash();
+        if !bao1x_api::SPI_FLASH_IDS.contains(&(id & 0xFF_FF_FF)) {
+            for command_set in ALL_COMMAND_SETS {
+                self.mode = SpimMode::Quad;
+                self.command_set = Some(command_set);
+                id = self.mem_read_id_flash();
+                if SPI_FLASH_IDS.contains(&(id & 0xFF_FF_FF)) {
+                    self.mem_qpi_mode(false);
+                    break;
+                }
+            }
+        }
+        id
     }
 
     /// Note that endianness is disregarded in the case that the channel is being used to talk to
@@ -853,7 +908,10 @@ impl Spim {
         // send the RDID command
         match self.mode {
             SpimMode::Standard => self.mem_send_cmd(0x9F),
-            SpimMode::Quad => self.mem_send_cmd(0xAF),
+            SpimMode::Quad => match self.command_set {
+                Some(CommandSet::Macronix) | None => self.mem_send_cmd(0xAF),
+                Some(CommandSet::Xtx) => self.mem_send_cmd(0x9F),
+            },
         }
 
         // read back the ID result
@@ -873,6 +931,7 @@ impl Spim {
         }
 
         let ret = u32::from_le_bytes([self.rx_buf()[0], self.rx_buf()[1], self.rx_buf()[2], 0x0]);
+        self.command_set = self.rx_buf::<u8>()[0].try_into().ok();
 
         self.mem_cs(false);
         ret
@@ -913,10 +972,19 @@ impl Spim {
     pub fn mem_qpi_mode(&mut self, activate: bool) {
         self.mem_cs(true);
         if activate {
-            self.mem_send_cmd(0x35);
+            match self.command_set {
+                Some(CommandSet::Macronix) | None => self.mem_send_cmd(0x35),
+                Some(CommandSet::Xtx) => {
+                    crate::println!("activating Xtx QPI");
+                    self.mem_send_cmd(0x38)
+                }
+            }
         } else {
             self.mode = SpimMode::Quad; // pre-assumes quad mode
-            self.mem_send_cmd(0xF5);
+            match self.command_set {
+                Some(CommandSet::Macronix) | None => self.mem_send_cmd(0xF5),
+                Some(CommandSet::Xtx) => self.mem_send_cmd(0xFF),
+            }
         }
         self.mem_cs(false);
         // change the mode only after the command has been sent
@@ -936,6 +1004,15 @@ impl Spim {
         if self.mode != SpimMode::Standard {
             self.mem_qpi_mode(false);
         }
+        loop {
+            self.flash_wren();
+            let status = self.flash_rdsr();
+            // crate::println!("wren status: {:x}", status);
+            if status & 0x02 != 0 {
+                break;
+            }
+        }
+
         self.mem_cs(true);
         self.mem_send_cmd(0x1);
         // setup the command list for data to send
@@ -951,6 +1028,26 @@ impl Spim {
             // xous::yield_slice();
         }
         self.mem_cs(false);
+
+        loop {
+            // wait while WIP is set
+            let status = self.flash_rdsr();
+            // crate::println!("WIP status: {:x}", status);
+            if (status & 0x01) == 0 {
+                break;
+            }
+        }
+        // disable writes: send wrdi
+        if self.flash_rdsr() & 0x02 != 0 {
+            loop {
+                self.flash_wrdi();
+                let status = self.flash_rdsr();
+                // crate::println!("WRDI status: {:x}", status);
+                if status & 0x02 == 0 {
+                    break;
+                }
+            }
+        }
     }
 
     /// Note that `use_yield` is disallowed in interrupt contexts (e.g. swapper)
@@ -1111,6 +1208,116 @@ impl Spim {
             }
             self.mem_cs(false);
             offset += chunk.len();
+        }
+    }
+
+    pub fn flash_read_status_register(&mut self) -> u32 {
+        if self.mode != SpimMode::Standard {
+            self.mem_qpi_mode(false);
+        }
+        self.mem_read_id_flash();
+        let addresses: &[u8] = match self.command_set {
+            Some(CommandSet::Xtx) => &[0x05, 0x35, 0x15],
+            Some(CommandSet::Macronix) | None => &[0x05],
+        };
+        let mut ret = 0u32;
+        for (i, &address) in addresses.iter().enumerate() {
+            self.mem_cs(true);
+            self.mem_send_cmd(address);
+            let cmd_list = [SpimCmd::RxData(self.mode, SpimWordsPerXfer::Words1, 8, SpimEndian::MsbFirst, 1)];
+            // safety: this is safe because rx_buf_phys() slice is only used as a base/bounds reference
+            unsafe {
+                self.udma_enqueue(
+                    Bank::Rx,
+                    &self.rx_buf_phys::<u8>()[..1],
+                    CFG_EN | CFG_SIZE_8 | CFG_BACKPRESSURE,
+                )
+            };
+            self.send_cmd_list(&cmd_list);
+            while self.udma_busy(Bank::Rx) {
+                // #[cfg(feature = "std")]
+                // xous::yield_slice();
+            }
+            ret |= (self.rx_buf::<u8>()[0] as u32) << (8 * i as u32);
+
+            self.mem_cs(false);
+        }
+        ret
+    }
+
+    pub fn flash_set_qe(&mut self) {
+        if self.mode != SpimMode::Standard {
+            self.mem_qpi_mode(false);
+        }
+        if self.command_set.is_none() {
+            self.mem_read_id_flash();
+        }
+        let sr = self.flash_read_status_register();
+        let qe_set = match self.command_set {
+            Some(CommandSet::Macronix) => 0b0100_0000 & sr != 0,
+            Some(CommandSet::Xtx) => 0b10_0000_0000 & sr != 0,
+            None => panic!("Attempting to set QE on unknown flash type"),
+        };
+        if qe_set {
+            // nothing to do, it's already set
+            return;
+        }
+
+        match self.command_set.unwrap() {
+            CommandSet::Macronix => {
+                self.mem_write_status_register(0b0100_0000 | (sr & 0xFF) as u8, ((sr & 0xFF00) >> 8) as u8);
+            }
+            CommandSet::Xtx => {
+                loop {
+                    self.flash_wren();
+                    let status = self.flash_rdsr();
+                    // crate::println!("wren status: {:x}", status);
+                    if status & 0x02 != 0 {
+                        break;
+                    }
+                }
+
+                self.mem_cs(true);
+                self.mem_send_cmd(0x31);
+                // setup the command list for data to send
+                let cmd_list = [SpimCmd::TxData(
+                    self.mode,
+                    SpimWordsPerXfer::Words1,
+                    8 as u8,
+                    SpimEndian::MsbFirst,
+                    1 as u32,
+                )];
+                self.tx_buf_mut()[..1].copy_from_slice(&[((sr & 0xFF00 >> 8) as u8) | 0b0000_0010]);
+                // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
+                unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..1], CFG_EN | CFG_SIZE_8) }
+                self.send_cmd_list(&cmd_list);
+
+                while self.udma_busy(Bank::Tx) {
+                    // #[cfg(feature = "std")]
+                    // xous::yield_slice();
+                }
+                self.mem_cs(false);
+
+                loop {
+                    // wait while WIP is set
+                    let status = self.flash_rdsr();
+                    // crate::println!("WIP status: {:x}", status);
+                    if (status & 0x01) == 0 {
+                        break;
+                    }
+                }
+                // disable writes: send wrdi
+                if self.flash_rdsr() & 0x02 != 0 {
+                    loop {
+                        self.flash_wrdi();
+                        let status = self.flash_rdsr();
+                        // crate::println!("WRDI status: {:x}", status);
+                        if status & 0x02 == 0 {
+                            break;
+                        }
+                    }
+                }
+            }
         }
     }
 
