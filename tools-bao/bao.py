@@ -9,9 +9,8 @@ from commands.monitor import cmd_monitor
 from commands.flash import cmd_flash
 from commands.doctor import cmd_doctor
 from commands.artifacts import cmd_artifacts
-from commands.update_all import cmd_update_all
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 def main():
     ap = argparse.ArgumentParser(
@@ -30,14 +29,6 @@ def main():
     # ports
     s = sub.add_parser("ports", help="List serial ports")
     s.set_defaults(func=cmd_ports)
-
-    # update-all
-    ua = sub.add_parser("update-all", help="Return true if board Xous/loader version differs from local")
-    ua.add_argument("-p", "--port", required=True, help="Monitor serial port")
-    ua.add_argument("-b", "--baud", type=int, default=115200)
-    ua.add_argument("--timeout", type=float, default=3.0, help="Seconds to wait for version response")
-    ua.add_argument("--json", action="store_true", help='Emit {"updateAll": bool, "current": "...", "board": "..."}')
-    ua.set_defaults(func=cmd_update_all)
 
     # monitor
     m = sub.add_parser("monitor", help="Open a serial monitor")
