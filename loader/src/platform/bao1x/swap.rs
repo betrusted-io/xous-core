@@ -92,7 +92,7 @@ impl SwapHal {
                 )
             };
             // turn off QPI mode, in case it was set from a reboot in a bad state
-            flash_spim.mem_qpi_mode(false);
+            flash_spim.identify_flash_reset_qpi();
             ram_spim.mem_qpi_mode(false);
 
             // sanity check: read ID
@@ -120,11 +120,13 @@ impl SwapHal {
             let ram_id = ram_spim.mem_read_id_ram();
             crate::println!("QPI flash ID: {:x}", flash_id);
             crate::println!("QPI ram ID: {:x}", ram_id);
-            // density 18, memory type 20, mfg ID C2 ==> MX25L128833F
-            // density 38, memory type 25, mfg ID C2 ==> MX25U12832F
-            assert!(flash_id & 0xFF_FF_FF == 0x1820C2 || flash_id & 0xFF_FF_FF == 0x38_25_C2);
+            assert!(
+                SPI_FLASH_IDS.contains(&(flash_id & 0xFF_FF_FF)),
+                "flash_id {:#x} not recognized",
+                flash_id
+            );
             // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
-            assert!((ram_id & 0xFF_FF == 0x5D9D) || (ram_id & 0xFF_FF == 0x559d));
+            assert!(RAM_IDS.contains(&(ram_id & 0xFF_FF)), "ram_id {:#x} not recognized", ram_id);
 
             // allocate the buf
             let mut buf = RawPage { data: [0u8; 4096] };
