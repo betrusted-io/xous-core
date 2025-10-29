@@ -77,6 +77,7 @@ dabao-selftest = [
     "xous-bio-bdma/bao1x",
 ]
 test-boot0-writeprotect = []
+spim-tests = []
 
 verilator-only = []
 default = ["bao1x-usb", "dabao-selftest"]
