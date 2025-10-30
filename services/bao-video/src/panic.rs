@@ -6,6 +6,7 @@ use bao1x_api::{EventChannel, IoxHal};
 use bao1x_hal::ifram::IframRange;
 use bao1x_hal::sh1107::{Mono, Oled128x128};
 use bao1x_hal::udma;
+use bao1x_hal::udma::CommandSet;
 use blitstr2::ClipRect;
 use blitstr2::NULL_GLYPH_SPRITE;
 /// THIS NEEDS SUBSTANTIAL REWORK, THE DRIVER HERE TARGETS A DIFFERENT DISPLAY THAN THE SH1107.
@@ -52,6 +53,7 @@ pub(crate) fn panic_handler_thread(
         usize,
         usize,
         u8,
+        Option<CommandSet>,
     ),
 ) {
     thread::spawn({

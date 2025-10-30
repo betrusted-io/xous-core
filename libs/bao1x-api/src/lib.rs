@@ -22,6 +22,13 @@ pub mod pubkeys;
 /// into the "official" list
 pub const BAOCHIP_1X_UF2_FAMILY: u32 = 0xa7d7_6373;
 
+// density 18, memory type 20, mfg ID C2 ==> MX25L128833F
+// density 38, memory type 25, mfg ID C2 ==> MX25U12832F
+// mfg ID 0b ==> XT25Q64FWOIGT cost down option (8MiB)
+pub const SPI_FLASH_IDS: [u32; 3] = [0x1820c2, 0x3825c2, 0x17600b];
+// KGD 5D, mfg ID 9D; remainder of bits are part of the EID
+pub const RAM_IDS: [u32; 2] = [0x5D9D, 0x559d];
+
 /// system preemption interval
 pub const SYSTEM_TICK_INTERVAL_MS: u32 = 10;
 

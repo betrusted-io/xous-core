@@ -56,11 +56,11 @@ pub fn setup_spim(perclk: u32) {
                        * page */
             4096,
             Some(6),
-            None,
+            Some(SpimMode::Standard), // guess Standard
             IframRange::from_raw_parts(SPIM_FLASH_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, 4096 * 2),
         )
     };
-    flash_spim.mem_qpi_mode(false);
+    flash_spim.identify_flash_reset_qpi();
     let flash_id = flash_spim.mem_read_id_flash();
     crate::println_d!("flash ID (init): {:x}", flash_id);
 
@@ -92,6 +92,7 @@ pub fn write_spim_page(addr: usize, data: Box<[u8; SPINOR_ERASE_SIZE as usize]>)
             256 + 16,
             4096,
             6,
+            None,
         )
     };
     crate::println_d!("Erasing sector at addr {:x}", addr);

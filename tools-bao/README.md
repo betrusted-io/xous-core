@@ -9,7 +9,6 @@ This tool is designed to be use by used by the VS Code extension at https://gith
 
 - **Serial Port Management**: List and monitor available serial ports.
 - **Flashing**: Copy UF2 firmware images to a mounted boot drive.
-- **Version Checking**: Compare local and device firmware versions to determine if updates are needed.
 - **Artifact Listing**: List available UF2 images for flashing.
 - **Environment Diagnostics**: Check Python and serial environment health.
 
@@ -80,20 +79,6 @@ List available UF2 images for flashing. Can output as JSON for scripting.
 **Usage:**
 ```sh
 python tools-bao/bao.py artifacts --json
-```
-
-### `update-all`
-Check if the board’s firmware version differs from the local version.
-
-**Options:**
-- `-p, --port` (required): Serial port to query
-- `-b, --baud`: Baud rate (default: 115200)
-- `--timeout`: Seconds to wait for version response (default: 3.0)
-- `--json`: Output in JSON format
-
-**Usage:**
-```sh
-python tools-bao/bao.py update-all -p COM3 --json
 ```
 
 ### `doctor`

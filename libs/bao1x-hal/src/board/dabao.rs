@@ -42,7 +42,7 @@ pub fn setup_usb_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         Some(IoxDir::Output),
         Some(IoxFunction::Gpio),
         None,
-        None,
+        Some(IoxEnable::Enable), // enable the pullup - dabao switch happens by tri-state
         Some(IoxEnable::Enable),
         Some(IoxDriveStrength::Drive2mA),
     );
