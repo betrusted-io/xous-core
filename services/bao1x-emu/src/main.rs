@@ -8,7 +8,7 @@ fn main() {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let sid = xns.register_name(bao1x_api::SERVER_NAME_bao1x_HAL, None).expect("can't register server");
+    let sid = xns.register_name(bao1x_api::SERVER_NAME_BAO1X_HAL, None).expect("can't register server");
 
     // start keyboard emulator service
     keyboard::start_keyboard_service();
@@ -81,6 +81,11 @@ fn main() {
                     log::info!("Udma configure event: {:?}/{:?}, {:x}", periph, to_channel, event_offset);
                 }
             }
+            HalOpcode::UdmaIrqStatusBits => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    scalar.arg1 = 0;
+                }
+            }
             HalOpcode::PeriphReset => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
@@ -118,6 +123,7 @@ fn main() {
             HalOpcode::InvalidCall => {
                 log::error!("Invalid opcode received: {:?}", msg);
             }
+            bao1x_api::HalOpcode::ConfigureBio => todo!(),
             HalOpcode::Quit => {
                 log::info!("Received quit opcode, exiting.");
                 break;

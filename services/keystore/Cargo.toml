@@ -90,6 +90,7 @@ test-baosec = ["ux-api/loader-baosec"]
 hosted-baosec = [
     "keystore-api/gen2",
     "modals/no-gam",
+    "aes",
 ] # emulated hardware on x86 platform
 board-baosor = [
     "utralib/bao1x",

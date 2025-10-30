@@ -1,6 +1,9 @@
 use String;
 use bao1x_api::I2cApi;
 use bao1x_api::I2cResult;
+#[cfg(feature = "hosted-baosec")]
+use bao1x_emu::i2c::I2c;
+#[cfg(not(feature = "hosted-baosec"))]
 use bao1x_hal_service::I2c;
 
 use crate::{CommonEnv, ShellCmdApi};

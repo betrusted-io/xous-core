@@ -33,4 +33,6 @@ impl UdmaGlobalConfig for UdmaGlobal {
     }
 
     fn reset(&self, peripheral: PeriphId) { self.reset(peripheral); }
+
+    fn irq_status_bits(&self, _bank: IrqBank) -> u32 { 0 }
 }

@@ -57,6 +57,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         }
                     }
                 }
+                #[cfg(not(feature = "hosted-baosec"))]
                 "shutdown" => {
                     use bao1x_api::*;
                     use bao1x_hal_service::I2c;
