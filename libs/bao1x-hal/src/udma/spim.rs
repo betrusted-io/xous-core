@@ -431,22 +431,6 @@ impl Spim {
         )
     }
 
-    pub fn identify_flash_reset_qpi(&mut self) -> u32 {
-        let mut id = self.mem_read_id_flash();
-        if !bao1x_api::SPI_FLASH_IDS.contains(&(id & 0xFF_FF_FF)) {
-            for command_set in ALL_COMMAND_SETS {
-                self.mode = SpimMode::Quad;
-                self.command_set = Some(command_set);
-                id = self.mem_read_id_flash();
-                if SPI_FLASH_IDS.contains(&(id & 0xFF_FF_FF)) {
-                    self.mem_qpi_mode(false);
-                    break;
-                }
-            }
-        }
-        id
-    }
-
     /// Note that endianness is disregarded in the case that the channel is being used to talk to
     /// a memory device, because the endianness is always MsbFirst.
     pub fn set_endianness(&mut self, endianness: SpimEndian) { self.endianness = endianness; }
@@ -902,6 +886,82 @@ impl Spim {
         }
     }
 
+    /// Tries to identify the flash type, and set up the device so that all the other commands
+    /// work seamlessly, regardless of the part in place. Macronix is the model device, so
+    /// we try to auto-ID the parts and configure them to behave as much like the Macronix defaults.
+    pub fn identify_flash_reset_qpi(&mut self) -> u32 {
+        let mut id = self.mem_read_id_flash();
+        if !bao1x_api::SPI_FLASH_IDS.contains(&(id & 0xFF_FF_FF)) {
+            for command_set in ALL_COMMAND_SETS {
+                self.mode = SpimMode::Quad;
+                self.command_set = Some(command_set);
+                id = self.mem_read_id_flash();
+                if SPI_FLASH_IDS.contains(&(id & 0xFF_FF_FF)) {
+                    self.mem_qpi_mode(false);
+                    break;
+                }
+            }
+        }
+        self.flash_ensure_qe();
+        id
+    }
+
+    /// A utility command to send commands to devices that update various parameters.
+    /// `nv`: when `true`, does the WREN/WRDI pre/post-amble to the command. Used for updating
+    ///       non-volatile parametercs
+    /// `command`: the command code
+    /// `param`: slice with the parameters to send
+    fn mem_param_set(&mut self, nv: bool, command: u8, param: &[u8]) {
+        if nv {
+            loop {
+                self.flash_wren();
+                let status = self.flash_rdsr();
+                // crate::println!("wren status: {:x}", status);
+                if status & 0x02 != 0 {
+                    break;
+                }
+            }
+        }
+
+        self.mem_cs(true);
+        self.mem_send_cmd(command);
+        // setup the command list for data to send
+        let cmd_list =
+            [SpimCmd::TxData(self.mode, SpimWordsPerXfer::Words1, 8 as u8, SpimEndian::MsbFirst, 1 as u32)];
+        self.tx_buf_mut()[..param.len()].copy_from_slice(param);
+        // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
+        unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..param.len()], CFG_EN | CFG_SIZE_8) }
+        self.send_cmd_list(&cmd_list);
+
+        while self.udma_busy(Bank::Tx) {
+            // #[cfg(feature = "std")]
+            // xous::yield_slice();
+        }
+        self.mem_cs(false);
+
+        if nv {
+            loop {
+                // wait while WIP is set
+                let status = self.flash_rdsr();
+                // crate::println!("WIP status: {:x}", status);
+                if (status & 0x01) == 0 {
+                    break;
+                }
+            }
+            // disable writes: send wrdi
+            if self.flash_rdsr() & 0x02 != 0 {
+                loop {
+                    self.flash_wrdi();
+                    let status = self.flash_rdsr();
+                    // crate::println!("WRDI status: {:x}", status);
+                    if status & 0x02 == 0 {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     pub fn mem_read_id_flash(&mut self) -> u32 {
         self.mem_cs(true);
 
@@ -992,6 +1052,15 @@ impl Spim {
             self.mode = SpimMode::Quad;
         } else {
             self.mode = SpimMode::Standard;
+        }
+        // cleanup any parameter settings
+        match self.command_set {
+            Some(CommandSet::Macronix) | None => (),
+            Some(CommandSet::Xtx) => {
+                crate::println!("Xtx setting 6 dummy cycles");
+                // set 6 dummy cycles; 8 is default
+                self.mem_param_set(false, 0xc0, &[0b0010_0000]);
+            }
         }
     }
 
@@ -1245,7 +1314,7 @@ impl Spim {
         ret
     }
 
-    pub fn flash_set_qe(&mut self) {
+    pub fn flash_ensure_qe(&mut self) {
         if self.mode != SpimMode::Standard {
             self.mem_qpi_mode(false);
         }
@@ -1268,55 +1337,8 @@ impl Spim {
                 self.mem_write_status_register(0b0100_0000 | (sr & 0xFF) as u8, ((sr & 0xFF00) >> 8) as u8);
             }
             CommandSet::Xtx => {
-                loop {
-                    self.flash_wren();
-                    let status = self.flash_rdsr();
-                    // crate::println!("wren status: {:x}", status);
-                    if status & 0x02 != 0 {
-                        break;
-                    }
-                }
-
-                self.mem_cs(true);
-                self.mem_send_cmd(0x31);
-                // setup the command list for data to send
-                let cmd_list = [SpimCmd::TxData(
-                    self.mode,
-                    SpimWordsPerXfer::Words1,
-                    8 as u8,
-                    SpimEndian::MsbFirst,
-                    1 as u32,
-                )];
-                self.tx_buf_mut()[..1].copy_from_slice(&[((sr & 0xFF00 >> 8) as u8) | 0b0000_0010]);
-                // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
-                unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<u8>()[..1], CFG_EN | CFG_SIZE_8) }
-                self.send_cmd_list(&cmd_list);
-
-                while self.udma_busy(Bank::Tx) {
-                    // #[cfg(feature = "std")]
-                    // xous::yield_slice();
-                }
-                self.mem_cs(false);
-
-                loop {
-                    // wait while WIP is set
-                    let status = self.flash_rdsr();
-                    // crate::println!("WIP status: {:x}", status);
-                    if (status & 0x01) == 0 {
-                        break;
-                    }
-                }
-                // disable writes: send wrdi
-                if self.flash_rdsr() & 0x02 != 0 {
-                    loop {
-                        self.flash_wrdi();
-                        let status = self.flash_rdsr();
-                        // crate::println!("WRDI status: {:x}", status);
-                        if status & 0x02 == 0 {
-                            break;
-                        }
-                    }
-                }
+                self.mem_param_set(true, 0x31, &[((sr & 0xFF00 >> 8) as u8) | 0b0000_0010]);
+                let status = self.flash_read_status_register();
             }
         }
     }
