@@ -91,7 +91,7 @@ bao1x = [
     "aes/bao1x",
     "utralib/bao1x",
     # caution: leaving this on will force debug-print-usb in *all* bao1x-hal configs!!
-    # "bao1x-hal/debug-print-usb",
+    # "bao1x-hal/debug-print-uart",
     "debug-print",
     "bao1x-hal",
     "rand_chacha",

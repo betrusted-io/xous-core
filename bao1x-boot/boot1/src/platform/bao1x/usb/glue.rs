@@ -64,8 +64,6 @@ pub fn setup_spim(perclk: u32) {
     let flash_id = flash_spim.mem_read_id_flash();
     crate::println_d!("flash ID (init): {:x}", flash_id);
 
-    flash_spim.flash_set_qe(); // ensure that QE bit is set; does nothing if already set
-
     flash_spim.mem_qpi_mode(true);
     let flash_id = flash_spim.mem_read_id_flash();
     crate::println_d!("QPI flash ID: {:x}", flash_id);
