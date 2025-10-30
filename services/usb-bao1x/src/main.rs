@@ -15,6 +15,7 @@ use std::panic;
 use std::sync::Arc;
 
 use api::*;
+use bao1x_api::IoGpio;
 use bao1x_api::keyboard::KeyMap;
 #[cfg(feature = "board-baosec")]
 use bao1x_hal::axp2101::VbusIrq;
@@ -277,7 +278,7 @@ pub(crate) fn main_hw() -> ! {
     };
 
     let (se0_port, se0_pin) = bao1x_hal::board::setup_usb_pins(&iox);
-    iox.set_gpio_pin_value(se0_port, se0_pin, bao1x_api::IoxValue::High); // release SE0 state, allowing for enumeration
+    iox.set_gpio_pin_dir(se0_port, se0_pin, bao1x_api::IoxDir::Input); // release SE0 state, allowing for enumeration
 
     log::info!("Entering main loop");
 

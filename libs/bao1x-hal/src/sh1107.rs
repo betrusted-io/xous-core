@@ -5,7 +5,7 @@ use ux_api::minigfx::{ColorNative, FrameBuffer, Point};
 use ux_api::platform::*;
 
 use crate::ifram::IframRange;
-use crate::udma::{self, Spim, SpimClkPha, SpimClkPol, SpimCs};
+use crate::udma::{self, CommandSet, Spim, SpimClkPha, SpimClkPol, SpimCs};
 
 pub const COLUMN: isize = WIDTH;
 pub const ROW: isize = LINES;
@@ -285,6 +285,7 @@ impl<'a> Oled128x128<'a> {
         usize,
         usize,
         u8,
+        Option<CommandSet>,
     ) {
         self.spim.into_raw_parts()
     }
@@ -312,6 +313,7 @@ impl<'a> Oled128x128<'a> {
             usize,
             usize,
             u8,
+            Option<CommandSet>,
         ),
         iox: &'a T,
     ) -> Self
@@ -331,6 +333,7 @@ impl<'a> Oled128x128<'a> {
             tx_buf_len_bytes,
             rx_buf_len_bytes,
             dummy_cycles,
+            command_set,
         ) = display_parts;
         // compile them into a new object
         let mut spim = unsafe {
@@ -346,6 +349,7 @@ impl<'a> Oled128x128<'a> {
                 tx_buf_len_bytes,
                 rx_buf_len_bytes,
                 dummy_cycles,
+                command_set,
             )
         };
         spim.set_endianness(crate::udma::SpimEndian::MsbFirst);

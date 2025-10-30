@@ -5,10 +5,6 @@ use crate::offsets::{PartitionAccess, RwPerms, SlotIndex};
 // we actually have 16MiB on the initial prototypes, but constraining to smaller for cost reduction
 pub const SPI_FLASH_LEN: usize = 8192 * 1024;
 pub const SPI_FLASH_ID_MASK: u32 = 0xff_ff_ff;
-// density 18, memory type 20, mfg ID C2 ==> MX25L128833F
-// density 38, memory type 25, mfg ID C2 ==> MX25U12832F
-// mfg ID 0b ==> XT25Q64FWOIGT cost down option (8MiB)
-pub const SPI_FLASH_IDS: [u32; 3] = [0x1820c2, 0x3825c2, 0x17_60_0b];
 
 // details of the SPINOR device
 pub const SPINOR_PAGE_LEN: u32 = 0x100;
