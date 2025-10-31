@@ -26,7 +26,7 @@ TRIPLE: str = "riscv32imac-unknown-xous-elf"
 FILENAMES: List[Tuple[str, str]] = [
     ("loader.uf2", "loader"),
     ("xous.uf2",   "xous"),
-    ("apps.uf2",    "apps"),
+    ("app.uf2",    "app"),
 ]
 
 EXIT_OK = 0

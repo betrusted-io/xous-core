@@ -1303,7 +1303,7 @@ impl Builder {
         }
 
         let mut app_img_path = output_file.parent().unwrap().to_owned();
-        app_img_path.push("app.img");
+        app_img_path.push("apps.img");
 
         Command::new(cargo())
             .current_dir(project_root())
