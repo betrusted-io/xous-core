@@ -52,7 +52,7 @@ def main():
     # flash
     f = sub.add_parser("flash", help="Copy UF2 file(s) to a mounted drive")
     f.add_argument("--dest", required=True, help="Mount path of the UF2 boot drive (e.g., D:\\)")
-    f.add_argument("files", nargs="+", help="One or more UF2 files to copy (e.g., loader.uf2 xous.uf2 app.uf2)")
+    f.add_argument("files", nargs="+", help="One or more UF2 files to copy (e.g., loader.uf2 xous.uf2 apps.uf2)")
     f.set_defaults(func=cmd_flash)
 
     args = ap.parse_args()
