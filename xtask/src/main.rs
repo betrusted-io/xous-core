@@ -605,7 +605,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_artyvexii();
         }
 
-        Some("baremetal-bao1x") | Some("bao1x-baremetal") => {
+        Some("baremetal-bao1x") | Some("bao1x-baremetal-baosec") => {
+            let board = "board-baosec";
+            builder.set_board(board);
+            builder.add_loader_feature(board);
+            builder.add_loader_feature("bao1x-usb");
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "baremetal/src/platform/bao1x/link.x",
+                (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder.set_baremetal(true).target_baremetal_bao1x("baremetal").set_sigblock_size(sigblock_size);
+        }
+
+        Some("bao1x-baremetal-dabao") => {
+            let board = "board-dabao";
+            builder.set_board(board);
+            builder.add_loader_feature(board);
+            builder.add_loader_feature("bao1x-usb");
             let sigblock_size = 0x300;
             update_flash_origin(
                 "baremetal/src/platform/bao1x/link.x",
@@ -914,7 +931,8 @@ Hardware images:
  tiny                    Precursor tiny image. For testing with services built out-of-tree.
  baosec                  Baosec application target image.
  dabao                   Dabao application target image.
- bao1x-baremetal         Baremetal image for baochip1x targets.
+ bao1x-baremetal-baosec  Baremetal image for baosec boards.
+ bao1x-baremetal-dabao   Baremetal image for dabao boards.
  bao1x-boot0             Boot0 partition for baochip1x targets.
  bao1x-boot1             Boot1 partition for baochip1x targets.
  bao1x-alt-boot1         Alterante boot1 partition for baochip1x targets. Burns into the 'loader/baremetal' region
