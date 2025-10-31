@@ -9,7 +9,7 @@ Outputs JSON if --json is set:
         "images": [
             { "path": ".../loader.uf2", "role": "loader" },
             { "path": ".../xous.uf2",   "role": "xous"   },
-            { "path": ".../apps.uf2",    "role": "app"    }
+            { "path": ".../apps.uf2",    "role": "apps"    }
         ]
     }
 
@@ -26,7 +26,7 @@ TRIPLE: str = "riscv32imac-unknown-xous-elf"
 FILENAMES: List[Tuple[str, str]] = [
     ("loader.uf2", "loader"),
     ("xous.uf2",   "xous"),
-    ("apps.uf2",    "app"),
+    ("apps.uf2",    "apps"),
 ]
 
 EXIT_OK = 0
