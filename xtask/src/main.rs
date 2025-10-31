@@ -791,7 +791,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             builder.add_loader_feature("debug-print");
             builder.add_kernel_feature("v2p");
-            builder.add_detached_app_feature("usb");
             match task.as_deref() {
                 Some("dabao") => builder.target_bao1x_soc(),
                 _ => panic!("should be unreachable"),
