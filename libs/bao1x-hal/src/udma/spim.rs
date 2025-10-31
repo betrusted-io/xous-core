@@ -1338,7 +1338,6 @@ impl Spim {
             }
             CommandSet::Xtx => {
                 self.mem_param_set(true, 0x31, &[((sr & 0xFF00 >> 8) as u8) | 0b0000_0010]);
-                let status = self.flash_read_status_register();
             }
         }
     }
