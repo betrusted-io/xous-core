@@ -669,7 +669,7 @@ impl Repl {
                     }
                 }
             }
-            #[cfg(all(feature = "bao1x", not(feature = "bao1x-evb")))]
+            #[cfg(all(feature = "bao1x", feature = "board-baosec"))]
             "ldo" => {
                 if args.len() != 1 {
                     return Err(Error::help("vdd85 [on|off]"));
@@ -736,7 +736,7 @@ impl Repl {
                     iox.set_gpio_pin_value(IoxPort::PA, 5, IoxValue::High);
                 }
             }
-            #[cfg(all(feature = "bao1x", not(feature = "bao1x-evb")))]
+            #[cfg(all(feature = "bao1x", feature = "board-baosec"))]
             "wfi" => {
                 let iox = bao1x_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
@@ -1143,7 +1143,7 @@ impl Repl {
                 crate::print!(", mon");
                 #[cfg(feature = "bao1x-bio")]
                 crate::print!(", bio, bdma, pin");
-                #[cfg(all(feature = "bao1x", not(feature = "bao1x-evb")))]
+                #[cfg(all(feature = "bao1x", feature = "board-baosec"))]
                 crate::print!(", ldo, wfi");
                 #[cfg(feature = "bao1x-usb")]
                 crate::print!(", usb");
