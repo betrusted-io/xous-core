@@ -833,6 +833,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(1);
         }
     }
+    // clean up any duplicates - this is an artifact of wanting to include dabao-console
+    // as a "default app" to make behavior more intuitive for beginners trying out dabao,
+    // but also wanting to list it in the UI as an app so that developers are /aware/ of
+    // dabao-console as an app they can modify. Simply hiding it by sticking it in the services
+    // directory makes in hard to discover. Maybe this will be changed to handle it entirely
+    // at the UI layer but anyways - this avoids accidental duplicate processes which is a good thing
+    // in general.
+    builder.deduplicate_processes();
     builder.build()?;
 
     // the intent of this call is to check that crates we are sourcing from crates.io
