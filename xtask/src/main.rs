@@ -786,7 +786,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // minimal set of services for app development on a dabao. Need to save space for the app itself!
             let bao_rram_pkgs =
-                ["xous-ticktimer", "xous-log", "xous-names", "usb-bao1x", "bao1x-hal-service"].to_vec();
+                ["xous-ticktimer", "keystore", "xous-log", "xous-names", "usb-bao1x", "bao1x-hal-service"]
+                    .to_vec();
             let bao_app_pkgs: Vec<&'static str> = ["dabao-console"].to_vec();
 
             builder.add_loader_feature("debug-print");

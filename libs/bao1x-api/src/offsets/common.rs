@@ -117,6 +117,25 @@ pub const OEM_MODE: usize = 86;
 /// the data store.
 pub const BOOT0_PUBKEY_FAIL: usize = 87;
 
+/// This pair of counters is used to invoke the key setup for dabao. It's not done until
+/// a Xous environment is loaded onto a dabao *and* the dabao is rebooted the first time.
+/// The reason it's not done all the time is that baosec boards want to set up their secure
+/// keys using the TRNG avalanche generator - which is not available on dabao. Thus we have
+/// to differentiate the two cases, because when a chip is "born" it thinks it's a "dabao",
+/// and has to be told it's a "baosec". This is the analogous path, but for dabaos that
+/// want the key store.
+pub const INVOKE_DABAO_KEY_SETUP: usize = 88;
+pub const DABAO_KEY_SETUP_DONE: usize = 89;
+
+/// When set, the system will prefer to present generic, fixed identifiers when challenged
+/// by external systems. The canonical use case for this is the serial number field in the
+/// USB device descriptor: normally, GENERIC_IDENTIFIERS is `0`, which means the device will
+/// present a semi-unique serial number (this is useful for users who plug in multiple devices
+/// and want to tell them apart). However, privacy-conscious users who don't need or want
+/// to tell devices apart can increment this OWC and then the USB serial number will be
+/// replaced with a fixed pattern that is common across all devices.
+pub const GENERIC_IDENTIFIERS: usize = 90;
+
 /// Total number of public key slots in the system. Pubkey revocations are at the "top of range"
 pub const PUBKEY_SLOTS: usize = 4;
 /// Offset in the one-way counter array for loader key revocations. Provisions for up to four

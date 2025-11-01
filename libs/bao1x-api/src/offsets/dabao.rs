@@ -42,4 +42,7 @@ pub const DATA_SLOTS: [SlotIndex; 8] = [
     crate::offsets::BETA_PUBKEY,
     crate::offsets::DEV_PUBKEY,
 ];
-pub const KEY_SLOTS: [SlotIndex; 0] = [];
+
+pub use crate::baosec::{CHAFF_KEYS, NUISANCE_KEYS, NUISANCE_KEYS_0, NUISANCE_KEYS_1, RMA_KEY, ROOT_SEED};
+
+pub const KEY_SLOTS: [SlotIndex; 5] = [ROOT_SEED, RMA_KEY, NUISANCE_KEYS_0, NUISANCE_KEYS_1, CHAFF_KEYS];
