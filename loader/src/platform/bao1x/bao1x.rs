@@ -164,6 +164,12 @@ pub fn early_init_hw() -> u32 {
         if one_way.get(bao1x_api::BootWaitCoding::OFFSET).unwrap() == 0 {
             one_way.inc_coded::<bao1x_api::BootWaitCoding>().ok();
         }
+        // set invoke_dabao_key_setup exactly once. On the next reboot, the keys
+        // for the dabao environment will be created using the on-chip TRNG.
+        if one_way.get(bao1x_api::INVOKE_DABAO_KEY_SETUP).unwrap() == 0 {
+            // safety: the argument is from a checked constant
+            unsafe { one_way.inc(bao1x_api::INVOKE_DABAO_KEY_SETUP).ok() };
+        }
     }
 
     // Setup some global control registers that will allow the TRNG to operate once the kernel is

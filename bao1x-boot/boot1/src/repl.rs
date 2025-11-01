@@ -229,7 +229,8 @@ impl Repl {
             }
             "audit" => {
                 let owc = OneWayCounter::new();
-                crate::println!("Board type reads as: {:?}", owc.get_decoded::<BoardTypeCoding>());
+                let boardtype = owc.get_decoded::<BoardTypeCoding>().unwrap();
+                crate::println!("Board type reads as: {:?}", boardtype);
                 crate::println!("Boot partition is: {:?}", owc.get_decoded::<AltBootCoding>());
                 crate::println!("Semver is: {}", crate::version::SEMVER);
                 crate::println!("Description is: {}", crate::RELEASE_DESCRIPTION);
@@ -351,14 +352,23 @@ impl Repl {
                     crate::println!("== CP SETUP FAILED ==");
                     secure = false;
                 }
-                if owc.get(IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0 {
+                if (boardtype == BoardTypeCoding::Baosec && owc.get(IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0)
+                    || (boardtype == BoardTypeCoding::Dabao && owc.get(DABAO_KEY_SETUP_DONE).unwrap() == 0)
+                {
                     crate::println!("In-system keys have NOT been generated");
-                    if owc.get_decoded::<BoardTypeCoding>().unwrap() == BoardTypeCoding::Baosec {
-                        // this is only a security failure on baosec systems
-                        secure = false;
-                    }
+                    secure = false;
                 } else {
-                    crate::println!("In-system keys have been generated");
+                    if boardtype == BoardTypeCoding::Baosec {
+                        crate::println!("In-system keys have been generated");
+                    } else {
+                        // assume dabao-type board
+                        if owc.get(INVOKE_DABAO_KEY_SETUP).unwrap() != 0 {
+                            crate::println!("In-system keys have been generated");
+                        } else {
+                            crate::println!("In-system key generation is still pending");
+                            secure = false
+                        }
+                    }
                 }
                 if !secure {
                     crate::println!("** System did not meet minimum requirements for security **");
