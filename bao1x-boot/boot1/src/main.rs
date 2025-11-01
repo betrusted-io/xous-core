@@ -273,6 +273,10 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         }
     }
 
+    boot(&iox, oled, se0_port, se0_pin)
+}
+
+pub fn boot(iox: &Iox, mut oled: Option<Oled128x128>, se0_port: bao1x_api::IoxPort, se0_pin: u8) -> ! {
     if let Some(ref mut sh1107) = oled {
         marquee(sh1107, "Booting...");
     }
@@ -280,6 +284,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // stop the USB subsystem so it can be re-init'd by the next stage.
     // without this, USB init will hang later on.
     glue::shutdown();
+    iox.set_gpio_dir(se0_port, se0_pin, bao1x_api::IoxDir::Output);
     iox.set_gpio_pin(se0_port, se0_pin, bao1x_api::IoxValue::Low); // put the USB port into SE0, so we re-enumerate with the OS stack
 
     // check that all pages in the SPI memory page cache have been written out

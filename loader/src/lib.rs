@@ -54,4 +54,4 @@ pub const GUARD_MEMORY_BYTES: usize = 8 * crate::PAGE_SIZE; // 1 extra page for 
 pub const SWAPPER_PID: u8 = 2;
 
 #[cfg(feature = "bao1x")]
-pub const SYSTEM_CLOCK_FREQUENCY: u32 = 800_000_000;
+pub const SYSTEM_CLOCK_FREQUENCY: u32 = bao1x_hal::board::DEFAULT_FCLK_FREQUENCY / 2;

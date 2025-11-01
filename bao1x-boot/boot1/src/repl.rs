@@ -106,7 +106,25 @@ impl Repl {
                 rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
             }
             "boot" => {
-                crate::secboot::try_boot(true);
+                use bao1x_hal::iox::Iox;
+                let one_way = OneWayCounter::new();
+                let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                let (port, pin) = match one_way.get_decoded::<bao1x_api::BoardTypeCoding>() {
+                    // the default map is baosec in boot1
+                    Ok(bao1x_api::BoardTypeCoding::Baosec) => bao1x_hal::board::setup_usb_pins(&iox),
+                    // otherwise assume dabao mapping
+                    _ => crate::setup_dabao_se0_pin(&iox),
+                };
+
+                // assert SE0 pin here. We add a delay even though crate:boot() calls this, because
+                // a button press initiated SE0 includes a certain minimum "low"; a direct serial command
+                // does not.
+                iox.set_gpio_pin(port, pin, IoxValue::Low);
+                crate::platform::delay(20); // minimum is 2.5ms
+
+                // note: the SE0 pin is now asserted & configured as an output as it goes to the next stage
+                // it us up to the next USB stack to de-assert this.
+                crate::boot(&iox, None, port, pin);
             }
             "uf2" => {
                 use base64::{Engine as _, engine::general_purpose};
