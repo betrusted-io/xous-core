@@ -17,14 +17,15 @@ fn main() {
     // allow preemption in the dabao console environment
     hal.set_preemption(true);
 
+    // spawn the shell thread
+    shell::start_shell();
+
     #[cfg(feature = "usb")]
     {
+        tt.sleep_ms(500).ok(); // pause for the system to startup
         let usb = UsbHid::new();
         usb.serial_console_input_injection();
     }
-
-    // spawn the shell thread
-    shell::start_shell();
 
     #[cfg(feature = "ctap-bringup")]
     {

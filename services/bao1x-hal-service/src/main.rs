@@ -265,6 +265,8 @@ fn main() {
     // setup TRNG server - baosec only because it has an external AV generator
     #[cfg(feature = "board-baosec")]
     servers::trng::start_trng_service(&bio_ss);
+    #[cfg(feature = "board-dabao")]
+    servers::trng::start_trng_service();
 
     let mut msg_opt = None;
     log::debug!("Starting main loop");

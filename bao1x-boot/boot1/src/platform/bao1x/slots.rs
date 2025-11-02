@@ -72,13 +72,21 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
         crate::println!("Public ID init done.");
     }
 
-    if *board_type == bao1x_api::BoardTypeCoding::Baosec
-        && owc.get(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0
+    if (*board_type == bao1x_api::BoardTypeCoding::Baosec
+        && owc.get(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0)
+        || (*board_type == bao1x_api::BoardTypeCoding::Dabao
+            && owc.get(bao1x_api::INVOKE_DABAO_KEY_SETUP).unwrap() != 0
+            && owc.get(bao1x_api::DABAO_KEY_SETUP_DONE).unwrap() == 0)
     {
         crate::println!("System setup not yet done. Initializing secret identifiers...");
         let trng = maybe_trng.get_or_insert_with(|| super::trng::ManagedTrng::new(&board_type));
         // generate all the keys
-        for key_range in bao1x_api::baosec::KEY_SLOTS.iter() {
+        let key_set = if *board_type == bao1x_api::BoardTypeCoding::Baosec {
+            &bao1x_api::baosec::KEY_SLOTS[..]
+        } else {
+            &bao1x_api::dabao::KEY_SLOTS[..]
+        };
+        for key_range in key_set.iter() {
             let mut storage = alloc::vec::Vec::with_capacity(key_range.len() * SLOT_ELEMENT_LEN_BYTES);
             storage.resize(key_range.len() * SLOT_ELEMENT_LEN_BYTES, 0);
             for chunk in storage.chunks_mut(SLOT_ELEMENT_LEN_BYTES) {
@@ -94,7 +102,11 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
         // once all values are written, advance the IN_SYSTEM_BOOT_SETUP_DONE state
         // safety: the offset is correct because we're pulling it from our pre-defined constants and
         // those are manually checked.
-        unsafe { owc.inc(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() };
+        if *board_type == bao1x_api::BoardTypeCoding::Baosec {
+            unsafe { owc.inc(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() };
+        } else if *board_type == bao1x_api::BoardTypeCoding::Dabao {
+            unsafe { owc.inc(bao1x_api::DABAO_KEY_SETUP_DONE).unwrap() };
+        }
         crate::println!("Secret ID init done.");
     }
 
@@ -110,7 +122,9 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
     // the developer mode bit, the key check/erasure would still happen upon launch into developer mode.
     #[cfg(feature = "unsafe-debug")]
     print_slots(&slot_mgr, &bao1x_api::baosec::KEY_SLOTS); // this prints all the keys as they are created
-    if *board_type == bao1x_api::BoardTypeCoding::Baosec && owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0 {
+    if (*board_type == bao1x_api::BoardTypeCoding::Baosec || *board_type == bao1x_api::BoardTypeCoding::Dabao)
+        && owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0
+    {
         #[cfg(feature = "unsafe-debug")]
         print_slots(&slot_mgr, &bao1x_api::baosec::KEY_SLOTS);
         check_and_fix_acls(&mut rram, &mut slot_mgr, &bao1x_api::baosec::KEY_SLOTS);

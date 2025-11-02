@@ -2126,8 +2126,10 @@ impl CorigineUsb {
             num_trb = len / MAX_TRB_XFER_LEN + if len % MAX_TRB_XFER_LEN != 0 { 1 } else { 0 };
         }
         let udc_ep = &mut self.udc_ep[pei];
-        let mut enq_pt =
-            unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
+        let mut enq_pt = match unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut() } {
+            Some(ptr) => ptr,
+            _ => return,
+        };
         let mut pcs = udc_ep.pcs;
 
         /*
