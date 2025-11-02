@@ -36,7 +36,8 @@ pub fn delay(quantum: usize) {
     use utralib::{CSR, utra};
     // abuse the d11ctime timer to create some time-out like thing
     let mut d11c = CSR::new(utra::d11ctime::HW_D11CTIME_BASE as *mut u32);
-    d11c.wfo(utra::d11ctime::CONTROL_COUNT, 333_333); // 1.0ms per interval
+    // 1.0ms per interval
+    d11c.wfo(utra::d11ctime::CONTROL_COUNT, crate::SYSTEM_CLOCK_FREQUENCY / 1000);
     let mut polarity = d11c.rf(utra::d11ctime::HEARTBEAT_BEAT);
     for _ in 0..quantum {
         while polarity == d11c.rf(utra::d11ctime::HEARTBEAT_BEAT) {}
