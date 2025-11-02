@@ -3311,7 +3311,6 @@ dependencies = [
  "sha2",
  "subtle",
  "utralib 0.1.26",
- "ux-api",
  "xous 0.9.67 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",

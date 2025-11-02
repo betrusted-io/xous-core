@@ -36,7 +36,8 @@ pub fn delay(quantum: usize) {
     use utralib::{CSR, utra};
     // abuse the d11ctime timer to create some time-out like thing
     let mut d11c = CSR::new(utra::d11ctime::HW_D11CTIME_BASE as *mut u32);
-    d11c.wfo(utra::d11ctime::CONTROL_COUNT, 333_333); // 1.0ms per interval
+    // 1.0ms per interval
+    d11c.wfo(utra::d11ctime::CONTROL_COUNT, crate::SYSTEM_CLOCK_FREQUENCY / 1000);
     let mut polarity = d11c.rf(utra::d11ctime::HEARTBEAT_BEAT);
     for _ in 0..quantum {
         while polarity == d11c.rf(utra::d11ctime::HEARTBEAT_BEAT) {}
@@ -163,6 +164,12 @@ pub fn early_init_hw() -> u32 {
         let one_way = bao1x_hal::acram::OneWayCounter::new();
         if one_way.get(bao1x_api::BootWaitCoding::OFFSET).unwrap() == 0 {
             one_way.inc_coded::<bao1x_api::BootWaitCoding>().ok();
+        }
+        // set invoke_dabao_key_setup exactly once. On the next reboot, the keys
+        // for the dabao environment will be created using the on-chip TRNG.
+        if one_way.get(bao1x_api::INVOKE_DABAO_KEY_SETUP).unwrap() == 0 {
+            // safety: the argument is from a checked constant
+            unsafe { one_way.inc(bao1x_api::INVOKE_DABAO_KEY_SETUP).ok() };
         }
     }
 

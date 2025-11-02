@@ -461,6 +461,36 @@ impl Builder {
         self
     }
 
+    /// Searches through the services and apps name spaces and removes duplicates
+    pub fn deduplicate_processes(&mut self) {
+        let mut pid_names = Vec::<String>::new();
+        let mut dup_indices = Vec::<(usize, usize)>::new();
+        {
+            // ensure the borrows that compose name_spaces go out of scope after searching for duplicates
+            let name_spaces = [&self.services, &self.apps];
+            for (ns, name_space) in name_spaces.iter().enumerate() {
+                for (i, service) in name_space.iter().enumerate() {
+                    if let Some(name) = &service.name() {
+                        if pid_names.contains(&name) {
+                            dup_indices.push((ns, i));
+                        } else {
+                            pid_names.push(name.to_owned());
+                        }
+                    }
+                }
+            }
+        }
+        if dup_indices.len() > 0 {
+            println!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+            for (dupe_ns, dupe_i) in dup_indices {
+                let removed =
+                    if dupe_ns == 0 { self.services.remove(dupe_i) } else { self.apps.remove(dupe_i) };
+                println!("WARNING: Found duplicate package name, removing later instances of {:?}", removed);
+            }
+            println!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+        }
+    }
+
     /// add a feature to be passed on to services
     pub fn add_feature(&mut self, feature: &str) -> &mut Builder {
         self.features.push(feature.into());
@@ -1303,7 +1333,7 @@ impl Builder {
         }
 
         let mut app_img_path = output_file.parent().unwrap().to_owned();
-        app_img_path.push("app.img");
+        app_img_path.push("apps.img");
 
         Command::new(cargo())
             .current_dir(project_root())

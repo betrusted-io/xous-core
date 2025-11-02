@@ -607,7 +607,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_artyvexii();
         }
 
-        Some("baremetal-bao1x") | Some("bao1x-baremetal") => {
+        Some("baremetal-bao1x") | Some("bao1x-baremetal-baosec") => {
+            let board = "board-baosec";
+            builder.set_board(board);
+            builder.add_loader_feature(board);
+            builder.add_loader_feature("bao1x-usb");
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "baremetal/src/platform/bao1x/link.x",
+                (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder.set_baremetal(true).target_baremetal_bao1x("baremetal").set_sigblock_size(sigblock_size);
+        }
+
+        Some("bao1x-baremetal-dabao") => {
+            let board = "board-dabao";
+            builder.set_board(board);
+            builder.add_loader_feature(board);
+            builder.add_loader_feature("bao1x-usb");
             let sigblock_size = 0x300;
             update_flash_origin(
                 "baremetal/src/platform/bao1x/link.x",
@@ -771,12 +788,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // minimal set of services for app development on a dabao. Need to save space for the app itself!
             let bao_rram_pkgs =
-                ["xous-ticktimer", "xous-log", "xous-names", "usb-bao1x", "bao1x-hal-service"].to_vec();
-            let bao_app_pkgs: Vec<&'static str> = [].to_vec();
+                ["xous-ticktimer", "keystore", "xous-log", "xous-names", "usb-bao1x", "bao1x-hal-service"]
+                    .to_vec();
+            let bao_app_pkgs: Vec<&'static str> = ["dabao-console"].to_vec();
 
             builder.add_loader_feature("debug-print");
             builder.add_kernel_feature("v2p");
-            builder.add_detached_app_feature("usb");
             match task.as_deref() {
                 Some("dabao") => builder.target_bao1x_soc(),
                 _ => panic!("should be unreachable"),
@@ -819,6 +836,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(1);
         }
     }
+    // clean up any duplicates - this is an artifact of wanting to include dabao-console
+    // as a "default app" to make behavior more intuitive for beginners trying out dabao,
+    // but also wanting to list it in the UI as an app so that developers are /aware/ of
+    // dabao-console as an app they can modify. Simply hiding it by sticking it in the services
+    // directory makes in hard to discover. Maybe this will be changed to handle it entirely
+    // at the UI layer but anyways - this avoids accidental duplicate processes which is a good thing
+    // in general.
+    builder.deduplicate_processes();
     builder.build()?;
 
     // the intent of this call is to check that crates we are sourcing from crates.io
@@ -916,7 +941,8 @@ Hardware images:
  tiny                    Precursor tiny image. For testing with services built out-of-tree.
  baosec                  Baosec application target image.
  dabao                   Dabao application target image.
- bao1x-baremetal         Baremetal image for baochip1x targets.
+ bao1x-baremetal-baosec  Baremetal image for baosec boards.
+ bao1x-baremetal-dabao   Baremetal image for dabao boards.
  bao1x-boot0             Boot0 partition for baochip1x targets.
  bao1x-boot1             Boot1 partition for baochip1x targets.
  bao1x-alt-boot1         Alterante boot1 partition for baochip1x targets. Burns into the 'loader/baremetal' region

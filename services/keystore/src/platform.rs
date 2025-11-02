@@ -1,6 +1,7 @@
-#[cfg(feature = "board-baosec")]
+// Dabao comes along for the ride for baosec
+#[cfg(any(feature = "board-baosec", feature = "board-dabao"))]
 mod baosec;
-#[cfg(feature = "board-baosec")]
+#[cfg(any(feature = "board-baosec", feature = "board-dabao"))]
 pub use baosec::*;
 
 #[cfg(feature = "hosted-baosec")]

@@ -9,6 +9,7 @@ from commands.monitor import cmd_monitor
 from commands.flash import cmd_flash
 from commands.doctor import cmd_doctor
 from commands.artifacts import cmd_artifacts
+from commands.boot import cmd_boot
 
 VERSION = "0.1.1"
 
@@ -33,7 +34,7 @@ def main():
     # monitor
     m = sub.add_parser("monitor", help="Open a serial monitor")
     m.add_argument("-p", "--port", required=True, help="Serial port (e.g., COM5, /dev/ttyUSB0)")
-    m.add_argument("-b", "--baud", type=int, default=115200, help="Baud rate")
+    m.add_argument("-b", "--baud", type=int, default=1000000, help="Baud rate")
     m.add_argument("--ts", action="store_true", help="Show timestamps on received lines")
     m.add_argument("--save", help="Append output to a file")
     m.add_argument("--reset", action="store_true", help="Toggle DTR/RTS on open")
@@ -52,8 +53,14 @@ def main():
     # flash
     f = sub.add_parser("flash", help="Copy UF2 file(s) to a mounted drive")
     f.add_argument("--dest", required=True, help="Mount path of the UF2 boot drive (e.g., D:\\)")
-    f.add_argument("files", nargs="+", help="One or more UF2 files to copy (e.g., loader.uf2 xous.uf2 app.uf2)")
+    f.add_argument("files", nargs="+", help="One or more UF2 files to copy (e.g., loader.uf2 xous.uf2 apps.uf2)")
     f.set_defaults(func=cmd_flash)
+
+    # boot
+    boot = sub.add_parser("boot", help="Send 'boot' to the bootloader serial port to start run mode")
+    boot.add_argument("-p", "--port", required=True, help="Bootloader serial port (e.g., COM7, /dev/ttyACM0)")
+    boot.add_argument("-b", "--baud", type=int, default=1000000, help="Baud rate (default 1000000)")
+    boot.set_defaults(func=cmd_boot)
 
     args = ap.parse_args()
 

@@ -19,7 +19,6 @@ bao1x-hal = { path = "../../libs/bao1x-hal", features = [
     "std",
 ], optional = true }
 bao1x-hal-service = { path = "../bao1x-hal-service", optional = true }
-ux-api = { path = "../../libs/ux-api" }
 bao1x-emu = { path = "../bao1x-emu", optional = true }
 bao1x-api = { path = "../../libs/bao1x-api" }
 xous-ipc = "0.10.7"
@@ -42,7 +41,7 @@ blowfish = { version = "0.9.1", features = ["bcrypt"] }
 # password modals - keep them in this crate to minimize plaintext password manipulations
 locales = { path = "../../locales" }
 # non-password modals are outsourced to a common crate
-modals = { path = "../modals" }
+modals = { path = "../modals", optional = true }
 
 # backups
 aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
@@ -60,7 +59,7 @@ aes = { path = "../aes", default-features = false, optional = true }
 # engine-25519 = { path = "../engine-25519" }
 byteorder = "1.4.3" # used by keywrap
 # hardware acceleration adaptations are inserted into a fork of the main branch.
-hex = { version = "0.4.3", default-features = false, features = [] }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 hkdf = "0.12.4"
 
 #[dependencies.curve25519-dalek]
@@ -78,15 +77,12 @@ hkdf = "0.12.4"
 bao1x = ["utralib/bao1x", "aes/bao1x"]
 board-baosec = [
     "utralib/bao1x",
-    "ux-api/board-baosec",
     "keystore-api/gen2",
-    "modals/no-gam",
-    "modals/bao1x",
     "bao1x-hal",
     "bao1x-hal-service/board-baosec",
 ] # USB form factor token
-loader-baosec = ["ux-api/loader-baosec"]
-test-baosec = ["ux-api/loader-baosec"]
+loader-baosec = []
+test-baosec = []
 hosted-baosec = [
     "keystore-api/gen2",
     "modals/no-gam",
@@ -102,12 +98,11 @@ loader-baosor = []
 board-dabao = [
     "utralib/bao1x",
     "keystore-api/gen2",
+    "bao1x-hal",
     "bao1x-hal-service/board-dabao",
 ] # Dev board form factor
 loader-dabao = []
 
-policy-menu = [
-] # provisions for users to set their password retention policies (on the block for deprecation) (note: to re-enable you need to add "rootkeys menu" to the tokens.rs in the GAM)
 hazardous-debug = [
 ] # this feature enables the printing of secret materials for debug purposes
 tts = []

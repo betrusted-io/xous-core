@@ -2,14 +2,14 @@
 Return release UF2 images for flashing.
 
 Scans the release directory for UF2 images:
-    <xous-core>/target/riscv32imac-unknown-xous-elf/release/{loader.uf2,xous.uf2,app.uf2}
+    <xous-core>/target/riscv32imac-unknown-xous-elf/release/{loader.uf2,xous.uf2,apps.uf2}
 
 Outputs JSON if --json is set:
     {
         "images": [
             { "path": ".../loader.uf2", "role": "loader" },
             { "path": ".../xous.uf2",   "role": "xous"   },
-            { "path": ".../app.uf2",    "role": "app"    }
+            { "path": ".../apps.uf2",    "role": "apps"    }
         ]
     }
 
@@ -26,7 +26,7 @@ TRIPLE: str = "riscv32imac-unknown-xous-elf"
 FILENAMES: List[Tuple[str, str]] = [
     ("loader.uf2", "loader"),
     ("xous.uf2",   "xous"),
-    ("app.uf2",    "app"),
+    ("apps.uf2",    "apps"),
 ]
 
 EXIT_OK = 0

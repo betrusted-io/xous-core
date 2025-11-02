@@ -106,7 +106,25 @@ impl Repl {
                 rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
             }
             "boot" => {
-                crate::secboot::try_boot(true);
+                use bao1x_hal::iox::Iox;
+                let one_way = OneWayCounter::new();
+                let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+                let (port, pin) = match one_way.get_decoded::<bao1x_api::BoardTypeCoding>() {
+                    // the default map is baosec in boot1
+                    Ok(bao1x_api::BoardTypeCoding::Baosec) => bao1x_hal::board::setup_usb_pins(&iox),
+                    // otherwise assume dabao mapping
+                    _ => crate::setup_dabao_se0_pin(&iox),
+                };
+
+                // assert SE0 pin here. We add a delay even though crate:boot() calls this, because
+                // a button press initiated SE0 includes a certain minimum "low"; a direct serial command
+                // does not.
+                iox.set_gpio_pin(port, pin, IoxValue::Low);
+                crate::platform::delay(20); // minimum is 2.5ms
+
+                // note: the SE0 pin is now asserted & configured as an output as it goes to the next stage
+                // it us up to the next USB stack to de-assert this.
+                crate::boot(&iox, None, port, pin);
             }
             "uf2" => {
                 use base64::{Engine as _, engine::general_purpose};
@@ -229,7 +247,8 @@ impl Repl {
             }
             "audit" => {
                 let owc = OneWayCounter::new();
-                crate::println!("Board type reads as: {:?}", owc.get_decoded::<BoardTypeCoding>());
+                let boardtype = owc.get_decoded::<BoardTypeCoding>().unwrap();
+                crate::println!("Board type reads as: {:?}", boardtype);
                 crate::println!("Boot partition is: {:?}", owc.get_decoded::<AltBootCoding>());
                 crate::println!("Semver is: {}", crate::version::SEMVER);
                 crate::println!("Description is: {}", crate::RELEASE_DESCRIPTION);
@@ -351,14 +370,23 @@ impl Repl {
                     crate::println!("== CP SETUP FAILED ==");
                     secure = false;
                 }
-                if owc.get(IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0 {
+                if (boardtype == BoardTypeCoding::Baosec && owc.get(IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0)
+                    || (boardtype == BoardTypeCoding::Dabao && owc.get(DABAO_KEY_SETUP_DONE).unwrap() == 0)
+                {
                     crate::println!("In-system keys have NOT been generated");
-                    if owc.get_decoded::<BoardTypeCoding>().unwrap() == BoardTypeCoding::Baosec {
-                        // this is only a security failure on baosec systems
-                        secure = false;
-                    }
+                    secure = false;
                 } else {
-                    crate::println!("In-system keys have been generated");
+                    if boardtype == BoardTypeCoding::Baosec {
+                        crate::println!("In-system keys have been generated");
+                    } else {
+                        // assume dabao-type board
+                        if owc.get(INVOKE_DABAO_KEY_SETUP).unwrap() != 0 {
+                            crate::println!("In-system keys have been generated");
+                        } else {
+                            crate::println!("In-system key generation is still pending");
+                            secure = false
+                        }
+                    }
                 }
                 if !secure {
                     crate::println!("** System did not meet minimum requirements for security **");

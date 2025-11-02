@@ -101,7 +101,8 @@ impl KeyStore {
             }
         }
 
-        // log::info!("chaff: {:x?}", chaff_xor);
+        #[cfg(feature = "hazardous-debug")]
+        log::info!("chaff: {:x?}", chaff_xor);
         ikm.extend_from_slice(&chaff_xor);
         assert!(ikm.len() == (nk_len + 1 + 1) * KEY_LEN); // sanity check that all keys were in fact added
 

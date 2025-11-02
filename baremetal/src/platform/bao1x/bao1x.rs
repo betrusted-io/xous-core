@@ -29,7 +29,6 @@ pub const SCRATCH_PAGE: usize = HEAP_START + HEAP_LEN + 4096;
 pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 
 pub const SYSTEM_CLOCK_FREQUENCY: u32 = 700_000_000;
-use bao1x_api::SYSTEM_TICK_INTERVAL_MS;
 
 pub fn early_init() {
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
@@ -91,13 +90,23 @@ pub fn early_init() {
 
     // Baosec specific:
     // Setup I/Os so things that should be powered off are actually off
-    bao1x_hal::board::setup_display_pins(&iox);
-    bao1x_hal::board::setup_memory_pins(&iox);
-    bao1x_hal::board::setup_i2c_pins(&iox);
-    bao1x_hal::board::setup_camera_pins(&iox);
-    bao1x_hal::board::setup_kb_pins(&iox);
-    bao1x_hal::board::setup_oled_power_pin(&iox);
-    bao1x_hal::board::setup_trng_power_pin(&iox);
+    #[cfg(feature = "board-baosec")]
+    {
+        bao1x_hal::board::setup_display_pins(&iox);
+        bao1x_hal::board::setup_memory_pins(&iox);
+        bao1x_hal::board::setup_i2c_pins(&iox);
+        bao1x_hal::board::setup_camera_pins(&iox);
+        bao1x_hal::board::setup_kb_pins(&iox);
+        bao1x_hal::board::setup_oled_power_pin(&iox);
+        bao1x_hal::board::setup_trng_power_pin(&iox);
+    }
+    #[cfg(feature = "board-dabao")]
+    {
+        // this actively drives the pin high, allowing USB to connect
+        bao1x_hal::board::setup_usb_pins(&iox);
+        // this puts the pin into a tri-state
+        bao1x_hal::board::setup_boot_pin(&iox);
+    }
     crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
     crate::println!("CPU freq: {} MHz", SYSTEM_CLOCK_FREQUENCY / 2);
 }
@@ -109,7 +118,7 @@ pub fn setup_timer() {
     timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0);
     timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
 
-    let ms = SYSTEM_TICK_INTERVAL_MS;
+    let ms = 1;
     timer.wfo(utra::timer0::EN_EN, 0b0); // disable the timer
     // load its values
     timer.wfo(utra::timer0::LOAD_LOAD, 0);
