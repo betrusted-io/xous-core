@@ -2251,10 +2251,12 @@ pub struct CorigineWrapper {
     pub ep_out_ready: Box<[Arc<AtomicBool>]>,
     pub address_is_set: Arc<AtomicBool>,
     pub event: Option<CrgEvent>,
+    pub irq_csr: AtomicCsr<u32>,
 }
 #[cfg(feature = "std")]
 impl CorigineWrapper {
     pub fn new(obj: CorigineUsb) -> Self {
+        let irq_csr = obj.irq_csr.clone();
         let c = Self {
             hw: Arc::new(Mutex::new(obj)),
             ep_meta: [None; CRG_EP_NUM],
@@ -2264,6 +2266,7 @@ impl CorigineWrapper {
                 .into_boxed_slice(),
             event: None,
             address_is_set: Arc::new(AtomicBool::new(false)),
+            irq_csr,
         };
         c
     }
@@ -2275,6 +2278,7 @@ impl CorigineWrapper {
             ep_out_ready: self.ep_out_ready.clone(),
             event: None,
             address_is_set: self.address_is_set.clone(),
+            irq_csr: self.irq_csr.clone(),
         };
         c.ep_meta.copy_from_slice(&self.ep_meta);
         for (dst, src) in c.ep_out_ready.iter().zip(self.ep_out_ready.iter()) {
@@ -2289,6 +2293,13 @@ impl CorigineWrapper {
         crate::println!("lock status: {}", if self.hw.try_lock().is_err() { "locked " } else { "unlocked" });
         */
         self.hw.lock().unwrap()
+    }
+
+    pub fn disable_interrupts(&self) { self.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 0); }
+
+    pub fn enable_interrupts(&self) {
+        self.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
+        self.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 3);
     }
 }
 
@@ -2535,6 +2546,7 @@ impl UsbBus for CorigineWrapper {
                 buf.len(),
                 &buf[..8.min(buf.len())]
             );
+            self.disable_interrupts();
             let addr = if let Some(addr) = self.core().get_app_buf_ptr(ep_addr.index() as u8, CRG_IN) {
                 // crate::println!("addr {:x}", addr);
                 addr
@@ -2574,6 +2586,7 @@ impl UsbBus for CorigineWrapper {
             }
             #[cfg(feature = "verbose-debug")]
             crate::println!("ep{} initiated {}", ep_addr.index(), buf.len());
+            self.enable_interrupts();
             Ok(buf.len())
         }
     }

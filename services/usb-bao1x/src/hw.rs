@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::sync::atomic::compiler_fence;
+use std::sync::atomic::{AtomicBool, compiler_fence};
 use std::sync::atomic::{AtomicPtr, Ordering};
 
 use bao1x_hal::usb::driver::*;
@@ -51,6 +51,10 @@ pub struct Bao1xUsb<'a> {
     // holds one HS packet - must be statically allocated in IRQ handler. Valid length is
     // passed as part of the interrupt recovery message.
     pub serial_rx: [u8; SERIAL_MAX_PACKET_SIZE],
+    // an error reporter for the double lock condition, which we need to figure out how to handle still.
+    // used for debugging, the idea is to query this in userspace to try and pick up the double-lock problem
+    // from the interrupt handler.
+    pub double_lock: AtomicBool,
 }
 
 impl<'a> Bao1xUsb<'a> {
@@ -104,8 +108,13 @@ impl<'a> Bao1xUsb<'a> {
             hid_packet: None,
             serial_port,
             serial_rx: [0u8; SERIAL_MAX_PACKET_SIZE],
+            double_lock: AtomicBool::new(false),
         }
     }
+
+    #[allow(dead_code)]
+    /// Used only when debugging the double lock problem
+    pub fn double_lock_detected(&self) -> bool { self.double_lock.swap(false, Ordering::SeqCst) }
 
     pub fn init(&mut self) {
         // this has to be done in `main` because we're passing a pointer to the Box'd structure, which
@@ -124,9 +133,9 @@ impl<'a> Bao1xUsb<'a> {
         self.irq_csr.wo(utra::irqarray1::EV_EDGE_TRIGGERED, 0);
         self.irq_csr.wo(utra::irqarray1::EV_POLARITY, 0);
 
-        self.wrapper.hw.lock().unwrap().init();
-        self.wrapper.hw.lock().unwrap().start();
-        self.wrapper.hw.lock().unwrap().update_current_speed();
+        self.wrapper.core().init();
+        self.wrapper.core().start();
+        self.wrapper.core().update_current_speed();
 
         // irq must me enabled without dependency on the hw lock
         self.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
@@ -145,10 +154,10 @@ impl<'a> Bao1xUsb<'a> {
         // disable all interrupts so we can safely go through initialization routines
         self.irq_csr.wo(utra::irqarray1::EV_ENABLE, 0);
 
-        self.wrapper.hw.lock().unwrap().reset();
-        self.wrapper.hw.lock().unwrap().init();
-        self.wrapper.hw.lock().unwrap().start();
-        self.wrapper.hw.lock().unwrap().update_current_speed();
+        self.wrapper.core().reset();
+        self.wrapper.core().init();
+        self.wrapper.core().start();
+        self.wrapper.core().update_current_speed();
 
         // reset all shared data structures
         self.device.force_reset().ok();
@@ -211,7 +220,14 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                     // #[cfg(feature = "verbose-debug")]
                     // crate::println!("getting event");
                     // scoping on the hardware lock to manipulate pointer states
-                    let mut corigine_usb = usb.wrapper.core();
+                    let mut corigine_usb = match usb.wrapper.hw.try_lock() {
+                        Ok(lock) => lock,
+                        _ => {
+                            crate::println!("double lock - this case is actually broken, stack will crash");
+                            usb.double_lock.store(true, Ordering::SeqCst);
+                            return;
+                        }
+                    };
                     let mut event = {
                         if corigine_usb.udc_event.evt_dq_pt.load(Ordering::SeqCst).is_null() {
                             // break;
@@ -219,7 +235,12 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                             break;
                         }
                         let event_ptr = corigine_usb.udc_event.evt_dq_pt.load(Ordering::SeqCst) as usize;
-                        unsafe { (event_ptr as *mut EventTrbS).as_mut().expect("couldn't deref pointer") }
+                        match unsafe { (event_ptr as *mut EventTrbS).as_mut() } {
+                            Some(ptr) => ptr,
+                            None => {
+                                break;
+                            }
+                        }
                     };
                     if event.dw3.cycle_bit() != corigine_usb.udc_event.ccs {
                         break;
