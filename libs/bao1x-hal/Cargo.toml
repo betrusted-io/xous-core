@@ -77,9 +77,10 @@ loader-baosec = [
     "ux-api/loader-baosec",
     "sigcheck",
 ]
-kernel-baosec = ["utralib/bao1x"]
-kernel-baosor = ["utralib/bao1x"]
-kernel-dabao = ["utralib/bao1x"]
+kernel = []
+kernel-baosec = ["utralib/bao1x", "kernel"]
+kernel-baosor = ["utralib/bao1x", "kernel"]
+kernel-dabao = ["utralib/bao1x", "kernel"]
 test-baosec = ["ux-api/loader-baosec", "camera-gc2145"]
 hosted-baosec = ["std"] # emulated hardware on x86 platform
 board-baosor = [

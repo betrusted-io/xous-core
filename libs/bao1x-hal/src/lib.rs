@@ -37,12 +37,7 @@ pub mod mbox;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod rram;
 // no signature checking in the kernel
-#[cfg(all(
-    not(feature = "hosted-baosec"),
-    not(feature = "kernel-baosec"),
-    not(feature = "kernel-dabao"),
-    not(feature = "kernel-baosor")
-))]
+#[cfg(all(not(feature = "hosted-baosec"), not(feature = "kernel"),))]
 pub mod sigcheck;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod sram_trim;
