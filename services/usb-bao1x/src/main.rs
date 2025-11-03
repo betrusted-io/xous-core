@@ -62,16 +62,7 @@ fn main() -> ! {
 
 pub(crate) fn main_hw() -> ! {
     #[cfg(feature = "usbd-debug")]
-    // bind the duart
-    let duart_mapping = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utra::duart::HW_DUART_BASE),
-        xous::MemoryAddress::new(0x3000_0000),
-        4096,
-        xous::MemoryFlags::R | xous::MemoryFlags::W,
-    )
-    .expect("couldn't map DUART");
-    #[cfg(feature = "usbd-debug")]
-    crate::println!("duart mapping: {:x?}", duart_mapping);
+    bao1x_hal::claim_duart();
 
     #[cfg(feature = "debug-print-usb")]
     panic::set_hook(Box::new(|info| {
@@ -288,6 +279,11 @@ pub(crate) fn main_hw() -> ! {
         let msg = msg_opt.as_mut().unwrap();
         let opcode = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidCall);
         log::debug!("{:?}", opcode);
+        if cu.double_lock_detected() {
+            log::warn!(
+                "Double lock error detected in USB stack. Meditations: services/usb-bao1x/src/hw.rs@226 (composite_handler inner loop) and consider adding more IRQ enable/disable similar to libs/bao1x-hal/src/usb/driver.rs@2549 (write impl)"
+            );
+        }
         match opcode {
             #[cfg(feature = "board-baosec")]
             Opcode::PmicIrq => match pmic.get_vbus_irq_status(&mut i2c).unwrap() {
@@ -750,7 +746,6 @@ pub(crate) fn main_hw() -> ! {
                                     usb_send.s.as_bytes().chunks(bao1x_hal::usb::driver::CRG_UDC_APP_BUFSIZE)
                                 {
                                     cu.serial_port.write(&chunk).ok();
-                                    cu.serial_port.flush().ok(); // just drop characters on error
                                 }
                             }
                             _ => {} // silent errors

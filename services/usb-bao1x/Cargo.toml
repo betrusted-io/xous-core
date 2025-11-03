@@ -74,7 +74,7 @@ verbose-debug = ["bao1x-hal/verbose-debug"]
 # mutually exclusive with kernel "print-panics"; will get a DUART allocation error on boot if kernel panics are on
 # sticks the DUART into the deep stack; necessary because we can't have external dependencies in usbd-device
 # and the DUART can be banged with simple hard-coded memory offsets.
-usbd-debug = ["usb-device/baochip-debug"]
+usbd-debug = ["usb-device/baochip-debug", "debug-print-usb"]
 
 prototyping = [
 ] # temporary feature-out for figuring out the code; remove this if you don't recognize it anymore
