@@ -13,3 +13,8 @@ def cmd_doctor(_args):
             print("   Hint: On Linux/macOS you may need to add your user to the dialout/uucp group or adjust permissions.")
     except Exception as e:
         print(f"[bao] Doctor failed: {e}")
+
+
+def register(subparsers) -> None:
+    d = subparsers.add_parser("doctor", help="Check Python environment and ports")
+    d.set_defaults(func=cmd_doctor)

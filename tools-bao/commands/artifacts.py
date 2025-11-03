@@ -9,7 +9,7 @@ Outputs JSON if --json is set:
         "images": [
             { "path": ".../loader.uf2", "role": "loader" },
             { "path": ".../xous.uf2",   "role": "xous"   },
-            { "path": ".../apps.uf2",    "role": "apps"    }
+            { "path": ".../apps.uf2",   "role": "apps"    }
         ]
     }
 
@@ -59,3 +59,9 @@ def cmd_artifacts(args) -> None:
         else:
             for i in images:
                 print(f"{i['path']} ({i['role']})")
+
+
+def register(subparsers) -> None:
+    a = subparsers.add_parser("artifacts", help="List newest UF2 images (release only)")
+    a.add_argument("--json", action="store_true", help="Output JSON instead of text")
+    a.set_defaults(func=cmd_artifacts)
