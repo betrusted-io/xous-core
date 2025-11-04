@@ -136,8 +136,6 @@ const VENDOR_ID: u16 = 0x1209;
 const PRODUCT_ID: u16 = 0x3613; // this needs to change! this is the Precursor product ID.
 const MANUFACTURER: &'static str = "Baochip";
 const PRODUCT: &'static str = "Dabao";
-// no seriously, do this
-const SERIAL: &'static str = "TODO";
 
 impl DeviceDescriptor {
     #[allow(dead_code)]
