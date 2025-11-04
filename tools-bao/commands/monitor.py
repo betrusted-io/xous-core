@@ -159,3 +159,24 @@ def cmd_monitor(args) -> None:
         except Exception:
             pass
         safe_close(ser)
+
+
+def register(subparsers) -> None:
+    m = subparsers.add_parser("monitor", help="Open a serial monitor")
+    m.add_argument("-p", "--port", required=True, help="Serial port (e.g., COM5, /dev/ttyUSB0)")
+    m.add_argument("-b", "--baud", type=int, default=1000000, help="Baud rate")
+    m.add_argument("--ts", action="store_true", help="Show timestamps on received lines")
+    m.add_argument("--save", help="Append output to a file")
+    m.add_argument("--reset", action="store_true", help="Toggle DTR/RTS on open")
+    m.add_argument("--crlf", action="store_true", help="Use CRLF as TX line ending in line mode (default LF)")
+    m.add_argument("--raw", action="store_true", help="Send keystrokes immediately (raw byte mode)")
+    m.add_argument("--no-echo", action="store_true", help="Do not locally echo typed input")
+    m.add_argument("--rtscts",  action="store_true", help="Enable RTS/CTS hardware flow control")
+    m.add_argument("--xonxoff", action="store_true", help="Enable XON/XOFF software flow control")
+    m.add_argument("--dsrdtr",  action="store_true", help="Enable DSR/DTR hardware flow control")
+    m.add_argument("--write-timeout", type=float, default=1.0, help="Write timeout in seconds")
+    m.add_argument("--dtr", type=int, choices=[0,1], help="Initial DTR level (0/1)")
+    m.add_argument("--rts", type=int, choices=[0,1], help="Initial RTS level (0/1)")
+    m.add_argument("--no-flush", action="store_true", help="Do not flush buffers on connect")
+    m.add_argument("--break-ms", type=int, default=0, help="Send BREAK for N milliseconds after opening")
+    m.set_defaults(func=cmd_monitor)

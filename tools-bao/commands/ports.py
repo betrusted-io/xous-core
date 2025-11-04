@@ -14,3 +14,8 @@ def cmd_ports(args) -> None:
         if p.vid is not None and p.pid is not None:
             vidpid = f" (VID:PID={p.vid:04x}:{p.pid:04x})"
         print(f"{p.device}\t{p.description}{vidpid}")
+
+
+def register(subparsers) -> None:
+    s = subparsers.add_parser("ports", help="List serial ports")
+    s.set_defaults(func=cmd_ports)

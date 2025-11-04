@@ -52,3 +52,18 @@ def cmd_flash(args) -> None:
 
     print(f"[bao] copied {copied} file(s)")
     sys.exit(0)
+
+
+def register(subparsers) -> None:
+    f = subparsers.add_parser("flash", help="Copy UF2 file(s) to a mounted drive")
+    f.add_argument(
+        "--dest",
+        required=True,
+        help="Mount path of the UF2 boot drive (e.g., D:\\\\ or /Volumes/BOOT/)"
+    )
+    f.add_argument(
+        "files",
+        nargs="+",
+        help="One or more UF2 files to copy (e.g., loader.uf2 xous.uf2 apps.uf2)"
+    )
+    f.set_defaults(func=cmd_flash)
