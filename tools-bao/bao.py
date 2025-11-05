@@ -11,7 +11,7 @@ from commands import doctor
 from commands import boot
 from commands import app
 
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 
 def main():
     ap = argparse.ArgumentParser(
