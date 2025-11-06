@@ -42,7 +42,10 @@ pub fn derive_usb_serial_number(
                 } as u32)
                 .unwrap_or('.');
                 ret.push(c);
-                if ret.len() == 8 {
+                // long enough such that it's unlikely that two devices on one computer will have the same ID
+                // short enough that it's likely to have a collision if used as a global UUID to fingerprint
+                // devices
+                if ret.len() == 6 {
                     break;
                 }
             }
