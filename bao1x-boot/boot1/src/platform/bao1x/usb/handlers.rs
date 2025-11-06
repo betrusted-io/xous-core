@@ -126,10 +126,13 @@ pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize,
                 ep0_buf[..4].copy_from_slice(&[4, USB_DT_STRING, 9, 4]);
                 4
             } else {
+                let owc = bao1x_hal::acram::OneWayCounter::new();
+                let slot_mgr = bao1x_hal::acram::SlotManager::new();
+                let sn = bao1x_hal::usb::derive_usb_serial_number(&owc, &slot_mgr);
                 let s = match id {
                     1 => MANUFACTURER,
                     2 => PRODUCT,
-                    _ => SERIAL,
+                    _ => &sn,
                 };
                 let slen = 2 + s.len() * 2;
                 ep0_buf[0] = slen as u8;

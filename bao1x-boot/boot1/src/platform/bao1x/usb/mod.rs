@@ -132,12 +132,10 @@ struct DeviceDescriptor {
     pub i_serial_number: u8,
     pub b_num_configurations: u8,
 }
-const VENDOR_ID: u16 = 0x1209;
-const PRODUCT_ID: u16 = 0x3613; // this needs to change! this is the Precursor product ID.
+const VENDOR_ID: u16 = 0x1d50;
+const PRODUCT_ID: u16 = 0x6196; // This is pending acceptance of a PR to the openmoko registry
 const MANUFACTURER: &'static str = "Baochip";
-const PRODUCT: &'static str = "Dabao";
-// no seriously, do this
-const SERIAL: &'static str = "TODO";
+const PRODUCT: &'static str = "Baochip-1x";
 
 impl DeviceDescriptor {
     #[allow(dead_code)]

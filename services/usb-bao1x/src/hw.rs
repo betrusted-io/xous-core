@@ -85,9 +85,17 @@ impl<'a> Bao1xUsb<'a> {
         // to concurrently add that in - you have to kick out one of the interfaces above to add mass
         // storage!)
 
-        let device = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x3613))
+        #[cfg(feature = "board-baosec")]
+        let product = "Baosec";
+        #[cfg(feature = "board-baosec")]
+        let pid = 0x6198; // pending PR acceptance
+        #[cfg(feature = "board-dabao")]
+        let product = "Dabao";
+        #[cfg(feature = "board-dabao")]
+        let pid = 0x6197; // pending PR acceptance
+        let device = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1d50, pid))
             .manufacturer("Baochip")
-            .product("Baosec")
+            .product(product)
             .serial_number(&serial_number)
             // this is *required* by the corigine stack
             .max_packet_size_0(64)

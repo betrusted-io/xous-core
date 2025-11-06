@@ -79,7 +79,10 @@ pub(crate) fn main_hw() -> ! {
     log::trace!("registered with NS -- {:?}", usbdev_sid);
     let tt = ticktimer::Ticktimer::new().unwrap();
 
-    let serial_number = format!("TODO!!"); // implement in bao1x-hal once we have a serial number API
+    let serial_number = std::env::vars()
+        .find(|(key, _value)| key == "PUBLIC_SERIAL")
+        .map(|(_key, value)| value)
+        .expect("Missing PUBLIC_SERIAL in environment");
 
     let native_kbd = bao1x_api::keyboard::Keyboard::new(&xns).expect("couldn't connect to keyboard service");
 

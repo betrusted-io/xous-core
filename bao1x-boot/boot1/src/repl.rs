@@ -245,6 +245,22 @@ impl Repl {
                     return Err(Error::help("altboot [toggle]"));
                 }
             }
+            "idmode" => {
+                let owc = OneWayCounter::new();
+                if args.len() == 0 {
+                    crate::println!("ID mode is: {:?}", owc.get_decoded::<ExternalIdentifiers>());
+                    self.abort_cmd();
+                    return Ok(());
+                } else if args.len() != 1 {
+                    return Err(Error::help("idmode [toggle]"));
+                }
+                if args[0] == "toggle" {
+                    owc.inc_coded::<ExternalIdentifiers>().unwrap();
+                    crate::println!("ID mode is now: {:?}", owc.get_decoded::<ExternalIdentifiers>());
+                } else {
+                    return Err(Error::help("idmode [toggle]"));
+                }
+            }
             "audit" => {
                 let owc = OneWayCounter::new();
                 let boardtype = owc.get_decoded::<BoardTypeCoding>().unwrap();
@@ -260,6 +276,18 @@ impl Repl {
                     u32::from_le_bytes(sn[8..12].try_into().unwrap()),
                     u32::from_le_bytes(sn[4..8].try_into().unwrap()),
                     u32::from_le_bytes(sn[..4].try_into().unwrap())
+                );
+                crate::println!(
+                    "Public serial number: {}",
+                    bao1x_hal::usb::derive_usb_serial_number(&owc, &slot_mgr)
+                );
+                let uuid = slot_mgr.read(&bao1x_hal::board::UUID).unwrap();
+                crate::println!(
+                    "UUID: {:08x}-{:08x}-{:08x}-{:08x}",
+                    u32::from_le_bytes(uuid[12..16].try_into().unwrap()),
+                    u32::from_le_bytes(uuid[8..12].try_into().unwrap()),
+                    u32::from_le_bytes(uuid[4..8].try_into().unwrap()),
+                    u32::from_le_bytes(uuid[..4].try_into().unwrap())
                 );
                 crate::println!("Revocations:");
                 crate::println!("Stage       key0     key1     key2     key3");
@@ -517,7 +545,7 @@ impl Repl {
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!(
-                    "Commands include: reset, echo, altboot, boot, bootwait, localecho, uf2, boardtype, audit, lockdown"
+                    "Commands include: reset, echo, altboot, boot, bootwait, idmode, localecho, uf2, boardtype, audit, lockdown"
                 );
                 #[cfg(feature = "test-boot0-keys")]
                 crate::print!(", publock");
