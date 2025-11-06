@@ -66,6 +66,7 @@ use alloc::vec::Vec;
 #[macro_use]
 mod args;
 use args::{KernelArgument, KernelArguments};
+#[cfg(feature = "bao1x")]
 use bao1x_api::UUID;
 
 #[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/debug.rs")]
@@ -121,14 +122,11 @@ mod test;
 // somewhat dangerously tell the loader to go ahead and allocate over this region by
 // telling it has the whole rest of SRAM to stick initial process pages in.
 #[global_allocator]
-#[cfg(feature = "bao1x")]
 static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
 // heap start is selected by looking at the total reserved .data + .bss region in the compiled loader.
 // it hovers at 0x5000 unless I start adding lots of statics to the loader (which there are not).
-#[cfg(feature = "bao1x")]
 pub const HEAP_OFFSET: usize = 0x5000;
 // just a small heap, big enough for us to use alloc to simplify argument processing
-#[cfg(feature = "bao1x")]
 pub const HEAP_LEN: usize = 0x1000;
 
 #[repr(C)]
@@ -245,14 +243,23 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // Initialize the allocator with heap memory range. The heap memory is "throw-away"
     // so we stick it near the bottom of RAM, with the assumption that the loader process
     // won't smash over it.
-    #[cfg(any(feature = "bao1x"))]
+    #[cfg(feature = "bao1x")]
+    let heap_start = utralib::HW_SRAM_MEM + HEAP_OFFSET;
+    #[cfg(not(feature = "bao1x"))]
+    let heap_start = utralib::HW_SRAM_EXT_MEM + HEAP_OFFSET;
+    #[cfg(not(feature = "bao1x"))]
     {
-        let heap_start = utralib::HW_SRAM_MEM + HEAP_OFFSET;
-        crate::println!("Setting up heap @ {:x}-{:x}", heap_start, heap_start + HEAP_LEN);
-        unsafe {
-            ALLOCATOR.lock().init(heap_start as *mut u8, HEAP_LEN);
+        // for precursor, clear this region, as it is only cleared later in the boot process
+        let ram_init = utralib::HW_SRAM_EXT_MEM as *mut u32;
+        for i in 0..(HEAP_LEN + HEAP_OFFSET) / size_of::<u32>() {
+            unsafe { ram_init.add(i).write_volatile(0) };
         }
     }
+    println!("Setting up heap @ {:x}-{:x}", heap_start, heap_start + HEAP_LEN);
+    unsafe {
+        ALLOCATOR.lock().init(heap_start as *mut u8, HEAP_LEN);
+    }
+    println!("done");
 
     // Run kernel image validation now that the heap is set up.
     #[cfg(feature = "bao1x")]
@@ -787,9 +794,6 @@ fn clear_ram(cfg: &mut BootConfig) {
     if VDBG {
         println!("Stack clearing limit: {:x}", clear_limit);
     }
-    #[cfg(not(feature = "bao1x"))]
-    let clear_start = 0;
-    #[cfg(feature = "bao1x")]
     let clear_start = HEAP_OFFSET + HEAP_LEN;
     unsafe {
         for addr in clear_start..(cfg.sram_size - clear_limit) / 4 {
