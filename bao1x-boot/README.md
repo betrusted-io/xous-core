@@ -105,3 +105,12 @@ The baremetal or loader stage are both located at the exact same offset. One can
 Because much of the hardware initialization is done by boot0/boot1, baremetal and loader *should* shed much of the hardware initializations it does. The only re-init that needs to happen are for parameters unique or different to the environments.
 
 Documentation of the baremetal or loader stages is deferred to the respective crates, which are located outside of this subdirectory.
+
+## Building boot1 with Docker
+From the root of the repository, run:
+
+```shell
+mkdir -p target && docker build --file bao1x-boot/Dockerfile --output target .
+```
+
+The `uf2` files will be under `target/`.
