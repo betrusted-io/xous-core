@@ -60,9 +60,13 @@
 // ** Testing features **
 //   -[ ] libs/precursor/hal/src/board/precursors.rs - PDDB_LEN is shortened for vexii-test target
 
+extern crate alloc;
+use alloc::vec::Vec;
+
 #[macro_use]
 mod args;
 use args::{KernelArgument, KernelArguments};
+use bao1x_api::UUID;
 
 #[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/debug.rs")]
 mod debug;
@@ -75,6 +79,7 @@ mod asm;
 mod bootconfig;
 #[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/consts.rs")]
 mod consts;
+mod env;
 mod minielf;
 #[cfg(feature = "resume")]
 mod murmur3;
@@ -121,10 +126,10 @@ static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::Loc
 // heap start is selected by looking at the total reserved .data + .bss region in the compiled loader.
 // it hovers at 0x5000 unless I start adding lots of statics to the loader (which there are not).
 #[cfg(feature = "bao1x")]
-const HEAP_OFFSET: usize = 0x5000;
+pub const HEAP_OFFSET: usize = 0x5000;
 // just a small heap, big enough for us to use alloc to simplify argument processing
 #[cfg(feature = "bao1x")]
-const HEAP_LEN: usize = 0x1000;
+pub const HEAP_LEN: usize = 0x1000;
 
 #[repr(C)]
 pub struct MemoryRegionExtra {
@@ -337,19 +342,36 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     let arg_buffer = (signed_buffer as u32 + signature_size as u32) as *const usize;
     println!("arg_buffer: {:x}", arg_buffer as usize);
 
+    // build the environment variables
+    let mut env_variables = crate::env::EnvVariables::new();
+    env_variables.add_var("ROOT_FILESYSTEM_HASH", &crate::env::to_hex_ascii(&fs_prehash));
+
+    #[cfg(feature = "bao1x")]
+    {
+        let owc = bao1x_hal::acram::OneWayCounter::new();
+        let slot_mgr = bao1x_hal::acram::SlotManager::new();
+        let sn = bao1x_hal::usb::derive_usb_serial_number(&owc, &slot_mgr);
+        env_variables.add_var("PUBLIC_SERIAL", &sn);
+        let hex_uuid = hex::encode(slot_mgr.read(&UUID).unwrap());
+        env_variables.add_var("UUID", &hex_uuid);
+    }
+
+    let mut env_header = crate::env::EnvHeader::default();
+    let env = env_header.to_bytes(&env_variables);
+
     // perhaps later on in these sequences, individual sub-images may be validated
     // against sub-signatures; or the images may need to be re-validated after loading
     // into RAM, if we have concerns about RAM glitching as an attack surface (I don't think we do...).
     // But for now, the basic "validate everything as a blob" is perhaps good enough to
     // armor code-at-rest against front-line patching attacks.
     let kab = KernelArguments::new(arg_buffer);
-    boot_sequence(kab, signature, fs_prehash, perclk_freq, detached_app);
+    boot_sequence(kab, signature, env, perclk_freq, detached_app);
 }
 
 fn boot_sequence(
     args: KernelArguments,
     _signature: u32,
-    fs_prehash: [u8; 64],
+    env: Vec<u8>,
     _perclk_freq: u32,
     detached_app: bool,
 ) -> ! {
@@ -381,7 +403,7 @@ fn boot_sequence(
         println!("Configured for simulation. Skipping RAM clear!");
         clear_ram(&mut cfg);
         phase_1(&mut cfg, detached_app);
-        phase_2(&mut cfg, &fs_prehash);
+        phase_2(&mut cfg, &env);
         #[cfg(any(feature = "debug-print", feature = "swap"))]
         if VDBG || SDBG {
             check_load(&mut cfg);
@@ -395,7 +417,7 @@ fn boot_sequence(
         println!("No suspend marker found, doing a cold boot!");
         clear_ram(&mut cfg);
         phase_1(&mut cfg, detached_app);
-        phase_2(&mut cfg, &fs_prehash);
+        phase_2(&mut cfg, &env);
         #[cfg(any(feature = "debug-print", feature = "swap"))]
         if VDBG || SDBG {
             check_load(&mut cfg);
@@ -765,8 +787,12 @@ fn clear_ram(cfg: &mut BootConfig) {
     if VDBG {
         println!("Stack clearing limit: {:x}", clear_limit);
     }
+    #[cfg(not(feature = "bao1x"))]
+    let clear_start = 0;
+    #[cfg(feature = "bao1x")]
+    let clear_start = HEAP_OFFSET + HEAP_LEN;
     unsafe {
-        for addr in 0..(cfg.sram_size - clear_limit) / 4 {
+        for addr in clear_start..(cfg.sram_size - clear_limit) / 4 {
             // 8k is reserved for our own stack
             ram.add(addr).write_volatile(0);
         }
