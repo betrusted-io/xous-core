@@ -281,6 +281,14 @@ impl Repl {
                     "Public serial number: {}",
                     bao1x_hal::usb::derive_usb_serial_number(&owc, &slot_mgr)
                 );
+                let uuid = slot_mgr.read(&bao1x_hal::board::UUID).unwrap();
+                crate::println!(
+                    "UUID: {:08x}-{:08x}-{:08x}-{:08x}",
+                    u32::from_le_bytes(uuid[12..16].try_into().unwrap()),
+                    u32::from_le_bytes(uuid[8..12].try_into().unwrap()),
+                    u32::from_le_bytes(uuid[4..8].try_into().unwrap()),
+                    u32::from_le_bytes(uuid[..4].try_into().unwrap())
+                );
                 crate::println!("Revocations:");
                 crate::println!("Stage       key0     key1     key2     key3");
                 let key_array = [
