@@ -33,6 +33,9 @@ impl<'a> ShellCmdApi<'a> for Test {
                         }
                     }
                 }
+                "env" => {
+                    log::info!("{:?}", std::env::vars());
+                }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
                 }
