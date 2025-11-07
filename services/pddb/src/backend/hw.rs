@@ -8,15 +8,18 @@ use std::collections::HashMap;
 #[cfg(any(all(feature = "pddbtest", feature = "autobasis"), not(feature = "deterministic")))]
 use std::collections::HashSet;
 use std::convert::TryInto;
+#[allow(unused_imports)]
 use std::io::{Error, ErrorKind, Result};
 
+#[cfg(feature = "gen1")]
+use aes::BLOCK_SIZE;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, generic_array::GenericArray};
-use aes::{Aes256, BLOCK_SIZE, Block};
+use aes::{Aes256, Block};
 use aes_gcm_siv::aead::{Aead, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
 use backend::bcrypt::*;
 #[cfg(all(feature = "gen2"))]
-use bao1x_hal::board::{BOOKEND_END, BOOKEND_START, SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
+use bao1x_hal::board::{SPINOR_BULK_ERASE_SIZE, SPINOR_ERASE_SIZE};
 #[cfg(feature = "gen1")]
 use keystore_api::AesRootkeyType;
 use keystore_api::{Checksums, KeywrapError};
@@ -960,12 +963,8 @@ impl PddbOs {
         self.cipher_ecb = None;
     }
 
-    pub(crate) fn clear_password(&self) {
-        #[cfg(feature = "gen1")]
-        self.rootkeys.clear_password(AesRootkeyType::User0);
-        #[cfg(feature = "gen2")]
-        self.rootkeys.clear_password();
-    }
+    #[cfg(feature = "gen1")]
+    pub(crate) fn clear_password(&self) { self.rootkeys.clear_password(AesRootkeyType::User0); }
 
     #[cfg(feature = "gen2")]
     pub(crate) fn ensure_password(&mut self) -> PasswordState {
@@ -977,7 +976,7 @@ impl PddbOs {
         use aes::cipher::KeyInit;
         if self.system_basis_key.is_none() || self.cipher_ecb.is_none() {
             let scd = self.static_crypto_data_get();
-            if scd.version == 0xFFFF_FFFF {
+            if scd.version == 0xFFFF_FFFF || scd.version == 0x0000_0000 {
                 // system is in the blank state
                 return PasswordState::Uninit;
             }
@@ -1077,6 +1076,7 @@ impl PddbOs {
     }
 
     fn syskey_ensure(&mut self) {
+        #[cfg(feature = "gen1")]
         while self.try_login() != PasswordState::Correct {
             self.clear_password(); // clear the bad password entry
             let xns = xous_names::XousNames::new().unwrap();
@@ -2176,6 +2176,7 @@ impl PddbOs {
         }
     }
 
+    #[cfg(feature = "gen1")]
     fn pw_check(&self, modals: &modals::Modals) -> Result<()> {
         let mut success = false;
         while !success {
@@ -2208,6 +2209,7 @@ impl PddbOs {
     }
 
     /// this function attempts to change the PIN. returns Ok() if changed, error if not.
+    #[cfg(feature = "gen1")]
     pub(crate) fn pddb_change_pin(&mut self, modals: &modals::Modals) -> Result<()> {
         if let Some(system_keys) = &self.system_basis_key {
             // get the new password
@@ -2251,6 +2253,7 @@ impl PddbOs {
             ));
         }
         // step 0. If we have a modal, confirm that the password entered was correct with a double-entry.
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             self.pw_check(modals)?;
         }
@@ -2258,6 +2261,7 @@ impl PddbOs {
         // step 1. Erase the entire PDDB region - leaves the state in all 1's
         if !fast {
             log::info!("Erasing the PDDB region");
+            #[cfg(feature = "gen1")]
             if let Some(modals) = progress {
                 modals
                     .start_progress(
@@ -2307,6 +2311,7 @@ impl PddbOs {
                     }
                 }
             }
+            #[cfg(feature = "gen1")]
             if let Some(modals) = progress {
                 modals.update_progress(PDDB_A_LOC + PDDB_A_LEN as u32).expect("couldn't update progress bar");
                 modals.finish_progress().expect("couldn't dismiss progress bar");
@@ -2316,6 +2321,7 @@ impl PddbOs {
         }
 
         // step 2. fill in the page table with junk, which marks it as cryptographically empty
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals
                 .start_progress(t!("pddb.initpt", locales::LANG), 0, size_of::<PageTableInFlash>() as u32, 0)
@@ -2331,6 +2337,7 @@ impl PddbOs {
                 }
             }
         }
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals
                 .update_progress(size_of::<PageTableInFlash>() as u32)
@@ -2348,6 +2355,7 @@ impl PddbOs {
             }
             self.patch_pagetable_raw(&temp, remainder_start as u32);
         }
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.finish_progress().expect("couldn't dismiss progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2359,6 +2367,7 @@ impl PddbOs {
         //if !self.rootkeys.ensure_aes_password() {
         //    return Err(Error::new(ErrorKind::PermissionDenied, "unlock password was incorrect"));
         //}
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals
                 .start_progress(t!("pddb.key", locales::LANG), 0, 100, 0)
@@ -2385,6 +2394,7 @@ impl PddbOs {
         self.system_basis_key = Some(BasisKeys { pt: system_basis_key_pt, data: system_basis_key }); // this causes system_basis_key to be owned by self and go out of scope
         let mut crypto_keys = StaticCryptoData::default();
         crypto_keys.version = SCD_VERSION; // should already be set by `default()` but let's be sure.
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.update_progress(50).expect("couldn't update progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2404,6 +2414,7 @@ impl PddbOs {
         self.entropy.borrow_mut().get_slice(&mut crypto_keys.salt_base);
         // commit keys
         self.patch_keys(crypto_keys.deref(), 0);
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2425,6 +2436,7 @@ impl PddbOs {
         // step 5. fscb handling
         // pick a set of random pages from the free pool and assign it to the fscb
         // pass the generator an empty cache - this causes it to treat the entire disk as free space
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals
                 .start_progress(t!("pddb.fastspace", locales::LANG), 0, 100, 0)
@@ -2436,6 +2448,7 @@ impl PddbOs {
         for (&src, dst) in free_pool.iter().zip(fast_space.free_pool.iter_mut()) {
             *dst = src;
         }
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.update_progress(50).expect("couldn't update progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2457,6 +2470,7 @@ impl PddbOs {
         // step 5. salt the free space with random numbers. this can take a while, we might need a "progress
         // report" of some kind... this is coded using "direct disk" offsets...under the assumption
         // that we only ever really want to do this here, and not re-use this routine elsewhere.
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals
                 .start_progress(
@@ -2510,6 +2524,7 @@ impl PddbOs {
             #[cfg(all(feature = "gen2", target_os = "xous"))]
             self.patch(&temp, offset);
         }
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.update_progress(PDDB_A_LEN as u32).expect("couldn't update progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2520,6 +2535,7 @@ impl PddbOs {
         }
 
         // step 6. create the system basis root structure
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals
                 .start_progress(t!("pddb.structure", locales::LANG), 0, 100, 0)
@@ -2537,6 +2553,7 @@ impl PddbOs {
 
         // step 7. Create a hashmap for our reverse PTE, allocate sectors, and add it to the Pddb's cache
         self.fast_space_read(); // we reconstitute our fspace map even though it was just generated, partially as a sanity check that everything is ok
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.update_progress(33).expect("couldn't update progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2573,6 +2590,7 @@ impl PddbOs {
         let syskey = self.system_basis_key.take().unwrap(); // take the key out
         self.data_encrypt_and_patch_page_with_commit(&syskey.data, &aad, &mut block, &pp);
         self.system_basis_key = Some(syskey); // put the key back
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.update_progress(66).expect("couldn't update progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2585,6 +2603,7 @@ impl PddbOs {
             // mark the entry as clean, as it has been sync'd to disk
             phys.set_clean(true);
         }
+        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2693,15 +2712,18 @@ impl PddbOs {
         // 0. acquire all the keys
         if let Some(all_keys) = self.pddb_get_all_keys(&cache) {
             // build a modals for rekey progress
+            #[cfg(feature = "gen1")]
             let xns = xous_names::XousNames::new().unwrap();
+            #[cfg(feature = "gen1")]
             let modals = modals::Modals::new(&xns).unwrap();
 
+            #[cfg(feature = "gen1")]
             modals.start_progress(t!("pddb.rekey.keys", locales::LANG), 0, all_keys.len() as u32, 0).ok();
             // we need a map of page numbers to encryption keys. The keys are referenced by their basis name.
             let mut pagemap = HashMap::<PhysAddr, &str>::new();
             // transform the returned Vec into a HashMap that maps basis names into pre-keyed ciphers.
             let mut keymap = HashMap::<&str, MigrationCiphers>::new();
-            for (index, (basis_keys, name)) in all_keys.iter().enumerate() {
+            for (_index, (basis_keys, name)) in all_keys.iter().enumerate() {
                 if let Some(map) = self.pt_scan_key(&basis_keys.pt, &basis_keys.data, &name) {
                     for pp in map.values() {
                         log::info!("page {} -> basis {}", pp.page_number(), name);
@@ -2728,7 +2750,8 @@ impl PddbOs {
                         data_key: basis_keys.data.into(),
                     },
                 );
-                modals.update_progress(index as u32 + 1).ok();
+                #[cfg(feature = "gen1")]
+                modals.update_progress(_index as u32 + 1).ok();
             }
 
             // check that we have no pages in the FSCB that aren't already mapped in the
@@ -2746,6 +2769,7 @@ impl PddbOs {
                     }
                 }
             }
+            #[cfg(feature = "gen1")]
             modals.finish_progress().ok();
             if !clean {
                 log::warn!(
@@ -2766,6 +2790,7 @@ impl PddbOs {
             let pagetable: &[u8] = unsafe { &self.pddb_mr.as_slice()[..pddb_data_pages * size_of::<Pte>()] };
             log::info!("Derived page table of len 0x{:x}", pagetable.len());
             let entries_per_page = PAGE_SIZE / size_of::<Pte>();
+            #[cfg(feature = "gen1")]
             modals
                 .start_progress(
                     t!("pddb.rekey.running", locales::LANG),
@@ -2875,8 +2900,10 @@ impl PddbOs {
                 self.patch_pagetable_raw(&new_pt_page[..chunk_len], chunk_start_address as u32);
                 // this only updates once per page of PTEs, so, every 256 pages that get re-encrypted in the
                 // worst case.
+                #[cfg(feature = "gen1")]
                 modals.update_progress(chunk_start_address as u32).ok();
             }
+            #[cfg(feature = "gen1")]
             modals.finish_progress().ok();
 
             self.dna_mode = DnaMode::Normal; // we're done with the legacy DNA!
@@ -2890,6 +2917,7 @@ impl PddbOs {
             };
             if do_fscb {
                 log::info!("regenerating fast space...");
+                #[cfg(feature = "gen1")]
                 modals.dynamic_notification(Some(t!("pddb.rekey.fastspace", locales::LANG)), None).ok();
                 // convert our used page map into the structure needed by fast_space_generate()
                 let mut page_heap = BinaryHeap::new();
@@ -2913,6 +2941,7 @@ impl PddbOs {
                 self.fast_space_write(&fast_space);
                 // this will ensure the data cache is fully in sync
                 self.fast_space_read();
+                #[cfg(feature = "gen1")]
                 modals.dynamic_notification_close().ok();
                 log::info!("fast space generation done.");
             }
@@ -2922,6 +2951,21 @@ impl PddbOs {
         }
     }
 
+    #[cfg(not(all(feature = "pddbtest", feature = "autobasis")))]
+    #[cfg(feature = "gen2")]
+    /// This is a bit unsafe in that it simply returns the list of all the known keys and doesn't
+    /// prompt the user to enter any hidden bases. However, for gen2-targets, we're simplifying
+    /// the basis logic and assuming that the UI is all handled outside of the PDDB.
+    pub(crate) fn pddb_get_all_keys(&self, cache: &Vec<BasisCacheEntry>) -> Option<Vec<(BasisKeys, String)>> {
+        // populate the "known" entries
+        let mut ret = Vec::<(BasisKeys, String)>::new();
+        for entry in cache {
+            ret.push((BasisKeys { pt: entry.pt_key.into(), data: entry.key.into() }, entry.name.to_string()));
+        }
+        log::info!("{} basis are open, with the following names:", cache.len());
+        Some(ret)
+    }
+
     /// UX function that informs the user of the currently open Basis, and prompts the user to enter passwords
     /// for other basis that may not currently be open. This function is also responsible for validating
     /// that the password is correct by doing a quick scan for "any" PTEs that happen to decrypt to something
@@ -2929,6 +2973,7 @@ impl PddbOs {
     /// a Vec of keys & names, not a BasisCacheEntry -- so it means that the Basis still are "closed"
     /// at the conclusion of the sweep, but their page use can be accounted for.
     #[cfg(not(all(feature = "pddbtest", feature = "autobasis")))]
+    #[cfg(feature = "gen1")]
     pub(crate) fn pddb_get_all_keys(&self, cache: &Vec<BasisCacheEntry>) -> Option<Vec<(BasisKeys, String)>> {
         #[cfg(feature = "ux-swap-delay")]
         const SWAP_DELAY_MS: usize = 300;
@@ -3074,6 +3119,7 @@ impl PddbOs {
         }
     }
 
+    #[cfg(feature = "gen1")]
     fn yes_no_approval(&self, modals: &modals::Modals, request: &str) -> bool {
         modals
             .add_list(vec![t!("pddb.yes", locales::LANG), t!("pddb.no", locales::LANG)])

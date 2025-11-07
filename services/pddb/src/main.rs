@@ -570,6 +570,7 @@ fn wrapped_main() -> ! {
     let entropy = Rc::new(RefCell::new(TrngPool::new()));
 
     // for less-secured user prompts (everything but password entry)
+    #[cfg(feature = "gen1")]
     let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
 
     // our very own password modal. Password modals are precious and privately owned, to avoid
@@ -699,8 +700,6 @@ fn wrapped_main() -> ! {
     // it is the only server capable of doing this.
     #[cfg(feature = "gen1")]
     let time_resetter = xns.request_connection_blocking(crate::TIME_SERVER_PDDB).unwrap();
-    #[cfg(feature = "gen2")]
-    let time_resetter = 0; // dummy
 
     // track processes that want a notification of a mount event
     let mut mount_notifications = Vec::<xous::MessageSender>::new();
@@ -800,67 +799,51 @@ fn wrapped_main() -> ! {
                 xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                     match pddb_os.ensure_password() {
                         PasswordState::Correct => {
-                            log::info!("pw correct");
-                            if try_mount_or_format(
-                                &modals,
-                                &mut pddb_os,
-                                &mut basis_cache,
-                                PasswordState::Correct,
-                                time_resetter,
-                                &mut basis_monitor_notifications,
-                            ) {
-                                is_mounted.store(true, Ordering::SeqCst);
-                                for requester in mount_notifications.drain(..) {
-                                    xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
+                            fn try_mount(
+                                pddb_os: &mut PddbOs,
+                                basis_cache: &mut BasisCache,
+                                basis_monitor_notifications: &mut Vec<xous::MessageEnvelope>,
+                            ) -> bool {
+                                if let Some(sys_basis) = pddb_os.pddb_mount() {
+                                    log::info!("PDDB mount operation finished successfully");
+                                    basis_cache.basis_add(sys_basis);
+                                    if basis_monitor_notifications.len() > 0 {
+                                        notify_basis_change(
+                                            basis_monitor_notifications,
+                                            basis_cache.basis_list(),
+                                        );
+                                    }
+                                    true
+                                } else {
+                                    false
                                 }
-                                assert!(
-                                    mount_notifications.len() == 0,
-                                    "apparently I don't understand what drain() does"
-                                );
-                                log::info!("{}PDDB.MOUNTED,{}", BOOKEND_START, BOOKEND_END);
-                                xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
-                            } else {
-                                xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
                             }
+
+                            // The behavior in gen2 is mount-or-format: no user approval
+                            // is requested in case of format. This is silghtly dangerous in case
+                            // of data corruption but I think this is the "right" user experience
+                            if !try_mount(&mut pddb_os, &mut basis_cache, &mut basis_monitor_notifications) {
+                                log::warn!("PDDB not formatted - formatting the PDDB!");
+                                pddb_os.pddb_format(false, None).expect("couldn't format PDDB");
+                                if !try_mount(
+                                    &mut pddb_os,
+                                    &mut basis_cache,
+                                    &mut basis_monitor_notifications,
+                                ) {
+                                    panic!("Couldn't format & mount PDDB");
+                                }
+                            }
+                            log::info!("{}PDDB.MOUNTED,{}", BOOKEND_START, BOOKEND_END);
+                            xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                         }
                         PasswordState::Uninit => {
-                            log::info!("uninit");
-                            if try_mount_or_format(
-                                &modals,
-                                &mut pddb_os,
-                                &mut basis_cache,
-                                PasswordState::Uninit,
-                                time_resetter,
-                                &mut basis_monitor_notifications,
-                            ) {
-                                for requester in mount_notifications.drain(..) {
-                                    xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
-                                }
-                                assert!(
-                                    mount_notifications.len() == 0,
-                                    "apparently I don't understand what drain() does"
-                                );
-                                log::info!("{}PDDB.MOUNTED,{}", BOOKEND_START, BOOKEND_END);
-                                xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
-                                is_mounted.store(true, Ordering::SeqCst);
-                            } else {
-                                xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
-                            }
+                            unimplemented!("Password is always available on gen2")
                         }
-                        PasswordState::ForcedAbort(failcount) => {
-                            log::info!("forced abort");
-                            xous::return_scalar2(
-                                msg.sender,
-                                2,
-                                // failcount is a u64, but on u32-archs, this gets truncated going to
-                                // usize. clip to u32::MAX.
-                                failcount.min(u32::MAX as u64) as usize,
-                            )
-                            .expect("couldn't return scalar");
+                        PasswordState::ForcedAbort(_failcount) => {
+                            unreachable!();
                         }
-                        PasswordState::Incorrect(failcount) => {
-                            xous::return_scalar2(msg.sender, 1, failcount.min(u32::MAX as u64) as usize)
-                                .expect("couldn't return scalar")
+                        PasswordState::Incorrect(_failcount) => {
+                            unreachable!();
                         }
                     }
                 })
@@ -1086,16 +1069,9 @@ fn wrapped_main() -> ! {
                             buf.to_original::<BasisRequestPassword, _>().unwrap().plaintext_pw
                         };
                         #[cfg(feature = "gen2")]
-                        let ret = match modals
-                            .alert_builder(
-                                format!("{}'{}'", t!("pddb.password_for", locales::LANG), mgmt.name).as_str(),
-                            )
-                            .field(None, None)
-                            .build()
-                        {
-                            Ok(text) => Some(text.content()[0].content.clone()),
-                            _ => panic!("failure retrieving password"),
-                        };
+                        let pw_str = hex::encode(mgmt.basis_key.expect("No key provided"));
+                        #[cfg(feature = "gen2")]
+                        let ret = Some(&pw_str);
                         if let Some(pw) = ret {
                             match basis_cache.basis_create(&mut pddb_os, mgmt.name.as_str(), pw.as_str()) {
                                 Ok(_) => {
@@ -1144,17 +1120,9 @@ fn wrapped_main() -> ! {
                                 buf.to_original::<BasisRequestPassword, _>().unwrap().plaintext_pw
                             };
                             #[cfg(feature = "gen2")]
-                            let ret = match modals
-                                .alert_builder(
-                                    format!("{}'{}'", t!("pddb.password_for", locales::LANG), &mgmt.name)
-                                        .as_str(),
-                                )
-                                .field(None, None)
-                                .build()
-                            {
-                                Ok(text) => Some(text.content()[0].content.clone()),
-                                _ => panic!("failure retrieving password"),
-                            };
+                            let pw_str = hex::encode(mgmt.basis_key.expect("No key provided"));
+                            #[cfg(feature = "gen2")]
+                            let ret = Some(&pw_str);
                             if let Some(pw) = ret {
                                 if let Some(basis) = basis_cache.basis_unlock(
                                     &mut pddb_os,
@@ -1166,6 +1134,7 @@ fn wrapped_main() -> ! {
                                         basis_cache
                                             .basis_unmount(&mut pddb_os, &basis.name)
                                             .expect("couldn't unmount previously mounted basis of same name");
+                                        #[cfg(feature = "gen1")]
                                         modals
                                             .show_notification(
                                                 t!("pddb.unmount_previous", locales::LANG),
@@ -1195,27 +1164,35 @@ fn wrapped_main() -> ! {
                                         mgmt.name.as_str(),
                                         BOOKEND_END
                                     );
-                                    modals
-                                        .add_list_item(t!("pddb.yes", locales::LANG))
-                                        .expect("couldn't build radio item list");
-                                    modals
-                                        .add_list_item(t!("pddb.no", locales::LANG))
-                                        .expect("couldn't build radio item list");
-                                    match modals.get_radiobutton(t!("pddb.badpass", locales::LANG)) {
-                                        Ok(response) => {
-                                            if response.as_str() == t!("pddb.yes", locales::LANG) {
-                                                finished = false;
-                                                // this will cause just another go-around
-                                            } else if response.as_str() == t!("pddb.no", locales::LANG) {
-                                                finished = true;
-                                                mgmt.code = PddbRequestCode::AccessDenied; // this will cause a return of AccessDenied
-                                            } else {
-                                                panic!("Got unexpected return from radiobutton");
+                                    #[cfg(feature = "gen1")]
+                                    {
+                                        modals
+                                            .add_list_item(t!("pddb.yes", locales::LANG))
+                                            .expect("couldn't build radio item list");
+                                        modals
+                                            .add_list_item(t!("pddb.no", locales::LANG))
+                                            .expect("couldn't build radio item list");
+                                        match modals.get_radiobutton(t!("pddb.badpass", locales::LANG)) {
+                                            Ok(response) => {
+                                                if response.as_str() == t!("pddb.yes", locales::LANG) {
+                                                    finished = false;
+                                                    // this will cause just another go-around
+                                                } else if response.as_str() == t!("pddb.no", locales::LANG) {
+                                                    finished = true;
+                                                    mgmt.code = PddbRequestCode::AccessDenied; // this will cause a return of AccessDenied
+                                                } else {
+                                                    panic!("Got unexpected return from radiobutton");
+                                                }
                                             }
+                                            _ => panic!("get_radiobutton failed"),
                                         }
-                                        _ => panic!("get_radiobutton failed"),
+                                        xous::yield_slice(); // allow a redraw to happen before repeating the request
                                     }
-                                    xous::yield_slice(); // allow a redraw to happen before repeating the request
+                                    #[cfg(feature = "gen2")]
+                                    {
+                                        mgmt.code = PddbRequestCode::AccessDenied; // this will cause a return of AccessDenied
+                                        finished = true;
+                                    }
                                 }
                             } else {
                                 finished = true;
@@ -2045,6 +2022,7 @@ fn wrapped_main() -> ! {
                             ) {
                                 Ok(attr) => attr,
                                 Err(e) => {
+                                    #[cfg(feature = "gen1")]
                                     modals
                                         .show_notification(
                                             &format!(
@@ -2061,6 +2039,14 @@ fn wrapped_main() -> ! {
                                             None,
                                         )
                                         .ok();
+                                    #[cfg(feature = "gen2")]
+                                    log::error!(
+                                        "Error: key not found during bulk read:\n{:?}\n{:?}:{}:{}",
+                                        e,
+                                        if state.is_basis_specified { Some(&state.basis) } else { None },
+                                        &state.dict,
+                                        &key_name,
+                                    );
                                     continue;
                                 }
                             };
@@ -2326,6 +2312,7 @@ fn wrapped_main() -> ! {
                 };
             }),
 
+            #[cfg(feature = "gen1")]
             Opcode::MenuListBasis => {
                 let bases = basis_cache.basis_list();
                 let mut note = String::from(t!("pddb.menu.listbasis_response", locales::LANG));
@@ -2335,6 +2322,7 @@ fn wrapped_main() -> ! {
                 }
                 modals.show_notification(&note, None).expect("couldn't show basis list");
             }
+            #[cfg(feature = "gen1")]
             Opcode::MenuChangePin => {
                 if basis_cache.basis_count() == 0 {
                     modals
@@ -2482,7 +2470,10 @@ fn wrapped_main() -> ! {
             Opcode::ComputeBackupHashes => {
                 let mut buffer =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                #[cfg(feature = "gen1")]
                 let result = pddb_os.checksums(Some(&modals));
+                #[cfg(feature = "gen2")]
+                let result = pddb_os.checksums(None);
                 buffer.replace(result).unwrap();
             }
             Opcode::Quit => {
@@ -2502,6 +2493,10 @@ fn wrapped_main() -> ! {
             }
             Opcode::InvalidOpcode => {
                 log::error!("couldn't convert opcode: {:?}", msg);
+            }
+            #[cfg(feature = "gen2")]
+            Opcode::MenuListBasis | Opcode::MenuChangePin => {
+                unimplemented!("Not available in gen2 targets")
             }
         }
     }
@@ -2576,6 +2571,7 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
     }
 }
 #[allow(unused_variables)]
+#[cfg(feature = "gen1")]
 fn try_mount_or_format(
     modals: &modals::Modals,
     pddb_os: &mut PddbOs,
