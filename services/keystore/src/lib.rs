@@ -4,7 +4,7 @@ pub use cipher::{
 };
 use keystore_api::*;
 use num_traits::*;
-use xous::{CID, Message, send_message};
+use xous::CID;
 use xous_ipc::Buffer;
 pub(crate) type BatchBlocks = GenericArray<Block, U16>;
 use std::convert::TryInto;
@@ -28,29 +28,10 @@ impl Keystore {
         Self { conn, domain: Some(key_type.to_owned()) }
     }
 
-    pub fn clear_password(&self) {
-        match send_message(
-            self.conn,
-            Message::new_blocking_scalar(Opcode::ClearPasswordCacheEntry.to_usize().unwrap(), 0, 0, 0, 0),
-        ) {
-            // it's a blocking scalar just to ensure that the password *has* cleared
-            // any error in this routine should rightfully be a panic.
-            Ok(xous::Result::Scalar5(_, _, _, _, _)) => (),
-            _ => panic!("clear_password() failed with internal error"),
-        }
-    }
-
     pub fn get_dna(&self) -> u64 {
-        let response = send_message(
-            self.conn,
-            Message::new_blocking_scalar(Opcode::GetDna.to_usize().unwrap(), 0, 0, 0, 0),
-        )
-        .unwrap();
-        if let xous::Result::Scalar5(_, val1, val2, _, _) = response {
-            (val1 as u64) | ((val2 as u64) << 32)
-        } else {
-            panic!("get_dna() failed with internal error");
-        }
+        let (_, value) =
+            std::env::vars().find(|(key, _value)| key == "UUID").expect("Fatal: No UUID in env!");
+        u64::from_ne_bytes(hex::decode(value).expect("Couldn't decode UUID")[..8].try_into().unwrap())
     }
 
     /// This routine confirms that the keystore has all the user secrets necessary to decrypt
@@ -60,24 +41,10 @@ impl Keystore {
     /// which is a shallow layer of security on top of the key store. The exact behavior of what
     /// this call entails is up to the keystore implementation.
     ///
-    /// On Baosec, it's envisioned that there is a user setting which specifies three possible behaviors:
-    ///   - None -- the master key is ready to use without any further derivation
-    ///   - PIN -- Requires a 4-6 digit code to unlock the device; retry limits, time-outs and self-wipes may
-    ///     also be configured
-    ///   - QR -- Requires a high-strength 256-bit password from a scanned QR code as a strong additional
-    ///     layer of security in case the device is lost or stolen.
-    pub fn ensure_password(&self) -> PasswordState {
-        match send_message(
-            self.conn,
-            Message::new_blocking_scalar(Opcode::EnsurePassword.to_usize().unwrap(), 0, 0, 0, 0),
-        ) {
-            Ok(xous::Result::Scalar5(_arg0, arg1, arg2, arg3, _arg4)) => {
-                log::info!("got {:x}, {:x}, {:x}", arg1, arg2, arg3);
-                (arg1, arg2, arg3).into()
-            }
-            _ => panic!("ensure_password() failed with internal error"),
-        }
-    }
+    /// On Baosec, the root password is available on boot. There is only one supplemental
+    /// password possible, and this is the one which unlocks an additional secret basis into
+    /// which secrets are stored.
+    pub fn ensure_password(&self) -> PasswordState { PasswordState::Correct }
 
     pub fn wrap_key(&self, input: &[u8]) -> Result<Vec<u8>, KeywrapError> {
         if input.len() > MAX_WRAP_DATA {
