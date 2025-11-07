@@ -244,22 +244,14 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // so we stick it near the bottom of RAM, with the assumption that the loader process
     // won't smash over it.
     #[cfg(feature = "bao1x")]
-    let heap_start = utralib::HW_SRAM_MEM + HEAP_OFFSET;
-    #[cfg(not(feature = "bao1x"))]
-    let heap_start = utralib::HW_SRAM_EXT_MEM + HEAP_OFFSET;
-    #[cfg(not(feature = "bao1x"))]
     {
-        // for precursor, clear this region, as it is only cleared later in the boot process
-        let ram_init = utralib::HW_SRAM_EXT_MEM as *mut u32;
-        for i in 0..(HEAP_LEN + HEAP_OFFSET) / size_of::<u32>() {
-            unsafe { ram_init.add(i).write_volatile(0) };
+        // heap is needed for bao1x-boot because signature depends on it
+        let heap_start = utralib::HW_SRAM_MEM + HEAP_OFFSET;
+        println!("Setting up heap @ {:x}-{:x}", heap_start, heap_start + HEAP_LEN);
+        unsafe {
+            ALLOCATOR.lock().init(heap_start as *mut u8, HEAP_LEN);
         }
     }
-    println!("Setting up heap @ {:x}-{:x}", heap_start, heap_start + HEAP_LEN);
-    unsafe {
-        ALLOCATOR.lock().init(heap_start as *mut u8, HEAP_LEN);
-    }
-    println!("done");
 
     // Run kernel image validation now that the heap is set up.
     #[cfg(feature = "bao1x")]
@@ -349,36 +341,19 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     let arg_buffer = (signed_buffer as u32 + signature_size as u32) as *const usize;
     println!("arg_buffer: {:x}", arg_buffer as usize);
 
-    // build the environment variables
-    let mut env_variables = crate::env::EnvVariables::new();
-    env_variables.add_var("ROOT_FILESYSTEM_HASH", &crate::env::to_hex_ascii(&fs_prehash));
-
-    #[cfg(feature = "bao1x")]
-    {
-        let owc = bao1x_hal::acram::OneWayCounter::new();
-        let slot_mgr = bao1x_hal::acram::SlotManager::new();
-        let sn = bao1x_hal::usb::derive_usb_serial_number(&owc, &slot_mgr);
-        env_variables.add_var("PUBLIC_SERIAL", &sn);
-        let hex_uuid = hex::encode(slot_mgr.read(&UUID).unwrap());
-        env_variables.add_var("UUID", &hex_uuid);
-    }
-
-    let mut env_header = crate::env::EnvHeader::default();
-    let env = env_header.to_bytes(&env_variables);
-
     // perhaps later on in these sequences, individual sub-images may be validated
     // against sub-signatures; or the images may need to be re-validated after loading
     // into RAM, if we have concerns about RAM glitching as an attack surface (I don't think we do...).
     // But for now, the basic "validate everything as a blob" is perhaps good enough to
     // armor code-at-rest against front-line patching attacks.
     let kab = KernelArguments::new(arg_buffer);
-    boot_sequence(kab, signature, env, perclk_freq, detached_app);
+    boot_sequence(kab, signature, fs_prehash, perclk_freq, detached_app);
 }
 
 fn boot_sequence(
     args: KernelArguments,
     _signature: u32,
-    env: Vec<u8>,
+    fs_prehash: [u8; 64],
     _perclk_freq: u32,
     detached_app: bool,
 ) -> ! {
@@ -403,23 +378,40 @@ fn boot_sequence(
     #[cfg(feature = "resume")]
     let (clean, was_forced_suspend, susres_pid) = check_resume(&mut cfg);
     #[cfg(not(feature = "resume"))]
-    let clean = {
-        // cold boot path
-        println!("No suspend marker found, doing a cold boot!");
-        #[cfg(feature = "simulation-only")]
-        println!("Configured for simulation. Skipping RAM clear!");
-        clear_ram(&mut cfg);
-        phase_1(&mut cfg, detached_app);
-        phase_2(&mut cfg, &env);
-        #[cfg(any(feature = "debug-print", feature = "swap"))]
-        if VDBG || SDBG {
-            check_load(&mut cfg);
-        }
-        println!("done initializing for cold boot.");
-        false
-    };
-    #[cfg(feature = "resume")]
+    let clean = false;
     if !clean {
+        #[cfg(not(feature = "bao1x"))]
+        {
+            // setup heap so we can make env. It's not set up earlier in precursor environment
+            // because it's not safe to smash memory on a resume
+            let heap_start = utralib::HW_SRAM_EXT_MEM + HEAP_OFFSET;
+            // for precursor, clear this region, as it is only cleared later in the boot process
+            let ram_init = utralib::HW_SRAM_EXT_MEM as *mut u32;
+            for i in 0..(HEAP_LEN + HEAP_OFFSET) / size_of::<u32>() {
+                unsafe { ram_init.add(i).write_volatile(0) };
+            }
+            println!("Setting up heap @ {:x}-{:x}", heap_start, heap_start + HEAP_LEN);
+            unsafe {
+                ALLOCATOR.lock().init(heap_start as *mut u8, HEAP_LEN);
+            }
+        }
+        // build the environment variables - requires heap
+        let mut env_variables = crate::env::EnvVariables::new();
+        env_variables.add_var("ROOT_FILESYSTEM_HASH", &crate::env::to_hex_ascii(&fs_prehash));
+
+        #[cfg(feature = "bao1x")]
+        {
+            let owc = bao1x_hal::acram::OneWayCounter::new();
+            let slot_mgr = bao1x_hal::acram::SlotManager::new();
+            let sn = bao1x_hal::usb::derive_usb_serial_number(&owc, &slot_mgr);
+            env_variables.add_var("PUBLIC_SERIAL", &sn);
+            let hex_uuid = hex::encode(slot_mgr.read(&UUID).unwrap());
+            env_variables.add_var("UUID", &hex_uuid);
+        }
+
+        let mut env_header = crate::env::EnvHeader::default();
+        let env = env_header.to_bytes(&env_variables);
+
         // cold boot path
         println!("No suspend marker found, doing a cold boot!");
         clear_ram(&mut cfg);
@@ -430,7 +422,9 @@ fn boot_sequence(
             check_load(&mut cfg);
         }
         println!("done initializing for cold boot.");
-    } else {
+    }
+    #[cfg(feature = "resume")]
+    if clean {
         // resume path
         use utralib::generated::*;
         // flip my self-power-on switch: otherwise, I might turn off before the whole sequence is finished.
