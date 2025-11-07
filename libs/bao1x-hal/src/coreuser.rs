@@ -160,5 +160,9 @@ impl Coreuser {
         // invert sense for Xous mode - User process 3 is trusted, the kernel is not!
         self.csr.rmwf(utra::coreuser::CONTROL_INVERT_PRIV, 1);
         self.csr.wo(utra::coreuser::PROTECT, 1);
+
+        // ensure security bits are set according to A1 stepping
+        let mut csr = CSR::new(utra::rrc::HW_RRC_BASE as *mut u32);
+        csr.wo(utra::rrc::SFR_RRCCR, crate::rram::SECURITY_MODE);
     }
 }

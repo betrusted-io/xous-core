@@ -9,58 +9,12 @@ use crate::*;
 ///
 /// Set up all the page tables, allocating new root page tables for SATPs and corresponding
 /// sub-pages starting from the base of previously copied process data.
-pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
+pub fn phase_2(cfg: &mut BootConfig, env: &Vec<u8>) {
     let args = cfg.args;
 
     // This is the offset in RAM where programs are loaded from.
     let mut process_offset = cfg.sram_start as usize + cfg.sram_size - cfg.init_size;
     println!("\n\nPhase2: Processess start out @ {:08x}", process_offset);
-
-    // Construct an environment block. This will be used by processes
-    // to access environment variables and system parameters. This
-    // is hardcoded for now, and can be expanded later.
-    #[rustfmt::skip]
-    let mut env = [
-        0x41, 0x70, 0x70, 0x50, // 'AppP' indicating application parameters
-        0x08, 0x00, 0x00, 0x00, // Size of AppP tag contents
-        0xb2, 0x00, 0x00, 0x00, // Size of entire AppP block including all tags
-        0x02, 0x00, 0x00, 0x00, // Number of tags present
-        0x45, 0x6e, 0x76, 0x42, // 'EnvB' indicating an environment block
-        0x9a, 0x00, 0x00, 0x00, // Number of bytes that follows for the environment block
-        0x01, 0x00, // Number of environment variables
-        0x14, 0x00, // Length of name of first variable
-        // Name of first variable 'ROOT_FILESYSTEM_HASH':
-        0x52, 0x4f, 0x4f, 0x54, 0x5f, 0x46, 0x49, 0x4c, 0x45, 0x53, 0x59, 0x53, 0x54, 0x45, 0x4d,
-        0x5f, 0x48, 0x41, 0x53, 0x48,
-        // Length of the contents of the first variable
-        0x80, 0x00,
-        // Root filesystem hash contents begin here:
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-    ];
-    // Convert the fs_prehash into a hex ascii string, suitable for environment variables
-    // The initial loader environment is hard-coded, so we use a hard-coded offset for the string
-    // destination. It was a deliberate decision to not include a generic environment variable
-    // handler in the loader because we want to keep the loader compact and with a small attack
-    // surface; a generic environment handling routine would add significant size without much
-    // benefit.
-    //
-    // Note that the main purpose for environment variables is for test & debug tooling, where
-    // single programs are run in hosted or emulated environments with arguments passed for fast
-    // debugging. The sole purpose for the environment variable in the loader's context is to
-    // pass this computed hash onto the userspace environments.
-    const HEX_DIGITS: [u8; 16] = *b"0123456789abcdef";
-    for (i, &byte) in fs_prehash.iter().enumerate() {
-        env[env.len() - 128 + i * 2] = HEX_DIGITS[(byte >> 4) as usize];
-        env[env.len() - 128 + i * 2 + 1] = HEX_DIGITS[(byte & 0xF) as usize];
-    }
 
     // Go through all Init processes and the kernel, setting up their
     // page tables and mapping memory to them.
@@ -86,14 +40,14 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
             println!("\n\nCopying IniE program into memory");
-            let allocated = inie.load(cfg, process_offset, pid, &env, IniType::IniE);
+            let allocated = inie.load(cfg, process_offset, pid, env, IniType::IniE);
             println!("IniE Allocated {:x}", allocated);
             process_offset -= allocated;
             pid += 1;
         } else if tag.name == u32::from_le_bytes(*b"IniF") {
             let inif = MiniElf::new(&tag);
             println!("\n\nMapping IniF program into memory");
-            let allocated = inif.load(cfg, process_offset, pid, &env, IniType::IniF);
+            let allocated = inif.load(cfg, process_offset, pid, env, IniType::IniF);
             println!("IniF Allocated {:x}", allocated);
             process_offset -= allocated;
             pid += 1;
@@ -102,7 +56,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             {
                 let inis = MiniElf::new(&tag);
                 println!("\n\nMapping IniS program into memory");
-                let allocated = inis.load(cfg, process_offset, pid, &env, IniType::IniS);
+                let allocated = inis.load(cfg, process_offset, pid, env, IniType::IniS);
                 println!("IniS Allocated {:x}", allocated);
                 process_offset -= allocated;
                 pid += 1;

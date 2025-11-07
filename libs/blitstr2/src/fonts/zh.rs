@@ -8364,7 +8364,7 @@ pub const GLYPH_LEN: usize = 65448;
 pub fn glyphs() -> &'static [u32] {
     #[cfg(any(feature="precursor", feature="renode"))]
     unsafe {
-        let data: *const u32 = core::mem::transmute(GLYPH_LOCATION.load(core::sync::atomic::Ordering::SeqCst));
+        let data: *const u32 = core::ptr::with_exposed_provenance::<u32>(GLYPH_LOCATION.load(core::sync::atomic::Ordering::SeqCst) as usize);
         core::slice::from_raw_parts(data, GLYPH_LEN)
     }
 
