@@ -133,26 +133,6 @@ pub fn keystore(sid: SID) -> ! {
                 }
                 buffer.replace(kwp).unwrap();
             }
-            Opcode::ClearPasswordCacheEntry => {
-                if let Some(scalar) = msg.body.scalar_message_mut() {
-                    // no passwords, nothing to clear: always return success
-                    scalar.arg1 = 1;
-                }
-            }
-            Opcode::EnsurePassword => {
-                if let Some(scalar) = msg.body.scalar_message_mut() {
-                    let pws: PasswordState = PasswordState::Correct;
-                    (scalar.arg1, scalar.arg2, scalar.arg3) = pws.into();
-                    log::info!("Password is always ensured in hosted mode");
-                }
-            }
-            Opcode::GetDna => {
-                // dummy DNA value
-                if let Some(scalar) = msg.body.scalar_message_mut() {
-                    scalar.arg1 = 0;
-                    scalar.arg2 = 0;
-                }
-            }
             Opcode::InvalidCall => {
                 log::error!("Invalid call in keystore: {:?}", opcode);
             }

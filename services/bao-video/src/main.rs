@@ -3,6 +3,7 @@
 // Including a resolver to a given character map also pulls the font data into the
 // bao-video binary, increasing its size.
 
+#[cfg(not(feature = "hosted-baosec"))]
 use bao1x_hal_service::Hal;
 use ux_api::minigfx::*;
 
@@ -171,6 +172,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let udma_global = UdmaGlobal::new();
     let mut i2c = I2c::new();
     #[allow(unused_variables)]
+    #[cfg(not(feature = "hosted-baosec"))]
     let hal = Hal::new();
 
     let mut display = Oled128x128::new(main_thread_token, bao1x_api::PERCLK, &iox, &udma_global);

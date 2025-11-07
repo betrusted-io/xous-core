@@ -8,7 +8,7 @@ fn main() {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let sid = xns.register_name(bao1x_api::SERVER_NAME_bao1x_HAL, None).expect("can't register server");
+    let sid = xns.register_name(bao1x_api::SERVER_NAME_BAO1X_HAL, None).expect("can't register server");
 
     // start keyboard emulator service
     keyboard::start_keyboard_service();
@@ -121,6 +121,9 @@ fn main() {
             HalOpcode::Quit => {
                 log::info!("Received quit opcode, exiting.");
                 break;
+            }
+            HalOpcode::ConfigureBio | HalOpcode::UdmaIrqStatusBits | HalOpcode::SetPreemptionState => {
+                todo!("unimplemented opcode: {:?}", opcode);
             }
         }
     }

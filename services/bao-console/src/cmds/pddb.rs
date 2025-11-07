@@ -31,6 +31,9 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
         #[cfg(feature = "pddbtest")]
         let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [writeover] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]\n[test]";
 
+        // instead of fetching a PIN from the user, use this fixed PIN
+        let testing_pin = [1u8; 32];
+
         let mut tokens = args.split(' ');
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
@@ -46,7 +49,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 },
                 "basiscreate" => {
                     if let Some(bname) = tokens.next() {
-                        match self.pddb.create_basis(bname) {
+                        match self.pddb.create_basis(bname, &testing_pin) {
                             Ok(_) => write!(ret, "basis {} created successfully", bname).unwrap(),
                             Err(e) => write!(ret, "basis {} could not be created: {:?}", bname, e).unwrap(),
                         }
@@ -56,7 +59,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 }
                 "basisunlock" => {
                     if let Some(bname) = tokens.next() {
-                        match self.pddb.unlock_basis(bname, None) {
+                        match self.pddb.unlock_basis(bname, &testing_pin, None) {
                             Ok(_) => write!(ret, "basis {} unlocked successfully", bname).unwrap(),
                             Err(e) => write!(ret, "basis {} could not be unlocked: {:?}", bname, e).unwrap(),
                         }
@@ -982,8 +985,8 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     }
                     // create a secret basis, put a test key in it
                     log::info!("create basis");
-                    self.pddb.create_basis("fscbtest").ok();
-                    self.pddb.unlock_basis("fscbtest", None).ok();
+                    self.pddb.create_basis("fscbtest", &testing_pin).ok();
+                    self.pddb.unlock_basis("fscbtest", &testing_pin, None).ok();
                     log::info!("write test key");
                     let mut persistence_test =
                         self.pddb.get("persistent", "key1", None, true, true, None, None::<fn()>).unwrap();
@@ -1030,7 +1033,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     }
                     // check that secret basis is still there
                     log::info!("confirm test basis");
-                    self.pddb.unlock_basis("fscbtest", None).ok();
+                    self.pddb.unlock_basis("fscbtest", &testing_pin, None).ok();
                     self.pddb.dbg_dump("fscb_test2").unwrap();
                     let mut persistence_test = self
                         .pddb
@@ -1099,7 +1102,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     }
                     self.pddb.dbg_remount().unwrap();
                     if let Some(name) = bname {
-                        match self.pddb.unlock_basis(name, None) {
+                        match self.pddb.unlock_basis(name, &testing_pin, None) {
                             Ok(_) => log::info!("basis {} unlocked successfully", name),
                             Err(e) => log::info!("basis {} could not be unlocked: {:?}", name, e),
                         }
@@ -1144,7 +1147,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         }
                     }
                     if let Some(name) = bname {
-                        match self.pddb.unlock_basis(name, None) {
+                        match self.pddb.unlock_basis(name, &testing_pin, None) {
                             Ok(_) => log::info!("basis {} unlocked successfully", name),
                             Err(e) => log::info!("basis {} could not be unlocked: {:?}", name, e),
                         }
