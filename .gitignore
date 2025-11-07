@@ -91,3 +91,6 @@ MANIFEST
 signing/credentials
 # Signer target directory
 signing/fido-signer/target
+
+# vscode extension support
+tools-bao/.venv/
