@@ -15,13 +15,6 @@ pub enum Opcode {
     AesOracle = 4,
     /// initiate key wrapper operation
     AesKwp = 5,
-    /// clear a cached password
-    ClearPasswordCacheEntry = 7,
-
-    // Gen-2 extensions are at 256 and up
-    /// Get a non-secret 64-bit random identifier
-    GetDna = 256,
-    EnsurePassword = 257,
 
     /// Used to map unknown opcodes
     InvalidCall = 65535,
