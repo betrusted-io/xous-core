@@ -170,6 +170,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let iox = IoxHal::new();
     let udma_global = UdmaGlobal::new();
     let mut i2c = I2c::new();
+    #[allow(unused_variables)]
     let hal = Hal::new();
 
     let mut display = Oled128x128::new(main_thread_token, bao1x_api::PERCLK, &iox, &udma_global);
