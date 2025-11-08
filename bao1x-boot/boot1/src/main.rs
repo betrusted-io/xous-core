@@ -306,6 +306,13 @@ pub fn boot(iox: &Iox, mut oled: Option<Oled128x128>, se0_port: bao1x_api::IoxPo
         }
     });
 
+    // reset instead of boot
+    #[cfg(feature = "alt-boot1")]
+    {
+        let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+        rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
+    }
+
     // when we get to this point, there's only two options...
     try_boot(true);
     unreachable!("`or_die = true` means this should be unreachable");
