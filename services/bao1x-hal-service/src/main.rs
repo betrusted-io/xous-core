@@ -262,6 +262,8 @@ fn main() {
     // claim BIO
     #[cfg(feature = "board-baosec")]
     let bio_ss = Arc::new(Mutex::new(xous_bio_bdma::BioSharedState::new()));
+    #[cfg(feature = "board-baosec")]
+    bio_ss.lock().unwrap().init();
     // setup TRNG server - baosec only because it has an external AV generator
     #[cfg(feature = "board-baosec")]
     servers::trng::start_trng_service(&bio_ss);
