@@ -1,3 +1,5 @@
+use aes::Aes256;
+use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
 use bao1x_api::{BOOT0_PUBKEY_FAIL, CP_ID, DEVELOPER_MODE, OEM_MODE, UUID};
 use bao1x_hal::{
     acram::{OneWayCounter, SlotManager},
@@ -5,8 +7,11 @@ use bao1x_hal::{
     rram::Reram,
 };
 use hkdf::Hkdf;
+use keystore_api::KeyWrapper;
 use rand::prelude::*;
 use sha2::Sha256;
+
+use crate::*;
 
 const KEY_LEN: usize = bao1x_api::SLOT_ELEMENT_LEN_BYTES;
 
@@ -149,5 +154,108 @@ impl KeyStore {
         }
 
         Self { slot_mgr, owc, master_key }
+    }
+
+    pub fn aes_kwp(&self, kwp: &mut KeyWrapper) -> Result<(), xous::Error> {
+        use aes_kw::Kek;
+        use aes_kw::KekAes256;
+        let keywrapper: KekAes256 = Kek::from(self.master_key);
+        match kwp.op {
+            KeyWrapOp::Wrap => {
+                match keywrapper.wrap_with_padding_vec(&kwp.data[..kwp.len as usize]) {
+                    Ok(wrapped) => {
+                        for (&src, dst) in wrapped.iter().zip(kwp.data.iter_mut()) {
+                            *dst = src;
+                        }
+                        kwp.len = wrapped.len() as u32;
+                        kwp.result = None;
+                        // this is an un-used field but...why not?
+                        kwp.expected_len = wrapped.len() as u32;
+                    }
+                    Err(e) => {
+                        kwp.result = Some(match e {
+                            aes_kw::Error::IntegrityCheckFailed => KeywrapError::IntegrityCheckFailed,
+                            aes_kw::Error::InvalidDataSize => KeywrapError::InvalidDataSize,
+                            aes_kw::Error::InvalidKekSize { size } => {
+                                log::info!("invalid size {}", size); // weird. can't name this _size
+                                KeywrapError::InvalidKekSize
+                            }
+                            aes_kw::Error::InvalidOutputSize { expected } => {
+                                log::info!("invalid output size {}", expected);
+                                KeywrapError::InvalidOutputSize
+                            }
+                        });
+                    }
+                }
+            }
+            KeyWrapOp::Unwrap => {
+                match keywrapper.unwrap_with_padding_vec(&kwp.data[..kwp.len as usize]) {
+                    Ok(wrapped) => {
+                        for (&src, dst) in wrapped.iter().zip(kwp.data.iter_mut()) {
+                            *dst = src;
+                        }
+                        kwp.len = wrapped.len() as u32;
+                        kwp.result = None;
+                        // this is an un-used field but...why not?
+                        kwp.expected_len = wrapped.len() as u32;
+                    }
+                    Err(e) => {
+                        kwp.result = Some(match e {
+                            aes_kw::Error::IntegrityCheckFailed => KeywrapError::IntegrityCheckFailed,
+                            aes_kw::Error::InvalidDataSize => KeywrapError::InvalidDataSize,
+                            aes_kw::Error::InvalidKekSize { size } => {
+                                log::info!("invalid size {}", size); // weird. can't name this _size
+                                KeywrapError::InvalidKekSize
+                            }
+                            aes_kw::Error::InvalidOutputSize { expected } => {
+                                log::info!("invalid output size {}", expected);
+                                KeywrapError::InvalidOutputSize
+                            }
+                        });
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn aes_op(&mut self, aes_op: &mut AesOp) -> Result<(), xous::Error> {
+        let op = match aes_op.aes_op {
+            // seems stupid, but we have to do this because we want to have zeroize on the AesOp
+            // record, and it means we can't have Copy on this.
+            AesOpType::Decrypt => AesOpType::Decrypt,
+            AesOpType::Encrypt => AesOpType::Encrypt,
+        };
+        let hk = Hkdf::<Sha256>::new(None, &self.master_key);
+        let mut okm = [0u8; 32];
+        hk.expand(&aes_op.domain.as_bytes(), &mut okm).expect("32 is a valid length for Sha256 to output");
+        let cipher = Aes256::new(GenericArray::from_slice(&okm));
+
+        // deserialize the specifier
+        match aes_op.block {
+            AesBlockType::SingleBlock(b) => {
+                match op {
+                    AesOpType::Decrypt => cipher.decrypt_block(&mut b.try_into().unwrap()),
+                    AesOpType::Encrypt => cipher.encrypt_block(&mut b.try_into().unwrap()),
+                }
+                aes_op.block = AesBlockType::SingleBlock(b);
+            }
+            AesBlockType::ParBlock(mut pb) => {
+                match op {
+                    AesOpType::Decrypt => {
+                        for block in pb.iter_mut() {
+                            cipher.decrypt_block(block.try_into().unwrap());
+                        }
+                    }
+                    AesOpType::Encrypt => {
+                        for block in pb.iter_mut() {
+                            cipher.encrypt_block(block.try_into().unwrap());
+                        }
+                    }
+                }
+                aes_op.block = AesBlockType::ParBlock(pb);
+            }
+        };
+        Ok(())
     }
 }

@@ -318,7 +318,12 @@ impl Pddb {
     /// returns the latest basis that is opened -- this is where all new values are being sent by default
     /// if the PDDB is not mounted, returns None
     pub fn latest_basis(&self) -> Option<String> {
-        let mgmt = PddbBasisRequest { name: String::new(), code: PddbRequestCode::Uninit, policy: None };
+        let mgmt = PddbBasisRequest {
+            name: String::new(),
+            code: PddbRequestCode::Uninit,
+            policy: None,
+            basis_key: None,
+        };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::LatestBasis.to_u32().unwrap())
             .expect("Couldn't execute ListBasis opcode");
@@ -333,12 +338,17 @@ impl Pddb {
         }
     }
 
+    #[cfg(feature = "gen1")]
     pub fn create_basis(&self, basis_name: &str) -> Result<()> {
         if basis_name.len() > BASIS_NAME_LEN - 1 {
             return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
         }
-        let mgmt =
-            PddbBasisRequest { name: String::from(basis_name), code: PddbRequestCode::Create, policy: None };
+        let mgmt = PddbBasisRequest {
+            name: String::from(basis_name),
+            code: PddbRequestCode::Create,
+            policy: None,
+            basis_key: None,
+        };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::CreateBasis.to_u32().unwrap())
             .expect("Couldn't execute CreateBasis opcode");
@@ -361,11 +371,85 @@ impl Pddb {
         }
     }
 
+    #[cfg(feature = "gen2")]
+    pub fn create_basis(&self, basis_name: &str, basis_key: &[u8; 32]) -> Result<()> {
+        if basis_name.len() > BASIS_NAME_LEN - 1 {
+            return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+        }
+        let mgmt = PddbBasisRequest {
+            name: String::from(basis_name),
+            code: PddbRequestCode::Create,
+            policy: None,
+            basis_key: Some(*basis_key),
+        };
+        let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.conn, Opcode::CreateBasis.to_u32().unwrap())
+            .expect("Couldn't execute CreateBasis opcode");
+        let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore mgmt structure");
+        match ret.code {
+            PddbRequestCode::NoErr => Ok(()),
+            PddbRequestCode::NoFreeSpace => {
+                Err(Error::new(ErrorKind::OutOfMemory, "No free space to create basis"))
+            }
+            PddbRequestCode::InternalError => {
+                Err(Error::new(ErrorKind::Other, "Internal error creating basis"))
+            }
+            PddbRequestCode::DuplicateEntry => {
+                Err(Error::new(ErrorKind::AlreadyExists, "Basis already exists"))
+            }
+            _ => {
+                log::error!("Invalid return code");
+                panic!("Invalid return code");
+            }
+        }
+    }
+
+    #[cfg(feature = "gen1")]
     pub fn unlock_basis(&self, basis_name: &str, policy: Option<BasisRetentionPolicy>) -> Result<()> {
         if basis_name.len() > BASIS_NAME_LEN - 1 {
             return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
         }
-        let mgmt = PddbBasisRequest { name: String::from(basis_name), code: PddbRequestCode::Open, policy };
+        let mgmt = PddbBasisRequest {
+            name: String::from(basis_name),
+            code: PddbRequestCode::Open,
+            policy,
+            basis_key: None,
+        };
+        let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.conn, Opcode::OpenBasis.to_u32().unwrap())
+            .expect("Couldn't execute OpenBasis opcode");
+        let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore mgmt structure");
+        match ret.code {
+            PddbRequestCode::NoErr => Ok(()),
+            PddbRequestCode::AccessDenied => {
+                Err(Error::new(ErrorKind::PermissionDenied, "Authentication error"))
+            }
+            PddbRequestCode::InternalError => {
+                Err(Error::new(ErrorKind::Other, "Internal error creating basis"))
+            }
+            _ => {
+                log::error!("Invalid return code");
+                panic!("Invalid return code");
+            }
+        }
+    }
+
+    #[cfg(feature = "gen2")]
+    pub fn unlock_basis(
+        &self,
+        basis_name: &str,
+        basis_key: &[u8; 32],
+        policy: Option<BasisRetentionPolicy>,
+    ) -> Result<()> {
+        if basis_name.len() > BASIS_NAME_LEN - 1 {
+            return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+        }
+        let mgmt = PddbBasisRequest {
+            name: String::from(basis_name),
+            code: PddbRequestCode::Open,
+            policy,
+            basis_key: Some(*basis_key),
+        };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::OpenBasis.to_u32().unwrap())
             .expect("Couldn't execute OpenBasis opcode");
@@ -389,8 +473,12 @@ impl Pddb {
         if basis_name.len() > BASIS_NAME_LEN - 1 {
             return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
         }
-        let mgmt =
-            PddbBasisRequest { name: String::from(basis_name), code: PddbRequestCode::Close, policy: None };
+        let mgmt = PddbBasisRequest {
+            name: String::from(basis_name),
+            code: PddbRequestCode::Close,
+            policy: None,
+            basis_key: None,
+        };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::CloseBasis.to_u32().unwrap())
             .expect("Couldn't execute CloseBasis opcode");
@@ -412,8 +500,12 @@ impl Pddb {
         if basis_name.len() > BASIS_NAME_LEN - 1 {
             return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
         }
-        let mgmt =
-            PddbBasisRequest { name: String::from(basis_name), code: PddbRequestCode::Delete, policy: None };
+        let mgmt = PddbBasisRequest {
+            name: String::from(basis_name),
+            code: PddbRequestCode::Delete,
+            policy: None,
+            basis_key: None,
+        };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::DeleteBasis.to_u32().unwrap())
             .expect("Couldn't execute DeleteBasis opcode");
