@@ -38,6 +38,7 @@ fn main() -> ! {
 /// Of course, this code running inside this process will work to read out the keys, since this
 /// is the designated, trusted process for accessing the key store.
 #[allow(dead_code)]
+#[cfg(not(feature = "hosted-baosec"))]
 fn attack_keystore() {
     use utralib::*;
     let cu_range = xous::map_memory(

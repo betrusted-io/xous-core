@@ -60,9 +60,14 @@
 // ** Testing features **
 //   -[ ] libs/precursor/hal/src/board/precursors.rs - PDDB_LEN is shortened for vexii-test target
 
+extern crate alloc;
+use alloc::vec::Vec;
+
 #[macro_use]
 mod args;
 use args::{KernelArgument, KernelArguments};
+#[cfg(feature = "bao1x")]
+use bao1x_api::UUID;
 
 #[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/debug.rs")]
 mod debug;
@@ -75,6 +80,7 @@ mod asm;
 mod bootconfig;
 #[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/consts.rs")]
 mod consts;
+mod env;
 mod minielf;
 #[cfg(feature = "resume")]
 mod murmur3;
@@ -116,15 +122,12 @@ mod test;
 // somewhat dangerously tell the loader to go ahead and allocate over this region by
 // telling it has the whole rest of SRAM to stick initial process pages in.
 #[global_allocator]
-#[cfg(feature = "bao1x")]
 static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
 // heap start is selected by looking at the total reserved .data + .bss region in the compiled loader.
 // it hovers at 0x5000 unless I start adding lots of statics to the loader (which there are not).
-#[cfg(feature = "bao1x")]
-const HEAP_OFFSET: usize = 0x5000;
+pub const HEAP_OFFSET: usize = 0x5000;
 // just a small heap, big enough for us to use alloc to simplify argument processing
-#[cfg(feature = "bao1x")]
-const HEAP_LEN: usize = 0x1000;
+pub const HEAP_LEN: usize = 0x1000;
 
 #[repr(C)]
 pub struct MemoryRegionExtra {
@@ -240,10 +243,11 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // Initialize the allocator with heap memory range. The heap memory is "throw-away"
     // so we stick it near the bottom of RAM, with the assumption that the loader process
     // won't smash over it.
-    #[cfg(any(feature = "bao1x"))]
+    #[cfg(feature = "bao1x")]
     {
+        // heap is needed for bao1x-boot because signature depends on it
         let heap_start = utralib::HW_SRAM_MEM + HEAP_OFFSET;
-        crate::println!("Setting up heap @ {:x}-{:x}", heap_start, heap_start + HEAP_LEN);
+        println!("Setting up heap @ {:x}-{:x}", heap_start, heap_start + HEAP_LEN);
         unsafe {
             ALLOCATOR.lock().init(heap_start as *mut u8, HEAP_LEN);
         }
@@ -374,34 +378,53 @@ fn boot_sequence(
     #[cfg(feature = "resume")]
     let (clean, was_forced_suspend, susres_pid) = check_resume(&mut cfg);
     #[cfg(not(feature = "resume"))]
-    let clean = {
-        // cold boot path
-        println!("No suspend marker found, doing a cold boot!");
-        #[cfg(feature = "simulation-only")]
-        println!("Configured for simulation. Skipping RAM clear!");
-        clear_ram(&mut cfg);
-        phase_1(&mut cfg, detached_app);
-        phase_2(&mut cfg, &fs_prehash);
-        #[cfg(any(feature = "debug-print", feature = "swap"))]
-        if VDBG || SDBG {
-            check_load(&mut cfg);
-        }
-        println!("done initializing for cold boot.");
-        false
-    };
-    #[cfg(feature = "resume")]
+    let clean = false;
     if !clean {
+        #[cfg(not(feature = "bao1x"))]
+        {
+            // setup heap so we can make env. It's not set up earlier in precursor environment
+            // because it's not safe to smash memory on a resume
+            let heap_start = utralib::HW_SRAM_EXT_MEM + HEAP_OFFSET;
+            // for precursor, clear this region, as it is only cleared later in the boot process
+            let ram_init = utralib::HW_SRAM_EXT_MEM as *mut u32;
+            for i in 0..(HEAP_LEN + HEAP_OFFSET) / size_of::<u32>() {
+                unsafe { ram_init.add(i).write_volatile(0) };
+            }
+            println!("Setting up heap @ {:x}-{:x}", heap_start, heap_start + HEAP_LEN);
+            unsafe {
+                ALLOCATOR.lock().init(heap_start as *mut u8, HEAP_LEN);
+            }
+        }
+        // build the environment variables - requires heap
+        let mut env_variables = crate::env::EnvVariables::new();
+        env_variables.add_var("ROOT_FILESYSTEM_HASH", &crate::env::to_hex_ascii(&fs_prehash));
+
+        #[cfg(feature = "bao1x")]
+        {
+            let owc = bao1x_hal::acram::OneWayCounter::new();
+            let slot_mgr = bao1x_hal::acram::SlotManager::new();
+            let sn = bao1x_hal::usb::derive_usb_serial_number(&owc, &slot_mgr);
+            env_variables.add_var("PUBLIC_SERIAL", &sn);
+            let hex_uuid = hex::encode(slot_mgr.read(&UUID).unwrap());
+            env_variables.add_var("UUID", &hex_uuid);
+        }
+
+        let mut env_header = crate::env::EnvHeader::default();
+        let env = env_header.to_bytes(&env_variables);
+
         // cold boot path
         println!("No suspend marker found, doing a cold boot!");
         clear_ram(&mut cfg);
         phase_1(&mut cfg, detached_app);
-        phase_2(&mut cfg, &fs_prehash);
+        phase_2(&mut cfg, &env);
         #[cfg(any(feature = "debug-print", feature = "swap"))]
         if VDBG || SDBG {
             check_load(&mut cfg);
         }
         println!("done initializing for cold boot.");
-    } else {
+    }
+    #[cfg(feature = "resume")]
+    if clean {
         // resume path
         use utralib::generated::*;
         // flip my self-power-on switch: otherwise, I might turn off before the whole sequence is finished.
@@ -765,8 +788,9 @@ fn clear_ram(cfg: &mut BootConfig) {
     if VDBG {
         println!("Stack clearing limit: {:x}", clear_limit);
     }
+    let clear_start = HEAP_OFFSET + HEAP_LEN;
     unsafe {
-        for addr in 0..(cfg.sram_size - clear_limit) / 4 {
+        for addr in clear_start..(cfg.sram_size - clear_limit) / 4 {
             // 8k is reserved for our own stack
             ram.add(addr).write_volatile(0);
         }

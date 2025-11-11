@@ -311,6 +311,7 @@ pub struct PddbBasisRequest {
     pub name: String,
     pub code: PddbRequestCode,
     pub policy: Option<BasisRetentionPolicy>,
+    pub basis_key: Option<[u8; 32]>,
 }
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct PddbDictRequest {

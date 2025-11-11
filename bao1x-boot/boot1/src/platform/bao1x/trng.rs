@@ -34,7 +34,7 @@ impl ManagedTrng {
             bio_ss.load_code(avtrng_bio_code(), 0, BioCore::Core0);
 
             // don't use QDIV
-            bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x1_0000);
+            bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x1_0001);
 
             // use extclock on channel 0, tied to the trng pin
             bio_ss.bio.wo(
@@ -44,7 +44,7 @@ impl ManagedTrng {
             );
 
             // start the machine
-            bio_ss.set_core_run_states([true, false, false, true]);
+            bio_ss.set_core_run_states([true, false, false, false]);
             bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, trng_pin as u32); // start the sampling
 
             // check if the TRNG seems to be working. If not, reject the board setting and reboot

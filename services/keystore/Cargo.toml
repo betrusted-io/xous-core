@@ -2,7 +2,7 @@
 name = "keystore"
 version = "0.1.0"
 authors = ["bunnie <bunnie@kosagi.com>"]
-edition = "2018"
+edition = "2021"
 description = "Keystore server for compact devices"
 
 # Dependency versions enforced by Cargo.lock.

@@ -213,7 +213,8 @@ pub enum RwPerms {
 /// Specifies what partitions can access a given slot. Some common patterns are
 /// provided, a Custom field is also provided for other odd combinations.
 pub enum PartitionAccess {
-    None,
+    /// Open disables not just PartitionAccess but also all other security controls
+    Open,
     All,
     Boot0,
     Boot1,
@@ -235,7 +236,7 @@ impl PartitionAccess {
         // The bitfield coding is fw1:fw0:boot1:boot0 from MSB to LSB.
         let code: u4 = u4::new(((raw >> 20) & 0xF) as u8);
         match code.value() {
-            0b0000 => Self::None,
+            0b0000 => Self::Open,
             0b1111 => Self::All,
             0b0001 => Self::Boot0,
             0b0010 => Self::Boot1,
@@ -251,7 +252,7 @@ impl PartitionAccess {
     // can be shifted into place.
     fn to_raw_u4(&self) -> u4 {
         match self {
-            Self::None => u4::new(0b0000 & 0xF),
+            Self::Open => u4::new(0b0000 & 0xF),
             Self::All => u4::new(0b1111 & 0xF),
             Self::Boot0 => u4::new(0b0001 & 0xF),
             Self::Boot1 => u4::new(0b0010 & 0xF),

@@ -321,15 +321,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("baosec-emu") => {
             let bao_pkgs = [
                 "xous-ticktimer",
+                "keystore",
                 "xous-log",
                 "xous-names",
-                "modals",
-                "bao-video",
+                // "usb-bao1x",
                 "bao1x-emu",
                 "bao-console",
+                "modals",
                 "pddb",
-                // "usb-cramium",
-                "keystore",
+                "bao-video",
             ];
             builder.add_feature("pddbtest");
             builder
@@ -338,6 +338,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_services(&bao_pkgs)
                 .add_apps(&get_cratespecs());
 
+            std::env::set_var("UUID", "1234567812345678123456781234567812345678123456781234567812345678");
             // builder.add_feature("modal-testing");
             builder.add_app("vault2", LoaderRegion::Swap);
         }

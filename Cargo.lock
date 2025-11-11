@@ -3497,6 +3497,7 @@ dependencies = [
  "ed25519-dalek",
  "ed25519-dalek-bao1x",
  "ed25519-dalek-loader",
+ "hex 0.4.3",
  "lazy_static",
  "libm 0.2.8",
  "linked_list_allocator",

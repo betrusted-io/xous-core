@@ -128,6 +128,9 @@ fn main() {
                 log::info!("Received quit opcode, exiting.");
                 break;
             }
+            HalOpcode::ConfigureBio | HalOpcode::UdmaIrqStatusBits | HalOpcode::SetPreemptionState => {
+                todo!("unimplemented opcode: {:?}", opcode);
+            }
         }
     }
     xns.unregister_server(sid).unwrap();
