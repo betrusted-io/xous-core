@@ -797,28 +797,24 @@ fn wrapped_main() -> ! {
             #[cfg(feature = "gen2")]
             Opcode::TryMount => {
                 xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    fn try_mount(
+                        pddb_os: &mut PddbOs,
+                        basis_cache: &mut BasisCache,
+                        basis_monitor_notifications: &mut Vec<xous::MessageEnvelope>,
+                    ) -> bool {
+                        if let Some(sys_basis) = pddb_os.pddb_mount() {
+                            log::info!("PDDB mount operation finished successfully");
+                            basis_cache.basis_add(sys_basis);
+                            if basis_monitor_notifications.len() > 0 {
+                                notify_basis_change(basis_monitor_notifications, basis_cache.basis_list());
+                            }
+                            true
+                        } else {
+                            false
+                        }
+                    }
                     match pddb_os.ensure_password() {
                         PasswordState::Correct => {
-                            fn try_mount(
-                                pddb_os: &mut PddbOs,
-                                basis_cache: &mut BasisCache,
-                                basis_monitor_notifications: &mut Vec<xous::MessageEnvelope>,
-                            ) -> bool {
-                                if let Some(sys_basis) = pddb_os.pddb_mount() {
-                                    log::info!("PDDB mount operation finished successfully");
-                                    basis_cache.basis_add(sys_basis);
-                                    if basis_monitor_notifications.len() > 0 {
-                                        notify_basis_change(
-                                            basis_monitor_notifications,
-                                            basis_cache.basis_list(),
-                                        );
-                                    }
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
-
                             // The behavior in gen2 is mount-or-format: no user approval
                             // is requested in case of format. This is silghtly dangerous in case
                             // of data corruption but I think this is the "right" user experience
@@ -833,11 +829,13 @@ fn wrapped_main() -> ! {
                                     panic!("Couldn't format & mount PDDB");
                                 }
                             }
-                            log::info!("{}PDDB.MOUNTED,{}", BOOKEND_START, BOOKEND_END);
-                            xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                         }
                         PasswordState::Uninit => {
-                            unimplemented!("Password is always available on gen2")
+                            log::warn!("PDDB not formatted - formatting the PDDB!");
+                            pddb_os.pddb_format(false, None).expect("couldn't format PDDB");
+                            if !try_mount(&mut pddb_os, &mut basis_cache, &mut basis_monitor_notifications) {
+                                panic!("Couldn't format & mount PDDB");
+                            }
                         }
                         PasswordState::ForcedAbort(_failcount) => {
                             unreachable!();
@@ -845,6 +843,12 @@ fn wrapped_main() -> ! {
                         PasswordState::Incorrect(_failcount) => {
                             unreachable!();
                         }
+                    }
+                    // the above operation should either succeed or panic, so we are always "success" here
+                    log::info!("{}PDDB.MOUNTED,{}", BOOKEND_START, BOOKEND_END);
+                    xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
+                    for requester in attempt_notifications.drain(..) {
+                        xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
                     }
                 })
             }

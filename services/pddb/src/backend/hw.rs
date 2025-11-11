@@ -530,7 +530,7 @@ impl PddbOs {
         let remaining_len = buf.len() - written;
         // this is OK here because we took care of any misaligned start data in step 1.
         let aligned_start = (offset + (SPINOR_ERASE_SIZE as usize - 1)) & !(SPINOR_ERASE_SIZE as usize - 1);
-        log::info!(
+        log::debug!(
             "aligned_start {:x} end {:x}",
             aligned_start,
             (aligned_start + (remaining_len + (SPINOR_ERASE_SIZE as usize - 1))
