@@ -95,7 +95,9 @@ use pddb::*;
 mod aes_cmd;
 #[cfg(feature = "aestests")]
 use aes_cmd::*;
+#[cfg(not(feature = "hosted-baosec"))]
 mod i2cdetect;
+#[cfg(not(feature = "hosted-baosec"))]
 use i2cdetect::*;
 mod cute;
 use cute::*;
@@ -162,6 +164,7 @@ impl CmdEnv {
         let mut echo_cmd = Echo {}; // this command has no persistent storage, so we can "create" it every time we call dispatch (but it's a zero-cost absraction so this doesn't actually create any instructions)
         let mut ver_cmd = Ver {};
         let mut console_cmd = Test {};
+        #[cfg(not(feature = "hosted-baosec"))]
         let mut i2cdetect_cmd = I2cDetect {};
         let mut cute_cmd = Cute {};
 
@@ -170,6 +173,7 @@ impl CmdEnv {
             &mut echo_cmd,
             &mut ver_cmd,
             &mut self.trng_cmd,
+            #[cfg(not(feature = "hosted-baosec"))]
             &mut i2cdetect_cmd,
             &mut cute_cmd,
             &mut console_cmd,
