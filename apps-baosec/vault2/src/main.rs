@@ -34,80 +34,27 @@ use crate::vendor_commands::VendorSession;
 /*
 Dev status & notes --
 
-Aug 3 2025:
+Nov 12 2025:
 
-`cargo xtask baosec-emu` will launch the emulated UI. The aspect currently
-in progress is the user interaction. Some firm conclusions so far are:
+`cargo xtask baosec-emu` will launch the emulated UI.
 
-- There is only going to be a TOTP and a password flow. FIDO interactions
-will be through modal pop-ups only that alert of the relying party (if FIDO2).
-FIDO-1 will notify that this is a legacy transaction with no identifier.
-- We will use the same PDDB record format as vault original
-- At the moment all "actions" are commented out in this app, so it is just a shell
-used to refine the UI flow. Once the UI flow is refined we will add in the
-live functionality
-- Likewise there is no HID handler loop or camera loop
-- Menu interactions will happen by pressing the "home" key and will be
-done with an explicitly coded menu routine. This is because we don't have
-a GAM in this implementation to handle layering/compositing in this UI framework.
+  -[ ] implement RTC
+  -[ ] implement QR code scanning loop
+  -[x] implement HID loop - needs testing, but have to implement RTC first before can test on HW
+  -[x] implement "action" loop
 
--[ ] harmonized TOTP & password interactions? It is not yet clear if we are
-going to have two separate UI flows, or if we will share elements between the
-two. I am inclined to harmonize the two, which means reworking the TOTP flow
-to have the search entry at the bottom.
-  -[x] TOTP interaction prototyped
-  -[ ] password interaction prototyped
--[x] implement "home" button press menu mode
--[ ] implement search by text entry - activated via both menu pop-up, and by
-selecting >search prefix< on the bottom line of UI
+  -[ ] figure out interaction for searching for passwords
+    -[ ] search by QR code
+    -[ ] search by text - is this even a good idea? i think the UX is not great, so maybe we omit it entirely.
 -[ ] implement PIN management UI - entering a pin unlocks the deniable basis automatically
     -[ ] remove basis management calls when replacing with PIN calls
 
-There are three action loops that need to be implemented. These are not
-necessarily listed in order of implementation:
-  -[ ] implement QR code scanning loop
-  -[ ] implement HID loop
-  -[ ] implement "action" loop
+-[ ] Consider the side channel resistance of the AES implementation in the keystore. We may want
+    to use an AES API that explicitly wraps the SCE's masked AES implementation to reduce side channels,
+    versus the Vex CPU core's AES implementation
 
--[x] implement keystore
-  -[ ] Consider the side channel resistance of the AES implementation in the keystore. We may want
-      to use an AES API that explicitly wraps the SCE's masked AES implementation to reduce side channels,
-      versus the Vex CPU core's AES implementation
-  -[x] PDDB should have a base 256-bit key to protect all entries, stored in key store
-       This is equivalent to the "Backup key" in precursor
-    -[x] Base 256-bit key is derived from hash of 64kbits raw data scattered
-    across the RRAM array. Locations are chosen to be diverse, with the goal of reducing
-    voltage contrast due to parasitic leakage masking bits
-    -[x] 64kbit array is split into four 16kbit chunks, which are XOR'd together to create
-    a 16kbit number. The four 16kbit chunks are read out 256-bits at a time, with an order
-    determined by a random number on boot. The random ordering frustrates side channel attacks
-    on read-out of the array. Thus the format is:
-      - Kn, where n=[0..=3]
-      - Each Kn is 16384 bits long, composed of 64 256-bit blocks: Bm = {B0, B1, ..Bm},
-        where m=[0..=255]
-      - The pre-hash key matter P is composed of K0 ^ K1 ^ K2 ^ K3, and the final key
-        is SHA512/256(P)
-      - P is derived specifically by visiting every one of KnBm in a random order and XOR'ing
-      them together, such that:
-        - The 16384-bit P is initialized to all 0's
-        - Break P into 64 separate 256-bit long blocks. Fill each block as follows:
-            - R is a 5-bit random number from the TRNG. It is rejection-sampled to generate a number
-            Rk that is [0..=23] (i.e. any number 24-31 is rejected and the TRNG is run again).
-            - Rk is turned into a permutation using the factoradic system:
-            - Derive factoradic digits [d₁, d₂, d₃, d₄] where:
-                - d1=k÷3!d1​=k÷3!
-                - d2=(kmod  3!)÷2!d2​=(kmod3!)÷2!
-                - d3=(kmod  2!)÷1!d3​=(kmod2!)÷1!
-                - d4=0d4​=0 (there should only be one element left at this point)
-            - Starting with the ordered list [A,B,C,D], at step i,
-                pick the element at position dᵢ and remove it.
-            - [A, B, C, D] represent visiting one of bank K0..=3
-            - Fetching 256 bits from the respective bank and XOR it into the block position in P
-        - The final backup key is computed as SHA512/256(DS | P), where DS is a domain separator consisting
-          of 8 bits of 0's (8 bits is chosen simply because it's convenient, not to imply we could have only
-          256 domains - you can always add more bits at the top of the hash).
-        - Other keys may be derived by changing the domain separator.
-  -[ ] The PIN may be optionally set to one of three values:
+-[ ] deniable basis implementation
+    -[ ] The PIN may be optionally set to one of three values:
     -[ ] nothing (implemented as all 0's in the cryptographic key)
     -[ ] a passcode (4-8 digits entered via keyboard)
       -[ ] Configurable self-destruct after # of incorrect PIN guesses. Set at 8 by default.
@@ -118,6 +65,7 @@ necessarily listed in order of implementation:
   -[ ] One deniable basis at a time is allowed. It is mounted using using only:
     -[ ] a PIN (4-8 digits entered via keyboard)
     -[ ] a QR code (generated using browser & managed by user)
+
 -[ ] implement backups
   -[ ] PIN confirmation required to set system into backup mode
   -[ ] Backup key is displayed. This is 256-bit key, displayed as QR code or Bip-39.
