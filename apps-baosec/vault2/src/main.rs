@@ -135,6 +135,8 @@ pub(crate) enum VaultOp {
     MenuAutotypeRate,
     MenuLeftyMode,
     MenuDone,
+    MenuTotpMode,
+    MenuPwMode,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -309,6 +311,34 @@ fn main() -> ! {
                 // update the TOTP codes, in case there were changes
                 vault_ui.refresh_totp();
                 allow_totp_rendering.store(true, Ordering::SeqCst);
+                vault_ui.redraw();
+            }
+            Some(VaultOp::MenuTotpMode) => {
+                *mode.lock().unwrap() = VaultMode::Totp;
+                // reload DB on mode switch
+                xous::send_message(
+                    actions_conn,
+                    xous::Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
+                vault_ui.refresh_totp();
+                allow_totp_rendering.store(true, Ordering::SeqCst);
+                xous::send_message(
+                    pump_conn,
+                    xous::Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .expect("couldn't start the pumper");
+                vault_ui.redraw();
+            }
+            Some(VaultOp::MenuPwMode) => {
+                *mode.lock().unwrap() = VaultMode::Password;
+                allow_totp_rendering.store(false, Ordering::SeqCst);
+                // reload DB on mode switch
+                xous::send_message(
+                    actions_conn,
+                    xous::Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
                 vault_ui.redraw();
             }
             Some(VaultOp::KeyPress) => xous::msg_scalar_unpack!(msg, k1, _k2, _k3, _k4, {

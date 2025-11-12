@@ -9,6 +9,7 @@ use ux_api::service::gfx::Gfx;
 use ux_api::widgets::ScrollableList;
 use xous::CID;
 
+use crate::storage::{ContentKind, Manager};
 use crate::*;
 
 pub const DEFAULT_FONT: GlyphStyle = GlyphStyle::Bold;
@@ -82,6 +83,8 @@ pub struct VaultUi {
 
     pddb: RefCell<Pddb>,
     item_height: isize,
+    style: GlyphStyle,
+    storage_manager: Manager,
 }
 
 impl VaultUi {
@@ -112,6 +115,8 @@ impl VaultUi {
             last_epoch: crate::totp::get_current_unix_time().expect("couldn't get current time") / 30,
             pddb: RefCell::new(pddb),
             item_height: height / glyph_height,
+            style,
+            storage_manager: Manager::new(xns),
         }
     }
 
@@ -194,10 +199,10 @@ impl VaultUi {
         self.totp_list.style(style);
         let glyph_height = self.gfx.glyph_height_hint(style).unwrap();
         self.item_height = glyph_height as isize + 2; // +2 because of the border width
-        self.item_lists
-            .lock()
-            .unwrap()
-            .set_items_per_screen(self.gfx.screen_size().unwrap().y / self.item_height);
+        self.item_lists.lock().unwrap().set_items_per_screen(
+            (self.gfx.screen_size().unwrap().y - 2 * self.item_height) / self.item_height,
+        );
+        self.style = style;
     }
 
     /// Clear the entire screen.
@@ -304,7 +309,143 @@ impl VaultUi {
                 - Pressing on circle middle button just does autotype
 
                  */
-                todo!()
+                let screensize = self.gfx.screen_size().unwrap();
+                // handle empty database case
+                if self.item_lists.lock().unwrap().filter_len(VaultMode::Password) == 0 {
+                    log::debug!("no items");
+                    let mut box_text = TextView::new(
+                        Gid::dummy(),
+                        TextBounds::CenteredBot(Rectangle::new(
+                            Point::new(0, screensize.y / 2),
+                            Point::new(screensize.x, screensize.y / 2 + self.item_height),
+                        )),
+                    );
+                    box_text.draw_border = false;
+                    box_text.clear_area = true;
+                    box_text.style = self.style;
+                    write!(box_text, "{}", t!("vault.no_items", locales::LANG)).ok();
+                    self.gfx.draw_textview(&mut box_text).expect("couldn't post empty notification");
+                    self.gfx.flush().ok();
+                    return;
+                }
+                let mut insert_at = 0;
+                if let Some(entry) = self.item_lists.lock().unwrap().selected_entry(VaultMode::Password) {
+                    log::debug!("rendering entry {:?}", entry);
+                    // draw more data about the selected item
+                    let guid = entry.key_guid.as_str();
+                    let pw: storage::PasswordRecord =
+                        match self.storage_manager.get_record(&ContentKind::Password, guid) {
+                            Ok(record) => record,
+                            Err(error) => {
+                                log::error!("internal error rendering password");
+                                self.gfx.flush().ok();
+                                return;
+                            }
+                        };
+                    let mut box_text = TextView::new(
+                        Gid::dummy(),
+                        TextBounds::CenteredBot(Rectangle::new(
+                            Point::new(0, insert_at),
+                            Point::new(screensize.x, insert_at + self.item_height),
+                        )),
+                    );
+                    insert_at += self.item_height;
+                    box_text.draw_border = false;
+                    box_text.clear_area = false;
+                    box_text.ellipsis = true;
+                    box_text.style = self.style;
+                    box_text.invert = true;
+                    // line 1
+                    write!(box_text, "{}", &pw.description).ok();
+                    self.gfx.draw_textview(&mut box_text).unwrap();
+                    // line 2
+                    box_text.bounds_hint = TextBounds::CenteredBot(Rectangle::new(
+                        Point::new(0, insert_at),
+                        Point::new(screensize.x, insert_at + self.item_height),
+                    ));
+                    insert_at += self.item_height;
+                    box_text.clear_str();
+                    write!(box_text, "{}", &pw.username).ok();
+                    self.gfx.draw_textview(&mut box_text).ok();
+                    // draw a rectangle around the top area
+                    self.gfx
+                        .draw_rectangle(Rectangle::new_coords_with_style(
+                            0,
+                            0,
+                            screensize.x,
+                            self.item_height * 2,
+                            DrawStyle {
+                                fill_color: None,
+                                stroke_color: Some(PixelColor::Light),
+                                stroke_width: 2,
+                            },
+                        ))
+                        .ok();
+                } else {
+                    // draw a rectangle around the top area
+                    self.gfx
+                        .draw_rectangle(Rectangle::new_coords_with_style(
+                            0,
+                            0,
+                            screensize.x,
+                            self.item_height * 2,
+                            DrawStyle {
+                                fill_color: Some(PixelColor::Dark),
+                                stroke_color: Some(PixelColor::Light),
+                                stroke_width: 2,
+                            },
+                        ))
+                        .ok();
+                    log::error!("Couldn't retrieve password info to render top area");
+                    insert_at = self.item_height * 2;
+                };
+                // ---- draw list body area ----
+                let selected = self.item_lists.lock().unwrap().selected_index(VaultMode::Password);
+                let mut guarded_list = self.item_lists.lock().unwrap();
+                let current_page = guarded_list.selected_page(VaultMode::Password);
+                log::debug!("current_page len {}", current_page.len());
+                for (index, item) in current_page.iter_mut().enumerate() {
+                    if insert_at - 1 > screensize.y - self.item_height {
+                        // -1 because of the overlapping border
+                        break;
+                    }
+                    log::debug!("drawing {}", item.name());
+                    let mut box_text = TextView::new(
+                        Gid::dummy(),
+                        TextBounds::BoundingBox(Rectangle::new(
+                            Point::new(0, insert_at),
+                            Point::new(screensize.x, insert_at + self.item_height),
+                        )),
+                    );
+                    box_text.draw_border = false;
+                    box_text.rounded_border = None;
+                    box_text.clear_area = false;
+                    box_text.style = self.style;
+                    box_text.ellipsis = true;
+                    if index == selected {
+                        box_text.invert = false;
+                    } else {
+                        box_text.invert = true;
+                    }
+                    write!(box_text, "{}", item.name()).ok();
+                    // do a dry run to get the final bounding box
+                    box_text.set_dry_run(true);
+                    self.gfx.draw_textview(&mut box_text).expect("couldn't post list item");
+                    if index == selected {
+                        let mut r = box_text.bounds_computed.unwrap();
+                        r.style = DrawStyle {
+                            fill_color: Some(PixelColor::Light),
+                            stroke_color: None,
+                            stroke_width: 0,
+                        };
+                        self.gfx.draw_rectangle(r).ok();
+                    }
+                    // now draw for reals
+                    box_text.set_dry_run(false);
+                    self.gfx.draw_textview(&mut box_text).expect("couldn't post list item");
+
+                    insert_at += self.item_height;
+                }
             }
         }
         self.gfx.flush().ok();

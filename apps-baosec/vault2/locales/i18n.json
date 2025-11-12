@@ -300,6 +300,13 @@
         "ja": "管理基盤",
         "zh": "管理基础"
     },
+    "vault.menu_pw_mode": {
+        "en": "Password mode",
+        "en-tts": "Password mode",
+        "fr": "Mode mot de passe",
+        "ja": "パスワードモード",
+        "zh": "密码模式"
+    },
     "vault.menu_readout_mode": {
         "en": "Enable host readout",
         "en-tts": "Enable host readout",
@@ -313,6 +320,13 @@
         "fr": "Définir l'interface utilisateur gaucher *MT*",
         "ja": "左手用 UI を設定する",
         "zh": "设置左手用户界面"
+    },
+    "vault.menu_totp_mode": {
+        "en": "TOTP mode",
+        "en-tts": "TOTP mode",
+        "fr": "Mode TOTP",
+        "ja": "TOTPモード",
+        "zh": "TOTP模式"
     },
     "vault.menu_unlock_basis": {
         "en": "Unlock secret Basis",

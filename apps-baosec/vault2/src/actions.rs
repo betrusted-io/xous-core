@@ -16,7 +16,6 @@ use locales::t;
 use num_traits::*;
 use passwords::PasswordGenerator;
 use pddb::BasisRetentionPolicy;
-use persistent_store::store::OPENSK2_DICT;
 use ux_api::widgets::TextEntryPayload;
 use vault2::env::xous::U2F_APP_DICT;
 use vault2::{
@@ -1476,8 +1475,8 @@ pub(crate) fn heap_usage() -> usize {
 fn make_pw_name(description: &str, username: &str, dest: &mut String) {
     dest.clear();
     dest.push_str(description);
-    dest.push_str("/");
-    dest.push_str(username);
+    // dest.push_str("/");
+    // dest.push_str(username);
 }
 
 fn make_u2f_item_from_record(guid: &str, ai: AppInfo) -> ListItem {
