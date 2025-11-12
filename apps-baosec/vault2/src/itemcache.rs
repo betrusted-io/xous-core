@@ -341,6 +341,8 @@ impl FilteredListView {
             ..((1 + page) * self.items_per_screen.get()).min(filterlen)]
     }
 
+    pub fn full_list(&mut self) -> &mut [ListItem] { &mut self.list[..] }
+
     pub fn nav(&mut self, dir: NavDir) {
         log::debug!("index bef: {}, filter: {:?}", self.selection_index, self.filter_range);
         match dir {
@@ -522,5 +524,9 @@ impl ItemLists {
 
     pub fn selected_page(&mut self, list_type: VaultMode) -> &mut [ListItem] {
         self.li_mut(list_type).selected_page()
+    }
+
+    pub fn full_list(&mut self, list_type: VaultMode) -> &mut [ListItem] {
+        self.li_mut(list_type).full_list()
     }
 }

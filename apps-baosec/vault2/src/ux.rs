@@ -97,9 +97,7 @@ impl VaultUi {
             .set_margin(TotpLayout::totp_margin())
             .pane_size(TotpLayout::list_box())
             .style(TotpLayout::list_font());
-        for i in 0..6 {
-            totp_list.add_item(0, &format!("example {}", i));
-        }
+
         let gfx = Gfx::new(&xns).unwrap();
         let style = DEFAULT_FONT;
         let glyph_height = gfx.glyph_height_hint(style).unwrap() as isize;
@@ -114,6 +112,29 @@ impl VaultUi {
             last_epoch: crate::totp::get_current_unix_time().expect("couldn't get current time") / 30,
             pddb: RefCell::new(pddb),
             item_height: height / glyph_height,
+        }
+    }
+
+    pub(crate) fn refresh_totp(&mut self) {
+        let mut locked_lists = self.item_lists.lock().unwrap();
+        let full_list = locked_lists.full_list(VaultMode::Totp);
+        self.totp_list.clear();
+        for item in full_list {
+            self.totp_list.add_item(0, &item.name());
+        }
+    }
+
+    pub(crate) fn update_selected_totp_code(&mut self) {
+        if self.totp_list.len() > 0 {
+            let selected = self.totp_list.get_selected();
+            let mut locked_lists = self.item_lists.lock().unwrap();
+            let full_list = locked_lists.full_list(VaultMode::Totp);
+            if let Some(selected_item) = full_list.iter().find(|item| item.name() == selected) {
+                match crate::totp::db_str_to_code(&selected_item.extra) {
+                    Ok(s) => self.totp_code = Some(s),
+                    _ => self.totp_code = None,
+                }
+            }
         }
     }
 
@@ -208,6 +229,11 @@ impl VaultUi {
                 tv.style = TotpLayout::totp_font();
                 tv.draw_border = false;
 
+                if self.totp_code.is_none() && self.totp_list.len() > 0 {
+                    // this handles initial population of the field
+                    self.update_selected_totp_code();
+                }
+
                 match &self.totp_code {
                     Some(code) => {
                         write!(tv, "{}", code).ok();
@@ -236,14 +262,7 @@ impl VaultUi {
                 let epoch = (current_time / (30 * 1000)) as u64;
                 if self.last_epoch != epoch {
                     self.last_epoch = epoch;
-                    if !self.item_lists.lock().unwrap().is_db_empty(VaultMode::Totp) {
-                        match crate::totp::db_str_to_code(
-                            &self.item_lists.lock().unwrap().selected_extra(VaultMode::Totp),
-                        ) {
-                            Ok(s) => self.totp_code = Some(s),
-                            _ => self.totp_code = None,
-                        }
-                    }
+                    self.update_selected_totp_code();
                 }
 
                 let mut timer_remaining = TotpLayout::timer_box();
@@ -292,7 +311,24 @@ impl VaultUi {
     }
 
     pub(crate) fn nav(&mut self, dir: NavDir) {
-        self.item_lists.lock().unwrap().nav((*self.mode.lock().unwrap()).clone(), dir);
+        let mode_at_entry = (*self.mode.lock().unwrap()).clone();
+        match mode_at_entry {
+            VaultMode::Password => {
+                self.item_lists.lock().unwrap().nav((*self.mode.lock().unwrap()).clone(), dir);
+            }
+            VaultMode::Totp => {
+                match dir {
+                    NavDir::Up => {
+                        self.totp_list.key_action('↑');
+                    }
+                    NavDir::Down => {
+                        self.totp_list.key_action('↓');
+                    }
+                    _ => unimplemented!(),
+                }
+                self.totp_code = None;
+            }
+        }
     }
 
     pub(crate) fn filter(&mut self, criteria: &String) {

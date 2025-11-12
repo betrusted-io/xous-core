@@ -285,20 +285,29 @@ fn main() -> ! {
     let modals = modals::Modals::new(&xns).unwrap();
     vault_ui.apply_glyph_style();
 
+    // reload the database
+    xous::send_message(
+        actions_conn,
+        xous::Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0),
+    )
+    .ok();
+    vault_ui.refresh_totp();
+
     // kickstart the pumper
     xous::send_message(pump_conn, xous::Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0))
         .expect("couldn't start the pumper");
     let mut menu_active = false;
     loop {
         let msg = xous::receive_message(sid).unwrap();
-        log::debug!("Got message: {:?}", msg.body.id());
+        log::trace!("Got message: {:?}", msg.body.id());
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(VaultOp::Redraw) => {
-                log::debug!("Got redraw");
                 vault_ui.redraw();
             }
             Some(VaultOp::MenuDone) => {
                 menu_active = false;
+                // update the TOTP codes, in case there were changes
+                vault_ui.refresh_totp();
                 allow_totp_rendering.store(true, Ordering::SeqCst);
                 vault_ui.redraw();
             }
@@ -336,6 +345,21 @@ fn main() -> ! {
                     }
                 }
             }),
+            Some(VaultOp::MenuEditStage1) => {
+                // stage 1 happens here because the filtered list and selection entry are in the responsive UX
+                // section.
+                log::debug!("selecting entry for edit");
+                if let Some(entry) = vault_ui.selected_entry() {
+                    let buf = Buffer::into_buf(entry).expect("IPC error");
+                    buf.send(actions_conn, ActionOp::MenuEditStage2.to_u32().unwrap())
+                        .expect("messaging error");
+                } else {
+                    // this will block redraws
+                    allow_totp_rendering.store(false, Ordering::SeqCst);
+                    modals.show_notification(t!("vault.error.nothing_selected", locales::LANG), None).ok();
+                    allow_totp_rendering.store(true, Ordering::SeqCst);
+                }
+            }
             Some(VaultOp::MenuChangeFont) => {
                 for item in FONT_LIST {
                     modals.add_list_item(item).expect("couldn't build radio item list");

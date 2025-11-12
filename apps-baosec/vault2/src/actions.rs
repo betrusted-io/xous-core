@@ -1105,12 +1105,12 @@ impl ActionManager {
                         }
                         if oom_keys != 0 {
                             log::warn!(
-                                "Ran out of cache space handling FIDO2 tokens. {} tokens are not loaded.",
+                                "Ran out of cache space handling TOTP. {} entries are not loaded.",
                                 oom_keys
                             );
                             self.report_err(
                                 &format!(
-                                    "Ran out of cache space handling FIDO2 entries. {} tokens not loaded",
+                                    "Ran out of cache space handling TOTP. {} entries not loaded",
                                     oom_keys
                                 ),
                                 None::<crate::storage::Error>,
@@ -1123,8 +1123,8 @@ impl ActionManager {
                                 // this is fine, it just means no entries have been entered yet
                             }
                             _ => {
-                                log::error!("Error opening FIDO2 dictionary");
-                                self.report_err("Error opening FIDO2 dictionary", Some(e))
+                                log::error!("Error opening TOTP dictionary");
+                                self.report_err("Error opening TOTP dictionary", Some(e))
                             }
                         }
                     }
