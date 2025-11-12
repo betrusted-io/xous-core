@@ -44,18 +44,27 @@ Open a serial monitor to interact with a device.
 
 **Options:**
 - `-p, --port` (required): Serial port (e.g., `COM5`, `/dev/ttyUSB0`)
-- `-b, --baud`: Baud rate (default: 115200)
-- `--ts`: Show timestamps on received lines
-- `--save`: Append output to a file
-- `--reset`: Toggle DTR/RTS on open
-- `--crlf`: Use CRLF as TX line ending (default LF)
+- `-b, --baud`: Baud rate (default: 1000000)
 - `--raw`: Send keystrokes immediately (raw mode)
+- `--crlf`: Use CRLF as TX line ending (default LF)
 - `--no-echo`: Do not locally echo typed input
-- `--rtscts`, `--xonxoff`, `--dsrdtr`: Enable hardware/software flow control
+- `--save <file>`: Append output to a file
+
+Defaults (PuTTY-style):
+ - --raw enabled
+ - --no-echo enabled
+ - --crlf enabled
 
 **Usage:**
 ```sh
-python tools-bao/bao.py monitor -p COM3 --ts
+# Typical usage
+python tools-bao/bao.py monitor -p COM8
+
+# Line mode with local echo
+python tools-bao/bao.py monitor -p /dev/ttyUSB0 --no-raw --echo
+
+# Save session output to a file
+python tools-bao/bao.py monitor -p COM8 --save log.txt
 ```
 
 ### `flash`
