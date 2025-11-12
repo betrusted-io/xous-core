@@ -1,34 +1,78 @@
 import sys
-import time
+import os
+import contextlib
 import logging
 import threading
 from serial.serialutil import SerialException
 from utils.serial_utils import open_serial, safe_close
 
+
+@contextlib.contextmanager
+def _stdin_raw_noecho():
+    """Disable local echo & canonical mode so each keystroke is delivered immediately.
+    Works on POSIX and Windows; restores terminal settings on exit."""
+    if not sys.stdin.isatty():
+        yield
+        return
+
+    if os.name == "posix":
+        import termios, tty
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            new = termios.tcgetattr(fd)
+            # Turn off ECHO and ICANON (line buffering); keep CR as CR (no ICRNL)
+            new[3] &= ~(termios.ECHO | termios.ICANON)   # lflags
+            new[1] |= termios.OPOST                      # oflags: leave output processing on
+            new[0] &= ~termios.ICRNL                     # iflags: don't map CR->NL
+            termios.tcsetattr(fd, termios.TCSANOW, new)
+            tty.setcbreak(fd)  # per-char reads; Ctrl+C still raises KeyboardInterrupt
+            yield
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    else:
+        # Windows
+        import ctypes
+        from ctypes import wintypes
+        kernel32 = ctypes.windll.kernel32
+        hIn = kernel32.GetStdHandle(-10)  # STD_INPUT_HANDLE
+        old_mode = wintypes.DWORD()
+        if hIn != ctypes.c_void_p(-1).value and kernel32.GetConsoleMode(hIn, ctypes.byref(old_mode)):
+            try:
+                new_mode = old_mode.value
+                ENABLE_ECHO_INPUT = 0x0004
+                ENABLE_LINE_INPUT = 0x0002
+                # Keep PROCESSED_INPUT so Ctrl+C works as KeyboardInterrupt
+                new_mode &= ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT)
+                kernel32.SetConsoleMode(hIn, new_mode)
+                yield
+            finally:
+                kernel32.SetConsoleMode(hIn, old_mode)
+        else:
+            yield
+
+
 def _stdin_to_serial(ser, args, stop_event: threading.Event):
+    """Forward user input to the serial port (raw: per-byte, line: per-line)."""
     try:
         if getattr(args, "raw", False):
-            # Raw mode: read larger chunks for smooth pastes when available
-            while not stop_event.is_set():
-                chunk = (
-                    sys.stdin.buffer.read1(4096)
-                    if hasattr(sys.stdin.buffer, "read1")
-                    else sys.stdin.buffer.read(1)
-                )
-                if not chunk:
-                    break  # EOF
-                try:
-                    ser.write(chunk)
-                    ser.flush()
-                except SerialException:
-                    break
-                if not getattr(args, "no_echo", False):
-                    # Local echo (avoid double-echo if target already echoes)
+            with _stdin_raw_noecho():
+                while not stop_event.is_set():
+                    b = sys.stdin.buffer.read(1)
+                    if not b:
+                        break
                     try:
-                        sys.stdout.write(chunk.decode(errors="replace"))
-                        sys.stdout.flush()
-                    except Exception:
-                        pass
+                        ser.write(b)
+                        ser.flush()
+                    except SerialException:
+                        break
+                    # Local echo only if explicitly requested
+                    if not getattr(args, "no_echo", False):
+                        try:
+                            sys.stdout.write(b.decode(errors="replace"))
+                            sys.stdout.flush()
+                        except Exception:
+                            pass
         else:
             # Line mode: read a full line, normalize line ending
             tx_eol = b"\r\n" if getattr(args, "crlf", False) else b"\n"
@@ -46,7 +90,6 @@ def _stdin_to_serial(ser, args, stop_event: threading.Event):
                     break
                 if not getattr(args, "no_echo", False):
                     try:
-                        # Echo what we sent, as a single line locally
                         sys.stdout.write(line.decode(errors="replace") + ("\r\n" if tx_eol == b"\r\n" else "\n"))
                         sys.stdout.flush()
                     except Exception:
@@ -57,16 +100,10 @@ def _stdin_to_serial(ser, args, stop_event: threading.Event):
         stop_event.set()
 
 def cmd_monitor(args) -> None:
-    # Open with flow-control / write-timeout if provided
     ser = open_serial(
         args.port,
         args.baud,
         timeout=0.1,
-        reset=getattr(args, "reset", False),
-        rtscts=getattr(args, "rtscts", False),
-        xonxoff=getattr(args, "xonxoff", False),
-        dsrdtr=getattr(args, "dsrdtr", False),
-        write_timeout=getattr(args, "write_timeout", 1.0),
     )
     outf = None
     if getattr(args, "save", None):
@@ -77,43 +114,10 @@ def cmd_monitor(args) -> None:
             safe_close(ser)
             return
 
-    # Initial line states (optional)
-    if getattr(args, "dtr", None) is not None:
-        try:
-            ser.dtr = bool(args.dtr)
-        except Exception:
-            pass
-    if getattr(args, "rts", None) is not None:
-        try:
-            ser.rts = bool(args.rts)
-        except Exception:
-            pass
-
-    # Optional flush on connect
-    if not getattr(args, "no_flush", False):
-        try:
-            ser.reset_input_buffer()
-            ser.reset_output_buffer()
-        except Exception:
-            pass
-
-    # Optional BREAK at start
-    if getattr(args, "break_ms", 0) > 0:
-        try:
-            ser.send_break(duration=args.break_ms / 1000.0)
-        except Exception:
-            pass
-
     print(f"[bao] Monitor {args.port} @ {args.baud} — interactive (Ctrl+C to exit)")
     mode = "RAW" if getattr(args, "raw", False) else ("LINE CRLF" if getattr(args, "crlf", False) else "LINE LF")
     echo = "OFF" if getattr(args, "no_echo", False) else "ON"
-    ts   = "ON" if getattr(args, "ts", False) else "OFF"
-    fc   = ",".join(n for n, on in [
-        ("RTS/CTS", getattr(args, "rtscts", False)),
-        ("XON/XOFF", getattr(args, "xonxoff", False)),
-        ("DSR/DTR", getattr(args, "dsrdtr", False)),
-    ] if on) or "none"
-    print(f"[bao] RX ts:{ts}  TX:{mode}  Echo:{echo}  Flow:{fc}")
+    print(f"[bao] TX:{mode}  Echo:{echo}")
 
     consecutive_errors = 0
     stop_event = threading.Event()
@@ -128,22 +132,21 @@ def cmd_monitor(args) -> None:
                 data = ser.read(4096)
                 if data:
                     s = data.decode(errors="replace")
-                    if getattr(args, "ts", False):
-                        ts = time.strftime("%H:%M:%S")
-                        s = "".join(f"[{ts}] {line}\n" for line in s.splitlines())
                     sys.stdout.write(s)
                     if outf:
                         outf.write(s)
                     sys.stdout.flush()
                 consecutive_errors = 0
-                time.sleep(0.01)
             except SerialException as e:
                 consecutive_errors += 1
                 logging.warning(f"[bao] Serial error: {e}. Retrying ({consecutive_errors}/3)...")
-                time.sleep(0.25)
                 if consecutive_errors >= 3:
                     logging.error("[bao] Giving up. Check that no other program is using the port.")
                     break
+            # Small yield to avoid a hot loop when idle
+            if not stop_event.is_set():
+                import time
+                time.sleep(0.01)
     except KeyboardInterrupt:
         pass
     finally:
@@ -165,18 +168,16 @@ def register(subparsers) -> None:
     m = subparsers.add_parser("monitor", help="Open a serial monitor")
     m.add_argument("-p", "--port", required=True, help="Serial port (e.g., COM5, /dev/ttyUSB0)")
     m.add_argument("-b", "--baud", type=int, default=1000000, help="Baud rate")
-    m.add_argument("--ts", action="store_true", help="Show timestamps on received lines")
     m.add_argument("--save", help="Append output to a file")
-    m.add_argument("--reset", action="store_true", help="Toggle DTR/RTS on open")
     m.add_argument("--crlf", action="store_true", help="Use CRLF as TX line ending in line mode (default LF)")
     m.add_argument("--raw", action="store_true", help="Send keystrokes immediately (raw byte mode)")
     m.add_argument("--no-echo", action="store_true", help="Do not locally echo typed input")
-    m.add_argument("--rtscts",  action="store_true", help="Enable RTS/CTS hardware flow control")
-    m.add_argument("--xonxoff", action="store_true", help="Enable XON/XOFF software flow control")
-    m.add_argument("--dsrdtr",  action="store_true", help="Enable DSR/DTR hardware flow control")
-    m.add_argument("--write-timeout", type=float, default=1.0, help="Write timeout in seconds")
-    m.add_argument("--dtr", type=int, choices=[0,1], help="Initial DTR level (0/1)")
-    m.add_argument("--rts", type=int, choices=[0,1], help="Initial RTS level (0/1)")
-    m.add_argument("--no-flush", action="store_true", help="Do not flush buffers on connect")
-    m.add_argument("--break-ms", type=int, default=0, help="Send BREAK for N milliseconds after opening")
+
+    # PuTTY-like defaults for direct CLI use
+    m.set_defaults(
+        raw=True,      # per-keystroke
+        no_echo=True,  # device provides echo if any
+        crlf=True,     # Enter sends CRLF in line mode
+    )
+
     m.set_defaults(func=cmd_monitor)
