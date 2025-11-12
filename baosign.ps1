@@ -9,7 +9,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("baremetal", "dabao", "baosec")]
+    [ValidateSet("baremetal", "dabao", "baosec", "bootloader")]
     [string]$Config,
 
     [Parameter(Mandatory = $false)]
@@ -26,19 +26,24 @@ $SIGNING_DIR = ".\signing\fido-signer"
 # Define configurations and their associated images with function codes
 # Modify these mappings according to your actual image names and function codes
 $configurations = @{
-    "baremetal" = @(
+    "bootloader" = @(
+        @{ Image = "bao1x-boot0.img"; FunctionCode = "boot0" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
+        @{ Image = "bao1x-boot1.img"; FunctionCode = "boot1" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
+        @{ Image = "bao1x-alt-boot1.img"; FunctionCode = "loader" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" }
+    )
+    "baremetal"  = @(
         @{ Image = "bao1x-boot0.img"; FunctionCode = "boot0" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
         @{ Image = "bao1x-boot1.img"; FunctionCode = "boot1" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
         @{ Image = "baremetal.img"; FunctionCode = "baremetal" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" }
     )
-    "dabao"     = @(
+    "dabao"      = @(
         @{ Image = "bao1x-boot0.img"; FunctionCode = "boot0" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
         @{ Image = "bao1x-boot1.img"; FunctionCode = "boot1" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
         @{ Image = "loader.bin"; FunctionCode = "loader" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
         @{ Image = "xous.img"; FunctionCode = "kernel" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
-        @{ Image = "app.img"; FunctionCode = "app" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
+        @{ Image = "apps.img"; FunctionCode = "app" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
     )
-    "baosec"    = @(
+    "baosec"     = @(
         @{ Image = "bao1x-boot0.img"; FunctionCode = "boot0" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
         @{ Image = "bao1x-boot1.img"; FunctionCode = "boot1" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
         @{ Image = "loader.bin"; FunctionCode = "loader" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
