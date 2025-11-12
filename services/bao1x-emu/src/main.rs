@@ -124,12 +124,12 @@ fn main() {
                 log::error!("Invalid opcode received: {:?}", msg);
             }
             bao1x_api::HalOpcode::ConfigureBio => todo!(),
+            HalOpcode::SetPreemptionState => {
+                todo!("unimplemented opcode: {:?}", opcode);
+            }
             HalOpcode::Quit => {
                 log::info!("Received quit opcode, exiting.");
                 break;
-            }
-            HalOpcode::ConfigureBio | HalOpcode::UdmaIrqStatusBits | HalOpcode::SetPreemptionState => {
-                todo!("unimplemented opcode: {:?}", opcode);
             }
         }
     }
