@@ -67,7 +67,6 @@ pub struct Menu<'a> {
     pub gfx: Gfx,
     pub sid: xous::SID,
     pub items: Vec<MenuItem>,
-    pub index: usize, // currently selected item
     pub helper_data: Option<Buffer<'a>>,
     pub name: String,
     pub list: ScrollableList, // UI rendering element
@@ -106,7 +105,6 @@ impl<'a> Menu<'a> {
             gfx: Gfx::new(&xns).unwrap(),
             sid,
             items: Vec::new(),
-            index: 0,
             helper_data: None,
             name: String::from(name),
             list,
@@ -116,7 +114,7 @@ impl<'a> Menu<'a> {
         }
     }
 
-    pub fn set_index(&mut self, index: usize) { self.index = index; }
+    pub fn set_index(&mut self, index: usize) { self.list.set_selected(0, index).unwrap() }
 
     /// this function spawns a client-side thread to forward redraw and key event
     /// messages on to a local server. The goal is to keep the local server's SID
@@ -219,7 +217,9 @@ impl<'a> Menu<'a> {
             log::debug!("got key '{}'", k);
             match k {
                 '∴' => {
-                    let mi = &self.items[self.index];
+                    let (_, selected) = self.list.get_selected_index();
+                    log::info!("selected index {}", selected);
+                    let mi = &self.items[selected];
                     if let Some(action) = mi.action_conn {
                         log::debug!("doing menu action for {}", mi.name);
                         match mi.action_payload {
@@ -241,7 +241,7 @@ impl<'a> Menu<'a> {
                             }
                         }
                     }
-                    self.index = 0; // reset the index to 0
+                    self.list.set_selected(0, 0).ok(); // reset selection
                     if !mi.close_on_select {
                         self.redraw();
                     } else {

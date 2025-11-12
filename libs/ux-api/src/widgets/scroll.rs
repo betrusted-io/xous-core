@@ -36,6 +36,7 @@ pub enum TextAlignment {
 pub struct ScrollableList {
     items: Vec<Vec<String>>,
     /// corresponds to the index into `items` that should be rendered as selected
+    /// format is (col, row)
     select_index: (usize, usize),
     /// offset in the list that represents the top left drawable item
     scroll_offset: (usize, usize),
