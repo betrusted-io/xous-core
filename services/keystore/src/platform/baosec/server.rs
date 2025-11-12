@@ -35,6 +35,9 @@ pub fn keystore(sid: SID) -> ! {
                 store.aes_kwp(&mut kwp).expect("couldn't wrap key");
                 buffer.replace(kwp).unwrap();
             }
+            Opcode::EphemeralOp => {
+                todo!()
+            }
             Opcode::InvalidCall => {
                 log::error!("Invalid call in keystore: {:?}", opcode);
             }
