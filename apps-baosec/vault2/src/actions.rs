@@ -7,13 +7,19 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+#[cfg(feature = "hosted-baosec")]
+use bao1x_emu::trng::Trng;
+#[cfg(feature = "board-baosec")]
+use bao1x_hal_service::trng::Trng;
+use keystore::Keystore;
 use locales::t;
 use num_traits::*;
 use passwords::PasswordGenerator;
 use pddb::BasisRetentionPolicy;
 use persistent_store::store::OPENSK2_DICT;
-use vault::env::xous::U2F_APP_DICT;
-use vault::{
+use ux_api::widgets::TextEntryPayload;
+use vault2::env::xous::U2F_APP_DICT;
+use vault2::{
     AppInfo, VAULT_ALLOC_HINT, VAULT_PASSWORD_DICT, VAULT_TOTP_DICT, atime_to_str, basis_change,
     ctap::data_formats::PublicKeyCredentialSource, deserialize_app_info, serialize_app_info, utc_now,
 };
@@ -27,8 +33,18 @@ use crate::{ListItem, ListKey, storage::TotpRecord};
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
 const VAULT_TOTP_REC_VERSION: u32 = 1;
 
+const DENIABLE_BASIS_NAME: &'static str = "deniable";
+
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum ActionOp {
+    /// Menu items
+    MenuAddnew,
+    MenuEditStage2,
+    MenuDeleteStage2,
+    MenuUnlockBasis,
+    MenuManageBasis,
+    MenuClose,
+
     /// Internal ops
     UpdateMode,
     UpdateOneItem,
@@ -39,12 +55,12 @@ pub enum ActionOp {
     GenerateTests,
 }
 
-pub struct ActionManager<'a> {
+pub struct ActionManager {
     modals: modals::Modals,
     storage: RefCell<storage::Manager>,
 
     #[cfg(feature = "vault-testing")]
-    trng: RefCell<trng::Trng>,
+    trng: RefCell<Trng>,
 
     mode: Arc<Mutex<VaultMode>>,
     pub item_lists: Arc<Mutex<ItemLists>>,
@@ -54,15 +70,16 @@ pub struct ActionManager<'a> {
     opensk_mutex: Arc<Mutex<i32>>,
     mode_cache: VaultMode,
     main_conn: xous::CID,
+    keystore: Keystore,
 }
-impl<'a> ActionManager<'a> {
+impl ActionManager {
     pub fn new(
         main_conn: xous::CID,
         mode: Arc<Mutex<VaultMode>>,
         item_lists: Arc<Mutex<ItemLists>>,
         action_active: Arc<AtomicBool>,
         opensk_mutex: Arc<Mutex<i32>>,
-    ) -> ActionManager<'a> {
+    ) -> ActionManager {
         let xns = xous_names::XousNames::new().unwrap();
         let storage_manager = storage::Manager::new(&xns);
 
@@ -72,7 +89,7 @@ impl<'a> ActionManager<'a> {
             storage: RefCell::new(storage_manager),
 
             #[cfg(feature = "vault-testing")]
-            trng: RefCell::new(trng::Trng::new(&xns).unwrap()),
+            trng: RefCell::new(Trng::new(&xns).unwrap()),
 
             mode_cache: mc,
             mode,
@@ -82,6 +99,7 @@ impl<'a> ActionManager<'a> {
             action_active,
             opensk_mutex,
             main_conn,
+            keystore: Keystore::new(&xns),
         }
     }
 
@@ -96,15 +114,13 @@ impl<'a> ActionManager<'a> {
             (*self.mode.lock().unwrap()).clone()
         };
         self.action_active.store(true, Ordering::SeqCst);
-        #[cfg(feature = "ux-swap-delay")]
-        self.tt.sleep_ms(SWAP_DELAY_MS).unwrap(); // allow calling menu to close
     }
 
     pub(crate) fn deactivate(&self) {
         self.action_active.store(false, Ordering::SeqCst);
         send_message(
             self.main_conn,
-            Message::new_scalar(crate::VaultOp::FullRedraw.to_usize().unwrap(), 0, 0, 0, 0),
+            Message::new_scalar(crate::VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0),
         )
         .ok();
     }
@@ -127,8 +143,6 @@ impl<'a> ActionManager<'a> {
                         return;
                     }
                 };
-                #[cfg(feature = "ux-swap-delay")]
-                self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let username = match self
                     .modals
                     .alert_builder(t!("vault.newitem.username", locales::LANG))
@@ -142,8 +156,6 @@ impl<'a> ActionManager<'a> {
                         return;
                     }
                 };
-                #[cfg(feature = "ux-swap-delay")]
-                self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let mut approved = false;
                 let mut bip39 = false;
                 // Security note about PasswordGenerator. This is a 3rd party crate. It relies on `rand`'s
@@ -209,8 +221,6 @@ impl<'a> ActionManager<'a> {
                             return;
                         }
                     };
-                    #[cfg(feature = "ux-swap-delay")]
-                    self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                     password = if maybe_password.len() == 0 {
                         let length = match self
                             .modals
@@ -225,8 +235,6 @@ impl<'a> ActionManager<'a> {
                                 return;
                             }
                         };
-                        #[cfg(feature = "ux-swap-delay")]
-                        self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                         let mut upper = false;
                         let mut number = false;
                         let mut symbol = false;
@@ -275,8 +283,6 @@ impl<'a> ActionManager<'a> {
                                     .ok();
                             }
                         }
-                        #[cfg(feature = "ux-swap-delay")]
-                        self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                         let pg2 = PasswordGenerator {
                             length: *length as usize,
                             numbers: number,
@@ -327,10 +333,6 @@ impl<'a> ActionManager<'a> {
                 let li = make_pw_item_from_record(&storage::hex(record.hash()), record);
                 self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
             }
-            VaultMode::Fido => {
-                self.report_err(t!("vault.error.add_fido2", locales::LANG), None::<std::io::Error>);
-                // no DB entry update because it's an error to even get here
-            }
             VaultMode::Totp => {
                 let description = match self
                     .modals
@@ -346,8 +348,6 @@ impl<'a> ActionManager<'a> {
                     }
                 };
 
-                #[cfg(feature = "ux-swap-delay")]
-                self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 self.modals
                     .add_list(vec![
                         t!("vault.newitem.totp", locales::LANG),
@@ -370,8 +370,6 @@ impl<'a> ActionManager<'a> {
                     }
                 }
 
-                #[cfg(feature = "ux-swap-delay")]
-                self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let secret = match self
                     .modals
                     .alert_builder(t!("vault.newitem.totp_ss", locales::LANG))
@@ -385,8 +383,7 @@ impl<'a> ActionManager<'a> {
                         return;
                     }
                 };
-                #[cfg(feature = "ux-swap-delay")]
-                self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+
                 let ss = secret.to_uppercase();
                 let ss_vec = if let Some(ss) =
                     base32::decode(base32::Alphabet::RFC4648 { padding: false }, &ss)
@@ -408,8 +405,6 @@ impl<'a> ActionManager<'a> {
 
                 let timestep = if !is_totp {
                     // get the initial count if it's an HOTP record
-                    #[cfg(feature = "ux-swap-delay")]
-                    self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                     match self
                         .modals
                         .alert_builder(t!("vault.hotp.count", locales::LANG))
@@ -536,7 +531,6 @@ impl<'a> ActionManager<'a> {
         let choice = match entry.mode {
             VaultMode::Password => Some(storage::ContentKind::Password),
             VaultMode::Totp => Some(storage::ContentKind::TOTP),
-            VaultMode::Fido => None,
         };
 
         if choice.is_none() {
@@ -819,8 +813,6 @@ impl<'a> ActionManager<'a> {
                                 return;
                             }
                         };
-                        #[cfg(feature = "ux-swap-delay")]
-                        self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                         password = if maybe_password.len() == 0 {
                             let length = match self
                                 .modals
@@ -835,8 +827,6 @@ impl<'a> ActionManager<'a> {
                                     return;
                                 }
                             };
-                            #[cfg(feature = "ux-swap-delay")]
-                            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                             let mut upper = false;
                             let mut number = false;
                             let mut symbol = false;
@@ -885,8 +875,6 @@ impl<'a> ActionManager<'a> {
                                         .ok();
                                 }
                             }
-                            #[cfg(feature = "ux-swap-delay")]
-                            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                             let pg2 = PasswordGenerator {
                                 length: length as usize,
                                 numbers: number,
@@ -946,14 +934,6 @@ impl<'a> ActionManager<'a> {
         }
     }
 
-    #[cfg(feature = "vaultperf")]
-    #[inline]
-    /// create performance logger entries
-    pub fn perfentry(&self, pm: &PerfMgr, meta: u32, index: u32, line: u32) {
-        let event = perf_entry!(self.pid, FILE_ID_APPS_VAULT_SRC_ACTIONS, meta, index, line);
-        pm.log_event_unchecked(event);
-    }
-
     pub(crate) fn is_db_empty(&mut self) -> bool {
         self.mode_cache = {
             // Wrap this in a block so the lock Drops. This comment keeps rustfmt from shortening the block
@@ -970,13 +950,6 @@ impl<'a> ActionManager<'a> {
     ///   - `format!()` is very slow, so we use `push_str()` where possible
     ///   - allocations are slow, so we try to avoid them at all costs
     pub(crate) fn retrieve_db(&mut self) {
-        #[cfg(feature = "vaultperf")]
-        self.pm.stop_and_reset();
-        #[cfg(feature = "vaultperf")]
-        self.pm.start();
-        #[cfg(feature = "vaultperf")]
-        self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 0, std::line!());
-
         self.mode_cache = {
             // Wrap this in a block so the lock Drops. This comment keeps rustfmt from shortening the block
             // and then clippy from complaining about unused braces.
@@ -989,13 +962,9 @@ impl<'a> ActionManager<'a> {
                     .dynamic_notification(Some(t!("vault.reloading_database", locales::LANG)), None)
                     .ok();
                 let start = self.tt.elapsed_ms();
-                #[cfg(feature = "vaultperf")]
-                self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 1, std::line!());
                 let mut klen = 0;
                 match self.pddb.borrow().read_dict(VAULT_PASSWORD_DICT, None, Some(256 * 1024)) {
                     Ok(keys) => {
-                        #[cfg(feature = "vaultperf")]
-                        self.perfentry(&self.pm, PERFMETA_NONE, 1, std::line!());
                         let mut oom_keys = 0;
                         // allocate a re-usable temporary buffers, to avoid triggering allocs
                         let mut pw_rec = PasswordRecord::alloc();
@@ -1006,14 +975,10 @@ impl<'a> ActionManager<'a> {
                         // pre-reserve the space at the top, to avoid lots of allocs
                         il.expand(self.mode_cache, keys.len());
                         for key in keys {
-                            #[cfg(feature = "vaultperf")]
-                            self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 2, std::line!());
                             if let Some(data) = key.data {
                                 if pw_rec.from_vec(data).is_ok() {
                                     // reset the re-usable structures
                                     extra.clear();
-                                    #[cfg(feature = "vaultperf")]
-                                    self.perfentry(&self.pm, PERFMETA_NONE, 2, std::line!());
 
                                     // build the description string
                                     make_pw_name(&pw_rec.description, &pw_rec.username, &mut desc);
@@ -1021,14 +986,8 @@ impl<'a> ActionManager<'a> {
                                     // build the storage key in the list array
                                     lookup_key.reset_from_parts(&desc, &key.name);
 
-                                    #[cfg(feature = "vaultperf")]
-                                    self.perfentry(&self.pm, PERFMETA_NONE, 2, std::line!());
                                     if let Some(prev_entry) = il.get(self.mode_cache, &lookup_key) {
-                                        #[cfg(feature = "vaultperf")]
-                                        self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 3, std::line!());
                                         prev_entry.dirty = true;
-                                        #[cfg(feature = "vaultperf")]
-                                        self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
                                         if prev_entry.atime != pw_rec.atime
                                             || prev_entry.count != pw_rec.count
                                         {
@@ -1042,25 +1001,16 @@ impl<'a> ActionManager<'a> {
                                             prev_entry.extra.clear();
                                             prev_entry.extra.push_str(&extra);
                                         }
-                                        #[cfg(feature = "vaultperf")]
-                                        self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
                                         if prev_entry.name() != &desc {
                                             // this check should be redundant, but, leave it in to be safe
                                             prev_entry.name_clear();
                                             prev_entry.name_push_str(&desc);
                                         }
-                                        #[cfg(feature = "vaultperf")]
-                                        self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
                                         if prev_entry.guid != key.name {
                                             prev_entry.guid.clear();
                                             prev_entry.guid.push_str(&key.name);
                                         }
-                                        #[cfg(feature = "vaultperf")]
-                                        self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 3, std::line!());
                                     } else {
-                                        #[cfg(feature = "vaultperf")]
-                                        self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 4, std::line!());
-
                                         let human_time = atime_to_str(pw_rec.atime);
 
                                         extra.push_str(&human_time);
@@ -1078,8 +1028,6 @@ impl<'a> ActionManager<'a> {
                                             pw_rec.count,
                                         );
                                         il.push(self.mode_cache, li);
-                                        #[cfg(feature = "vaultperf")]
-                                        self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 4, std::line!());
                                     }
 
                                     klen += 1;
@@ -1102,8 +1050,6 @@ impl<'a> ActionManager<'a> {
                                 */
                                 oom_keys += 1;
                             }
-                            #[cfg(feature = "vaultperf")]
-                            self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 2, std::line!());
                         }
                         log::debug!("before fixup_filter: {}", self.tt.elapsed_ms() - start);
                         il.filter_reset(self.mode_cache);
@@ -1133,131 +1079,8 @@ impl<'a> ActionManager<'a> {
                         }
                     }
                 }
-                #[cfg(feature = "vaultperf")]
-                self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 1, std::line!());
                 log::info!("readout took {} ms for {} elements", self.tt.elapsed_ms() - start, klen);
                 self.modals.dynamic_notification_close().ok();
-            }
-            VaultMode::Fido => {
-                // first assemble U2F records
-                log::debug!("listing in {}", U2F_APP_DICT);
-                // regen from scratch every time, It's slow, but we're counting on <20 FIDO entries on average
-                self.item_lists.lock().unwrap().clear(self.mode_cache);
-                match self.pddb.borrow().read_dict(U2F_APP_DICT, None, Some(256 * 1024)) {
-                    Ok(keys) => {
-                        let mut oom_keys = 0;
-                        for key in keys {
-                            if let Some(data) = key.data {
-                                if let Some(ai) = deserialize_app_info(data) {
-                                    let li = make_u2f_item_from_record(&key.name, ai);
-                                    self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
-                                } else {
-                                    let err = format!(
-                                        "{}:{}:{}: ({})[moved data]...",
-                                        key.basis, U2F_APP_DICT, key.name, key.len
-                                    );
-                                    self.report_err("Couldn't deserialize U2F key:", Some(err));
-                                }
-                            } else {
-                                oom_keys += 1;
-                            }
-                        }
-                        if oom_keys != 0 {
-                            log::warn!(
-                                "Ran out of cache space handling U2F tokens. {} tokens are not loaded.",
-                                oom_keys
-                            );
-                            self.report_err(
-                                &format!(
-                                    "Ran out of cache space handling U2F entries. {} tokens not loaded",
-                                    oom_keys
-                                ),
-                                None::<crate::storage::Error>,
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        match e.kind() {
-                            ErrorKind::NotFound => {
-                                // this is fine, it just means no entries have been entered yet
-                            }
-                            _ => {
-                                log::error!("Error opening U2F dictionary");
-                                self.report_err("Error opening U2F dictionary", Some(e))
-                            }
-                        }
-                    }
-                }
-
-                {
-                    // this brace creates a block that defines the lifetime of `mutex`; it is released on drop
-                    // as it goes out of scope access to OPENSK2_DICT has to be
-                    // mutex-guarded, otherwise we get errors as the OpenSK thread mutates
-                    // the dictionary while we query it
-                    let mutex = self.opensk_mutex.lock().unwrap();
-                    log::debug!("listing in {}", OPENSK2_DICT);
-                    match self.pddb.borrow().read_dict(OPENSK2_DICT, None, Some(256 * 1024)) {
-                        Ok(keys) => {
-                            let mut oom_keys = 0;
-                            for key in keys {
-                                let key_number = key.name.parse::<usize>().unwrap_or(0);
-                                if vault::ctap::storage::key::CREDENTIALS.contains(&key_number) {
-                                    if let Some(data) = key.data {
-                                        match vault::ctap::storage::deserialize_credential(&data) {
-                                            Some(result) => {
-                                                let li = make_fido_item_from_record(&key.name, result);
-                                                self.item_lists
-                                                    .lock()
-                                                    .unwrap()
-                                                    .insert_unique(self.mode_cache, li);
-                                            }
-                                            None => {
-                                                // Probably more indicative of a mismatch in OpenSK key range
-                                                // mapping, rather than a hard error.
-                                                let err = format!(
-                                                    "{}:{}:{}: ({}){:x?}...",
-                                                    key.basis,
-                                                    OPENSK2_DICT,
-                                                    key.name,
-                                                    key.len,
-                                                    &data[..16]
-                                                );
-                                                log::info!("Couldn't deserialize FIDO2 key {}", err);
-                                            }
-                                        }
-                                    } else {
-                                        oom_keys += 1;
-                                    }
-                                }
-                            }
-                            if oom_keys != 0 {
-                                log::warn!(
-                                    "Ran out of cache space handling FIDO2 tokens. {} tokens are not loaded.",
-                                    oom_keys
-                                );
-                                self.report_err(
-                                    &format!(
-                                        "Ran out of cache space handling FIDO2 entries. {} tokens not loaded",
-                                        oom_keys
-                                    ),
-                                    None::<crate::storage::Error>,
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            match e.kind() {
-                                ErrorKind::NotFound => {
-                                    // this is fine, it just means no entries have been entered yet
-                                }
-                                _ => {
-                                    log::error!("Error opening FIDO2 dictionary");
-                                    self.report_err("Error opening FIDO2 dictionary", Some(e))
-                                }
-                            }
-                        }
-                    }
-                    drop(mutex);
-                }
             }
             VaultMode::Totp => {
                 self.item_lists.lock().unwrap().clear(self.mode_cache);
@@ -1310,54 +1133,24 @@ impl<'a> ActionManager<'a> {
         }
         self.item_lists.lock().unwrap().filter_reset(self.mode_cache);
         log::debug!("heap usage B: {}", heap_usage());
-        #[cfg(feature = "vaultperf")]
-        {
-            self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 0, std::line!());
-            self.pm.flush().ok();
-            match self.pm.stop_and_flush() {
-                Ok(entries) => {
-                    log::info!("entries: {}", entries);
-                }
-                _ => {
-                    log::info!("Perfcounter OOM'd during run");
-                }
-            }
-            log::info!("Buf vmem loc: {:x}", self.perfbuf.as_ptr() as u32);
-            log::info!(
-                "Buf pmem loc: {:x}",
-                xous::syscall::virt_to_phys(self.perfbuf.as_ptr() as usize).unwrap_or(0)
-            );
-            log::info!("PerfLogEntry size: {}", core::mem::size_of::<PerfLogEntry>());
-            log::info!("Now printing the page table mapping for the performance buffer:");
-            for page in (0..BUFLEN).step_by(4096) {
-                log::info!(
-                    "V|P {:x} {:x}",
-                    self.perfbuf.as_ptr() as usize + page,
-                    xous::syscall::virt_to_phys(self.perfbuf.as_ptr() as usize + page).unwrap_or(0),
-                );
-            }
-        }
+    }
+
+    /// This is just a placeholder function - needs to be upgraded to consider prompting the user for
+    /// a PIN value, etc.
+    pub(crate) fn get_pin_key(&self) -> [u8; 32] {
+        let mut key = [0u8; 32];
+        key[..16].copy_from_slice(&self.keystore.get_volatile_secret().expect("PIN not set"));
+        key
     }
 
     pub(crate) fn unlock_basis(&mut self) {
-        let name = match self
-            .modals
-            .alert_builder(t!("vault.basis.name", locales::LANG))
-            .field(None, Some(name_validator))
-            .build()
-        {
-            Ok(text) => &text.content()[0].content,
-            _ => {
-                log::error!("Name entry failed");
-                self.action_active.store(false, Ordering::SeqCst);
-                return;
-            }
-        };
-        #[cfg(feature = "ux-swap-delay")]
-        self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
-        match self.pddb.borrow().unlock_basis(&name, Some(BasisRetentionPolicy::Persist)) {
+        match self.pddb.borrow().unlock_basis(
+            DENIABLE_BASIS_NAME,
+            &self.get_pin_key(),
+            Some(BasisRetentionPolicy::Persist),
+        ) {
             Ok(_) => {
-                log::debug!("Basis {} unlocked", name);
+                log::debug!("Basis {} unlocked", DENIABLE_BASIS_NAME);
                 // clear local caches
                 self.item_lists.lock().unwrap().clear_all();
             }
@@ -1406,13 +1199,14 @@ impl<'a> ActionManager<'a> {
                         return;
                     }
                 };
-                #[cfg(feature = "ux-swap-delay")]
-                self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
-                match self.pddb.borrow().create_basis(&name) {
+                match self.pddb.borrow().create_basis(&name, &self.get_pin_key()) {
                     Ok(_) => {
                         if self.yes_no_approval(t!("vault.basis.created_mount", locales::LANG)) {
-                            match self.pddb.borrow().unlock_basis(&name, Some(BasisRetentionPolicy::Persist))
-                            {
+                            match self.pddb.borrow().unlock_basis(
+                                &name,
+                                &self.get_pin_key(),
+                                Some(BasisRetentionPolicy::Persist),
+                            ) {
                                 Ok(_) => {
                                     log::debug!("Basis {} unlocked", name);
                                     // clear local caches
@@ -1539,106 +1333,7 @@ impl<'a> ActionManager<'a> {
                 };
             }
         }
-        // --- U2F + FIDO ---
-        let fido = self.pddb.borrow().list_keys(OPENSK2_DICT, None).unwrap_or(Vec::new());
-        let u2f = self.pddb.borrow().list_keys(U2F_APP_DICT, None).unwrap_or(Vec::new());
-        let total = fido.len() + u2f.len();
-        if total < TARGET_ENTRIES {
-            let extra_u2f = (TARGET_ENTRIES - total) / 2;
-            let extra_fido = TARGET_ENTRIES - extra_u2f;
-            for index in 0..extra_u2f {
-                let n = random_pick::pick_multiple_from_slice(&words, &weights, 2);
-                let name = format!("{} {}", n[0], n[1]);
-                let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
-                let mut id = [0u8; 32];
-                self.trng.borrow_mut().fill_bytes_via_next(&mut id);
-                let record = vault::AppInfo {
-                    name,
-                    id,
-                    notes,
-                    ctime: 1, // zero ctime is disallowed
-                    atime: 1,
-                    count: 0,
-                };
-                let ser = serialize_app_info(&record);
-                let app_id_str = hex::encode(id);
-                match self.pddb.borrow().get(
-                    U2F_APP_DICT,
-                    &app_id_str,
-                    None,
-                    true,
-                    true,
-                    Some(256),
-                    Some(basis_change),
-                ) {
-                    Ok(mut app_data) => match app_data.write(&ser) {
-                        Ok(len) => {
-                            log::debug!("u2f wrote {} bytes", len);
-                            self.modals
-                                .dynamic_notification_update(
-                                    Some(&format!("u2f entry {}, {} bytes", index, len)),
-                                    None,
-                                )
-                                .ok();
-                        }
-                        Err(e) => log::error!("U2F Error: {:?}", e),
-                    },
-                    _ => log::error!("U2F Error creating record"),
-                }
-            }
-            let xns = xous_names::XousNames::new().unwrap();
-            let mut rng = ctap_crypto::rng256::XousRng256::new(&xns);
-            for index in 0..extra_fido {
-                use ctap_crypto::rng256::Rng256;
-                use vault::ctap::data_formats::*;
-                let _c_id = random_pick::pick_multiple_from_slice(&words, &weights, 2);
-                let cred_id = format!("{}", index + 1800); // 1800 is extracted from ctap/storage/keys.rs; 1700 is the start of the credential region, this sticks it...somewhere "above" that
-                let r_id = random_pick::pick_multiple_from_slice(&words, &weights, 2);
-                let rp_id = format!("{} {}", r_id[0], r_id[1]);
-                let handle = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
-                let new_credential = PublicKeyCredentialSource {
-                    key_type: PublicKeyCredentialType::PublicKey,
-                    credential_id: rng.gen_uniform_u8x32().to_vec(),
-                    private_key: vault::ctap::crypto_wrapper::PrivateKey::Ecdsa(rng.gen_uniform_u8x32()),
-                    rp_id,
-                    user_handle: handle.as_bytes().to_vec(),
-                    user_display_name: None,
-                    cred_protect_policy: None,
-                    creation_order: 0,
-                    user_name: None,
-                    user_icon: None,
-                    cred_blob: None,
-                    large_blob_key: None,
-                };
-                let shortid = &cred_id;
-                match self.pddb.borrow().get(
-                    OPENSK2_DICT,
-                    shortid,
-                    None,
-                    true,
-                    true,
-                    Some(128),
-                    Some(basis_change),
-                ) {
-                    Ok(mut cred) => {
-                        let value = vault::ctap::storage::serialize_credential(new_credential).unwrap();
-                        match cred.write(&value) {
-                            Ok(len) => {
-                                log::debug!("fido2 wrote {} bytes", len);
-                                self.modals
-                                    .dynamic_notification_update(
-                                        Some(&format!("fido2 entry {}, {} bytes", index, len)),
-                                        None,
-                                    )
-                                    .ok();
-                            }
-                            Err(e) => log::error!("FIDO2 Error: {:?}", e),
-                        }
-                    }
-                    _ => log::error!("couldn't create FIDO2 credential"),
-                }
-            }
-        }
+
         // TOTP
         let totp = self.pddb.borrow().list_keys(VAULT_TOTP_DICT, None).unwrap_or(Vec::new());
         if totp.len() < TARGET_ENTRIES {
@@ -1761,31 +1456,6 @@ fn count_validator(input: &TextEntryPayload) -> Option<String> {
         Ok(_input_int) => None,
         _ => Some(String::from(t!("vault.illegal_count", locales::LANG))),
     }
-}
-
-#[cfg(feature = "vaultperf")]
-fn build_perf_mgr<'a>(bufptr: *mut u8) -> PerfMgr<'a> {
-    use utralib::generated::*;
-    let perf_csr = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utra::perfcounter::HW_PERFCOUNTER_BASE),
-        None,
-        4096,
-        xous::MemoryFlags::R | xous::MemoryFlags::W,
-    )
-    .expect("couldn't map perfcounter CSR range: check that no other performance managers are active");
-    // this is the range used by the shellchat performance manager
-    let event1_csr = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utra::event_source1::HW_EVENT_SOURCE1_BASE),
-        None,
-        4096,
-        xous::MemoryFlags::R | xous::MemoryFlags::W,
-    )
-    .expect("couldn't map event1 CSR range");
-    PerfMgr::new(
-        bufptr,
-        AtomicCsr::new(perf_csr.as_mut_ptr() as *mut u32),
-        AtomicCsr::new(event1_csr.as_mut_ptr() as *mut u32), // event_source1
-    )
 }
 
 pub(crate) fn heap_usage() -> usize {

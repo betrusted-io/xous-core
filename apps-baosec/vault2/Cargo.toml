@@ -27,17 +27,20 @@ ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.65" }
 userprefs = { path = "../../libs/userprefs" }
 ux-api = { path = "../../libs/ux-api" }
 bao1x-api = { path = "../../libs/bao1x-api" }
+bao1x-hal = { path = "../../libs/bao1x-hal" }
 bao1x-hal-service = { path = "../../services/bao1x-hal-service", optional = true }
 bao1x-emu = { path = "../../services/bao1x-emu", optional = true }
 blitstr2 = { path = "../../libs/blitstr2" }
 usb-bao1x = { path = "../../services/usb-bao1x" }
+xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main" }
+keystore = { path = "../../services/keystore" }
 
 # opensk
-# ctap-crypto = { path = "libraries/crypto" }
-# cbor = { path = "libraries/cbor" }
-# persistent_store = { path = "libraries/persistent_store" }
-# ed25519-compact = { version = "1", default-features = false, optional = true }
-# rand = { version = "0.8.5", optional = true }
+ctap-crypto = { path = "../../apps/vault/libraries/crypto" }
+cbor = { path = "../../apps/vault/libraries/cbor" }
+persistent_store = { path = "../../apps/vault/libraries/persistent_store" }
+ed25519-compact = { version = "1", default-features = false, optional = true }
+rand = { version = "0.8.5", optional = true }
 
 # ux formatting
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
@@ -71,19 +74,22 @@ board-baosec = [
 ]
 hosted-baosec = ["bao1x-emu", "ux-api/hosted-baosec", "usb-bao1x/hosted-baosec"]
 
-# with_ctap1 = ["ctap-crypto/with_ctap1"]
+with_ctap1 = ["ctap-crypto/with_ctap1"]
 vendor_hid = []
 std = []
 fuzz = []
 debug_ctap = []
 autotest = []
-multireset = []                 # allows credential reset more than once per boot
+multireset = [] # allows credential reset more than once per boot
 vault-testing = ["random-pick"]
-# introduce a slight delay after UX boxes swap, in case of race conditions. Shouldn't be necessary anymore, but kept around in case there's a new edge case we missed.
-ux-swap-delay = []
 osk-upgrade = [
 ] # placeholder to select out OpenSK's "vendor upgrade" over HID, which we don't use because we have our own upgrade path.
 xous = [
 ] # marks xous-specific code segments deep inside the CTAP crate. Mostly to help evaluate if a patch is even feasible in the future.
-# ed25519 = ["ed25519-compact"]
-default = [] # testing removed for release tag
+ed25519 = ["ed25519-compact"]
+default = [
+    "with_ctap1",
+    "ed25519",
+    "xous",
+    "vault-testing", # testing removed for release tag
+]

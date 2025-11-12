@@ -84,7 +84,7 @@ impl Manager {
     pub fn new(_xns: &xous_names::XousNames) -> Manager { Manager { pddb: pddb::Pddb::new() } }
 
     fn pddb_exists(&self, dict: &str, key_name: &str, basis: Option<String>) -> bool {
-        match self.pddb.get(dict, &key_name, basis.as_deref(), false, false, None, Some(vault::basis_change))
+        match self.pddb.get(dict, &key_name, basis.as_deref(), false, false, None, Some(vault2::basis_change))
         {
             Ok(_) => return true,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
@@ -117,7 +117,7 @@ impl Manager {
             // exist
             true,
             alloc_hint,
-            Some(vault::basis_change),
+            Some(vault2::basis_change),
         ) {
             Ok(mut data) => match data.write(payload) {
                 Ok(_) => match sync {
@@ -131,7 +131,7 @@ impl Manager {
     }
 
     fn pddb_get(&self, dict: &str, key_name: &str) -> Result<Vec<u8>, Error> {
-        match self.pddb.get(dict, key_name, None, false, false, None, Some(vault::basis_change)) {
+        match self.pddb.get(dict, key_name, None, false, false, None, Some(vault2::basis_change)) {
             Ok(mut record) => {
                 let mut data = Vec::<u8>::new();
                 record.read_to_end(&mut data)?;
@@ -142,7 +142,7 @@ impl Manager {
     }
 
     fn basis_for_key(&self, dict: &str, key_name: &str) -> Result<String, Error> {
-        match self.pddb.get(dict, key_name, None, false, false, None, Some(vault::basis_change)) {
+        match self.pddb.get(dict, key_name, None, false, false, None, Some(vault2::basis_change)) {
             Ok(record) => Ok(record.attributes().expect("couldn't get key attributes").basis),
             Err(e) => return Err(Error::IoError(e)),
         }

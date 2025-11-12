@@ -1,4 +1,5 @@
-use core::fmt::Write;
+use core::fmt::Write as TextViewWrite;
+use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
 use blitstr2::GlyphStyle;
@@ -9,6 +10,35 @@ use ux_api::widgets::ScrollableList;
 use xous::CID;
 
 use crate::*;
+
+pub const DEFAULT_FONT: GlyphStyle = GlyphStyle::Bold;
+pub const FONT_LIST: [&'static str; 6] = ["regular", "tall", "mono", "bold", "large", "small"];
+pub fn name_to_style(name: &str) -> Option<GlyphStyle> {
+    match name {
+        "regular" => Some(GlyphStyle::Regular),
+        "tall" => Some(GlyphStyle::Tall),
+        "mono" => Some(GlyphStyle::Monospace),
+        "cjk" => Some(GlyphStyle::Cjk),
+        "bold" => Some(GlyphStyle::Bold),
+        "large" => Some(GlyphStyle::Large),
+        "small" => Some(GlyphStyle::Small),
+        _ => None,
+    }
+}
+fn style_to_name(style: &GlyphStyle) -> String {
+    match style {
+        GlyphStyle::Regular => "regular".to_string(),
+        GlyphStyle::Monospace => "mono".to_string(),
+        GlyphStyle::Cjk => "cjk".to_string(),
+        GlyphStyle::Bold => "bold".to_string(),
+        GlyphStyle::Large => "large".to_string(),
+        GlyphStyle::Small => "small".to_string(),
+        GlyphStyle::Tall => "tall".to_string(),
+        _ => "regular".to_string(),
+    }
+}
+const VAULT_CONFIG_DICT: &'static str = "vault.config";
+const VAULT_CONFIG_KEY_FONT: &'static str = "fontstyle";
 
 pub enum NavDir {
     Up,
@@ -49,6 +79,9 @@ pub struct VaultUi {
     /// totp redraw state
     totp_code: Option<String>,
     last_epoch: u64,
+
+    pddb: RefCell<Pddb>,
+    item_height: isize,
 }
 
 impl VaultUi {
@@ -58,22 +91,92 @@ impl VaultUi {
         item_lists: Arc<Mutex<ItemLists>>,
         mode: Arc<Mutex<VaultMode>>,
     ) -> Self {
-        let mut totp_list = ScrollableList::default()
+        let pddb = pddb::Pddb::new();
+        let mut totp_list = ScrollableList::default();
+        totp_list
             .set_margin(TotpLayout::totp_margin())
             .pane_size(TotpLayout::list_box())
             .style(TotpLayout::list_font());
         for i in 0..6 {
             totp_list.add_item(0, &format!("example {}", i));
         }
+        let gfx = Gfx::new(&xns).unwrap();
+        let style = DEFAULT_FONT;
+        let glyph_height = gfx.glyph_height_hint(style).unwrap() as isize;
+        let height = gfx.screen_size().unwrap().y;
         Self {
             main_cid: cid,
-            gfx: Gfx::new(&xns).unwrap(),
+            gfx,
             totp_list,
             item_lists,
             mode,
             totp_code: None,
             last_epoch: crate::totp::get_current_unix_time().expect("couldn't get current time") / 30,
+            pddb: RefCell::new(pddb),
+            item_height: height / glyph_height,
         }
+    }
+
+    pub(crate) fn store_glyph_style(&mut self, style: GlyphStyle) {
+        self.pddb
+            .borrow()
+            .delete_key(VAULT_CONFIG_DICT, VAULT_CONFIG_KEY_FONT, Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS))
+            .expect("couldn't delete previous setting");
+
+        match self.pddb.borrow().get(
+            VAULT_CONFIG_DICT,
+            VAULT_CONFIG_KEY_FONT,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS),
+            true,
+            true,
+            Some(32),
+            Some(vault2::basis_change),
+        ) {
+            Ok(mut style_key) => {
+                style_key.write(style_to_name(&style).as_bytes()).ok();
+            }
+            _ => panic!("PDDB access erorr"),
+        };
+        self.pddb.borrow().sync().ok();
+    }
+
+    pub(crate) fn apply_glyph_style(&mut self) {
+        let style = match self.pddb.borrow().get(
+            VAULT_CONFIG_DICT,
+            VAULT_CONFIG_KEY_FONT,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS),
+            true,
+            true,
+            Some(32),
+            Some(vault2::basis_change),
+        ) {
+            Ok(mut style_key) => {
+                let mut name_bytes = Vec::<u8>::new();
+                match style_key.read_to_end(&mut name_bytes) {
+                    Ok(_len) => {
+                        log::debug!(
+                            "name_bytes: {:?} {:?}",
+                            name_bytes,
+                            String::from_utf8(name_bytes.to_vec())
+                        );
+                        name_to_style(&String::from_utf8(name_bytes).unwrap_or("bold".to_string()))
+                            .unwrap_or(GlyphStyle::Bold)
+                    }
+                    Err(_) => GlyphStyle::Bold,
+                }
+            }
+            _ => {
+                log::warn!("PDDB access error reading default glyph size");
+                GlyphStyle::Bold
+            }
+        };
+        self.totp_list.style(style);
+        let glyph_height = self.gfx.glyph_height_hint(style).unwrap();
+        self.item_height = glyph_height as isize + 2; // +2 because of the border width
+        self.item_lists
+            .lock()
+            .unwrap()
+            .set_items_per_screen(self.gfx.screen_size().unwrap().y / self.item_height);
     }
 
     /// Clear the entire screen.

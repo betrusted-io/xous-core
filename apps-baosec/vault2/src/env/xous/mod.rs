@@ -4,12 +4,12 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
+use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
 use ctap_crypto::rng256::XousRng256;
 use locales::t;
 use modals::Modals;
 use num_traits::*;
 use persistent_store::Store;
-use precursor_hal::board::{BOOKEND_END, BOOKEND_START};
 use xous::try_send_message;
 use xous_names::XousNames;
 use xous_usb_hid::device::fido::*;
@@ -32,7 +32,7 @@ const KEEPALIVE_DELAY: Duration = Duration::from_millis(KEEPALIVE_DELAY_MS);
 mod storage;
 
 pub struct XousHidConnection {
-    pub endpoint: usb_device_xous::UsbHid,
+    pub endpoint: usb_bao1x::UsbHid,
 }
 impl XousHidConnection {
     pub fn recv_with_timeout(&mut self, buf: &mut [u8; 64], timeout_delay: Duration) -> SendOrRecvStatus {
@@ -613,7 +613,7 @@ impl XousEnv {
         XousEnv {
             rng: XousRng256::new(&xns),
             store,
-            main_connection: XousHidConnection { endpoint: usb_device_xous::UsbHid::new() },
+            main_connection: XousHidConnection { endpoint: usb_bao1x::UsbHid::new() },
             #[cfg(feature = "vendor_hid")]
             vendor_connection: XousHidConnection { endpoint: UsbEndpoint::VendorHid },
             modals: modals::Modals::new(&xns).unwrap(),

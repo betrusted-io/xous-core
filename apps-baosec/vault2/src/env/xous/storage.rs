@@ -37,7 +37,7 @@ impl Storage for XousStorage {
     }
 
     fn num_pages(&self) -> usize {
-        precursor_hal::board::PDDB_LEN as usize / 4096
+        bao1x_hal::board::PDDB_LEN as usize / 4096
     }
 
     fn max_word_writes(&self) -> usize {
@@ -48,7 +48,7 @@ impl Storage for XousStorage {
         100_000
     }
 
-    fn read_slice(&self, _index: StorageIndex, _length: usize) -> StorageResult<Cow<[u8]>> {
+    fn read_slice(&self, _index: StorageIndex, _length: usize) -> StorageResult<Cow<'_, [u8]>> {
         unimplemented!()
     }
 

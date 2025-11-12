@@ -1,16 +1,25 @@
 use core::sync::atomic::{AtomicBool, Ordering};
+use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
+use std::thread;
 
 use num_traits::*;
+use pddb::Pddb;
 use totp::PumpOp;
+use xous::msg_blocking_scalar_unpack;
+use xous_ipc::Buffer;
+
 mod ux;
 use ux::*;
 mod itemcache;
 use itemcache::*;
-// mod actions;
-// use actions::ActionOp;
-// mod storage;
+mod actions;
+use actions::ActionOp;
+mod storage;
+mod submenu;
 mod totp;
+pub(crate) mod vault_api;
+use locales::t;
 
 /*
 Dev status & notes --
@@ -38,9 +47,11 @@ two. I am inclined to harmonize the two, which means reworking the TOTP flow
 to have the search entry at the bottom.
   -[x] TOTP interaction prototyped
   -[ ] password interaction prototyped
--[ ] implement "home" button press menu mode
+-[x] implement "home" button press menu mode
 -[ ] implement search by text entry - activated via both menu pop-up, and by
 selecting >search prefix< on the bottom line of UI
+-[ ] implement PIN management UI - entering a pin unlocks the deniable basis automatically
+    -[ ] remove basis management calls when replacing with PIN calls
 
 There are three action loops that need to be implemented. These are not
 necessarily listed in order of implementation:
@@ -48,16 +59,16 @@ necessarily listed in order of implementation:
   -[ ] implement HID loop
   -[ ] implement "action" loop
 
--[ ] implement keystore
+-[x] implement keystore
   -[ ] Consider the side channel resistance of the AES implementation in the keystore. We may want
       to use an AES API that explicitly wraps the SCE's masked AES implementation to reduce side channels,
       versus the Vex CPU core's AES implementation
-  -[ ] PDDB should have a base 256-bit key to protect all entries, stored in key store
+  -[x] PDDB should have a base 256-bit key to protect all entries, stored in key store
        This is equivalent to the "Backup key" in precursor
-    -[ ] Base 256-bit key is derived from hash of 64kbits raw data scattered
+    -[x] Base 256-bit key is derived from hash of 64kbits raw data scattered
     across the RRAM array. Locations are chosen to be diverse, with the goal of reducing
     voltage contrast due to parasitic leakage masking bits
-    -[ ] 64kbit array is split into four 16kbit chunks, which are XOR'd together to create
+    -[x] 64kbit array is split into four 16kbit chunks, which are XOR'd together to create
     a 16kbit number. The four 16kbit chunks are read out 256-bits at a time, with an order
     determined by a random number on boot. The random ordering frustrates side channel attacks
     on read-out of the array. Thus the format is:
@@ -114,6 +125,16 @@ pub(crate) enum VaultOp {
     /// Redraw the screen
     Redraw = 0,
     KeyPress,
+
+    /// Partial menu
+    MenuChangeFont,
+    MenuDeleteStage1,
+    MenuEditStage1,
+    MenuAutotype,
+    MenuReadoutMode,
+    MenuAutotypeRate,
+    MenuLeftyMode,
+    MenuDone,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -131,7 +152,7 @@ pub struct SelectedEntry {
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("Vault2 PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -163,7 +184,7 @@ fn main() -> ! {
     // has to be in its own thread because it uses blocking modal calls that would cause
     // redraws of the background list to block/fail.
     let actions_sid = xous::create_server().unwrap();
-    /*
+
     let _ = thread::spawn({
         let main_conn = conn.clone();
         let sid = actions_sid.clone();
@@ -256,44 +277,81 @@ fn main() -> ! {
             xous::destroy_server(sid).ok();
         }
     });
-    */
+
     let actions_conn = xous::connect(actions_sid).unwrap();
+
+    let menu_sid = xous::create_server().unwrap();
+    let menu_mgr = submenu::create_submenu(conn, actions_conn, menu_sid);
+    let modals = modals::Modals::new(&xns).unwrap();
+    vault_ui.apply_glyph_style();
+
     // kickstart the pumper
     xous::send_message(pump_conn, xous::Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0))
         .expect("couldn't start the pumper");
+    let mut menu_active = false;
     loop {
         let msg = xous::receive_message(sid).unwrap();
-        log::debug!("Got message: {:?}", msg);
-
+        log::debug!("Got message: {:?}", msg.body.id());
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(VaultOp::Redraw) => {
                 log::debug!("Got redraw");
                 vault_ui.redraw();
             }
+            Some(VaultOp::MenuDone) => {
+                menu_active = false;
+                allow_totp_rendering.store(true, Ordering::SeqCst);
+                vault_ui.redraw();
+            }
             Some(VaultOp::KeyPress) => xous::msg_scalar_unpack!(msg, k1, _k2, _k3, _k4, {
                 let k = char::from_u32(k1 as u32).unwrap_or('\u{0000}');
                 log::info!("key {}", k);
-                match k {
-                    '↓' => {
-                        vault_ui.nav(NavDir::Down);
-                    }
-                    '↑' => {
-                        vault_ui.nav(NavDir::Up);
-                    }
-                    '←' => {
-                        vault_ui.nav(NavDir::PageUp);
-                    }
-                    '→' => {
-                        vault_ui.nav(NavDir::PageDown);
-                    }
-                    _ => {
-                        log::info!("unhandled key {}", k);
+                if menu_active {
+                    menu_mgr.key_press(k);
+                } else {
+                    match k {
+                        '∴' => {
+                            allow_totp_rendering.store(false, Ordering::SeqCst);
+                            menu_mgr.redraw();
+                            menu_active = true;
+                        }
+                        '↓' => {
+                            vault_ui.nav(NavDir::Down);
+                            vault_ui.redraw();
+                        }
+                        '↑' => {
+                            vault_ui.nav(NavDir::Up);
+                            vault_ui.redraw();
+                        }
+                        '←' => {
+                            vault_ui.nav(NavDir::PageUp);
+                            vault_ui.redraw();
+                        }
+                        '→' => {
+                            vault_ui.nav(NavDir::PageDown);
+                            vault_ui.redraw();
+                        }
+                        _ => {
+                            log::info!("unhandled key {}", k);
+                        }
                     }
                 }
-                vault_ui.redraw();
             }),
+            Some(VaultOp::MenuChangeFont) => {
+                for item in FONT_LIST {
+                    modals.add_list_item(item).expect("couldn't build radio item list");
+                }
+                allow_totp_rendering.store(false, Ordering::SeqCst);
+                match modals.get_radiobutton(t!("vault.select_font", locales::LANG)) {
+                    Ok(style) => {
+                        vault_ui.store_glyph_style(name_to_style(&style).unwrap_or(DEFAULT_FONT));
+                        vault_ui.apply_glyph_style();
+                    }
+                    _ => log::error!("get_radiobutton failed"),
+                }
+                allow_totp_rendering.store(true, Ordering::SeqCst);
+            }
             _ => {
-                log::error!("Got unknown message");
+                log::error!("Got unknown message: {:?}", msg);
             }
         }
     }
