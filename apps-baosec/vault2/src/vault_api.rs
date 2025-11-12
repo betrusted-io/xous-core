@@ -16,20 +16,13 @@ pub const VAULT_TOTP_DICT: &'static str = "vault.totp";
 /// bytes to reserve for a key entry. Making this slightly larger saves on some churn as stuff gets updated
 pub const VAULT_ALLOC_HINT: usize = 256;
 
+/// Top level application events.
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum VaultOp {
-    /// a line of text has arrived
-    Line = 0, // make sure we occupy opcodes with discriminants < 1000, as the rest are used for callbacks
-    /// incremental line of text
-    IncrementalLine,
-    /// redraw our UI
-    Redraw,
-    /// ignore dirty rectangles and redraw everything
-    FullRedraw,
-    /// reload the database (slow), and ignore dirty rectangles and redraw everything
+pub(crate) enum VaultOp {
+    /// Redraw the screen
+    Redraw = 0,
     ReloadDbAndFullRedraw,
-    /// change focus
-    ChangeFocus,
+    KeyPress,
 
     /// Partial menu
     MenuChangeFont,
@@ -39,15 +32,11 @@ pub enum VaultOp {
     MenuReadoutMode,
     MenuAutotypeRate,
     MenuLeftyMode,
+    MenuDone,
+    MenuTotpMode,
+    MenuPwMode,
 
-    /// PDDB basis change
     BasisChange,
-
-    /// Nop while waiting for prerequisites to be filled
-    Nop,
-
-    /// exit the application
-    Quit,
 }
 
 pub fn atime_to_str(req_atime: u64) -> String {

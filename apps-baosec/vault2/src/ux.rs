@@ -143,6 +143,11 @@ impl VaultUi {
         }
     }
 
+    pub(crate) fn basis_change(&mut self) {
+        self.item_lists.lock().unwrap().clear_all();
+        self.totp_list.clear();
+    }
+
     pub(crate) fn store_glyph_style(&mut self, style: GlyphStyle) {
         self.pddb
             .borrow()
@@ -213,7 +218,7 @@ impl VaultUi {
         // to reduce locking thrash, we cache a copy of the current mode at the top of redraw.
         let mode_at_entry = (*self.mode.lock().unwrap()).clone();
 
-        self.gfx.clear().ok();
+        self.clear_area();
 
         match mode_at_entry {
             VaultMode::Totp => {
@@ -337,7 +342,7 @@ impl VaultUi {
                         match self.storage_manager.get_record(&ContentKind::Password, guid) {
                             Ok(record) => record,
                             Err(error) => {
-                                log::error!("internal error rendering password");
+                                log::error!("internal error rendering password: {:?}", error);
                                 self.gfx.flush().ok();
                                 return;
                             }

@@ -20,7 +20,7 @@ use ux_api::widgets::TextEntryPayload;
 use vault2::env::xous::U2F_APP_DICT;
 use vault2::{
     AppInfo, VAULT_ALLOC_HINT, VAULT_PASSWORD_DICT, VAULT_TOTP_DICT, atime_to_str, basis_change,
-    ctap::data_formats::PublicKeyCredentialSource, deserialize_app_info, serialize_app_info, utc_now,
+    deserialize_app_info, serialize_app_info, utc_now,
 };
 use xous::{Message, send_message};
 
@@ -66,7 +66,6 @@ pub struct ActionManager {
     pddb: RefCell<pddb::Pddb>,
     tt: ticktimer_server::Ticktimer,
     action_active: Arc<AtomicBool>,
-    opensk_mutex: Arc<Mutex<i32>>,
     mode_cache: VaultMode,
     main_conn: xous::CID,
     keystore: Keystore,
@@ -77,7 +76,6 @@ impl ActionManager {
         mode: Arc<Mutex<VaultMode>>,
         item_lists: Arc<Mutex<ItemLists>>,
         action_active: Arc<AtomicBool>,
-        opensk_mutex: Arc<Mutex<i32>>,
     ) -> ActionManager {
         let xns = xous_names::XousNames::new().unwrap();
         let storage_manager = storage::Manager::new(&xns);
@@ -96,7 +94,6 @@ impl ActionManager {
             pddb: RefCell::new(pddb::Pddb::new()),
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             action_active,
-            opensk_mutex,
             main_conn,
             keystore: Keystore::new(&xns),
         }
@@ -1472,7 +1469,7 @@ pub(crate) fn heap_usage() -> usize {
     }
 }
 
-fn make_pw_name(description: &str, username: &str, dest: &mut String) {
+fn make_pw_name(description: &str, _username: &str, dest: &mut String) {
     dest.clear();
     dest.push_str(description);
     // dest.push_str("/");
@@ -1489,20 +1486,7 @@ fn make_u2f_item_from_record(guid: &str, ai: AppInfo) -> ListItem {
     let desc: String = format!("{} (U2F)", ai.name);
     ListItem::new(desc, extra, true, guid.to_owned(), ai.count, ai.atime)
 }
-fn make_fido_item_from_record(guid: &str, result: PublicKeyCredentialSource) -> ListItem {
-    let name = if let Some(display_name) = result.user_display_name {
-        display_name
-    } else {
-        String::from_utf8(result.user_handle).unwrap_or("".to_string())
-    };
-    let desc = format!(
-        "{} / {} (FIDO2)",
-        result.rp_id,
-        String::from_utf8(result.credential_id).unwrap_or("---".to_string())
-    );
-    let extra = format!("{}", name);
-    ListItem::new(desc, extra, true, guid.to_owned(), 0, 0)
-}
+
 fn make_totp_item_from_record(guid: &str, totp: TotpRecord) -> ListItem {
     let extra = format!(
         "{}:{}:{}:{}:{}",

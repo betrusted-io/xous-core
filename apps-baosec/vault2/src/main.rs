@@ -1,14 +1,3 @@
-use core::sync::atomic::{AtomicBool, Ordering};
-use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
-use std::thread;
-
-use num_traits::*;
-use pddb::Pddb;
-use totp::PumpOp;
-use xous::msg_blocking_scalar_unpack;
-use xous_ipc::Buffer;
-
 mod ux;
 use ux::*;
 mod itemcache;
@@ -18,8 +7,29 @@ use actions::ActionOp;
 mod storage;
 mod submenu;
 mod totp;
-pub(crate) mod vault_api;
+pub mod vault_api;
+pub use vault_api::*;
+mod vendor_commands;
+
+use core::sync::atomic::{AtomicBool, Ordering};
+use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Instant;
+
 use locales::t;
+use num_traits::*;
+use pddb::Pddb;
+use totp::PumpOp;
+use vault2::Transport;
+use vault2::ctap::main_hid::HidIterType;
+use vault2::env::Env;
+use vault2::env::xous::XousEnv;
+use xous::msg_blocking_scalar_unpack;
+use xous_ipc::Buffer;
+use xous_usb_hid::device::fido::*;
+
+use crate::vendor_commands::VendorSession;
 
 /*
 Dev status & notes --
@@ -119,26 +129,6 @@ necessarily listed in order of implementation:
 
 pub(crate) const SERVER_NAME_VAULT2: &str = "_Vault2_";
 
-/// Top level application events.
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub(crate) enum VaultOp {
-    /// Redraw the screen
-    Redraw = 0,
-    KeyPress,
-
-    /// Partial menu
-    MenuChangeFont,
-    MenuDeleteStage1,
-    MenuEditStage1,
-    MenuAutotype,
-    MenuReadoutMode,
-    MenuAutotypeRate,
-    MenuLeftyMode,
-    MenuDone,
-    MenuTotpMode,
-    MenuPwMode,
-}
-
 #[derive(Copy, Clone, PartialEq, Eq, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum VaultMode {
     Totp,
@@ -170,6 +160,9 @@ fn main() -> ! {
     let action_active = Arc::new(AtomicBool::new(false));
     // Protects access to the openSK PDDB entries from simultaneous readout on the UX while OpenSK is updating
     let opensk_mutex = Arc::new(Mutex::new(0));
+    let allow_host = Arc::new(AtomicBool::new(false));
+    // storage for lefty mode
+    let lefty_mode = Arc::new(AtomicBool::new(false));
 
     let mut vault_ui = VaultUi::new(&xns, conn, item_lists.clone(), mode.clone());
 
@@ -193,10 +186,8 @@ fn main() -> ! {
         let mode = mode.clone();
         let item_lists = item_lists.clone();
         let action_active = action_active.clone();
-        let opensk_mutex = opensk_mutex.clone();
         move || {
-            let mut manager =
-                crate::actions::ActionManager::new(main_conn, mode, item_lists, action_active, opensk_mutex);
+            let mut manager = crate::actions::ActionManager::new(main_conn, mode, item_lists, action_active);
             loop {
                 let msg = xous::receive_message(sid).unwrap();
                 let opcode: Option<ActionOp> = FromPrimitive::from_usize(msg.body.id());
@@ -282,6 +273,116 @@ fn main() -> ! {
 
     let actions_conn = xous::connect(actions_sid).unwrap();
 
+    // spawn the FIDO2 USB handler
+    let _ = thread::spawn({
+        let allow_host = allow_host.clone();
+        let opensk_mutex = opensk_mutex.clone();
+        let conn = conn.clone();
+        let lefty_mode = lefty_mode.clone();
+        move || {
+            let mut vendor_session = VendorSession::default();
+            // block until the PDDB is mounted
+            let pddb = pddb::Pddb::new();
+            pddb.is_mounted_blocking();
+
+            let env = XousEnv::new(conn, lefty_mode); // lefty_mode is now owned by env
+            let mut ctap = vault2::Ctap::new(env, Instant::now());
+            loop {
+                match ctap.env().main_hid_connection().u2f_wait_incoming() {
+                    Ok(msg) => {
+                        ctap.update_timeouts(Instant::now());
+                        let mutex = opensk_mutex.lock().unwrap();
+                        log::trace!("Received U2F packet");
+                        let typed_reply =
+                            ctap.process_hid_packet(&msg.packet, Transport::MainHid, Instant::now());
+                        match typed_reply {
+                            HidIterType::Ctap(reply) => {
+                                for pkt_reply in reply {
+                                    let mut reply = RawFidoReport::default();
+                                    reply.packet.copy_from_slice(&pkt_reply);
+                                    let status = ctap.env().main_hid_connection().u2f_send(reply);
+                                    match status {
+                                        Ok(()) => {
+                                            log::trace!("Sent U2F packet");
+                                        }
+                                        Err(e) => {
+                                            log::error!("Error sending U2F packet: {:?}", e);
+                                        }
+                                    }
+                                }
+                            }
+                            HidIterType::Vendor(msg) => {
+                                let reply = match vendor_commands::handle_vendor_data(
+                                    msg.cmd as u8,
+                                    msg.cid,
+                                    msg.payload,
+                                    &mut vendor_session,
+                                ) {
+                                    Ok(return_payload) => {
+                                        // if None, this means we've finished parsing all that
+                                        // was needed, and we handle/respond with real data
+
+                                        match return_payload {
+                                            Some(data) => data,
+                                            None => {
+                                                log::debug!("starting processing of vendor data...");
+                                                let resp = vendor_commands::handle_vendor_command(
+                                                    &mut vendor_session,
+                                                    allow_host.load(Ordering::SeqCst),
+                                                );
+                                                log::debug!("finished processing of vendor data!");
+
+                                                match vendor_session.is_backup() {
+                                                    true => {
+                                                        if vendor_session.has_backup_data() {
+                                                            resp
+                                                        } else {
+                                                            vendor_session = VendorSession::default();
+                                                            resp
+                                                        }
+                                                    }
+                                                    false => {
+                                                        vendor_session = VendorSession::default();
+                                                        resp
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Err(session_error) => {
+                                        // reset the session
+                                        vendor_session = VendorSession::default();
+
+                                        session_error.ctaphid_error(msg.cid)
+                                    }
+                                };
+                                for pkt_reply in reply {
+                                    let mut reply = RawFidoReport::default();
+                                    reply.packet.copy_from_slice(&pkt_reply);
+                                    let status = ctap.env().main_hid_connection().u2f_send(reply);
+                                    match status {
+                                        Ok(()) => {
+                                            log::trace!("Sent U2F packet");
+                                        }
+                                        Err(e) => {
+                                            log::error!("Error sending U2F packet: {:?}", e);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        drop(mutex);
+                    }
+                    Err(e) => match e {
+                        _ => {
+                            log::warn!("FIDO listener got an error: {:?}", e);
+                        }
+                    },
+                }
+            }
+        }
+    });
+
     let menu_sid = xous::create_server().unwrap();
     let menu_mgr = submenu::create_submenu(conn, actions_conn, menu_sid);
     let modals = modals::Modals::new(&xns).unwrap();
@@ -304,6 +405,15 @@ fn main() -> ! {
         log::trace!("Got message: {:?}", msg.body.id());
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(VaultOp::Redraw) => {
+                vault_ui.redraw();
+            }
+            Some(VaultOp::ReloadDbAndFullRedraw) => {
+                xous::send_message(
+                    actions_conn,
+                    xous::Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
+                vault_ui.refresh_totp();
                 vault_ui.redraw();
             }
             Some(VaultOp::MenuDone) => {
@@ -403,6 +513,20 @@ fn main() -> ! {
                     _ => log::error!("get_radiobutton failed"),
                 }
                 allow_totp_rendering.store(true, Ordering::SeqCst);
+            }
+            Some(VaultOp::BasisChange) => {
+                vault_ui.basis_change();
+                xous::send_message(
+                    conn,
+                    xous::Message::new_blocking_scalar(
+                        VaultOp::ReloadDbAndFullRedraw.to_usize().unwrap(),
+                        0,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+                .ok();
             }
             _ => {
                 log::error!("Got unknown message: {:?}", msg);

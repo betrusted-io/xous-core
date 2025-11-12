@@ -9,9 +9,8 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use ctap_crypto::Hash256;
 
 use crate::totp::TotpAlgorithm;
-
-const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
-const VAULT_TOTP_DICT: &'static str = "vault.totp";
+use crate::vault_api::VAULT_PASSWORD_DICT;
+use crate::vault_api::VAULT_TOTP_DICT;
 const VAULT_TOTP_ALLOC_HINT: usize = 128;
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
 
