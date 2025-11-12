@@ -6768,6 +6768,7 @@ name = "vault2"
 version = "0.1.0"
 dependencies = [
  "arrayref",
+ "backup",
  "bao1x-api",
  "bao1x-emu",
  "bao1x-hal",
