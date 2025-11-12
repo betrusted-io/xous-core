@@ -330,6 +330,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "modals",
                 "pddb",
                 "bao-video",
+                "vault2",
             ];
             builder.add_feature("pddbtest");
             builder
@@ -340,7 +341,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             std::env::set_var("UUID", "1234567812345678123456781234567812345678123456781234567812345678");
             // builder.add_feature("modal-testing");
-            builder.add_app("vault2", LoaderRegion::Swap);
         }
         Some("pddb-ci") => {
             builder
@@ -724,7 +724,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "pddb",
             ]
             .to_vec();
-            let bao_swap_pkgs = ["bao-video"].to_vec();
+            let bao_swap_pkgs = ["bao-video", "vault2"].to_vec();
             if !builder.is_swap_set() {
                 // reserve 3MiB for system services: ultimately, "pddb, modals, and bao-video"
                 builder.set_swap(0, bao1x_api::offsets::baosec::SWAP_RAM_LEN as _);
