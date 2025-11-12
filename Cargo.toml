@@ -117,6 +117,7 @@ members = [
   "libs/bao1x-api",
   "services/keystore",
   "libs/precursor-hal",
+  "apps-baosec/vault2",
   "baremetal",
   "bao1x-boot/boot0",
   "bao1x-boot/boot1",

@@ -15,6 +15,8 @@ pub enum Opcode {
     AesOracle = 4,
     /// initiate key wrapper operation
     AesKwp = 5,
+    /// Ephemeral secret operations
+    EphemeralOp = 256,
 
     /// Used to map unknown opcodes
     InvalidCall = 65535,

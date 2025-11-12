@@ -6764,6 +6764,55 @@ dependencies = [
 ]
 
 [[package]]
+name = "vault2"
+version = "0.1.0"
+dependencies = [
+ "arrayref",
+ "backup",
+ "bao1x-api",
+ "bao1x-emu",
+ "bao1x-hal",
+ "bao1x-hal-service",
+ "base32",
+ "blitstr2",
+ "byteorder",
+ "cbor",
+ "chrono",
+ "ctap-crypto",
+ "digest 0.9.0",
+ "ed25519-compact",
+ "enum-iterator",
+ "hex 0.4.3",
+ "hmac",
+ "keystore",
+ "locales",
+ "log",
+ "modals",
+ "num-derive 0.4.2",
+ "num-traits",
+ "passwords",
+ "pddb",
+ "persistent_store",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "random-pick",
+ "rkyv 0.8.8",
+ "sha1",
+ "sha2",
+ "sntpc",
+ "subtle",
+ "usb-bao1x",
+ "userprefs",
+ "ux-api",
+ "xous 0.9.67 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+ "xous-ipc 0.10.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-usb-hid",
+]
+
+[[package]]
 name = "vaultbackup-rs"
 version = "0.1.0"
 dependencies = [

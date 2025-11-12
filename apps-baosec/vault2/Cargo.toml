@@ -1,0 +1,95 @@
+[package]
+name = "vault2"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4.14"
+num-derive = { version = "0.4.2", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+xous = "0.9.66"
+xous-ipc = "0.10.6"
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+] }
+log-server = { package = "xous-api-log", version = "0.1.65" }
+xous-names = { package = "xous-api-names", version = "0.9.67" }
+locales = { path = "../../locales" }
+pddb = { path = "../../services/pddb" }
+modals = { path = "../../services/modals", features = ["no-gam"] }
+backup = { path = "../../apps/vault/libraries/backup" }
+byteorder = { version = "1.4.3", default-features = false }
+arrayref = "0.3.6"
+subtle = { version = "2.5.0", features = ["core_hint_black_box"] }
+rand_core = "0.6.3"
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.65" }
+userprefs = { path = "../../libs/userprefs" }
+ux-api = { path = "../../libs/ux-api" }
+bao1x-api = { path = "../../libs/bao1x-api" }
+bao1x-hal = { path = "../../libs/bao1x-hal" }
+bao1x-hal-service = { path = "../../services/bao1x-hal-service", optional = true }
+bao1x-emu = { path = "../../services/bao1x-emu", optional = true }
+blitstr2 = { path = "../../libs/blitstr2" }
+usb-bao1x = { path = "../../services/usb-bao1x" }
+xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main" }
+keystore = { path = "../../services/keystore" }
+
+# opensk
+ctap-crypto = { path = "../../apps/vault/libraries/crypto" }
+cbor = { path = "../../apps/vault/libraries/cbor" }
+persistent_store = { path = "../../apps/vault/libraries/persistent_store" }
+ed25519-compact = { version = "1", default-features = false, optional = true }
+rand = { version = "0.8.5", optional = true }
+
+# ux formatting
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+chrono = { version = "0.4.33", default-features = false, features = ["std"] }
+
+# password generation
+passwords = "3.1.9"
+
+# totp
+sha1 = "0.10.6"
+hmac = "0.12.1"
+digest = "0.9.0"
+base32 = "0.4.0"
+sha2 = { version = "0.10.8" }
+sntpc = { version = "0.3.1" }
+# net = { path = "../../services/net" }
+# com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
+
+# testing
+random-pick = { version = "1.2.15", optional = true }
+
+[dev-dependencies]
+enum-iterator = "0.6.0"
+
+[features]
+board-baosec = [
+    "bao1x-hal-service",
+    "ux-api/board-baosec",
+    "blitstr2/board-baosec",
+    "usb-bao1x/board-baosec",
+]
+hosted-baosec = ["bao1x-emu", "ux-api/hosted-baosec", "usb-bao1x/hosted-baosec"]
+
+with_ctap1 = ["ctap-crypto/with_ctap1"]
+vendor_hid = []
+std = []
+fuzz = []
+debug_ctap = []
+autotest = []
+multireset = [] # allows credential reset more than once per boot
+vault-testing = ["random-pick"]
+osk-upgrade = [
+] # placeholder to select out OpenSK's "vendor upgrade" over HID, which we don't use because we have our own upgrade path.
+xous = [
+] # marks xous-specific code segments deep inside the CTAP crate. Mostly to help evaluate if a patch is even feasible in the future.
+ed25519 = ["ed25519-compact"]
+default = [
+    "with_ctap1",
+    "ed25519",
+    "xous",
+    "vault-testing", # testing removed for release tag
+]

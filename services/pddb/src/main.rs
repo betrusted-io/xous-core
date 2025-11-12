@@ -847,6 +847,7 @@ fn wrapped_main() -> ! {
                     // the above operation should either succeed or panic, so we are always "success" here
                     log::info!("{}PDDB.MOUNTED,{}", BOOKEND_START, BOOKEND_END);
                     xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
+                    #[cfg(target_os = "xous")]
                     for requester in attempt_notifications.drain(..) {
                         xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
                     }

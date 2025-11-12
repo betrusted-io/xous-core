@@ -133,6 +133,9 @@ pub fn keystore(sid: SID) -> ! {
                 }
                 buffer.replace(kwp).unwrap();
             }
+            Opcode::EphemeralOp => {
+                todo!()
+            }
             Opcode::InvalidCall => {
                 log::error!("Invalid call in keystore: {:?}", opcode);
             }

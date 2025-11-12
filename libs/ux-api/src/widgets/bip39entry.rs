@@ -69,22 +69,25 @@ pub struct Bip39Entry {
 
 impl Default for Bip39Entry {
     fn default() -> Self {
-        let mut items = ScrollableList::default().set_margin(Point::new(4, 0));
+        let mut items = ScrollableList::default();
+        items.set_margin(Point::new(4, 0));
         let br = items.pane().br();
         let row_height = items.row_height();
-        items = items.pane_size(Rectangle::new(Point::new(0, row_height as isize + 2), br));
+        items.pane_size(Rectangle::new(Point::new(0, row_height as isize + 2), br));
 
         items.add_item(0, t!("bip39.pick_word", locales::LANG));
         items.add_item(0, t!("bip39.scan_qr_code", locales::LANG));
         items.add_item(0, t!("bip39.cancel", locales::LANG));
         let extra_items = items.col_length(0).unwrap_or(0);
 
-        let mut sl = ScrollableList::default().set_margin(Point::new(10, 0));
+        let mut sl = ScrollableList::default();
+        sl.set_margin(Point::new(10, 0));
         let br = sl.pane().br();
         let row_height = sl.row_height();
-        sl = sl.pane_size(Rectangle::new(Point::new(0, row_height as isize + 2), br));
+        sl.pane_size(Rectangle::new(Point::new(0, row_height as isize + 2), br));
 
-        let mut osk = ScrollableList::default().set_alignment(TextAlignment::Center);
+        let mut osk = ScrollableList::default();
+        osk.set_alignment(TextAlignment::Center);
         match locales::LANG {
             "en" => {
                 /*

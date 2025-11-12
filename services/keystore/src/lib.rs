@@ -46,6 +46,17 @@ impl Keystore {
     /// which secrets are stored.
     pub fn ensure_password(&self) -> PasswordState { PasswordState::Correct }
 
+    /// The ephemeral secret is a 128-bit value that wipes on device reset. The value itself
+    /// is provided by another library. It's intended to be a store for user-provided PIN values,
+    /// and thus would not be generated internally to the keystore.
+    ///
+    /// Returns `IntegrityCheckFailed` if the secret was not previously set.
+    pub fn get_volatile_secret(&self) -> Result<[u8; 16], KeywrapError> {
+        Err(KeywrapError::IntegrityCheckFailed)
+    }
+
+    pub fn set_volatile_secret(&self, _secret: &[u8; 16]) { todo!() }
+
     pub fn wrap_key(&self, input: &[u8]) -> Result<Vec<u8>, KeywrapError> {
         if input.len() > MAX_WRAP_DATA {
             // of course, the underlying crypto can handle a much larger piece of data,

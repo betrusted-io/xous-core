@@ -81,6 +81,11 @@ fn main() {
                     log::info!("Udma configure event: {:?}/{:?}, {:x}", periph, to_channel, event_offset);
                 }
             }
+            HalOpcode::UdmaIrqStatusBits => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    scalar.arg1 = 0;
+                }
+            }
             HalOpcode::PeriphReset => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
@@ -118,12 +123,13 @@ fn main() {
             HalOpcode::InvalidCall => {
                 log::error!("Invalid opcode received: {:?}", msg);
             }
+            bao1x_api::HalOpcode::ConfigureBio => todo!(),
+            HalOpcode::SetPreemptionState => {
+                todo!("unimplemented opcode: {:?}", opcode);
+            }
             HalOpcode::Quit => {
                 log::info!("Received quit opcode, exiting.");
                 break;
-            }
-            HalOpcode::ConfigureBio | HalOpcode::UdmaIrqStatusBits | HalOpcode::SetPreemptionState => {
-                todo!("unimplemented opcode: {:?}", opcode);
             }
         }
     }
