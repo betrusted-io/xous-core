@@ -63,8 +63,8 @@ pub struct ScrollableList {
 
 impl Clone for ScrollableList {
     fn clone(&self) -> Self {
-        let mut sl = ScrollableList::default()
-            .pane_size(self.pane())
+        let mut sl = ScrollableList::default();
+        sl.pane_size(self.pane())
             .set_min_col_width(self.min_col_width)
             .style(self.style)
             .set_with_scrollbars(self.with_scrollbars)
@@ -108,19 +108,19 @@ impl ScrollableList {
 
     pub fn get_alignment(&self) -> TextAlignment { self.text_alignment }
 
-    pub fn set_alignment(mut self, alignment: TextAlignment) -> Self {
+    pub fn set_alignment<'a>(&'a mut self, alignment: TextAlignment) -> &'a mut Self {
         self.text_alignment = alignment;
         self
     }
 
-    pub fn pane_size(mut self, pane: Rectangle) -> Self {
+    pub fn pane_size<'a>(&'a mut self, pane: Rectangle) -> &'a mut Self {
         self.pane = RefCell::new(pane);
         self
     }
 
     pub fn pane(&self) -> Rectangle { self.pane.borrow().clone() }
 
-    pub fn style(mut self, style: GlyphStyle) -> Self {
+    pub fn style<'a>(&'a mut self, style: GlyphStyle) -> &'a mut Self {
         self.style = style;
         self.height_hint = self.gfx.glyph_height_hint(style).unwrap();
         self
@@ -180,20 +180,20 @@ impl ScrollableList {
     pub fn row_height(&self) -> usize { self.height_hint }
 
     /// Use this to add space around list items for aesthetic tuning.
-    pub fn set_margin(mut self, margin: Point) -> Self {
+    pub fn set_margin<'a>(&'a mut self, margin: Point) -> &'a mut Self {
         self.margin = margin;
         self
     }
 
     /// Tunes the desired minimum width of a column.
-    pub fn set_min_col_width(mut self, width: usize) -> Self {
+    pub fn set_min_col_width<'a>(&'a mut self, width: usize) -> &'a mut Self {
         self.min_col_width = width;
         self
     }
 
     /// When `with_bars` is `true`, scroll bars are rendered when only part
     /// of the list is visible on the screen.
-    pub fn set_with_scrollbars(mut self, with_bars: bool) -> Self {
+    pub fn set_with_scrollbars<'a>(&'a mut self, with_bars: bool) -> &'a mut Self {
         self.with_scrollbars = with_bars;
         self
     }

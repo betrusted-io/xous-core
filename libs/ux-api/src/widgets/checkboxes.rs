@@ -15,10 +15,11 @@ pub struct CheckBoxes {
 }
 impl CheckBoxes {
     pub fn new(action_conn: xous::CID, action_opcode: u32) -> Self {
-        let mut sl = ScrollableList::default().set_margin(Point::new(2, 0));
+        let mut sl = ScrollableList::default();
+        sl.set_margin(Point::new(2, 0));
         let br = sl.pane().br();
         let row_height = sl.row_height();
-        sl = sl.pane_size(Rectangle::new(Point::new(0, row_height as isize + 2), br));
+        sl.pane_size(Rectangle::new(Point::new(0, row_height as isize + 2), br));
         sl.add_item(0, t!("radio.select_and_close", locales::LANG));
         CheckBoxes { items: sl, action_conn, action_opcode, action_payload: CheckBoxPayload::new() }
     }
