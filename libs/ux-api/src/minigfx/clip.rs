@@ -61,7 +61,7 @@ impl ObjectList {
     pub fn push(&mut self, item: ClipObjectType) -> Result<(), ClipObjectType> {
         let serialized_size =
             self.list.capacity() * size_of::<ClipObjectType>() + size_of::<Vec<ClipObjectType>>();
-        log::debug!("sersize {}", serialized_size);
+        // log::debug!("sersize {}", serialized_size);
         // TODO: export the capacity limit of a buffer. The origin of the capacity limit is equal to
         // the size of a page of memory, plus 256 bytes for "scratch" area for rkyv to work in. I did
         // try to use the .replace() method with an allocation of a large enough buffer to hold the whole
