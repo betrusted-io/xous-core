@@ -1,6 +1,5 @@
 use std::fmt::Write;
 
-use blitstr2::GlyphStyle;
 use num_traits::*;
 use xous_ipc::Buffer;
 
@@ -91,7 +90,8 @@ impl<'a> Menu<'a> {
     pub fn new(name: &str, parent_conn: xous::CID, parent_redraw_op: usize) -> Menu<'_> {
         let xns = xous_names::XousNames::new().unwrap();
         let sid = xous::create_server().expect("can't create private menu message server");
-        let list = ScrollableList::default().set_alignment(crate::widgets::TextAlignment::Center);
+        let mut list = ScrollableList::default();
+        list.set_alignment(crate::widgets::TextAlignment::Center);
         let mut title_tv = TextView::new(
             Gid::dummy(),
             TextBounds::CenteredTop(Rectangle::new(
@@ -214,8 +214,6 @@ impl<'a> Menu<'a> {
         );
     }
 
-    fn num_items(&self) -> usize { self.items.len() }
-
     pub fn key_event(&mut self, keys: [char; 4]) {
         for &k in keys.iter() {
             log::debug!("got key '{}'", k);
@@ -299,7 +297,9 @@ impl MenuMatic {
     }
 
     pub fn delete_item(&self, item_name: &str) -> bool {
-        let mm = MenuManagement { item: MenuItem::default(), op: MenuMgrOp::DeleteItem };
+        let mut item = MenuItem::default();
+        item.name = item_name.to_owned();
+        let mm = MenuManagement { item, op: MenuMgrOp::DeleteItem };
         let mut buf = Buffer::into_buf(mm).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.cid, 0).expect("Couldn't issue management opcode");
         let ret = buf.to_original::<MenuManagement, _>().unwrap();

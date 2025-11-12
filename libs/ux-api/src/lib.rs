@@ -20,7 +20,7 @@ pub mod service;
 #[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-baosec")))]
 use num_traits::*;
 #[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-baosec")))]
-use xous::{CID, Message, send_message};
+use xous::Message;
 #[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-baosec")))]
 use xous_ipc::Buffer;
 
