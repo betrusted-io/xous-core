@@ -29,7 +29,7 @@ pub enum TextAlignment {
 }
 
 /// This object takes an array of strings and attempts to render them
-/// as a scrollabel list. The number of columns rendered is equal
+/// as a scrollable list. The number of columns rendered is equal
 /// to the dimensionality of the items passed; i.e., if two lists of
 /// strings are passed, two columns will be rendered.
 #[derive(Debug)]
@@ -211,6 +211,19 @@ impl ScrollableList {
             }
         } else {
             Err(())
+        }
+    }
+
+    pub fn delete_item(&mut self, col: usize, row: usize) -> String {
+        if self.items[col].len() > row {
+            let removed = self.items[col].remove(row);
+            // ensure the selection index is valid
+            if self.select_index.1 >= self.items[col].len() {
+                self.select_index.1 = self.items.len().saturating_sub(1);
+            }
+            removed
+        } else {
+            "".to_owned()
         }
     }
 
