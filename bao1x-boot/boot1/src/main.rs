@@ -78,7 +78,10 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     crate::println_d!("TX_IDLE: {:?}", crate::platform::usb::TX_IDLE.load(Ordering::SeqCst));
     let perclk: u32;
     (board_type, perclk) = crate::platform::early_init(board_type);
+    #[cfg(not(feature = "alt-boot1"))]
     crate::println!("\n~~Boot1 up! ({}: {})~~\n", crate::version::SEMVER, RELEASE_DESCRIPTION);
+    #[cfg(feature = "alt-boot1")]
+    crate::println!("\n~~Alt-Boot1 up! ({}: {})~~\n", crate::version::SEMVER, RELEASE_DESCRIPTION);
     crate::println!("Configured board type: {:?}", board_type);
     if board_type == BoardTypeCoding::Baosec {
         IS_BAOSEC.store(true, Ordering::SeqCst);
@@ -91,6 +94,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
             }
             board_type = one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error");
             crate::println!("Re-configured board type: {:?}", board_type);
+            IS_BAOSEC.store(false, Ordering::SeqCst);
         }
     }
 
