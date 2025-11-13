@@ -9,7 +9,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("baremetal", "dabao", "baosec", "bootloader", "kernel", "loader", "swap", "apps", "boot1")]
+    [ValidateSet("baremetal", "dabao", "baosec", "bootloader", "kernel", "loader", "swap", "apps", "boot1", "alt-boot1")]
     [string]$Config,
 
     [Parameter(Mandatory = $false)]
@@ -64,6 +64,9 @@ $configurations = @{
     )
     "boot1"      = @(
         @{ Image = "bao1x-boot1.img"; FunctionCode = "boot1" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" }
+    )
+    "alt-boot1"  = @(
+        @{ Image = "bao1x-alt-boot1.img"; FunctionCode = "baremetal" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" }
     )
 }
 
