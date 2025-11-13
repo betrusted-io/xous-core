@@ -72,6 +72,13 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
         crate::println!("Public ID init done.");
     }
 
+    // Delegate in-system key setup to the OS. Don't do it in the bootloader. This code is
+    // too hard to get right to be doing it here, and there is no ostensible security advantage
+    // in doing it at this stage versus in the system. Reasoning: the in-system key setup would
+    // be done in the factory, post-wafer probe, regardless. Whether it's hard-coded into the boot1
+    // stage or left to be flexible based on the OS's needs doesn't make a difference because the
+    // point of keying is still going to be the factory.
+    /*
     if (*board_type == bao1x_api::BoardTypeCoding::Baosec
         && owc.get(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0)
         || (*board_type == bao1x_api::BoardTypeCoding::Dabao
@@ -109,6 +116,7 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
         }
         crate::println!("Secret ID init done.");
     }
+    */
 
     #[cfg(feature = "print-ifr")]
     print_ifr();
@@ -168,7 +176,10 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
         let is_correct = match acl {
             AccessSettings::Data(sa) => sa.get_partition_access() == pa && sa.get_rw_permissions() == rw,
             AccessSettings::Key(sa) => {
-                sa.get_partition_access() == pa && sa.get_rw_permissions() == rw && sa.akey_id() == 31
+                // crate::println!("sa.pa {:x?} pa {:x?}", sa.get_partition_access(), pa);
+                // crate::println!("sa.rw {:x?} rw {:x?}", sa.get_rw_permissions(), rw);
+                // crate::println!("sa.akeyid: {:x}", sa.akey_id());
+                sa.get_partition_access() == pa && sa.get_rw_permissions() == rw && sa.akey_id() == 0xFF
             }
         };
         if !is_correct || !is_consistent {
