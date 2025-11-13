@@ -12,7 +12,6 @@ use hkdf::Hkdf;
 use keystore_api::KeyWrapper;
 use rand::prelude::*;
 use sha2::Sha256;
-use utralib::utra::coresub_sramtrm;
 
 use crate::*;
 
@@ -35,6 +34,8 @@ impl KeyStore {
     }
 
     pub fn ensure_system_init(&mut self, rram: &mut Reram) {
+        // debug coreuser status
+        /*
         let coreuser_range = xous::map_memory(
             xous::MemoryAddress::new(utralib::utra::coreuser::HW_COREUSER_BASE),
             None,
@@ -42,8 +43,10 @@ impl KeyStore {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("Couldn't map coreuser range");
-        let mut coreuser = utralib::CSR::new(coreuser_range.as_mut_ptr() as *mut u32);
+        let coreuser = utralib::CSR::new(coreuser_range.as_mut_ptr() as *mut u32);
         log::info!("coreuser status: {:x}", coreuser.r(utralib::utra::coreuser::STATUS));
+        */
+
         // one routine works for both dabao and baosec
         let board_type = self.owc.get_decoded::<BoardTypeCoding>().unwrap();
         if (board_type == bao1x_api::BoardTypeCoding::Baosec
