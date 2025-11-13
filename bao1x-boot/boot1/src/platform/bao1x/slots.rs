@@ -162,10 +162,6 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
         let mut is_consistent = true;
         let mut acl = match slot_mgr.get_acl(&slot_element) {
             Ok(settings) => settings,
-            Err(bao1x_api::AccessError::KeyAclInconsistency(prototype)) => {
-                is_consistent = false;
-                AccessSettings::Key(prototype)
-            }
             Err(bao1x_api::AccessError::DataAclInconsistency(prototype)) => {
                 is_consistent = false;
                 AccessSettings::Data(prototype)
@@ -175,12 +171,6 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
         let (pa, rw) = slot_element.get_access_spec();
         let is_correct = match acl {
             AccessSettings::Data(sa) => sa.get_partition_access() == pa && sa.get_rw_permissions() == rw,
-            AccessSettings::Key(sa) => {
-                // crate::println!("sa.pa {:x?} pa {:x?}", sa.get_partition_access(), pa);
-                // crate::println!("sa.rw {:x?} rw {:x?}", sa.get_rw_permissions(), rw);
-                // crate::println!("sa.akeyid: {:x}", sa.akey_id());
-                sa.get_partition_access() == pa && sa.get_rw_permissions() == rw && sa.akey_id() == 0xFF
-            }
         };
         if !is_correct || !is_consistent {
             crate::println!(
@@ -195,14 +185,14 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
                     sa.set_partition_access(&pa);
                     sa.set_rw_permissions(rw);
                 }
-                AccessSettings::Key(sa) => {
-                    sa.set_partition_access(&pa);
-                    sa.set_rw_permissions(rw);
-                    sa.set_akey_id(0xFF); // 0xff disables key chaining to access the key
+            }
+            crate::println!("Writing ACL raw value: {:x?}", acl);
+            match slot_mgr.set_acl(rram, slot_element, &acl) {
+                Ok(_) => {}
+                Err(e) => {
+                    crate::println!("Couldn't set ACL for {:?} ({:?})", slot_element, e);
                 }
             }
-            crate::println!("Fixed ACL raw value: {:x?}", acl);
-            slot_mgr.set_acl(rram, slot_element, &acl).unwrap();
         }
     }
 }
@@ -231,16 +221,6 @@ fn print_slots(slot_mgr: &SlotManager, slot_list: &[SlotIndex]) {
                     let acl = slot_mgr.get_data_acl(acl_index);
                     crate::println!(
                         "    Data {} ({:x?}): {:x?}",
-                        data_index / SLOT_ELEMENT_LEN_BYTES,
-                        acl,
-                        bytes
-                    );
-                },
-                SlotType::Key => unsafe {
-                    let bytes = slot_mgr.read_key_slot(data_index);
-                    let acl = slot_mgr.get_key_acl(acl_index);
-                    crate::println!(
-                        "    Key {} ({:x?}): {:x?}",
                         data_index / SLOT_ELEMENT_LEN_BYTES,
                         acl,
                         bytes

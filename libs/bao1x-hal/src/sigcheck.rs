@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use bao1x_api::signatures::*;
 #[cfg(not(feature = "std"))]
-use bao1x_api::{DEVELOPER_MODE, KeySlotAccess, RwPerms, SLOT_ELEMENT_LEN_BYTES, SlotType};
+use bao1x_api::{DEVELOPER_MODE, DataSlotAccess, RwPerms, SLOT_ELEMENT_LEN_BYTES, SlotType};
 use digest::Digest;
 use sha2_bao1x::{Sha256, Sha512};
 use xous::arch::PAGE_SIZE;
@@ -226,7 +226,7 @@ pub fn erase_secrets() {
     // have access permissions, and panic instead of allowing a boot.
     const ZERO_ERR_THRESH: usize = 2;
     for slot in crate::board::KEY_SLOTS.iter() {
-        if slot.get_type() == SlotType::Key {
+        if slot.get_type() == SlotType::Data {
             let (_pa, rw_perms) = slot.get_access_spec();
             for data_index in slot.try_into_data_iter().unwrap() {
                 match rw_perms {
@@ -238,11 +238,11 @@ pub fn erase_secrets() {
                                 .set_acl(
                                     &mut rram,
                                     slot,
-                                    &AccessSettings::Key(KeySlotAccess::new_with_raw_value(0)),
+                                    &AccessSettings::Data(DataSlotAccess::new_with_raw_value(0)),
                                 )
                                 .expect("couldn't reset ACL");
                         }
-                        let bytes = unsafe { slot_mgr.read_key_slot(data_index) };
+                        let bytes = unsafe { slot_mgr.read_data_slot(data_index) };
                         if bytes.iter().all(|&b| b == 0) {
                             zero_key_count += 1;
                         }
@@ -253,12 +253,15 @@ pub fn erase_secrets() {
                                 alloc::vec::Vec::with_capacity(slot.len() * SLOT_ELEMENT_LEN_BYTES);
                             eraser.resize(slot.len() * SLOT_ELEMENT_LEN_BYTES, ERASE_VALUE);
 
-                            slot_mgr.write(&mut rram, slot, &eraser).expect("couldn't erase key");
+                            slot_mgr.write(&mut rram, slot, &eraser).ok();
                         }
-                        let check = unsafe { slot_mgr.read_key_slot(data_index) };
+                        let check = unsafe { slot_mgr.read_data_slot(data_index) };
                         if !check.iter().all(|&b| b == ERASE_VALUE) {
                             crate::println!("Failed to erase key at {}: {:x?}", data_index, check);
-                            panic!("Key erasure did not succeed, refusing to boot!");
+                            // reboot on failure to erase
+                            let mut rcurst =
+                                utralib::CSR::new(utralib::utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+                            rcurst.wo(utralib::utra::sysctrl::SFR_RCURST0, 0x55AA);
                         } else {
                             crate::println!("Key range at {} confirmed erased", slot.get_base());
                         }
