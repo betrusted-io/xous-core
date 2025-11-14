@@ -1325,7 +1325,10 @@ impl Spim {
         let qe_set = match self.command_set {
             Some(CommandSet::Macronix) => 0b0100_0000 & sr != 0,
             Some(CommandSet::Xtx) => 0b10_0000_0000 & sr != 0,
-            None => panic!("Attempting to set QE on unknown flash type"),
+            None => {
+                crate::println!("Can't set QE on unknown flash type");
+                return;
+            }
         };
         if qe_set {
             // nothing to do, it's already set

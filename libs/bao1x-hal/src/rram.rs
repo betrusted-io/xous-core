@@ -1,3 +1,6 @@
+#[cfg(feature = "std")]
+use std::pin::Pin;
+
 use utralib::{CSR, utra};
 
 #[cfg(not(feature = "std"))]
@@ -57,6 +60,9 @@ const RRC_CR_POWERDOWN: u32 = 1;
 const RRC_CR_WRITE_DATA: u32 = 0;
 const RRC_CR_WRITE_CMD: u32 = 2;
 
+// number of attempts allowed before giving up on writes
+const ATTEMPTS: usize = 2;
+
 #[cfg(feature = "std")]
 fn rram_handler(_irq_no: usize, arg: *mut usize) {
     let rram = unsafe { &mut *(arg as *mut Reram) };
@@ -111,7 +117,7 @@ impl<'a> Reram {
     /// This returns an object that has a handle to manage the RRAM, but no memory
     /// ranges mapped that are valid for writing. Memory ranges need to be added
     /// with `add_range()` before any writes can occur.
-    pub fn new() -> Self {
+    pub fn new() -> Pin<Box<Self>> {
         let rram_page = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::rrc::HW_RRC_BASE),
             None,
@@ -135,18 +141,18 @@ impl<'a> Reram {
         let mut irq_csr = CSR::new(irq_page.as_mut_ptr() as *mut u32);
 
         // pin the structure on the heap so that it doesn't move around on us.
-        let mut rram = Reram {
+        let mut rram = Box::pin(Reram {
             csr,
             irq_csr,
             offset: 0,
             buf: [0u32; ALIGNMENT / size_of::<u32>()],
             range_map: RangeMap::new(),
-        };
+        });
 
         xous::claim_interrupt(
             utra::irqarray11::IRQARRAY11_IRQ,
             rram_handler,
-            &mut rram as *mut Reram as *mut usize,
+            Pin::as_mut(&mut rram).get_mut() as *mut Reram as *mut usize,
         )
         .expect("couldn't claim RRAM handler interrupt");
         irq_csr.wo(utra::irqarray11::EV_PENDING, 0xFFFF_FFFF);
@@ -338,6 +344,33 @@ impl<'a> Reram {
         Ok(data.len())
     }
 
+    fn write_slice_retry(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
+        for i in 0..ATTEMPTS {
+            match self.write_slice_inner(offset, data) {
+                Ok(len) => {
+                    #[cfg(not(feature = "std"))]
+                    let check_slice = unsafe {
+                        core::slice::from_raw_parts((offset + utralib::HW_RERAM_MEM) as *const u8, data.len())
+                    };
+                    #[cfg(feature = "std")]
+                    let check_slice = self.array(offset)?;
+
+                    if check_slice[..data.len().min(check_slice.len())]
+                        == data[..data.len().min(check_slice.len())]
+                    {
+                        return Ok(len);
+                    } else {
+                        crate::println!("Write failed to verify retry {}/{}", i + 1, ATTEMPTS);
+                    }
+                }
+                Err(e) => {
+                    crate::println!("Write with error {:?}, retrying...", e);
+                }
+            }
+        }
+        Err(xous::Error::InternalError)
+    }
+
     /// Bounds-check regular writes to make sure they are in the "standard" memory array region
     /// Boot0 region is also disallowed for writing because it should be hardware write-protected.
     /// For testing purposes, that check may be commented out just to make sure the write protection
@@ -351,7 +384,7 @@ impl<'a> Reram {
         {
             return Err(xous::Error::AccessDenied);
         }
-        self.write_slice_inner(offset, data)
+        self.write_slice_retry(offset, data)
     }
 
     /// This has a separate API not to enforce security but to avoid fat-fingering data
@@ -360,9 +393,11 @@ impl<'a> Reram {
     /// processes, but they only come into effect after the OS is booted.
     pub fn protected_write_slice(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
         if offset < bao1x_api::RRAM_STORAGE_LEN || offset >= utralib::HW_RERAM_MEM_LEN {
+            // crate::println!("offset {:x} access denied", offset);
             return Err(xous::Error::AccessDenied);
         }
-        self.write_slice_inner(offset, data)
+        // crate::println!("Writing to {:x}: {:x?}", offset, &data[..16.min(data.len())]);
+        self.write_slice_retry(offset, data)
     }
 }
 

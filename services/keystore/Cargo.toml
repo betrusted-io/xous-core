@@ -75,6 +75,9 @@ hkdf = "0.12.4"
 
 [features]
 bao1x = ["utralib/bao1x", "aes/bao1x"]
+
+debug-hal = ["bao1x-hal/debug-print-duart"]
+
 board-baosec = [
     "utralib/bao1x",
     "keystore-api/gen2",

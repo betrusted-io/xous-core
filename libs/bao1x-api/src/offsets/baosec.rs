@@ -44,21 +44,21 @@ pub const DEFAULT_FCLK_FREQUENCY: u32 = 700_000_000;
 /// are derived from. The seed may be blended with other bits of data scattered about
 /// the RRAM array, other device identifiers and hardware measurements to create the final
 /// device secret key.
-pub const ROOT_SEED: SlotIndex = SlotIndex::Key(256, PartitionAccess::Fw0, RwPerms::ReadOnly);
+pub const ROOT_SEED: SlotIndex = SlotIndex::Data(256, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// The `RMA_KEY` is a secret parameter that is unique per-device secret which is recorded
 /// at manufacturing time. Its purpose is to facilitate the creation of a signed RMA
 /// authorization certificate which upon receipt would blank the device and unlock various
 /// features for debugging failed hardware.
-pub const RMA_KEY: SlotIndex = SlotIndex::Key(257, PartitionAccess::Fw0, RwPerms::ReadOnly);
+pub const RMA_KEY: SlotIndex = SlotIndex::Data(257, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// Reserved for use as a CP to FT tracking cookie. This is used to help track inventory
 /// between CP and FT, if such a feature is desired in the supply chain. Blanked on entry
 /// to developer mode.
-pub const CP_COOKIE: SlotIndex = SlotIndex::Key(258, PartitionAccess::Fw0, RwPerms::ReadWrite);
+pub const CP_COOKIE: SlotIndex = SlotIndex::Data(258, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// The swap encryption key. Used to protect swap images beyond the signing key, if we so desire.
-pub const SWAP_KEY: SlotIndex = SlotIndex::Key(259, PartitionAccess::Fw0, RwPerms::ReadOnly);
+pub const SWAP_KEY: SlotIndex = SlotIndex::Data(259, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// `NUISANCE_KEYS` are hashed together with `ROOT_SEED` to derive the core secret.
 /// Their primary purpose is to annoy microscopists trying to read the secret key by
@@ -85,9 +85,9 @@ pub const SWAP_KEY: SlotIndex = SlotIndex::Key(259, PartitionAccess::Fw0, RwPerm
 /// numbered data slots. Some of the data slots in the first 8 slots will be read-only at CP time, and
 /// thus they can't be initialized with random data and be used as a nuisance key. This is a minor degradation
 /// in security margin.
-pub const NUISANCE_KEYS_0: SlotIndex = SlotIndex::KeyRange(8..128, PartitionAccess::Fw0, RwPerms::ReadOnly);
+pub const NUISANCE_KEYS_0: SlotIndex = SlotIndex::DataRange(8..128, PartitionAccess::Fw0, RwPerms::ReadWrite);
 pub const NUISANCE_KEYS_1: SlotIndex =
-    SlotIndex::KeyRange(1920..2048, PartitionAccess::Fw0, RwPerms::ReadOnly);
+    SlotIndex::DataRange(1920..2048, PartitionAccess::Fw0, RwPerms::ReadWrite);
 pub const NUISANCE_KEYS: [SlotIndex; 2] = [NUISANCE_KEYS_0, NUISANCE_KEYS_1];
 
 /// `CHAFF_KEYS` are a bank of keys that are hashed into the key array, but instead of
@@ -109,7 +109,7 @@ pub const NUISANCE_KEYS: [SlotIndex; 2] = [NUISANCE_KEYS_0, NUISANCE_KEYS_1];
 /// the chaff is cleared, we also don't care as much about side channels since we're now operating
 /// in a fundamentally insecure regime (e.g. developer mode - you can just read out the data by
 /// running your own code on the device).
-pub const CHAFF_KEYS: SlotIndex = SlotIndex::KeyRange(128..256, PartitionAccess::Fw0, RwPerms::ReadWrite);
+pub const CHAFF_KEYS: SlotIndex = SlotIndex::DataRange(128..256, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// All the slots of concern located in a single iterator. The idea is that everything is
 /// condensed here and used to check for access integrity using the array below.
@@ -127,4 +127,4 @@ pub const DATA_SLOTS: [SlotIndex; 8] = [
 /// In addition to these KEY_SLOTS, the DEVELOPER_MODE one way counter is a security-important parameter
 /// that should be included as domain separation in any KDF.
 pub const KEY_SLOTS: [SlotIndex; 6] =
-    [ROOT_SEED, RMA_KEY, CP_COOKIE, NUISANCE_KEYS_0, NUISANCE_KEYS_1, CHAFF_KEYS];
+    [CP_COOKIE, RMA_KEY, ROOT_SEED, NUISANCE_KEYS_0, NUISANCE_KEYS_1, CHAFF_KEYS];

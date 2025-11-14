@@ -678,6 +678,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
             )?;
             builder.add_loader_feature("alt-boot1");
+            builder.add_loader_feature("force-dabao");
             builder
                 .set_baremetal(true)
                 .target_baremetal_bao1x("bao1x-alt-boot1")

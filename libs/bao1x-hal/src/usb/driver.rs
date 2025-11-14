@@ -1630,6 +1630,8 @@ impl CorigineUsb {
         }
     }
 
+    pub fn get_speed(&self) -> PortSpeed { PortSpeed::from_portsc(self.csr.r(PORTSC)) }
+
     pub fn update_ep0_maxpacketsize(&mut self, size: usize) {
         let cmd_param = self.csr.ms(CMDPARA0_CMD1_UPDATE_EP0_MPS, size as u32);
         self.issue_command(CmdType::UpdateEp0, cmd_param, 0).expect("couldn't issue command");

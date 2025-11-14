@@ -137,27 +137,23 @@ impl OneWayCounter {
 #[derive(PartialEq, Eq, Debug)]
 pub enum AccessSettings {
     Data(DataSlotAccess),
-    Key(KeySlotAccess),
 }
 impl AccessSettings {
     pub fn raw_u32(&self) -> u32 {
         match self {
             Self::Data(d) => d.raw_value(),
-            Self::Key(d) => d.raw_value(),
         }
     }
 
     pub fn allows_cpu_read(&self) -> bool {
         match self {
             Self::Data(d) => !d.core_rd_dis(),
-            Self::Key(d) => !d.core_rd_dis(),
         }
     }
 
     pub fn allows_cpu_write(&self) -> bool {
         match self {
             Self::Data(d) => !d.core_wr_dis(),
-            Self::Key(d) => !d.core_wr_dis(),
         }
     }
 
@@ -165,7 +161,6 @@ impl AccessSettings {
     pub fn is_set_only(&self) -> bool {
         match self {
             Self::Data(d) => d.write_mode(),
-            Self::Key(_d) => false,
         }
     }
 }
@@ -181,9 +176,11 @@ pub enum AccessType {
 pub struct SlotManager {
     data_range: xous::MemoryRange,
     data_acl_range: xous::MemoryRange,
-    key_range: xous::MemoryRange,
-    key_acl_range: xous::MemoryRange,
     user_id: CoreuserId,
+    #[cfg(feature = "std")]
+    data_write_offset: xous::MemoryRange,
+    #[cfg(feature = "std")]
+    data_acl_write_offset: xous::MemoryRange,
 }
 
 impl SlotManager {
@@ -206,21 +203,13 @@ impl SlotManager {
         )
         .expect("Couldn't map ACL range");
         #[cfg(feature = "std")]
-        let key_range = xous::map_memory(
-            xous::MemoryAddress::new(KEY_SLOT_START),
-            None,
-            KEY_SLOT_LEN,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("Couldn't map slot range");
+        // safety: these ranges are valid and pre-aligned
+        let data_write_offset = unsafe { xous::MemoryRange::new(DATA_SLOT_START, DATA_SLOT_LEN).unwrap() };
         #[cfg(feature = "std")]
-        let key_acl_range = xous::map_memory(
-            xous::MemoryAddress::new(ACRAM_KEYSLOT_START),
-            None,
-            ACRAM_KEYSLOT_LEN,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("Couldn't map ACL range");
+        // safety: these ranges are valid and pre-aligned
+        let data_acl_write_offset =
+            unsafe { xous::MemoryRange::new(ACRAM_DATASLOT_START, ACRAM_DATASLOT_LEN).unwrap() };
+
         #[cfg(not(feature = "std"))]
         // safety: these ranges are valid and pre-aligned
         let data_range = unsafe { xous::MemoryRange::new(DATA_SLOT_START, DATA_SLOT_LEN).unwrap() };
@@ -228,13 +217,6 @@ impl SlotManager {
         // safety: these ranges are valid and pre-aligned
         let data_acl_range =
             unsafe { xous::MemoryRange::new(ACRAM_DATASLOT_START, ACRAM_DATASLOT_LEN).unwrap() };
-        #[cfg(not(feature = "std"))]
-        // safety: these ranges are valid and pre-aligned
-        let key_range = unsafe { xous::MemoryRange::new(KEY_SLOT_START, KEY_SLOT_LEN).unwrap() };
-        #[cfg(not(feature = "std"))]
-        // safety: these ranges are valid and pre-aligned
-        let key_acl_range =
-            unsafe { xous::MemoryRange::new(ACRAM_KEYSLOT_START, ACRAM_KEYSLOT_LEN).unwrap() };
 
         #[cfg(feature = "std")]
         let user_id = if xous::process::id() == crate::coreuser::TRUSTED_PID as u32 {
@@ -246,15 +228,17 @@ impl SlotManager {
         #[cfg(not(feature = "std"))]
         let user_id = crate::coreuser::TRUSTED_USER;
 
-        Self { data_range, data_acl_range, key_range, key_acl_range, user_id }
+        #[cfg(not(feature = "std"))]
+        let ret = Self { data_range, data_acl_range, user_id };
+        #[cfg(feature = "std")]
+        let ret = Self { data_range, data_acl_range, user_id, data_write_offset, data_acl_write_offset };
+        ret
     }
 
     #[cfg(feature = "std")]
     pub fn register_mapping(&self, rram: &mut Reram) {
         rram.add_range(DATA_SLOT_START - utralib::HW_RERAM_MEM, self.data_range);
         rram.add_range(ACRAM_DATASLOT_START - utralib::HW_RERAM_MEM, self.data_acl_range);
-        rram.add_range(KEY_SLOT_START - utralib::HW_RERAM_MEM, self.key_range);
-        rram.add_range(ACRAM_KEYSLOT_START - utralib::HW_RERAM_MEM, self.key_acl_range);
     }
 
     pub fn read(&self, slot: &SlotIndex) -> Result<&[u8], AccessError> {
@@ -269,14 +253,8 @@ impl SlotManager {
                 SlotIndex::Data(_, _, _) => unsafe {
                     &self.data_range.as_slice()[offset..offset + SLOT_ELEMENT_LEN_BYTES]
                 },
-                SlotIndex::Key(_, _, _) => unsafe {
-                    &self.key_range.as_slice()[offset..offset + SLOT_ELEMENT_LEN_BYTES]
-                },
                 SlotIndex::DataRange(range, _, _) => unsafe {
                     &self.data_range.as_slice()[offset..offset + SLOT_ELEMENT_LEN_BYTES * range.len()]
-                },
-                SlotIndex::KeyRange(range, _, _) => unsafe {
-                    &self.key_range.as_slice()[offset..offset + SLOT_ELEMENT_LEN_BYTES * range.len()]
                 },
             })
         } else {
@@ -288,16 +266,8 @@ impl SlotManager {
     /// There is access or type checking done. This is a "raw read" primitive mostly used for debugging.
     pub unsafe fn read_data_slot(&self, absolute_offset: usize) -> &[u8] {
         let ptr: *const u8 = &self.data_range.as_slice::<u8>()[absolute_offset] as *const u8;
-        crate::println!("data loc: {:x}", ptr as usize);
+        crate::println!("data loc: {:x}, offset: {:x}", ptr as usize, absolute_offset);
         &self.data_range.as_slice()[absolute_offset..absolute_offset + SLOT_ELEMENT_LEN_BYTES]
-    }
-
-    /// Safety: the caller must resolve the index into either the data or the key array correctly.
-    /// There is access or type checking done. This is a "raw read" primitive mostly used for debugging.
-    pub unsafe fn read_key_slot(&self, absolute_offset: usize) -> &[u8] {
-        let ptr: *const u8 = &self.key_range.as_slice::<u8>()[absolute_offset] as *const u8;
-        crate::println!("key loc: {:x}", ptr as usize);
-        &self.key_range.as_slice()[absolute_offset..absolute_offset + SLOT_ELEMENT_LEN_BYTES]
     }
 
     pub fn write(&self, writer: &mut Reram, slot: &SlotIndex, value: &[u8]) -> Result<(), AccessError> {
@@ -305,9 +275,13 @@ impl SlotManager {
         if self.user_id.is_accessible(&acl, &AccessType::Write) {
             let offset = slot.try_into_data_offset()?;
 
+            #[cfg(not(feature = "std"))]
             let range = match slot {
                 SlotIndex::Data(_, _, _) | SlotIndex::DataRange(_, _, _) => &self.data_range,
-                SlotIndex::Key(_, _, _) | SlotIndex::KeyRange(_, _, _) => &self.key_range,
+            };
+            #[cfg(feature = "std")]
+            let range = match slot {
+                SlotIndex::Data(_, _, _) | SlotIndex::DataRange(_, _, _) => &self.data_write_offset,
             };
 
             if value.len() != slot.len() * SLOT_ELEMENT_LEN_BYTES {
@@ -322,6 +296,7 @@ impl SlotManager {
         if self.user_id.is_accessible(&acl, &AccessType::Read) {
             // read-verify only if we have read access
             let readback = self.read(slot)?;
+            crate::println!("rbk: {:x?}", &readback[..8]);
             if readback != value { Err(AccessError::WriteError) } else { Ok(()) }
         } else {
             Ok(())
@@ -336,12 +311,6 @@ impl SlotManager {
                 let offset = slot.try_into_acl_offset()?;
                 AccessSettings::Data(DataSlotAccess::new_with_raw_value(u32::from_le_bytes(unsafe {
                     self.data_acl_range.as_slice()[offset..offset + size_of::<u32>()].try_into().unwrap()
-                })))
-            }
-            SlotIndex::Key(_, _, _) => {
-                let offset = slot.try_into_acl_offset()?;
-                AccessSettings::Key(KeySlotAccess::new_with_raw_value(u32::from_le_bytes(unsafe {
-                    self.key_acl_range.as_slice()[offset..offset + size_of::<u32>()].try_into().unwrap()
                 })))
             }
             SlotIndex::DataRange(_, _, _) => {
@@ -360,22 +329,6 @@ impl SlotManager {
                 }
                 AccessSettings::Data(prototype)
             }
-            SlotIndex::KeyRange(_, _, _) => {
-                let mut range = slot.try_into_acl_iter()?;
-                let offset = range.next().unwrap();
-                let prototype = KeySlotAccess::new_with_raw_value(u32::from_le_bytes(unsafe {
-                    self.key_acl_range.as_slice()[offset..offset + size_of::<u32>()].try_into().unwrap()
-                }));
-                for offset in range {
-                    let successor = KeySlotAccess::new_with_raw_value(u32::from_le_bytes(unsafe {
-                        self.key_acl_range.as_slice()[offset..offset + size_of::<u32>()].try_into().unwrap()
-                    }));
-                    if prototype != successor {
-                        return Err(AccessError::KeyAclInconsistency(prototype));
-                    }
-                }
-                AccessSettings::Key(prototype)
-            }
         })
     }
 
@@ -389,22 +342,22 @@ impl SlotManager {
         }))
     }
 
-    /// Safety: the caller must resolve the index into either the data or the key array correctly.
-    /// There is access or type checking done. This is a "raw read" primitive mostly used for debugging.
-    pub unsafe fn get_key_acl(&self, absolute_offset: usize) -> KeySlotAccess {
-        KeySlotAccess::new_with_raw_value(u32::from_le_bytes(unsafe {
-            self.key_acl_range.as_slice()[absolute_offset..absolute_offset + size_of::<u32>()]
-                .try_into()
-                .unwrap()
-        }))
-    }
-
     pub fn set_acl(
         &self,
         writer: &mut Reram,
         slot: &SlotIndex,
         setting: &AccessSettings,
     ) -> Result<(), AccessError> {
+        #[cfg(not(feature = "std"))]
+        let ptr = match slot {
+            SlotIndex::Data(_, _, _) | SlotIndex::DataRange(_, _, _) => self.data_acl_range.as_ptr() as usize,
+        };
+        #[cfg(feature = "std")]
+        let ptr = match slot {
+            SlotIndex::Data(_, _, _) | SlotIndex::DataRange(_, _, _) => {
+                self.data_acl_write_offset.as_ptr() as usize
+            }
+        };
         // safety: the unsafe blocks here are concerned that the data types of the resulting
         // slice are all representable. In this case, all bits are valid in the final representation.
         match slot {
@@ -412,45 +365,27 @@ impl SlotManager {
                 let offset = slot.try_into_acl_offset()?;
                 writer
                     .protected_write_slice(
-                        self.data_acl_range.as_ptr() as usize - utralib::HW_RERAM_MEM + offset,
-                        &setting.raw_u32().to_le_bytes(),
-                    )
-                    .map(|_| ())
-                    .map_err(|_| AccessError::WriteError)
-            }
-            SlotIndex::Key(_, _, _) => {
-                let offset = slot.try_into_acl_offset()?;
-                writer
-                    .protected_write_slice(
-                        self.key_acl_range.as_ptr() as usize - utralib::HW_RERAM_MEM + offset,
+                        ptr - utralib::HW_RERAM_MEM + offset,
                         &setting.raw_u32().to_le_bytes(),
                     )
                     .map(|_| ())
                     .map_err(|_| AccessError::WriteError)
             }
             SlotIndex::DataRange(_, _, _) => {
+                let mut success = true;
                 for offset in slot.try_into_acl_iter()? {
-                    writer
-                        .protected_write_slice(
-                            self.data_acl_range.as_ptr() as usize - utralib::HW_RERAM_MEM + offset,
-                            &setting.raw_u32().to_le_bytes(),
-                        )
-                        .map(|_| ())
-                        .map_err(|_| AccessError::WriteError)?
+                    match writer.protected_write_slice(
+                        ptr - utralib::HW_RERAM_MEM + offset,
+                        &setting.raw_u32().to_le_bytes(),
+                    ) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            success = false;
+                            crate::println!("Can't write to ACL offset {:x}: {:?}", offset, e);
+                        }
+                    }
                 }
-                Ok(())
-            }
-            SlotIndex::KeyRange(_, _, _) => {
-                for offset in slot.try_into_acl_iter()? {
-                    writer
-                        .protected_write_slice(
-                            self.key_acl_range.as_ptr() as usize - utralib::HW_RERAM_MEM + offset,
-                            &setting.raw_u32().to_le_bytes(),
-                        )
-                        .map(|_| ())
-                        .map_err(|_| AccessError::WriteError)?
-                }
-                Ok(())
+                if success { Ok(()) } else { Err(AccessError::WriteError) }
             }
         }
     }

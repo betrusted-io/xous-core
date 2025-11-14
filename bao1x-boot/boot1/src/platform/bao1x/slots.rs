@@ -72,6 +72,13 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
         crate::println!("Public ID init done.");
     }
 
+    // Delegate in-system key setup to the OS. Don't do it in the bootloader. This code is
+    // too hard to get right to be doing it here, and there is no ostensible security advantage
+    // in doing it at this stage versus in the system. Reasoning: the in-system key setup would
+    // be done in the factory, post-wafer probe, regardless. Whether it's hard-coded into the boot1
+    // stage or left to be flexible based on the OS's needs doesn't make a difference because the
+    // point of keying is still going to be the factory.
+    /*
     if (*board_type == bao1x_api::BoardTypeCoding::Baosec
         && owc.get(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0)
         || (*board_type == bao1x_api::BoardTypeCoding::Dabao
@@ -109,6 +116,7 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
         }
         crate::println!("Secret ID init done.");
     }
+    */
 
     #[cfg(feature = "print-ifr")]
     print_ifr();
@@ -154,10 +162,6 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
         let mut is_consistent = true;
         let mut acl = match slot_mgr.get_acl(&slot_element) {
             Ok(settings) => settings,
-            Err(bao1x_api::AccessError::KeyAclInconsistency(prototype)) => {
-                is_consistent = false;
-                AccessSettings::Key(prototype)
-            }
             Err(bao1x_api::AccessError::DataAclInconsistency(prototype)) => {
                 is_consistent = false;
                 AccessSettings::Data(prototype)
@@ -167,9 +171,6 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
         let (pa, rw) = slot_element.get_access_spec();
         let is_correct = match acl {
             AccessSettings::Data(sa) => sa.get_partition_access() == pa && sa.get_rw_permissions() == rw,
-            AccessSettings::Key(sa) => {
-                sa.get_partition_access() == pa && sa.get_rw_permissions() == rw && sa.akey_id() == 31
-            }
         };
         if !is_correct || !is_consistent {
             crate::println!(
@@ -184,14 +185,14 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
                     sa.set_partition_access(&pa);
                     sa.set_rw_permissions(rw);
                 }
-                AccessSettings::Key(sa) => {
-                    sa.set_partition_access(&pa);
-                    sa.set_rw_permissions(rw);
-                    sa.set_akey_id(0xFF); // 0xff disables key chaining to access the key
+            }
+            crate::println!("Writing ACL raw value: {:x?}", acl);
+            match slot_mgr.set_acl(rram, slot_element, &acl) {
+                Ok(_) => {}
+                Err(e) => {
+                    crate::println!("Couldn't set ACL for {:?} ({:?})", slot_element, e);
                 }
             }
-            crate::println!("Fixed ACL raw value: {:x?}", acl);
-            slot_mgr.set_acl(rram, slot_element, &acl).unwrap();
         }
     }
 }
@@ -220,16 +221,6 @@ fn print_slots(slot_mgr: &SlotManager, slot_list: &[SlotIndex]) {
                     let acl = slot_mgr.get_data_acl(acl_index);
                     crate::println!(
                         "    Data {} ({:x?}): {:x?}",
-                        data_index / SLOT_ELEMENT_LEN_BYTES,
-                        acl,
-                        bytes
-                    );
-                },
-                SlotType::Key => unsafe {
-                    let bytes = slot_mgr.read_key_slot(data_index);
-                    let acl = slot_mgr.get_key_acl(acl_index);
-                    crate::println!(
-                        "    Key {} ({:x?}): {:x?}",
                         data_index / SLOT_ELEMENT_LEN_BYTES,
                         acl,
                         bytes

@@ -479,7 +479,11 @@ impl Repl {
                     crate::println!("Permissions (actual): {:x?}", acl);
                     // attempt to clear the permissions, making the keys malleable
                     slot_mgr
-                        .set_acl(&mut rram, &key, &AccessSettings::Key(KeySlotAccess::new_with_raw_value(0)))
+                        .set_acl(
+                            &mut rram,
+                            &key,
+                            &AccessSettings::Data(DataSlotAccess::new_with_raw_value(0)),
+                        )
                         .ok(); // if we can't clear, that's by design
 
                     let acl = slot_mgr.get_acl(&key).unwrap();

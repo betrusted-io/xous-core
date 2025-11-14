@@ -49,7 +49,7 @@ pub fn try_boot(or_die: bool) {
             if tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
                 || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
             {
-                crate::println!("Developer key detected, ensuring secret are erased");
+                crate::println!("Developer key detected, ensuring secrets are erased");
                 bao1x_hal::sigcheck::erase_secrets();
             }
             // this has to be called *after* erase_secrets, because we can't erase the secrets
