@@ -257,10 +257,12 @@ pub fn erase_secrets() {
                         let check = unsafe { slot_mgr.read_data_slot(data_index) };
                         if !check.iter().all(|&b| b == ERASE_VALUE) {
                             crate::println!("Failed to erase key at {}: {:x?}", data_index, check);
+                            /* // commented out - can lead to boot loops
                             // reboot on failure to erase
                             let mut rcurst =
                                 utralib::CSR::new(utralib::utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
                             rcurst.wo(utralib::utra::sysctrl::SFR_RCURST0, 0x55AA);
+                            */
                         } else {
                             crate::println!("Key range at {} confirmed erased", slot.get_base());
                         }
@@ -268,9 +270,7 @@ pub fn erase_secrets() {
                     _ => {}
                 }
                 if zero_key_count > ZERO_ERR_THRESH {
-                    panic!(
-                        "Saw too many zero-keys. Insufficient privilege to erase keys, panicing instead of allowing a boot!"
-                    );
+                    crate::println!("Saw too many zero-keys. Insufficient privilege to erase keys!");
                 }
             }
         }
