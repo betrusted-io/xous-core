@@ -9,12 +9,20 @@ pub static TX_IDLE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicB
 
 // Call from USB_REQ_SET_CONFIGURATION after setting device state to Configured
 pub(crate) fn enable_serial_eps(this: &mut CorigineUsb) {
+    let int_mps = match this.get_speed() {
+        PortSpeed::Fs => FS_INT_MPS,
+        _ => HS_INT_MPS,
+    };
     // CDC notification IN (interrupt)
-    this.ep_enable(2, USB_SEND, HS_INT_MPS as _, EpType::IntrInbound);
+    this.ep_enable(2, USB_SEND, int_mps as _, EpType::IntrInbound);
 
+    let bulk_mps = match this.get_speed() {
+        PortSpeed::Fs => FS_BULK_MPS,
+        _ => HS_BULK_MPS,
+    };
     // CDC data bulk OUT and IN
-    this.ep_enable(3, USB_RECV, HS_BULK_MPS as _, EpType::BulkOutbound);
-    this.ep_enable(3, USB_SEND, HS_BULK_MPS as _, EpType::BulkInbound);
+    this.ep_enable(3, USB_RECV, bulk_mps as _, EpType::BulkOutbound);
+    this.ep_enable(3, USB_SEND, bulk_mps as _, EpType::BulkInbound);
 }
 
 pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize, length: usize) {
