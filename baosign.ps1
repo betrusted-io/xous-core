@@ -35,15 +35,11 @@ $configurations = @{
         @{ Image = "baremetal.img"; FunctionCode = "baremetal" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" }
     )
     "dabao"      = @(
-        @{ Image = "bao1x-boot0.img"; FunctionCode = "boot0" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
-        @{ Image = "bao1x-boot1.img"; FunctionCode = "boot1" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
         @{ Image = "loader.bin"; FunctionCode = "loader" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
         @{ Image = "xous.img"; FunctionCode = "kernel" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
         @{ Image = "apps.img"; FunctionCode = "app" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
     )
     "baosec"     = @(
-        @{ Image = "bao1x-boot0.img"; FunctionCode = "boot0" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
-        @{ Image = "bao1x-boot1.img"; FunctionCode = "boot1" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
         @{ Image = "loader.bin"; FunctionCode = "loader" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
         @{ Image = "xous.img"; FunctionCode = "kernel" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
         @{ Image = "swap.img"; FunctionCode = "swap" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
