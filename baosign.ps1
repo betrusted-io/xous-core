@@ -32,8 +32,6 @@ $configurations = @{
         @{ Image = "bao1x-alt-boot1.img"; FunctionCode = "loader" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" }
     )
     "baremetal"  = @(
-        @{ Image = "bao1x-boot0.img"; FunctionCode = "boot0" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
-        @{ Image = "bao1x-boot1.img"; FunctionCode = "boot1" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
         @{ Image = "baremetal.img"; FunctionCode = "baremetal" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" }
     )
     "dabao"      = @(
