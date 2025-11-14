@@ -221,10 +221,9 @@ pub fn erase_secrets() {
     let mut rram = crate::rram::Reram::new();
 
     let mut zero_key_count = 0;
-    // statistically speaking, I suppose, maybe we could have "a" set of keys that are 0 out of a randomly
-    // generated set. But if we see more than the threshold below of zero keys, conclude that we don't
-    // have access permissions, and panic instead of allowing a boot.
-    const ZERO_ERR_THRESH: usize = 2;
+    // This is set to a higher level because we need to work around an earlier issue
+    // with overly-broad ACL settings on alpha0 boards
+    const ZERO_ERR_THRESH: usize = 64;
     for slot in crate::board::KEY_SLOTS.iter() {
         if slot.get_type() == SlotType::Data {
             let (_pa, rw_perms) = slot.get_access_spec();
