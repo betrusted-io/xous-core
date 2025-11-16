@@ -281,7 +281,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                 if tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
                     || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
                 {
-                    crate::println!("Developer key detected, ensuring secret are erased");
+                    crate::println!("Developer key detected, ensuring secrets are erased");
                     bao1x_hal::sigcheck::erase_secrets();
                 }
             }
@@ -315,7 +315,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                         == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
                         || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
                     {
-                        crate::println!("Developer key detected, ensuring secret are erased");
+                        crate::println!("Developer key detected, ensuring secrets are erased");
                         bao1x_hal::sigcheck::erase_secrets();
                     }
                     true

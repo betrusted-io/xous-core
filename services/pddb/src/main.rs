@@ -841,7 +841,11 @@ fn wrapped_main() -> ! {
                             unreachable!();
                         }
                         PasswordState::Incorrect(_failcount) => {
-                            unreachable!();
+                            log::warn!("PDDB formatted, but keys rotated. Formatting PDDB!");
+                            pddb_os.pddb_format(false, None).expect("couldn't format PDDB");
+                            if !try_mount(&mut pddb_os, &mut basis_cache, &mut basis_monitor_notifications) {
+                                panic!("Couldn't format & mount PDDB");
+                            }
                         }
                     }
                     // the above operation should either succeed or panic, so we are always "success" here

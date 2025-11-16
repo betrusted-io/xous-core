@@ -175,11 +175,11 @@ pub const UUID: SlotIndex = SlotIndex::Data(1, PartitionAccess::Open, RwPerms::R
 /// `IFR_HASH` is a provisional slot for a hash of the IFR region. Whether the hash is meaningful
 /// or not depends on if the chip is booted before it is sealed. At the time of writing, it's
 /// not clear if the wafer probe infrastructure will allow this.
-pub const IFR_HASH: SlotIndex = SlotIndex::Data(2, PartitionAccess::All, RwPerms::ReadOnly);
+pub const IFR_HASH: SlotIndex = SlotIndex::Data(2, PartitionAccess::Open, RwPerms::ReadWrite);
 
 /// `WAFER_ID` is a copy of the lot ID + wafer ID + x/y position data that should be captured
 /// during CP.
-pub const CP_ID: SlotIndex = SlotIndex::Data(3, PartitionAccess::All, RwPerms::ReadOnly);
+pub const CP_ID: SlotIndex = SlotIndex::Data(3, PartitionAccess::Open, RwPerms::ReadWrite);
 
 /// Indelible versions of the public keys. The problem with the pubkeys in boot0 region is that
 /// boot0 itself has the ability to modify its own memory. A copy here can have a bit set in
