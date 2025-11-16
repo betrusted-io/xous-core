@@ -7,9 +7,6 @@ use core::ops::Range;
 use arbitrary_int::{Number, u4};
 use bitbybit::bitfield;
 
-pub const KEY_SLOT_START: usize = 0x603F_0000;
-pub const KEY_SLOT_LEN: usize = 0x1_0000;
-pub const MAX_KEY_SLOTS: usize = KEY_SLOT_LEN / SLOT_ELEMENT_LEN_BYTES;
 pub const DATA_SLOT_START: usize = 0x603E_0000;
 pub const DATA_SLOT_LEN: usize = 0x1_0000;
 pub const MAX_DATA_SLOTS: usize = DATA_SLOT_LEN / SLOT_ELEMENT_LEN_BYTES;
@@ -17,10 +14,6 @@ pub const SLOT_ELEMENT_LEN_BYTES: usize = 256 / 8;
 
 pub const ACRAM_DATASLOT_START: usize = 0x603D_C000;
 pub const ACRAM_DATASLOT_LEN: usize = 0x2000;
-pub const ACRAM_KEYSLOT_START: usize = 0x603D_E000;
-pub const ACRAM_KEYSLOT_LEN: usize = 0x2000;
-// pub const ACRAM_GKEYSLOT_START: usize = 0x603D_E400; // This is mentioned in the docs but I don't see it in
-// the code?
 pub const IFR_BASE: usize = 0x6040_0000;
 pub const IFR_LEN: usize = 0x400;
 /// This number is special: it only appears during certain portions of the chip life cycle in
@@ -101,79 +94,6 @@ impl DataSlotAccess {
     }
 }
 
-#[bitfield(u32)]
-#[derive(PartialEq, Eq, Debug)]
-pub struct KeySlotAccess {
-    #[bits(24..=31, rw)]
-    akey_id: u8,
-    #[bit(23, rw)]
-    fw1: bool,
-    #[bit(22, rw)]
-    fw0: bool,
-    #[bit(21, rw)]
-    boot1: bool,
-    #[bit(20, rw)]
-    boot0: bool,
-    #[bits(8..=15, rw)]
-    seg_id: u8,
-    #[bit(3, rw)]
-    sce_wr_dis: bool,
-    #[bit(2, rw)]
-    sce_rd_dis: bool,
-    #[bit(1, rw)]
-    core_wr_dis: bool,
-    #[bit(0, rw)]
-    core_rd_dis: bool,
-}
-
-impl KeySlotAccess {
-    // This method is only valid in no-std currently. Not sure if there is even meaning for us
-    // to access this in the Xous environment, as this is primarily a secure boot construct
-    #[cfg(not(feature = "std"))]
-    pub fn get_entry(slot: usize) -> Self {
-        let slot_array =
-            unsafe { core::slice::from_raw_parts(ACRAM_KEYSLOT_START as *const KeySlotAccess, 2048) };
-        slot_array[slot]
-    }
-
-    pub fn get_partition_access(&self) -> PartitionAccess { PartitionAccess::from_raw_u32(self.raw_value()) }
-
-    pub fn set_partition_access(&mut self, pa: &PartitionAccess) {
-        *self = Self::new_with_raw_value((self.raw_value() & !(0xf << 20)) | (pa.to_raw_u4().as_u32() << 20));
-    }
-
-    pub fn get_rw_permissions(&self) -> RwPerms {
-        match [self.core_rd_dis(), self.core_wr_dis()] {
-            [true, true] => RwPerms::Denied,
-            [false, true] => RwPerms::ReadOnly,
-            [true, false] => RwPerms::WriteOnly,
-            [false, false] => RwPerms::ReadWrite,
-        }
-    }
-
-    pub fn set_rw_permissions(&mut self, spec: RwPerms) {
-        match spec {
-            RwPerms::Denied => {
-                self.set_core_rd_dis(true);
-                self.set_core_wr_dis(true);
-            }
-            RwPerms::ReadOnly => {
-                self.set_core_rd_dis(false);
-                self.set_core_wr_dis(true);
-            }
-            RwPerms::WriteOnly => {
-                self.set_core_rd_dis(true);
-                self.set_core_wr_dis(false);
-            }
-            RwPerms::ReadWrite => {
-                self.set_core_rd_dis(false);
-                self.set_core_wr_dis(false);
-            }
-            RwPerms::Unspecified => panic!("RwPerms must be specified"),
-        }
-    }
-}
-
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum AccessError {
     /// Access is anticipated to be denied by the hardware. Users can attempt to still
@@ -196,7 +116,6 @@ pub enum AccessError {
     /// Returned when a set of slots that should have the same ACL don't. The value
     /// inside is the value of the first ACL in the set.
     DataAclInconsistency(DataSlotAccess),
-    KeyAclInconsistency(KeySlotAccess),
 }
 
 /// Enum to specify read/write permissions to a given slot.
@@ -279,28 +198,22 @@ impl PartitionAccess {
 pub enum SlotIndex {
     Data(usize, PartitionAccess, RwPerms),
     DataRange(Range<usize>, PartitionAccess, RwPerms),
-    Key(usize, PartitionAccess, RwPerms),
-    KeyRange(Range<usize>, PartitionAccess, RwPerms),
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum SlotType {
     Data,
-    Key,
 }
 impl SlotIndex {
     pub fn get_access_spec(&self) -> (PartitionAccess, RwPerms) {
         match self {
             Self::Data(_, spec, rw) => (*spec, *rw),
             Self::DataRange(_, spec, rw) => (*spec, *rw),
-            Self::Key(_, spec, rw) => (*spec, *rw),
-            Self::KeyRange(_, spec, rw) => (*spec, *rw),
         }
     }
 
     pub fn get_type(&self) -> SlotType {
         match self {
             Self::Data(_, _, _) | Self::DataRange(_, _, _) => SlotType::Data,
-            Self::Key(_, _, _) | Self::KeyRange(_, _, _) => SlotType::Key,
         }
     }
 
@@ -308,8 +221,6 @@ impl SlotIndex {
         match self {
             Self::Data(base, _, _) => *base,
             Self::DataRange(range, _, _) => range.start,
-            Self::Key(base, _, _) => *base,
-            Self::KeyRange(range, _, _) => range.start,
         }
     }
 
@@ -317,8 +228,6 @@ impl SlotIndex {
         match self {
             Self::Data(_, _, _) => 1,
             Self::DataRange(range, _, _) => range.len(),
-            Self::Key(_, _, _) => 1,
-            Self::KeyRange(range, _, _) => range.len(),
         }
     }
 
@@ -333,24 +242,9 @@ impl SlotIndex {
                     Err(AccessError::OutOfBounds)
                 }
             }
-            Self::Key(index, _, _) => {
-                if *index < MAX_KEY_SLOTS {
-                    Ok(*index * SLOT_ELEMENT_LEN_BYTES)
-                } else {
-                    Err(AccessError::OutOfBounds)
-                }
-            }
             Self::DataRange(range, _, _) => {
                 let index = range.start;
                 if range.end <= MAX_DATA_SLOTS {
-                    Ok(index * SLOT_ELEMENT_LEN_BYTES)
-                } else {
-                    Err(AccessError::OutOfBounds)
-                }
-            }
-            Self::KeyRange(range, _, _) => {
-                let index = range.start;
-                if range.end <= MAX_KEY_SLOTS {
                     Ok(index * SLOT_ELEMENT_LEN_BYTES)
                 } else {
                     Err(AccessError::OutOfBounds)
@@ -374,19 +268,6 @@ impl SlotIndex {
                 }
                 Ok(SlotOffsetIter::Range(range.clone().map(|idx| idx * SLOT_ELEMENT_LEN_BYTES)))
             }
-            Self::Key(index, _, _) => {
-                if *index < MAX_KEY_SLOTS {
-                    Ok(SlotOffsetIter::Single(core::iter::once(*index * SLOT_ELEMENT_LEN_BYTES)))
-                } else {
-                    Err(AccessError::OutOfBounds)
-                }
-            }
-            Self::KeyRange(range, _, _) => {
-                if range.end > MAX_KEY_SLOTS {
-                    return Err(AccessError::OutOfBounds);
-                }
-                Ok(SlotOffsetIter::Range(range.clone().map(|idx| idx * SLOT_ELEMENT_LEN_BYTES)))
-            }
         }
     }
 
@@ -399,22 +280,8 @@ impl SlotIndex {
                     Err(AccessError::OutOfBounds)
                 }
             }
-            Self::Key(index, _, _) => {
-                if *index < MAX_KEY_SLOTS {
-                    Ok(*index * size_of::<u32>())
-                } else {
-                    Err(AccessError::OutOfBounds)
-                }
-            }
             Self::DataRange(range, _, _) => {
                 if range.end <= MAX_DATA_SLOTS {
-                    Ok(range.start * size_of::<u32>())
-                } else {
-                    Err(AccessError::OutOfBounds)
-                }
-            }
-            Self::KeyRange(range, _, _) => {
-                if range.end <= MAX_KEY_SLOTS {
                     Ok(range.start * size_of::<u32>())
                 } else {
                     Err(AccessError::OutOfBounds)
@@ -436,19 +303,6 @@ impl SlotIndex {
             }
             Self::DataRange(range, _, _) => {
                 if range.end > MAX_DATA_SLOTS {
-                    return Err(AccessError::OutOfBounds);
-                }
-                Ok(SlotOffsetIter::Range(range.clone().map(|idx| idx * ACL_SIZE)))
-            }
-            Self::Key(index, _, _) => {
-                if *index < MAX_KEY_SLOTS {
-                    Ok(SlotOffsetIter::Single(core::iter::once(*index * ACL_SIZE)))
-                } else {
-                    Err(AccessError::OutOfBounds)
-                }
-            }
-            Self::KeyRange(range, _, _) => {
-                if range.end > MAX_KEY_SLOTS {
                     return Err(AccessError::OutOfBounds);
                 }
                 Ok(SlotOffsetIter::Range(range.clone().map(|idx| idx * ACL_SIZE)))

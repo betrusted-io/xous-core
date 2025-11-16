@@ -3,6 +3,8 @@ use keystore_api::*;
 mod platform;
 
 fn main() -> ! {
+    #[cfg(feature = "debug-hal")]
+    bao1x_hal::claim_duart();
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
@@ -57,8 +59,11 @@ fn attack_keystore() {
 
     let slot_mgr = bao1x_hal::acram::SlotManager::new();
     // let slot = bao1x_api::baosec::ROOT_SEED;
-    let slot =
-        bao1x_api::offsets::SlotIndex::Key(0, bao1x_api::PartitionAccess::Fw0, bao1x_api::RwPerms::ReadOnly);
+    let slot = bao1x_api::offsets::SlotIndex::Data(
+        256,
+        bao1x_api::PartitionAccess::Fw0,
+        bao1x_api::RwPerms::ReadOnly,
+    );
     let data_index = slot.try_into_data_offset().unwrap();
     let acl_index = slot.try_into_acl_offset().unwrap();
     let user_states = [
@@ -74,8 +79,8 @@ fn attack_keystore() {
             cu.rmwf(utra::coreuser::USERVALUE_USER2, state.as_dense());
             log::info!(" COREUSER STATUS {:x}", cu.r(utra::coreuser::STATUS));
             unsafe {
-                let bytes = slot_mgr.read_key_slot(data_index);
-                let acl = slot_mgr.get_key_acl(acl_index);
+                let bytes = slot_mgr.read_data_slot(data_index);
+                let acl = slot_mgr.get_data_acl(acl_index);
                 log::info!(
                     "    Key {} ({:x?}): {:x?}",
                     data_index / bao1x_api::offsets::SLOT_ELEMENT_LEN_BYTES,

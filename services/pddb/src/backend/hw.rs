@@ -2510,7 +2510,7 @@ impl PddbOs {
                 }
             }
             self.entropy.borrow_mut().get_slice(&mut temp);
-            if (offset / PAGE_SIZE) % 256 == 0 {
+            if (offset / PAGE_SIZE) % 32 == 0 {
                 // ~one update per megabyte
                 log::info!("Cryptographic 'erase': {}/{}", offset, PDDB_A_LEN);
                 if let Some(modals) = progress {

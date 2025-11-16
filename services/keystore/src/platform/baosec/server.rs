@@ -8,7 +8,11 @@ use crate::platform::KeyStore;
 pub fn keystore(sid: SID) -> ! {
     let hal = bao1x_hal_service::Hal::new();
     let mut rram = Reram::new();
-    let mut store = KeyStore::init_from_hw(&mut rram);
+    let mut store = KeyStore::init_mappings(&mut rram);
+    // does nothing if the keys are already initialized
+    store.ensure_system_init(&mut rram);
+    // derive the master key
+    store.derive_master_key();
 
     let mut msg_opt = None;
 
