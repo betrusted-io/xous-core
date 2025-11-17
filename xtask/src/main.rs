@@ -379,6 +379,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("hosted-ci") => {
             builder.target_hosted().add_services(&user_pkgs).hosted_build_only().add_apps(&get_cratespecs());
         }
+        Some("hosted-bao1x-ci") => {
+            let bao_pkgs = [
+                "xous-ticktimer",
+                "keystore",
+                "xous-log",
+                "xous-names",
+                "bao1x-emu",
+                "bao-console",
+                "modals",
+                "pddb",
+                "bao-video",
+                "vault2",
+            ];
+            builder
+                .target_hosted_baosec()
+                .add_services(&bao_pkgs)
+                .hosted_build_only()
+                .add_apps(&get_cratespecs());
+        }
 
         // ------ Precursor hardware image configs ------
         Some("app-image") => {
