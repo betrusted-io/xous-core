@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        task: ["hosted-ci", "renode-image"]
+        task: ["bao1x-boot0", "bao1x-boot1", "bao1x-alt-boot1", "bao1x-baremetal-dabao", "dabao", "baosec", "hosted-bao1x-ci", "hosted-ci", "renode-image"]
     steps:
       - name: Install Ubuntu dependencies
         run: |
