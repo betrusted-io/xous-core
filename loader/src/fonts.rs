@@ -3,21 +3,25 @@
 // The order of these modules affects the link order in the loader, which is referred to in the graphics engine.
 // To make changes, see <xous_root>/libs/blitstr2/codegen/main.go
 
+// NOTE: this list must be in alphabetical order since Rust 1.91.0. If it is not alphabetized,
+// the linker will re-order them into allphabetical order, messing up the offsets.
+
+
+#[cfg(not(feature = "bao1x"))]
+pub mod bold;
 #[cfg(not(feature = "bao1x"))]
 pub mod emoji;
-#[cfg(not(feature = "bao1x"))]
-pub mod zh;
 #[cfg(not(feature = "bao1x"))]
 pub mod ja;
 #[cfg(not(feature = "bao1x"))]
 pub mod kr;
 #[cfg(not(feature = "bao1x"))]
-pub mod bold;
-#[cfg(not(feature = "bao1x"))]
 pub mod mono;
 #[cfg(not(feature = "bao1x"))]
 pub mod regular;
 #[cfg(not(feature = "bao1x"))]
+pub mod small;
+#[cfg(not(feature = "bao1x"))]
 pub mod tall;
 #[cfg(not(feature = "bao1x"))]
-pub mod small;
+pub mod zh;

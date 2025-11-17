@@ -1,6 +1,6 @@
 {
   "comment": [
-    "Config for use with main.go. Before making changes here, see config_editor.rb."
+    "Config for use with main.go. Before making changes here, see config_editor.rb. NOTE: the glyph set list MUST be alphabetized since Rust 1.91"
   ],
   "loadermod": [
     "../../../loader/src/fonts.rs"
@@ -9,6 +9,21 @@
     "../src/fontmap.rs"
   ],
   "glyphSets": [
+    {
+      "name": "Bold",
+      "sprites": "src_data/latin_bold.png",
+      "size": 15,
+      "cols": 16,
+      "gutter": 1,
+      "border": 1,
+      "legal": "src_data/chicago_legal.txt",
+      "index": "src_data/latin_index.json",
+      "indexType": "json-grid-coord",
+      "glyphTrim": "proportional",
+      "rustout": "../src/fonts/bold.rs",
+      "loaderout": "../../../loader/src/fonts/bold.rs",
+      "small": true
+    },
     {
       "name": "Emoji",
       "sprites": "src_data/basic_emoji.png",
@@ -23,21 +38,6 @@
       "rustout": "../src/fonts/emoji.rs",
       "loaderout": "../../../loader/src/fonts/emoji.rs",
       "small": true
-    },
-    {
-      "name": "zh",
-      "sprites": "src_data/hanzi.png",
-      "size": 16,
-      "cols": 30,
-      "gutter": 2,
-      "border": 2,
-      "legal": "src_data/hanzi_legal.txt",
-      "index": "src_data/hanzi.codepoints",
-      "indexType": "txt-row-major",
-      "glyphTrim": "CJK",
-      "rustout": "../src/fonts/zh.rs",
-      "loaderout": "../../../loader/src/fonts/zh.rs",
-      "small": false
     },
     {
       "name": "ja",
@@ -70,21 +70,6 @@
       "small": false
     },
     {
-      "name": "Bold",
-      "sprites": "src_data/latin_bold.png",
-      "size": 15,
-      "cols": 16,
-      "gutter": 1,
-      "border": 1,
-      "legal": "src_data/chicago_legal.txt",
-      "index": "src_data/latin_index.json",
-      "indexType": "json-grid-coord",
-      "glyphTrim": "proportional",
-      "rustout": "../src/fonts/bold.rs",
-      "loaderout": "../../../loader/src/fonts/bold.rs",
-      "small": true
-    },
-    {
       "name": "Mono",
       "sprites": "src_data/latin_mono.png",
       "size": 15,
@@ -115,6 +100,21 @@
       "small": true
     },
     {
+      "name": "Small",
+      "sprites": "src_data/latin_small.png",
+      "size": 12,
+      "cols": 16,
+      "gutter": 1,
+      "border": 1,
+      "legal": "src_data/geneva_legal.txt",
+      "index": "src_data/latin_index.json",
+      "indexType": "json-grid-coord",
+      "glyphTrim": "proportional",
+      "rustout": "../src/fonts/small.rs",
+      "loaderout": "../../../loader/src/fonts/small.rs",
+      "small": true
+    },
+    {
       "name": "Tall",
       "sprites": "src_data/latin_tall.png",
       "size": 19,
@@ -130,19 +130,19 @@
       "small": true
     },
     {
-      "name": "Small",
-      "sprites": "src_data/latin_small.png",
-      "size": 12,
-      "cols": 16,
-      "gutter": 1,
-      "border": 1,
-      "legal": "src_data/geneva_legal.txt",
-      "index": "src_data/latin_index.json",
-      "indexType": "json-grid-coord",
-      "glyphTrim": "proportional",
-      "rustout": "../src/fonts/small.rs",
-      "loaderout": "../../../loader/src/fonts/small.rs",
-      "small": true
+      "name": "zh",
+      "sprites": "src_data/hanzi.png",
+      "size": 16,
+      "cols": 30,
+      "gutter": 2,
+      "border": 2,
+      "legal": "src_data/hanzi_legal.txt",
+      "index": "src_data/hanzi.codepoints",
+      "indexType": "txt-row-major",
+      "glyphTrim": "CJK",
+      "rustout": "../src/fonts/zh.rs",
+      "loaderout": "../../../loader/src/fonts/zh.rs",
+      "small": false
     }
   ]
 }
