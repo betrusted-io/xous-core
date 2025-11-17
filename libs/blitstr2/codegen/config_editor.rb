@@ -20,7 +20,7 @@ latin_index_outfile = "src_data/latin_index.json"
 
 config = {
   comment: [
-    "Config for use with main.go. Before making changes here, see config_editor.rb.",
+    "Config for use with main.go. Before making changes here, see config_editor.rb. NOTE: the glyph set list MUST be alphabetized since Rust 1.91",
   ],
   loadermod: [
     "../../../../../loader/src/fonts.rs",
@@ -30,6 +30,16 @@ config = {
   ],
   glyphSets: [
     {
+      name: "Bold",
+      sprites: "src_data/latin_bold.png", size: 15, cols: 16, gutter: 1, border: 1,
+      legal: "src_data/chicago_legal.txt",
+      index: latin_index_outfile,
+      indexType: "json-grid-coord",
+      glyphTrim: "proportional",
+      rustout: "../fonts/bold.rs",
+      loaderout: "../../../../../loader/src/fonts/bold.rs",
+    },
+    {
       name: "Emoji",
       sprites: "src_data/basic_emoji.png", size: 16, cols: 30, gutter: 2, border: 2,
       legal: "src_data/basic_emoji_legal.txt",
@@ -38,16 +48,6 @@ config = {
       glyphTrim: "CJK",
       rustout: "../fonts/emoji.rs",
       loaderout: "../../../../../loader/src/fonts/emoji.rs",
-    },
-    {
-      name: "zh",
-      sprites: "src_data/hanzi.png", size: 16, cols: 30, gutter: 2, border: 2,
-      legal: "src_data/hanzi_legal.txt",
-      index: "src_data/hanzi.codepoints",
-      indexType: "txt-row-major",
-      glyphTrim: "CJK",
-      rustout: "../fonts/zh.rs",
-      loaderout: "../../../../../loader/src/fonts/zh.rs",
     },
     {
       name: "ja",
@@ -70,16 +70,6 @@ config = {
       loaderout: "../../../../../loader/src/fonts/kr.rs",
     },
     {
-      name: "Bold",
-      sprites: "src_data/latin_bold.png", size: 15, cols: 16, gutter: 1, border: 1,
-      legal: "src_data/chicago_legal.txt",
-      index: latin_index_outfile,
-      indexType: "json-grid-coord",
-      glyphTrim: "proportional",
-      rustout: "../fonts/bold.rs",
-      loaderout: "../../../../../loader/src/fonts/bold.rs",
-    },
-    {
       name: "Mono",
       sprites: "src_data/latin_mono.png", size: 15, cols: 16, gutter: 1, border: 1,
       legal: "src_data/courier_legal.txt",
@@ -100,6 +90,16 @@ config = {
       loaderout: "../../../../../loader/src/fonts/regular.rs",
     },
     {
+      name: "Small",
+      sprites: "src_data/latin_small.png", size: 12, cols: 16, gutter: 1, border: 1,
+      legal: "src_data/geneva_legal.txt",
+      index: latin_index_outfile,
+      indexType: "json-grid-coord",
+      glyphTrim: "proportional",
+      rustout: "../fonts/small.rs",
+      loaderout: "../../../../../loader/src/fonts/small.rs",
+    },
+    {
       name: "Tall",
       sprites: "src_data/latin_tall.png", size: 19, cols: 30, gutter: 1, border: 1,
       legal: "src_data/helvetica_legal.txt",
@@ -110,15 +110,15 @@ config = {
       loaderout: "../../../../../loader/src/fonts/tall.rs",
     },
     {
-      name: "Small",
-      sprites: "src_data/latin_small.png", size: 12, cols: 16, gutter: 1, border: 1,
-      legal: "src_data/geneva_legal.txt",
-      index: latin_index_outfile,
-      indexType: "json-grid-coord",
-      glyphTrim: "proportional",
-      rustout: "../fonts/small.rs",
-      loaderout: "../../../../../loader/src/fonts/small.rs",
-    }
+      name: "zh",
+      sprites: "src_data/hanzi.png", size: 16, cols: 30, gutter: 2, border: 2,
+      legal: "src_data/hanzi_legal.txt",
+      index: "src_data/hanzi.codepoints",
+      indexType: "txt-row-major",
+      glyphTrim: "CJK",
+      rustout: "../fonts/zh.rs",
+      loaderout: "../../../../../loader/src/fonts/zh.rs",
+    },
   ]
 }
 
