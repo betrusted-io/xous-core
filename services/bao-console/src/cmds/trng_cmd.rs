@@ -15,7 +15,7 @@ impl<'a> ShellCmdApi<'a> for TrngCmd {
     fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::new();
-        let helpstring = "trng [pump] [u32] [u64]";
+        let helpstring = "trng [pump] [u32] [u64] [buf]";
 
         let mut tokens = args.split(' ');
 
