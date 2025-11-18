@@ -3,6 +3,7 @@ use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArr
 use bao1x_api::{
     BOOT0_PUBKEY_FAIL, BoardTypeCoding, CP_ID, DEVELOPER_MODE, OEM_MODE, SLOT_ELEMENT_LEN_BYTES, UUID,
 };
+use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
 use bao1x_hal::{
     acram::{OneWayCounter, SlotManager},
     board::{CHAFF_KEYS, NUISANCE_KEYS_0, NUISANCE_KEYS_1, ROOT_SEED},
@@ -102,6 +103,23 @@ impl KeyStore {
 
         // read key material
         ikm.extend_from_slice(self.slot_mgr.read(&ROOT_SEED).unwrap());
+        #[cfg(feature = "hazardous-debug")]
+        {
+            // analyze part of the key and print some informative statements during hazardous-debug
+            // we want to make sure that keys are actually being initialized, erased, or denied
+            // look at only 64 bits out of the 256 bit key - it's enough that it's highly unlikely that
+            // these 64 bits would match any of the zero/erased values, but not so much that if a
+            // dev image is accidentally signed & released that it'd be a serious threat to security
+            // as you'd still have 192 bits of secret material
+            let root_seed = self.slot_mgr.read(&ROOT_SEED).unwrap();
+            if root_seed[..8] == [0u8; 8] {
+                log::info!("{}KEYSTORE.ZERO,{}", BOOKEND_START, BOOKEND_END);
+            } else if root_seed[..8] == [bao1x_hal::sigcheck::ERASE_VALUE; 8] {
+                log::info!("{}KEYSTORE.ERASED,{}", BOOKEND_START, BOOKEND_END);
+            } else {
+                log::info!("{}KEYSTORE.KEYPASS,{}", BOOKEND_START, BOOKEND_END);
+            }
+        }
 
         // build nuisance key offsets - this is direct readout hardening
         let nk0 = NUISANCE_KEYS_0.try_into_data_iter().unwrap();
@@ -175,7 +193,7 @@ impl KeyStore {
         #[cfg(feature = "hazardous-debug")]
         // leak only part of the chaff, see below comment about hedging against accidental signing of a debug
         // image
-        log::info!("chaff: {:x?}", chaff_xor[..8]);
+        log::info!("chaff: {:x?}", &chaff_xor[..8]);
         ikm.extend_from_slice(&chaff_xor);
         assert!(ikm.len() == (nk_len + 1 + 1) * KEY_LEN); // sanity check that all keys were in fact added
 
@@ -220,11 +238,14 @@ impl KeyStore {
         // do something with ct_xor that guarantees it's never optimized out
         if ct_xor.iter().all(|&cx| cx == 0) {
             log::warn!("Chaff result is all-0. Confirming that we're in developer mode");
+            log::info!("{}KEYSTORE.ZEROCHAFF,{}", BOOKEND_START, BOOKEND_END);
             // panic if we're not in developer mode
             assert!(
                 self.owc.get(DEVELOPER_MODE).unwrap() != 0,
                 "Either we have the most improbable chaff, or (more likely) the chaff is set to all 0's"
             );
+        } else {
+            log::info!("{}KEYSTORE.OKCHAFF,{}", BOOKEND_START, BOOKEND_END);
         }
         self.master_key = Some(master_key);
     }
