@@ -14,6 +14,11 @@ use crate::acram::OneWayCounter;
 use crate::acram::{AccessSettings, SlotManager};
 use crate::udma::Spim;
 
+// An erase value of 0 can be conflated with access permissions being incorrect. Choose a non-0 value
+// for the erase value, but also, don't pick a 0-1-0-1 dense pattern because that can assist with
+// calibrating microscopy techniques.
+pub const ERASE_VALUE: u8 = 0x03;
+
 /// Current draw @ 200MHz CPU ACLK (400MHz FCLK), VDD85 = 0.80V nom (measured @0.797V): ~71mA peak @ 27C,
 /// measured on VDD33 (LDO path places strict upper bounds on IDD85). Target: < 100mA under all PVT.
 ///
@@ -208,11 +213,6 @@ pub fn erase_secrets() {
 
 #[cfg(not(feature = "std"))]
 pub fn erase_secrets() {
-    // An erase value of 0 is conflateable with access permissions being incorrect. Choose a non-0 value
-    // for the erase value, but also, don't pick a 0-1-0-1 dense pattern because that can assist with
-    // calibrating microscopy techniques.
-    const ERASE_VALUE: u8 = 0x03;
-
     // ensure coreuser settings, as we could enter from a variety of loader stages
     let mut cu = crate::coreuser::Coreuser::new();
     cu.set();

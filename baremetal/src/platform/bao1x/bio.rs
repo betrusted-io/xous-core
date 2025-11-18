@@ -6,7 +6,7 @@ use utralib::utra::bio_bdma::SFR_CONFIG_CLOCKING_MODE;
 use utralib::*;
 use xous_bio_bdma::*;
 
-use crate::{print, println};
+use crate::println;
 
 /*
 pub fn bdma_test(_args: &Vec<String>, seed: u32) -> usize {
@@ -204,8 +204,7 @@ impl TestPattern {
     }
 }
 
-pub fn bdma_coincident_test(_args: &Vec<String>, seed: u32) -> usize {
-    let clkmode = 0;
+pub fn bdma_coincident_test(_args: &Vec<String>, seed: u32, clkmode: u32) -> usize {
     const TEST_LEN: usize = 1024;
 
     let mut passing = 0;
@@ -286,10 +285,10 @@ fn coincident_u32(
     for (i, &d) in src.iter().enumerate() {
         let rbk = unsafe { dst.as_ptr().add(i).read_volatile() };
         if rbk != d {
-            if errs < 4 {
+            if errs < 3 {
                 println!("{} err @{}, {:x} rbk: {:x}", name, i, d, rbk);
             } else {
-                print!(".");
+                // crate::print!(".");
             }
             errs += 1;
             pass = 0;

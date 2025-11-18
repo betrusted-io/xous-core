@@ -458,11 +458,20 @@ impl Repl {
             #[cfg(feature = "bao1x-bio")]
             "bdma" => {
                 let mut seed = 0;
+                let mut clkmode: u32 = 3;
+                let mut passing: bool;
                 loop {
-                    crate::platform::bio::bdma_coincident_test(&args, seed);
+                    crate::println!("seed {}, clkmode {}", seed, clkmode);
+                    if crate::platform::bio::bdma_coincident_test(&args, seed, clkmode) != 4 {
+                        clkmode = (clkmode + 1) % 4;
+                        passing = false;
+                        crate::println!("~~BDMAFAIL~~");
+                    } else {
+                        passing = true
+                    };
+                    crate::println!("  pasing: {:?}", passing);
                     seed += 1;
-                    crate::println!("seed {}", seed);
-                    if seed > 32 {
+                    if passing || seed > 8 {
                         break;
                     }
                 }
