@@ -28,6 +28,7 @@ bytemuck = "1.24.0"
 # pddb testing
 rand = { version = "0.8.5", features = ["getrandom"], optional = true }
 rand_chacha = { version = "0.3.1", optional = true }
+rand_core = "0.6.4"
 
 aes = { path = "../aes", default-features = false, optional = true }
 
