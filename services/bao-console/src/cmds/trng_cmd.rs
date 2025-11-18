@@ -1,4 +1,5 @@
 use String;
+#[cfg(not(feature = "hosted-baosec"))]
 use rand_core::RngCore;
 
 use crate::{CommonEnv, ShellCmdApi};
@@ -38,6 +39,7 @@ impl<'a> ShellCmdApi<'a> for TrngCmd {
                 "u64" => {
                     log::info!("A u64 trng value: {:x}", env.trng.get_u64().unwrap());
                 }
+                #[cfg(not(feature = "hosted-baosec"))]
                 "buf" => {
                     let mut test1 = [0u8; 8192];
                     let mut trng = bao1x_hal_service::trng::Trng::new(&env.xns).unwrap();
