@@ -173,7 +173,9 @@ impl KeyStore {
         }
 
         #[cfg(feature = "hazardous-debug")]
-        log::info!("chaff: {:x?}", chaff_xor);
+        // leak only part of the chaff, see below comment about hedging against accidental signing of a debug
+        // image
+        log::info!("chaff: {:x?}", chaff_xor[..8]);
         ikm.extend_from_slice(&chaff_xor);
         assert!(ikm.len() == (nk_len + 1 + 1) * KEY_LEN); // sanity check that all keys were in fact added
 
@@ -201,8 +203,14 @@ impl KeyStore {
         }
 
         #[cfg(feature = "hazardous-debug")]
-        for (i, chunk) in ikm.chunks(256).enumerate() {
-            log::info!("ikm({:4}): {:x?}", i, chunk);
+        for (i, chunk) in ikm.chunks(32).enumerate() {
+            // subsample the keyspace - we're using hazardous-debug in CI to confirm correctness
+            // of keys, which creates some risk that these images are abused in production (e.g. if
+            // one is accidentally signed where this is on). Subsampling the keys reduces the risk
+            // in case such an image gets out.
+            if i % 8 == 0 {
+                log::info!("ikm({:4}): {:x?}", i * 32, chunk);
+            }
         }
         log::debug!("salt: {:x?}", salt); // not hazardous, these are public values
         let hk = Hkdf::<Sha256>::new(Some(&salt[..]), &ikm);
