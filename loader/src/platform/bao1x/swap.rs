@@ -256,8 +256,20 @@ impl SwapHal {
                                         [bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
                                     || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
                                 {
-                                    crate::println!("Developer key detected, ensuring secrets are erased");
-                                    bao1x_hal::sigcheck::erase_secrets();
+                                    // we can't erase keys in the loader, because the keys have already been
+                                    // locked out at this point. Thus,
+                                    // ensure that the system is already in developer mode.
+                                    let owc = bao1x_hal::acram::OneWayCounter::new();
+                                    if owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0 {
+                                        crate::println!(
+                                            "Swap is devkey signed, but system is not in developer mode. Dying!"
+                                        );
+                                        bao1x_hal::sigcheck::die_no_std();
+                                    } else {
+                                        crate::println!(
+                                            "Developer key detected on swap. Proceeding in developer mode!"
+                                        );
+                                    }
                                 }
                             }
                             Err(e) => {
