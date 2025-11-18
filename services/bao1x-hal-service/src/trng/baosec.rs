@@ -151,10 +151,12 @@ impl Trng {
         use rand_chacha::rand_core::RngCore;
         use rand_chacha::rand_core::SeedableRng;
 
+        // for very short runs, fill directly from the HW TRNG
         if dest.len() < 64 {
             self.fill_bytes_via_next(dest);
             return;
         }
+        // larger runs, seed a ChaCha8 and use its results to fill the buffer
         let mut seed = [0u8; 32];
         self.fill_bytes_via_next(&mut seed);
         let mut cstrng = ChaCha8Rng::from_seed(seed);
@@ -181,7 +183,8 @@ impl RngCore for Trng {
         let buf = &mut api_buf.data;
         let mut filled = 0;
         while filled < dest.len() {
-            let fetch_len = ((dest.len() - filled) / size_of::<u32>()).min(buf.len());
+            let fetch_len = ((((dest.len() + 3) & !3) - filled) / size_of::<u32>()).min(buf.len());
+            log::debug!("fetching {} bytes; filled {} so far", fetch_len * 4, filled);
             self.fill_buf(&mut buf[..fetch_len]).expect("couldn't fill temp buffer");
             for &w in buf[..fetch_len].iter() {
                 let bytes = w.to_le_bytes();
