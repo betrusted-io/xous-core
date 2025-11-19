@@ -108,12 +108,21 @@ pub fn early_init_hw() -> u32 {
         let board_type =
             one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error");
         if board_type != bao1x_api::BoardTypeCoding::Baosec {
+            use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
+
             crate::println!("Board type is not Baosec; resetting it and rebooting!");
             while one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
                 != bao1x_api::BoardTypeCoding::Baosec
             {
                 one_way.inc_coded::<bao1x_api::BoardTypeCoding>().expect("increment error");
             }
+            // set bootwait, because we need to provision swap
+            while one_way.get_decoded::<bao1x_api::BootWaitCoding>().expect("owc coding error")
+                != bao1x_api::BootWaitCoding::Enable
+            {
+                one_way.inc_coded::<bao1x_api::BootWaitCoding>().expect("increment error");
+            }
+            crate::println!("{}LOADER.SETBOARD,{}", BOOKEND_START, BOOKEND_END);
             crate::println!("Board type set to baosec, rebooting so boot1 can provision keys!");
             let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
             rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
