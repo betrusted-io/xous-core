@@ -295,7 +295,10 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                 }
             }
             Err(e) => {
+                use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
+
                 println!("Kernel failed signature check. Dying: {:?}", e);
+                println!("{}LOADER.KERNFAIL,{}", BOOKEND_START, BOOKEND_END);
                 bao1x_hal::sigcheck::die_no_std();
             }
         }
