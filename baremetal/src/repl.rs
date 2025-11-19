@@ -1195,6 +1195,64 @@ impl Repl {
                 }
                 crate::println!("...done!");
             }
+            #[cfg(feature = "board-baosec")]
+            "erase_swap" => {
+                use bao1x_api::{baosec::PDDB_LEN, baosec::PDDB_ORIGIN};
+                use bao1x_hal::{
+                    board::SPINOR_BULK_ERASE_SIZE,
+                    ifram::IframRange,
+                    iox::Iox,
+                    udma::{Spim, *},
+                };
+                let perclk = 100_000_000;
+                let udma_global = GlobalConfig::new();
+
+                // setup the I/O pins
+                let iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
+                let channel = bao1x_hal::board::setup_memory_pins(&iox);
+                udma_global.clock_on(PeriphId::from(channel));
+                // safety: this is safe because clocks have been set up
+                let mut flash_spim = unsafe {
+                    Spim::new_with_ifram(
+                        channel,
+                        // has to be half the clock frequency reaching the block, but
+                        // run it as fast
+                        // as we can run perclk
+                        perclk / 4,
+                        perclk / 2,
+                        SpimClkPol::LeadingEdgeRise,
+                        SpimClkPha::CaptureOnLeading,
+                        SpimCs::Cs0,
+                        0,
+                        0,
+                        None,
+                        256 + 16, /* just enough space to send commands + programming
+                                   * page */
+                        4096,
+                        Some(6),
+                        Some(SpimMode::Standard), // guess Standard
+                        IframRange::from_raw_parts(
+                            bao1x_hal::board::SPIM_FLASH_IFRAM_ADDR,
+                            bao1x_hal::board::SPIM_FLASH_IFRAM_ADDR,
+                            4096 * 2,
+                        ),
+                    )
+                };
+                flash_spim.identify_flash_reset_qpi();
+                let flash_id = flash_spim.mem_read_id_flash();
+                crate::println!("flash ID (init): {:x}", flash_id);
+
+                flash_spim.mem_qpi_mode(true);
+                let flash_id = flash_spim.mem_read_id_flash();
+                crate::println!("QPI flash ID: {:x}", flash_id);
+
+                crate::println!("Erasing from {:x}-{:x}...", 0, 2 * SPINOR_BULK_ERASE_SIZE);
+                for addr in (0..2 * SPINOR_BULK_ERASE_SIZE).step_by(SPINOR_BULK_ERASE_SIZE as usize) {
+                    crate::println!("  {:x}...", addr);
+                    flash_spim.flash_erase_block(addr, SPINOR_BULK_ERASE_SIZE as usize);
+                }
+                crate::println!("...done!");
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);

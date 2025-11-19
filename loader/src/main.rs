@@ -93,6 +93,8 @@ pub mod swap;
 use core::{mem, ptr, slice};
 
 use asm::*;
+#[cfg(feature = "bao1x")]
+use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
 use bootconfig::BootConfig;
 use consts::*;
 pub use loader::*;
@@ -285,17 +287,18 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                     // out at this point. Thus, ensure that the system is already in developer mode.
                     let owc = bao1x_hal::acram::OneWayCounter::new();
                     if owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0 {
-                        crate::println!(
-                            "Kernel is devkey signed, but system is not in developer mode. Dying!"
-                        );
+                        println!("{}LOADER.KERNDIE,{}", BOOKEND_START, BOOKEND_END);
+                        println!("Kernel is devkey signed, but system is not in developer mode. Dying!");
                         bao1x_hal::sigcheck::die_no_std();
                     } else {
-                        crate::println!("Developer key detected on kernel. Proceeding in developer mode!");
+                        println!("{}LOADER.KERNDEV,{}", BOOKEND_START, BOOKEND_END);
+                        println!("Developer key detected on kernel. Proceeding in developer mode!");
                     }
                 }
             }
             Err(e) => {
                 println!("Kernel failed signature check. Dying: {:?}", e);
+                println!("{}LOADER.KERNFAIL,{}", BOOKEND_START, BOOKEND_END);
                 bao1x_hal::sigcheck::die_no_std();
             }
         }
@@ -328,19 +331,20 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                         // out at this point. Thus, ensure that the system is already in developer mode.
                         let owc = bao1x_hal::acram::OneWayCounter::new();
                         if owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0 {
-                            crate::println!(
+                            println!("{}LOADER.APPDIE,{}", BOOKEND_START, BOOKEND_END);
+                            println!(
                                 "Detached app is devkey signed, but system is not in developer mode. Dying!"
                             );
                             bao1x_hal::sigcheck::die_no_std();
                         } else {
-                            crate::println!(
-                                "Developer key detected on detached app. Proceeding in developer mode!"
-                            );
+                            println!("{}LOADER.APPDEV,{}", BOOKEND_START, BOOKEND_END);
+                            println!("Developer key detected on detached app. Proceeding in developer mode!");
                         }
                     }
                     true
                 }
                 Err(_e) => {
+                    println!("{}LOADER.APPFAIL,{}", BOOKEND_START, BOOKEND_END);
                     println!("No valid detached app found");
                     false
                 }

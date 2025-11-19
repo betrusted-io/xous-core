@@ -456,6 +456,7 @@ dependencies = [
  "num-derive 0.4.2",
  "num-traits",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "rkyv 0.8.8",
  "ux-api",
