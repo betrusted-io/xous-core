@@ -89,6 +89,7 @@ impl KeyStore {
                 }
             }
             log::info!("Secret ID init done.");
+            log::info!("{}KEYSTORE.INITDONE,{}", BOOKEND_START, BOOKEND_END);
         }
     }
 
