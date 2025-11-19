@@ -1197,7 +1197,6 @@ impl Repl {
             }
             #[cfg(feature = "board-baosec")]
             "erase_swap" => {
-                use bao1x_api::{baosec::PDDB_LEN, baosec::PDDB_ORIGIN};
                 use bao1x_hal::{
                     board::SPINOR_BULK_ERASE_SIZE,
                     ifram::IframRange,
@@ -1249,7 +1248,7 @@ impl Repl {
                 crate::println!("Erasing from {:x}-{:x}...", 0, 2 * SPINOR_BULK_ERASE_SIZE);
                 for addr in (0..2 * SPINOR_BULK_ERASE_SIZE).step_by(SPINOR_BULK_ERASE_SIZE as usize) {
                     crate::println!("  {:x}...", addr);
-                    flash_spim.flash_erase_block(addr, SPINOR_BULK_ERASE_SIZE as usize);
+                    flash_spim.flash_erase_block(addr as usize, SPINOR_BULK_ERASE_SIZE as usize);
                 }
                 crate::println!("...done!");
             }
