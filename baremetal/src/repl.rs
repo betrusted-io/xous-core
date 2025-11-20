@@ -7,6 +7,8 @@ use alloc::vec::Vec;
 #[cfg(feature = "bao1x")]
 use bao1x_api::*;
 #[allow(unused_imports)]
+use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
+#[allow(unused_imports)]
 use utralib::*;
 #[cfg(any(feature = "artybio", feature = "bao1x-bio"))]
 use xous_bio_bdma::*;
@@ -903,6 +905,56 @@ impl Repl {
                 */
                 crate::platform::clockset_wrapper(800_000_000);
                 crate::println!("exiting wfi");
+            }
+            #[cfg(feature = "ci-security")]
+            // write protection only works after we leave the boot environment, thus it has to be tested in
+            // baremetal
+            "boot0-wp" => {
+                crate::println!("Write protection test");
+                let mut rram = bao1x_hal::rram::Reram::new();
+                // boot0 should end at 0x2_0000; boot1 ends at 0x6_0000
+                // expected result: the first four should have the update fail
+                // the fifth value (in boot1) should update
+                let regions =
+                    [(false, 0x0), (false, 0xF000), (false, 0x1_1000), (false, 0x1_F000), (true, 0x5_F000)];
+                let mut passing = true;
+                for (i, &(writable, region)) in regions.iter().enumerate() {
+                    let ref_data = unsafe {
+                        core::slice::from_raw_parts((region + utralib::HW_RERAM_MEM) as *const u8, 32)
+                    };
+                    let base = ref_data[0]; // increment whatever is in the original area
+                    let try_write = [base + 1 + i as u8; 32];
+                    // crate::println!("orig ({:x}): {:x?}", region, test_data);
+                    rram.write_slice(region, &try_write).unwrap();
+                    if writable {
+                        if ref_data != try_write {
+                            crate::println!(
+                                "Failure on writeable {:?} ({:x}): {:x?} vs {:x?}",
+                                writable,
+                                region,
+                                ref_data,
+                                try_write
+                            );
+                            passing = false;
+                        }
+                    } else {
+                        if ref_data == try_write {
+                            crate::println!(
+                                "Failure on writeable {:?} ({:x}): {:x?} vs {:x?}",
+                                writable,
+                                region,
+                                ref_data,
+                                try_write
+                            );
+                            passing = false;
+                        }
+                    }
+                }
+                if passing {
+                    crate::println!("{}SEC.BOOT0WP-PASS,{}", BOOKEND_START, BOOKEND_END);
+                } else {
+                    crate::println!("{}SEC.BOOT0WP-FAIL,{}", BOOKEND_START, BOOKEND_END);
+                }
             }
             #[cfg(feature = "bao1x-trng")]
             "trngro" => {
