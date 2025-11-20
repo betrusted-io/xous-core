@@ -515,7 +515,7 @@ impl Repl {
                 }
                 use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
                 crate::println!(
-                    "{}PUB_MUT,{},{}",
+                    "{}SEC.PUBMUT-{},{}",
                     BOOKEND_START,
                     if pass { "PASS" } else { "FAIL" },
                     BOOKEND_END
