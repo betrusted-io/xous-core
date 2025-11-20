@@ -1,6 +1,17 @@
 # Xous Core
 
-Core files for the Xous microkernel operating system.
+Xous is a microkernel operating system written in pure Rust, built for high-assurance applications.
+
+Key features:
+- Hardware memory protection
+  - Virtual memory via MMU
+  - Each process has an isolated address space
+- `std` support in stable Rust (tier-3 Rust target)
+- Asynchronous message passing
+- Minimal code base
+  - [Microkernel](./kernel) architecture
+  - System [services](./services) live in userland
+- Targeted at high-assurance embedded applications
 
 The [Xous Book](https://betrusted.io/xous-book/) covers the architecture and structure of the kernel.
 

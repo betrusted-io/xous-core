@@ -34,6 +34,23 @@ impl Trng {
             left.copy_from_slice(&chunk[..n]);
         }
     }
+
+    pub fn fill_seeded_bytes(&mut self, dest: &mut [u8]) {
+        use rand_chacha::ChaCha8Rng;
+        use rand_chacha::rand_core::RngCore;
+        use rand_chacha::rand_core::SeedableRng;
+
+        // for very short runs, fill directly from the HW TRNG
+        if dest.len() < 64 {
+            self.fill_bytes_via_next(dest);
+            return;
+        }
+        // larger runs, seed a ChaCha8 and use its results to fill the buffer
+        let mut seed = [0u8; 32];
+        self.fill_bytes_via_next(&mut seed);
+        let mut cstrng = ChaCha8Rng::from_seed(seed);
+        cstrng.fill_bytes(dest);
+    }
 }
 
 impl RngCore for Trng {

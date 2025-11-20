@@ -10,6 +10,7 @@ xous-names = { package = "xous-api-names", version = "0.9.68" }
 "ux-api" = { path = "../../libs/ux-api" }
 "rand" = "0.8"
 rand_core = "0.6.4"
+rand_chacha = "0.3.1"
 log = "0.4.14"
 log-server = { package = "xous-api-log", version = "0.1.66" }
 num-derive = { version = "0.4.2", default-features = false }
@@ -18,10 +19,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
 ] }
-bao1x-api = { path = "../../libs/bao1x-api", features = [
-    "derive-rkyv",
-    "std",
-] }
+bao1x-api = { path = "../../libs/bao1x-api", features = ["derive-rkyv", "std"] }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 minifb = "0.26.0"

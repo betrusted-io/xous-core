@@ -176,12 +176,12 @@ impl Repl {
                 }
             }
             "bootwait" => {
+                let one_way = OneWayCounter::new();
                 if args.len() != 1 {
-                    return Err(Error::help("bootwait [check | toggle]"));
+                    return Err(Error::help("bootwait [check | toggle | enable | disable]"));
                 }
                 if args[0] == "toggle" {
                     // this toggles the bootwait flag by incrementing its one-way counter
-                    let one_way = OneWayCounter::new();
                     match one_way.inc_coded::<bao1x_api::BootWaitCoding>() {
                         Ok(_) => {
                             let state = one_way
@@ -192,12 +192,23 @@ impl Repl {
                         Err(e) => crate::println!("Couldn't toggle bootwait: {:?}", e),
                     }
                 } else if args[0] == "check" {
-                    let one_way = OneWayCounter::new();
                     let state =
                         one_way.get_decoded::<bao1x_api::BootWaitCoding>().expect("couldn't fetch flag");
                     crate::println!("bootwait is {:?}", state);
+                } else if args[0] == "enable" {
+                    while one_way.get_decoded::<bao1x_api::BootWaitCoding>().expect("couldn't fetch flag")
+                        != bao1x_api::BootWaitCoding::Enable
+                    {
+                        one_way.inc_coded::<bao1x_api::BootWaitCoding>().unwrap();
+                    }
+                } else if args[0] == "disable" {
+                    while one_way.get_decoded::<bao1x_api::BootWaitCoding>().expect("couldn't fetch flag")
+                        != bao1x_api::BootWaitCoding::Disable
+                    {
+                        one_way.inc_coded::<bao1x_api::BootWaitCoding>().unwrap();
+                    }
                 } else {
-                    return Err(Error::help("bootwait [check | toggle]"));
+                    return Err(Error::help("bootwait [check | toggle | enable | disable]"));
                 }
             }
             "boardtype" => {
