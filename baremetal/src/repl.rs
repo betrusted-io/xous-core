@@ -925,7 +925,7 @@ impl Repl {
                     let base = ref_data[0]; // increment whatever is in the original area
                     let try_write = [base + 1 + i as u8; 32];
                     // crate::println!("orig ({:x}): {:x?}", region, test_data);
-                    rram.write_slice(region, &try_write).unwrap();
+                    rram.write_slice(region, &try_write).ok(); // we expect write errors, don't panic on failure
                     if writable {
                         if ref_data != try_write {
                             crate::println!(
