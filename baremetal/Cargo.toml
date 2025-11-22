@@ -79,6 +79,7 @@ dabao-selftest = [
 ]
 ci-security = []
 spim-tests = []
+redteam = ["bao1x-hal/redteam"]
 
 verilator-only = []
-default = ["bao1x-usb", "ci-security"]
+default = ["bao1x-usb"]

@@ -99,6 +99,9 @@ pub fn early_init() {
         bao1x_hal::board::setup_kb_pins(&iox);
         bao1x_hal::board::setup_oled_power_pin(&iox);
         bao1x_hal::board::setup_trng_power_pin(&iox);
+        // make sure SE0 is cleared
+        let (port, pin) = bao1x_hal::board::setup_usb_pins(&iox);
+        iox.set_gpio_pin(port, pin, IoxValue::High);
     }
     #[cfg(feature = "board-dabao")]
     {
