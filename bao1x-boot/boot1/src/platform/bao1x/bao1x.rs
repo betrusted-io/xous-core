@@ -66,7 +66,7 @@ pub fn setup_dabao_se0_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     (DABAO_SE0_PORT, DABAO_SE0_PIN)
 }
 
-pub fn setup_backup_region() {
+pub fn setup_backup_region() -> u32 {
     let mut bu_mgr = bao1x_hal::buram::BackupManager::new();
     if !bu_mgr.is_backup_valid() {
         // zeroize the backup RAM
@@ -93,16 +93,36 @@ pub fn setup_backup_region() {
         bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV2, 0x1_0000);
         bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV3, 0x1_0000);
 
+        let mut trng = bao1x_hal::sce::trng::Trng::new(utralib::utra::trng::HW_TRNG_BASE);
+        trng.setup_raw_generation(256);
+        trng.start();
+        let mut delay: u16 = 0;
+        for _ in 0..8 {
+            delay ^= trng.get_u32().unwrap() as u16;
+        }
+        let mut acc = 1;
+        // one of ~1k slots for delay
+        for i in 0..delay & 0x3FF {
+            acc += i as u32;
+        }
+
         // soft-reset the system
         let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
         rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
+
+        // this is never returned, but guarantees the compiler does not optimize out the delay loop
+        acc
+    } else {
+        0
     }
 }
 
 /// This can change the board type coding to a safer, simpler board type if the declared board type has
 /// problems booting.
 pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::BoardTypeCoding, u32) {
-    setup_backup_region();
+    if setup_backup_region() == 0 {
+        crate::println!("backup region is clean!");
+    }
 
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
