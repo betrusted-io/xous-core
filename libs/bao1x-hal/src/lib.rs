@@ -31,6 +31,8 @@ pub use shared_csr::*;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod acram;
 #[cfg(not(feature = "hosted-baosec"))]
+pub mod buram;
+#[cfg(not(feature = "hosted-baosec"))]
 pub mod coreuser;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod mbox;
