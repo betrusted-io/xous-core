@@ -66,9 +66,44 @@ pub fn setup_dabao_se0_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     (DABAO_SE0_PORT, DABAO_SE0_PIN)
 }
 
+pub fn setup_backup_region() {
+    let mut bu_mgr = bao1x_hal::buram::BackupManager::new();
+    if !bu_mgr.is_backup_valid() {
+        // zeroize the backup RAM
+        bu_mgr.bu_ram_as_mut().fill(0);
+        // calculate the hash and mark as valid
+        bu_mgr.make_valid();
+
+        // setup the BIO, so the reset can also clear its registers and state for a clean BDMA pipeline
+        let mut bio_ss = xous_bio_bdma::BioSharedState::new();
+        bio_ss.init();
+        // must disable DMA filtering
+        bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM, 1);
+        bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI, 1);
+
+        // stop all the machines, so that code can be loaded
+        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
+        // reset all the fifos
+        bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0xF);
+        // setup clocking mode option
+        bio_ss.bio.rmwf(utralib::utra::bio_bdma::SFR_CONFIG_CLOCKING_MODE, 3 as u32);
+
+        bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x1_0000);
+        bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV1, 0x1_0000);
+        bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV2, 0x1_0000);
+        bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV3, 0x1_0000);
+
+        // soft-reset the system
+        let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+        rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
+    }
+}
+
 /// This can change the board type coding to a safer, simpler board type if the declared board type has
 /// problems booting.
 pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::BoardTypeCoding, u32) {
+    setup_backup_region();
+
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
     // setup board-specific I/Os - early boot set. These are items that have to be
