@@ -66,6 +66,7 @@ pub fn setup_dabao_se0_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     (DABAO_SE0_PORT, DABAO_SE0_PIN)
 }
 
+#[cfg(not(feature = "alt-boot1"))]
 pub fn setup_backup_region() -> u32 {
     let mut bu_mgr = bao1x_hal::buram::BackupManager::new();
     if !bu_mgr.is_backup_valid() {
@@ -139,6 +140,7 @@ pub fn setup_backup_region() -> u32 {
 /// This can change the board type coding to a safer, simpler board type if the declared board type has
 /// problems booting.
 pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::BoardTypeCoding, u32) {
+    #[cfg(not(feature = "alt-boot1"))]
     if setup_backup_region() == 0 {
         crate::println!("backup region is clean!");
     }
@@ -331,6 +333,8 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
     let mut cu = bao1x_hal::coreuser::Coreuser::new();
     // Coreuser needs to be set up correctly for check_slots to succeed.
     cu.set();
+    // can't check slots in alt-boot mode because it's effectively baremetal as far as permissions go
+    #[cfg(not(feature = "alt-boot1"))]
     crate::platform::slots::check_slots(&board_type);
     // protect() is called inside sigcheck on boot!
 
