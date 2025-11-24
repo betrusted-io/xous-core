@@ -269,6 +269,7 @@ fn main() {
     servers::trng::start_trng_service(&bio_ss);
     #[cfg(feature = "board-dabao")]
     servers::trng::start_trng_service();
+    servers::rtc::start_rtc_service();
 
     let mut msg_opt = None;
     log::debug!("Starting main loop");
