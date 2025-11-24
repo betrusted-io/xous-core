@@ -39,6 +39,8 @@ pub mod mbox;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod rram;
 // no signature checking in the kernel
+#[cfg(not(feature = "hosted-baosec"))]
+pub mod rtc;
 #[cfg(all(not(feature = "hosted-baosec"), not(feature = "kernel"),))]
 pub mod sigcheck;
 #[cfg(not(feature = "hosted-baosec"))]
