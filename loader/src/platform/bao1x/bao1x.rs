@@ -140,6 +140,11 @@ pub fn early_init_hw() -> u32 {
         // kernel expects the TRNG to be on
         iox.set_gpio_pin(trng_power.0, trng_power.1, bao1x_api::IoxValue::High);
 
+        // select the 32khz external xosc for baosec targets
+        // note that on dabao there is still a "32khz" source, but it's the internal ring oscillator
+        // and it's only accurate to within about 10%.
+        ao_sysctrl.rmwf(utra::ao_sysctrl::CR_CR_CLK32KSELREG, 1);
+
         use bao1x_hal::udma::GlobalConfig;
         use ux_api::minigfx::FrameBuffer;
 

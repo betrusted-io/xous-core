@@ -17,6 +17,7 @@ use xous_usb_hid::device::DeviceClass;
 use xous_usb_hid::device::fido::RawFido;
 use xous_usb_hid::device::fido::RawFidoConfig;
 use xous_usb_hid::device::fido::RawFidoReport;
+use xous_usb_hid::device::keyboard::KeyboardLedsReport;
 use xous_usb_hid::device::keyboard::{NKROBootKeyboard, NKROBootKeyboardConfig};
 use xous_usb_hid::page::Keyboard;
 use xous_usb_hid::prelude::UsbHidClass;
@@ -55,6 +56,7 @@ pub struct Bao1xUsb<'a> {
     // used for debugging, the idea is to query this in userspace to try and pick up the double-lock problem
     // from the interrupt handler.
     pub double_lock: AtomicBool,
+    pub led_state: KeyboardLedsReport,
 }
 
 impl<'a> Bao1xUsb<'a> {
@@ -117,6 +119,7 @@ impl<'a> Bao1xUsb<'a> {
             serial_port,
             serial_rx: [0u8; SERIAL_MAX_PACKET_SIZE],
             double_lock: AtomicBool::new(false),
+            led_state: KeyboardLedsReport::default(),
         }
     }
 
@@ -280,9 +283,7 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                     }
                     match class.device::<NKROBootKeyboard<_>, _>().read_report() {
                         Ok(l) => {
-                            // for now all we do is just print this, we don't
-                            // actually store the data or pass it on to userspace
-                            crate::println!("keyboard LEDs: {:?}", l);
+                            usb.led_state = l;
                         }
                         Err(e) => match e {
                             UsbError::WouldBlock => {}

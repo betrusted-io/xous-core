@@ -462,6 +462,89 @@ impl Repl {
                     }
                 }
             }
+            "baosec-init" => {
+                // this routine is used to initialize baosec products - sets the board type and
+                // erases the off-chip FLASH
+                use bao1x_api::{baosec::PDDB_LEN, baosec::PDDB_ORIGIN};
+                use bao1x_hal::{
+                    board::SPINOR_BULK_ERASE_SIZE,
+                    ifram::IframRange,
+                    iox::Iox,
+                    udma::{Spim, *},
+                };
+                let perclk = 100_000_000;
+                let udma_global = GlobalConfig::new();
+
+                // setup the I/O pins
+                let iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
+                let channel = bao1x_hal::board::setup_memory_pins(&iox);
+                udma_global.clock_on(PeriphId::from(channel));
+                // safety: this is safe because clocks have been set up
+                let mut flash_spim = unsafe {
+                    Spim::new_with_ifram(
+                        channel,
+                        // has to be half the clock frequency reaching the block, but
+                        // run it as fast
+                        // as we can run perclk
+                        perclk / 4,
+                        perclk / 2,
+                        SpimClkPol::LeadingEdgeRise,
+                        SpimClkPha::CaptureOnLeading,
+                        SpimCs::Cs0,
+                        0,
+                        0,
+                        None,
+                        256 + 16, /* just enough space to send commands + programming
+                                   * page */
+                        4096,
+                        Some(6),
+                        Some(SpimMode::Standard), // guess Standard
+                        IframRange::from_raw_parts(
+                            bao1x_hal::board::SPIM_FLASH_IFRAM_ADDR,
+                            bao1x_hal::board::SPIM_FLASH_IFRAM_ADDR,
+                            4096 * 2,
+                        ),
+                    )
+                };
+                flash_spim.identify_flash_reset_qpi();
+                let flash_id = flash_spim.mem_read_id_flash();
+                crate::println!("flash ID (init): {:x}", flash_id);
+                if !SPI_FLASH_IDS.contains(&(flash_id & 0xFF_FF_FF)) {
+                    return Err(Error::help("Supported SPI device not found. Aborting operation."));
+                }
+
+                crate::println!("Erasing from {:x}-{:x}...", 0, PDDB_ORIGIN + PDDB_LEN);
+                for addr in (0..PDDB_ORIGIN + PDDB_LEN).step_by(SPINOR_BULK_ERASE_SIZE as usize) {
+                    crate::println!("  {:x}...", addr);
+                    flash_spim.flash_erase_block(addr, SPINOR_BULK_ERASE_SIZE as usize);
+                }
+                crate::println!("...done!");
+                let one_way = bao1x_hal::acram::OneWayCounter::new();
+                let board_type =
+                    one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error");
+                if board_type != bao1x_api::BoardTypeCoding::Baosec {
+                    while one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
+                        != bao1x_api::BoardTypeCoding::Baosec
+                    {
+                        one_way.inc_coded::<bao1x_api::BoardTypeCoding>().expect("increment error");
+                    }
+                }
+                // reset the USB stack so that we'll re-enumerate correctly after this reboot.
+                // This also has the side-effect of redirecting the console output back to the serial port.
+                crate::platform::usb::glue::shutdown();
+                let (se0_port, se0_pin) = bao1x_hal::board::setup_usb_pins(&iox);
+                iox.set_gpio_dir(se0_port, se0_pin, bao1x_api::IoxDir::Output);
+                iox.set_gpio_pin(se0_port, se0_pin, bao1x_api::IoxValue::Low); // put the USB port into SE0, so we re-enumerate with the OS stack
+
+                use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
+                // CI note: this appears on the "hard UART", not on USB serial. If we want this on USB
+                // serial, we would want to add some wait time to ensure the USB packets get sent before
+                // issuing the reboot command.
+                crate::println!("{}BOOT1.SETBOARD,{}", BOOKEND_START, BOOKEND_END);
+                crate::println!("Board type set to baosec, rebooting so boot1 can provision keys!");
+                let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+                rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
+            }
             #[cfg(feature = "test-boot0-keys")]
             "publock" => {
                 let rram = CSR::new(utra::rrc::HW_RRC_BASE as *mut u32);
@@ -515,7 +598,7 @@ impl Repl {
                 }
                 use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
                 crate::println!(
-                    "{}PUB_MUT,{},{}",
+                    "{}SEC.PUBMUT-{},{}",
                     BOOKEND_START,
                     if pass { "PASS" } else { "FAIL" },
                     BOOKEND_END

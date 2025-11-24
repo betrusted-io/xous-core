@@ -66,9 +66,83 @@ pub fn setup_dabao_se0_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     (DABAO_SE0_PORT, DABAO_SE0_PIN)
 }
 
+pub fn setup_backup_region() -> u32 {
+    let mut bu_mgr = bao1x_hal::buram::BackupManager::new();
+    if !bu_mgr.is_backup_valid() {
+        // zeroize the backup RAM
+        bu_mgr.bu_ram_as_mut().fill(0);
+        // calculate the hash and mark as valid
+        bu_mgr.make_valid();
+
+        // setup the BIO, so the reset can also clear its registers and state for a clean BDMA pipeline
+        let mut bio_ss = xous_bio_bdma::BioSharedState::new();
+        bio_ss.init();
+        // must disable DMA filtering
+        bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_MEM, 1);
+        bio_ss.bio.rmwf(utra::bio_bdma::SFR_CONFIG_DISABLE_FILTER_PERI, 1);
+
+        // stop all the machines, so that code can be loaded
+        bio_ss.bio.wo(utra::bio_bdma::SFR_CTRL, 0x0);
+        // reset all the fifos
+        bio_ss.bio.wo(utra::bio_bdma::SFR_FIFO_CLR, 0xF);
+        // setup clocking mode option
+        bio_ss.bio.rmwf(utralib::utra::bio_bdma::SFR_CONFIG_CLOCKING_MODE, 3 as u32);
+
+        bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV0, 0x1_0000);
+        bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV1, 0x1_0000);
+        bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV2, 0x1_0000);
+        bio_ss.bio.wo(utra::bio_bdma::SFR_QDIV3, 0x1_0000);
+
+        let mut trng = bao1x_hal::sce::trng::Trng::new(utralib::utra::trng::HW_TRNG_BASE);
+        trng.setup_raw_generation(256);
+        trng.start();
+        let mut delay: u16 = 0;
+        for _ in 0..8 {
+            delay ^= trng.get_u32().unwrap() as u16;
+        }
+        let mut acc = 1;
+        // one of ~1k slots for delay
+        for i in 0..delay & 0x3FF {
+            acc += i as u32;
+        }
+
+        // enable the RTC if it isn't already - on a cold boot, it would be off
+        let mut rtc = CSR::new(bao1x_hal::rtc::HW_RTC_BASE as *mut u32);
+        // RTC start randomization. Provides some deniability on how long a device has been
+        // powered on for, should that become a relevant metric for forensics.
+        //
+        // acc is used below just to "use" the value, it doesn't have a significant meaning.
+        // 15_000_000 (15 million decimal) => ~6 months. Sets lower bound on RTC start time.
+        // 0xFFF_FFFF mask on the random number XOR's in an interval from 0 to 8.5 years.
+        // the total counter value can go up to 136 years, so what this does is limits the
+        // uptime of the device to 127 years before the counter wraps around.
+        //
+        // The reason the "2038" problem doesn't affect us is that the current UTC time is
+        // computed as a 64-bit offset on top of this 32-bit counter. So basically our rollover
+        // horizon starts when the device is powered on less a few years for some deniability
+        // about when the device was first powered on.
+        crate::println!("Time offset initialized");
+        rtc.wo(bao1x_hal::rtc::LR, 15_000_000 + (trng.get_u32().unwrap() ^ acc) & 0xFFF_FFFF);
+        rtc.wfo(bao1x_hal::rtc::CR_EN, 1);
+
+        // soft-reset the system
+        let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+        rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
+
+        // this is never returned, but guarantees the compiler does not optimize out the delay loop
+        acc
+    } else {
+        0
+    }
+}
+
 /// This can change the board type coding to a safer, simpler board type if the declared board type has
 /// problems booting.
 pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::BoardTypeCoding, u32) {
+    if setup_backup_region() == 0 {
+        crate::println!("backup region is clean!");
+    }
+
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
     // setup board-specific I/Os - early boot set. These are items that have to be

@@ -71,6 +71,7 @@ board-baosec = [
     "ux-api/board-baosec",
     "blitstr2/board-baosec",
     "usb-bao1x/board-baosec",
+    "persistent_store/board-baosec",
 ]
 hosted-baosec = ["bao1x-emu", "ux-api/hosted-baosec", "usb-bao1x/hosted-baosec"]
 

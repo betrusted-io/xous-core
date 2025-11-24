@@ -697,7 +697,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
             )?;
             builder.add_loader_feature("alt-boot1");
-            builder.add_loader_feature("force-dabao");
+            // builder.add_loader_feature("force-dabao");
             builder
                 .set_baremetal(true)
                 .target_baremetal_bao1x("bao1x-alt-boot1")
@@ -768,10 +768,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // builder.add_kernel_feature("debug-swap-verbose");
             // builder.add_feature("quantum-timer"); // this isn't in bao1x..
             builder.add_kernel_feature("v2p");
-            match task.as_deref() {
-                Some("baosec") => builder.target_bao1x_soc(),
-                _ => panic!("should be unreachable"),
-            };
+            builder.target_bao1x_soc();
 
             // It is important that this is the first service added, because the swapper *must* be in PID 2
             builder.add_service("xous-swapper", LoaderRegion::Flash);
@@ -790,6 +787,52 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 builder.add_service(&app, LoaderRegion::Swap);
             }
             // builder.add_feature("modal-testing");
+        }
+
+        Some("baosec-improper-keystore") => {
+            let board = "board-baosec";
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "loader/src/platform/bao1x/link.x",
+                (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            // select the board
+            builder.set_board(board);
+            builder.add_feature(board);
+            builder.add_loader_feature(board);
+            builder.add_kernel_feature(board);
+            builder.set_sigblock_size(sigblock_size);
+
+            let bao_rram_pkgs = [
+                "xous-ticktimer",
+                "xous-log",
+                "xous-names",
+                "usb-bao1x",
+                "bao1x-hal-service",
+                "bao-console",
+                "keystore", // deliberately out of order
+                "bao-video",
+            ]
+            .to_vec();
+            if !builder.is_swap_set() {
+                // reserve 3MiB for system services: ultimately, "pddb, modals, and bao-video"
+                builder.set_swap(0, bao1x_api::offsets::baosec::SWAP_RAM_LEN as _);
+            }
+            builder.add_loader_feature("swap");
+            builder.add_kernel_feature("swap");
+            builder.add_feature("swap");
+
+            builder.add_loader_feature("debug-print");
+            builder.add_kernel_feature("v2p");
+            builder.target_bao1x_soc();
+
+            // It is important that this is the first service added, because the swapper *must* be in PID 2
+            builder.add_service("xous-swapper", LoaderRegion::Flash);
+
+            for service in bao_rram_pkgs {
+                builder.add_service(service, LoaderRegion::Flash);
+            }
+            builder.add_services(&get_cratespecs());
         }
 
         Some("dabao") => {
