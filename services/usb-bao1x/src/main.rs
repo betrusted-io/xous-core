@@ -23,9 +23,10 @@ use bao1x_hal::usb::driver::{CorigineUsb, CorigineWrapper};
 use hw::Bao1xUsb;
 use hw::UsbIrqReq;
 use num_traits::*;
+use packed_struct::PackedStructSlice;
 use usb_device::class_prelude::*;
 use utralib::{AtomicCsr, utra};
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
+use xous::msg_scalar_unpack;
 use xous_ipc::Buffer;
 use xous_usb_hid::device::fido::RawFidoReport;
 use xous_usb_hid::page::Keyboard;
@@ -443,41 +444,46 @@ pub(crate) fn main_hw() -> ! {
                 }
                 buffer.replace(u2f_ipc).unwrap();
             }
-            Opcode::SendKeyCode => msg_blocking_scalar_unpack!(msg, code0, code1, code2, autoup, {
-                let native_map = native_kbd.get_keymap().unwrap();
-                if code0 != 0 {
-                    cu.kbd_tx_queue.borrow_mut().push_back(match native_map {
-                        KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(code0 as u8 as char)[0],
-                        _ => mappings::char_to_hid_code_us101(code0 as u8 as char)[0],
-                    });
-                }
-                if code1 != 0 {
-                    cu.kbd_tx_queue.borrow_mut().push_back(match native_map {
-                        KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(code1 as u8 as char)[0],
-                        _ => mappings::char_to_hid_code_us101(code1 as u8 as char)[0],
-                    });
-                }
-                if code2 != 0 {
-                    cu.kbd_tx_queue.borrow_mut().push_back(match native_map {
-                        KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(code2 as u8 as char)[0],
-                        _ => mappings::char_to_hid_code_us101(code2 as u8 as char)[0],
-                    });
-                }
-                let auto_up = if autoup == 1 { true } else { false };
-                // kbd_tx_queue borrow_mut() should be out of scope before the IRQ is fired
-                cu.sw_irq(UsbIrqReq::KbdTx);
-                tt.sleep_ms(autotype_delay_ms).ok();
-                if auto_up {
-                    {
-                        // ensure borrow_mut() is scoped out before IRQ is fired
-                        cu.kbd_tx_queue.borrow_mut().push_back(Keyboard::NoEventIndicated);
+            Opcode::SendKeyCode => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let code0 = scalar.arg1;
+                    let code1 = scalar.arg2;
+                    let code2 = scalar.arg3;
+                    let autoup = scalar.arg4;
+                    let native_map = native_kbd.get_keymap().unwrap();
+                    if code0 != 0 {
+                        cu.kbd_tx_queue.borrow_mut().push_back(match native_map {
+                            KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(code0 as u8 as char)[0],
+                            _ => mappings::char_to_hid_code_us101(code0 as u8 as char)[0],
+                        });
                     }
+                    if code1 != 0 {
+                        cu.kbd_tx_queue.borrow_mut().push_back(match native_map {
+                            KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(code1 as u8 as char)[0],
+                            _ => mappings::char_to_hid_code_us101(code1 as u8 as char)[0],
+                        });
+                    }
+                    if code2 != 0 {
+                        cu.kbd_tx_queue.borrow_mut().push_back(match native_map {
+                            KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(code2 as u8 as char)[0],
+                            _ => mappings::char_to_hid_code_us101(code2 as u8 as char)[0],
+                        });
+                    }
+                    let auto_up = if autoup == 1 { true } else { false };
+                    // kbd_tx_queue borrow_mut() should be out of scope before the IRQ is fired
                     cu.sw_irq(UsbIrqReq::KbdTx);
                     tt.sleep_ms(autotype_delay_ms).ok();
+                    if auto_up {
+                        {
+                            // ensure borrow_mut() is scoped out before IRQ is fired
+                            cu.kbd_tx_queue.borrow_mut().push_back(Keyboard::NoEventIndicated);
+                        }
+                        cu.sw_irq(UsbIrqReq::KbdTx);
+                        tt.sleep_ms(autotype_delay_ms).ok();
+                    }
+                    scalar.arg1 = 0;
                 }
-                xous::return_scalar(msg.sender, 0).unwrap();
-            }),
-
+            }
             Opcode::SendString => {
                 let mut buffer =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
@@ -546,83 +552,88 @@ pub(crate) fn main_hw() -> ! {
                     LogLevel::Err => log::set_max_level(log::LevelFilter::Error),
                 }
             }),
-            Opcode::IrqSerialRx => msg_scalar_unpack!(msg, valid_bytes, _, _, _, {
-                serial_buf.extend_from_slice(&cu.serial_rx[..valid_bytes]);
-                match serial_listen_mode {
-                    SerialListenMode::NoListener => {
-                        match std::str::from_utf8(&serial_buf) {
-                            Ok(s) => log::info!("No listener ascii: {}", s),
-                            Err(_) => {
-                                log::info!("No listener binary: {:x?}", &serial_buf);
-                            }
-                        }
-                        serial_buf.clear();
-                    }
-                    SerialListenMode::ConsoleListener => {
-                        match std::str::from_utf8(&serial_buf) {
-                            Ok(s) => {
-                                for c in s.chars() {
-                                    native_kbd.inject_key(c);
+            Opcode::IrqSerialRx => {
+                if let Some(scalar) = msg.body.scalar_message() {
+                    let valid_bytes = scalar.arg1;
+                    serial_buf.extend_from_slice(&cu.serial_rx[..valid_bytes]);
+                    match serial_listen_mode {
+                        SerialListenMode::NoListener => {
+                            match std::str::from_utf8(&serial_buf) {
+                                Ok(s) => log::info!("No listener ascii: {}", s),
+                                Err(_) => {
+                                    log::info!("No listener binary: {:x?}", &serial_buf);
                                 }
                             }
-                            Err(_) => {
-                                log::info!("Non UTF-8 received on console: {:x?}", &serial_buf);
-                            }
-                        }
-                        serial_buf.clear();
-                    }
-                    SerialListenMode::AsciiListener(maybe_delimiter) => {
-                        if let Some(delimiter) = maybe_delimiter {
-                            if !delimiter.is_ascii() {
-                                log::warn!(
-                                    "Chosen ASCII delimiter {} is not ASCII. Serial receive will not function properly.",
-                                    delimiter
-                                );
-                            }
-                            if !serial_rx_trigger {
-                                // once true, sticks as true
-                                serial_rx_trigger =
-                                    serial_buf.iter().find(|&&c| c == (delimiter as u8)).is_some();
-                            }
-                        } else {
-                            serial_rx_trigger = true;
-                        }
-                        // now see if we should pass it back to the listener (if it is hooked)
-                        if serial_rx_trigger && serial_listener.is_some() {
-                            let mut rx_msg = serial_listener.take().unwrap();
-                            let mut response = unsafe {
-                                Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
-                            };
-                            let mut buf = response.to_original::<UsbSerialAscii, _>().unwrap();
-                            use std::fmt::Write; // is this really the best way to do it? probably not.
-                            write!(buf.s, "{}", std::string::String::from_utf8_lossy(&serial_buf)).ok();
-
-                            response.replace(buf).unwrap();
-                            // the rx_msg will drop and respond to the listener
-                            serial_rx_trigger = false;
                             serial_buf.clear();
                         }
-                    }
-                    SerialListenMode::BinaryListener => {
-                        match serial_listener.take() {
-                            Some(mut rx_msg) => {
+                        SerialListenMode::ConsoleListener => {
+                            match std::str::from_utf8(&serial_buf) {
+                                Ok(s) => {
+                                    for c in s.chars() {
+                                        native_kbd.inject_key(c);
+                                    }
+                                }
+                                Err(_) => {
+                                    log::info!("Non UTF-8 received on console: {:x?}", &serial_buf);
+                                }
+                            }
+                            serial_buf.clear();
+                        }
+                        SerialListenMode::AsciiListener(maybe_delimiter) => {
+                            if let Some(delimiter) = maybe_delimiter {
+                                if !delimiter.is_ascii() {
+                                    log::warn!(
+                                        "Chosen ASCII delimiter {} is not ASCII. Serial receive will not function properly.",
+                                        delimiter
+                                    );
+                                }
+                                if !serial_rx_trigger {
+                                    // once true, sticks as true
+                                    serial_rx_trigger =
+                                        serial_buf.iter().find(|&&c| c == (delimiter as u8)).is_some();
+                                }
+                            } else {
+                                serial_rx_trigger = true;
+                            }
+                            // now see if we should pass it back to the listener (if it is hooked)
+                            if serial_rx_trigger && serial_listener.is_some() {
+                                let mut rx_msg = serial_listener.take().unwrap();
                                 let mut response = unsafe {
                                     Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
                                 };
-                                let mut buf = response.to_original::<UsbSerialBinary, _>().unwrap();
-                                let n = serial_buf.len().min(SERIAL_BINARY_BUFLEN);
-                                let at_most_one_page: Vec<u8> = serial_buf.drain(..n).collect();
-                                buf.d.extend_from_slice(&at_most_one_page);
+                                let mut buf = response.to_original::<UsbSerialAscii, _>().unwrap();
+                                use std::fmt::Write; // is this really the best way to do it? probably not.
+                                write!(buf.s, "{}", std::string::String::from_utf8_lossy(&serial_buf)).ok();
+
                                 response.replace(buf).unwrap();
                                 // the rx_msg will drop and respond to the listener
+                                serial_rx_trigger = false;
+                                serial_buf.clear();
                             }
-                            None => {
-                                // do nothing, keep queuing data...
+                        }
+                        SerialListenMode::BinaryListener => {
+                            match serial_listener.take() {
+                                Some(mut rx_msg) => {
+                                    let mut response = unsafe {
+                                        Buffer::from_memory_message_mut(
+                                            rx_msg.body.memory_message_mut().unwrap(),
+                                        )
+                                    };
+                                    let mut buf = response.to_original::<UsbSerialBinary, _>().unwrap();
+                                    let n = serial_buf.len().min(SERIAL_BINARY_BUFLEN);
+                                    let at_most_one_page: Vec<u8> = serial_buf.drain(..n).collect();
+                                    buf.d.extend_from_slice(&at_most_one_page);
+                                    response.replace(buf).unwrap();
+                                    // the rx_msg will drop and respond to the listener
+                                }
+                                None => {
+                                    // do nothing, keep queuing data...
+                                }
                             }
                         }
                     }
                 }
-            }),
+            }
             Opcode::SerialHookAscii => {
                 let maybe_delimiter = {
                     let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -740,21 +751,32 @@ pub(crate) fn main_hw() -> ! {
                 // the logger API is "best effort" only. Because retries and response codes can cause problems
                 // in the logger API, if anything goes wrong, we prefer to discard characters rather than get
                 // the whole subsystem stuck in some awful recursive error handling hell.
-                match msg.body.memory_message() {
-                    Some(mem_msg) => {
-                        let buffer = unsafe { Buffer::from_memory_message(mem_msg) };
-                        match buffer.to_original::<api::UsbString, _>() {
-                            Ok(usb_send) => {
-                                for chunk in
-                                    usb_send.s.as_bytes().chunks(bao1x_hal::usb::driver::CRG_UDC_APP_BUFSIZE)
-                                {
-                                    cu.serial_port.write(&chunk).ok();
-                                }
+                if let Some(mem_msg) = msg.body.memory_message() {
+                    let buffer = unsafe { Buffer::from_memory_message(mem_msg) };
+                    match buffer.to_original::<api::UsbString, _>() {
+                        Ok(usb_send) => {
+                            for chunk in
+                                usb_send.s.as_bytes().chunks(bao1x_hal::usb::driver::CRG_UDC_APP_BUFSIZE)
+                            {
+                                cu.serial_port.write(&chunk).ok();
                             }
-                            _ => {} // silent errors
                         }
+                        _ => {} // silent errors
                     }
-                    _ => {} // silent errors
+                }
+            }
+            Opcode::LinkStatus => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    // to get the raw device state:
+                    // cu.device.bus().core().get_device_state()
+                    scalar.arg1 = cu.device.state() as usize;
+                }
+            }
+            Opcode::GetLedState => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let mut code = [0u8; 1];
+                    cu.led_state.pack_to_slice(&mut code).unwrap();
+                    scalar.arg1 = code[0] as usize;
                 }
             }
             Opcode::InvalidCall => {
@@ -766,7 +788,7 @@ pub(crate) fn main_hw() -> ! {
             }
             _ => {
                 unimplemented!(
-                    "Opcode {:?} not implemented for this version of the stack: {:?}",
+                    "Opcode {:?} not implemented for this version of the USB stack: {:?}",
                     opcode,
                     msg
                 );
