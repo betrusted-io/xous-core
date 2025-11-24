@@ -38,9 +38,7 @@ keystore = { path = "../../services/keystore" }
 # opensk
 ctap-crypto = { path = "../../apps/vault/libraries/crypto" }
 cbor = { path = "../../apps/vault/libraries/cbor" }
-persistent_store = { path = "../../apps/vault/libraries/persistent_store", features = [
-    "board-baosec",
-] }
+persistent_store = { path = "../../apps/vault/libraries/persistent_store" }
 ed25519-compact = { version = "1", default-features = false, optional = true }
 rand = { version = "0.8.5", optional = true }
 
@@ -73,6 +71,7 @@ board-baosec = [
     "ux-api/board-baosec",
     "blitstr2/board-baosec",
     "usb-bao1x/board-baosec",
+    "persistent_store/board-baosec",
 ]
 hosted-baosec = ["bao1x-emu", "ux-api/hosted-baosec", "usb-bao1x/hosted-baosec"]
 
