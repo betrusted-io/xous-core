@@ -348,6 +348,7 @@ dependencies = [
  "bao1x-hal",
  "bao1x-hal-service",
  "bytemuck",
+ "chrono",
  "log",
  "modals",
  "num-derive 0.4.2",
