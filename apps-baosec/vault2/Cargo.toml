@@ -38,7 +38,9 @@ keystore = { path = "../../services/keystore" }
 # opensk
 ctap-crypto = { path = "../../apps/vault/libraries/crypto" }
 cbor = { path = "../../apps/vault/libraries/cbor" }
-persistent_store = { path = "../../apps/vault/libraries/persistent_store" }
+persistent_store = { path = "../../apps/vault/libraries/persistent_store", features = [
+    "board-baosec",
+] }
 ed25519-compact = { version = "1", default-features = false, optional = true }
 rand = { version = "0.8.5", optional = true }
 
