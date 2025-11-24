@@ -32,7 +32,7 @@ use crate::secboot::try_boot;
 // Notes:
 // - "Towards" - not a release yet, but working towards the stated milestone
 // - Eliminating "Towards" is done at the tag-out point.
-const RELEASE_DESCRIPTION: &'static str = "Alpha-1";
+const RELEASE_DESCRIPTION: &'static str = "Towards Beta-0";
 
 static UART_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
 #[allow(dead_code)]
@@ -83,19 +83,19 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     #[cfg(feature = "alt-boot1")]
     crate::println!("\n~~Alt-Boot1 up! ({}: {})~~\n", crate::version::SEMVER, RELEASE_DESCRIPTION);
     crate::println!("Configured board type: {:?}", board_type);
+
+    #[cfg(feature = "alt-boot1")]
+    {
+        // in alt-boot1, always enable bootwait - otherwise we enter a boot loop
+        while one_way.get_decoded::<bao1x_api::BootWaitCoding>().expect("couldn't fetch flag")
+            != bao1x_api::BootWaitCoding::Enable
+        {
+            one_way.inc_coded::<bao1x_api::BootWaitCoding>().unwrap();
+        }
+    }
+
     if board_type == BoardTypeCoding::Baosec {
         IS_BAOSEC.store(true, Ordering::SeqCst);
-        #[cfg(all(feature = "force-dabao", feature = "alt-boot1"))]
-        {
-            while one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
-                != bao1x_api::BoardTypeCoding::Dabao
-            {
-                one_way.inc_coded::<bao1x_api::BoardTypeCoding>().expect("increment error");
-            }
-            board_type = one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error");
-            crate::println!("Re-configured board type: {:?}", board_type);
-            IS_BAOSEC.store(false, Ordering::SeqCst);
-        }
     }
 
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
