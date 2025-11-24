@@ -148,6 +148,7 @@ fn main() -> ! {
     log::info!("Vault2 PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
+    let tt = ticktimer_server::Ticktimer::new().unwrap();
 
     // Register the server with xous
     let sid = xns.register_name(SERVER_NAME_VAULT2, None).expect("can't register server");
@@ -387,6 +388,11 @@ fn main() -> ! {
     let menu_mgr = submenu::create_submenu(conn, actions_conn, menu_sid);
     let modals = modals::Modals::new(&xns).unwrap();
     vault_ui.apply_glyph_style();
+
+    // give the system a second to stabilize, then try to mount
+    tt.sleep_ms(1000).ok();
+    let pddb = pddb::Pddb::new();
+    pddb.try_mount();
 
     // reload the database
     xous::send_message(
