@@ -643,7 +643,7 @@ impl Repl {
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!(
-                    "Commands include: reset, echo, altboot, boot, bootwait, idmode, localecho, uf2, boardtype, audit, lockdown, baosec-init"
+                    "Commands include: reset, echo, altboot, boot, bootwait, idmode, localecho, uf2, boardtype, audit, lockdown"
                 );
                 #[cfg(feature = "test-boot0-keys")]
                 crate::print!(", publock");
