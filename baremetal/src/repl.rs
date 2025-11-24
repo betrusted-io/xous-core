@@ -1037,7 +1037,7 @@ impl Repl {
                     }
                 }
             }
-            #[cfg(feature = "bao1x-trng")]
+            #[cfg(all(feature = "bao1x-trng", feature = "board-baosec"))]
             "trngav" => {
                 use base64::{Engine as _, engine::general_purpose};
                 fn encode_base64(input: &[u8]) -> String { general_purpose::STANDARD.encode(input) }

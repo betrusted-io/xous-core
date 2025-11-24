@@ -92,7 +92,9 @@ impl UsbHid {
             self.conn,
             Message::new_blocking_scalar(Opcode::LinkStatus.to_usize().unwrap(), 0, 0, 0, 0),
         ) {
-            Ok(xous::Result::Scalar1(code)) => match code {
+            // this is manually unpacked because the usb_device crate doesn't have a From/To implementation
+            // for UsbDeviceState :-/
+            Ok(xous::Result::Scalar5(_, code, _, _, _)) => match code {
                 0 => UsbDeviceState::Default,
                 1 => UsbDeviceState::Addressed,
                 2 => UsbDeviceState::Configured,
@@ -120,7 +122,7 @@ impl UsbHid {
                 if auto_keyup { 1 } else { 0 },
             ),
         ) {
-            Ok(xous::Result::Scalar1(code)) => {
+            Ok(xous::Result::Scalar5(_, code, _, _, _)) => {
                 match code {
                     0 => Ok(()),
                     // indicates that we aren't connected to a host to send characters
@@ -159,7 +161,7 @@ impl UsbHid {
             self.conn,
             Message::new_blocking_scalar(Opcode::GetLedState.to_usize().unwrap(), 0, 0, 0, 0),
         ) {
-            Ok(xous::Result::Scalar1(code)) => match KeyboardLedsReport::unpack(&[code as u8]) {
+            Ok(xous::Result::Scalar5(_, code, _, _, _)) => match KeyboardLedsReport::unpack(&[code as u8]) {
                 Ok(r) => Ok(r),
                 Err(_) => Err(xous::Error::InternalError),
             },

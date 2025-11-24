@@ -32,6 +32,9 @@ rand_core = "0.6.4"
 
 aes = { path = "../aes", default-features = false, optional = true }
 
+# time testing
+chrono = "0.4.33"
+
 # hid bringup
 xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main", optional = true }
 
