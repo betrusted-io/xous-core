@@ -37,6 +37,25 @@ impl<'a> ShellCmdApi<'a> for Test {
                         }
                     }
                 }
+                "time" => {
+                    use chrono::Utc;
+                    let systime = std::time::SystemTime::now();
+                    let epoch = systime.duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap();
+                    log::info!("Seconds since epoch: {}", epoch.as_secs());
+                    log::info!("Systime: {:?}", systime);
+                    let now = Utc::now();
+                    log::info!("UTC now {}", now.format("%Y-%m-%d %H:%M:%S UTC"));
+
+                    log::info!("Waiting 3 seconds");
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+
+                    let systime = std::time::SystemTime::now();
+                    let epoch = systime.duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap();
+                    log::info!("Seconds since epoch: {}", epoch.as_secs());
+                    log::info!("Systime: {:?}", systime);
+                    let now = Utc::now();
+                    log::info!("UTC now {}", now.format("%Y-%m-%d %H:%M:%S UTC"));
+                }
                 #[cfg(feature = "bmp180")]
                 "temp" => {
                     use bao1x_hal::bmp180::Bmp180;
