@@ -106,6 +106,25 @@ pub fn setup_backup_region() -> u32 {
             acc += i as u32;
         }
 
+        // enable the RTC if it isn't already - on a cold boot, it would be off
+        let mut rtc = CSR::new(bao1x_hal::rtc::HW_RTC_BASE as *mut u32);
+        // RTC start randomization. Provides some deniability on how long a device has been
+        // powered on for, should that become a relevant metric for forensics.
+        //
+        // acc is used below just to "use" the value, it doesn't have a significant meaning.
+        // 15_000_000 (15 million decimal) => ~6 months. Sets lower bound on RTC start time.
+        // 0xFFF_FFFF mask on the random number XOR's in an interval from 0 to 8.5 years.
+        // the total counter value can go up to 136 years, so what this does is limits the
+        // uptime of the device to 127 years before the counter wraps around.
+        //
+        // The reason the "2038" problem doesn't affect us is that the current UTC time is
+        // computed as a 64-bit offset on top of this 32-bit counter. So basically our rollover
+        // horizon starts when the device is powered on less a few years for some deniability
+        // about when the device was first powered on.
+        crate::println!("Time offset initialized");
+        rtc.wo(bao1x_hal::rtc::LR, 15_000_000 + (trng.get_u32().unwrap() ^ acc) & 0xFFF_FFFF);
+        rtc.wfo(bao1x_hal::rtc::CR_EN, 1);
+
         // soft-reset the system
         let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
         rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
