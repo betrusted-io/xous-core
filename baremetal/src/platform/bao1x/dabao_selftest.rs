@@ -5,6 +5,13 @@ use xous_bio_bdma::*;
 const DABAO_PINMASK: u32 = 0b0001_1111_1000_1111_0111_1000_0011_1110; // 0x1F8F783E;
 
 pub fn dabao_selftest() {
+    let one_way = bao1x_hal::acram::OneWayCounter::new();
+    while one_way.get_decoded::<bao1x_api::BootWaitCoding>().expect("couldn't fetch flag")
+        != bao1x_api::BootWaitCoding::Enable
+    {
+        one_way.inc_coded::<bao1x_api::BootWaitCoding>().unwrap();
+    }
+
     let mut bio_ss = BioSharedState::new();
     let iox = bao1x_hal::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
     iox.set_ports_from_bio_bitmask(DABAO_PINMASK);
