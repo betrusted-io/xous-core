@@ -60,6 +60,7 @@ pub struct ScrollableList {
     /// for some global shared state to lock the UI for a given model which I haven't
     /// figured out how to handle any other way.
     pub gfx: Gfx,
+    autoflush: bool,
 }
 
 impl Clone for ScrollableList {
@@ -104,8 +105,11 @@ impl ScrollableList {
             text_alignment: TextAlignment::Left,
             pane: RefCell::new(pane),
             gfx,
+            autoflush: true,
         }
     }
+
+    pub fn set_autoflush(&mut self, autoflush: bool) { self.autoflush = autoflush; }
 
     pub fn get_alignment(&self) -> TextAlignment { self.text_alignment }
 
@@ -507,7 +511,9 @@ impl ScrollableList {
                 self.gfx.draw_object_list(ol).unwrap();
             }
         }
-        self.gfx.flush().unwrap();
+        if self.autoflush {
+            self.gfx.flush().unwrap();
+        }
     }
 
     /// Update the scrollable list state based on a key action. Passes on
