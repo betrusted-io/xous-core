@@ -486,7 +486,7 @@ fn main() -> ! {
                             vault_ui.redraw();
                         }
                         _ => {
-                            log::info!("unhandled key {}", k);
+                            log::debug!("unhandled key {}", k);
                         }
                     }
                 }
