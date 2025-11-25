@@ -322,7 +322,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         break;
                     }
-                    println!("{}: {:x}", region.name, region.base);
+                    println!("{:10}: {:x} - {:x}", region.name, region.base, region.base + region.size);
                     map.insert(
                         region.name.to_lowercase(),
                         tools::utils::CsrMemoryRegion {
