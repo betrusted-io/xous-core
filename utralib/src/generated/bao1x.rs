@@ -258,14 +258,12 @@ pub const HW_RRC_MEM:     usize = 0x40000000;
 pub const HW_RRC_MEM_LEN: usize = 65536;
 pub const HW_SECSUB_MEM:     usize = 0x40050000;
 pub const HW_SECSUB_MEM_LEN: usize = 65536;
-pub const HW_PIO_MEM:     usize = 0x50123000;
-pub const HW_PIO_MEM_LEN: usize = 4096;
 pub const HW_BIO_BDMA_MEM:     usize = 0x50124000;
 pub const HW_BIO_BDMA_MEM_LEN: usize = 4096;
 pub const HW_AO_MEM:     usize = 0x40060000;
 pub const HW_AO_MEM_LEN: usize = 65536;
 pub const HW_AOPERI_MEM:     usize = 0x40061000;
-pub const HW_AOPERI_MEM_LEN: usize = 12288;
+pub const HW_AOPERI_MEM_LEN: usize = 20480;
 pub const HW_SEG_LKEY_MEM:     usize = 0x40020000;
 pub const HW_SEG_LKEY_MEM_LEN: usize = 256;
 pub const HW_SEG_KEY_MEM:     usize = 0x40020100;
@@ -346,6 +344,8 @@ pub const HW_BIO_FIFO2_MEM:     usize = 0x5012b000;
 pub const HW_BIO_FIFO2_MEM_LEN: usize = 4096;
 pub const HW_BIO_FIFO3_MEM:     usize = 0x5012c000;
 pub const HW_BIO_FIFO3_MEM_LEN: usize = 4096;
+pub const HW_AORAM_MEM:     usize = 0x50300000;
+pub const HW_AORAM_MEM_LEN: usize = 16384;
 
 // Physical base addresses of registers
 pub const HW_D11CTIME_BASE :   usize = 0xe0000000;
