@@ -256,7 +256,7 @@ fn main() {
     // The index of the array corresponds to the slot.
     let mut irq_table: [Option<IrqLocalRegistration>; 8] = [None; 8];
 
-    // start keyboard emulator service
+    #[cfg(feature = "board-baosec")]
     servers::keyboard::start_keyboard_service();
 
     // claim BIO

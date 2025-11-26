@@ -17,7 +17,7 @@ The [Xous Book](https://betrusted.io/xous-book/) covers the architecture and str
 
 The [wiki](https://github.com/betrusted-io/betrusted-wiki/wiki) is a community resource that answers many FAQ.
 
-The [Baochip README](./README-baochip.md) is the starting point for Baochip users.
+The [Baochip README](./README-baochip.md) is the starting point for Baochip users. `vscode` users may wish to install the `baochip` extension to help manage build & test cycles.
 
 The [Precursor README](./README-precursor.md) is the starting point for Precursor users.
 

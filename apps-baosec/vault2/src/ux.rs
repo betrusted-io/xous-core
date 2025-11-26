@@ -100,6 +100,7 @@ impl VaultUi {
             .set_margin(TotpLayout::totp_margin())
             .pane_size(TotpLayout::list_box())
             .style(TotpLayout::list_font());
+        totp_list.set_autoflush(false);
 
         let gfx = Gfx::new(&xns).unwrap();
         let style = DEFAULT_FONT;
@@ -258,9 +259,10 @@ impl VaultUi {
                 self.totp_list.draw(TotpLayout::timer_box().br().y);
 
                 // draw the timer element
+                let mut object_list = ObjectList::new();
                 let mut timer_box = TotpLayout::timer_box();
                 timer_box.style = DrawStyle::new(PixelColor::Dark, PixelColor::Light, 1);
-                self.gfx.draw_rectangle(timer_box).ok();
+                object_list.push(ClipObjectType::Rect(timer_box)).unwrap();
 
                 // draw the duration bar
                 let current_time = std::time::SystemTime::now()
@@ -281,7 +283,8 @@ impl VaultUi {
                 let delta_width = (delta * width * 128) / (30 * 128 * 1000);
                 timer_remaining.br = Point::new(width - delta_width, timer_remaining.br().y);
                 timer_remaining.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
-                self.gfx.draw_rectangle(timer_remaining).ok();
+                object_list.push(ClipObjectType::Rect(timer_remaining)).unwrap();
+                self.gfx.draw_object_list(object_list).unwrap();
             }
             VaultMode::Password => {
                 /*

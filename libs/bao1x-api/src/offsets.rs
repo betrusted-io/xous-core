@@ -21,9 +21,6 @@ pub const IFR_LEN: usize = 0x400;
 /// It contains the lot ID, wafer ID, and wafer x/y position of the die.
 pub const IFR_CP_ID_BASE: usize = 0x6040_00A0;
 
-pub const AO_BU_MEM: usize = 0x5030_0000;
-pub const AO_BU_MEM_LEN: usize = 0x4000;
-
 #[bitfield(u32)]
 #[derive(PartialEq, Eq, Debug)]
 pub struct DataSlotAccess {

@@ -34,6 +34,8 @@ pub mod acram;
 pub mod buram;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod coreuser;
+#[cfg(all(not(feature = "hosted-baosec"), feature = "std"))]
+pub mod kpc_aoint;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod mbox;
 #[cfg(not(feature = "hosted-baosec"))]
