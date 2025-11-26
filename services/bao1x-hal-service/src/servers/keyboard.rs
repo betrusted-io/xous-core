@@ -1,12 +1,47 @@
+use arbitrary_int::{Number, u4};
+use bao1x_api::IrqNotification;
 use bao1x_api::keyboard::*;
 use bao1x_hal::board::KeyPress;
-use bao1x_hal::kpc_aoint::AoIntStatus;
+use bao1x_hal::kpc_aoint::{AoIntStatus, KpcAoInt};
 use num_traits::*;
+use utralib::utra::irqarray2;
 use utralib::*;
 use xous::{CID, MessageSender, msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
 const KEYUP_DELAY_MS: u64 = 50;
+
+pub fn handler(_irq_no: usize, arg: *mut usize) {
+    let kpc_aoint = unsafe { &mut *(arg as *mut KpcAoInt) };
+    let pending = kpc_aoint.irq.r(irqarray2::EV_PENDING);
+    // clear all pending interrupts
+    kpc_aoint.irq.wo(irqarray2::EV_PENDING, pending);
+
+    // Note to self: this routine might need augmentation if the interrupt source also
+    // has to be *disabled*. This would be necessary if the interrupt persists as asserted
+    // instead of being a pulse, to prevent re-entrant interrupting.
+
+    for bit in 0..16u32 {
+        let mask = 1u32 << bit;
+        if (pending & mask) != 0 {
+            for notifier in kpc_aoint.args.iter() {
+                if notifier.bit.value() as u32 == bit {
+                    xous::try_send_message(
+                        notifier.conn,
+                        xous::Message::new_scalar(
+                            notifier.opcode,
+                            pending as usize,
+                            notifier.args[1],
+                            notifier.args[2],
+                            notifier.args[3],
+                        ),
+                    )
+                    .ok();
+                }
+            }
+        }
+    }
+}
 
 struct KeypressTimestamp {
     pub kp: KeyPress,
@@ -91,9 +126,9 @@ fn map_keypress(kp: KeyPress) -> char {
     }
 }
 
-pub fn start_keyboard_service(dkpc_ptr: usize, irq_ptr: usize, ao_ptr: usize) {
+pub fn start_keyboard_service() {
     std::thread::spawn(move || {
-        keyboard_service(dkpc_ptr, irq_ptr, ao_ptr);
+        keyboard_service();
     });
     std::thread::spawn(move || {
         keyboard_bouncer();
@@ -123,13 +158,57 @@ fn keyboard_bouncer() {
     }
 }
 
-fn keyboard_service(dkpc_ptr: usize, irq_ptr: usize, ao_ptr: usize) {
-    let dkpc = CSR::new(dkpc_ptr as *mut u32);
-    let mut ao = CSR::new(ao_ptr as *mut u32);
-    let _irq = CSR::new(irq_ptr as *mut u32);
-
+fn keyboard_service() {
     let xns = xous_names::XousNames::new().unwrap();
+
+    // "own" the KPC & Always-on registers
+    let mut kpc_aoint = bao1x_hal::kpc_aoint::KpcAoInt::new(Some(handler));
+    kpc_aoint.ao.wo(utra::ao_sysctrl::SFR_IOX, 1); // connect PF directly to KP unit, overrides IO mux even???
+    kpc_aoint.ao.wo(utra::ao_sysctrl::CR_WKUPMASK, 0x3F);
+
+    // KPOPO0 defines drive state in phase 0 - here we set it to high
+    // KPOPO1 defines drive state in phase 1 - here we set it to low
+    // KPOE0 defines OE state in phase 0 - here we set it to drive
+    // KPOE1 defines OE state in phase 1 - here we set it to drive
+    let cfg0 = kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOPO0, 1)
+        // | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOPO1, 1)
+        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOOE0, 1)
+        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOOE1, 1)
+        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_DKPCEN, 1);
+    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG0, cfg0);
+    let cfg1 = kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG1_CFG_STEP, 2)
+        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG1_CFG_FILTER, 2)
+        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG1_CFG_CNT1MS, 4);
+    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG1, cfg1);
+    // CFG2 has format of interval kpo | stop drive kpo | sample point kpi | start drive kpo, each 8 bits wide
+    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG2, 0x40_05_03_01); // sets ~24ms scanning rate
+    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG3, 0xFFFF_0000); //  fall[15:0] | rise[15:0] detection
+    // this is the deep sleep interval for debouncing the keyboard array
+    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG4, 256);
+    // drain any pending events
+    while kpc_aoint.kpc.r(utra::dkpc::SFR_SR1) != 0 {
+        // this register didn't get mapped in register extraction because its type
+        // is `apb_buf2`: FIXME - adjust the register extraction script to capture this type.
+        // this register drains the pending interrupts from the wakeup/keyboard queue
+        let _ = unsafe { kpc_aoint.kpc.base().add(8).read_volatile() };
+    }
+
     let kbd_sid = xns.register_name(bao1x_api::SERVER_NAME_KBD, None).expect("can't register server");
+    let kbd_conn = xous::connect(kbd_sid).unwrap();
+
+    let kpc_int = u4::new(bao1x_hal::kpc_aoint::IrqMapping::AoInt as u8);
+    kpc_aoint.add_irq_notifier(IrqNotification {
+        bit: kpc_int,
+        conn: kbd_conn,
+        opcode: KeyboardOpcode::HandlerTrigger.to_usize().unwrap(),
+        args: [0, 0, 0, 0],
+    });
+    // feels like a bit of an abstraction violation, but I don't know how much the other interrupts
+    // require edge-triggered handling
+    kpc_aoint.irq.wo(utra::irqarray2::EV_EDGE_TRIGGERED, 1 << kpc_int.as_u32());
+    kpc_aoint.irq.wo(utra::irqarray2::EV_POLARITY, 1 << kpc_int.as_u32());
+    kpc_aoint.modify_irq_ena(kpc_int, true);
+
     let tt = ticktimer::Ticktimer::new().unwrap();
 
     let mut listeners: Vec<(CID, usize)> = Vec::new();
@@ -146,27 +225,32 @@ fn keyboard_service(dkpc_ptr: usize, irq_ptr: usize, ao_ptr: usize) {
 
     #[cfg(feature = "keyboard-testing")]
     // this routine is useful for mapping out raw keys on new hardware builds
-    std::thread::spawn(move || {
-        let dkpc = CSR::new(dkpc_ptr as *mut u32);
-        let mut irq = CSR::new(irq_ptr as *mut u32);
-        let mut ao = CSR::new(ao_ptr as *mut u32);
-        let tt = ticktimer::Ticktimer::new().unwrap();
-        loop {
-            tt.sleep_ms(1000);
-            for i in (0..6).chain(12..13).chain(8..9) {
-                log::info!("{:x}: {:x} ", i * 4, unsafe { dkpc.base().add(i).read_volatile() });
+    std::thread::spawn({
+        let dkpc_ptr = unsafe { kpc_aoint.kpc.base() as usize };
+        let irq_ptr = unsafe { kpc_aoint.irq.base() as usize };
+        let ao_ptr = unsafe { kpc_aoint.ao.base() as usize };
+        move || {
+            let dkpc = CSR::new(dkpc_ptr as *mut u32);
+            let mut irq = CSR::new(irq_ptr as *mut u32);
+            let mut ao = CSR::new(ao_ptr as *mut u32);
+            let tt = ticktimer::Ticktimer::new().unwrap();
+            loop {
+                tt.sleep_ms(1000);
+                for i in (0..6).chain(12..13).chain(8..9) {
+                    log::info!("{:x}: {:x} ", i * 4, unsafe { kpc_aoint.kpc.base().add(i).read_volatile() });
+                }
+                let fr = AoIntStatus::new_with_raw_value(ao.r(utra::ao_sysctrl::SFR_AOFR));
+                let pending = irq.r(utralib::utra::irqarray2::EV_PENDING);
+                log::info!(
+                    "int: {:x}/{:x}/{:x}/{:x?}",
+                    irq.r(utralib::utra::irqarray2::EV_ENABLE),
+                    pending,
+                    irq.r(utralib::utra::irqarray2::EV_STATUS),
+                    fr,
+                );
+                ao.wo(utra::ao_sysctrl::SFR_AOFR, fr.raw_value());
+                irq.wo(utra::irqarray2::EV_PENDING, pending);
             }
-            let fr = AoIntStatus::new_with_raw_value(ao.r(utra::ao_sysctrl::SFR_AOFR));
-            let pending = irq.r(utralib::utra::irqarray2::EV_PENDING);
-            log::info!(
-                "int: {:x}/{:x}/{:x}/{:x?}",
-                irq.r(utralib::utra::irqarray2::EV_ENABLE),
-                pending,
-                irq.r(utralib::utra::irqarray2::EV_STATUS),
-                fr,
-            );
-            ao.wo(utra::ao_sysctrl::SFR_AOFR, fr.raw_value());
-            irq.wo(utra::irqarray2::EV_PENDING, pending);
         }
     });
 
@@ -327,8 +411,8 @@ fn keyboard_service(dkpc_ptr: usize, irq_ptr: usize, ao_ptr: usize) {
                     last_key_event = now;
 
                     // key downs come from this register
-                    if dkpc.r(utra::dkpc::SFR_SR1) != 0 {
-                        let sr1 = unsafe { dkpc.base().add(8).read_volatile() };
+                    if kpc_aoint.kpc.r(utra::dkpc::SFR_SR1) != 0 {
+                        let sr1 = unsafe { kpc_aoint.kpc.base().add(8).read_volatile() };
                         let key_down = bao1x_hal::board::kpc_sr1_to_key(sr1);
                         key_tracker.register_key_down(key_down, now);
                         if key_down != KeyPress::Invalid {
@@ -340,14 +424,14 @@ fn keyboard_service(dkpc_ptr: usize, irq_ptr: usize, ao_ptr: usize) {
                     // noise is detected on the keyboard, *before* the hardware debounce
                     // happens!
                     if key_tracker.keys_pressed() > 0 {
-                        let sr0 = dkpc.r(utra::dkpc::SFR_SR0);
+                        let sr0 = kpc_aoint.kpc.r(utra::dkpc::SFR_SR0);
                         let keys_down = bao1x_hal::board::kpc_sr0_to_key(sr0);
                         key_tracker.update_key_down(&keys_down, now);
                     }
 
                     // clear the FR bits
-                    let fr = AoIntStatus::new_with_raw_value(ao.r(utra::ao_sysctrl::SFR_AOFR));
-                    ao.wo(utra::ao_sysctrl::SFR_AOFR, fr.raw_value());
+                    let fr = AoIntStatus::new_with_raw_value(kpc_aoint.ao.r(utra::ao_sysctrl::SFR_AOFR));
+                    kpc_aoint.ao.wo(utra::ao_sysctrl::SFR_AOFR, fr.raw_value());
 
                     // add any repeat keys to the key response array
                     kc.extend_from_slice(&key_tracker.get_repeats(now));
