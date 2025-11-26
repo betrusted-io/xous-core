@@ -499,9 +499,12 @@ dependencies = [
 name = "bao1x-hal-service"
 version = "0.1.0"
 dependencies = [
+ "arbitrary-int",
  "bao1x-api",
  "bao1x-hal",
+ "bitbybit",
  "bitfield",
+ "bytemuck",
  "flatipc",
  "flatipc-derive",
  "log",
