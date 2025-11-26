@@ -12,12 +12,12 @@ use crate::{CommonEnv, ShellCmdApi};
 
 pub struct PddbCmd {
     pddb: pddb::Pddb,
+    mounted: bool,
 }
 impl PddbCmd {
     pub fn new() -> Self {
         let pddb = pddb::Pddb::new();
-        log::info!("PDDB mount result: {:?}", pddb.try_mount());
-        PddbCmd { pddb }
+        PddbCmd { pddb, mounted: false }
     }
 }
 
@@ -25,6 +25,11 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
     cmd_api!(pddb);
 
     fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
+        // lazy-eval this mount
+        if !self.mounted {
+            log::info!("PDDB mount result: {:?}", self.pddb.try_mount());
+            self.mounted = true;
+        }
         let mut ret = String::new();
         #[cfg(not(feature = "pddbtest"))]
         let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [writeover] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]";

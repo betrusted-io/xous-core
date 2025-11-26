@@ -9,6 +9,7 @@ pub fn keystore(sid: SID) -> ! {
     let hal = bao1x_hal_service::Hal::new();
     let mut rram = Reram::new();
     let mut store = KeyStore::init_mappings(&mut rram);
+    let mut backup_mgr = bao1x_hal::buram::BackupManager::new();
     // does nothing if the keys are already initialized
     store.ensure_system_init(&mut rram);
     // derive the master key
@@ -40,6 +41,7 @@ pub fn keystore(sid: SID) -> ! {
                 buffer.replace(kwp).unwrap();
             }
             Opcode::EphemeralOp => {
+                // this will use the backup_mgr to store ephemeral secrets
                 todo!()
             }
             Opcode::InvalidCall => {

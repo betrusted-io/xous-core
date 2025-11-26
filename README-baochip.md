@@ -5,10 +5,18 @@ Baochip-based boards use the `bao1x` SoC. There are two boards supported out-of-
 - `dabao` is a minimal SoM-style breakout board. Basically just the chip on a board.
 - `baosec` is a hardware security token. It features a camera, display, external memory, buttons, and a supplemental hardware TRNG.
 
+The build idiom is `cargo xtask <target>`, i.e. `cargo xtask dabao`. The build will generate a [`UF2`](https://makecode.com/blog/one-chip-to-flash-them-all) artifact, which can be found in `target/riscv32imac-unknown-[xous|none]-elf/release/`.
+
+Holding down the `PROG` button while plugging the device into USB will cause it to enter a bootloader that enumerates a mass storage device. The build artifacts can then be copied onto the device. Pressing `PROG` again will cause the device to run the program. Targets also enumerate a serial port over USB, which will activate a debug console.
+
+## Bootloaders
+
 Regardless of the board, the `bao1x` chip comes from the factory programmed with `boot0` and `boot1` stages. The code for these can be found in `bao1x-boot/`.
 
 - `boot0` is a permanent root of trust burned onto the chip. Its sole purpose is to validate `boot1`. See [security model](./README-baochip.md#security-model) for details on the trust chain
 - `boot1` contains a USB driver, serial-over-USB driver, and serial driver capable of accepting code updates in the form of .u2f files or serial commands. It also contains a small command terminal for managing configurations, keys, and device lifecycle state.
+
+### Applications
 
 Three application targets are supported by Xous:
 

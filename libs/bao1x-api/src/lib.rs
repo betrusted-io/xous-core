@@ -108,3 +108,18 @@ impl StaticsInRom {
         unsafe { core::slice::from_raw_parts(self as *const Self as *const u8, core::mem::size_of::<Self>()) }
     }
 }
+
+/// Structure for recording message formats to be passed from interrupt handlers back to userspace.
+/// A specific handler may or may not use any or all of the arguments: this simply provides storage
+/// for all the possible arguments.
+#[derive(Copy, Clone)]
+pub struct IrqNotification {
+    /// Specifies the bit position of the event in the irq bank
+    pub bit: arbitrary_int::u4,
+    /// Connection to send notifications to
+    pub conn: xous::CID,
+    /// Opcode argument for the notification
+    pub opcode: usize,
+    /// Up to four arguments to be passed on
+    pub args: [usize; 4],
+}

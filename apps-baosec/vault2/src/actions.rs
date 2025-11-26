@@ -1284,7 +1284,10 @@ impl ActionManager {
         let pws = self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None).unwrap_or(Vec::new());
         if pws.len() < TARGET_ENTRIES_PW {
             let extra_count = TARGET_ENTRIES_PW - pws.len();
-            for _index in 0..extra_count {
+            for index in 0..extra_count {
+                if index % 10 == 0 {
+                    log::info!("Creating {}/{} passwords", index + 1, extra_count);
+                }
                 let desc = random_pick::pick_multiple_from_slice(&words, &weights, 3);
                 // this exposes raw unicode and symbols to the sorting list
                 // let description = format!("{} {} {}", desc[0], desc[1], desc[2]);
@@ -1334,7 +1337,8 @@ impl ActionManager {
         let totp = self.pddb.borrow().list_keys(VAULT_TOTP_DICT, None).unwrap_or(Vec::new());
         if totp.len() < TARGET_ENTRIES {
             let extra = TARGET_ENTRIES - totp.len();
-            for _index in 0..extra {
+            for index in 0..extra {
+                log::info!("Creating {}/{} TOTP records", index + 1, extra);
                 let names = random_pick::pick_multiple_from_slice(&words, &weights, 3);
                 let name = format!("{} {} {}", names[0], names[1], names[2]);
                 let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
@@ -1375,9 +1379,11 @@ impl ActionManager {
                 Err(e) => log::error!("PW Error: {:?}", e),
             };
         }
+        log::info!("Done creating entries, syncing DB...");
         self.modals.dynamic_notification_update(Some("Syncing PDDB..."), None).ok();
         self.pddb.borrow().sync().ok();
         self.modals.dynamic_notification_close().ok();
+        log::info!("~~fin~~");
     }
 
     fn report_err<T: std::fmt::Debug>(&self, note: &str, e: Option<T>) {

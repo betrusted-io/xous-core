@@ -312,14 +312,46 @@ pub fn setup_kb_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 2], [(Iox
     )
 }
 
+pub fn setup_kpc_pins<T: IoSetup + IoGpio>(iox: &T) -> ([(IoxPort, u8); 2], [(IoxPort, u8); 3]) {
+    for r in R_PINS {
+        iox.setup_pin(
+            KB_PORT,
+            r,
+            Some(IoxDir::Input),
+            Some(IoxFunction::AF1),
+            None,
+            None,
+            Some(IoxEnable::Enable),
+            Some(IoxDriveStrength::Drive2mA),
+        );
+    }
+
+    for c in C_PINS {
+        iox.setup_pin(
+            KB_PORT,
+            c,
+            Some(IoxDir::Input),
+            Some(IoxFunction::AF1),
+            Some(IoxEnable::Enable),
+            None,
+            Some(IoxEnable::Enable),
+            Some(IoxDriveStrength::Drive2mA),
+        );
+    }
+    (
+        [(KB_PORT, R_PINS[0]), (KB_PORT, R_PINS[1])],
+        [(KB_PORT, C_PINS[0]), (KB_PORT, C_PINS[1]), (KB_PORT, C_PINS[2])],
+    )
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum KeyPress {
     Up,
+    Select,
     Down,
     Left,
+    Center,
     Right,
-    Select,
-    Home,
     Invalid,
     None,
 }
@@ -340,7 +372,7 @@ pub fn scan_keyboard<T: IoSetup + IoGpio>(
                 if key_press_index < key_presses.len() {
                     key_presses[key_press_index] = match (row, col) {
                         (1, 3) => KeyPress::Left,
-                        (1, 2) => KeyPress::Home,
+                        (1, 2) => KeyPress::Center,
                         (1, 0) => KeyPress::Right,
                         (0, 0) => KeyPress::Down,
                         (0, 2) => KeyPress::Up,
@@ -354,6 +386,64 @@ pub fn scan_keyboard<T: IoSetup + IoGpio>(
         iox.set_gpio_pin_value(*port, *pin, IoxValue::High);
     }
     key_presses
+}
+
+// key:    sr1 & 0xFF | sr0 & 0xFF
+//  -- must read sr0 to pick up multiple key hit --
+// down:   0x10 | 0xfffe 1111_1110
+// select: 0x11 | 0xfffd 1111_1101 (press in on jog dial)
+// up:     0x12 | 0xfffb 1111_1011
+// right:  0x14 | 0xffef 1110_1111
+// left:   0x15 | 0xffdf 1101_1111
+// center: 0x16 | 0xffbf 1011_1111
+
+/// SR0 will contain the current raw status of all the keys and the interrupt
+/// system will continue to notify us that an event is happening until all keys
+/// are released.
+///
+/// This maps the output of the "polled" raw event register (SR0) to `KeyPress`
+/// Multiple keys can be encoded in this.
+pub fn kpc_sr0_to_key(raw_event: u32) -> [KeyPress; 4] {
+    let mut key_presses: [KeyPress; 4] = [KeyPress::None; 4];
+    let mut key_press_index = 0;
+    let masked = raw_event & 0x7F;
+    for position in 0..7 {
+        if (masked & (1 << position)) == 0 {
+            let kp_candidate = match position {
+                0 => KeyPress::Down,
+                1 => KeyPress::Select,
+                2 => KeyPress::Up,
+                4 => KeyPress::Right,
+                5 => KeyPress::Left,
+                6 => KeyPress::Center,
+                _ => KeyPress::Invalid,
+            };
+            if kp_candidate != KeyPress::Invalid && key_press_index < key_presses.len() {
+                key_presses[key_press_index] = kp_candidate;
+                key_press_index += 1;
+            }
+        }
+    }
+    key_presses
+}
+
+/// SR1 outputs a single event every time a key is pressed. Thus it is a KeyDown
+/// indicator.
+///
+/// This maps the output of the "keydown" event register (SR1) to `KeyPress`
+/// only one keydown seems to ever be encoded in this, or at least, it can't
+/// effectively differentiate multiple simultaneous keypresses due to its coding.
+pub fn kpc_sr1_to_key(raw_event: u32) -> KeyPress {
+    let masked = raw_event & 0xFF;
+    match masked {
+        0x10 => KeyPress::Down,
+        0x11 => KeyPress::Select,
+        0x12 => KeyPress::Up,
+        0x14 => KeyPress::Right,
+        0x15 => KeyPress::Left,
+        0x16 => KeyPress::Center,
+        _ => KeyPress::Invalid,
+    }
 }
 
 pub fn setup_pmic_irq<T: IoIrq>(iox: &T, server: &str, opcode: usize) {

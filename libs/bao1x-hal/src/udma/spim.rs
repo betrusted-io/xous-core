@@ -318,7 +318,7 @@ impl Spim {
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
-        .expect("couldn't map serial port");
+        .expect("couldn't map spim channel");
         #[cfg(target_os = "xous")]
         let csr = CSR::new(csr_range.as_mut_ptr() as *mut u32);
         #[cfg(not(target_os = "xous"))]

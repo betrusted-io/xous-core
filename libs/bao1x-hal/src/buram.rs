@@ -25,9 +25,8 @@ impl BackupManager {
             )
             .unwrap()
         };
-        let bu_ram = unsafe {
-            xous::MemoryRange::new(bao1x_api::offsets::AO_BU_MEM, bao1x_api::offsets::AO_BU_MEM_LEN).unwrap()
-        };
+        let bu_ram =
+            unsafe { xous::MemoryRange::new(utralib::HW_AORAM_MEM, utralib::HW_AORAM_MEM_LEN).unwrap() };
         BackupManager { bu_reg, bu_ram }
     }
 
@@ -36,15 +35,15 @@ impl BackupManager {
         let bu_reg = xous::map_memory(
             xous::MemoryAddress::new(utralib::utra::aobureg::HW_AOBUREG_BASE),
             None,
-            utralib::utra::aobureg::AOBUREG_NUMREGS * size_of::<u32>(),
+            4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("Couldn't map backup register range");
 
         let bu_ram = xous::map_memory(
-            xous::MemoryAddress::new(bao1x_api::offsets::AO_BU_MEM),
+            xous::MemoryAddress::new(utralib::HW_AORAM_MEM),
             None,
-            bao1x_api::offsets::AO_BU_MEM_LEN,
+            utralib::HW_AORAM_MEM_LEN,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("couldn't map backup RAM range");
@@ -54,7 +53,7 @@ impl BackupManager {
     pub fn is_backup_valid(&self) -> bool {
         let bu_ram_u32: &[u32] = unsafe { self.bu_ram.as_slice() };
         let hash = murmur3_32(bu_ram_u32, 0x0);
-        let bu_reg: &[u32] = unsafe { self.bu_reg.as_slice() };
+        let bu_reg: &[u32] = &unsafe { self.bu_reg.as_slice() }[..utralib::utra::aobureg::AOBUREG_NUMREGS];
         hash == bu_reg[HASH_LOC]
     }
 
