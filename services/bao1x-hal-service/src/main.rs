@@ -1,9 +1,11 @@
 mod api;
+mod kpc_aoint;
 mod servers;
 #[cfg(feature = "board-baosec")]
 use std::sync::{Arc, Mutex};
 
-use bao1x_api::*;
+use arbitrary_int::{Number, u4};
+use bao1x_api::{keyboard::KeyboardOpcode, *};
 use bao1x_hal::{iox::Iox, udma::GlobalConfig};
 use bitfield::*;
 use num_traits::*;
@@ -256,8 +258,61 @@ fn main() {
     // The index of the array corresponds to the slot.
     let mut irq_table: [Option<IrqLocalRegistration>; 8] = [None; 8];
 
+    // "own" the KPC & Always-on registers
+    let mut kpc_aoint = bao1x_hal::kpc_aoint::KpcAoInt::new(Some(crate::kpc_aoint::handler));
+    kpc_aoint.ao.wo(utra::ao_sysctrl::SFR_IOX, 1); // connect PF directly to KP unit, overrides IO mux even???
+    kpc_aoint.ao.wo(utra::ao_sysctrl::CR_WKUPMASK, 0x3F);
+
+    // KPOPO0 defines drive state in phase 0 - here we set it to high
+    // KPOPO1 defines drive state in phase 1 - here we set it to low
+    // KPOE0 defines OE state in phase 0 - here we set it to drive
+    // KPOE1 defines OE state in phase 1 - here we set it to drive
+    let cfg0 = kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOPO0, 1)
+        // | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOPO1, 1)
+        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOOE0, 1)
+        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOOE1, 1)
+        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_DKPCEN, 1);
+    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG0, cfg0);
+    let cfg1 = kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG1_CFG_STEP, 2)
+        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG1_CFG_FILTER, 2)
+        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG1_CFG_CNT1MS, 4);
+    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG1, cfg1);
+    // CFG2 has format of interval kpo | stop drive kpo | sample point kpi | start drive kpo, each 8 bits wide
+    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG2, 0x40_05_03_01); // sets ~24ms scanning rate
+    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG3, 0xFFFF_0000); //  fall[15:0] | rise[15:0] detection
+    // this is the deep sleep interval for debouncing the keyboard array
+    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG4, 256);
+    // drain any pending events
+    while kpc_aoint.kpc.r(utra::dkpc::SFR_SR1) != 0 {
+        // this register didn't get mapped in register extraction because its type
+        // is `apb_buf2`: FIXME - adjust the register extraction script to capture this type.
+        // this register drains the pending interrupts from the wakeup/keyboard queue
+        let _ = unsafe { kpc_aoint.kpc.base().add(8).read_volatile() };
+    }
+
+    // safety: cloning the KPC hardware register is only safe because the KPC register is accessed
+    // in two mutually exclusive contexts: the interrupt handler, and userland service. This server
+    // guarantees we won't try to access it in any other contexts.
+    servers::keyboard::start_keyboard_service(
+        unsafe { kpc_aoint.kpc.base() } as usize,
+        unsafe { kpc_aoint.irq.base() } as usize,
+        unsafe { kpc_aoint.ao.base() } as usize,
+    );
     // start keyboard emulator service
-    servers::keyboard::start_keyboard_service();
+    let kbd_conn = xns.request_connection_blocking(bao1x_api::SERVER_NAME_KBD).unwrap();
+
+    let kpc_int = u4::new(bao1x_hal::kpc_aoint::IrqMapping::AoInt as u8);
+    kpc_aoint.add_irq_notifier(IrqNotification {
+        bit: kpc_int,
+        conn: kbd_conn,
+        opcode: KeyboardOpcode::HandlerTrigger.to_usize().unwrap(),
+        args: [0, 0, 0, 0],
+    });
+    // feels like a bit of an abstraction violation, but I don't know how much the other interrupts
+    // require edge-triggered handling
+    kpc_aoint.irq.wo(utra::irqarray2::EV_EDGE_TRIGGERED, 1 << kpc_int.as_u32());
+    kpc_aoint.irq.wo(utra::irqarray2::EV_POLARITY, 1 << kpc_int.as_u32());
+    kpc_aoint.modify_irq_ena(kpc_int, true);
 
     // claim BIO
     #[cfg(feature = "board-baosec")]
