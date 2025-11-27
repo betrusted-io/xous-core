@@ -38,7 +38,7 @@ pub(crate) fn generate_version(add_timestamp: bool) {
         )
         .expect("couldn't add our timestamp");
     } else {
-        write!(new_data, "#[allow(dead_code)]\npub const TIMESTAMP: &'static str = \"unavailable\";\n")
+        write!(new_data, "#[allow(dead_code)]\npub const TIMESTAMP: &'static str = \"omitted\";\n")
             .expect("couldn't add our timestamp");
     }
     let mut semver_code = Vec::new();
