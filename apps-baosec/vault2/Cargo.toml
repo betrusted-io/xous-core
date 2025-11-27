@@ -72,8 +72,14 @@ board-baosec = [
     "blitstr2/board-baosec",
     "usb-bao1x/board-baosec",
     "persistent_store/board-baosec",
+    "ctap-crypto/board-baosec",
 ]
-hosted-baosec = ["bao1x-emu", "ux-api/hosted-baosec", "usb-bao1x/hosted-baosec"]
+hosted-baosec = [
+    "bao1x-emu",
+    "ux-api/hosted-baosec",
+    "usb-bao1x/hosted-baosec",
+    "ctap-crypto/hosted-baosec",
+]
 
 with_ctap1 = ["ctap-crypto/with_ctap1"]
 vendor_hid = []

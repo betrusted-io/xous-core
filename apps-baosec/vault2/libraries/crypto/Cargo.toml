@@ -13,7 +13,8 @@ edition = "2018"
 cbor = { path = "../cbor", package = "cbor-vault2" }
 arrayref = "0.3.6"
 subtle = { version = "2.2.3", default-features = false }
-bao1x-hal-service = { path = "../../../../services/bao1x-hal-service" }
+bao1x-hal-service = { path = "../../../../services/bao1x-hal-service", optional = true }
+bao1x-emu = { path = "../../../../services/bao1x-emu", optional = true }
 xous-names = { package = "xous-api-names", version = "0.9.67" }
 rand_core = "0.6.3"
 p256 = { version = "0.11.1", default-features = false, features = [
@@ -41,5 +42,7 @@ byteorder = { version = "1", default-features = false }
 rfc6979 = "0.2.0"
 
 [features]
+board-baosec = ["bao1x-hal-service"]
+hosted-baosec = ["bao1x-emu"]
 with_ctap1 = []
 derive_debug = []
