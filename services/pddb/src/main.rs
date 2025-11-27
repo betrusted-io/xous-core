@@ -855,6 +855,9 @@ fn wrapped_main() -> ! {
                     for requester in attempt_notifications.drain(..) {
                         xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
                     }
+                    for requester in mount_notifications.drain(..) {
+                        xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
+                    }
                 })
             }
             #[cfg(feature = "gen1")]
