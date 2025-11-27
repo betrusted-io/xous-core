@@ -18,7 +18,7 @@ xous-names = { package = "xous-api-names", version = "0.9.67" }
 locales = { path = "../../locales" }
 pddb = { path = "../../services/pddb" }
 modals = { path = "../../services/modals", features = ["no-gam"] }
-backup = { path = "../../apps/vault/libraries/backup" }
+backup = { path = "./libraries/backup", package = "backup-vault2" }
 byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
 subtle = { version = "2.5.0", features = ["core_hint_black_box"] }
@@ -36,8 +36,8 @@ xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branc
 keystore = { path = "../../services/keystore" }
 
 # opensk
-ctap-crypto = { path = "../../apps/vault/libraries/crypto" }
-cbor = { path = "../../apps/vault/libraries/cbor" }
+ctap-crypto = { path = "./libraries/crypto", package = "ctap-crypto-vault2" }
+cbor = { path = "./libraries/cbor", package = "cbor-vault2" }
 persistent_store = { path = "../../apps/vault/libraries/persistent_store" }
 ed25519-compact = { version = "1", default-features = false, optional = true }
 rand = { version = "0.8.5", optional = true }
