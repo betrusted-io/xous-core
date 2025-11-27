@@ -737,6 +737,13 @@ impl Gfx {
         let response: QrAcquisition = buf.to_original()?;
         Ok(response)
     }
+
+    #[cfg(feature = "hosted-baosec")]
+    pub fn acquire_qr(&self) -> Result<QrAcquisition, xous::Error> {
+        let dummy = "otpauth://totp/ACME%20Co:john.doe@email.com?secret=HXDMVJECJJWSRB3HWIZR4IFUGFTMXBOZ&issuer=ACME%20Co&algorithm=SHA1&digits=6&period=30".to_string();
+        // just return some dummy data
+        Ok(QrAcquisition { content: Some(dummy), meta: None })
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

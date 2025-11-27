@@ -129,7 +129,6 @@ impl BulkRead {
     pub fn default() -> BulkRead { BulkRead { buf: [0; 7936], from_offset: 0, len: 7936 } }
 }
 
-#[cfg(feature = "board-baosec")]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct QrAcquisition {
     pub content: Option<String>,
