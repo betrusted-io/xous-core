@@ -201,15 +201,19 @@ impl<'a> Menu<'a> {
                 DrawStyle::new(PixelColor::Light, PixelColor::Light, 3),
             ))
             .ok();
-        self.list.draw(
-            self.title_tv
-                .bounds_computed
-                .unwrap_or(Rectangle::new(
-                    Point::new(0, 0),
-                    Point::new(crate::platform::WIDTH as isize, self.list.row_height() as isize),
-                ))
-                .height() as isize,
-        );
+        let title_height = self
+            .title_tv
+            .bounds_computed
+            .unwrap_or(Rectangle::new(
+                Point::new(0, 0),
+                Point::new(crate::platform::WIDTH as isize, self.list.row_height() as isize),
+            ))
+            .height() as isize;
+        self.list.pane_size(Rectangle::new(
+            Point::new(0, 0),
+            Point::new(crate::platform::WIDTH, crate::platform::HEIGHT as isize - title_height),
+        ));
+        self.list.draw(title_height);
     }
 
     pub fn key_event(&mut self, keys: [char; 4]) {
