@@ -12,7 +12,7 @@ use xous::CID;
 use crate::storage::{ContentKind, Manager};
 use crate::*;
 
-pub const DEFAULT_FONT: GlyphStyle = GlyphStyle::Bold;
+pub const DEFAULT_FONT: GlyphStyle = GlyphStyle::Regular;
 pub const FONT_LIST: [&'static str; 6] = ["regular", "tall", "mono", "bold", "large", "small"];
 pub fn name_to_style(name: &str) -> Option<GlyphStyle> {
     match name {
@@ -67,7 +67,7 @@ impl TotpLayout {
 
     pub fn list_box() -> Rectangle { Rectangle::new(Point::new(0, 50), Point::new(127, 127)) }
 
-    pub fn list_font() -> GlyphStyle { GlyphStyle::Bold }
+    pub fn list_font() -> GlyphStyle { GlyphStyle::Regular }
 }
 
 pub struct VaultUi {
@@ -191,15 +191,15 @@ impl VaultUi {
                             name_bytes,
                             String::from_utf8(name_bytes.to_vec())
                         );
-                        name_to_style(&String::from_utf8(name_bytes).unwrap_or("bold".to_string()))
-                            .unwrap_or(GlyphStyle::Bold)
+                        name_to_style(&String::from_utf8(name_bytes).unwrap_or("regular".to_string()))
+                            .unwrap_or(GlyphStyle::Regular)
                     }
-                    Err(_) => GlyphStyle::Bold,
+                    Err(_) => GlyphStyle::Regular,
                 }
             }
             _ => {
                 log::warn!("PDDB access error reading default glyph size");
-                GlyphStyle::Bold
+                GlyphStyle::Regular
             }
         };
         self.totp_list.style(style);
