@@ -38,8 +38,8 @@ Nov 12 2025:
 
 `cargo xtask baosec-emu` will launch the emulated UI.
 
-  -[ ] implement RTC
-  -[ ] implement QR code scanning loop
+  -[x] implement RTC
+  -[x] implement QR code scanning loop
   -[x] implement HID loop - needs testing, but have to implement RTC first before can test on HW
   -[x] implement "action" loop
 
@@ -73,6 +73,28 @@ Nov 12 2025:
   -[ ] Backup data presented as .bin file on mass storage device
   -[ ] Device stays in backup state until user clears screen; exit via reboot
 
+
+UI interaction planning.
+
+Main mode of interaction is QR code scanning. This should be accessible with a single button. Thus:
+
+1. middle center button pops up QR code scanner. Behavior then depends on the code scanned.
+  Note: will need a menu item to replace passwords - we should keep the old passwords in case it's needed?
+
+Observation: left/right paging buttons don't do a lot with O(hundreds) passwords, but scrolling
+is fast. So don't implement left/right paging as on Precursor, freeing up two buttons.
+
+2. Left button: pops up text entry to filter lists
+
+3. Right button: "action" button - used to type the current password, and/or approve FIDO sigs
+
+4. Up/down/select jog: exclusively for menu interactions. Menus are always linear, with select.
+
+This UI design does not allow for hierarchical menus because there isn't a "back" button, but
+we *could*, possibly, if we really needed menu hierarchies, repurpose a left/right button as
+a hierarchy nav function.
+
+-> But can we keep the menu shallow?
   */
 
 pub(crate) const SERVER_NAME_VAULT2: &str = "_Vault2_";
@@ -200,6 +222,11 @@ fn main() -> ! {
                         xous::return_scalar(msg.sender, 1).unwrap();
                     }),
                     Some(ActionOp::ReloadDb) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        manager.retrieve_db();
+                        xous::return_scalar(msg.sender, 1).unwrap();
+                    }),
+                    Some(ActionOp::AcquireQr) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        manager.acquire_qr();
                         manager.retrieve_db();
                         xous::return_scalar(msg.sender, 1).unwrap();
                     }),
@@ -431,6 +458,39 @@ fn main() -> ! {
                         }
                         '→' => {
                             vault_ui.nav(NavDir::PageDown);
+                            vault_ui.redraw();
+                        }
+                        '🔥' => {
+                            allow_totp_rendering.store(false, Ordering::SeqCst);
+                            xous::send_message(
+                                actions_conn,
+                                xous::Message::new_blocking_scalar(
+                                    ActionOp::AcquireQr.to_usize().unwrap(),
+                                    0,
+                                    0,
+                                    0,
+                                    0,
+                                ),
+                            )
+                            .ok();
+                            // wait a moment for the last frame to clear before redrawing the UI
+                            tt.sleep_ms(100).ok();
+                            allow_totp_rendering.store(true, Ordering::SeqCst);
+                            // reload DB to pickup the new data
+                            xous::send_message(
+                                actions_conn,
+                                xous::Message::new_blocking_scalar(
+                                    ActionOp::ReloadDb.to_usize().unwrap(),
+                                    0,
+                                    0,
+                                    0,
+                                    0,
+                                ),
+                            )
+                            .ok();
+                            if *mode.lock().unwrap() == VaultMode::Totp {
+                                vault_ui.refresh_totp();
+                            }
                             vault_ui.redraw();
                         }
                         _ => {
