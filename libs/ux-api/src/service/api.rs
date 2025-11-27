@@ -97,6 +97,11 @@ pub enum GfxOpcode {
     /// V2 API for fast drawing of multiple objects
     UnclippedObjectList,
 
+    #[cfg(feature = "board-baosec")]
+    AcquireQr,
+    #[cfg(feature = "board-baosec")]
+    KeyPress,
+
     /// Gutter for invalid calls
     InvalidCall,
 
@@ -122,4 +127,10 @@ pub struct BulkRead {
 }
 impl BulkRead {
     pub fn default() -> BulkRead { BulkRead { buf: [0; 7936], from_offset: 0, len: 7936 } }
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct QrAcquisition {
+    pub content: Option<String>,
+    pub meta: Option<String>,
 }

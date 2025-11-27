@@ -1,5 +1,5 @@
 [package]
-name = "cbor"
+name = "cbor-vault2"
 version = "0.1.0"
 authors = [
   "Fabian Kaczmarczyck <kaczmarczyck@google.com>",
@@ -12,4 +12,3 @@ edition = "2018"
 [dependencies]
 
 [features]
-

@@ -56,7 +56,6 @@ hosted-baosec = ["bao1x-emu", "ux-api/hosted-baosec", "no-gam"]
 autotest = []
 
 bao1x = ["utralib/bao1x", "blitstr2/bao1x"]
-decongest-udma = []
 b64-export = ["base64"]
 default = [
     # "b64-export",

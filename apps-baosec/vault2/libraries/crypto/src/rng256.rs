@@ -38,12 +38,19 @@ fn bytes_to_u32(bytes: [u8; 32]) -> [u32; 8] {
 }
 
 pub struct XousRng256 {
-    trng: trng::Trng,
+    #[cfg(feature = "board-baosec")]
+    trng: bao1x_hal_service::trng::Trng,
+    #[cfg(feature = "hosted-baosec")]
+    trng: bao1x_emu::trng::Trng,
 }
 
 impl XousRng256 {
     pub fn new(xns: &xous_names::XousNames) -> Self {
-        XousRng256 { trng: trng::Trng::new(xns).unwrap() }
+        #[cfg(feature = "board-baosec")]
+        let ret = XousRng256 { trng: bao1x_hal_service::trng::Trng::new(xns).unwrap() };
+        #[cfg(feature = "hosted-baosec")]
+        let ret = XousRng256 { trng: bao1x_emu::trng::Trng::new(xns).unwrap() };
+        ret
     }
 }
 impl Rng256 for XousRng256 {

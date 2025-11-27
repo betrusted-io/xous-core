@@ -139,6 +139,20 @@
         "ja": "何も選択されていません.",
         "zh": "未选择任何内容."
     },
+    "vault.error.qr": {
+        "en": "Error parsing QR code",
+        "en-tts": "Error parsing QR code",
+        "fr": "Erreur de code QR",
+        "ja": "QRコード解析エラー",
+        "zh": "二维码解析错误"
+    },
+    "vault.error.qr_unrecognized": {
+        "en": "Unrecognized QR action",
+        "en-tts": "Unrecognized QR action",
+        "fr": "Action QR inconnue",
+        "ja": "未対応のQRアクション",
+        "zh": "未知的二维码操作"
+    },
     "vault.error.record_error": {
         "en": "Corrupt database entry.",
         "en-tts": "Corrupt database entry.",

@@ -1,5 +1,6 @@
 use std::convert::TryFrom;
 use std::{
+    collections::HashMap,
     io::Read,
     io::Write,
     time::{SystemTime, UNIX_EPOCH},
@@ -294,6 +295,113 @@ pub enum TOTPSerializationError {
     BadTimestep,
     BadHotp,
     MalformedInput,
+}
+
+impl TotpRecord {
+    pub fn from_uri(uri: &str) -> Result<TotpRecord, String> {
+        let mut record = TotpRecord::default();
+
+        // Split on first '/' to get type and rest
+        let (otp_type, rest) = uri.split_once('/').ok_or("Invalid format: missing '/'")?;
+
+        // Determine if HOTP or TOTP
+        record.is_hotp = match otp_type.to_lowercase().as_str() {
+            "hotp" => true,
+            "totp" => false,
+            _ => return Err(format!("Unknown OTP type: {}", otp_type)),
+        };
+
+        // Split label and query
+        let (label, query) = rest.split_once('?').ok_or("Missing query parameters")?;
+
+        // Parse label (may be "issuer:account" or just "account")
+        let decoded_label = url_decode(label)?;
+        /*
+        record.name = if let Some((_, account)) = decoded_label.split_once(':') {
+            account.to_string()
+        } else {
+            decoded_label
+        };
+        */
+        // don't parse this field - we want the issuer to be shown.
+        record.name = decoded_label;
+
+        // Parse query parameters
+        let params = parse_query(query)?;
+
+        // Extract secret (required)
+        record.secret = params.get("secret").ok_or("Missing required 'secret' parameter")?.to_string();
+
+        // Extract optional parameters with defaults
+        if let Some(algo) = params.get("algorithm") {
+            record.algorithm = match algo.to_uppercase().as_str() {
+                "SHA1" => TotpAlgorithm::HmacSha1,
+                "SHA256" => TotpAlgorithm::HmacSha256,
+                "SHA512" => TotpAlgorithm::HmacSha512,
+                _ => return Err(format!("Unknown algorithm: {}", algo)),
+            };
+        }
+
+        if let Some(digits) = params.get("digits") {
+            record.digits = digits.parse().map_err(|_| format!("Invalid digits value: {}", digits))?;
+        } else {
+            record.digits = 6; // Default
+        }
+
+        if !record.is_hotp {
+            if let Some(period) = params.get("period") {
+                record.timestep = period.parse().map_err(|_| format!("Invalid period value: {}", period))?;
+            } else {
+                record.timestep = 30; // Default
+            }
+        }
+
+        // Extract issuer for notes if present
+        if let Some(issuer) = params.get("issuer") {
+            record.notes = issuer.clone();
+        }
+
+        Ok(record)
+    }
+}
+
+fn parse_query(query: &str) -> Result<HashMap<String, String>, String> {
+    let mut params = HashMap::new();
+
+    for pair in query.split('&') {
+        if let Some((key, value)) = pair.split_once('=') {
+            let decoded_value = url_decode(value)?;
+            params.insert(key.to_string(), decoded_value);
+        }
+    }
+
+    Ok(params)
+}
+
+fn url_decode(s: &str) -> Result<String, String> {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '%' => {
+                // Get next two characters as hex
+                let hex: String = chars.by_ref().take(2).collect();
+                if hex.len() != 2 {
+                    return Err("Invalid percent encoding".to_string());
+                }
+
+                let byte = u8::from_str_radix(&hex, 16)
+                    .map_err(|_| format!("Invalid hex in percent encoding: {}", hex))?;
+
+                result.push(byte as char);
+            }
+            '+' => result.push(' '),
+            _ => result.push(ch),
+        }
+    }
+
+    Ok(result)
 }
 
 impl StorageContent for TotpRecord {

@@ -11,6 +11,8 @@ mod gfx;
 #[cfg(feature = "board-baosec")]
 mod panic;
 mod qr;
+#[cfg(not(feature = "hosted-baosec"))]
+mod qr_warmup;
 #[cfg(feature = "gfx-testing")]
 mod testing;
 use std::{
@@ -197,6 +199,12 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
         panic::panic_handler_thread(is_panic.clone(), panic_display);
     }
 
+    // respond to keyboard presses - needed to abort QR code mode
+    #[cfg(not(feature = "hosted-baosec"))]
+    let kbd = bao1x_api::keyboard::Keyboard::new(&xns).unwrap();
+    #[cfg(not(feature = "hosted-baosec"))]
+    kbd.register_listener(SERVER_NAME_GFX, GfxOpcode::KeyPress.to_u32().unwrap() as usize);
+
     // ---- camera initialization
     #[cfg(not(feature = "hosted-baosec"))]
     {
@@ -280,9 +288,6 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     cam.set_slicing((border, 0), (cols - border, IMAGE_HEIGHT));
     log::info!("320x240 resolution setup with 256x240 slicing");
 
-    #[cfg(feature = "decongest-udma")]
-    log::info!("Decongest udma option enabled.");
-
     #[cfg(not(feature = "hosted-baosec"))]
     let cid = xous::connect(sid).unwrap(); // self-connection always succeeds
 
@@ -333,6 +338,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     #[cfg(feature = "gfx-testing")]
     testing::tests();
     let mut bw_thresh: u8 = 128;
+    let mut qr_request: Option<xous::MessageEnvelope> = None;
     loop {
         if !is_panic.load(Ordering::Relaxed) {
             xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
@@ -341,9 +347,68 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(GfxOpcode::InvalidCall);
             log::debug!("{:?}", opcode);
             match opcode {
+                #[cfg(not(feature = "hosted-baosec"))]
+                GfxOpcode::AcquireQr => {
+                    if qr_request.is_none() {
+                        display.stash(); // save a copy of the UI
+                        // this will defer response until later
+                        qr_request = msg_opt.take();
+
+                        // decode dummy data - what this does is load the swapped out QR decoding logic, thus
+                        // improving the latency of the decoder on the "first hit". The sole purpose of this
+                        // is to improve the user experience during scanning.
+                        let mut img = rqrr::PreparedImage::prepare_from_bitmap(
+                            bao1x_hal::sh1107::COLUMN as _,
+                            bao1x_hal::sh1107::ROW as _,
+                            |x, y| {
+                                let bitnum = x + y * bao1x_hal::sh1107::COLUMN as usize;
+                                // true is `black`
+                                crate::qr_warmup::BITMAP[bitnum / 32] & 1 << (bitnum % 32) != 0
+                            },
+                        );
+                        let grids = img.detect_grids();
+                        if grids.len() == 1 {
+                            match grids[0].decode() {
+                                Ok((_meta, data)) => {
+                                    log::info!("warmed up decoder with {}", data);
+                                }
+                                Err(e) => {
+                                    log::error!("Test image failed to decode! {:?}", e)
+                                }
+                            }
+                        } else {
+                            log::error!("test image failed to decode, this shouldn't happen!");
+                        }
+
+                        // now start acquisition
+                        cam.capture_async();
+                        // turning off preemption makes camera acquisition smoother; the OS will naturally try
+                        // to schedule other tasks between camera frames after each
+                        // CamIrq interrupt
+                        hal.set_preemption(false);
+                    }
+                    // if qr_request is already pending, ignore any new acquisition requests
+                }
+                #[cfg(not(feature = "hosted-baosec"))]
+                GfxOpcode::KeyPress => {
+                    // any key press will abort QR acquisition by taking the qr_request. If it's already None,
+                    // the keypress is just ignored.
+                    if let Some(mut envelope) = qr_request.take() {
+                        let acquisition = QrAcquisition { content: None, meta: None };
+                        let mut response = unsafe {
+                            xous_ipc::Buffer::from_memory_message_mut(
+                                envelope.body.memory_message_mut().unwrap(),
+                            )
+                        };
+                        response.replace(acquisition).unwrap();
+                        display.pop();
+                        hal.set_preemption(true);
+                    }
+                }
                 GfxOpcode::CamIrq => {
-                    #[cfg(not(feature = "decongest-udma"))]
-                    cam.capture_async();
+                    if qr_request.is_some() {
+                        cam.capture_async();
+                    }
 
                     // copy the camera data to our FB
                     let fb: &[u32] = cam.rx_buf();
@@ -375,7 +440,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     if candidates.len() == 3 {
                         gfx::msg(
                             &mut display,
-                            "Decoding...",
+                            "Searching...",
                             Point::new(0, 0),
                             Mono::White.into(),
                             Mono::Black.into(),
@@ -386,25 +451,57 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                             });
                         let grids = img.detect_grids();
                         if grids.len() == 1 {
+                            gfx::msg(
+                                &mut display,
+                                "Decoding...",
+                                Point::new(0, 0),
+                                Mono::White.into(),
+                                Mono::Black.into(),
+                            );
                             match grids[0].decode() {
                                 Ok((meta, content)) => {
-                                    log::info!("meta: {:?}", meta);
-                                    log::info!("************ {} ***********", content);
-                                    decode_success = true;
                                     gfx::msg(
                                         &mut display,
-                                        &format!("{:?}", meta),
+                                        "Success!",
                                         Point::new(0, 0),
                                         Mono::White.into(),
                                         Mono::Black.into(),
                                     );
-                                    gfx::msg(
-                                        &mut display,
-                                        &format!("{:?}", content),
-                                        Point::new(0, 64),
-                                        Mono::White.into(),
-                                        Mono::Black.into(),
-                                    );
+                                    // this take will cause the QR response to be routed to the sender since
+                                    // the Message `Drop`s. It will also cause the sampling of the camera to
+                                    // stop on the next frame.
+                                    if let Some(mut envelope) = qr_request.take() {
+                                        let metadata = format!("{:?}", meta);
+                                        let acquisition =
+                                            QrAcquisition { content: Some(content), meta: Some(metadata) };
+                                        let mut response = unsafe {
+                                            xous_ipc::Buffer::from_memory_message_mut(
+                                                envelope.body.memory_message_mut().unwrap(),
+                                            )
+                                        };
+                                        response.replace(acquisition).unwrap();
+                                        display.pop();
+                                        #[cfg(not(feature = "hosted-baosec"))]
+                                        hal.set_preemption(true);
+                                    } else {
+                                        log::info!("meta: {:?}", meta);
+                                        log::info!("************ {} ***********", content);
+                                        decode_success = true;
+                                        gfx::msg(
+                                            &mut display,
+                                            &format!("{:?}", meta),
+                                            Point::new(0, 0),
+                                            Mono::White.into(),
+                                            Mono::Black.into(),
+                                        );
+                                        gfx::msg(
+                                            &mut display,
+                                            &format!("{:?}", content),
+                                            Point::new(0, 64),
+                                            Mono::White.into(),
+                                            Mono::Black.into(),
+                                        );
+                                    }
                                 }
                                 Err(e) => {
                                     log::info!("{:?}", e);
@@ -435,48 +532,6 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
                     // clear the front buffer
                     display.clear();
-
-                    // re-initiate the capture. This is done at the bottom of the loop because UDMA
-                    // congestion leads to system instability. When this problem is solved, we would
-                    // actually want to re-initiate the capture immediately (or leave it on continuous mode)
-                    // to allow capture to process concurrently with the code. However, there is a bug
-                    // in the SPIM block that prevents proper usage with high bus contention that should
-                    // be fixed in bao1x.
-                    #[cfg(feature = "decongest-udma")]
-                    {
-                        const TIMEOUT_MS: u64 = 100;
-                        let start = tt.elapsed_ms();
-                        let mut now = tt.elapsed_ms();
-                        // this is required because if we initiate the capture in the middle
-                        // of a frame, we get an offset result. This should be fixed by DAR-704
-                        // on bao1x if the pull request is accepted; in which case, we can just rely
-                        // on setting bit 30 of the CFG_GLOBAL register which will cause any
-                        // RX start request to align to the beginning of a frame automatically.
-                        while iox.get_gpio_pin_value(IoxPort::PB, 9) == IoxValue::High
-                            && ((now - start) < TIMEOUT_MS)
-                        {
-                            now = tt.elapsed_ms();
-                        }
-                        if now - start >= TIMEOUT_MS {
-                            log::info!("Timeout before capture_async()!");
-                        }
-                        cam.capture_async();
-                    }
-
-                    // this is no longer the case because we're relying on interrupts to wake us up.
-                    /*
-                    // wait for the transfer to finish
-                    let start = tt.elapsed_ms();
-                    let mut now = tt.elapsed_ms();
-                    use bao1x_hal::udma::Udma;
-                    while cam.udma_busy(bao1x_hal::udma::Bank::Rx) && ((now - start) < TIMEOUT_MS) {
-                        now = tt.elapsed_ms();
-                        // busy-wait to get better time resolution on when the frame ends
-                    }
-                    if now - start >= TIMEOUT_MS {
-                        log::info!("Timeout before rx_buf()!");
-                    }
-                    */
                 }
                 GfxOpcode::InvalidCall => {
                     log::error!("Invalid call to bao video server: {:?}", msg);
@@ -535,11 +590,15 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     minigfx::handlers::draw_text_view(&mut display, msg);
                 }
                 GfxOpcode::Flush => {
-                    log::trace!("***gfx flush*** redraw##");
-                    display.redraw();
+                    if qr_request.is_none() {
+                        log::trace!("***gfx flush*** redraw##");
+                        display.redraw();
+                    }
                 }
                 GfxOpcode::Clear => {
-                    display.clear();
+                    if qr_request.is_none() {
+                        display.clear();
+                    }
                 }
                 GfxOpcode::Line => {
                     minigfx::handlers::line(&mut display, screen_clip.into(), msg);

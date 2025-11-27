@@ -16,6 +16,28 @@ Regardless of the board, the `bao1x` chip comes from the factory programmed with
 - `boot0` is a permanent root of trust burned onto the chip. Its sole purpose is to validate `boot1`. See [security model](./README-baochip.md#security-model) for details on the trust chain
 - `boot1` contains a USB driver, serial-over-USB driver, and serial driver capable of accepting code updates in the form of .u2f files or serial commands. It also contains a small command terminal for managing configurations, keys, and device lifecycle state.
 
+### Updating Boot1
+
+`boot1` is responsible for managing application loading. As such, updating `boot1` requires an intermediate step, because the actively executing program cannot overwrite its contents safely. The overview for updating `boot1` is as follows:
+
+1. Load `boot1-alt` into the `baremetal` region.
+2. Run `boot1-alt`, thus freeing `boot1` to be updated.
+3. Copy the updated `boot1` record while in the `boot1-alt` environment.
+4. Reboot back into the `boot1` environment.
+
+#### Detailed Boot1 Update for Dabao Users
+
+1. Build alt-boot1: `cargo xtask bao1x-alt-boot1`
+2. Build boot1: `cargo xtask bao1x-boot1`
+3. Plug the dabao board into the host. Confirm that the mass storage device has the volume label of `BAOCHIP`.
+4. Copy `target/riscv32imac-unknown-none-elf/release/bao1x-alt-boot1.uf2` into the `BAOCHIP` volume.
+5. Press `PROG` (the button closest to the USB connector)
+6. The board should unmount itself and re-mount as a volume with the label of `ALTCHIP`.
+7. Copy `target/riscv32imac-unknown-none-elf/release/bao1x-boot1.uf2` into the `ALTCHIP` volume.
+8. Press `RESET` (the button farthest from the USB connector)
+9. The device should re-appear as `BAOCHIP`
+10. Confirm boot1 update by running the `audit` command on the boot1 console and checking that the reported git revision matches that of the source build.
+
 ### Applications
 
 Three application targets are supported by Xous:

@@ -12,7 +12,7 @@ use xous::CID;
 use crate::storage::{ContentKind, Manager};
 use crate::*;
 
-pub const DEFAULT_FONT: GlyphStyle = GlyphStyle::Bold;
+pub const DEFAULT_FONT: GlyphStyle = GlyphStyle::Regular;
 pub const FONT_LIST: [&'static str; 6] = ["regular", "tall", "mono", "bold", "large", "small"];
 pub fn name_to_style(name: &str) -> Option<GlyphStyle> {
     match name {
@@ -67,7 +67,7 @@ impl TotpLayout {
 
     pub fn list_box() -> Rectangle { Rectangle::new(Point::new(0, 50), Point::new(127, 127)) }
 
-    pub fn list_font() -> GlyphStyle { GlyphStyle::Bold }
+    pub fn list_font() -> GlyphStyle { GlyphStyle::Regular }
 }
 
 pub struct VaultUi {
@@ -85,6 +85,8 @@ pub struct VaultUi {
     item_height: isize,
     style: GlyphStyle,
     storage_manager: Manager,
+
+    usb_dev: usb_bao1x::UsbHid,
 }
 
 impl VaultUi {
@@ -118,6 +120,7 @@ impl VaultUi {
             item_height: height / glyph_height,
             style,
             storage_manager: Manager::new(xns),
+            usb_dev: usb_bao1x::UsbHid::new(),
         }
     }
 
@@ -130,17 +133,27 @@ impl VaultUi {
         }
     }
 
-    pub(crate) fn update_selected_totp_code(&mut self) {
+    pub(crate) fn update_selected_totp_code(&mut self) -> Option<String> {
         if self.totp_list.len() > 0 {
             let selected = self.totp_list.get_selected();
             let mut locked_lists = self.item_lists.lock().unwrap();
             let full_list = locked_lists.full_list(VaultMode::Totp);
             if let Some(selected_item) = full_list.iter().find(|item| item.name() == selected) {
                 match crate::totp::db_str_to_code(&selected_item.extra) {
-                    Ok(s) => self.totp_code = Some(s),
-                    _ => self.totp_code = None,
+                    Ok(s) => {
+                        self.totp_code = Some(s.clone());
+                        Some(s)
+                    }
+                    _ => {
+                        self.totp_code = None;
+                        None
+                    }
                 }
+            } else {
+                None
             }
+        } else {
+            None
         }
     }
 
@@ -191,15 +204,15 @@ impl VaultUi {
                             name_bytes,
                             String::from_utf8(name_bytes.to_vec())
                         );
-                        name_to_style(&String::from_utf8(name_bytes).unwrap_or("bold".to_string()))
-                            .unwrap_or(GlyphStyle::Bold)
+                        name_to_style(&String::from_utf8(name_bytes).unwrap_or("regular".to_string()))
+                            .unwrap_or(GlyphStyle::Regular)
                     }
-                    Err(_) => GlyphStyle::Bold,
+                    Err(_) => GlyphStyle::Regular,
                 }
             }
             _ => {
                 log::warn!("PDDB access error reading default glyph size");
-                GlyphStyle::Bold
+                GlyphStyle::Regular
             }
         };
         self.totp_list.style(style);
@@ -473,7 +486,12 @@ impl VaultUi {
                     NavDir::Down => {
                         self.totp_list.key_action('↓');
                     }
-                    _ => unimplemented!(),
+                    _ => {
+                        if let Some(code) = self.update_selected_totp_code() {
+                            // ignore USB errors while sending code
+                            self.usb_dev.send_str(&code).ok();
+                        }
+                    }
                 }
                 self.totp_code = None;
             }

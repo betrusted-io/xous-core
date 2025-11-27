@@ -423,7 +423,11 @@ impl<'a> Oled128x128<'a> {
                 .txrx_data_async_from_parts::<u8>(total_buf_len, len, true, false)
                 .expect("Couldn't initiate oled command");
         }
-        self.spim.txrx_await(false).unwrap();
+        self.spim.txrx_await(false).unwrap_or_else(|_e| {
+            #[cfg(feature = "std")]
+            log::error!("txrx err {:?}", _e);
+            &[]
+        });
     }
 
     pub fn init(&mut self) {
@@ -479,7 +483,11 @@ impl<'a> FrameBuffer for Oled128x128<'a> {
                     .txrx_data_async_from_parts::<u8>(page * chunk_size, chunk_size, true, false)
                     .expect("Couldn't initiate oled data transfer");
             }
-            self.spim.txrx_await(false).unwrap();
+            self.spim.txrx_await(false).unwrap_or_else(|_e| {
+                #[cfg(feature = "std")]
+                log::error!("txrx err {:?}", _e);
+                &[]
+            });
         }
     }
 

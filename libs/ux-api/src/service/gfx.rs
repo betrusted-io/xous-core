@@ -728,6 +728,22 @@ impl Gfx {
         };
         buf.lend(self.conn, GfxOpcode::UnclippedObjectList.to_u32().unwrap()).map(|_| ())
     }
+
+    #[cfg(feature = "board-baosec")]
+    pub fn acquire_qr(&self) -> Result<QrAcquisition, xous::Error> {
+        let acquisition = QrAcquisition { content: None, meta: None };
+        let mut buf = Buffer::into_buf(acquisition).unwrap();
+        buf.lend_mut(self.conn, GfxOpcode::AcquireQr.to_u32().unwrap())?;
+        let response: QrAcquisition = buf.to_original()?;
+        Ok(response)
+    }
+
+    #[cfg(feature = "hosted-baosec")]
+    pub fn acquire_qr(&self) -> Result<QrAcquisition, xous::Error> {
+        let dummy = "otpauth://totp/ACME%20Co:john.doe@email.com?secret=HXDMVJECJJWSRB3HWIZR4IFUGFTMXBOZ&issuer=ACME%20Co&algorithm=SHA1&digits=6&period=30".to_string();
+        // just return some dummy data
+        Ok(QrAcquisition { content: Some(dummy), meta: None })
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
