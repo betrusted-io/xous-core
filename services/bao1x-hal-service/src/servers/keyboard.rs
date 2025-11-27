@@ -9,7 +9,7 @@ use utralib::*;
 use xous::{CID, MessageSender, msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
-const KEYUP_DELAY_MS: u64 = 50;
+const KEYUP_DELAY_MS: u64 = 80;
 
 pub fn handler(_irq_no: usize, arg: *mut usize) {
     let kpc_aoint = unsafe { &mut *(arg as *mut KpcAoInt) };
