@@ -109,7 +109,7 @@ pub(crate) fn panic_handler_thread(
                     }
 
                     display.draw();
-                    append_string("~Guru Meditation~\n", &mut display);
+                    append_string("~Guru Meditation~", &mut display);
                 }
                 let body = match msg.body.memory_message() {
                     Some(body) => body,
