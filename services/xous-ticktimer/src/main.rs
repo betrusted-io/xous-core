@@ -3,7 +3,6 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 use xous_api_ticktimer::*;
-#[cfg(feature = "timestamp")]
 mod version;
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -31,7 +30,7 @@ fn main() -> ! {
     #[cfg(not(feature = "timestamp"))]
     {
         log::info!("****************************************************************");
-        log::info!("Welcome to Xous");
+        log::info!("Welcome to Xous {}", version::SEMVER);
         log::info!("Reproducible build without timestamps");
         log::info!("****************************************************************");
     }
