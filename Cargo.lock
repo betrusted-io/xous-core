@@ -320,6 +320,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "backup-vault2"
+version = "0.1.0"
+dependencies = [
+ "cbor-vault2",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ball"
 version = "0.1.0"
 dependencies = [
@@ -888,6 +897,10 @@ dependencies = [
 
 [[package]]
 name = "cbor"
+version = "0.1.0"
+
+[[package]]
+name = "cbor-vault2"
 version = "0.1.0"
 
 [[package]]
@@ -1502,6 +1515,32 @@ dependencies = [
  "sha2",
  "subtle",
  "trng",
+ "untrusted 0.7.1",
+ "xous-api-names",
+]
+
+[[package]]
+name = "ctap-crypto-vault2"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "arrayref",
+ "bao1x-hal-service",
+ "byteorder",
+ "cbc",
+ "cbor-vault2",
+ "hex 0.3.2",
+ "log",
+ "p256",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+ "regex",
+ "rfc6979 0.2.0",
+ "serde",
+ "serde_json",
+ "sha2",
+ "subtle",
  "untrusted 0.7.1",
  "xous-api-names",
 ]
@@ -6774,7 +6813,7 @@ name = "vault2"
 version = "0.1.0"
 dependencies = [
  "arrayref",
- "backup",
+ "backup-vault2",
  "bao1x-api",
  "bao1x-emu",
  "bao1x-hal",
@@ -6782,9 +6821,9 @@ dependencies = [
  "base32",
  "blitstr2",
  "byteorder",
- "cbor",
+ "cbor-vault2",
  "chrono",
- "ctap-crypto",
+ "ctap-crypto-vault2",
  "digest 0.9.0",
  "ed25519-compact",
  "enum-iterator",
