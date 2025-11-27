@@ -657,7 +657,7 @@ impl Spim {
             if let Some(pending) = self.pending_txrx.take() {
                 let tt = xous_api_ticktimer::Ticktimer::new().unwrap();
                 let start = tt.elapsed_ms();
-                let mut now = tt.elapsed_ms();
+                let mut now = start;
                 const TIMEOUT_MS: u64 = 500;
                 while (self.udma_busy(Bank::Tx) || self.udma_busy(Bank::Rx) || self.udma_busy(Bank::Custom))
                     && ((now - start) < TIMEOUT_MS)
@@ -690,6 +690,7 @@ impl Spim {
                         self.csr().base().add(Bank::Rx as usize).add(DmaReg::Saddr.into()).write_volatile(0);
                         self.csr().base().add(Bank::Rx as usize).add(DmaReg::Cfg.into()).write_volatile(0); // clear bit is not self-clearing
                     };
+                    return Err(xous::Error::Timeout);
                 }
                 Ok(&self.rx_buf()[..pending])
             } else {

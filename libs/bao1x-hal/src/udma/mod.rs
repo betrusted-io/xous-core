@@ -270,7 +270,7 @@ pub trait Udma {
         ); */
         bank_addr.add(DmaReg::Saddr.into()).write_volatile(buf_addr);
         bank_addr.add(DmaReg::Size.into()).write_volatile((buf.len() * size_of::<T>()) as u32);
-        bank_addr.add(DmaReg::Cfg.into()).write_volatile(config | CFG_EN)
+        bank_addr.add(DmaReg::Cfg.into()).write_volatile(config | CFG_EN | CFG_BACKPRESSURE)
     }
     fn udma_reset(&self, bank: Bank) {
         unsafe {
