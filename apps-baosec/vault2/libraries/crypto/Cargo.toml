@@ -1,5 +1,5 @@
 [package]
-name = "ctap-crypto"
+name = "ctap-crypto-vault2"
 version = "0.1.0"
 authors = [
   "Fabian Kaczmarczyck <kaczmarczyck@google.com>",
@@ -10,10 +10,10 @@ license = "Apache-2.0"
 edition = "2018"
 
 [dependencies]
-cbor = { path = "../cbor" }
+cbor = { path = "../cbor", package = "cbor-vault2" }
 arrayref = "0.3.6"
 subtle = { version = "2.2.3", default-features = false }
-trng = { path = "../../../../services/trng" }
+bao1x-hal-service = { path = "../../../../services/bao1x-hal-service" }
 xous-names = { package = "xous-api-names", version = "0.9.67" }
 rand_core = "0.6.3"
 p256 = { version = "0.11.1", default-features = false, features = [
@@ -30,7 +30,7 @@ log = "0.4.14" # xous debugging
 [target.'cfg(any(windows,unix))'.dependencies]
 rand = "0.8.5"
 rand_chacha = "0.3.1"
-cbor = { path = "../cbor" }
+cbor = { path = "../cbor", package = "cbor-vault2" }
 regex = { version = "1" }
 untrusted = { version = "0.7.0" }
 hex = { version = "0.3.2", default-features = false } # do not update this, it's required to be at this version for tests to work.

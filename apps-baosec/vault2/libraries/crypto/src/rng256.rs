@@ -38,12 +38,12 @@ fn bytes_to_u32(bytes: [u8; 32]) -> [u32; 8] {
 }
 
 pub struct XousRng256 {
-    trng: trng::Trng,
+    trng: bao1x_hal_service::trng::Trng,
 }
 
 impl XousRng256 {
     pub fn new(xns: &xous_names::XousNames) -> Self {
-        XousRng256 { trng: trng::Trng::new(xns).unwrap() }
+        XousRng256 { trng: bao1x_hal_service::trng::Trng::new(xns).unwrap() }
     }
 }
 impl Rng256 for XousRng256 {
