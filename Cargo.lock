@@ -1525,6 +1525,7 @@ version = "0.1.0"
 dependencies = [
  "aes",
  "arrayref",
+ "bao1x-emu",
  "bao1x-hal-service",
  "byteorder",
  "cbc",
