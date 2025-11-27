@@ -121,7 +121,7 @@ fn map_keypress(kp: KeyPress) -> char {
         KeyPress::Left => '←',
         KeyPress::Right => '→',
         KeyPress::Select => '∴',
-        KeyPress::Center => '\r',
+        KeyPress::Center => '🔥',
         _ => '\u{0000}',
     }
 }
