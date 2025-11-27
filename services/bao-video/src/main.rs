@@ -11,6 +11,7 @@ mod gfx;
 #[cfg(feature = "board-baosec")]
 mod panic;
 mod qr;
+#[cfg(not(feature = "hosted-baosec"))]
 mod qr_warmup;
 #[cfg(feature = "gfx-testing")]
 mod testing;
@@ -199,7 +200,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     }
 
     // respond to keyboard presses - needed to abort QR code mode
+    #[cfg(not(feature = "hosted-baosec"))]
     let kbd = bao1x_api::keyboard::Keyboard::new(&xns).unwrap();
+    #[cfg(not(feature = "hosted-baosec"))]
     kbd.register_listener(SERVER_NAME_GFX, GfxOpcode::KeyPress.to_u32().unwrap() as usize);
 
     // ---- camera initialization
@@ -344,6 +347,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(GfxOpcode::InvalidCall);
             log::debug!("{:?}", opcode);
             match opcode {
+                #[cfg(not(feature = "hosted-baosec"))]
                 GfxOpcode::AcquireQr => {
                     if qr_request.is_none() {
                         display.stash(); // save a copy of the UI
@@ -385,6 +389,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     }
                     // if qr_request is already pending, ignore any new acquisition requests
                 }
+                #[cfg(not(feature = "hosted-baosec"))]
                 GfxOpcode::KeyPress => {
                     // any key press will abort QR acquisition by taking the qr_request. If it's already None,
                     // the keypress is just ignored.
@@ -476,6 +481,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                         };
                                         response.replace(acquisition).unwrap();
                                         display.pop();
+                                        #[cfg(not(feature = "hosted-baosec"))]
                                         hal.set_preemption(true);
                                     } else {
                                         log::info!("meta: {:?}", meta);
