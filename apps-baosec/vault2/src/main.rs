@@ -38,42 +38,6 @@ Nov 12 2025:
 
 `cargo xtask baosec-emu` will launch the emulated UI.
 
-  -[x] implement RTC
-  -[x] implement QR code scanning loop
-  -[x] implement HID loop - needs testing, but have to implement RTC first before can test on HW
-  -[x] implement "action" loop
-
-  -[ ] figure out interaction for searching for passwords
-    -[ ] search by QR code
-    -[ ] search by text - is this even a good idea? i think the UX is not great, so maybe we omit it entirely.
--[ ] implement PIN management UI - entering a pin unlocks the deniable basis automatically
-    -[ ] remove basis management calls when replacing with PIN calls
-
--[ ] Consider the side channel resistance of the AES implementation in the keystore. We may want
-    to use an AES API that explicitly wraps the SCE's masked AES implementation to reduce side channels,
-    versus the Vex CPU core's AES implementation
-
--[ ] deniable basis implementation
-    -[ ] The PIN may be optionally set to one of three values:
-    -[ ] nothing (implemented as all 0's in the cryptographic key)
-    -[ ] a passcode (4-8 digits entered via keyboard)
-      -[ ] Configurable self-destruct after # of incorrect PIN guesses. Set at 8 by default.
-      -[ ] Each incorrect guess has a 15 second timeout
-    -[ ] a QR code (generated using browser & managed by user, 128 bits entropy)
-  -[ ] Remember that re-pinning should be a low-cost operation. As such the PIN is used
-   to protect a wrapped key that actually encrypts the PDDB, and not be the key itself.
-  -[ ] One deniable basis at a time is allowed. It is mounted using using only:
-    -[ ] a PIN (4-8 digits entered via keyboard)
-    -[ ] a QR code (generated using browser & managed by user)
-
--[ ] implement backups
-  -[ ] PIN confirmation required to set system into backup mode
-  -[ ] Backup key is displayed. This is 256-bit key, displayed as QR code or Bip-39.
-  -[ ] Hash & integrity blocks computed, stored
-  -[ ] Backup data presented as .bin file on mass storage device
-  -[ ] Device stays in backup state until user clears screen; exit via reboot
-
-
 UI interaction planning.
 
 Main mode of interaction is QR code scanning. This should be accessible with a single button. Thus:
