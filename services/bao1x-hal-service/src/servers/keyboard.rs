@@ -132,6 +132,10 @@ fn map_keypress(kp: KeyPress) -> char {
         KeyPress::Left => '←',
         KeyPress::Right => '→',
         KeyPress::Select => '∴',
+        // "Fire" is used as the mapping for the center instead of carriage return ('\r' (0xd))
+        // because carriage return is reserved for the shell to indicate the end of line. Thus
+        // by mapping "fire" to the center key, we get a UI-specific action key without invoking
+        // shell commands in the background unintentionally.
         KeyPress::Center => '🔥',
         _ => '\u{0000}',
     }
