@@ -324,7 +324,7 @@ impl ActionApi for TextEntry {
                     }
                 }
                 // end the session by pressing the middle screen button
-                '\u{d}' => {
+                '\u{d}' | '🔥' => {
                     self.osk_active = false;
 
                     // run the validator

@@ -181,7 +181,7 @@ impl ActionApi for Slider {
                 '\u{0}' => {
                     // ignore null messages
                 }
-                '∴' | '\u{d}' => {
+                '∴' | '\u{d}' | '🔥' => {
                     // relinquish focus before returning the result
                     let xns = xous_names::XousNames::new().unwrap();
                     let gfx = Gfx::new(&xns).unwrap();

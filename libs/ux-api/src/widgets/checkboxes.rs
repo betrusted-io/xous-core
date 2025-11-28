@@ -60,7 +60,7 @@ impl ActionApi for CheckBoxes {
             '↑' | '↓' => {
                 self.items.key_action(k);
             }
-            '∴' | '\u{d}' => {
+            '∴' | '\u{d}' | '🔥' => {
                 let mut selected_item = self.items.get_selected().to_owned();
                 if selected_item == t!("radio.select_and_close", locales::LANG) {
                     self.items.gfx.release_modal().unwrap();
