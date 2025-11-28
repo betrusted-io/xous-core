@@ -744,6 +744,14 @@ impl Gfx {
         // just return some dummy data
         Ok(QrAcquisition { content: Some(dummy), meta: None })
     }
+
+    pub fn register_listener(&self, server_name: &str, action_opcode: usize) {
+        let kr =
+            KeyboardRegistration { server_name: String::from(server_name), listener_op_id: action_opcode };
+        let buf = Buffer::into_buf(kr).unwrap();
+        buf.lend(self.conn, GfxOpcode::FilteredKeyboardListener.to_u32().unwrap())
+            .expect("couldn't register listener");
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

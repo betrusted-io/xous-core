@@ -48,7 +48,8 @@ use num_traits::*;
 use utralib::utra;
 use ux_api::minigfx::{self, FrameBuffer};
 use ux_api::service::api::*;
-use xous::sender::Sender;
+use xous::{CID, sender::Sender};
+use xous_ipc::Buffer;
 
 // Scope of this crate: *No calls to modals* this can create dependency lockups.
 //
@@ -339,6 +340,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     testing::tests();
     let mut bw_thresh: u8 = 128;
     let mut qr_request: Option<xous::MessageEnvelope> = None;
+    let mut kbd_listeners: Vec<(CID, usize)> = Vec::new();
     loop {
         if !is_panic.load(Ordering::Relaxed) {
             xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
@@ -391,18 +393,35 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 }
                 #[cfg(not(feature = "hosted-baosec"))]
                 GfxOpcode::KeyPress => {
-                    // any key press will abort QR acquisition by taking the qr_request. If it's already None,
-                    // the keypress is just ignored.
-                    if let Some(mut envelope) = qr_request.take() {
-                        let acquisition = QrAcquisition { content: None, meta: None };
-                        let mut response = unsafe {
-                            xous_ipc::Buffer::from_memory_message_mut(
-                                envelope.body.memory_message_mut().unwrap(),
-                            )
-                        };
-                        response.replace(acquisition).unwrap();
-                        display.pop();
-                        hal.set_preemption(true);
+                    if let Some(scalar) = msg.body.scalar_message() {
+                        // any key press will abort QR acquisition by taking the qr_request.
+                        if let Some(mut envelope) = qr_request.take() {
+                            let acquisition = QrAcquisition { content: None, meta: None };
+                            let mut response = unsafe {
+                                xous_ipc::Buffer::from_memory_message_mut(
+                                    envelope.body.memory_message_mut().unwrap(),
+                                )
+                            };
+                            response.replace(acquisition).unwrap();
+                            display.pop();
+                            hal.set_preemption(true);
+                        }
+                        // forward messages on to listeners iff we don't have an active modal
+                        if modal_queue.len() == 0 {
+                            for &(listener_conn, listener_op) in kbd_listeners.iter() {
+                                xous::try_send_message(
+                                    listener_conn,
+                                    xous::Message::new_scalar(
+                                        listener_op,
+                                        scalar.arg1,
+                                        scalar.arg2,
+                                        scalar.arg3,
+                                        scalar.arg4,
+                                    ),
+                                )
+                                .ok();
+                            }
+                        }
                     }
                 }
                 GfxOpcode::CamIrq => {
@@ -572,6 +591,19 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         if let Some(sender) = modal_queue.front() {
                             // Notify the waiter that it is allowed to run
                             xous::return_scalar(*sender, 0).unwrap();
+                        }
+                    }
+                }
+                GfxOpcode::FilteredKeyboardListener => {
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let kr = buffer.as_flat::<KeyboardRegistration, _>().unwrap();
+                    match xns.request_connection_blocking(kr.server_name.as_str()) {
+                        Ok(cid) => {
+                            kbd_listeners
+                                .push((cid, <u32 as From<u32>>::from(kr.listener_op_id.into()) as usize));
+                        }
+                        Err(e) => {
+                            log::error!("couldn't connect to listener: {:?}", e);
                         }
                     }
                 }
