@@ -742,9 +742,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "bao-console",
                 "modals",
                 "pddb",
+                "bao-video",
             ]
             .to_vec();
-            let bao_swap_pkgs = ["bao-video", "vault2"].to_vec();
+            let bao_swap_pkgs = ["vault2"].to_vec();
             if !builder.is_swap_set() {
                 // reserve 3MiB for system services: ultimately, "pddb, modals, and bao-video"
                 builder.set_swap(0, bao1x_api::offsets::baosec::SWAP_RAM_LEN as _);
