@@ -1,16 +1,24 @@
+#[cfg(feature = "board-baosec")]
 use arbitrary_int::{Number, u4};
+#[cfg(feature = "board-baosec")]
 use bao1x_api::IrqNotification;
 use bao1x_api::keyboard::*;
+#[cfg(feature = "board-baosec")]
 use bao1x_hal::board::KeyPress;
+#[cfg(feature = "board-baosec")]
 use bao1x_hal::kpc_aoint::{AoIntStatus, KpcAoInt};
 use num_traits::*;
+#[cfg(feature = "board-baosec")]
 use utralib::utra::irqarray2;
+#[cfg(feature = "board-baosec")]
 use utralib::*;
 use xous::{CID, MessageSender, msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
+#[cfg(feature = "board-baosec")]
 const KEYUP_DELAY_MS: u64 = 80;
 
+#[cfg(feature = "board-baosec")]
 pub fn handler(_irq_no: usize, arg: *mut usize) {
     let kpc_aoint = unsafe { &mut *(arg as *mut KpcAoInt) };
     let pending = kpc_aoint.irq.r(irqarray2::EV_PENDING);
@@ -43,15 +51,18 @@ pub fn handler(_irq_no: usize, arg: *mut usize) {
     }
 }
 
+#[cfg(feature = "board-baosec")]
 struct KeypressTimestamp {
     pub kp: KeyPress,
     pub next_repeat_time: u64,
 }
+#[cfg(feature = "board-baosec")]
 struct KeyTracker {
     pub rate_ms: usize,
     pub delay_ms: usize,
     pub keys: Vec<KeypressTimestamp>,
 }
+#[cfg(feature = "board-baosec")]
 impl KeyTracker {
     pub fn new() -> Self { KeyTracker { rate_ms: KEYUP_DELAY_MS as usize, delay_ms: 500, keys: Vec::new() } }
 
@@ -113,7 +124,7 @@ impl KeyTracker {
 
     pub fn clear_keys(&mut self) { self.keys.clear(); }
 }
-
+#[cfg(feature = "board-baosec")]
 fn map_keypress(kp: KeyPress) -> char {
     match kp {
         KeyPress::Down => '↓',
@@ -162,53 +173,68 @@ fn keyboard_service() {
     let xns = xous_names::XousNames::new().unwrap();
 
     // "own" the KPC & Always-on registers
+    #[cfg(feature = "board-baosec")]
+    {
+        let iox = crate::iox::IoxHal::new();
+        let (_row, _col) = bao1x_hal::board::setup_kpc_pins(&iox);
+    }
+    #[cfg(feature = "board-baosec")]
     let mut kpc_aoint = bao1x_hal::kpc_aoint::KpcAoInt::new(Some(handler));
-    kpc_aoint.ao.wo(utra::ao_sysctrl::SFR_IOX, 1); // connect PF directly to KP unit, overrides IO mux even???
-    kpc_aoint.ao.wo(utra::ao_sysctrl::CR_WKUPMASK, 0x3F);
+    #[cfg(feature = "board-baosec")]
+    {
+        kpc_aoint.ao.wo(utra::ao_sysctrl::SFR_IOX, 1); // connect PF directly to KP unit, overrides IO mux even???
+        kpc_aoint.ao.wo(utra::ao_sysctrl::CR_WKUPMASK, 0x3F);
 
-    // KPOPO0 defines drive state in phase 0 - here we set it to high
-    // KPOPO1 defines drive state in phase 1 - here we set it to low
-    // KPOE0 defines OE state in phase 0 - here we set it to drive
-    // KPOE1 defines OE state in phase 1 - here we set it to drive
-    let cfg0 = kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOPO0, 1)
-        // | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOPO1, 1)
-        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOOE0, 1)
-        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOOE1, 1)
-        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_DKPCEN, 1);
-    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG0, cfg0);
-    let cfg1 = kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG1_CFG_STEP, 2)
-        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG1_CFG_FILTER, 2)
-        | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG1_CFG_CNT1MS, 4);
-    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG1, cfg1);
-    // CFG2 has format of interval kpo | stop drive kpo | sample point kpi | start drive kpo, each 8 bits wide
-    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG2, 0x40_05_03_01); // sets ~24ms scanning rate
-    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG3, 0xFFFF_0000); //  fall[15:0] | rise[15:0] detection
-    // this is the deep sleep interval for debouncing the keyboard array
-    kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG4, 256);
-    // drain any pending events
-    while kpc_aoint.kpc.r(utra::dkpc::SFR_SR1) != 0 {
-        // this register didn't get mapped in register extraction because its type
-        // is `apb_buf2`: FIXME - adjust the register extraction script to capture this type.
-        // this register drains the pending interrupts from the wakeup/keyboard queue
-        let _ = unsafe { kpc_aoint.kpc.base().add(8).read_volatile() };
+        // KPOPO0 defines drive state in phase 0 - here we set it to high
+        // KPOPO1 defines drive state in phase 1 - here we set it to low
+        // KPOE0 defines OE state in phase 0 - here we set it to drive
+        // KPOE1 defines OE state in phase 1 - here we set it to drive
+        let cfg0 = kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOPO0, 1)
+            // | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOPO1, 1)
+            | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOOE0, 1)
+            | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOOE1, 1)
+            | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_DKPCEN, 1);
+        kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG0, cfg0);
+        let cfg1 = kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG1_CFG_STEP, 2)
+            | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG1_CFG_FILTER, 2)
+            | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG1_CFG_CNT1MS, 4);
+        kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG1, cfg1);
+        // CFG2 has format of interval kpo | stop drive kpo | sample point kpi | start drive kpo, each 8 bits
+        // wide
+        kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG2, 0x40_05_03_01); // sets ~24ms scanning rate
+        kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG3, 0xFFFF_0000); //  fall[15:0] | rise[15:0] detection
+        // this is the deep sleep interval for debouncing the keyboard array
+        kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG4, 256);
+        // drain any pending events
+        while kpc_aoint.kpc.r(utra::dkpc::SFR_SR1) != 0 {
+            // this register didn't get mapped in register extraction because its type
+            // is `apb_buf2`: FIXME - adjust the register extraction script to capture this type.
+            // this register drains the pending interrupts from the wakeup/keyboard queue
+            let _ = unsafe { kpc_aoint.kpc.base().add(8).read_volatile() };
+        }
     }
 
     let kbd_sid = xns.register_name(bao1x_api::SERVER_NAME_KBD, None).expect("can't register server");
-    let kbd_conn = xous::connect(kbd_sid).unwrap();
 
-    let kpc_int = u4::new(bao1x_hal::kpc_aoint::IrqMapping::AoInt as u8);
-    kpc_aoint.add_irq_notifier(IrqNotification {
-        bit: kpc_int,
-        conn: kbd_conn,
-        opcode: KeyboardOpcode::HandlerTrigger.to_usize().unwrap(),
-        args: [0, 0, 0, 0],
-    });
-    // feels like a bit of an abstraction violation, but I don't know how much the other interrupts
-    // require edge-triggered handling
-    kpc_aoint.irq.wo(utra::irqarray2::EV_EDGE_TRIGGERED, 1 << kpc_int.as_u32());
-    kpc_aoint.irq.wo(utra::irqarray2::EV_POLARITY, 1 << kpc_int.as_u32());
-    kpc_aoint.modify_irq_ena(kpc_int, true);
+    #[cfg(feature = "board-baosec")]
+    {
+        let kbd_conn = xous::connect(kbd_sid).unwrap();
 
+        let kpc_int = u4::new(bao1x_hal::kpc_aoint::IrqMapping::AoInt as u8);
+        kpc_aoint.add_irq_notifier(IrqNotification {
+            bit: kpc_int,
+            conn: kbd_conn,
+            opcode: KeyboardOpcode::HandlerTrigger.to_usize().unwrap(),
+            args: [0, 0, 0, 0],
+        });
+        // feels like a bit of an abstraction violation, but I don't know how much the other interrupts
+        // require edge-triggered handling
+        kpc_aoint.irq.wo(utra::irqarray2::EV_EDGE_TRIGGERED, 1 << kpc_int.as_u32());
+        kpc_aoint.irq.wo(utra::irqarray2::EV_POLARITY, 1 << kpc_int.as_u32());
+        kpc_aoint.modify_irq_ena(kpc_int, true);
+    }
+
+    #[cfg(feature = "board-baosec")]
     let tt = ticktimer::Ticktimer::new().unwrap();
 
     let mut listeners: Vec<(CID, usize)> = Vec::new();
@@ -219,9 +245,6 @@ fn keyboard_service() {
     let mut esc_chars = [0u8; 16];
     // storage for any blocking listeners
     let mut blocking_listener = Vec::<MessageSender>::new();
-
-    let iox = crate::iox::IoxHal::new();
-    let (_row, _col) = bao1x_hal::board::setup_kpc_pins(&iox);
 
     #[cfg(feature = "keyboard-testing")]
     // this routine is useful for mapping out raw keys on new hardware builds
@@ -254,7 +277,9 @@ fn keyboard_service() {
         }
     });
 
+    #[cfg(feature = "board-baosec")]
     let mut key_tracker = KeyTracker::new();
+    #[cfg(feature = "board-baosec")]
     let mut last_key_event = 0u64;
     loop {
         let msg = xous::receive_message(kbd_sid).unwrap(); // this blocks until we get a message
@@ -302,10 +327,15 @@ fn keyboard_service() {
                 log::warn!("Defaulting to DVORAK map");
                 xous::return_scalar(msg.sender, KeyMap::Dvorak.into()).expect("can't retrieve keymap");
             }),
+            #[cfg(feature = "board-baosec")]
             Some(KeyboardOpcode::SetRepeat) => msg_scalar_unpack!(msg, rate, delay, _, _, {
                 key_tracker.rate_ms = rate;
                 key_tracker.delay_ms = delay;
             }),
+            #[cfg(not(feature = "board-baosec"))]
+            Some(KeyboardOpcode::SetRepeat) => {
+                msg_scalar_unpack!(msg, _rate, _delay, _, _, { unimplemented!() })
+            }
             Some(KeyboardOpcode::SetChordInterval) => msg_scalar_unpack!(msg, _delay, _, _, _, {
                 // chording allows us to interpret multiple key hits as a whole new separate key.
                 // for now we don't implement this feature.
@@ -401,6 +431,11 @@ fn keyboard_service() {
                     xous::return_scalar2(listener, key as u32 as usize, 0).unwrap();
                 }
             }),
+            #[cfg(not(feature = "board-baosec"))]
+            Some(KeyboardOpcode::HandlerTrigger) => msg_scalar_unpack!(msg, _pending, _, _, _, {
+                log::error!("This target does not support keyboard interrupts, yet somehow we got one!");
+            }),
+            #[cfg(feature = "board-baosec")]
             Some(KeyboardOpcode::HandlerTrigger) => msg_scalar_unpack!(msg, pending, _, _, _, {
                 if pending & (1 << bao1x_hal::kpc_aoint::IrqMapping::AoInt as usize) != 0 {
                     let mut kc: Vec<char> = Vec::new();
