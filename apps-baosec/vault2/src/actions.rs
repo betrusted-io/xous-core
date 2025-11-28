@@ -1,7 +1,7 @@
 use core::convert::TryFrom;
 use std::cell::RefCell;
 use std::io::ErrorKind;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -17,7 +17,6 @@ use num_traits::*;
 use passwords::PasswordGenerator;
 use pddb::BasisRetentionPolicy;
 use ux_api::widgets::TextEntryPayload;
-use vault2::env::xous::U2F_APP_DICT;
 use vault2::{
     AppInfo, VAULT_ALLOC_HINT, VAULT_PASSWORD_DICT, VAULT_TOTP_DICT, atime_to_str, basis_change,
     deserialize_app_info, serialize_app_info, utc_now,
@@ -506,7 +505,7 @@ impl ActionManager {
     /// This is mainly used by the autotype routine to ensure that the single entry that
     /// was autotyped has an updated atime in the UX; otherwise routines should update
     /// the cache directly.
-    pub(crate) fn update_db_entry(&mut self, entry: SelectedEntry) {
+    pub(crate) fn update_db_entry(&mut self, entry: &SelectedEntry) {
         match entry.mode {
             VaultMode::Password => {
                 let choice = storage::ContentKind::Password;
@@ -530,109 +529,12 @@ impl ActionManager {
         };
     }
 
-    pub(crate) fn menu_edit(&mut self, entry: SelectedEntry) {
+    pub(crate) fn menu_edit(&mut self, entry: &SelectedEntry) {
         let choice = match entry.mode {
-            VaultMode::Password => Some(storage::ContentKind::Password),
-            VaultMode::Totp => Some(storage::ContentKind::TOTP),
+            VaultMode::Password => storage::ContentKind::Password,
+            VaultMode::Totp => storage::ContentKind::TOTP,
         };
 
-        if choice.is_none() {
-            let dict = U2F_APP_DICT;
-            // at the moment only U2F records are supported for editing. The FIDO2 stuff is done with a
-            // different record storage format that's a bit funkier to edit.
-            let maybe_update = match self.pddb.borrow().get(
-                dict,
-                &entry.key_guid,
-                None,
-                false,
-                false,
-                None,
-                Some(basis_change),
-            ) {
-                Ok(mut record) => {
-                    // resolve the basis of the key, so that we are editing it "in place"
-                    let attr = record.attributes().expect("couldn't get key attributes");
-                    let mut data = Vec::<u8>::new();
-                    let maybe_update = match record.read_to_end(&mut data) {
-                        Ok(_len) => {
-                            if let Some(mut ai) = deserialize_app_info(data) {
-                                let edit_data = if ai.notes != t!("vault.notes", locales::LANG) {
-                                    self.modals
-                                        .alert_builder(t!("vault.edit_dialog", locales::LANG))
-                                        .field_placeholder_persist(Some(ai.name), Some(password_validator))
-                                        .field_placeholder_persist(Some(ai.notes), Some(password_validator))
-                                        .field_placeholder_persist(Some(hex::encode(ai.id)), None)
-                                        .build()
-                                        .expect("modals error in edit")
-                                } else {
-                                    self.modals
-                                        .alert_builder(t!("vault.edit_dialog", locales::LANG))
-                                        .field_placeholder_persist(Some(ai.name), Some(password_validator))
-                                        .field(Some(ai.notes), Some(password_validator))
-                                        .field_placeholder_persist(Some(hex::encode(ai.id)), None)
-                                        .build()
-                                        .expect("modals error in edit")
-                                };
-                                ai.name = edit_data.content()[0].content.as_str().to_string();
-                                ai.notes = edit_data.content()[1].content.as_str().to_string();
-                                ai.atime = 0;
-                                ai
-                            } else {
-                                self.report_err(
-                                    t!("vault.error.record_error", locales::LANG),
-                                    None::<std::io::Error>,
-                                );
-                                return;
-                            }
-                        }
-                        Err(e) => {
-                            self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e));
-                            return;
-                        }
-                    };
-                    Some((maybe_update, attr.basis))
-                }
-                Err(e) => {
-                    match e.kind() {
-                        std::io::ErrorKind::NotFound => {
-                            self.report_err(t!("vault.error.fido2", locales::LANG), None::<std::io::Error>)
-                        }
-                        _ => self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e)),
-                    }
-                    return;
-                }
-            };
-            if let Some((update, basis)) = maybe_update {
-                self.pddb.borrow().delete_key(dict, entry.key_guid.as_str(), Some(&basis)).unwrap_or_else(
-                    |e| self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e)),
-                );
-                match self.pddb.borrow().get(
-                    dict,
-                    entry.key_guid.as_str(),
-                    Some(&basis),
-                    false,
-                    true,
-                    Some(VAULT_ALLOC_HINT),
-                    Some(basis_change),
-                ) {
-                    Ok(mut record) => {
-                        let ser = serialize_app_info(&update);
-                        record.write(&ser).unwrap_or_else(|e| {
-                            self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e));
-                            0
-                        });
-                        // update the item cache so it appears on the screen
-                        let li = make_u2f_item_from_record(entry.key_guid.as_str(), update);
-                        self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
-                    }
-                    Err(e) => self.report_err(t!("vault.error.internal_error", locales::LANG), Some(e)),
-                }
-            }
-            self.pddb.borrow().sync().ok();
-            return;
-        }
-
-        let choice = choice.unwrap();
         let key_guid = entry.key_guid.as_str();
         let mut storage = self.storage.borrow_mut();
 
@@ -648,7 +550,7 @@ impl ActionManager {
 
                 let edit_data = if pw.notes != t!("vault.notes", locales::LANG) {
                     self.modals
-                        .alert_builder(t!("vault.edit_dialog", locales::LANG))
+                        .alert_builder("")
                         .field_placeholder_persist(Some(pw.name), Some(password_validator))
                         .field_placeholder_persist(Some(pw.secret), Some(password_validator))
                         .field_placeholder_persist(Some(pw.notes), Some(password_validator))
@@ -663,7 +565,7 @@ impl ActionManager {
                         .expect("modals error in edit")
                 } else {
                     self.modals
-                        .alert_builder(t!("vault.edit_dialog", locales::LANG))
+                        .alert_builder("")
                         .field_placeholder_persist(Some(pw.name), Some(password_validator))
                         .field_placeholder_persist(Some(pw.secret), Some(password_validator))
                         .field(Some(pw.notes), Some(password_validator))
@@ -727,7 +629,7 @@ impl ActionManager {
                 // display previous data for edit
                 let edit_data = if pw.notes != t!("vault.notes", locales::LANG) {
                     self.modals
-                        .alert_builder(t!("vault.edit_dialog", locales::LANG))
+                        .alert_builder("")
                         .field_placeholder_persist(Some(pw.description), Some(password_validator))
                         .field_placeholder_persist(Some(pw.username), Some(password_validator))
                         .field_placeholder_persist(Some(pw.password), Some(password_validator))
@@ -738,7 +640,7 @@ impl ActionManager {
                 } else {
                     // note is placeholder text, treat it as such
                     self.modals
-                        .alert_builder(t!("vault.edit_dialog", locales::LANG))
+                        .alert_builder("")
                         .field_placeholder_persist(Some(pw.description), Some(password_validator))
                         .field_placeholder_persist(Some(pw.username), Some(password_validator))
                         .field_placeholder_persist(Some(pw.password), Some(password_validator))
@@ -961,6 +863,7 @@ impl ActionManager {
         log::debug!("heap usage A: {}", heap_usage());
         match self.mode_cache {
             VaultMode::Password => {
+                use std::fmt::Write;
                 self.modals
                     .dynamic_notification(Some(t!("vault.reloading_database", locales::LANG)), None)
                     .ok();
@@ -971,7 +874,7 @@ impl ActionManager {
                         let mut oom_keys = 0;
                         // allocate a re-usable temporary buffers, to avoid triggering allocs
                         let mut pw_rec = PasswordRecord::alloc();
-                        let mut extra = String::with_capacity(256);
+                        let mut extra = String::with_capacity(16);
                         let mut desc = String::with_capacity(256);
                         let mut lookup_key = ListKey::reserved();
                         let mut il = self.item_lists.lock().unwrap();
@@ -990,17 +893,10 @@ impl ActionManager {
                                     lookup_key.reset_from_parts(&desc, &key.name);
 
                                     if let Some(prev_entry) = il.get(self.mode_cache, &lookup_key) {
-                                        prev_entry.dirty = true;
                                         if prev_entry.atime != pw_rec.atime
                                             || prev_entry.count != pw_rec.count
                                         {
-                                            // this is expensive, so don't run it unless we have to
-                                            let human_time = atime_to_str(pw_rec.atime);
-                                            // note this code is duplicated in make_pw_item_from_record()
-                                            extra.push_str(&human_time);
-                                            extra.push_str("; ");
-                                            extra.push_str(t!("vault.u2f.appinfo.authcount", locales::LANG));
-                                            extra.push_str(&pw_rec.count.to_string());
+                                            write!(extra, "[{}]", pw_rec.count).ok();
                                             prev_entry.extra.clear();
                                             prev_entry.extra.push_str(&extra);
                                         }
@@ -1014,18 +910,11 @@ impl ActionManager {
                                             prev_entry.guid.push_str(&key.name);
                                         }
                                     } else {
-                                        let human_time = atime_to_str(pw_rec.atime);
-
-                                        extra.push_str(&human_time);
-                                        extra.push_str("; ");
-                                        extra.push_str(t!("vault.u2f.appinfo.authcount", locales::LANG));
-                                        extra.push_str(&pw_rec.count.to_string());
-
+                                        write!(extra, "[{}]", pw_rec.count).ok();
                                         let li = ListItem::new(
                                             desc.to_string(), /* these allocs will be slow, but we do it
                                                                * only once on boot */
-                                            extra.to_string(),
-                                            true,
+                                            extra.to_owned(),
                                             key.name,
                                             pw_rec.atime,
                                             pw_rec.count,
@@ -1555,22 +1444,11 @@ pub(crate) fn heap_usage() -> usize {
     }
 }
 
-fn make_pw_name(description: &str, _username: &str, dest: &mut String) {
+fn make_pw_name(description: &str, username: &str, dest: &mut String) {
     dest.clear();
     dest.push_str(description);
-    // dest.push_str("/");
-    // dest.push_str(username);
-}
-
-fn make_u2f_item_from_record(guid: &str, ai: AppInfo) -> ListItem {
-    let extra = format!(
-        "{}; {}{}",
-        atime_to_str(ai.atime),
-        t!("vault.u2f.appinfo.authcount", locales::LANG),
-        ai.count,
-    );
-    let desc: String = format!("{} (U2F)", ai.name);
-    ListItem::new(desc, extra, true, guid.to_owned(), ai.count, ai.atime)
+    dest.push_str("/");
+    dest.push_str(username);
 }
 
 fn make_totp_item_from_record(guid: &str, totp: TotpRecord) -> ListItem {
@@ -1583,7 +1461,7 @@ fn make_totp_item_from_record(guid: &str, totp: TotpRecord) -> ListItem {
         if totp.is_hotp { "HOTP" } else { "TOTP" }
     );
     let desc = format!("{}", totp.name);
-    ListItem::new(desc, extra, true, guid.to_owned(), 0, 0)
+    ListItem::new(desc, extra, guid.to_owned(), 0, 0)
 }
 fn make_pw_item_from_record(guid: &str, pw: PasswordRecord) -> ListItem {
     // create the list item from the updated entry
@@ -1598,7 +1476,6 @@ fn make_pw_item_from_record(guid: &str, pw: PasswordRecord) -> ListItem {
     ListItem::new(
         desc.to_string(), // these allocs will be slow, but we do it only once on boot
         extra.to_string(),
-        true,
         guid.to_string(),
         pw.atime,
         pw.count,

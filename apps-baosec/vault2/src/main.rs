@@ -8,6 +8,7 @@ mod storage;
 mod submenu;
 mod totp;
 pub mod vault_api;
+use ux_api::service::gfx::Gfx;
 pub use vault_api::*;
 mod vendor_commands;
 
@@ -34,10 +35,6 @@ use crate::vendor_commands::VendorSession;
 /*
 Dev status & notes --
 
-Nov 12 2025:
-
-`cargo xtask baosec-emu` will launch the emulated UI.
-
 UI interaction planning.
 
 Main mode of interaction is QR code scanning. This should be accessible with a single button. Thus:
@@ -59,6 +56,17 @@ we *could*, possibly, if we really needed menu hierarchies, repurpose a left/rig
 a hierarchy nav function.
 
 -> But can we keep the menu shallow?
+
+Architectural notes --
+
+Data is long-term stored in the PDDB. Each of the three modes have their own dictionary
+(OpenSK/FIDO2, passwords, totp).
+
+The data is read into an `ItemList`, which is a RAM-based structure that caches all the PDDB data for
+fast sorting, searching etc. `ItemList` is where meta-operations like search & sort happen.
+
+For rendering the data is then copied into a UI element, such as a `ScrollableList`, based on
+the currently active mode.
   */
 
 pub(crate) const SERVER_NAME_VAULT2: &str = "_Vault2_";
@@ -78,7 +86,7 @@ pub struct SelectedEntry {
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("Vault2 PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -106,9 +114,10 @@ fn main() -> ! {
     crate::totp::pumper(mode.clone(), pump_sid, conn, allow_totp_rendering.clone());
     let pump_conn = xous::connect(pump_sid).unwrap();
 
-    // respond to keyboard events
-    let kbd = bao1x_api::keyboard::Keyboard::new(&xns).unwrap();
-    kbd.register_listener(SERVER_NAME_VAULT2, VaultOp::KeyPress.to_u32().unwrap() as usize);
+    // respond to keyboard events - register with the `Gfx` subsystem, so we're getting keypresses
+    // filtered by the modals interface
+    let gfx = Gfx::new(&xns).unwrap();
+    gfx.register_listener(SERVER_NAME_VAULT2, VaultOp::KeyPress.to_u32().unwrap() as usize);
 
     // spawn the actions server. This is responsible for grooming the UX elements. It
     // has to be in its own thread because it uses blocking modal calls that would cause
@@ -147,7 +156,8 @@ fn main() -> ! {
                             unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
                         manager.activate();
-                        manager.menu_edit(entry); // this is responsible for updating the item cache
+                        manager.menu_edit(&entry); // this is responsible for updating the item cache
+                        manager.update_db_entry(&entry);
                         manager.deactivate();
                     }
                     Some(ActionOp::MenuUnlockBasis) => {
@@ -175,7 +185,7 @@ fn main() -> ! {
                             unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
                         manager.activate();
-                        manager.update_db_entry(entry);
+                        manager.update_db_entry(&entry);
                         manager.deactivate();
                     }
                     Some(ActionOp::UpdateMode) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
@@ -339,7 +349,7 @@ fn main() -> ! {
         xous::Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0),
     )
     .ok();
-    vault_ui.refresh_totp();
+    vault_ui.refresh_draw_list();
 
     // kickstart the pumper
     xous::send_message(pump_conn, xous::Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0))
@@ -358,13 +368,13 @@ fn main() -> ! {
                     xous::Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0),
                 )
                 .ok();
-                vault_ui.refresh_totp();
+                vault_ui.refresh_draw_list();
                 vault_ui.redraw();
             }
             Some(VaultOp::MenuDone) => {
                 menu_active = false;
                 // update the TOTP codes, in case there were changes
-                vault_ui.refresh_totp();
+                vault_ui.refresh_draw_list();
                 allow_totp_rendering.store(true, Ordering::SeqCst);
                 vault_ui.redraw();
             }
@@ -376,7 +386,7 @@ fn main() -> ! {
                     xous::Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0),
                 )
                 .ok();
-                vault_ui.refresh_totp();
+                vault_ui.refresh_draw_list();
                 allow_totp_rendering.store(true, Ordering::SeqCst);
                 xous::send_message(
                     pump_conn,
@@ -386,7 +396,10 @@ fn main() -> ! {
                 vault_ui.redraw();
             }
             Some(VaultOp::MenuPwMode) => {
-                *mode.lock().unwrap() = VaultMode::Password;
+                {
+                    // lock needs to go out of scope so we don't hang the later ops
+                    *mode.lock().unwrap() = VaultMode::Password;
+                }
                 allow_totp_rendering.store(false, Ordering::SeqCst);
                 // reload DB on mode switch
                 xous::send_message(
@@ -417,11 +430,11 @@ fn main() -> ! {
                             vault_ui.redraw();
                         }
                         '←' => {
-                            vault_ui.nav(NavDir::PageUp);
+                            vault_ui.nav(NavDir::Autotype);
                             vault_ui.redraw();
                         }
                         '→' => {
-                            vault_ui.nav(NavDir::PageDown);
+                            vault_ui.nav(NavDir::Reserved);
                             vault_ui.redraw();
                         }
                         '🔥' => {
@@ -453,7 +466,7 @@ fn main() -> ! {
                             )
                             .ok();
                             if *mode.lock().unwrap() == VaultMode::Totp {
-                                vault_ui.refresh_totp();
+                                vault_ui.refresh_draw_list();
                             }
                             vault_ui.redraw();
                         }
@@ -467,16 +480,16 @@ fn main() -> ! {
                 // stage 1 happens here because the filtered list and selection entry are in the responsive UX
                 // section.
                 log::debug!("selecting entry for edit");
+                // this will block redraws
+                allow_totp_rendering.store(false, Ordering::SeqCst);
                 if let Some(entry) = vault_ui.selected_entry() {
                     let buf = Buffer::into_buf(entry).expect("IPC error");
-                    buf.send(actions_conn, ActionOp::MenuEditStage2.to_u32().unwrap())
+                    buf.lend(actions_conn, ActionOp::MenuEditStage2.to_u32().unwrap())
                         .expect("messaging error");
                 } else {
-                    // this will block redraws
-                    allow_totp_rendering.store(false, Ordering::SeqCst);
                     modals.show_notification(t!("vault.error.nothing_selected", locales::LANG), None).ok();
-                    allow_totp_rendering.store(true, Ordering::SeqCst);
                 }
+                allow_totp_rendering.store(true, Ordering::SeqCst);
             }
             Some(VaultOp::MenuChangeFont) => {
                 for item in FONT_LIST {

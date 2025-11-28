@@ -2,8 +2,7 @@ use core::num::NonZeroUsize;
 use std::cmp::Ordering;
 use std::ops::Range;
 
-use crate::ux::NavDir;
-use crate::{SelectedEntry, VaultMode};
+use crate::VaultMode;
 
 pub struct ListKey {
     pub name: String,
@@ -58,13 +57,11 @@ impl PartialEq<ListItem> for ListKey {
 
 /// Display list for items. "name" is the key by which the list is sorted.
 /// "extra" is more information about the item, which should not be part of the sort.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ListItem {
     name: String,
     sortable_name: String,
     pub extra: String,
-    /// used by drawing routines to optimize refresh time
-    pub dirty: bool,
     /// this is the name of the key used to refer to the item
     pub guid: String,
     /// stash a copy so we can compare to the DB record and avoid re-generating the atime/count string if it
@@ -105,9 +102,9 @@ impl PartialEq for ListItem {
 impl Eq for ListItem {}
 
 impl ListItem {
-    pub fn new(name: String, extra: String, dirty: bool, guid: String, atime: u64, count: u64) -> Self {
+    pub fn new(name: String, extra: String, guid: String, atime: u64, count: u64) -> Self {
         let sortable_name = name.to_lowercase();
-        Self { name, sortable_name, extra, dirty, guid, atime, count }
+        Self { name, sortable_name, extra, guid, atime, count }
     }
 
     /// This is made available for edit/delete routines to generate the key without having to
@@ -136,7 +133,6 @@ pub struct FilteredListView {
     // on the heap to copy data.
     list: Vec<ListItem>,
     sorted: bool,
-    selection_index: usize,
     items_per_screen: NonZeroUsize,
     filter_range: Option<Range<usize>>,
 }
@@ -146,7 +142,6 @@ impl FilteredListView {
         Self {
             list: Vec::new(),
             sorted: false,
-            selection_index: 0,
             items_per_screen: NonZeroUsize::new(1).unwrap(),
             filter_range: None,
         }
@@ -165,16 +160,10 @@ impl FilteredListView {
         log::debug!("filter clear");
         self.list.clear();
         self.sorted = false;
-        self.selection_index = 0;
         self.filter_range = None;
     }
 
     pub fn set_items_per_screen(&mut self, ips: usize) {
-        if ips != self.items_per_screen.get() {
-            for item in self.list.iter_mut() {
-                item.dirty = true;
-            }
-        }
         self.items_per_screen = NonZeroUsize::new(ips).unwrap_or(NonZeroUsize::new(1).unwrap());
     }
 
@@ -266,31 +255,9 @@ impl FilteredListView {
                 }
             }
         }
-        //ts[4] = tt.elapsed_ms();
-        if let Some(r) = &self.filter_range {
-            if self.selection_index >= r.len() {
-                self.selection_index = 0;
-            }
-        }
-        self.mark_filtered_as_dirty();
-        //ts[5] = tt.elapsed_ms();
-        //for(index, &elapsed) in ts[1..].iter().enumerate() {
-        //    log::info!("{}: {}", index + 1, elapsed.saturating_sub(ts[0]));
-        //}
     }
 
-    fn mark_filtered_as_dirty(&mut self) {
-        if let Some(r) = self.filter_range.clone() {
-            for i in self.list[r].iter_mut() {
-                i.dirty = true;
-            }
-        }
-    }
-
-    pub fn filter_reset(&mut self) {
-        self.filter_range = Some(0..self.list.len());
-        self.mark_filtered_as_dirty();
-    }
+    pub fn filter_reset(&mut self) { self.filter_range = Some(0..self.list.len()); }
 
     pub fn filter_len(&self) -> usize {
         if let Some(r) = &self.filter_range {
@@ -302,134 +269,9 @@ impl FilteredListView {
         }
     }
 
-    pub fn mark_all_dirty(&mut self) {
-        for item in self.list.iter_mut() {
-            item.dirty = true;
-        }
-    }
-
-    fn mark_filtered_selection_as_dirty(&mut self, index: usize) {
-        let index = index + self.filter_start();
-        if index < self.list.len() {
-            self.list[index].dirty = true;
-        }
-    }
-
-    fn mark_filtered_screen_as_dirty(&mut self, index: usize) {
-        let index = index + self.filter_start();
-        let page = index / self.items_per_screen.get();
-        let listlen = self.list.len();
-        for item in self.list[((page as usize) * self.items_per_screen.get()).min(listlen)
-            ..((1 + page as usize) * self.items_per_screen.get()).min(listlen)]
-            .iter_mut()
-        {
-            item.dirty = true;
-        }
-    }
-
     fn filter_start(&self) -> usize { self.filter_range.clone().unwrap_or(0..0).start }
 
-    pub fn get_page(&self) -> usize { self.selection_index / self.items_per_screen.get() }
-
-    pub fn selected_index(&self) -> usize { self.selection_index % self.items_per_screen.get() }
-
-    pub fn selected_page(&mut self) -> &mut [ListItem] {
-        let filterlen = self.filter_len();
-        let page = self.get_page();
-        let filtered_range = &mut self.list[self.filter_range.clone().unwrap_or(0..0)];
-        &mut filtered_range[(page * self.items_per_screen.get()).min(filterlen)
-            ..((1 + page) * self.items_per_screen.get()).min(filterlen)]
-    }
-
     pub fn full_list(&mut self) -> &mut [ListItem] { &mut self.list[..] }
-
-    pub fn nav(&mut self, dir: NavDir) {
-        log::debug!("index bef: {}, filter: {:?}", self.selection_index, self.filter_range);
-        match dir {
-            NavDir::Up => {
-                if self.selection_index > 0 {
-                    let starting_page = self.get_page();
-                    self.mark_filtered_selection_as_dirty(self.selection_index);
-                    self.selection_index -= 1;
-                    self.mark_filtered_selection_as_dirty(self.selection_index);
-                    if starting_page != self.get_page() {
-                        self.mark_filtered_screen_as_dirty(self.selection_index);
-                    }
-                }
-            }
-            NavDir::Down => {
-                if self.selection_index < self.filter_len() {
-                    let starting_page = self.get_page();
-                    self.mark_filtered_selection_as_dirty(self.selection_index);
-                    self.selection_index += 1;
-                    self.mark_filtered_selection_as_dirty(self.selection_index);
-                    if starting_page != self.get_page() {
-                        self.mark_filtered_screen_as_dirty(self.selection_index);
-                    }
-                }
-            }
-            NavDir::PageUp => {
-                if self.selection_index > self.items_per_screen.get() {
-                    self.mark_filtered_screen_as_dirty(self.selection_index);
-                    self.selection_index -= self.items_per_screen.get();
-                    self.mark_filtered_screen_as_dirty(self.selection_index);
-                } else {
-                    self.mark_filtered_selection_as_dirty(self.selection_index);
-                    self.selection_index = 0;
-                    self.mark_filtered_selection_as_dirty(self.selection_index);
-                }
-            }
-            NavDir::PageDown => {
-                if self.selection_index < self.filter_len() - self.items_per_screen.get() {
-                    self.mark_filtered_screen_as_dirty(self.selection_index);
-                    self.selection_index += self.items_per_screen.get();
-                    self.mark_filtered_screen_as_dirty(self.selection_index);
-                } else {
-                    self.mark_filtered_selection_as_dirty(self.selection_index);
-                    self.selection_index = self.filter_len() - 1;
-                    self.mark_filtered_selection_as_dirty(self.selection_index);
-                }
-            }
-        }
-        log::debug!("index after: {}", self.selection_index);
-    }
-
-    pub fn selected_guid(&self) -> String {
-        self.list[self.selection_index + self.filter_start()].guid.to_owned()
-    }
-
-    pub fn selected_extra(&self) -> String {
-        self.list[self.selection_index + self.filter_start()].extra.to_owned()
-    }
-
-    pub fn selected_update_extra(&mut self, extra: String) {
-        let start = self.filter_start();
-        self.list[self.selection_index + start].extra = extra
-    }
-
-    pub fn selected_update_atime(&mut self, atime: u64) {
-        let start = self.filter_start();
-        self.list[self.selection_index + start].atime = atime
-    }
-
-    pub fn selected_entry(&self, mode: VaultMode) -> Option<SelectedEntry> {
-        if let Some(r) = self.filter_range.clone() {
-            log::debug!("filter range: {:?}", r);
-            log::debug!("selection index: {}", self.selection_index);
-            log::debug!("filter start: {}", self.filter_start());
-            if r.contains(&(self.selection_index + self.filter_start())) {
-                Some(SelectedEntry {
-                    key_guid: String::from(&self.list[self.selection_index + self.filter_start()].guid),
-                    description: String::from(&self.list[self.selection_index + self.filter_start()].name),
-                    mode,
-                })
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    }
 }
 pub struct ItemLists {
     totp: FilteredListView,
@@ -478,11 +320,6 @@ impl ItemLists {
         self.pw.set_items_per_screen(ips as usize);
     }
 
-    pub fn mark_all_dirty(&mut self) {
-        self.totp.mark_all_dirty();
-        self.pw.mark_all_dirty();
-    }
-
     pub fn clear_filter(&mut self) {}
 
     pub fn clear(&mut self, list_type: VaultMode) { self.li_mut(list_type).clear(); }
@@ -501,30 +338,6 @@ impl ItemLists {
     pub fn filter_reset(&mut self, list_type: VaultMode) { self.li_mut(list_type).filter_reset(); }
 
     pub fn filter_len(&self, list_type: VaultMode) -> usize { self.li(list_type).filter_len() }
-
-    pub fn nav(&mut self, list_type: VaultMode, dir: NavDir) { self.li_mut(list_type).nav(dir); }
-
-    pub fn selected_index(&self, list_type: VaultMode) -> usize { self.li(list_type).selected_index() }
-
-    pub fn selected_guid(&self, list_type: VaultMode) -> String { self.li(list_type).selected_guid() }
-
-    pub fn selected_extra(&self, list_type: VaultMode) -> String { self.li(list_type).selected_extra() }
-
-    pub fn selected_update_extra(&mut self, list_type: VaultMode, extra: String) {
-        self.li_mut(list_type).selected_update_extra(extra)
-    }
-
-    pub fn selected_update_atime(&mut self, list_type: VaultMode, atime: u64) {
-        self.li_mut(list_type).selected_update_atime(atime)
-    }
-
-    pub fn selected_entry(&self, list_type: VaultMode) -> Option<SelectedEntry> {
-        self.li(list_type).selected_entry(list_type)
-    }
-
-    pub fn selected_page(&mut self, list_type: VaultMode) -> &mut [ListItem] {
-        self.li_mut(list_type).selected_page()
-    }
 
     pub fn full_list(&mut self, list_type: VaultMode) -> &mut [ListItem] {
         self.li_mut(list_type).full_list()

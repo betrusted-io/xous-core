@@ -504,10 +504,10 @@
         "zh": "选择字体"
     },
     "vault.u2f.appinfo.authcount": {
-        "en": "Usage count: ",
-        "en-tts": "Usage count: ",
-        "fr": "Nombre d’usages: ",
-        "ja": "使用回数: ",
+        "en": "Uses: ",
+        "en-tts": "Uses: ",
+        "fr": "Usages : ",
+        "ja": "使用数: ",
         "zh": "使用次数: "
     },
     "vault.u2f.appinfo.days_ago": {
