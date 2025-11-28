@@ -6,11 +6,14 @@ use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
+use std::time::SystemTime;
 
 #[cfg(feature = "hosted-baosec")]
 use bao1x_emu::trng::Trng;
+use bao1x_hal_service::api::TimeOp;
 #[cfg(feature = "board-baosec")]
 use bao1x_hal_service::trng::Trng;
+use chrono::{DateTime, Utc};
 use keystore::Keystore;
 use locales::t;
 use num_traits::*;
@@ -74,6 +77,8 @@ pub struct ActionManager {
     keystore: Keystore,
 
     gfx: ux_api::service::gfx::Gfx,
+    // used to set time when QR codes are scanned
+    rtc_conn: xous::CID,
 }
 impl ActionManager {
     pub fn new(
@@ -86,6 +91,9 @@ impl ActionManager {
         let storage_manager = storage::Manager::new(&xns);
 
         let mc = (*mode.lock().unwrap()).clone();
+        let rtc_conn =
+            xous::connect(xous::SID::from_bytes(bao1x_hal_service::api::TIME_SERVER_PUBLIC).unwrap())
+                .unwrap();
         ActionManager {
             modals: modals::Modals::new(&xns).unwrap(),
             storage: RefCell::new(storage_manager),
@@ -102,6 +110,7 @@ impl ActionManager {
             main_conn,
             keystore: Keystore::new(&xns),
             gfx: ux_api::service::gfx::Gfx::new(&xns).unwrap(),
+            rtc_conn,
         }
     }
 
@@ -1076,7 +1085,31 @@ impl ActionManager {
                                 }
                             }
                             "pwauth" => {
-                                // todo
+                                if let Some((op_type, rest)) = data.split_once('/') {
+                                    match op_type {
+                                        "pass" => {
+                                            if let Some(time_pos) = rest.rfind("?time=") {
+                                                let url = &rest[..time_pos];
+                                                let time_str = &rest[time_pos + 6..];
+                                                self.set_time(time_str);
+                                                log::info!("URL: {}", url);
+                                                // now try to lookup the password; if it does not exist, offer
+                                                // to create a password
+
+                                                // TODO: left off here
+                                            }
+                                        }
+                                        "new" => {
+                                            if let Some(pass_pos) = rest.find("?pass=") {
+                                                let url = &rest[..pass_pos];
+                                                let password = &rest[pass_pos + 6..];
+                                                log::info!("URL: {}", url);
+                                                log::info!("Password: {}", password);
+                                            }
+                                        }
+                                        _ => log::error!("Unknown pwauth operation: {}", op_type),
+                                    }
+                                }
                             }
                             "time" => {
                                 // todo
@@ -1097,6 +1130,41 @@ impl ActionManager {
                 log::error!("QR acquisition failed: {:?}", e);
                 // on error, etc. just note the issue and move on
             }
+        }
+    }
+
+    pub(crate) fn set_time(&self, time_str: &str) {
+        match DateTime::parse_from_rfc3339(time_str) {
+            Ok(datetime) => {
+                let utc_time = datetime.with_timezone(&Utc);
+                log::info!("Time (UTC): {}", utc_time);
+                let since_epoch_ms = utc_time.timestamp_millis();
+                xous::send_message(
+                    self.rtc_conn,
+                    xous::Message::new_scalar(
+                        TimeOp::SetUtcTimeMs.to_usize().unwrap(),
+                        ((since_epoch_ms >> 32) & 0xFFFF_FFFF) as usize,
+                        (since_epoch_ms & 0xFFFF_FFFF) as usize,
+                        0,
+                        0,
+                    ),
+                )
+                .ok();
+                let offset = datetime.offset();
+                let offset_ms = (offset.local_minus_utc() as i64) * 1000;
+                xous::send_message(
+                    self.rtc_conn,
+                    xous::Message::new_scalar(
+                        TimeOp::SetTzOffsetMs.to_usize().unwrap(),
+                        (((offset_ms as u64) >> 32) & 0xFFFF_FFFF) as usize,
+                        (offset_ms & 0xFFFF_FFFF) as usize,
+                        0,
+                        0,
+                    ),
+                )
+                .ok();
+            }
+            Err(e) => log::error!("Failed to parse time: {}", e),
         }
     }
 
