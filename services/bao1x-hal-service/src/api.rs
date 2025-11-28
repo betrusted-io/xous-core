@@ -1,3 +1,7 @@
+/// This is a "well known name" used by `libstd` to connect to the time server
+/// Anyone who wants to check if time has been initialized would use this name.
+pub const TIME_SERVER_PUBLIC: &'static [u8; 16] = b"timeserverpublic";
+
 /// Do not modify the discriminants in this structure. They are used in `libstd` directly.
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub enum TimeOp {
