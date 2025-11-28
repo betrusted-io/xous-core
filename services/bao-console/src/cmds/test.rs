@@ -38,13 +38,15 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }
                 }
                 "time" => {
-                    use chrono::Utc;
+                    use chrono::{Local, Utc};
                     let systime = std::time::SystemTime::now();
                     let epoch = systime.duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap();
                     log::info!("Seconds since epoch: {}", epoch.as_secs());
                     log::info!("Systime: {:?}", systime);
                     let now = Utc::now();
                     log::info!("UTC now {}", now.format("%Y-%m-%d %H:%M:%S UTC"));
+                    let local_now = Local::now();
+                    log::info!("Local time: {}", local_now.format("%Y-%m-%d %H:%M:%S %Z"));
 
                     log::info!("Waiting 3 seconds");
                     std::thread::sleep(std::time::Duration::from_secs(3));
@@ -55,6 +57,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("Systime: {:?}", systime);
                     let now = Utc::now();
                     log::info!("UTC now {}", now.format("%Y-%m-%d %H:%M:%S UTC"));
+                    let local_now = Local::now();
+                    log::info!("Local time: {}", local_now.format("%Y-%m-%d %H:%M:%S %Z"));
                 }
                 #[cfg(feature = "bmp180")]
                 "temp" => {
