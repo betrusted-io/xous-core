@@ -306,20 +306,29 @@ fn keyboard_service() {
                 }
             }
             Some(KeyboardOpcode::RegisterKeyObserver) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let kr = buffer.as_flat::<KeyboardRegistration, _>().unwrap();
-                if observer_conn.is_none() {
-                    match xns.request_connection_blocking(kr.server_name.as_str()) {
-                        Ok(cid) => {
-                            observer_conn = Some(cid);
-                            observer_op = Some(<u32 as From<u32>>::from(kr.listener_op_id.into()) as usize);
-                        }
-                        Err(e) => {
-                            log::error!("couldn't connect to observer: {:?}", e);
-                            observer_conn = None;
-                            observer_op = None;
+                if msg.body.has_memory() {
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let kr = buffer.as_flat::<KeyboardRegistration, _>().unwrap();
+                    if observer_conn.is_none() {
+                        match xns.request_connection_blocking(kr.server_name.as_str()) {
+                            Ok(cid) => {
+                                observer_conn = Some(cid);
+                                observer_op =
+                                    Some(<u32 as From<u32>>::from(kr.listener_op_id.into()) as usize);
+                            }
+                            Err(e) => {
+                                log::error!("couldn't connect to observer: {:?}", e);
+                                observer_conn = None;
+                                observer_op = None;
+                            }
                         }
                     }
+                } else {
+                    log::error!(
+                        "RegisterKeyObserver got incorrect argument; ignoring! From PID {:?}: {:?}",
+                        msg.sender.pid(),
+                        msg
+                    );
                 }
             }
             Some(KeyboardOpcode::SelectKeyMap) => {
