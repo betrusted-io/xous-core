@@ -244,6 +244,13 @@ fn main() {
     .expect("couldn't claim IRQ control page");
     let irq_csr = CSR::new(irq_page.as_mut_ptr() as *mut u32);
     let mut irq = IrqHandler { irq_csr, cid: self_cid };
+    // ensure that iox interrupts are gated off by default
+    for index in 0..8 {
+        unsafe {
+            iox.csr.base().add(utralib::utra::iox::SFR_INTCR_CRINT0.offset()).add(index).write_volatile(0);
+        }
+    }
+    iox.csr.wo(utra::iox::SFR_INTFR, 0);
     xous::claim_interrupt(
         utralib::utra::irqarray10::IRQARRAY10_IRQ,
         iox_irq_handler,

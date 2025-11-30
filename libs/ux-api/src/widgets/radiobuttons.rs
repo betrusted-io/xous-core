@@ -51,7 +51,7 @@ impl ActionApi for RadioButtons {
             '↑' | '↓' => {
                 self.items.key_action(k);
             }
-            '∴' | '\u{d}' => {
+            '∴' | '\u{d}' | '🔥' => {
                 self.action_payload = RadioButtonPayload::new(self.items.get_selected());
 
                 self.items.gfx.release_modal().unwrap();

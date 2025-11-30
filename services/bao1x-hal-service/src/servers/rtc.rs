@@ -1,11 +1,8 @@
 use bao1x_hal::rtc::*;
 use utralib::*;
 
+use crate::api::TIME_SERVER_PUBLIC;
 use crate::api::TimeOp;
-
-/// This is a "well known name" used by `libstd` to connect to the time server
-/// Anyone who wants to check if time has been initialized would use this name.
-pub const TIME_SERVER_PUBLIC: &'static [u8; 16] = b"timeserverpublic";
 
 pub fn start_rtc_service() {
     let _ = std::thread::spawn({
@@ -144,6 +141,7 @@ fn rtc_service() -> ! {
                     let tz_hi_ms = scalar.arg1;
                     let tz_lo_ms = scalar.arg2;
                     let tz_ms = ((tz_hi_ms as i64) << 32) | (tz_lo_ms as i64);
+                    log::info!("TZ offset set to {}", tz_ms / 1000);
                     // sanity check with very broad bounds: I don't know of any time zones that are more
                     // than +/2 days from UTC 86400 seconds in a day, times 1000
                     // milliseconds, times 2 days

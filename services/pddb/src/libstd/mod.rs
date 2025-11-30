@@ -335,7 +335,7 @@ pub(crate) fn open_key(
         let mut len = 0;
 
         // If the file doesn't exist in this basis, create it (if necessary)
-        // or mvoe on to the next basis.
+        // or move on to the next basis.
         if basis_cache
             .key_attributes(pddb_os, requested_dict, requested_key, bname)
             .map(|attr| len = attr.len as u64)

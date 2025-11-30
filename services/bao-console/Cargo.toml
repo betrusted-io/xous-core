@@ -82,4 +82,4 @@ rramtests = []
 # loaded and run.
 duart-debug-hal = ["bao1x-hal/debug-print-duart"]
 
-default = []
+default = ["with-pddb"]

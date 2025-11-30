@@ -595,6 +595,13 @@ impl Modals {
         Ok(())
     }
 
+    pub fn add_stateful_list(&self, items: Vec<(bool, &str)>) -> Result<(), xous::Error> {
+        for (_, &(state, text)) in items.iter().enumerate() {
+            self.add_stateful_list_item(state, text).or(Err(xous::Error::InternalError))?;
+        }
+        Ok(())
+    }
+
     /// Add individual items to a list to be used by get_radiobutton or get_checkbox.
     /// - Does not display on its own, the above mentioned methods prompt display of the list.
     ///
@@ -610,7 +617,15 @@ impl Modals {
     /// ```
     pub fn add_list_item(&self, item: &str) -> Result<(), xous::Error> {
         self.lock();
-        let itemname = ManagedListItem { token: self.token, item: ItemName::new(item) };
+        let itemname = ManagedListItem { token: self.token, item: ItemName::new(item), state: false };
+        let buf = Buffer::into_buf(itemname).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::AddModalItem.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        Ok(())
+    }
+
+    pub fn add_stateful_list_item(&self, state: bool, item: &str) -> Result<(), xous::Error> {
+        self.lock();
+        let itemname = ManagedListItem { token: self.token, item: ItemName::new(item), state };
         let buf = Buffer::into_buf(itemname).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::AddModalItem.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         Ok(())
@@ -739,10 +754,8 @@ impl Modals {
             .or(Err(xous::Error::InternalError))?;
         let selected_items = buf.to_original::<CheckBoxPayload, _>().unwrap();
         let mut ret = Vec::<String>::new();
-        for maybe_item in selected_items.payload() {
-            if let Some(item) = maybe_item {
-                ret.push(String::from(item.as_str()));
-            }
+        for item in selected_items.payload() {
+            ret.push(String::from(item.as_str()));
         }
         self.unlock();
         Ok(ret)

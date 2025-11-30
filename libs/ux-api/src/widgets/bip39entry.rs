@@ -354,7 +354,7 @@ impl ActionApi for Bip39Entry {
                         self.shortlist.key_action(k);
                         None
                     }
-                    '∴' | '\u{d}' => {
+                    '∴' | '\u{d}' | '🔥' => {
                         let selection = self.shortlist.get_selected();
                         match selection {
                             "⬅" => {

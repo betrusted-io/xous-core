@@ -9,8 +9,13 @@ use ux_api::service::gfx::Gfx;
 use ux_api::widgets::ScrollableList;
 use xous::CID;
 
-use crate::storage::{ContentKind, Manager};
+use crate::storage::Manager;
 use crate::*;
+
+const FAST_SCROLL_DELAY_MS: u64 = 1300;
+const KEYUP_DELAY_MS: u64 = 100;
+/// How many elements to skip through on fast scroll
+const PAGE_INCREMENT: usize = 6;
 
 pub const DEFAULT_FONT: GlyphStyle = GlyphStyle::Regular;
 pub const FONT_LIST: [&'static str; 6] = ["regular", "tall", "mono", "bold", "large", "small"];
@@ -44,8 +49,8 @@ const VAULT_CONFIG_KEY_FONT: &'static str = "fontstyle";
 pub enum NavDir {
     Up,
     Down,
-    PageUp,
-    PageDown,
+    Autotype,
+    Reserved,
 }
 
 /// Centralizes tunable UI parameters for TOTP
@@ -73,7 +78,7 @@ impl TotpLayout {
 pub struct VaultUi {
     main_cid: CID,
     gfx: Gfx,
-    totp_list: ScrollableList,
+    display_list: ScrollableList,
     item_lists: Arc<Mutex<ItemLists>>,
     mode: Arc<Mutex<VaultMode>>,
 
@@ -87,6 +92,9 @@ pub struct VaultUi {
     storage_manager: Manager,
 
     usb_dev: usb_bao1x::UsbHid,
+    last_key_time: u64,
+    start_hold_time: u64,
+    tt: ticktimer_server::Ticktimer,
 }
 
 impl VaultUi {
@@ -104,6 +112,8 @@ impl VaultUi {
             .style(TotpLayout::list_font());
         totp_list.set_autoflush(false);
 
+        let tt = ticktimer_server::Ticktimer::new().unwrap();
+        let now = tt.elapsed_ms();
         let gfx = Gfx::new(&xns).unwrap();
         let style = DEFAULT_FONT;
         let glyph_height = gfx.glyph_height_hint(style).unwrap() as isize;
@@ -111,7 +121,7 @@ impl VaultUi {
         Self {
             main_cid: cid,
             gfx,
-            totp_list,
+            display_list: totp_list,
             item_lists,
             mode,
             totp_code: None,
@@ -121,21 +131,34 @@ impl VaultUi {
             style,
             storage_manager: Manager::new(xns),
             usb_dev: usb_bao1x::UsbHid::new(),
+            tt,
+            last_key_time: now,
+            start_hold_time: now,
         }
     }
 
-    pub(crate) fn refresh_totp(&mut self) {
-        let mut locked_lists = self.item_lists.lock().unwrap();
-        let full_list = locked_lists.full_list(VaultMode::Totp);
-        self.totp_list.clear();
+    pub(crate) fn refresh_draw_list(&mut self) {
+        let mode = { (*self.mode.lock().unwrap()).clone() };
+
+        let mut locked_lists = if let Ok(g) = self.item_lists.try_lock() {
+            g
+        } else {
+            log::warn!("Couldn't get lock in refresh_draw_list; aborting the refresh");
+            return;
+        };
+        let full_list = locked_lists.full_list(mode);
+        self.display_list.clear();
         for item in full_list {
-            self.totp_list.add_item(0, &item.name());
+            self.display_list.add_item(0, &item.name());
         }
     }
 
     pub(crate) fn update_selected_totp_code(&mut self) -> Option<String> {
-        if self.totp_list.len() > 0 {
-            let selected = self.totp_list.get_selected();
+        if *self.mode.lock().unwrap() != VaultMode::Totp {
+            return None;
+        }
+        if self.display_list.len() > 0 {
+            let selected = self.display_list.get_selected();
             let mut locked_lists = self.item_lists.lock().unwrap();
             let full_list = locked_lists.full_list(VaultMode::Totp);
             if let Some(selected_item) = full_list.iter().find(|item| item.name() == selected) {
@@ -157,16 +180,38 @@ impl VaultUi {
         }
     }
 
+    pub(crate) fn get_selected_item(&self) -> Option<ListItem> {
+        let mode = *self.mode.lock().unwrap();
+        if self.display_list.len() > 0 {
+            let selected = self.display_list.get_selected();
+            let mut locked_lists = self.item_lists.lock().unwrap();
+            let full_list = locked_lists.full_list(mode);
+            full_list.iter().find(|&item| item.name() == selected).cloned()
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn selected_entry(&self) -> Option<SelectedEntry> {
+        let mode = *self.mode.lock().unwrap();
+        if let Some(li) = self.get_selected_item() {
+            let name = li.name().to_owned();
+            Some(SelectedEntry { key_guid: li.guid, description: name, mode })
+        } else {
+            None
+        }
+    }
+
     pub(crate) fn basis_change(&mut self) {
         self.item_lists.lock().unwrap().clear_all();
-        self.totp_list.clear();
+        self.display_list.clear();
     }
 
     pub(crate) fn store_glyph_style(&mut self, style: GlyphStyle) {
         self.pddb
             .borrow()
             .delete_key(VAULT_CONFIG_DICT, VAULT_CONFIG_KEY_FONT, Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS))
-            .expect("couldn't delete previous setting");
+            .ok();
 
         match self.pddb.borrow().get(
             VAULT_CONFIG_DICT,
@@ -215,7 +260,7 @@ impl VaultUi {
                 GlyphStyle::Regular
             }
         };
-        self.totp_list.style(style);
+        self.display_list.style(style);
         let glyph_height = self.gfx.glyph_height_hint(style).unwrap();
         self.item_height = glyph_height as isize + 2; // +2 because of the border width
         self.item_lists.lock().unwrap().set_items_per_screen(
@@ -253,7 +298,7 @@ impl VaultUi {
                 tv.style = TotpLayout::totp_font();
                 tv.draw_border = false;
 
-                if self.totp_code.is_none() && self.totp_list.len() > 0 {
+                if self.totp_code.is_none() && self.display_list.len() > 0 {
                     // this handles initial population of the field
                     self.update_selected_totp_code();
                 }
@@ -269,7 +314,7 @@ impl VaultUi {
                 self.gfx.draw_textview(&mut tv).expect("couldn't draw text");
 
                 // list of codes to pick from
-                self.totp_list.draw(TotpLayout::timer_box().br().y);
+                self.display_list.draw(TotpLayout::timer_box().br().y);
 
                 // draw the timer element
                 let mut object_list = ObjectList::new();
@@ -300,36 +345,6 @@ impl VaultUi {
                 self.gfx.draw_object_list(object_list).unwrap();
             }
             VaultMode::Password => {
-                /*
-                Password UI --
-
-                Home menu:
-
-                > Search by QR code
-                > Search by text entry
-                > Enter new by QR code
-                > Enter new by text entry
-
-                Prefix entered:
-
-                ---------------------
-                | Selected Domain   |
-                | Selected Username |
-                ---------------------
-                > Domain short 1
-                > Domain short 2
-                > Domain short 3
-                > Domain short 4
-                > search prefix <
-
-                - Scrolling down to search prefix and hitting home brings up keyboard UI
-                - Left-right would page through prefixed entries
-                - Up down would page through just the current page of entries (allowing selection of search prefix region)
-                - Selecting search prefix brings up the alphabetic entry UI
-                - Pressing in on scroll button raises a new menu for "autotype password" + "delete passsword" + "edit password" options
-                - Pressing on circle middle button just does autotype
-
-                 */
                 let screensize = self.gfx.screen_size().unwrap();
                 // handle empty database case
                 if self.item_lists.lock().unwrap().filter_len(VaultMode::Password) == 0 {
@@ -343,67 +358,37 @@ impl VaultUi {
                     );
                     box_text.draw_border = false;
                     box_text.clear_area = true;
+                    box_text.invert = true;
                     box_text.style = self.style;
                     write!(box_text, "{}", t!("vault.no_items", locales::LANG)).ok();
                     self.gfx.draw_textview(&mut box_text).expect("couldn't post empty notification");
                     self.gfx.flush().ok();
                     return;
                 }
+
+                // ---- draw the top "detail info" about the selected password ----
                 let mut insert_at = 0;
-                if let Some(entry) = self.item_lists.lock().unwrap().selected_entry(VaultMode::Password) {
+                if let Some(entry) = self.get_selected_item() {
                     log::debug!("rendering entry {:?}", entry);
                     // draw more data about the selected item
-                    let guid = entry.key_guid.as_str();
-                    let pw: storage::PasswordRecord =
-                        match self.storage_manager.get_record(&ContentKind::Password, guid) {
-                            Ok(record) => record,
-                            Err(error) => {
-                                log::error!("internal error rendering password: {:?}", error);
-                                self.gfx.flush().ok();
-                                return;
-                            }
-                        };
                     let mut box_text = TextView::new(
                         Gid::dummy(),
-                        TextBounds::CenteredBot(Rectangle::new(
+                        TextBounds::CenteredTop(Rectangle::new(
                             Point::new(0, insert_at),
-                            Point::new(screensize.x, insert_at + self.item_height),
+                            Point::new(screensize.x, insert_at + self.item_height * 3),
                         )),
                     );
-                    insert_at += self.item_height;
                     box_text.draw_border = false;
                     box_text.clear_area = false;
                     box_text.ellipsis = true;
                     box_text.style = self.style;
                     box_text.invert = true;
                     // line 1
-                    write!(box_text, "{}", &pw.description).ok();
+                    write!(box_text, "{}/{} [{}]", &entry.name(), &entry.extra, entry.count).ok();
                     self.gfx.draw_textview(&mut box_text).unwrap();
-                    // line 2
-                    box_text.bounds_hint = TextBounds::CenteredBot(Rectangle::new(
-                        Point::new(0, insert_at),
-                        Point::new(screensize.x, insert_at + self.item_height),
-                    ));
-                    insert_at += self.item_height;
-                    box_text.clear_str();
-                    write!(box_text, "{}", &pw.username).ok();
-                    self.gfx.draw_textview(&mut box_text).ok();
-                    // draw a rectangle around the top area
-                    self.gfx
-                        .draw_rectangle(Rectangle::new_coords_with_style(
-                            0,
-                            0,
-                            screensize.x,
-                            self.item_height * 2,
-                            DrawStyle {
-                                fill_color: None,
-                                stroke_color: Some(PixelColor::Light),
-                                stroke_width: 2,
-                            },
-                        ))
-                        .ok();
+                    insert_at += box_text.bounds_computed.unwrap().height() as isize;
                 } else {
-                    // draw a rectangle around the top area
+                    // draw just the empty rectangle around the top area if nothing is selected
                     self.gfx
                         .draw_rectangle(Rectangle::new_coords_with_style(
                             0,
@@ -420,77 +405,65 @@ impl VaultUi {
                     log::error!("Couldn't retrieve password info to render top area");
                     insert_at = self.item_height * 2;
                 };
-                // ---- draw list body area ----
-                let selected = self.item_lists.lock().unwrap().selected_index(VaultMode::Password);
-                let mut guarded_list = self.item_lists.lock().unwrap();
-                let current_page = guarded_list.selected_page(VaultMode::Password);
-                log::debug!("current_page len {}", current_page.len());
-                for (index, item) in current_page.iter_mut().enumerate() {
-                    if insert_at - 1 > screensize.y - self.item_height {
-                        // -1 because of the overlapping border
-                        break;
-                    }
-                    log::debug!("drawing {}", item.name());
-                    let mut box_text = TextView::new(
-                        Gid::dummy(),
-                        TextBounds::BoundingBox(Rectangle::new(
-                            Point::new(0, insert_at),
-                            Point::new(screensize.x, insert_at + self.item_height),
-                        )),
-                    );
-                    box_text.draw_border = false;
-                    box_text.rounded_border = None;
-                    box_text.clear_area = false;
-                    box_text.style = self.style;
-                    box_text.ellipsis = true;
-                    if index == selected {
-                        box_text.invert = false;
-                    } else {
-                        box_text.invert = true;
-                    }
-                    write!(box_text, "{}", item.name()).ok();
-                    // do a dry run to get the final bounding box
-                    box_text.set_dry_run(true);
-                    self.gfx.draw_textview(&mut box_text).expect("couldn't post list item");
-                    if index == selected {
-                        let mut r = box_text.bounds_computed.unwrap();
-                        r.style = DrawStyle {
-                            fill_color: Some(PixelColor::Light),
-                            stroke_color: None,
-                            stroke_width: 0,
-                        };
-                        self.gfx.draw_rectangle(r).ok();
-                    }
-                    // now draw for reals
-                    box_text.set_dry_run(false);
-                    self.gfx.draw_textview(&mut box_text).expect("couldn't post list item");
-
-                    insert_at += self.item_height;
-                }
+                self.display_list.draw(insert_at);
             }
         }
         self.gfx.flush().ok();
+    }
+
+    /// Returns `true` if in longpress state. Only call this once per key hit input.
+    pub(crate) fn manage_longpress(&mut self) -> bool {
+        let now = self.tt.elapsed_ms();
+        if now - self.last_key_time > KEYUP_DELAY_MS {
+            self.start_hold_time = now;
+        }
+        self.last_key_time = now;
+        now - self.start_hold_time > FAST_SCROLL_DELAY_MS
     }
 
     pub(crate) fn nav(&mut self, dir: NavDir) {
         let mode_at_entry = (*self.mode.lock().unwrap()).clone();
         match mode_at_entry {
             VaultMode::Password => {
-                self.item_lists.lock().unwrap().nav((*self.mode.lock().unwrap()).clone(), dir);
+                let increment = if self.manage_longpress() { PAGE_INCREMENT } else { 1 };
+                match dir {
+                    NavDir::Up => {
+                        for _ in 0..increment {
+                            self.display_list.key_action('↑');
+                        }
+                    }
+                    NavDir::Down => {
+                        for _ in 0..increment {
+                            self.display_list.key_action('↓');
+                        }
+                    }
+                    NavDir::Autotype => {
+                        if let Some(item) = self.get_selected_item() {
+                            // print any errors within this function as a panic at this line
+                            self.handle_autotype(item.guid, false).unwrap();
+                        }
+                    }
+                    NavDir::Reserved => {
+                        // tbd
+                    }
+                }
             }
             VaultMode::Totp => {
                 match dir {
                     NavDir::Up => {
-                        self.totp_list.key_action('↑');
+                        self.display_list.key_action('↑');
                     }
                     NavDir::Down => {
-                        self.totp_list.key_action('↓');
+                        self.display_list.key_action('↓');
                     }
-                    _ => {
+                    NavDir::Autotype => {
                         if let Some(code) = self.update_selected_totp_code() {
                             // ignore USB errors while sending code
                             self.usb_dev.send_str(&code).ok();
                         }
+                    }
+                    NavDir::Reserved => {
+                        // tbd
                     }
                 }
                 self.totp_code = None;
@@ -502,8 +475,50 @@ impl VaultUi {
         self.item_lists.lock().unwrap().filter(self.mode.lock().unwrap().clone(), criteria);
     }
 
-    pub(crate) fn selected_entry(&self) -> Option<SelectedEntry> {
-        let mode = (*self.mode.lock().unwrap()).clone();
-        self.item_lists.lock().unwrap().selected_entry(mode)
+    pub(crate) fn handle_autotype(&mut self, guid: String, type_username: bool) -> Result<(), String> {
+        // we re-fetch the entry for autotype, because the PDDB could have unmounted a basis.
+        let atime = utc_now().timestamp() as u64;
+        let pddb_binding = self.pddb.borrow();
+
+        let mut record = pddb_binding
+            .get(vault2::VAULT_PASSWORD_DICT, &guid, None, false, false, None, Some(vault2::basis_change))
+            .map_err(|e| format!("couldn't access key {}: {:?}", guid, e))?;
+        let mut data = Vec::<u8>::new();
+        record.read_to_end(&mut data).map_err(|_| format!("Couldn't access key {}", guid))?;
+        let mut pw = crate::storage::PasswordRecord::try_from(data)
+            .map_err(|_| format!("Couldn't deserialize {}", guid))?;
+        let to_type = if type_username { &pw.username } else { &pw.password };
+        self.usb_dev.send_str(to_type).ok(); // ignore USB errors
+        pw.count += 1;
+        pw.atime = atime;
+
+        // this get determines which basis the key is in
+        let app_data = pddb_binding
+            .get(vault2::VAULT_PASSWORD_DICT, &guid, None, true, true, Some(256), Some(vault2::basis_change))
+            .map_err(|e| format!("error updating key atime: {:?}", e))?;
+        let basis = app_data.attributes().map_err(|_| "couldn't get attributes")?.basis;
+
+        // delete the old key
+        pddb_binding
+            .delete_key(vault2::VAULT_PASSWORD_DICT, &guid, Some(&basis))
+            .map_err(|_| "Couldn't delete previous pw entry")?;
+
+        // write the new key in
+        let mut record = pddb_binding
+            .get(
+                vault2::VAULT_PASSWORD_DICT,
+                &guid,
+                Some(&basis),
+                false,
+                true,
+                Some(vault2::VAULT_ALLOC_HINT),
+                Some(vault2::basis_change),
+            )
+            .map_err(|e| format!("couldn't update key {}: {:?}", guid, e))?;
+        let ser: Vec<u8> = crate::storage::PasswordRecord::into(pw);
+        record.write(&ser).map_err(|e| format!("couldn't update key {}: {:?}", guid, e))?;
+
+        self.pddb.borrow().sync().ok();
+        Ok(())
     }
 }

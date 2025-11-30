@@ -645,9 +645,12 @@ pub enum PasswordSerializationError {
 #[derive(Default)]
 pub struct PasswordRecord {
     pub version: u32,
+    // This contains the URL
     pub description: String,
+    // Username associated with the URL
     pub username: String,
     pub password: String,
+    // Initially contains just "Notes", but will contain the old password when updated
     pub notes: String,
     pub ctime: u64,
     pub atime: u64,

@@ -37,6 +37,11 @@ impl CheckBoxes {
 
     pub fn add_item(&mut self, new_item: ItemName) { self.items.push(new_item); }
 
+    pub fn add_checked_item(&mut self, new_item: ItemName) {
+        self.action_payload.add(&new_item.0);
+        self.items.push(new_item);
+    }
+
     pub fn clear_items(&mut self) { self.items.clear(); }
 }
 impl ActionApi for CheckBoxes {

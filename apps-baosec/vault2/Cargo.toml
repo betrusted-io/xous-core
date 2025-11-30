@@ -48,6 +48,7 @@ chrono = { version = "0.4.33", default-features = false, features = ["std"] }
 
 # password generation
 passwords = "3.1.9"
+random-pick = { version = "1.2.15" }
 
 # totp
 sha1 = "0.10.6"
@@ -59,8 +60,6 @@ sntpc = { version = "0.3.1" }
 # net = { path = "../../services/net" }
 # com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 
-# testing
-random-pick = { version = "1.2.15", optional = true }
 
 [dev-dependencies]
 enum-iterator = "0.6.0"
@@ -88,7 +87,7 @@ fuzz = []
 debug_ctap = []
 autotest = []
 multireset = [] # allows credential reset more than once per boot
-vault-testing = ["random-pick"]
+vault-testing = []
 osk-upgrade = [
 ] # placeholder to select out OpenSK's "vendor upgrade" over HID, which we don't use because we have our own upgrade path.
 xous = [

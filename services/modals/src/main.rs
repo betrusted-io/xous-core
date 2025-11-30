@@ -117,7 +117,7 @@ fn wrapped_main() -> ! {
     text_action.action_conn = renderer_cid;
     text_action.action_opcode = Opcode::TextEntryReturn.to_u32().unwrap();
 
-    let mut fixed_items = Vec::<ItemName>::new();
+    let mut fixed_items = Vec::<(bool, ItemName)>::new();
     let mut progress_action = Slider::new(
         renderer_cid,
         Opcode::SliderReturn.to_u32().unwrap(),
@@ -386,7 +386,7 @@ fn wrapped_main() -> ! {
                     );
                     continue;
                 }
-                fixed_items.push(manageditem.item);
+                fixed_items.push((manageditem.state, manageditem.item));
             }
             Some(Opcode::GetModalIndex) => {
                 xous::return_scalar(msg.sender, list_selected as usize)
@@ -635,7 +635,7 @@ fn wrapped_main() -> ! {
                             RadioButtons::new(renderer_cid, Opcode::RadioReturn.to_u32().unwrap());
                         list_hash.clear();
                         list_selected = 0u32;
-                        for item in fixed_items.iter() {
+                        for (_, item) in fixed_items.iter() {
                             radiobuttons.add_item(item.clone());
                             list_hash.insert(item.as_str().to_string(), list_hash.len());
                         }
@@ -660,8 +660,12 @@ fn wrapped_main() -> ! {
                             CheckBoxes::new(renderer_cid, Opcode::CheckBoxReturn.to_u32().unwrap());
                         list_hash.clear();
                         list_selected = 0u32;
-                        for item in fixed_items.iter() {
-                            checkbox.add_item(item.clone());
+                        for (checked, item) in fixed_items.iter() {
+                            if *checked {
+                                checkbox.add_checked_item(item.clone());
+                            } else {
+                                checkbox.add_item(item.clone());
+                            }
                             list_hash.insert(item.as_str().to_string(), list_hash.len());
                         }
                         fixed_items.clear();
@@ -981,18 +985,15 @@ fn wrapped_main() -> ! {
                         };
                         response.replace(item.clone()).unwrap();
                         op = RendererState::None;
-                        for (_, check_item) in item.payload().iter().enumerate() {
-                            match check_item {
-                                Some(item) => match list_hash.get(item.as_str()) {
-                                    Some(index) => {
-                                        match index {
-                                            0..=31 => drop(list_selected.set_bit(*index, true)),
-                                            _ => log::warn!("invalid bitfield index"),
-                                        };
-                                    }
-                                    None => log::warn!("failed to set list_selected index"),
-                                },
-                                None => {}
+                        for (_, item) in item.payload().iter().enumerate() {
+                            match list_hash.get(item.as_str()) {
+                                Some(index) => {
+                                    match index {
+                                        0..=31 => drop(list_selected.set_bit(*index, true)),
+                                        _ => log::warn!("invalid bitfield index"),
+                                    };
+                                }
+                                None => log::warn!("failed to set list_selected index"),
                             }
                         }
                     } else {

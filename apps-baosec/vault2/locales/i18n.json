@@ -1,4 +1,11 @@
 {
+    "vault.add_new": {
+        "en": "<Add New...>",
+        "en-tts": "<Add New...>",
+        "fr": "<Ajouter…>",
+        "ja": "<新規追加…>",
+        "zh": "<新增…>"
+    },
     "vault.autotyping": {
         "en": "Autotyping...",
         "en-tts": "Autotyping...",
@@ -69,6 +76,13 @@
         "ja": "パスワードフィールドはBIP39としてエンコードできません。",
         "zh": "密码字段不可编码为 BIP39。"
     },
+    "vault.cancel": {
+        "en": "Cancel",
+        "en-tts": "Cancel",
+        "fr": "Annuler",
+        "ja": "キャンセル",
+        "zh": "取消"
+    },
     "vault.completed": {
         "en": "Operation completed.",
         "en-tts": "Operation completed.",
@@ -76,12 +90,26 @@
         "ja": "操作が完了しました.",
         "zh": "操作完成."
     },
+    "vault.configure": {
+        "en": "Configure",
+        "en-tts": "Configure",
+        "fr": "Configurer",
+        "ja": "設定する",
+        "zh": "配置"
+    },
     "vault.delete.confirm": {
-        "en": "Confirm entry deletion: ",
-        "en-tts": "Confirm entry deletion: ",
-        "fr": "Confirmer la suppression des entrée: ",
-        "ja": "エントリの削除を確認する: ",
-        "zh": "确认条目删除: "
+        "en": "Delete?",
+        "en-tts": "Delete?",
+        "fr": "Supprimer?",
+        "ja": "削除しますか？",
+        "zh": "删除？"
+    },
+    "vault.edit": {
+        "en": "Edit",
+        "en-tts": "Edit",
+        "fr": "Modifier",
+        "ja": "編集",
+        "zh": "编辑"
     },
     "vault.edit_dialog": {
         "en": "Make your changes and press enter.\nUse the d-pad to navigate entries.",
@@ -223,6 +251,13 @@
         "ja": "FIDOホストがPINを作成しています。\n任意のキーを押して受け入れます。",
         "zh": "FIDO 主机正在创建 PIN。\n按任意键接受。"
     },
+    "vault.generated": {
+        "en": "Generated",
+        "en-tts": "Generated",
+        "fr": "Généré",
+        "ja": "生成済み",
+        "zh": "已生成"
+    },
     "vault.hotp.count": {
         "en": "Please enter the initial HOTP count:",
         "en-tts": "Please enter the initial HOTP count:",
@@ -257,6 +292,13 @@
         "fr": "Le secret partagé n’est pas valide Base32",
         "ja": "共有秘密は無効ですBase32",
         "zh": "共享密钥无效 Base32"
+    },
+    "vault.length": {
+        "en": "Length",
+        "en-tts": "Length",
+        "fr": "Longueur",
+        "ja": "長さ",
+        "zh": "长度"
     },
     "vault.menu_addnew": {
         "en": "Add new item",
@@ -392,9 +434,9 @@
         "zh": "这是哪种类型的 OTP 记录（如果您不知道，可能是 TOTP）？"
     },
     "vault.newitem.lowercase": {
-        "en": "Lowercase letters",
-        "en-tts": "Lowercase letters",
-        "fr": "Lettres minuscules",
+        "en": "Lowercase",
+        "en-tts": "Lowercase",
+        "fr": "Minuscules",
         "ja": "小文字",
         "zh": "小写字母"
     },
@@ -426,6 +468,13 @@
         "ja": "シンボル",
         "zh": "符号"
     },
+    "vault.newitem.symbols_customize": {
+        "en": "Edit symbols",
+        "en-tts": "Edit symbols",
+        "fr": "Modifier symboles",
+        "ja": "記号を編集",
+        "zh": "编辑符号"
+    },
     "vault.newitem.totp": {
         "en": "TOTP",
         "en-tts": "TOTP",
@@ -441,9 +490,9 @@
         "zh": "在 Base32 中输入 OTP 共享密钥："
     },
     "vault.newitem.uppercase": {
-        "en": "Uppercase letters",
-        "en-tts": "Uppercase letters",
-        "fr": "Lettres majuscules",
+        "en": "Uppercase",
+        "en-tts": "Uppercase",
+        "fr": "Majuscules",
         "ja": "大文字",
         "zh": "大写字母"
     },
@@ -475,6 +524,13 @@
         "ja": "ノート",
         "zh": "笔录"
     },
+    "vault.pw.approval": {
+        "en": "Use",
+        "en-tts": "Use",
+        "fr": "Utiliser",
+        "ja": "使用",
+        "zh": "使用"
+    },
     "vault.readout_active": {
         "en": "🔓Readout mode active.🔓\n\nHost is permitted to read and write unlocked records.\n\nPlease run your host scripts, then press any key to restore security.",
         "en-tts": "Readout mode active.\n\nHost is permitted to read and write unlocked records.\n\nPlease run your host scripts, then press any key to restore security.",
@@ -503,11 +559,25 @@
         "ja": "フォントを選択する",
         "zh": "选择字体"
     },
+    "vault.use": {
+        "en": "Use",
+        "en-tts": "Use",
+        "fr": "Utiliser",
+        "ja": "使用",
+        "zh": "使用"
+    },
+    "vault.username": {
+        "en": "Username",
+        "en-tts": "Username",
+        "fr": "Nom d’utilisateur",
+        "ja": "ユーザー名",
+        "zh": "用户名"
+    },
     "vault.u2f.appinfo.authcount": {
-        "en": "Usage count: ",
-        "en-tts": "Usage count: ",
-        "fr": "Nombre d’usages: ",
-        "ja": "使用回数: ",
+        "en": "Uses: ",
+        "en-tts": "Uses: ",
+        "fr": "Usages : ",
+        "ja": "使用数: ",
         "zh": "使用次数: "
     },
     "vault.u2f.appinfo.days_ago": {

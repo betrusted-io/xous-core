@@ -1,7 +1,5 @@
 use zeroize::Zeroize;
 
-use super::*;
-
 /// We use a new type for item names, so that it's easy to resize this as needed.
 #[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct ItemName(String);
@@ -72,45 +70,28 @@ impl RadioButtonPayload {
     pub fn clear(&mut self) { self.0.0.clear(); }
 }
 #[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub struct CheckBoxPayload(pub [Option<ItemName>; MAX_ITEMS]); // returns a list of potential items that could be selected
+pub struct CheckBoxPayload(Vec<ItemName>); // returns a list of potential items that could be selected
 impl CheckBoxPayload {
-    pub fn new() -> Self { CheckBoxPayload([const { None }; MAX_ITEMS]) }
+    pub fn new() -> Self { CheckBoxPayload(Vec::new()) }
 
-    pub fn payload(self) -> [Option<ItemName>; MAX_ITEMS] { self.0 }
+    pub fn payload(self) -> Vec<ItemName> { self.0 }
 
-    pub fn contains(&self, name: &str) -> bool {
-        for maybe_item in self.0.iter() {
-            if let Some(item) = maybe_item {
-                if item.as_str() == name {
-                    return true;
-                }
-            }
-        }
-        false
-    }
+    pub fn contains(&self, name: &str) -> bool { self.0.iter().any(|item| item.0 == name) }
 
     pub fn add(&mut self, name: &str) -> bool {
         if self.contains(name) {
             return true;
         }
-        for maybe_item in self.0.iter_mut() {
-            if maybe_item.is_none() {
-                *maybe_item = Some(ItemName::new(name));
-                return true;
-            }
-        }
-        false
+        self.0.push(ItemName::new(name));
+        true
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
-        for maybe_item in self.0.iter_mut() {
-            if let Some(item) = maybe_item {
-                if item.as_str() == name {
-                    *maybe_item = None;
-                    return true;
-                }
-            }
+        if let Some(pos) = self.0.iter().position(|item| item.0 == name) {
+            self.0.remove(pos);
+            true
+        } else {
+            false
         }
-        false
     }
 }

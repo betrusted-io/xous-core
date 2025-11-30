@@ -8,7 +8,7 @@ use crate::minigfx::*;
 use crate::service::api::Gid;
 
 const MAX_FIELDS: i16 = 10;
-pub const MAX_ITEMS: usize = 8;
+pub const MAX_ITEMS: usize = 40;
 
 pub type ValidatorErr = String;
 pub type Payloads = [TextEntryPayload; MAX_FIELDS as usize];
@@ -324,7 +324,7 @@ impl ActionApi for TextEntry {
                     }
                 }
                 // end the session by pressing the middle screen button
-                '\u{d}' => {
+                '\u{d}' | '🔥' => {
                     self.osk_active = false;
 
                     // run the validator

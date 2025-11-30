@@ -124,7 +124,17 @@ pub(crate) fn panic_handler_thread(
                 }
                 .get();
                 let s = unsafe { core::str::from_utf8_unchecked(&body.buf.as_slice()[..len]) };
-                append_string(s, &mut display);
+                const MAX_CHARS: usize = 7 * 18; // 7 lines by 18 characters is what the display can hold
+                if s.chars().count() <= MAX_CHARS {
+                    append_string(s, &mut display);
+                } else {
+                    // truncate very long panic messages to just show the *end* as that contains the useful
+                    // information (the front tends to be stuff like path information in the build)
+                    append_string(
+                        s.char_indices().rev().take(MAX_CHARS).last().map(|(i, _)| &s[i..]).unwrap(),
+                        &mut display,
+                    );
+                }
                 display.draw();
             }
         }
