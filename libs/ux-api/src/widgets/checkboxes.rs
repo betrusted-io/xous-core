@@ -30,6 +30,13 @@ impl CheckBoxes {
         self.items.insert_item(0, list_len - 1, &unchecked_item);
     }
 
+    pub fn add_checked_item(&mut self, new_item: ItemName) {
+        let checked_item = format!("{}{}", CHECKED, new_item.as_str());
+        let list_len = self.items.col_length(0).unwrap_or(1);
+        self.items.insert_item(0, list_len - 1, &checked_item);
+        self.action_payload.add(&checked_item);
+    }
+
     pub fn clear_items(&mut self) { self.items.clear(); }
 }
 
