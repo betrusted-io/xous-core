@@ -28,6 +28,7 @@ pub struct ManagedPromptWithFixedResponse {
 pub struct ManagedListItem {
     pub token: [u32; 4],
     pub item: ItemName,
+    pub state: bool,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
