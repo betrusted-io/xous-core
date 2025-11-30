@@ -10,6 +10,7 @@ mod totp;
 pub mod vault_api;
 use ux_api::service::gfx::Gfx;
 pub use vault_api::*;
+mod generator;
 mod vendor_commands;
 
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -465,9 +466,7 @@ fn main() -> ! {
                                 ),
                             )
                             .ok();
-                            if *mode.lock().unwrap() == VaultMode::Totp {
-                                vault_ui.refresh_draw_list();
-                            }
+                            vault_ui.refresh_draw_list();
                             vault_ui.redraw();
                         }
                         _ => {
@@ -504,6 +503,24 @@ fn main() -> ! {
                     _ => log::error!("get_radiobutton failed"),
                 }
                 allow_totp_rendering.store(true, Ordering::SeqCst);
+            }
+            Some(VaultOp::MenuDeleteStage1) => {
+                allow_totp_rendering.store(false, Ordering::SeqCst);
+                if let Some(entry) = vault_ui.selected_entry() {
+                    let buf = Buffer::into_buf(entry).expect("IPC error");
+                    buf.lend(actions_conn, ActionOp::MenuDeleteStage2.to_u32().unwrap())
+                        .expect("messaging error");
+                } else {
+                    modals.show_notification(t!("vault.error.nothing_selected", locales::LANG), None).ok();
+                }
+                xous::send_message(
+                    actions_conn,
+                    xous::Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
+                allow_totp_rendering.store(true, Ordering::SeqCst);
+                vault_ui.refresh_draw_list();
+                vault_ui.redraw();
             }
             Some(VaultOp::BasisChange) => {
                 vault_ui.basis_change();

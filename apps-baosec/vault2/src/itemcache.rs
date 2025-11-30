@@ -59,8 +59,11 @@ impl PartialEq<ListItem> for ListKey {
 /// "extra" is more information about the item, which should not be part of the sort.
 #[derive(Debug, Clone)]
 pub struct ListItem {
+    // for passwords, this is the URL of the password
     name: String,
+    /// This is the name, but made all lowercase so that the sort goes strictly alphabetical
     sortable_name: String,
+    // for passwords, this is the username associated with the URL
     pub extra: String,
     /// this is the name of the key used to refer to the item
     pub guid: String,
@@ -113,7 +116,9 @@ impl ListItem {
 
     pub fn key(&self) -> String { Self::key_from_parts(&self.name, &self.guid) }
 
-    pub fn name(&self) -> &String { &self.name }
+    pub fn name(&self) -> &str { &self.name }
+
+    pub fn extra(&self) -> &str { &self.extra }
 
     pub fn name_clear(&mut self) {
         self.name.clear();
@@ -145,6 +150,10 @@ impl FilteredListView {
             items_per_screen: NonZeroUsize::new(1).unwrap(),
             filter_range: None,
         }
+    }
+
+    pub fn find_by_name(&self, name: &str) -> Vec<ListItem> {
+        self.list.iter().filter(|item| item.name() == name).cloned().collect()
     }
 
     pub fn is_db_empty(&self) -> bool { self.list.len() == 0 }
@@ -282,6 +291,14 @@ impl ItemLists {
     pub fn new() -> Self { ItemLists { totp: FilteredListView::new(), pw: FilteredListView::new() } }
 
     pub fn is_db_empty(&self, list_type: VaultMode) -> bool { self.li(list_type).is_db_empty() }
+
+    pub fn find_by_name(&self, mode: VaultMode, name: &str) -> Vec<ListItem> {
+        let view = match mode {
+            VaultMode::Password => &self.pw,
+            VaultMode::Totp => &self.totp,
+        };
+        view.find_by_name(name)
+    }
 
     fn li_mut(&mut self, list_type: VaultMode) -> &mut FilteredListView {
         match list_type {

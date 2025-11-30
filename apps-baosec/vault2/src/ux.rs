@@ -9,7 +9,7 @@ use ux_api::service::gfx::Gfx;
 use ux_api::widgets::ScrollableList;
 use xous::CID;
 
-use crate::storage::{ContentKind, Manager};
+use crate::storage::Manager;
 use crate::*;
 
 const FAST_SCROLL_DELAY_MS: u64 = 1300;
@@ -384,7 +384,7 @@ impl VaultUi {
                     box_text.style = self.style;
                     box_text.invert = true;
                     // line 1
-                    write!(box_text, "{} {}", &entry.name(), &entry.extra).ok();
+                    write!(box_text, "{}/{} [{}]", &entry.name(), &entry.extra, entry.count).ok();
                     self.gfx.draw_textview(&mut box_text).unwrap();
                     insert_at += box_text.bounds_computed.unwrap().height() as isize;
                 } else {

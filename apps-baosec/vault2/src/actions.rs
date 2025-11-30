@@ -2,11 +2,12 @@ use core::convert::TryFrom;
 use std::cell::RefCell;
 use std::io::ErrorKind;
 use std::io::Write;
+use std::path::Path;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
-use std::time::SystemTime;
+use std::{fs::File, io, io::BufRead};
 
 #[cfg(feature = "hosted-baosec")]
 use bao1x_emu::trng::Trng;
@@ -20,12 +21,12 @@ use num_traits::*;
 use passwords::PasswordGenerator;
 use pddb::BasisRetentionPolicy;
 use ux_api::widgets::TextEntryPayload;
-use vault2::{
-    AppInfo, VAULT_ALLOC_HINT, VAULT_PASSWORD_DICT, VAULT_TOTP_DICT, atime_to_str, basis_change,
-    deserialize_app_info, serialize_app_info, utc_now,
-};
+use vault2::{VAULT_PASSWORD_DICT, VAULT_TOTP_DICT, atime_to_str, utc_now};
 use xous::{Message, send_message};
 
+use crate::VAULT_CONFIG_GENERATOR;
+use crate::VAULT_CONFIG_USERNAMES;
+use crate::generator::*;
 use crate::storage::{self, PasswordRecord, StorageContent};
 use crate::totp::TotpAlgorithm;
 use crate::{ItemLists, SelectedEntry, VaultMode};
@@ -79,6 +80,8 @@ pub struct ActionManager {
     gfx: ux_api::service::gfx::Gfx,
     // used to set time when QR codes are scanned
     rtc_conn: xous::CID,
+    // used to type passwords
+    usb_dev: usb_bao1x::UsbHid,
 }
 impl ActionManager {
     pub fn new(
@@ -111,6 +114,7 @@ impl ActionManager {
             keystore: Keystore::new(&xns),
             gfx: ux_api::service::gfx::Gfx::new(&xns).unwrap(),
             rtc_conn,
+            usb_dev: usb_bao1x::UsbHid::new(),
         }
     }
 
@@ -134,6 +138,225 @@ impl ActionManager {
             Message::new_scalar(crate::VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0),
         )
         .ok();
+    }
+
+    /// This will create a password for `url`, associating it with a `username`. Returns an Option<&str>
+    /// if the user selects to immediately use the password.
+    pub(crate) fn add_password(&mut self, url: &str) -> Result<String, String> {
+        // 1. Pick or enter a username from the username list. The list always has an entry for <Add New...>,
+        //    which prompts a user to enter a new one, and save it to the list.
+        // 2. Present a default password using standard parameters. Options are "Use", "Edit", "Configure",
+        //    "Cancel"
+        // 3. Configure will present options of: length -> use [numbers, uppercase, lowercase, specials] -> if
+        //    specials
+        // is selected, a checkbox list of which specials, with the "safe set" selected. These options are
+        // remembered and applied next time the password generator is run.
+        // 4. "Use" will save the password, and then type it
+        // 5. "Edit" will go to the standard text editing method
+        // 6. "Cancel" just returns None, and makes no changes to anything.
+
+        let mut usernames: Vec<String> = if let Ok(file) = File::open(VAULT_CONFIG_USERNAMES) {
+            let reader = std::io::BufReader::new(file);
+            reader.lines().collect::<io::Result<Vec<String>>>().map_err(|_| "Can't read usernames")?
+        } else {
+            // Create new file and write default content
+            std::fs::create_dir_all(Path::new(VAULT_CONFIG_USERNAMES).parent().unwrap()).unwrap();
+            let mut file = File::create(VAULT_CONFIG_USERNAMES).unwrap();
+            file.write_all("".as_bytes()).unwrap();
+            Vec::new()
+        };
+
+        let username = {
+            let mut usernames_refs: Vec<&str> = usernames.iter().map(AsRef::as_ref).collect();
+            usernames_refs.push(t!("vault.add_new", locales::LANG));
+            self.modals.add_list(usernames_refs).unwrap();
+            match self.modals.get_radiobutton(t!("vault.username", locales::LANG)) {
+                Ok(response) => {
+                    if response == t!("vault.add_new", locales::LANG) {
+                        let new_username = &self
+                            .modals
+                            .alert_builder("")
+                            .field(None, None)
+                            .build()
+                            .map_err(|e| format!("Error entering username: {:?}", e))?
+                            .content()[0]
+                            .content;
+                        usernames.push(new_username.to_owned());
+                        let mut file = File::create(VAULT_CONFIG_USERNAMES)
+                            .map_err(|e| format!("Couldn't open usernames file for writing: {:?}", e))?;
+                        for username in usernames {
+                            writeln!(file, "{}", username)
+                                .map_err(|e| format!("Couldn't write username: {:?}", e))?;
+                        }
+                        new_username.to_owned()
+                    } else {
+                        response
+                    }
+                }
+                Err(e) => return Err(format!("Error selecting user: {:?}", e)),
+            }
+        };
+
+        let mut generator_modified = false;
+        let mut generator_config: GeneratorConfig = if let Ok(file) = File::open(VAULT_CONFIG_GENERATOR) {
+            GeneratorConfig::deserialize(file).unwrap_or(GeneratorConfig::default())
+        } else {
+            generator_modified = true;
+            GeneratorConfig::default()
+        };
+        let mut pw: Option<String> = None;
+        loop {
+            let pools = generator_config.to_pools();
+            if pw.is_none() {
+                pw = Some(generate(&pools, generator_config.length, true));
+            }
+            let password_options = vec![
+                t!("vault.pw.approval", locales::LANG),
+                t!("vault.edit", locales::LANG),
+                t!("vault.configure", locales::LANG),
+                t!("vault.cancel", locales::LANG),
+            ];
+            self.modals.add_list(password_options).unwrap();
+            match self.modals.get_radiobutton(&format!(
+                "{}:\n{}",
+                t!("vault.generated", locales::LANG),
+                &pw.as_ref().unwrap()
+            )) {
+                Ok(response) => {
+                    if response == t!("vault.pw.approval", locales::LANG) {
+                        break;
+                    } else if response == t!("vault.edit", locales::LANG) {
+                        let new_pw = &self
+                            .modals
+                            .alert_builder("")
+                            .field(pw, Some(password_validator))
+                            .build()
+                            .map_err(|e| format!("Error editing password: {:?}", e))?
+                            .content()[0]
+                            .content;
+                        pw = Some(if new_pw.len() > 0 {
+                            new_pw.clone()
+                        } else {
+                            // empty password is shortcut to regenerate from scratch
+                            generate(&pools, generator_config.length, true)
+                        });
+                    } else if response == t!("vault.configure", locales::LANG) {
+                        pw.take();
+                        generator_modified = true;
+                        let mut modified_config = generator_config.clone();
+                        // get length
+                        generator_config.length = usize::from_str_radix(
+                            self.modals
+                                .alert_builder(t!("vault.length", locales::LANG))
+                                .field(Some(generator_config.length.to_string()), Some(length_validator))
+                                .build()
+                                .map_err(|e| format!("Error getting length: {:?}", e))?
+                                .content()[0]
+                                .as_str(),
+                            10,
+                        )
+                        .unwrap_or(crate::generator::DEFAULT_LENGTH);
+                        // configure character sets
+                        let config_options = vec![
+                            (modified_config.lower, t!("vault.newitem.lowercase", locales::LANG)),
+                            (modified_config.upper, t!("vault.newitem.uppercase", locales::LANG)),
+                            (modified_config.numbers, t!("vault.newitem.numbers", locales::LANG)),
+                            (modified_config.use_symbols, t!("vault.newitem.symbols", locales::LANG)),
+                            (false, t!("vault.newitem.symbols_customize", locales::LANG)),
+                        ];
+                        self.modals.add_stateful_list(config_options).unwrap();
+                        match self.modals.get_checkbox(&format!("{}:", t!("vault.use", locales::LANG))) {
+                            Ok(options) => {
+                                let mut modify_symbols = false;
+                                for option in options {
+                                    if option == t!("vault.newitem.lowercase", locales::LANG) {
+                                        modified_config.lower = true;
+                                    } else if option == t!("vault.newitem.uppercase", locales::LANG) {
+                                        modified_config.upper = true;
+                                    } else if option == t!("vault.newitem.numbers", locales::LANG) {
+                                        modified_config.numbers = true;
+                                    } else if option == t!("vault.newitem.symbols", locales::LANG) {
+                                        modified_config.use_symbols = true;
+                                    } else if option == t!("vault.newitem.symbols_customize", locales::LANG) {
+                                        modify_symbols = true;
+                                    }
+                                }
+                                if modify_symbols {
+                                    let mut symbol_states = Vec::<(bool, &str)>::new();
+                                    let symbols_str: Vec<String> =
+                                        SYMBOLS_ALL.iter().map(|c| c.to_string()).collect();
+                                    log::info!("config: {:?}", modified_config);
+                                    for (&state, sym) in
+                                        modified_config.symbols.iter().zip(symbols_str.iter())
+                                    {
+                                        symbol_states.push((state, sym))
+                                    }
+                                    log::info!("states: {:?}", symbol_states);
+                                    self.modals.add_stateful_list(symbol_states).unwrap();
+                                    let new_states = self
+                                        .modals
+                                        .get_checkbox(&format!("{}:", t!("vault.use", locales::LANG)))
+                                        .map_err(|e| format!("Can't get symbol list: {:?}", e))?;
+                                    log::info!("new states: {:?}", new_states);
+                                    for (new_state, sym) in
+                                        modified_config.symbols.iter_mut().zip(symbols_str.iter())
+                                    {
+                                        *new_state = new_states.contains(sym);
+                                    }
+                                    log::info!("updated list: {:?}", modified_config);
+                                }
+                                if !modified_config.lower
+                                    && !modified_config.upper
+                                    && !modified_config.numbers
+                                    && !modified_config.use_symbols
+                                {
+                                    log::warn!(
+                                        "Invalid generator config - nothing selected. Going back to previous config."
+                                    );
+                                    generator_modified = false;
+                                } else {
+                                    generator_config = modified_config;
+                                }
+                            }
+                            Err(e) => return Err(format!("Couldn't get options: {:?}", e)),
+                        }
+                        log::info!("leaving config with modified: {:?}", generator_modified);
+                    } else {
+                        return Err("Operation canceled by user".to_string());
+                    }
+                }
+                Err(e) => return Err(format!("Couldn't get password approval: {:?}", e)),
+            }
+        }
+        // create password from url/username/pw tuple
+        let now = crate::utc_now().timestamp() as u64;
+        let mut record = storage::PasswordRecord {
+            version: VAULT_PASSWORD_REC_VERSION,
+            description: url.to_string(),
+            username,
+            password: pw.as_ref().unwrap().to_owned(),
+            notes: t!("vault.notes", locales::LANG).to_string(),
+            ctime: now,
+            atime: now,
+            count: 1,
+        };
+        // store & update UI
+        self.storage
+            .borrow_mut()
+            .new_record(&mut record, None, true)
+            .map_err(|e| format!("Couldn't write record: {:?}", e))?; // update the ux cache
+        let li = make_pw_item_from_record(&storage::hex(record.hash()), record);
+        self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
+        // update generator if modified
+        if generator_modified {
+            // Create new file and write configuration content
+            let file = File::create(VAULT_CONFIG_GENERATOR).unwrap();
+            log::info!("serializing generator: {:?}", generator_config);
+            generator_config
+                .serialize(file)
+                .map_err(|e| format!("Error saving generator config: {:?}", e))?;
+        }
+        Ok(pw.unwrap())
     }
 
     /// This routine is now required to update the itemlist data as well as the PDDB to save on
@@ -905,7 +1128,7 @@ impl ActionManager {
                                         if prev_entry.atime != pw_rec.atime
                                             || prev_entry.count != pw_rec.count
                                         {
-                                            write!(extra, "[{}]", pw_rec.count).ok();
+                                            write!(extra, "{}", pw_rec.username).ok();
                                             prev_entry.extra.clear();
                                             prev_entry.extra.push_str(&extra);
                                         }
@@ -918,8 +1141,10 @@ impl ActionManager {
                                             prev_entry.guid.clear();
                                             prev_entry.guid.push_str(&key.name);
                                         }
+                                        prev_entry.atime = pw_rec.atime;
+                                        prev_entry.count = pw_rec.count;
                                     } else {
-                                        write!(extra, "[{}]", pw_rec.count).ok();
+                                        write!(extra, "{}", pw_rec.username).ok();
                                         let li = ListItem::new(
                                             desc.to_string(), /* these allocs will be slow, but we do it
                                                                * only once on boot */
@@ -1096,7 +1321,98 @@ impl ActionManager {
                                                 // now try to lookup the password; if it does not exist, offer
                                                 // to create a password
 
-                                                // TODO: left off here
+                                                // Password lookup has to search all the entries in sequence
+                                                // for a match.
+                                                //
+                                                // Then, we need to disambiguate records that may have more
+                                                // than one username
+                                                // associated with them.
+                                                let mut matches = self
+                                                    .item_lists
+                                                    .lock()
+                                                    .unwrap()
+                                                    .find_by_name(VaultMode::Password, url);
+                                                if matches.len() == 0 {
+                                                    // try removing "www." as manually entered passwords tend
+                                                    // to lack this
+                                                    let base_matches =
+                                                        self.item_lists.lock().unwrap().find_by_name(
+                                                            VaultMode::Password,
+                                                            url.strip_prefix("www.").unwrap_or(url),
+                                                        );
+                                                    matches.extend_from_slice(&base_matches);
+                                                }
+                                                if matches.len() == 0 {
+                                                    match self.add_password(url) {
+                                                        Ok(pw) => {
+                                                            self.usb_dev.send_str(&pw).ok();
+                                                        }
+                                                        Err(e) => {
+                                                            log::error!(
+                                                                "add_password failed with error {:?}",
+                                                                e
+                                                            );
+                                                        }
+                                                    }
+                                                } else if matches.len() == 1 {
+                                                    // directly ask if it should be typed
+                                                    let mut pw: storage::PasswordRecord = self
+                                                        .storage
+                                                        .borrow()
+                                                        .get_record(
+                                                            &storage::ContentKind::Password,
+                                                            &matches[0].guid,
+                                                        )
+                                                        .expect(
+                                                            "entry should exist if it is in the item list",
+                                                        );
+                                                    if self.yes_no_approval(&format!(
+                                                        "{} {}?",
+                                                        t!("vault.pw.approval", locales::LANG),
+                                                        url
+                                                    )) {
+                                                        self.usb_dev.send_str(&pw.password).ok();
+                                                        self.increment_pw_usage(&matches[0].guid, &mut pw);
+                                                    }
+                                                } else {
+                                                    // disambiguate which item to type
+                                                    let mut names: Vec<&str> =
+                                                        matches.iter().map(|item| item.name()).collect();
+                                                    // add a cancel option, in case none of the options look
+                                                    // correct
+                                                    names.push(t!("vault.cancel", locales::LANG));
+                                                    self.modals.add_list(names).unwrap();
+                                                    match self
+                                                        .modals
+                                                        .get_radiobutton(t!("vault.username", locales::LANG))
+                                                    {
+                                                        Ok(response) => {
+                                                            if response != t!("vault.cancel", locales::LANG) {
+                                                                if let Some(entry) = matches
+                                                                    .iter()
+                                                                    .find(|&item| item.extra() == &response)
+                                                                {
+                                                                    let mut pw: storage::PasswordRecord = self
+                                                                        .storage
+                                                                        .borrow()
+                                                                        .get_record(
+                                                                            &storage::ContentKind::Password,
+                                                                            &entry.guid,
+                                                                        )
+                                                                        .expect(
+                                                                            "entry should exist if it is in the item list",
+                                                                        );
+                                                                    self.usb_dev.send_str(&pw.password).ok();
+                                                                    self.increment_pw_usage(
+                                                                        &entry.guid,
+                                                                        &mut pw,
+                                                                    );
+                                                                }
+                                                            }
+                                                        }
+                                                        _ => (),
+                                                    }
+                                                }
                                             }
                                         }
                                         "new" => {
@@ -1131,6 +1447,12 @@ impl ActionManager {
                 // on error, etc. just note the issue and move on
             }
         }
+    }
+
+    pub fn increment_pw_usage(&self, guid: &str, pw: &mut storage::PasswordRecord) {
+        pw.count += 1;
+        pw.atime = crate::utc_now().timestamp() as u64;
+        self.storage.borrow_mut().update(&storage::ContentKind::Password, guid, pw).unwrap();
     }
 
     pub(crate) fn set_time(&self, time_str: &str) {
@@ -1512,11 +1834,11 @@ pub(crate) fn heap_usage() -> usize {
     }
 }
 
-fn make_pw_name(description: &str, username: &str, dest: &mut String) {
+fn make_pw_name(description: &str, _username: &str, dest: &mut String) {
     dest.clear();
     dest.push_str(description);
-    dest.push_str("/");
-    dest.push_str(username);
+    // dest.push_str("/");
+    // dest.push_str(username);
 }
 
 fn make_totp_item_from_record(guid: &str, totp: TotpRecord) -> ListItem {

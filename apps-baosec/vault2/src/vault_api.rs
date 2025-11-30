@@ -13,6 +13,11 @@ pub const COMMAND_RESET_SESSION: u8 = 0x74;
 
 pub const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
 pub const VAULT_TOTP_DICT: &'static str = "vault.totp";
+/// contains the list of usernames
+pub const VAULT_CONFIG_USERNAMES: &'static str = "vault.config/usernames";
+/// contains the generator configuration record
+pub const VAULT_CONFIG_GENERATOR: &'static str = "vault.config/generator";
+
 /// bytes to reserve for a key entry. Making this slightly larger saves on some churn as stuff gets updated
 pub const VAULT_ALLOC_HINT: usize = 256;
 
