@@ -11,9 +11,11 @@ use std::{fs::File, io, io::BufRead};
 
 #[cfg(feature = "hosted-baosec")]
 use bao1x_emu::trng::Trng;
+#[cfg(feature = "board-baosec")]
 use bao1x_hal_service::api::TimeOp;
 #[cfg(feature = "board-baosec")]
 use bao1x_hal_service::trng::Trng;
+#[cfg(feature = "board-baosec")]
 use chrono::{DateTime, Utc};
 use keystore::Keystore;
 use locales::t;
@@ -79,6 +81,7 @@ pub struct ActionManager {
 
     gfx: ux_api::service::gfx::Gfx,
     // used to set time when QR codes are scanned
+    #[cfg(feature = "board-baosec")]
     rtc_conn: xous::CID,
     // used to type passwords
     usb_dev: usb_bao1x::UsbHid,
@@ -94,6 +97,7 @@ impl ActionManager {
         let storage_manager = storage::Manager::new(&xns);
 
         let mc = (*mode.lock().unwrap()).clone();
+        #[cfg(feature = "board-baosec")]
         let rtc_conn =
             xous::connect(xous::SID::from_bytes(bao1x_hal_service::api::TIME_SERVER_PUBLIC).unwrap())
                 .unwrap();
@@ -113,6 +117,7 @@ impl ActionManager {
             main_conn,
             keystore: Keystore::new(&xns),
             gfx: ux_api::service::gfx::Gfx::new(&xns).unwrap(),
+            #[cfg(feature = "board-baosec")]
             rtc_conn,
             usb_dev: usb_bao1x::UsbHid::new(),
         }
@@ -1455,8 +1460,9 @@ impl ActionManager {
         self.storage.borrow_mut().update(&storage::ContentKind::Password, guid, pw).unwrap();
     }
 
-    pub(crate) fn set_time(&self, time_str: &str) {
-        match DateTime::parse_from_rfc3339(time_str) {
+    pub(crate) fn set_time(&self, _time_str: &str) {
+        #[cfg(feature = "board-baosec")]
+        match DateTime::parse_from_rfc3339(_time_str) {
             Ok(datetime) => {
                 let utc_time = datetime.with_timezone(&Utc);
                 log::info!("Time (UTC): {}", utc_time);

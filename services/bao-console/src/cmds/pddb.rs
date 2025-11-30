@@ -42,6 +42,35 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
         let mut tokens = args.split(' ');
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "std1" => {
+                    use std::fs::File;
+                    const DEFAULT_LIST: &'static str = "bunnie:bunnie@kosagi.com:b@bunnie.org";
+                    let path = "vault.config/usernames";
+                    // Try to open for reading first
+                    let result = if let Ok(mut file) = File::open(path) {
+                        let mut content = String::new();
+                        file.read_to_string(&mut content).unwrap();
+                        content
+                    } else {
+                        // Create new file and write default content
+                        let mut file = File::create(path).unwrap();
+                        file.write_all(DEFAULT_LIST.as_bytes()).unwrap();
+                        DEFAULT_LIST.to_string()
+                    };
+                    log::info!("result: {}", result);
+                }
+                "std2" => {
+                    use std::fs;
+                    let path = "vault.config/usernames";
+                    let mut intermediate = fs::read_to_string(path).unwrap();
+                    intermediate.push_str(":more@more.com");
+                    fs::write(path, intermediate).unwrap();
+                }
+                "std3" => {
+                    use std::fs;
+                    let path = "vault.config/usernames";
+                    log::info!("file: {}", fs::read_to_string(path).unwrap());
+                }
                 "basislist" => {
                     let bases = self.pddb.list_basis();
                     for basis in bases {
