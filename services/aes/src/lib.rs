@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(target_os = "none", no_std)]
 
 /*
   Soft AES implementations vendored in from https://github.com/RustCrypto/block-ciphers.git
@@ -54,13 +54,16 @@ pub use soft::Aes256Soft as Aes256;
 ))]
 pub use vex::{Aes128, Aes256};
 
-#[cfg(any(feature = "vexii-test", feature = "bao1x"))]
+#[cfg(all(any(feature = "vexii-test", feature = "bao1x"), not(feature = "chaffing")))]
 mod zkn;
+#[cfg(all(any(feature = "vexii-test", feature = "bao1x"), feature = "chaffing"))]
+mod zkn_chaff;
 #[cfg(any(feature = "vexii-test", feature = "bao1x"))]
-// pub use soft::Aes128Soft as Aes128;
 pub use zkn::Aes128;
 #[cfg(any(feature = "vexii-test", feature = "bao1x"))]
 pub use zkn::Aes256;
+#[cfg(all(any(feature = "vexii-test", feature = "bao1x"), feature = "chaffing"))]
+use zkn_chaff as zkn;
 
 /// Size of an AES block (128-bits; 16-bytes)
 pub const BLOCK_SIZE: usize = 16;
