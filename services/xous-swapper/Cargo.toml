@@ -21,7 +21,9 @@ loader = { path = "../../loader", features = ["swap"], optional = true }
 aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
     "aes",
 ] }
-aes = { path = "../aes", default-features = false, optional = true }
+aes = { path = "../aes", default-features = false, optional = true, features = [
+    "chaffing",
+] }
 bao1x-hal = { path = "../../libs/bao1x-hal", optional = true, default-features = false }
 precursor-hal = { path = "../../libs/precursor-hal", optional = true, default-features = false }
 bao1x-api = { path = "../../libs/bao1x-api", optional = true, default-features = false }
