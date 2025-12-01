@@ -21,10 +21,12 @@ level = "warn"
 check-cfg = ["cfg(aes_compact)", "cfg(aes_force_soft)"]
 
 [features]
-hazmat = []                                                                   # Expose cryptographically hazardous APIs
+hazmat = []                                                  # Expose cryptographically hazardous APIs
 bao1x = []
 vexii-test = []
 precursor = []
 renode = []
-chaffing = ["rand_chacha", "hex", "utralib/bao1x", "bao1x-hal/loader-baosec"]
+chaffing = ["rand_chacha", "hex"]
+loader-baosec = ["utralib/bao1x", "bao1x-hal/loader-baosec"]
+loader-dabao = ["utralib/bao1x", "bao1x-hal/loader-dabao"]
 default = []
