@@ -30,7 +30,9 @@ rand = { version = "0.8.5", features = ["getrandom"], optional = true }
 rand_chacha = { version = "0.3.1", optional = true }
 rand_core = "0.6.4"
 
-aes = { path = "../aes", default-features = false, optional = true }
+aes = { path = "../aes", default-features = false, optional = true, features = [
+    "chaffing",
+] }
 
 # time testing
 chrono = "0.4.33"
@@ -82,4 +84,4 @@ rramtests = []
 # loaded and run.
 duart-debug-hal = ["bao1x-hal/debug-print-duart"]
 
-default = ["with-pddb"]
+default = ["with-pddb", "aestests"]
