@@ -61,7 +61,6 @@
 //   -[ ] libs/precursor/hal/src/board/precursors.rs - PDDB_LEN is shortened for vexii-test target
 
 extern crate alloc;
-use alloc::vec::Vec;
 
 #[macro_use]
 mod args;
@@ -433,14 +432,11 @@ fn boot_sequence(
             env_variables.add_var("UUID", &hex_uuid);
         }
 
-        let mut env_header = crate::env::EnvHeader::default();
-        let env = env_header.to_bytes(&env_variables);
-
         // cold boot path
         println!("No suspend marker found, doing a cold boot!");
         clear_ram(&mut cfg);
         phase_1(&mut cfg, detached_app);
-        phase_2(&mut cfg, &env);
+        phase_2(&mut cfg, env_variables);
         #[cfg(any(feature = "debug-print", feature = "swap"))]
         if VDBG || SDBG {
             check_load(&mut cfg);

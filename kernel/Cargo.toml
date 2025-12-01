@@ -18,8 +18,6 @@ utralib = { version = "0.1.26", optional = true, default-features = false }
 rand_chacha = { version = "0.3.1", optional = true, default-features = false }
 bao1x-hal = { path = "../libs/bao1x-hal", optional = true, default-features = false }
 loader = { path = "../loader", optional = true, features = ["swap"] }
-aes = { path = "../services/aes", default-features = false, optional = true }
-
 [target.'cfg(any(windows,unix))'.dev-dependencies]
 xous-kernel = { package = "xous", version = "0.9.67", features = [
     "forget-memory-messages",
@@ -46,7 +44,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(ci)', 'cfg(baremetal)'] }
 
 [features]
 vexii-test = []                                                    # integration test for vexii, not a production configuration
-bao1x = ["utralib/bao1x", "rand_chacha", "raw-trng", "aes/bao1x"]
+bao1x = ["utralib/bao1x", "rand_chacha", "raw-trng"]
 verilator-only = []
 board-baosec = ["bao1x-hal/kernel-baosec", "memmap-flash", "swap"]
 board-baosor = ["bao1x-hal/kernel-baosor"]

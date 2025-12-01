@@ -18,7 +18,7 @@ pub struct EnvHeader {
     count: u16,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EnvVariables {
     count: usize,
     flattened_vars: Vec<u8>,

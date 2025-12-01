@@ -168,6 +168,10 @@ with vex bao1x CPU (400MHz)
 hardware 4.65µs/block enc+dec AES256
 software 45.79µs/block enc+dec AES256
 
+with vex bao1x CPU (350MHz)
+hardware 5.36µs/block enc+dec AES256
+software 52.45µs/block enc+dec AES256
+hardware - with chaffing - 10.27µs/block enc+dec AES256
 */
 pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);

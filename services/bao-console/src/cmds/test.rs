@@ -121,6 +121,10 @@ impl<'a> ShellCmdApi<'a> for Test {
                     iox.set_gpio_pin_value(IoxPort::PF, 6, IoxValue::Low);
                     log::info!("sent shutdown to axp2101");
                 }
+                "seed" => {
+                    let (_, value) = std::env::vars().find(|(key, _value)| key == "SEED").unwrap();
+                    log::info!("Seed: {:?}", value);
+                }
                 "keepon" => {
                     todo!("Fix this to use DCDC2 for keepon (as per baosec v2)");
                 }

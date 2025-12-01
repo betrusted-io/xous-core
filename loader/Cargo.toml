@@ -40,7 +40,9 @@ xous-pl230 = { path = "../libs/xous-pl230", optional = true, features = [
 aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
     "aes",
 ], optional = true }
-aes = { path = "../services/aes", default-features = false, optional = true }
+aes = { path = "../services/aes", default-features = false, optional = true, features = [
+    "chaffing",
+] }
 crc = { version = "1.8.1", default-features = false }
 rand_chacha = { version = "0.3.1", optional = true, default-features = false }
 pio-proc = { version = "0.2.2", optional = true }
@@ -103,9 +105,14 @@ board-baosec = [
     "sha2-bao1x",
     "digest",
     "ux-api/loader-baosec",
+    "aes/loader-baosec",
 ]
 board-baosor = ["bao1x-hal/loader-baosor"]
-board-dabao = ["bao1x-hal/loader-dabao", "bao1x-hal/board-dabao"]
+board-dabao = [
+    "bao1x-hal/loader-dabao",
+    "bao1x-hal/board-dabao",
+    "aes/loader-dabao",
+]
 atsama5d27 = ["utralib/atsama5d27", "armv7", "dep:atsama5d27"]
 
 # precursor flags
