@@ -3,13 +3,13 @@ use xous::arch::{SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR};
 
 #[cfg(feature = "swap")]
 use crate::swap::*;
-use crate::*;
+use crate::{env::EnvVariables, *};
 
 /// Phase 2 bootloader
 ///
 /// Set up all the page tables, allocating new root page tables for SATPs and corresponding
 /// sub-pages starting from the base of previously copied process data.
-pub fn phase_2(cfg: &mut BootConfig, env: &Vec<u8>) {
+pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables) {
     let args = cfg.args;
 
     // This is the offset in RAM where programs are loaded from.
@@ -36,18 +36,38 @@ pub fn phase_2(cfg: &mut BootConfig, env: &Vec<u8>) {
     #[cfg(feature = "atsama5d27")]
     let mut kernel_irq_sp = 0;
 
+    #[cfg(feature = "bao1x")]
+    let mut trng = bao1x_hal::sce::trng::Trng::new(utralib::generated::HW_TRNG_BASE as usize);
+    #[cfg(feature = "bao1x")]
+    trng.setup_raw_generation(32); // this is safe to call multiple times to affirm the TRNG state
+
     for tag in args.iter() {
+        let mut env_header = crate::env::EnvHeader::default();
+        let mut pid_env = env_variables.clone();
+
+        #[cfg(feature = "bao1x")]
+        {
+            let mut seed = [0u8; 32];
+            for chunk in seed.chunks_mut(4) {
+                chunk.copy_from_slice(&trng.get_u32().unwrap().to_ne_bytes());
+            }
+            let seed_hex = hex::encode(&seed);
+            pid_env.add_var("SEED", &seed_hex);
+        }
+
+        let env = env_header.to_bytes(&pid_env);
+
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
             println!("\n\nCopying IniE program into memory");
-            let allocated = inie.load(cfg, process_offset, pid, env, IniType::IniE);
+            let allocated = inie.load(cfg, process_offset, pid, &env, IniType::IniE);
             println!("IniE Allocated {:x}", allocated);
             process_offset -= allocated;
             pid += 1;
         } else if tag.name == u32::from_le_bytes(*b"IniF") {
             let inif = MiniElf::new(&tag);
             println!("\n\nMapping IniF program into memory");
-            let allocated = inif.load(cfg, process_offset, pid, env, IniType::IniF);
+            let allocated = inif.load(cfg, process_offset, pid, &env, IniType::IniF);
             println!("IniF Allocated {:x}", allocated);
             process_offset -= allocated;
             pid += 1;
@@ -56,7 +76,7 @@ pub fn phase_2(cfg: &mut BootConfig, env: &Vec<u8>) {
             {
                 let inis = MiniElf::new(&tag);
                 println!("\n\nMapping IniS program into memory");
-                let allocated = inis.load(cfg, process_offset, pid, env, IniType::IniS);
+                let allocated = inis.load(cfg, process_offset, pid, &env, IniType::IniS);
                 println!("IniS Allocated {:x}", allocated);
                 process_offset -= allocated;
                 pid += 1;
