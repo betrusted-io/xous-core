@@ -397,6 +397,22 @@ pub fn die_no_std() -> ! {
         core::arch::asm! (
             // TODO: any SCE other security-sensitive registers to be zeorized?
 
+            //  - bureg zeroize - this is priority because it has the ephemeral key
+            "li          x1, 0x40065000",
+            "li          x2, 0x40065020",
+        "30:",
+            "sw          x0, 0(x1)",
+            "addi        x1, x1, 4",
+            "bne         x1, x2, 30b",
+
+            //  - AORAM_MEM zeroize - also priority because it can have ephemeral secrets
+            "li          x1, 0x50300000",
+            "li          x2, 0x50304000",
+        "16:",
+            "sw          x0, 0(x1)",
+            "addi        x1, x1, 4",
+            "bne         x1, x2, 16b",
+
             // key regions
             "li          x1, 0x40020000",
             "li          x2, 0x40022700",
@@ -433,14 +449,6 @@ pub fn die_no_std() -> ! {
             "sw          x0, 0(x1)",
             "addi        x1, x1, 4",
             "bne         x1, x2, 13b",
-
-            //  - AO_MEM zeroize
-            "li          x1, 0x40060000",
-            "li          x2, 0x40070000",
-        "16:",
-            "sw          x0, 0(x1)",
-            "addi        x1, x1, 4",
-            "bne         x1, x2, 16b",
 
             // zeroize main RAM
             "li          x1, 0x61000000",
