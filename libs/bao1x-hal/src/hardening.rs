@@ -17,6 +17,7 @@ const DELAY_MARGIN_BITS: u64 = 8;
 /// off the PLL it is (a) harder to glitch the clock, because skipping a beat on the external
 /// crystal doesn't *stop* the PLL and (b) harder to glitch the code because the CPU is running
 /// much faster and the timing of the glitch has to be more precise.
+#[inline(always)]
 pub fn check_pll() {
     let cgu = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
     if cgu.r(utra::sysctrl::SFR_CGUSEL0) & 1 == 0 {
