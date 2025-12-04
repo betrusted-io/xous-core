@@ -2,6 +2,9 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use bao1x_api::HardenedBool;
+use bao1x_api::REVOCATION_DUPE_DISTANCE;
+use bao1x_api::bollard;
 use bao1x_api::signatures::*;
 #[cfg(not(feature = "std"))]
 use bao1x_api::{DEVELOPER_MODE, DataSlotAccess, RwPerms, SLOT_ELEMENT_LEN_BYTES, SlotType};
@@ -12,6 +15,7 @@ use xous::arch::PAGE_SIZE;
 use crate::acram::OneWayCounter;
 #[cfg(not(feature = "std"))]
 use crate::acram::{AccessSettings, SlotManager};
+use crate::hardening::Csprng;
 use crate::udma::Spim;
 
 // An erase value of 0 can be conflated with access permissions being incorrect. Choose a non-0 value
@@ -54,7 +58,10 @@ pub fn validate_image(
     function_codes: &[u32],
     auto_jump: bool,
     mut spim: Option<&mut Spim>,
-) -> Result<(usize, [u8; 4]), String> {
+    mut csprng: Option<&mut Csprng>,
+) -> Result<(usize, usize, [u8; 4]), String> {
+    bollard!(die_no_std, 4);
+    csprng.as_deref_mut().map(|rng| rng.random_delay());
     // Copy the signature into a structure so we can unpack it.
     let mut sig = SignatureInFlash::default();
     if let Some(ref mut spim) = spim {
@@ -66,6 +73,7 @@ pub fn validate_image(
         sig.as_mut().copy_from_slice(sig_slice);
     };
 
+    bollard!(die_no_std, 4);
     let pubkey_ptr = pubkeys_offset as *const SignatureInFlash;
     let pk_src: &SignatureInFlash = unsafe { pubkey_ptr.as_ref().unwrap() };
     if pk_src.sealed_data.magic != MAGIC_NUMBER {
@@ -74,9 +82,12 @@ pub fn validate_image(
 
     let signed_len = sig.sealed_data.signed_len;
 
+    bollard!(die_no_std, 4);
+    csprng.as_deref_mut().map(|rng| rng.random_delay());
     if sig.sealed_data.magic != MAGIC_NUMBER {
         return Err(String::from("Invalid magic number on incoming record to be verified"));
     }
+    bollard!(die_no_std, 4);
     if sig.sealed_data.version != BAOCHIP_SIG_VERSION {
         crate::println!(
             "Version {:x} sig found, should be {:x}",
@@ -88,32 +99,59 @@ pub fn validate_image(
 
     // checking the function code prevents exploiting code meant for other partitions signed
     // with a valid signature as code for the next stage boot.
+    bollard!(die_no_std, 4);
     if !function_codes.contains(&sig.sealed_data.function_code) {
         crate::println!("Function code {} not expected", sig.sealed_data.function_code);
         return Err(String::from("Partition has invalid function code"));
     }
 
-    let developer = sig.sealed_data.function_code == FunctionCode::Developer as u32;
+    bollard!(die_no_std, 4);
+    let developer = if sig.sealed_data.function_code == FunctionCode::Developer as u32 {
+        HardenedBool::TRUE
+    } else {
+        HardenedBool::FALSE
+    };
 
     // crate::println!("Signature: {:x?}", sig.signature);
     let one_way_counters = OneWayCounter::new();
-    let mut secure = false;
+    let mut secure = HardenedBool::FALSE;
     let mut passing_key: Option<usize> = None;
+    let mut passing_key2: Option<usize> = None;
+    csprng.as_deref_mut().map(|rng| rng.random_delay());
     for (i, key) in pk_src.sealed_data.pubkeys.iter().enumerate() {
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        bollard!(die_no_std, 4);
         if key.tag == [0u8; 4] {
             continue;
         }
-        let revocation_value = one_way_counters.get(revocation_offset + i).expect("internal error");
-        if revocation_value != 0 {
-            crate::println!("Key at index {} is revoked ({}), skipping", i, revocation_value);
+
+        // revocations are hardened by checking duplicate one-way counters. The glitch attack has to
+        // succeed twice to use a revoked key.
+        let (rev_a, rev_b) = one_way_counters
+            .hardened_get2(revocation_offset + i, revocation_offset + i - REVOCATION_DUPE_DISTANCE)
+            .expect("internal error");
+        bollard!(die_no_std, 4);
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        if rev_a != 0 {
+            crate::println!("Key at index {} is revoked ({}), skipping", i, rev_a);
+            continue;
+        }
+        bollard!(die_no_std, 4);
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        if rev_b != 0 {
+            crate::println!("Key at index {} is revoked ({}), skipping", i, rev_a);
             continue;
         }
         let verifying_key =
             ed25519_dalek::VerifyingKey::from_bytes(&key.pk).or(Err(String::from("invalid public key")))?;
 
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        bollard!(die_no_std, 4);
+
         let ed25519_signature = ed25519_dalek::Signature::from(sig.signature);
 
         let mut h: Sha512 = Sha512::new();
+        bollard!(die_no_std, 4);
         if let Some(ref mut spim) = spim {
             // need to read the data out page by page and hash it.
             // ASSUME: the SPIM driver has allocated a read buffer that is actually PAGE_SIZE. If the SPIM
@@ -135,20 +173,30 @@ pub fn validate_image(
             };
             h.update(&image);
         }
+        bollard!(die_no_std, 4);
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
         if sig.aad_len == 0 {
             // crate::println!("ed25519ph verifying with {:x?}", &key.pk);
             // debugging note: h.clone() does *not* work. You have to print the hash by modifying
             // the function inside the ed25519 crate.
+            bollard!(die_no_std, 4);
+            csprng.as_deref_mut().map(|rng| rng.random_delay());
+            // this match statement is an achille's heel. I don't want to fork the cryptographic
+            // crates, so we have an unhardened comparison of the result. The work-around is
+            // in paranoid mode, we command the system to verify things *twice*
             match verifying_key.verify_prehashed(h, None, &ed25519_signature) {
                 Ok(_) => {
+                    bollard!(die_no_std, 4);
                     crate::println!("ed25519ph verification passed");
                     passing_key = Some(i);
+                    csprng.as_deref_mut().map(|rng| rng.random_delay());
+                    passing_key2 = Some(i);
                     if i != sig.sealed_data.pubkeys.len() - 1 {
-                        secure = true;
+                        secure = HardenedBool::TRUE;
                         break;
                     } else if i == sig.sealed_data.pubkeys.len() - 1 {
                         // this is the developer key slot
-                        secure = false;
+                        secure = HardenedBool::FALSE;
                         break;
                     }
                 }
@@ -157,13 +205,16 @@ pub fn validate_image(
                 }
             }
         } else {
+            bollard!(die_no_std, 4);
             let sha512_hashed_image = h.finalize();
             // create a *new* hasher because a token can only sign a hash, not the full image.
             let mut h: Sha256 = Sha256::new();
             // hash dat hash!
             // crate::println!("verifying base hash {:x?}", &sha512_hashed_image.as_slice());
             h.update(&sha512_hashed_image.as_slice());
+            csprng.as_deref_mut().map(|rng| rng.random_delay());
             let hashed_hash = h.finalize();
+            bollard!(die_no_std, 4);
             // crate::println!("hashed hash: {:x?}", hashed_hash.as_slice());
 
             let mut msg: Vec<u8> = Vec::new();
@@ -171,16 +222,27 @@ pub fn validate_image(
             msg.extend_from_slice(hashed_hash.as_slice());
             // crate::println!("assembled msg({}): {:x?}", msg.len(), msg);
 
+            bollard!(die_no_std, 4);
+            csprng.as_deref_mut().map(|rng| rng.random_delay());
+            // this match statement is an achille's heel. I don't want to fork the cryptographic
+            // crates, so we have an unhardened comparison of the result. The work-around is
+            // in paranoid mode, we command the system to verify things *twice*
             match verifying_key.verify_strict(&msg, &ed25519_signature) {
                 Ok(_) => {
+                    bollard!(die_no_std, 4);
                     crate::println!("FIDO2 ed25519 verification passed");
                     passing_key = Some(i);
+                    bollard!(die_no_std, 4);
+                    csprng.as_deref_mut().map(|rng| rng.random_delay());
+                    passing_key2 = Some(i);
                     if i != sig.sealed_data.pubkeys.len() - 1 {
-                        secure = true;
+                        bollard!(die_no_std, 4);
+                        secure = HardenedBool::TRUE;
                         break;
                     } else if i == sig.sealed_data.pubkeys.len() - 1 {
+                        bollard!(die_no_std, 4);
                         // this is the developer key slot
-                        secure = false;
+                        secure = HardenedBool::FALSE;
                         break;
                     }
                 }
@@ -191,28 +253,54 @@ pub fn validate_image(
         }
     }
 
-    if let Some(valid_key) = passing_key {
-        if auto_jump {
-            if !secure || developer {
-                erase_secrets();
+    bollard!(die_no_std, 4);
+    csprng.as_deref_mut().map(|rng| rng.random_delay());
+    if let Some(valid_key2) = passing_key2 {
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        if let Some(valid_key) = passing_key {
+            bollard!(die_no_std, 4);
+            if auto_jump {
+                bollard!(die_no_std, 4);
+                csprng.as_deref_mut().map(|rng| rng.random_delay());
+                // erase secrets if secure is false
+                match secure.is_true() {
+                    Some(true) => (),
+                    Some(false) => {
+                        bollard!(die_no_std, 4);
+                        erase_secrets(&mut csprng);
+                    }
+                    None => die_no_std(),
+                }
+                // erase secrets if developer is true
+                match developer.is_true() {
+                    Some(true) => {
+                        bollard!(die_no_std, 4);
+                        erase_secrets(&mut csprng);
+                    }
+                    Some(false) => (),
+                    None => die_no_std(),
+                }
+                bollard!(die_no_std, 4);
+                jump_to(img_offset as usize);
             }
-            jump_to(img_offset as usize);
+            Ok((valid_key, valid_key2, pk_src.sealed_data.pubkeys[valid_key].tag))
+        } else {
+            Err(String::from("No valid pubkeys found or signature invalid"))
         }
-        Ok((valid_key, pk_src.sealed_data.pubkeys[valid_key].tag))
     } else {
         Err(String::from("No valid pubkeys found or signature invalid"))
     }
 }
 
 #[cfg(feature = "std")]
-pub fn erase_secrets() {
+pub fn erase_secrets(_csprng: &mut Option<&mut Csprng>) {
     unimplemented!(
         "erase_secrets() is not available in the run-time environment; access permissions are insufficient."
     );
 }
 
 #[cfg(not(feature = "std"))]
-pub fn erase_secrets() {
+pub fn erase_secrets(csprng: &mut Option<&mut Csprng>) {
     // ensure coreuser settings, as we could enter from a variety of loader stages
     let mut cu = crate::coreuser::Coreuser::new();
     cu.set();
@@ -224,10 +312,13 @@ pub fn erase_secrets() {
     // This is set to a higher level because we need to work around an earlier issue
     // with overly-broad ACL settings on alpha0 boards
     const ZERO_ERR_THRESH: usize = 64;
+    bollard!(die_no_std, 4);
     for slot in crate::board::KEY_SLOTS.iter() {
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
         if slot.get_type() == SlotType::Data {
             let (_pa, rw_perms) = slot.get_access_spec();
             for data_index in slot.try_into_data_iter().unwrap() {
+                csprng.as_deref_mut().map(|rng| rng.random_delay());
                 match rw_perms {
                     RwPerms::ReadWrite | RwPerms::WriteOnly => {
                         // only clear ACL if it isn't already cleared
@@ -247,6 +338,7 @@ pub fn erase_secrets() {
                         }
                         // only erase if the key hasn't already been erased, to avoid stressing the RRAM array
                         // erase_secrets() may be called on every boot in some modes.
+                        bollard!(die_no_std, 4);
                         if !bytes.iter().all(|&b| b == ERASE_VALUE) {
                             let mut eraser =
                                 alloc::vec::Vec::with_capacity(slot.len() * SLOT_ELEMENT_LEN_BYTES);
@@ -272,6 +364,7 @@ pub fn erase_secrets() {
                 if zero_key_count > ZERO_ERR_THRESH {
                     crate::println!("Saw too many zero-keys. Insufficient privilege to erase keys!");
                 }
+                bollard!(die_no_std, 4);
             }
         }
     }
