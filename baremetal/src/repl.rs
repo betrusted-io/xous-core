@@ -1304,6 +1304,185 @@ impl Repl {
                 }
                 crate::println!("...done!");
             }
+            "glue" => {
+                let mut glue = CSR::new(utra::gluechain::HW_GLUECHAIN_BASE as *mut u32);
+                let mut irq13 = CSR::new(utra::irqarray13::HW_IRQARRAY13_BASE as *mut u32);
+                let mut irq15 = CSR::new(utra::irqarray15::HW_IRQARRAY15_BASE as *mut u32);
+                irq15.wo(utra::irqarray15::EV_EDGE_TRIGGERED, 0xFFFF_FFFF);
+                irq15.wo(utra::irqarray15::EV_POLARITY, 0xFFFF_FFFF);
+                irq15.wo(utra::irqarray15::EV_PENDING, 0xFFFF_FFFF);
+                irq13.wo(utra::irqarray13::EV_EDGE_TRIGGERED, 0xFFFF_FFFF);
+                irq13.wo(utra::irqarray13::EV_POLARITY, 0xFFFF_FFFF);
+                irq13.wo(utra::irqarray13::EV_PENDING, 0xFFFF_FFFF);
+                let mut last_irq15 = 1u32;
+                let mut cur_irq15: u32;
+                let mut last_irq13 = 1u32;
+                let mut cur_irq13: u32;
+                let mut last_state = [1u32; 8];
+                let mut cur_state = [0u32; 8];
+                let mut quit = false;
+                let mut count = 0;
+                unsafe {
+                    glue.base().add(0).write_volatile(0x0);
+                    glue.base().add(1).write_volatile(0x0);
+                    glue.base().add(4).write_volatile(0xFFFF_FFFF);
+                    glue.base().add(5).write_volatile(0xFFFF_FFFF);
+                    glue.base().add(6).write_volatile(0x0);
+                    glue.base().add(7).write_volatile(0x0);
+                }
+                loop {
+                    for (i, dest) in cur_state.iter_mut().enumerate() {
+                        *dest = unsafe { glue.base().add(i).read_volatile() };
+                    }
+                    if cur_state != last_state {
+                        crate::println!("diff({:8}): {:08x?}", count, cur_state);
+                        last_state = cur_state;
+                    }
+                    cur_irq13 = irq13.r(utra::irqarray13::EV_PENDING);
+                    if cur_irq13 != last_irq13 {
+                        crate::println!("irq13: {:x}", cur_irq13);
+                        last_irq13 = cur_irq13;
+                    }
+                    cur_irq15 = irq15.r(utra::irqarray15::EV_PENDING);
+                    if cur_irq15 != last_irq15 {
+                        crate::println!("irq15: {:x}", cur_irq15);
+                        last_irq15 = cur_irq15;
+                    }
+                    critical_section::with(|cs| {
+                        if crate::USB_RX.borrow(cs).borrow().len() > 0
+                            || crate::UART_RX.borrow(cs).borrow().len() > 0
+                        {
+                            quit = true;
+                        }
+                    });
+                    if quit {
+                        break;
+                    }
+                    count += 1;
+                    crate::usb::flush();
+                }
+            }
+            "sensor" => {
+                let mut sensor = CSR::new(utra::sensorc::HW_SENSORC_BASE as *mut u32);
+                let mut irq13 = CSR::new(utra::irqarray13::HW_IRQARRAY13_BASE as *mut u32);
+                let mut irq15 = CSR::new(utra::irqarray15::HW_IRQARRAY15_BASE as *mut u32);
+                irq15.wo(utra::irqarray15::EV_EDGE_TRIGGERED, 0xFFFF_FFFF);
+                irq15.wo(utra::irqarray15::EV_POLARITY, 0xFFFF_FFFF);
+                irq15.wo(utra::irqarray15::EV_PENDING, 0xFFFF_FFFF);
+                irq15.wo(utra::irqarray15::EV_ENABLE, 0xFFFF_FFFF);
+                irq13.wo(utra::irqarray13::EV_EDGE_TRIGGERED, 0xFFFF_FFFF);
+                irq13.wo(utra::irqarray13::EV_POLARITY, 0xFFFF_FFFF);
+                irq13.wo(utra::irqarray13::EV_PENDING, 0xFFFF_FFFF);
+                irq13.wo(utra::irqarray13::EV_ENABLE, 0xFFFF_FFFF);
+                // glitch detect:
+                // irq13 -> 8 -> secirq
+                // irq15 -> 2 -> sensorc irq
+                /*
+                   vd_VD09_CFG => trim from 500, 550, 600, 650 mV VD09TL trigger
+                    assign  { vd_VD09_CFG[1:0],VD09ENA,VD25ENA,VD33ENA } = sensor_vdena;
+                    assign  { VD09TL,VD09TH,VD25TL,VD25TH,VD33TL,VD33TH } = sensor_vdtst ;
+                    assign  sensor_vd = { VD09L,VD09H,VD25L,VD25H,VD33L,VD33H };
+                */
+                /* Results of laser glitch test:
+                sensor
+                diff: [0000, 003f, 0000, 0000, 0000, 0000, 000c, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0007, 0000, 0000]
+                irq13: 0
+                irq15: 0
+                - glitch now -
+                irq13: 8
+                irq15: 2
+                diff: [0000, 003f, 0000, 0000, 0000, 0002, 000c, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0007, 0000, 0000]
+                diff: [0000, 003f, 0000, 0000, 0000, 0000, 000c, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0007, 0000, 0000]
+                diff: [0000, 003f, 0000, 0000, 0000, 0002, 000c, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0007, 0000, 0000]
+                                                        ^ this is the light sensor trigger bit
+                diff: [0000, 003f, 000a, 000a, 0000, 0000, 000c, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0007, 0000, 0000]
+                diff: [0000, 003f, 0002, 000a, 0000, 0000, 000c, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0000, 0007, 0000, 0000]
+                                      ^ these are voltage glitches induced by light exposure
+                */
+                let mut last_irq15 = 1u32;
+                let mut cur_irq15: u32;
+                let mut last_irq13 = 1u32;
+                let mut cur_irq13: u32;
+                let mut last_state = [1u32; utra::sensorc::SENSORC_NUMREGS];
+                let mut cur_state = [0u32; utra::sensorc::SENSORC_NUMREGS];
+                let mut quit = false;
+                sensor.wo(utra::sensorc::SFR_VDMASK0, 0);
+                sensor.wo(utra::sensorc::SFR_VDMASK1, 0x3f); // when 0 it'll reset
+                sensor.wo(utra::sensorc::SFR_LDIP_FD, 0x1ff); // setup filtering parameters
+                sensor.wo(utra::sensorc::SFR_LDCFG, 0xc);
+                sensor.wo(utra::sensorc::SFR_LDMASK, 0x0); // turn on both sensors
+                loop {
+                    for (i, dest) in cur_state.iter_mut().enumerate() {
+                        *dest = unsafe { sensor.base().add(i).read_volatile() };
+                    }
+                    if cur_state != last_state {
+                        crate::println!("diff: {:04x?}", cur_state);
+                        last_state = cur_state;
+                    }
+                    cur_irq13 = irq13.r(utra::irqarray13::EV_PENDING);
+                    if cur_irq13 != last_irq13 {
+                        crate::println!("irq13: {:x}", cur_irq13);
+                        last_irq13 = cur_irq13;
+                    }
+                    cur_irq15 = irq15.r(utra::irqarray15::EV_PENDING);
+                    if cur_irq15 != last_irq15 {
+                        crate::println!("irq15: {:x}", cur_irq15);
+                        last_irq15 = cur_irq15;
+                    }
+                    critical_section::with(|cs| {
+                        if crate::USB_RX.borrow(cs).borrow().len() > 0
+                            || crate::UART_RX.borrow(cs).borrow().len() > 0
+                        {
+                            quit = true;
+                        }
+                    });
+                    if quit {
+                        break;
+                    }
+                    crate::usb::flush();
+                }
+            }
+            "mesh" => {
+                let mut mesh = CSR::new(utra::mesh::HW_MESH_BASE as *mut u32);
+                let mut quit = false;
+                mesh.wo(utra::mesh::SFR_MLIE_CR_MLIE0, 0);
+                mesh.wo(utra::mesh::SFR_MLIE_CR_MLIE1, 0);
+                mesh.wo(utra::mesh::SFR_MLDRV_CR_MLDRV0, 0x5A5A_5A5A);
+                mesh.wo(utra::mesh::SFR_MLDRV_CR_MLDRV1, 0xA5A5_A5A5);
+                let mut last_state = [1u32; 8];
+                let mut cur_state = [2u32; 8];
+                for (i, state) in cur_state.iter_mut().enumerate() {
+                    *state = unsafe { mesh.base().add(i + 8).read_volatile() }
+                }
+                let mut iters = 0;
+                loop {
+                    if cur_state != last_state {
+                        crate::println!("diff: {:08x?}", cur_state);
+                        last_state = cur_state;
+                    }
+                    for (i, state) in cur_state.iter_mut().enumerate() {
+                        *state = unsafe { mesh.base().add(i + 8).read_volatile() }
+                    }
+                    critical_section::with(|cs| {
+                        if crate::USB_RX.borrow(cs).borrow().len() > 0
+                            || crate::UART_RX.borrow(cs).borrow().len() > 0
+                        {
+                            quit = true;
+                        }
+                    });
+                    crate::platform::delay(1);
+                    iters += 1;
+                    if iters == 100 {
+                        crate::println!("measure!");
+                        mesh.wo(utra::mesh::SFR_MLIE_CR_MLIE0, 0xffff_ffff);
+                        mesh.wo(utra::mesh::SFR_MLIE_CR_MLIE1, 0xffff_ffff);
+                    }
+                    if quit {
+                        break;
+                    }
+                    crate::usb::flush();
+                }
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);
@@ -1320,7 +1499,7 @@ impl Repl {
                 #[cfg(feature = "bao1x-bio")]
                 crate::print!(", bio, bdma, pin");
                 #[cfg(all(feature = "bao1x", feature = "board-baosec"))]
-                crate::print!(", ldo, wfi, pdbberase");
+                crate::print!(", ldo, wfi, pdbberase, erase_swap");
                 #[cfg(feature = "bao1x-usb")]
                 crate::print!(", usb");
                 #[cfg(feature = "bao1x-trng")]
