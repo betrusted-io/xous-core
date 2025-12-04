@@ -1,4 +1,5 @@
-use bao1x_api::signatures::FunctionCode;
+use bao1x_api::{bollard, signatures::FunctionCode};
+use bao1x_hal::hardening::Csprng;
 
 pub const ALLOWED_FUNCTIONS: [u32; 5] = [
     FunctionCode::Baremetal as u32,
@@ -8,6 +9,7 @@ pub const ALLOWED_FUNCTIONS: [u32; 5] = [
     FunctionCode::Developer as u32,
 ];
 
+#[inline(always)]
 fn seal_boot1_keys() {
     // This is a security-critical initialization. Failure to do this correctly totally breaks
     // the hardware access control scheme for key/data slots.
@@ -22,7 +24,7 @@ fn seal_boot1_keys() {
     cu.protect();
 }
 
-pub fn try_boot(or_die: bool) {
+pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
     // loader is at the same offset as baremetal. Accept either as valid boot.
     // This diverges if the signature check is successful
     match bao1x_hal::sigcheck::validate_image(
@@ -32,13 +34,18 @@ pub fn try_boot(or_die: bool) {
         &ALLOWED_FUNCTIONS,
         false,
         None,
+        Some(csprng),
     ) {
-        Ok((k, tag)) => {
+        Ok((k, k2, tag)) => {
             crate::println!(
-                "Booting with key {}({})",
+                "Booting with key {}/{}({})",
                 k,
+                k2,
                 core::str::from_utf8(&tag).unwrap_or("invalid tag")
             );
+            if k != k2 {
+                bao1x_hal::sigcheck::die_no_std();
+            }
 
             // disable IRQs in preparation for next phase
             crate::platform::irq::disable_all_irqs();
@@ -50,12 +57,15 @@ pub fn try_boot(or_die: bool) {
                 || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
             {
                 crate::println!("Developer key detected, ensuring secrets are erased");
-                bao1x_hal::sigcheck::erase_secrets();
+                bao1x_hal::sigcheck::erase_secrets(&mut Some(csprng));
             }
             // this has to be called *after* erase_secrets, because we can't erase the secrets
             // once the mappings have been sealed off. This is why we can't use the auto-jump method
             // like we do in boot0.
+            csprng.random_delay();
+            bollard!(bao1x_hal::sigcheck::die_no_std, 4);
             seal_boot1_keys();
+            bollard!(bao1x_hal::sigcheck::die_no_std, 4);
             bao1x_hal::sigcheck::jump_to(bao1x_api::LOADER_START);
         }
         Err(e) => crate::println!("Image did not validate: {:?}", e),
