@@ -254,6 +254,14 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
         }
     }
 
+    #[cfg(feature = "bao1x")]
+    let mut csprng = bao1x_hal::hardening::Csprng::new();
+    #[cfg(feature = "bao1x")]
+    csprng.random_delay();
+    #[cfg(feature = "bao1x")]
+    // it's security-important to ensure we're running off the PLL
+    bao1x_hal::hardening::check_pll();
+
     // Run kernel image validation now that the heap is set up.
     #[cfg(feature = "bao1x")]
     let detached_app = {
@@ -270,13 +278,18 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
             ],
             false,
             None,
+            Some(&mut csprng),
         ) {
-            Ok((k, tag)) => {
+            Ok((k, k2, tag)) => {
                 println!(
-                    "*** Kernel signature check by key @ {}({}) OK ***",
+                    "*** Kernel signature check by key @ {}/{}({}) OK ***",
                     k,
+                    k2,
                     core::str::from_utf8(&tag).unwrap_or("invalid tag")
                 );
+                if k != k2 {
+                    bao1x_hal::sigcheck::die_no_std();
+                }
                 // k is just a nominal slot number. If either match, assume we are dealing with a
                 // developer image.
                 if tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
@@ -313,15 +326,20 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                 &[FunctionCode::App as u32, FunctionCode::UpdatedApp as u32],
                 false,
                 None,
+                Some(&mut csprng),
             ) {
-                Ok((k, tag)) => {
+                Ok((k, k2, tag)) => {
                     println!(
-                        "*** Detached app signature check by key @ {}({}) OK ***",
+                        "*** Detached app signature check by key @ {}/{}({}) OK ***",
                         k,
+                        k2,
                         core::str::from_utf8(&tag).unwrap_or("invalid tag")
                     );
                     // k is just a nominal slot number. If either match, assume we are dealing with a
                     // developer image.
+                    if k != k2 {
+                        bao1x_hal::sigcheck::die_no_std();
+                    }
                     if tag
                         == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
                         || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
@@ -353,6 +371,15 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
             false
         }
     };
+
+    #[cfg(feature = "bao1x")]
+    {
+        // Follow up the mesh check in loader - it takes 100ms or so for the mesh to settle, we can't afford
+        // to wait that long in boot1.
+        let one_way = bao1x_hal::acram::OneWayCounter::new();
+        bao1x_hal::hardening::mesh_check_and_react(&mut csprng, &one_way);
+    }
+
     #[cfg(not(feature = "bao1x"))]
     let detached_app = false;
 

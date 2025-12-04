@@ -242,13 +242,18 @@ impl SwapHal {
                             &[FunctionCode::Swap as u32, FunctionCode::UpdatedSwap as u32],
                             false,
                             Some(&mut hal.flash_spim),
+                            None,
                         ) {
-                            Ok((k, tag)) => {
+                            Ok((k, k2, tag)) => {
                                 println!(
-                                    "*** Swap signature check by key @ {}({}) OK ***",
+                                    "*** Swap signature check by key @ {}/{}({}) OK ***",
                                     k,
+                                    k2,
                                     core::str::from_utf8(&tag).unwrap_or("invalid tag")
                                 );
+                                if k != k2 {
+                                    bao1x_hal::sigcheck::die_no_std();
+                                }
                                 // k is just a nominal slot number. If either match, assume we are dealing
                                 // with a developer image.
                                 if tag
