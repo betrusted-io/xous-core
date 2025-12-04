@@ -65,6 +65,41 @@ macro_rules! encode_oneway {
 }
 
 // =========== ONE WAY COUNTER SLOTS ==============
+
+/// Paranoid mode is written twice; either being non-zero invokes paranoid mode
+/// In paranoid mode, the glitch detectors are set to trigger aggressively and reset the
+/// system through automatic hardware means. This can lead to false positives that can
+/// degrade user experience, which is why it's left as a setting.
+pub const PARANOID_MODE: usize = 65;
+
+/// Counter that logs the possible number of attacks seen. This is used in conjunction
+/// with paranoid mode to initiate a system wipe. The reason this can be non-zero is that
+/// stray light or environmental factors can trigger the system, and so this threshold is
+/// tunable.
+pub const POSSIBLE_ATTACKS: usize = 66;
+
+/// Paranoid mode is written twice
+pub const PARANOID_MODE_DUPE: usize = 67;
+
+/// Total number of public key slots in the system. Pubkey revocations are duplicated because
+/// being able to override a pubkey revocation is a strong attack vector.
+pub const PUBKEY_SLOTS: usize = 4;
+
+/// The layout of the below duplicate revocation bits *MUST* match that of the primary keys.
+/// This property is relied upon by the signature checking routine.
+/// Offset in the one-way counter array for loader key revocations. Provisions for up to four
+/// key slots, from [68..=72].
+pub const LOADER_REVOCATION_DUPE_OFFSET: usize = 68;
+/// Offset in the one-way counter array for boot1 key revocations. Provisions for up to four
+/// key slots, from [72..=76].
+pub const BOOT1_REVOCATION_DUPE_OFFSET: usize = LOADER_REVOCATION_DUPE_OFFSET + PUBKEY_SLOTS;
+/// Offset in the one-way counter array for boot0 key revocations. Provisions for up to four
+/// key slots, from [76..=80].
+pub const BOOT0_REVOCATION_DUPE_OFFSET: usize = BOOT1_REVOCATION_DUPE_OFFSET + PUBKEY_SLOTS;
+
+/// Fixed offset between the main key and the duplicate key
+pub const REVOCATION_DUPE_DISTANCE: usize = LOADER_REVOCATION_OFFSET - LOADER_REVOCATION_DUPE_OFFSET;
+
 encode_oneway! {
     #[offset = 80]
     pub enum BootWaitCoding {
@@ -142,8 +177,6 @@ encode_oneway! {
     }
 }
 
-/// Total number of public key slots in the system. Pubkey revocations are at the "top of range"
-pub const PUBKEY_SLOTS: usize = 4;
 /// Offset in the one-way counter array for loader key revocations. Provisions for up to four
 /// key slots, from [116..=120].
 pub const LOADER_REVOCATION_OFFSET: usize = 116;
