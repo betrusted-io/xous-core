@@ -16,7 +16,9 @@ pub mod offsets;
 pub mod sce;
 pub mod signatures;
 pub use offsets::*;
+pub mod clocks;
 pub mod pubkeys;
+pub use clocks::*;
 
 /// UF2 Family ID. Randomly generated, no collisions with the known list, still to be merged
 /// into the "official" list
@@ -122,4 +124,100 @@ pub struct IrqNotification {
     pub opcode: usize,
     /// Up to four arguments to be passed on
     pub args: [usize; 4],
+}
+
+#[macro_export]
+macro_rules! bollard {
+    // A call with no args just inserts 4 illegal instructions
+    () => {
+        bollard!(4)
+    };
+
+    // A call with countermeasures specified interleaves countermeasures with illegal instructions
+    // Interleaving is done because the countermeasure jump is a single point of failure
+    // that could be bypassed. Leaving illegal instructions in hardens against that possibility.
+    //
+    // Note that the countermeasure routine needs to be within +/-1 MiB of the bollard
+    ($countermeasure:path, $count:literal) => {{
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+        unsafe {
+            core::arch::asm!(
+                "    j 2f",
+                "1:",
+                ".rept {count}",
+                "    j {cm}",
+                // this is an "invalid opcode" -- will trigger an instruction page fault
+                "   .word 0xffffffff",
+                ".endr",
+                "2:",
+                cm = sym $countermeasure,
+                count = const $count,
+                options(nomem, nostack, preserves_flags)
+            );
+        }
+
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }};
+    ($count:literal) => {{
+        // Force a compiler barrier to prevent reordering around the tripwire
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+        unsafe {
+            core::arch::asm!(
+                "j 2f",
+                // Label 1: illegal instruction sled
+                "1:",
+                ".rept {count}",
+                // this is an "invalid opcode" -- will trigger an instruction page fault
+                ".word 0xffffffff",
+                ".endr",
+                // Label 2: safe landing
+                "2:",
+                count = const $count,
+                options(nomem, nostack, preserves_flags)
+            );
+        }
+
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }};
+}
+
+/// Hardened boolean type - values chosen for high Hamming distance
+/// and resistance to stuck-at-zero/one faults.
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct HardenedBool(u32);
+
+impl HardenedBool {
+    pub const FALSE: Self = Self(Self::FALSE_VALUE);
+    const FALSE_VALUE: u32 = 0xA5A5_5A5A;
+    pub const TRUE: Self = Self(Self::TRUE_VALUE);
+    // Hamming distance of 16 between these values
+    // Also chosen to not be simple patterns (0x0000, 0xFFFF, etc.)
+    const TRUE_VALUE: u32 = 0x5A5A_A5A5;
+
+    /// Check if true - returns None if value is corrupted
+    #[inline(never)]
+    pub fn is_true(self) -> Option<bool> {
+        match self.0 {
+            Self::TRUE_VALUE => Some(true),
+            Self::FALSE_VALUE => Some(false),
+            _ => None, // Corruption detected
+        }
+    }
+
+    /// Constant-time equality check against TRUE
+    #[inline(never)]
+    pub fn check_true(self) -> bool {
+        // Use volatile to prevent optimizer from simplifying
+        let val = unsafe { core::ptr::read_volatile(&self.0) };
+        val == Self::TRUE_VALUE
+    }
+
+    /// Return the complement - for redundant checking
+    pub fn complement(self) -> u32 { !self.0 }
+
+    /// Verify internal consistency (value is one of the two valid states)
+    pub fn is_valid(self) -> bool { self.0 == Self::TRUE_VALUE || self.0 == Self::FALSE_VALUE }
 }
