@@ -1,4 +1,7 @@
+use bao1x_api::bollard;
 use bao1x_api::signatures::SIGBLOCK_LEN;
+use bao1x_hal::acram::OneWayCounter;
+use bao1x_hal::hardening::{Csprng, die, paranoid_mode};
 use utralib::CSR;
 use utralib::utra;
 use utralib::utra::sysctrl;
@@ -34,9 +37,50 @@ pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 /// so we don't have to initialize it in boot0.
 pub const DEFAULT_FCLK_FREQUENCY: u32 = 350_000_000;
 
-pub fn early_init() {
-    let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
+pub fn early_init() -> Csprng {
+    // glitch_safety: set up an initial random delay so that the later routines aren't executing
+    // so predictably. This uses a raw, untested TRNG; later on, a safer version of this is created
+    // but at this point we're running at only 32 MHz or so, so we don't have a lot of gas to do
+    // fancy things.
+    let mut ro_trng = bao1x_hal::sce::trng::Trng::new(utra::trng::HW_TRNG_BASE);
+    ro_trng.setup_raw_generation(32);
+    let delay = ro_trng.get_raw() & 0xFFF;
+    // this should insert a delay of around 0-12 microseconds
+    for _ in 0..delay {
+        unsafe { core::arch::asm!("nop") };
+    }
 
+    // This checks if paranoid mode should be entered. If we should enter it, the system will
+    // automatically reset on any glitch detection attempt.
+
+    // === FIRST read of paranoid mode ===
+    bollard!(die, 4);
+    let owc = OneWayCounter::new();
+    let (paranoid1, paranoid2) =
+        owc.hardened_get2(bao1x_api::PARANOID_MODE, bao1x_api::PARANOID_MODE_DUPE).unwrap();
+    bollard!(die, 4);
+    if paranoid1 != paranoid2 {
+        die();
+    }
+    bollard!(die, 4);
+    if paranoid1 != 0 {
+        bollard!(die, 4);
+        paranoid_mode();
+    }
+    // this should insert a delay of around 0-12 microseconds
+    let delay = ro_trng.get_raw() & 0xFFF;
+    for _ in 0..delay {
+        bollard!(die, 4);
+    }
+    bollard!(die, 4);
+    if paranoid2 != 0 {
+        bollard!(die, 4);
+        paranoid_mode();
+    }
+
+    let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
+    // glitch_safety: the next set of code, if not run correctly, will lead to non-functioning hardware
+    // the behavior might be exploitable but probably more likely to be undefined/unpredictable
     unsafe {
         // this block is mandatory in all cases to get clocks set into some consistent, expected mode
         {
@@ -71,6 +115,9 @@ pub fn early_init() {
 
     // safety: this data structure is pre-loaded by the image loader and is guaranteed to
     // only have representable, valid values that are aligned according to the repr(C) spec
+    // glitch_safety: if the statics aren't set up correctly, you generally end up with code
+    // hangs because most of the statics set up locks to unlocked states, and missing this will
+    // cause them to initialize in a lock state.
     let statics_in_rom: &bao1x_api::StaticsInRom =
         unsafe { (STATICS_LOC as *const bao1x_api::StaticsInRom).as_ref().unwrap() };
     assert!(statics_in_rom.version == bao1x_api::STATICS_IN_ROM_VERSION, "Can't find valid statics table");
@@ -90,18 +137,42 @@ pub fn early_init() {
     }
 
     // set the clock.
-    let perclk = unsafe { init_clock_asic(DEFAULT_FCLK_FREQUENCY) };
+    // glitch_safety: this code must be hardened, as disabling the PLL and running directly off
+    // external clock could make the chip very exploitable. See inside the function for details.
+    let perclk = unsafe { init_clock_asic_350mhz() };
 
     crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
+    // the CSPRNG is built *after* we go to high speed mode. Note the discipline that after every
+    // print, we insert a random_delay - so that you can't use the print as a reliable trigger.
+    let mut csprng = Csprng::new();
+    csprng.random_delay();
 
     // setup heap alloc
+    // glitch_safety: failing to initialize this will generally cause heap allocs to hang
     setup_alloc();
 
+    // glitch_safety: failing to initialize this will mostly lead to unpredictable delays in
+    // non-security critical code
     setup_timer();
+
+    // glitch_safety: redundant check to make sure we're still using the PLL, and that a glitch
+    // in `init_clock_asic_350mhz` wasn't able to skip over the switch to PLL mode. This check
+    // in combination with the previous check inside init_clock_asic_350mhz means you need
+    // three successful glitches to bypass these checks: one to skip PLL setting, and one each
+    // for the checks. There is also a random_delay() inserted between the previous check and now.
+    bao1x_api::bollard!(4);
+    bao1x_hal::hardening::check_pll();
+    bao1x_api::bollard!(4);
 
     // this is a security-critical initialization. Failure to do this correctly breaks
     // all the hardware hashes. It's done once, in boot0. Note that the constants *are*
     // malleable (no hardware lock to prevent update), which is a potential vulnerability.
+    //
+    // glitch_safety: in terms of glitching, having the hash round constants set to random
+    // values breaks the signature check in unpredictable ways. It's not clear that writing
+    // this twice improves glitch safety, because you can always just glitch the second
+    // write (it's a big operation, 10k of data written). So, we just do it once, without
+    // any particular hardening.
     init_hash();
 
     // TxRx setup
@@ -116,8 +187,12 @@ pub fn early_init() {
     #[cfg(not(feature = "unsafe-dev"))]
     let _udma_uart = crate::debug::setup_tx(perclk);
 
+    // glitch_safety: this contant isn't security-critical
     crate::debug::USE_CONSOLE.store(true, core::sync::atomic::Ordering::SeqCst);
     crate::println!("boot0 console up");
+    csprng.random_delay();
+
+    csprng
 }
 
 pub fn setup_timer() {
@@ -173,9 +248,11 @@ pub fn init_hash() {
         RIPMD_X.iter().chain(
         RAMSEG_SHA3.iter()
     ))))))))))));
+    bao1x_api::bollard!(4);
     for (dst, &src) in sce_mem.iter_mut().zip(constants) {
         *dst = src;
     }
+    bao1x_api::bollard!(4);
     let mut combo_hash = CSR::new(utra::combohash::HW_COMBOHASH_BASE as *mut u32);
     combo_hash.wo(utra::combohash::SFR_OPT3, 0); // u32 big-endian constant load
     combo_hash.wfo(utra::combohash::SFR_CRFUNC_CR_FUNC, HashFunction::Init as u32);
@@ -225,58 +302,14 @@ mod panic_handler {
     }
 }
 
-/// Takes in the top clock in MHz, desired perclk in MHz, and returns a tuple of
-/// (min cycle, fd, actual freq)
-/// *tested*
-pub fn clk_to_per(top_in_mhz: u32, perclk_in_mhz: u32) -> Option<(u8, u8, u32)> {
-    let fd_platonic = ((256 * perclk_in_mhz) / (top_in_mhz / 2)).min(256);
-    if fd_platonic > 0 {
-        let fd = fd_platonic - 1;
-        let min_cycle = (2 * (256 / (fd + 1))).max(1);
-        let min_freq = top_in_mhz / min_cycle;
-        let target_freq = top_in_mhz * (fd + 1) / 512;
-        let actual_freq = target_freq.max(min_freq);
-        if fd < 256 && min_cycle < 256 && min_cycle > 0 {
-            Some(((min_cycle - 1) as u8, fd as u8, actual_freq))
-        } else {
-            None
-        }
-    } else {
-        None
-    }
-}
-
-/// TODO: pare this down for the boot0 function
-pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
+/// The frequency parameter is hard-coded for this implementation because running at a higher
+/// speed makes glitches more difficult to time. We also don't want any risk of a glitch bypassing
+/// the PLL.
+pub unsafe fn init_clock_asic_350mhz() -> u32 {
+    let freq_hz = 350_000_000;
     use utra::sysctrl;
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
     let mut cgu = CSR::new(daric_cgu);
-
-    const UNIT_MHZ: u32 = 1000 * 1000;
-    const PFD_F_MHZ: u32 = 16;
-    const FREQ_0: u32 = 16 * UNIT_MHZ;
-    const FREQ_OSC_MHZ: u32 = 48; // Actually 48MHz
-    const M: u32 = FREQ_OSC_MHZ / PFD_F_MHZ; //  - 1;  // OSC input was 24, replace with 48
-
-    const TBL_Q: [u16; 7] = [
-        // keep later DIV even number as possible
-        0x7777, // 16-32 MHz
-        0x7737, // 32-64
-        0x3733, // 64-128
-        0x3313, // 128-256
-        0x3311, // 256-512 // keep ~ 100MHz
-        0x3301, // 512-1024
-        0x3301, // 1024-1600
-    ];
-    const TBL_MUL: [u32; 7] = [
-        64, // 16-32 MHz
-        32, // 32-64
-        16, // 64-128
-        8,  // 128-256
-        4,  // 256-512
-        2,  // 512-1024
-        2,  // 1024-1600
-    ];
 
     // Safest divider settings, assuming no overclocking.
     // If overclocking, need to lower hclk:iclk:pclk even futher; the CPU speed can outperform the bus fabric.
@@ -288,26 +321,9 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x0f1f); // iclk
     daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x070f); // pclk
 
-    // calculate perclk divider. Target 100MHz.
-
-    // perclk divider - set to divide by 16 off of an 800Mhz base. Only found on bao1x.
-    // daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
-    // perclk divider - set to divide by 8 off of an 800Mhz base. Only found on bao1x.
-    // TODO: this only works for two clock settings. Broken @ 600. Need to fix this to instead derive
-    // what pclk is instead of always reporting 100mhz
-    let (_min_cycle, _fd, perclk) =
-        if let Some((min_cycle, fd, perclk)) = clk_to_per(freq_hz / 1_000_000, 100) {
-            daric_cgu
-                .add(utra::sysctrl::SFR_CGUFDPER.offset())
-                .write_volatile((min_cycle as u32) << 16 | (fd as u32) << 8 | fd as u32);
-            (min_cycle, fd, perclk * 1_000_000)
-        } else if freq_hz > 400_000_000 {
-            daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x07_ff_ff);
-            (7, 0xff, freq_hz / 8)
-        } else {
-            daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
-            (3, 0xff, freq_hz / 4)
-        };
+    // hard coded
+    daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x19191);
+    let perclk = 175000000;
 
     // turn off gates
     daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0xff);
@@ -317,139 +333,99 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     // commit dividers
     daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
 
-    if freq_hz > 700_000_000 {
-        crate::println!("setting vdd85 to 0.893v");
-        let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
-        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08421FF1);
-        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
-        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
-        crate::platform::delay_at_sysfreq(20, 48_000_000);
-    } else if freq_hz > 350_000_000 {
-        crate::println!("setting vdd85 to 0.81v");
-        let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
-        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08421290);
-        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
-        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
-        crate::platform::delay_at_sysfreq(20, 48_000_000);
-    } else {
-        crate::println!("setting vdd85 to 0.72v");
-        let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
-        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08420420);
-        ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
-        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
-        crate::platform::delay_at_sysfreq(20, 48_000_000);
-    }
-    crate::println!("...done");
+    let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
+    ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08420420);
+    ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM1CSR, 0x2);
+    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x57);
+    crate::platform::delay_at_sysfreq(20, 48_000_000);
 
-    // DARIC_CGU->cgusel1 = 1; // 0: RC, 1: XTAL
+    // glitch_safety: this switches us to the external crystal for a period of time to configure
+    // the PLL. I don't think there is an option around this - it does mean we have a risk of a glitch
+    // preventing a switch back, so the switch-back has to be hardened.
     cgu.wo(sysctrl::SFR_CGUSEL1, 1);
-    // DARIC_CGU->cgufscr = FREQ_OSC_MHZ; // external crystal is 48MHz
-    cgu.wo(sysctrl::SFR_CGUFSCR, FREQ_OSC_MHZ);
-    // __DSB();
-    // DARIC_CGU->cguset = 0x32UL;
+    cgu.wo(sysctrl::SFR_CGUFSCR, bao1x_api::FREQ_OSC_MHZ);
     cgu.wo(sysctrl::SFR_CGUSET, 0x32);
-    // __DSB();
 
     let duart = utra::duart::HW_DUART_BASE as *mut u32;
     duart.add(utra::duart::SFR_CR.offset()).write_volatile(0);
     // set the ETUC now that we're on the xosc.
-    duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(FREQ_OSC_MHZ);
+    duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(bao1x_api::FREQ_OSC_MHZ);
     duart.add(utra::duart::SFR_CR.offset()).write_volatile(1);
 
-    if freq_hz <= 1_000_000 {
-        // DARIC_IPC->osc = freqHz;
-        cgu.wo(sysctrl::SFR_IPCOSC, freq_hz);
-        // __DSB();
-        // DARIC_IPC->ar     = 0x0032;  // commit, must write 32
-        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
-        // __DSB();
-    }
     // switch to OSC
-    //DARIC_CGU->cgusel0 = 0; // clktop sel, 0:clksys, 1:clkpll0
     cgu.wo(sysctrl::SFR_CGUSEL0, 0);
-    // __DSB();
-    // DARIC_CGU->cguset = 0x32; // commit
     cgu.wo(sysctrl::SFR_CGUSET, 0x32);
-    //__DSB();
 
-    if freq_hz <= 1_000_000 {
-    } else {
-        let n_fxp24: u64; // fixed point
-        let f16mhz_log2: u32 = (freq_hz / FREQ_0).ilog2();
+    // PD PLL
+    cgu.wo(sysctrl::SFR_IPCLPEN, cgu.r(sysctrl::SFR_IPCLPEN) | 0x2);
+    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
 
-        // PD PLL
-        // DARIC_IPC->lpen |= 0x02 ;
-        cgu.wo(sysctrl::SFR_IPCLPEN, cgu.r(sysctrl::SFR_IPCLPEN) | 0x2);
-        // __DSB();
-        // DARIC_IPC->ar     = 0x0032;  // commit, must write 32
-        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
-        // __DSB();
-
-        // delay
-        // for (uint32_t i = 0; i < 1024; i++){
-        //    __NOP();
-        //}
-        for _ in 0..1024 {
-            unsafe { core::arch::asm!("nop") };
-        }
-        crate::println!("PLL delay 1");
-        // why is this print needed for the code not to crash?
-        crate::println!("freq_hz {} log2 {}", freq_hz, f16mhz_log2);
-        n_fxp24 = (((freq_hz as u64) << 24) * TBL_MUL[f16mhz_log2 as usize] as u64
-            + PFD_F_MHZ as u64 * UNIT_MHZ as u64 / 2)
-            / (PFD_F_MHZ as u64 * UNIT_MHZ as u64); // rounded
-        let n_frac: u32 = (n_fxp24 & 0x00ffffff) as u32;
-
-        // TODO very verbose
-        //printf ("%s(%4" PRIu32 "MHz) M = %4" PRIu32 ", N = %4" PRIu32 ".%08" PRIu32 ", Q = %2lu, QDiv =
-        // 0x%04" PRIx16 "\n",     __FUNCTION__, freqHz / 1000000, M, (uint32_t)(n_fxp24 >> 24),
-        // (uint32_t)((uint64_t)(n_fxp24 & 0x00ffffff) * 100000000/(1UL <<24)), TBL_MUL[f16MHzLog2],
-        // TBL_Q[f16MHzLog2]); DARIC_IPC->pll_mn = ((M << 12) & 0x0001F000) | ((n_fxp24 >> 24) &
-        // 0x00000fff); // 0x1F598; // ??
-        cgu.wo(sysctrl::SFR_IPCPLLMN, ((M << 12) & 0x0001F000) | (((n_fxp24 >> 24) as u32) & 0x00000fff));
-        // DARIC_IPC->pll_f = n_frac | ((0 == n_frac) ? 0 : (1UL << 24)); // ??
-        cgu.wo(sysctrl::SFR_IPCPLLF, n_frac | if 0 == n_frac { 0 } else { 1u32 << 24 });
-        // DARIC_IPC->pll_q = TBL_Q[f16MHzLog2]; // ?? TODO select DIV for VCO freq
-        cgu.wo(sysctrl::SFR_IPCPLLQ, TBL_Q[f16mhz_log2 as usize] as u32);
-        //               VCO bias   CPP bias   CPI bias
-        //                1          2          3
-        //DARIC_IPC->ipc = (3 << 6) | (5 << 3) | (5);
-        // DARIC_IPC->ipc = (1 << 6) | (2 << 3) | (3);
-        cgu.wo(sysctrl::SFR_IPCCR, (1 << 6) | (2 << 3) | (3));
-        // __DSB();
-        // DARIC_IPC->ar     = 0x0032;  // commit
-        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
-        // __DSB();
-
-        // DARIC_IPC->lpen &= ~0x02;
-        cgu.wo(sysctrl::SFR_IPCLPEN, cgu.r(sysctrl::SFR_IPCLPEN) & !0x2);
-
-        //__DSB();
-        // DARIC_IPC->ar     = 0x0032;  // commit
-        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
-        // __DSB();
-
-        // delay
-        // for (uint32_t i = 0; i < 1024; i++){
-        //    __NOP();
-        // }
-        for _ in 0..1024 {
-            unsafe { core::arch::asm!("nop") };
-        }
-        crate::println!("PLL delay 2");
-
-        // DARIC_CGU->cgusel0 = 1; // clktop sel, 0:clksys, 1:clkpll0
-        cgu.wo(sysctrl::SFR_CGUSEL0, 1);
-        // __DSB();
-        // DARIC_CGU->cguset = 0x32; // commit
-        cgu.wo(sysctrl::SFR_CGUSET, 0x32);
-        crate::println!("clocks set");
+    for _ in 0..4096 {
+        bao1x_api::bollard!(4);
     }
+
+    // hard-coded so that there's less chances for glitches to muck with PLL parameters
+    cgu.wo(sysctrl::SFR_IPCPLLMN, 0x3057);
+    cgu.wo(sysctrl::SFR_IPCPLLF, 0x1800000);
+    cgu.wo(sysctrl::SFR_IPCPLLQ, 0x3311);
+    cgu.wo(sysctrl::SFR_IPCCR, 0x53);
+
+    bao1x_api::bollard!(6);
+    // written twice - this is safe to do, because values don't take hold until ARIPFLOW is triggered
+    cgu.wo(sysctrl::SFR_IPCPLLMN, 0x3057);
+    cgu.wo(sysctrl::SFR_IPCPLLF, 0x1800000);
+    cgu.wo(sysctrl::SFR_IPCPLLQ, 0x3311);
+    cgu.wo(sysctrl::SFR_IPCCR, 0x53);
+    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
+
+    cgu.wo(sysctrl::SFR_IPCLPEN, cgu.r(sysctrl::SFR_IPCLPEN) & !0x2);
+    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
+
+    for _ in 0..4096 {
+        bao1x_api::bollard!(4);
+    }
+
+    // place bollards around the PLL re-enable code.
+    bao1x_api::bollard!(6);
+    cgu.wo(sysctrl::SFR_CGUSEL0, 1);
+    cgu.wo(sysctrl::SFR_CGUSET, 0x32);
+    bao1x_api::bollard!(6);
 
     // Taken in from latest daric_util.c
     let mut udmacore = CSR::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
     udmacore.wo(utra::udma_ctrl::REG_CG, 0xFFFF_FFFF);
 
+    // glitch_safety: check that we're running on the PLL
+    bao1x_hal::hardening::check_pll();
+
+    // pll print is put after the routine, so it can't be used as a glitch trigger
     crate::println!("PLL configured to {} MHz", freq_hz / 1_000_000);
+
+    /*
+    // these are the prints used to instrument the normal clock setting flow to derive the constants
+    // used in this section.
+
+    crate::println!(
+        "min_cycle {}, fd {}, perclk {}, SFR_CGUFDPER: {:x}",
+        min_cycle,
+        fd,
+        perclk,
+        (min_cycle as u32) << 16 | (fd as u32) << 8 | fd as u32
+    );
+    crate::println!("freq_hz {} log2 {}", freq_hz, f16mhz_log2);
+    crate::println!("SFR_IPCPLLMN: {:x}", ((M << 12) & 0x0001F000) | (((n_fxp24 >> 24) as u32) & 0x00000fff));
+    crate::println!("SFR_IPCPLLF: {:x}", n_frac | if 0 == n_frac { 0 } else { 1u32 << 24 });
+    crate::println!("SFR_IPCPLLQ: {:x}", TBL_Q[f16mhz_log2 as usize] as u32);
+    crate::println!("SFR_IPCCR: {:x}", (1 << 6) | (2 << 3) | (3));
+
+    Results @ 350MHz:
+        min_cycle 1, fd 145, perclk 175000000, SFR_CGUFDPER: 19191
+        freq_hz 350000000 log2 4
+        SFR_IPCPLLMN: 3057
+        SFR_IPCPLLF: 1800000
+        SFR_IPCPLLQ: 3311
+        SFR_IPCCR: 53
+    */
+
     perclk
 }
