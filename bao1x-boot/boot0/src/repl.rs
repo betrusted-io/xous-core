@@ -140,8 +140,9 @@ impl Repl {
                 &[FunctionCode::Boot0 as u32], // only boot0 is allowed for boot0
                 false,
                 None,
+                None,
             ) {
-                Ok(key_number) => crate::println!("sigcheck passed on key {}", key_number),
+                Ok(key_number, _key_number2, _id) => crate::println!("sigcheck passed on key {}", key_number),
                 Err(e) => crate::println!("sigcheck failed: {}", e),
             },
             "reps" => {
@@ -168,6 +169,7 @@ impl Repl {
                         bao1x_api::BOOT0_REVOCATION_OFFSET,
                         &[FunctionCode::Boot0 as u32], // only boot0 is allowed for boot0
                         false,
+                        None,
                         None,
                     )
                     .ok();
