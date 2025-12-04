@@ -8,6 +8,7 @@ use bao1x_api::signatures::FunctionCode;
 #[allow(unused_imports)]
 use bao1x_api::*;
 use bao1x_hal::acram::OneWayCounter;
+use bao1x_hal::hardening::Csprng;
 use utralib::*;
 
 pub struct Error {
@@ -83,6 +84,12 @@ impl Repl {
                     ("loader", LOADER_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
                     ("boot0", BOOT0_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
                     ("boot1", BOOT1_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("loader", LOADER_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("boot0", BOOT0_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("boot1", BOOT1_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("paranoid1", PARANOID_MODE), /* let's try CI testing with this active, and see how
+                                                   * bad it is... */
+                    ("paranoid2", PARANOID_MODE_DUPE),
                 ];
                 for &(desc, devkey) in devkey_offsets.iter() {
                     match unsafe { owc.inc(devkey) } {
@@ -124,7 +131,8 @@ impl Repl {
 
                 // note: the SE0 pin is now asserted & configured as an output as it goes to the next stage
                 // it us up to the next USB stack to de-assert this.
-                crate::boot(&iox, None, port, pin);
+                let mut csprng = Csprng::new();
+                crate::boot(&iox, None, port, pin, &mut csprng);
             }
             "uf2" => {
                 use base64::{Engine as _, engine::general_purpose};
@@ -209,6 +217,28 @@ impl Repl {
                     }
                 } else {
                     return Err(Error::help("bootwait [check | toggle | enable | disable]"));
+                }
+            }
+            "paranoid" => {
+                let one_way = OneWayCounter::new();
+                if args.len() != 1 {
+                    return Err(Error::help(
+                        "paranoid [check | enable] (Note: it cannot be unset once set!)",
+                    ));
+                }
+                if args[0] == "check" {
+                    let state = one_way.get(bao1x_api::PARANOID_MODE).unwrap() != 0
+                        || one_way.get(bao1x_api::PARANOID_MODE_DUPE).unwrap() != 0;
+                    crate::println!("paranoid mode is {:?} (Note: it cannot be unset once set!)", state);
+                } else if args[0] == "enable" {
+                    unsafe {
+                        one_way.inc(bao1x_api::PARANOID_MODE).unwrap();
+                        one_way.inc(bao1x_api::PARANOID_MODE_DUPE).unwrap();
+                    }
+                } else {
+                    return Err(Error::help(
+                        "paranoid [check | enable] (Note: it cannot be unset once set!)",
+                    ));
                 }
             }
             "boardtype" => {
@@ -300,7 +330,15 @@ impl Repl {
                     u32::from_le_bytes(uuid[4..8].try_into().unwrap()),
                     u32::from_le_bytes(uuid[..4].try_into().unwrap())
                 );
+                crate::println!(
+                    "Paranoid mode: {}/{}",
+                    owc.get(PARANOID_MODE).unwrap(),
+                    owc.get(PARANOID_MODE_DUPE).unwrap()
+                );
+                // this number may be non-zero because some of the sensors are on a hair-trigger
+                crate::println!("Possible attack attempts: {}", owc.get(POSSIBLE_ATTACKS).unwrap());
                 crate::println!("Revocations:");
+                // only checks the main array, not the duplicate array
                 crate::println!("Stage       key0     key1     key2     key3");
                 let key_array = [
                     ("boot0       ", BOOT0_REVOCATION_OFFSET),
@@ -326,10 +364,12 @@ impl Repl {
                     &[FunctionCode::Boot0 as u32],
                     false,
                     None,
+                    None,
                 ) {
-                    Ok((k, tag)) => crate::println!(
-                        "Boot0: key {} ({})",
+                    Ok((k, k2, tag)) => crate::println!(
+                        "Boot0: key {}/{} ({})",
                         k,
+                        k2,
                         core::str::from_utf8(&tag).unwrap_or("invalid tag")
                     ),
                     Err(e) => crate::println!("Boot0 did not validate: {:?}", e),
@@ -345,10 +385,12 @@ impl Repl {
                     ],
                     false,
                     None,
+                    None,
                 ) {
-                    Ok((k, tag)) => crate::println!(
-                        "Boot1: key {} ({})",
+                    Ok((k, k2, tag)) => crate::println!(
+                        "Boot1: key {}/{} ({})",
                         k,
+                        k2,
                         core::str::from_utf8(&tag).unwrap_or("invalid tag")
                     ),
                     Err(e) => crate::println!("Boot1 did not validate: {:?}", e),
@@ -360,10 +402,12 @@ impl Repl {
                     &crate::secboot::ALLOWED_FUNCTIONS,
                     false,
                     None,
+                    None,
                 ) {
-                    Ok((k, tag)) => crate::println!(
-                        "Next stage: key {} ({})",
+                    Ok((k, k2, tag)) => crate::println!(
+                        "Next stage: key {}/{} ({})",
                         k,
+                        k2,
                         core::str::from_utf8(&tag).unwrap_or("invalid tag")
                     ),
                     Err(e) => crate::println!("Next stage did not validate: {:?}", e),
@@ -443,8 +487,9 @@ impl Repl {
                     ],
                     false,
                     None,
+                    None,
                 ) {
-                    Ok((k, _tag)) => {
+                    Ok((k, _k2, _tag)) => {
                         if k != bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
                             crate::println!(
                                 "This will permanently disable developer mode. It cannot be undone!"
@@ -643,7 +688,7 @@ impl Repl {
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!(
-                    "Commands include: reset, echo, altboot, boot, bootwait, idmode, localecho, uf2, boardtype, audit, lockdown"
+                    "Commands include: reset, echo, altboot, boot, bootwait, idmode, localecho, uf2, boardtype, audit, lockdown, paranoid"
                 );
                 #[cfg(feature = "test-boot0-keys")]
                 crate::print!(", publock");
