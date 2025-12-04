@@ -374,6 +374,8 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
 
     #[cfg(feature = "bao1x")]
     {
+        csprng.random_delay();
+        bao1x_hal::hardening::check_pll();
         // Follow up the mesh check in loader - it takes 100ms or so for the mesh to settle, we can't afford
         // to wait that long in boot1.
         let one_way = bao1x_hal::acram::OneWayCounter::new();
