@@ -128,6 +128,10 @@ impl OneWayCounter {
     /// if they are not, then something bad happened.
     #[inline(always)]
     pub fn hardened_get2(&self, offset: usize, dupe: usize) -> Result<(u32, u32), OneWayErr> {
+        assert!(
+            offset != dupe,
+            "hardened_get2 requires different offsets; use hardened_get for same offset gets"
+        );
         bollard!(4);
         const HARDENING_FACTOR: usize = 4;
         #[cfg(not(feature = "std"))]
