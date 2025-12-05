@@ -4,10 +4,11 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::convert::TryInto;
 
-use bao1x_api::signatures::FunctionCode;
+use bao1x_api::pubkeys::{BOOT0_SELF_CHECK, BOOT0_TO_BOOT1, BOOT1_TO_LOADER_OR_BAREMETAL};
 #[allow(unused_imports)]
 use bao1x_api::*;
 use bao1x_hal::acram::OneWayCounter;
+use bao1x_hal::hardening::Csprng;
 use utralib::*;
 
 pub struct Error {
@@ -83,6 +84,12 @@ impl Repl {
                     ("loader", LOADER_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
                     ("boot0", BOOT0_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
                     ("boot1", BOOT1_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("loader", LOADER_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("boot0", BOOT0_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("boot1", BOOT1_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("paranoid1", PARANOID_MODE), /* let's try CI testing with this active, and see how
+                                                   * bad it is... */
+                    ("paranoid2", PARANOID_MODE_DUPE),
                 ];
                 for &(desc, devkey) in devkey_offsets.iter() {
                     match unsafe { owc.inc(devkey) } {
@@ -124,7 +131,8 @@ impl Repl {
 
                 // note: the SE0 pin is now asserted & configured as an output as it goes to the next stage
                 // it us up to the next USB stack to de-assert this.
-                crate::boot(&iox, None, port, pin);
+                let mut csprng = Csprng::new();
+                crate::boot(&iox, None, port, pin, &mut csprng);
             }
             "uf2" => {
                 use base64::{Engine as _, engine::general_purpose};
@@ -209,6 +217,28 @@ impl Repl {
                     }
                 } else {
                     return Err(Error::help("bootwait [check | toggle | enable | disable]"));
+                }
+            }
+            "paranoid" => {
+                let one_way = OneWayCounter::new();
+                if args.len() != 1 {
+                    return Err(Error::help(
+                        "paranoid [check | enable] (Note: it cannot be unset once set!)",
+                    ));
+                }
+                if args[0] == "check" {
+                    let state = one_way.get(bao1x_api::PARANOID_MODE).unwrap() != 0
+                        || one_way.get(bao1x_api::PARANOID_MODE_DUPE).unwrap() != 0;
+                    crate::println!("paranoid mode is {:?} (Note: it cannot be unset once set!)", state);
+                } else if args[0] == "enable" {
+                    unsafe {
+                        one_way.inc(bao1x_api::PARANOID_MODE).unwrap();
+                        one_way.inc(bao1x_api::PARANOID_MODE_DUPE).unwrap();
+                    }
+                } else {
+                    return Err(Error::help(
+                        "paranoid [check | enable] (Note: it cannot be unset once set!)",
+                    ));
                 }
             }
             "boardtype" => {
@@ -300,7 +330,15 @@ impl Repl {
                     u32::from_le_bytes(uuid[4..8].try_into().unwrap()),
                     u32::from_le_bytes(uuid[..4].try_into().unwrap())
                 );
+                crate::println!(
+                    "Paranoid mode: {}/{}",
+                    owc.get(PARANOID_MODE).unwrap(),
+                    owc.get(PARANOID_MODE_DUPE).unwrap()
+                );
+                // this number may be non-zero because some of the sensors are on a hair-trigger
+                crate::println!("Possible attack attempts: {}", owc.get(POSSIBLE_ATTACKS).unwrap());
                 crate::println!("Revocations:");
+                // only checks the main array, not the duplicate array
                 crate::println!("Stage       key0     key1     key2     key3");
                 let key_array = [
                     ("boot0       ", BOOT0_REVOCATION_OFFSET),
@@ -319,52 +357,33 @@ impl Repl {
                     crate::println!("");
                 }
 
-                match bao1x_hal::sigcheck::validate_image(
-                    bao1x_api::BOOT0_START as *const u32,
-                    bao1x_api::BOOT0_START as *const u32,
-                    bao1x_api::BOOT0_REVOCATION_OFFSET,
-                    &[FunctionCode::Boot0 as u32],
-                    false,
-                    None,
-                ) {
-                    Ok((k, tag)) => crate::println!(
-                        "Boot0: key {} ({})",
+                match bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, None) {
+                    Ok((k, k2, tag, target)) => crate::println!(
+                        "Boot0: key {}/{} ({}) -> {:x}",
                         k,
-                        core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                        !k2,
+                        core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                        target ^ u32::from_le_bytes(tag)
                     ),
                     Err(e) => crate::println!("Boot0 did not validate: {:?}", e),
                 }
-                match bao1x_hal::sigcheck::validate_image(
-                    bao1x_api::BOOT1_START as *const u32,
-                    bao1x_api::BOOT0_START as *const u32,
-                    bao1x_api::BOOT0_REVOCATION_OFFSET,
-                    &[
-                        FunctionCode::Boot1 as u32,
-                        FunctionCode::UpdatedBoot1 as u32,
-                        FunctionCode::Developer as u32,
-                    ],
-                    false,
-                    None,
-                ) {
-                    Ok((k, tag)) => crate::println!(
-                        "Boot1: key {} ({})",
+                match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None) {
+                    Ok((k, k2, tag, target)) => crate::println!(
+                        "Boot1: key {}/{} ({}) -> {:x}",
                         k,
-                        core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                        !k2,
+                        core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                        target ^ u32::from_le_bytes(tag)
                     ),
                     Err(e) => crate::println!("Boot1 did not validate: {:?}", e),
                 }
-                match bao1x_hal::sigcheck::validate_image(
-                    bao1x_api::LOADER_START as *const u32,
-                    bao1x_api::BOOT1_START as *const u32,
-                    bao1x_api::BOOT1_REVOCATION_OFFSET,
-                    &crate::secboot::ALLOWED_FUNCTIONS,
-                    false,
-                    None,
-                ) {
-                    Ok((k, tag)) => crate::println!(
-                        "Next stage: key {} ({})",
+                match bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, None) {
+                    Ok((k, k2, tag, target)) => crate::println!(
+                        "Next stage: key {}/{} ({}) -> {:x}",
                         k,
-                        core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                        !k2,
+                        core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                        target ^ u32::from_le_bytes(tag)
                     ),
                     Err(e) => crate::println!("Next stage did not validate: {:?}", e),
                 }
@@ -431,37 +450,22 @@ impl Repl {
                     crate::println!("** System did not meet minimum requirements for security **");
                 }
             }
-            "lockdown" => {
-                match bao1x_hal::sigcheck::validate_image(
-                    bao1x_api::BOOT1_START as *const u32,
-                    bao1x_api::BOOT0_START as *const u32,
-                    bao1x_api::BOOT0_REVOCATION_OFFSET,
-                    &[
-                        FunctionCode::Boot1 as u32,
-                        FunctionCode::UpdatedBoot1 as u32,
-                        FunctionCode::Developer as u32,
-                    ],
-                    false,
-                    None,
-                ) {
-                    Ok((k, _tag)) => {
-                        if k != bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
-                            crate::println!(
-                                "This will permanently disable developer mode. It cannot be undone!"
-                            );
-                            crate::println!("Proceed? (type 'YES' in all caps to proceed)");
-                            self.lockdown_armed = true;
-                        } else {
-                            crate::println!(
-                                "Boot1 is signed with the developer key. Refusing to lockdown, as that would brick the chip."
-                            )
-                        }
-                    }
-                    Err(_e) => {
-                        crate::println!("Boot1 has no valid signature, lockdown would brick the chip.")
+            "lockdown" => match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None) {
+                Ok((k, _k2, _tag, _target)) => {
+                    if k != bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
+                        crate::println!("This will permanently disable developer mode. It cannot be undone!");
+                        crate::println!("Proceed? (type 'YES' in all caps to proceed)");
+                        self.lockdown_armed = true;
+                    } else {
+                        crate::println!(
+                            "Boot1 is signed with the developer key. Refusing to lockdown, as that would brick the chip."
+                        )
                     }
                 }
-            }
+                Err(_e) => {
+                    crate::println!("Boot1 has no valid signature, lockdown would brick the chip.")
+                }
+            },
             "baosec-init" => {
                 // this routine is used to initialize baosec products - sets the board type and
                 // erases the off-chip FLASH
@@ -643,7 +647,7 @@ impl Repl {
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!(
-                    "Commands include: reset, echo, altboot, boot, bootwait, idmode, localecho, uf2, boardtype, audit, lockdown"
+                    "Commands include: reset, echo, altboot, boot, bootwait, idmode, localecho, uf2, boardtype, audit, lockdown, paranoid"
                 );
                 #[cfg(feature = "test-boot0-keys")]
                 crate::print!(", publock");

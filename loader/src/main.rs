@@ -254,46 +254,88 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
         }
     }
 
+    #[cfg(feature = "bao1x")]
+    let mut csprng = bao1x_hal::hardening::Csprng::new();
+    #[cfg(feature = "bao1x")]
+    csprng.random_delay();
+    #[cfg(feature = "bao1x")]
+    // it's security-important to ensure we're running off the PLL
+    bao1x_hal::hardening::check_pll();
+
     // Run kernel image validation now that the heap is set up.
     #[cfg(feature = "bao1x")]
     let detached_app = {
-        use bao1x_api::signatures::FunctionCode;
+        use bao1x_api::{PARANOID_MODE, PARANOID_MODE_DUPE, bollard, pubkeys::LOADER_TO_KERNEL};
+
+        let owc = bao1x_hal::acram::OneWayCounter::new();
+        let (paranoid1, paranoid2) = owc.hardened_get2(PARANOID_MODE, PARANOID_MODE_DUPE).unwrap();
+        let (dev_mode1, dev_mode2) = owc.hardened_get(bao1x_api::DEVELOPER_MODE).unwrap();
+        csprng.random_delay();
+        bollard!(bao1x_hal::sigcheck::die_no_std, 4);
         // validate using the bao1x signature scheme
-        match bao1x_hal::sigcheck::validate_image(
-            bao1x_api::KERNEL_START as *const u32,
-            bao1x_api::LOADER_START as *const u32,
-            bao1x_api::LOADER_REVOCATION_OFFSET,
-            &[
-                FunctionCode::Kernel as u32,
-                FunctionCode::UpdatedKernel as u32,
-                FunctionCode::Developer as u32,
-            ],
-            false,
-            None,
-        ) {
-            Ok((k, tag)) => {
-                println!(
-                    "*** Kernel signature check by key @ {}({}) OK ***",
-                    k,
-                    core::str::from_utf8(&tag).unwrap_or("invalid tag")
-                );
+        match bao1x_hal::sigcheck::validate_image(LOADER_TO_KERNEL, None, Some(&mut csprng)) {
+            Ok((key, key_inv, tag, _target)) => {
+                if paranoid1 == 0 && paranoid2 == 0 {
+                    // only print if not in paranoid mode; the DUART output can be used to align a glitch
+                    println!(
+                        "*** Kernel signature check by key @ {}/{}({}) OK ***",
+                        key,
+                        !key_inv,
+                        core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                    );
+                }
+                if key != !key_inv {
+                    bao1x_hal::sigcheck::die_no_std();
+                }
+                // we can't erase keys in the loader, because the keys have already been locked
+                // out at this point. Thus, ensure that the system is already in developer mode.
+                csprng.random_delay();
                 // k is just a nominal slot number. If either match, assume we are dealing with a
                 // developer image.
+                csprng.random_delay();
+                bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                 if tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
-                    || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                    || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
                 {
-                    // we can't erase keys in the loader, because the keys have already been locked
-                    // out at this point. Thus, ensure that the system is already in developer mode.
-                    let owc = bao1x_hal::acram::OneWayCounter::new();
-                    if owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0 {
-                        println!("{}LOADER.KERNDIE,{}", BOOKEND_START, BOOKEND_END);
-                        println!("Kernel is devkey signed, but system is not in developer mode. Dying!");
+                    csprng.random_delay();
+                    if dev_mode1 == 0 {
+                        if paranoid1 == 0 && paranoid2 == 0 {
+                            println!("{}LOADER.KERNDIE,{}", BOOKEND_START, BOOKEND_END);
+                            println!("Kernel is devkey signed, but system is not in developer mode. Dying!");
+                        }
                         bao1x_hal::sigcheck::die_no_std();
                     } else {
                         println!("{}LOADER.KERNDEV,{}", BOOKEND_START, BOOKEND_END);
                         println!("Developer key detected on kernel. Proceeding in developer mode!");
                     }
                 }
+                csprng.random_delay();
+                // this consumes dev_mode2 & !k2 - the alternate version - preventing the check from being
+                // optimized out
+                bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+                if !key_inv == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
+                    csprng.random_delay();
+                    if dev_mode2 == 0 {
+                        if paranoid1 == 0 && paranoid2 == 0 {
+                            println!("{}LOADER.KERNDIE,{}", BOOKEND_START, BOOKEND_END);
+                            println!("Kernel is devkey signed, but system is not in developer mode. Dying!");
+                        }
+                        bao1x_hal::sigcheck::die_no_std();
+                    } else {
+                        println!("{}LOADER.KERNDEV,{}", BOOKEND_START, BOOKEND_END);
+                        println!("Developer key detected on kernel. Proceeding in developer mode!");
+                    }
+                }
+                bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+                // Why no further hardening / duplicate sig check:
+                //   - At this point, we're locked out of erasing keys anyways. If the adversary can get us to
+                //     run dev keys signed code at this point, we have limited options to do reactive
+                //     security.
+                //   - The "prize" thus for the adversary at this point is to glitch the kernel or keystore
+                //     directly. Need to think through the ramifications of e.g. ASID setting and how to
+                //     harden that. There is no TOCTOU on the sig check versus code run because the keystore
+                //     is always implemented in XIP code.
+                //   - A duplicate sig check would be pretty expensive because the kernel is not small
             }
             Err(e) => {
                 println!("Kernel failed signature check. Dying: {:?}", e);
@@ -302,44 +344,67 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
             }
         }
 
-        let one_way = bao1x_hal::acram::OneWayCounter::new();
-        if one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error")
+        if owc.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error")
             == bao1x_api::BoardTypeCoding::Dabao
         {
-            match bao1x_hal::sigcheck::validate_image(
-                bao1x_api::offsets::dabao::APP_RRAM_START as *const u32,
-                bao1x_api::LOADER_START as *const u32,
-                bao1x_api::LOADER_REVOCATION_OFFSET,
-                &[FunctionCode::App as u32, FunctionCode::UpdatedApp as u32],
-                false,
-                None,
-            ) {
-                Ok((k, tag)) => {
-                    println!(
-                        "*** Detached app signature check by key @ {}({}) OK ***",
-                        k,
-                        core::str::from_utf8(&tag).unwrap_or("invalid tag")
-                    );
+            use bao1x_api::pubkeys::LOADER_TO_DETACHED_APP;
+
+            csprng.random_delay();
+            match bao1x_hal::sigcheck::validate_image(LOADER_TO_DETACHED_APP, None, Some(&mut csprng)) {
+                Ok((key, key_inv, tag, _target)) => {
+                    if paranoid1 == 0 && paranoid2 == 0 {
+                        println!(
+                            "*** Detached app signature check by key @ {}/{}({}) OK ***",
+                            key,
+                            !key_inv,
+                            core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                        );
+                    }
                     // k is just a nominal slot number. If either match, assume we are dealing with a
                     // developer image.
+                    if key != !key_inv {
+                        bao1x_hal::sigcheck::die_no_std();
+                    }
+                    csprng.random_delay();
+                    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                     if tag
                         == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
-                        || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                        || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
                     {
                         // we can't erase keys in the loader, because the keys have already been locked
                         // out at this point. Thus, ensure that the system is already in developer mode.
-                        let owc = bao1x_hal::acram::OneWayCounter::new();
-                        if owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0 {
-                            println!("{}LOADER.APPDIE,{}", BOOKEND_START, BOOKEND_END);
-                            println!(
-                                "Detached app is devkey signed, but system is not in developer mode. Dying!"
-                            );
+                        if dev_mode1 == 0 {
+                            if paranoid1 == 0 && paranoid2 == 0 {
+                                println!("{}LOADER.APPDIE,{}", BOOKEND_START, BOOKEND_END);
+                                println!(
+                                    "Detached app is devkey signed, but system is not in developer mode. Dying!"
+                                );
+                            }
                             bao1x_hal::sigcheck::die_no_std();
                         } else {
                             println!("{}LOADER.APPDEV,{}", BOOKEND_START, BOOKEND_END);
                             println!("Developer key detected on detached app. Proceeding in developer mode!");
                         }
                     }
+                    csprng.random_delay();
+                    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+                    if !key_inv == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
+                        if dev_mode2 == 0 {
+                            if paranoid1 == 0 && paranoid2 == 0 {
+                                println!("{}LOADER.APPDIE,{}", BOOKEND_START, BOOKEND_END);
+                                println!(
+                                    "Detached app is devkey signed, but system is not in developer mode. Dying!"
+                                );
+                            }
+                            bao1x_hal::sigcheck::die_no_std();
+                        } else {
+                            println!("{}LOADER.APPDEV,{}", BOOKEND_START, BOOKEND_END);
+                            println!("Developer key detected on detached app. Proceeding in developer mode!");
+                        }
+                    }
+
+                    // Why no further hardening - in theory, it's pretty "safe" to run developer
+                    // images at this point, because kernel isolation should be protecting the keys.
                     true
                 }
                 Err(_e) => {
@@ -353,6 +418,17 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
             false
         }
     };
+
+    #[cfg(feature = "bao1x")]
+    {
+        csprng.random_delay();
+        bao1x_hal::hardening::check_pll();
+        // Follow up the mesh check in loader - it takes 100ms or so for the mesh to settle, we can't afford
+        // to wait that long in boot1.
+        let one_way = bao1x_hal::acram::OneWayCounter::new();
+        bao1x_hal::hardening::mesh_check_and_react(&mut csprng, &one_way);
+    }
+
     #[cfg(not(feature = "bao1x"))]
     let detached_app = false;
 

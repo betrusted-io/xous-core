@@ -1,4 +1,4 @@
-use crate::signatures::Pubkey;
+use crate::signatures::{FunctionCode, Pubkey};
 
 pub mod bao1;
 pub mod bao2;
@@ -38,3 +38,90 @@ const fn pad_array<const N: usize, const M: usize>(input: &[u8; N]) -> [u8; M] {
 
 /// This is the exported record that should be copied into the header of all boot images
 pub const PUBKEY_HEADER: [Pubkey; 4] = [bao1::PUBKEY, bao2::PUBKEY, beta::PUBKEY, developer::PUBKEY];
+
+/// This structure defines a security configuration
+///
+/// `image_ptr`: a `*const u32` pointer to the base of the firmware image being configured
+/// `pubkey_ptr`: a `*const u32` pointer to the public keys used to validate the image at `image_ptr`
+/// `revocation_owc`: a `usize` number that is the one-way counter index that defines the beginning of the
+/// primary revocation counter bank. The duplicate bank is inferred based on the expected fixed offset to
+/// the duplicate bank.
+/// `function_codes`: a `&'static [u32]` that contains the allowable function codes for the image. The
+/// function codes are a domain separator that prevent an image meant for one stage of boot being used for
+/// another.
+#[derive(Copy, Clone)]
+pub struct SecurityConfiguration {
+    pub image_ptr: *const u32,
+    pub pubkey_ptr: *const u32,
+    pub revocation_owc: usize,
+    pub function_codes: &'static [u32],
+}
+
+pub const BOOT0_SELF_CHECK: SecurityConfiguration = SecurityConfiguration {
+    image_ptr: crate::BOOT0_START as *const u32,
+    pubkey_ptr: crate::BOOT0_START as *const u32,
+    revocation_owc: crate::BOOT0_REVOCATION_OFFSET,
+    function_codes: &[FunctionCode::Boot0 as u32],
+};
+
+pub const BOOT0_TO_BOOT1: SecurityConfiguration = SecurityConfiguration {
+    image_ptr: crate::BOOT1_START as *const u32,
+    pubkey_ptr: crate::BOOT0_START as *const u32,
+    revocation_owc: crate::BOOT0_REVOCATION_OFFSET,
+    function_codes: &[
+        FunctionCode::Boot1 as u32,
+        FunctionCode::UpdatedBoot1 as u32,
+        FunctionCode::Developer as u32,
+    ],
+};
+
+/// This is different from a jump directly to loader/baremetal because the
+/// function codes *must* be for Boot1.
+pub const BOOT0_TO_ALTBOOT1: SecurityConfiguration = SecurityConfiguration {
+    image_ptr: crate::LOADER_START as *const u32,
+    pubkey_ptr: crate::BOOT0_START as *const u32,
+    revocation_owc: crate::BOOT0_REVOCATION_OFFSET,
+    function_codes: &[
+        FunctionCode::Boot1 as u32,
+        FunctionCode::UpdatedBoot1 as u32,
+        FunctionCode::Developer as u32,
+    ],
+};
+
+pub const BOOT1_TO_LOADER_OR_BAREMETAL: SecurityConfiguration = SecurityConfiguration {
+    image_ptr: crate::LOADER_START as *const u32,
+    pubkey_ptr: crate::BOOT1_START as *const u32,
+    revocation_owc: crate::BOOT1_REVOCATION_OFFSET,
+    function_codes: &[
+        FunctionCode::Baremetal as u32,
+        FunctionCode::UpdatedBaremetal as u32,
+        FunctionCode::Loader as u32,
+        FunctionCode::UpdatedLoader as u32,
+        FunctionCode::Developer as u32,
+    ],
+};
+
+pub const LOADER_TO_KERNEL: SecurityConfiguration = SecurityConfiguration {
+    image_ptr: crate::KERNEL_START as *const u32,
+    pubkey_ptr: crate::LOADER_START as *const u32,
+    revocation_owc: crate::LOADER_REVOCATION_OFFSET,
+    function_codes: &[
+        FunctionCode::Kernel as u32,
+        FunctionCode::UpdatedKernel as u32,
+        FunctionCode::Developer as u32,
+    ],
+};
+
+pub const LOADER_TO_DETACHED_APP: SecurityConfiguration = SecurityConfiguration {
+    image_ptr: crate::offsets::dabao::APP_RRAM_START as *const u32,
+    pubkey_ptr: crate::LOADER_START as *const u32,
+    revocation_owc: crate::LOADER_REVOCATION_OFFSET,
+    function_codes: &[FunctionCode::App as u32, FunctionCode::UpdatedApp as u32],
+};
+
+pub const LOADER_TO_SWAP: SecurityConfiguration = SecurityConfiguration {
+    image_ptr: (crate::offsets::baosec::SWAP_HEADER_LEN - crate::signatures::SIGBLOCK_LEN) as *const u32,
+    pubkey_ptr: crate::LOADER_START as *const u32,
+    revocation_owc: crate::LOADER_REVOCATION_OFFSET,
+    function_codes: &[FunctionCode::Swap as u32, FunctionCode::UpdatedSwap as u32],
+};

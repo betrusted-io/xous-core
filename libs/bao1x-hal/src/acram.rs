@@ -8,10 +8,12 @@
 //! restrictions are not a concern.
 
 use bao1x_api::OneWayEncoding;
+use bao1x_api::bollard;
 use bao1x_api::offsets::*;
 #[cfg(feature = "std")]
 use xous::MemoryRange;
 
+use crate::cache_flush;
 use crate::coreuser::CoreuserId;
 use crate::rram::Reram;
 
@@ -65,6 +67,99 @@ impl OneWayCounter {
             // safety: only safe because the pointer is length-checked
             // we use this form to access the array because we need to read_volatile()
             Ok(unsafe { base.add(offset * COUNTER_STRIDE_U32).read_volatile() })
+        } else {
+            Err(OneWayErr::OutOfBounds)
+        }
+    }
+
+    /// This routine repeatedly reads the value of the counter, summing it up, so that
+    /// a glitch of `hardened_get()` is unlikely to return e.g. 0 if the counter has
+    /// any value larger than 0.
+    ///
+    /// Inlining the hardened code means there isn't a single region of the chip to attack, either.
+    ///
+    /// It's recommended to also insert some random delay before calling this.
+    ///
+    /// The return value is a (u32, u32). The caller should check that these two values are equal,
+    /// if they are not, then something bad happened.
+    #[inline(always)]
+    pub fn hardened_get(&self, offset: usize) -> Result<(u32, u32), OneWayErr> {
+        bollard!(4);
+        const HARDENING_FACTOR: usize = 4;
+        #[cfg(not(feature = "std"))]
+        let base = ONEWAY_START as *const u32;
+        #[cfg(feature = "std")]
+        let base = self.mapping.as_ptr() as *const u32;
+        if offset < MAX_ONEWAY_COUNTERS {
+            // safety: only safe because the pointer is length-checked
+            // we use this form to access the array because we need to read_volatile()
+            let mut value_1 = unsafe { base.add(offset * COUNTER_STRIDE_U32).read_volatile() };
+            for _ in 0..HARDENING_FACTOR {
+                cache_flush();
+                bollard!(4);
+                value_1 =
+                    value_1.saturating_add(unsafe { base.add(offset * COUNTER_STRIDE_U32).read_volatile() });
+                bollard!(4);
+            }
+            bollard!(4);
+            // repeated twice in case the previous loop was glitched over
+            let mut value_2 = unsafe { base.add(offset * COUNTER_STRIDE_U32).read_volatile() };
+            for _ in 0..HARDENING_FACTOR {
+                cache_flush();
+                bollard!(4);
+                value_2 =
+                    value_2.saturating_add(unsafe { base.add(offset * COUNTER_STRIDE_U32).read_volatile() });
+                bollard!(4);
+            }
+            Ok((value_1, value_2))
+        } else {
+            Err(OneWayErr::OutOfBounds)
+        }
+    }
+
+    /// This version of hardened_get takes two counters that are ostensibly duplicates of each
+    /// other. This is useful for state that is extremely sensitive, such as key revocation counters.
+    ///
+    /// Inlining the hardened code means there isn't a single region of the chip to attack, either.
+    ///
+    /// It's recommended to also insert some random delay before calling this.
+    ///
+    /// The return value is a (u32, u32). The caller should check that these two values are equal,
+    /// if they are not, then something bad happened.
+    #[inline(always)]
+    pub fn hardened_get2(&self, offset: usize, dupe: usize) -> Result<(u32, u32), OneWayErr> {
+        assert!(
+            offset != dupe,
+            "hardened_get2 requires different offsets; use hardened_get for same offset gets"
+        );
+        bollard!(4);
+        const HARDENING_FACTOR: usize = 4;
+        #[cfg(not(feature = "std"))]
+        let base = ONEWAY_START as *const u32;
+        #[cfg(feature = "std")]
+        let base = self.mapping.as_ptr() as *const u32;
+        if offset < MAX_ONEWAY_COUNTERS && dupe < MAX_ONEWAY_COUNTERS {
+            // safety: only safe because the pointer is length-checked
+            // we use this form to access the array because we need to read_volatile()
+            let mut value_1 = unsafe { base.add(offset * COUNTER_STRIDE_U32).read_volatile() };
+            for _ in 0..HARDENING_FACTOR {
+                cache_flush();
+                bollard!(4);
+                value_1 =
+                    value_1.saturating_add(unsafe { base.add(offset * COUNTER_STRIDE_U32).read_volatile() });
+                bollard!(4);
+            }
+            bollard!(4);
+            // read the duplicate value
+            let mut value_2 = unsafe { base.add(dupe * COUNTER_STRIDE_U32).read_volatile() };
+            for _ in 0..HARDENING_FACTOR {
+                cache_flush();
+                bollard!(4);
+                value_2 =
+                    value_2.saturating_add(unsafe { base.add(dupe * COUNTER_STRIDE_U32).read_volatile() });
+                bollard!(4);
+            }
+            Ok((value_1, value_2))
         } else {
             Err(OneWayErr::OutOfBounds)
         }

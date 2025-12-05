@@ -14,6 +14,9 @@ vexriscv = { version = "0.5.6", package = "xous-riscv" }
 riscv = { version = "0.14.0", features = ["critical-section-single-hart"] }
 linked_list_allocator = { version = "0.10.5", optional = true }
 critical-section = "1.2.0"
+hex-literal = "0.4"
+sha2-bao1x = { path = "../sha2-bao1x", default-features = false }
+digest = "0.10.7"
 
 [features]
 # Baochip feature tree below

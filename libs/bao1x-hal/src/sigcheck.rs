@@ -2,6 +2,11 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use bao1x_api::REVOCATION_DUPE_DISTANCE;
+use bao1x_api::bollard;
+use bao1x_api::pubkeys::DEVELOPER_KEY_SLOT;
+use bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS;
+use bao1x_api::pubkeys::SecurityConfiguration;
 use bao1x_api::signatures::*;
 #[cfg(not(feature = "std"))]
 use bao1x_api::{DEVELOPER_MODE, DataSlotAccess, RwPerms, SLOT_ELEMENT_LEN_BYTES, SlotType};
@@ -12,6 +17,7 @@ use xous::arch::PAGE_SIZE;
 use crate::acram::OneWayCounter;
 #[cfg(not(feature = "std"))]
 use crate::acram::{AccessSettings, SlotManager};
+use crate::hardening::Csprng;
 use crate::udma::Spim;
 
 // An erase value of 0 can be conflated with access permissions being incorrect. Choose a non-0 value
@@ -29,32 +35,49 @@ pub const ERASE_VALUE: u8 = 0x03;
 /// IDD85 > 100mA. Thus we can't boot at max speed config, as not all system configurations have the
 /// external regulator. So, we have to work at reduced VDD/frequency and make sure this constraint is met.
 ///
-/// `img_offset` is a pointer to untrusted image data. It's assumed that the 0-offset of the pointer is
-/// a `SignatureInFlash` structure.
+/// The following arguments are packed into a `SecurityConfiguration` record. These records are defined
+/// in libs/bao1x-hal/src/pubkeys/mod.rs and are all of `const` type.
+///     `img_offset` is a pointer to untrusted image data. It's assumed that the 0-offset of the pointer is
+///     a `SignatureInFlash` structure.
 ///
-/// `pubkeys_offset` is a pointer to trusted public key data. Because 'pubkeys_offset` is assumed to be
-/// trusted minimal validation is done on this pointer. It's important that the caller has vetted this
-/// pointer before using it!
+///     `pubkeys_offset` is a pointer to trusted public key data. Because 'pubkeys_offset` is assumed to be
+///     trusted minimal validation is done on this pointer. It's important that the caller has vetted this
+///     pointer before using it!
 ///
-/// `revocation_offset` is the offset into the one-way counter array that contains the revocations
-/// corresponding to the pubkeys presented.
+///     `revocation_offset` is the offset into the one-way counter array that contains the revocations
+///     corresponding to the pubkeys presented.
 ///
-/// `function code` is a domain separator that ensures that signed sections can't be passed into
-/// the wrong phase of the boot sequence. Passed as a list of u32-values that are allowed.
-///
-/// `auto_jump` is a flag which, when `true`, causes the code to diverge into the signed block.
-/// If `false` the function returns the `(key_index, tag)` of the first passing public key, or an error
-/// if none were found.
+///     `function code` is a domain separator that ensures that signed sections can't be passed into
+///     the wrong phase of the boot sequence. Passed as a list of u32-values that are allowed.
 ///
 /// `spim`, when Some, informs validate_image to check an image contained in SPI flash.
+///
+/// `csprng`, when Some, allows the image validator to insert random delays to harden against glitch attacks
+///
+/// Returns either Ok(key_index, !key_index, tag, jump_target) or Err
+///   - `key_index` is returned twice, once as the compliment of itself, to harden the return value and to
+///     facilitate hardened logic based on the return values.
+///   - `tag` is an informative field, mostly, but can also be used to help with security checks as it should
+///     be correlated to the `key_index` value.
+///   - `jump_target` is the location to jump to, XOR'd with `tag` as a u32::le_bytes()
+///
+/// The purpose the XOR of `jump_target` with `tag` is to prevent the compiler from simply statically
+/// inferring a jump address, which becomes an ideal glitch target. The XOR itself doesn't provide
+/// cryptographic masking of the target address, it simply requires the CPU to do *something* to derive the
+/// jump target from a set of data that have not been corrupted by prior glitching.
 pub fn validate_image(
-    img_offset: *const u32,
-    pubkeys_offset: *const u32,
-    revocation_offset: usize,
-    function_codes: &[u32],
-    auto_jump: bool,
+    configuration: SecurityConfiguration,
     mut spim: Option<&mut Spim>,
-) -> Result<(usize, [u8; 4]), String> {
+    mut csprng: Option<&mut Csprng>,
+) -> Result<(usize, usize, [u8; 4], u32), String> {
+    // Unpack the arguments
+    let img_offset: *const u32 = configuration.image_ptr;
+    let pubkeys_offset: *const u32 = configuration.pubkey_ptr;
+    let revocation_offset: usize = configuration.revocation_owc;
+    let function_codes: &[u32] = configuration.function_codes;
+
+    bollard!(die_no_std, 4);
+    csprng.as_deref_mut().map(|rng| rng.random_delay());
     // Copy the signature into a structure so we can unpack it.
     let mut sig = SignatureInFlash::default();
     if let Some(ref mut spim) = spim {
@@ -66,6 +89,7 @@ pub fn validate_image(
         sig.as_mut().copy_from_slice(sig_slice);
     };
 
+    bollard!(die_no_std, 4);
     let pubkey_ptr = pubkeys_offset as *const SignatureInFlash;
     let pk_src: &SignatureInFlash = unsafe { pubkey_ptr.as_ref().unwrap() };
     if pk_src.sealed_data.magic != MAGIC_NUMBER {
@@ -74,9 +98,12 @@ pub fn validate_image(
 
     let signed_len = sig.sealed_data.signed_len;
 
+    bollard!(die_no_std, 4);
+    csprng.as_deref_mut().map(|rng| rng.random_delay());
     if sig.sealed_data.magic != MAGIC_NUMBER {
         return Err(String::from("Invalid magic number on incoming record to be verified"));
     }
+    bollard!(die_no_std, 4);
     if sig.sealed_data.version != BAOCHIP_SIG_VERSION {
         crate::println!(
             "Version {:x} sig found, should be {:x}",
@@ -88,32 +115,53 @@ pub fn validate_image(
 
     // checking the function code prevents exploiting code meant for other partitions signed
     // with a valid signature as code for the next stage boot.
+    bollard!(die_no_std, 4);
     if !function_codes.contains(&sig.sealed_data.function_code) {
         crate::println!("Function code {} not expected", sig.sealed_data.function_code);
         return Err(String::from("Partition has invalid function code"));
     }
 
-    let developer = sig.sealed_data.function_code == FunctionCode::Developer as u32;
+    bollard!(die_no_std, 4);
 
     // crate::println!("Signature: {:x?}", sig.signature);
     let one_way_counters = OneWayCounter::new();
-    let mut secure = false;
     let mut passing_key: Option<usize> = None;
+    let mut passing_key2: Option<usize> = None;
+    csprng.as_deref_mut().map(|rng| rng.random_delay());
     for (i, key) in pk_src.sealed_data.pubkeys.iter().enumerate() {
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        bollard!(die_no_std, 4);
         if key.tag == [0u8; 4] {
             continue;
         }
-        let revocation_value = one_way_counters.get(revocation_offset + i).expect("internal error");
-        if revocation_value != 0 {
-            crate::println!("Key at index {} is revoked ({}), skipping", i, revocation_value);
+
+        // revocations are hardened by checking duplicate one-way counters. The glitch attack has to
+        // succeed twice to use a revoked key.
+        let (rev_a, rev_b) = one_way_counters
+            .hardened_get2(revocation_offset + i, revocation_offset + i - REVOCATION_DUPE_DISTANCE)
+            .expect("internal error");
+        bollard!(die_no_std, 4);
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        if rev_a != 0 {
+            crate::println!("Key at index {} is revoked ({}), skipping", i, rev_a);
+            continue;
+        }
+        bollard!(die_no_std, 4);
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        if rev_b != 0 {
+            crate::println!("Key at index {} is revoked ({}), skipping", i, rev_a);
             continue;
         }
         let verifying_key =
             ed25519_dalek::VerifyingKey::from_bytes(&key.pk).or(Err(String::from("invalid public key")))?;
 
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        bollard!(die_no_std, 4);
+
         let ed25519_signature = ed25519_dalek::Signature::from(sig.signature);
 
         let mut h: Sha512 = Sha512::new();
+        bollard!(die_no_std, 4);
         if let Some(ref mut spim) = spim {
             // need to read the data out page by page and hash it.
             // ASSUME: the SPIM driver has allocated a read buffer that is actually PAGE_SIZE. If the SPIM
@@ -135,35 +183,41 @@ pub fn validate_image(
             };
             h.update(&image);
         }
+        bollard!(die_no_std, 4);
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
         if sig.aad_len == 0 {
             // crate::println!("ed25519ph verifying with {:x?}", &key.pk);
             // debugging note: h.clone() does *not* work. You have to print the hash by modifying
             // the function inside the ed25519 crate.
+            bollard!(die_no_std, 4);
+            csprng.as_deref_mut().map(|rng| rng.random_delay());
+            // this match statement is an achille's heel. I don't want to fork the cryptographic
+            // crates, so we have an unhardened comparison of the result. The work-around is
+            // in paranoid mode, we command the system to verify things *twice*
             match verifying_key.verify_prehashed(h, None, &ed25519_signature) {
                 Ok(_) => {
+                    bollard!(die_no_std, 4);
                     crate::println!("ed25519ph verification passed");
                     passing_key = Some(i);
-                    if i != sig.sealed_data.pubkeys.len() - 1 {
-                        secure = true;
-                        break;
-                    } else if i == sig.sealed_data.pubkeys.len() - 1 {
-                        // this is the developer key slot
-                        secure = false;
-                        break;
-                    }
+                    csprng.as_deref_mut().map(|rng| rng.random_delay());
+                    passing_key2 = Some(!i);
+                    break;
                 }
                 _ => {
                     crate::println!("ed25519ph verification failed");
                 }
             }
         } else {
+            bollard!(die_no_std, 4);
             let sha512_hashed_image = h.finalize();
             // create a *new* hasher because a token can only sign a hash, not the full image.
             let mut h: Sha256 = Sha256::new();
             // hash dat hash!
             // crate::println!("verifying base hash {:x?}", &sha512_hashed_image.as_slice());
             h.update(&sha512_hashed_image.as_slice());
+            csprng.as_deref_mut().map(|rng| rng.random_delay());
             let hashed_hash = h.finalize();
+            bollard!(die_no_std, 4);
             // crate::println!("hashed hash: {:x?}", hashed_hash.as_slice());
 
             let mut msg: Vec<u8> = Vec::new();
@@ -171,18 +225,20 @@ pub fn validate_image(
             msg.extend_from_slice(hashed_hash.as_slice());
             // crate::println!("assembled msg({}): {:x?}", msg.len(), msg);
 
+            bollard!(die_no_std, 4);
+            csprng.as_deref_mut().map(|rng| rng.random_delay());
+            // this match statement is an achille's heel. I don't want to fork the cryptographic
+            // crates, so we have an unhardened comparison of the result. The work-around is
+            // in paranoid mode, we command the system to verify things *twice*
             match verifying_key.verify_strict(&msg, &ed25519_signature) {
                 Ok(_) => {
+                    bollard!(die_no_std, 4);
                     crate::println!("FIDO2 ed25519 verification passed");
                     passing_key = Some(i);
-                    if i != sig.sealed_data.pubkeys.len() - 1 {
-                        secure = true;
-                        break;
-                    } else if i == sig.sealed_data.pubkeys.len() - 1 {
-                        // this is the developer key slot
-                        secure = false;
-                        break;
-                    }
+                    bollard!(die_no_std, 4);
+                    csprng.as_deref_mut().map(|rng| rng.random_delay());
+                    passing_key2 = Some(!i);
+                    break;
                 }
                 _ => {
                     crate::println!("FIDO2 verification failed");
@@ -191,28 +247,35 @@ pub fn validate_image(
         }
     }
 
-    if let Some(valid_key) = passing_key {
-        if auto_jump {
-            if !secure || developer {
-                erase_secrets();
-            }
-            jump_to(img_offset as usize);
+    bollard!(die_no_std, 4);
+    csprng.as_deref_mut().map(|rng| rng.random_delay());
+    if let Some(valid_key2) = passing_key2 {
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        if let Some(valid_key) = passing_key {
+            bollard!(die_no_std, 4);
+            Ok((
+                valid_key,
+                valid_key2,
+                pk_src.sealed_data.pubkeys[valid_key].tag,
+                (img_offset as u32) ^ u32::from_le_bytes(pk_src.sealed_data.pubkeys[valid_key].tag),
+            ))
+        } else {
+            Err(String::from("No valid pubkeys found or signature invalid"))
         }
-        Ok((valid_key, pk_src.sealed_data.pubkeys[valid_key].tag))
     } else {
         Err(String::from("No valid pubkeys found or signature invalid"))
     }
 }
 
 #[cfg(feature = "std")]
-pub fn erase_secrets() {
+pub fn erase_secrets(_csprng: &mut Option<&mut Csprng>) -> Result<(), String> {
     unimplemented!(
         "erase_secrets() is not available in the run-time environment; access permissions are insufficient."
     );
 }
 
 #[cfg(not(feature = "std"))]
-pub fn erase_secrets() {
+pub fn erase_secrets(csprng: &mut Option<&mut Csprng>) -> Result<(), String> {
     // ensure coreuser settings, as we could enter from a variety of loader stages
     let mut cu = crate::coreuser::Coreuser::new();
     cu.set();
@@ -224,10 +287,15 @@ pub fn erase_secrets() {
     // This is set to a higher level because we need to work around an earlier issue
     // with overly-broad ACL settings on alpha0 boards
     const ZERO_ERR_THRESH: usize = 64;
+    bollard!(die_no_std, 4);
     for slot in crate::board::KEY_SLOTS.iter() {
+        bollard!(die_no_std, 4);
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
         if slot.get_type() == SlotType::Data {
             let (_pa, rw_perms) = slot.get_access_spec();
             for data_index in slot.try_into_data_iter().unwrap() {
+                bollard!(die_no_std, 4);
+                csprng.as_deref_mut().map(|rng| rng.random_delay());
                 match rw_perms {
                     RwPerms::ReadWrite | RwPerms::WriteOnly => {
                         // only clear ACL if it isn't already cleared
@@ -247,6 +315,7 @@ pub fn erase_secrets() {
                         }
                         // only erase if the key hasn't already been erased, to avoid stressing the RRAM array
                         // erase_secrets() may be called on every boot in some modes.
+                        bollard!(die_no_std, 4);
                         if !bytes.iter().all(|&b| b == ERASE_VALUE) {
                             let mut eraser =
                                 alloc::vec::Vec::with_capacity(slot.len() * SLOT_ELEMENT_LEN_BYTES);
@@ -269,17 +338,101 @@ pub fn erase_secrets() {
                     }
                     _ => {}
                 }
-                if zero_key_count > ZERO_ERR_THRESH {
-                    crate::println!("Saw too many zero-keys. Insufficient privilege to erase keys!");
-                }
+                bollard!(die_no_std, 4);
             }
+            bollard!(die_no_std, 4);
         }
+        bollard!(die_no_std, 4);
     }
+    bollard!(die_no_std, 4);
     let owc = OneWayCounter::new();
     // once all secrets are erased, advance the DEVELOPER_MODE state
     // safety: the offset is correct because we're pulling it from our pre-defined constants and
     // those are manually checked.
-    unsafe { owc.inc(DEVELOPER_MODE).unwrap() };
+    if owc.get(DEVELOPER_MODE).unwrap() < 15 {
+        // limit incrementing to avoid memory wear-out, as erase_secrets() can be called every time on boot.
+        unsafe { owc.inc(DEVELOPER_MODE).unwrap() };
+    }
+    if zero_key_count > ZERO_ERR_THRESH {
+        Err(String::from("Saw too many zero-keys. Insufficient privilege to erase keys!"))
+    } else {
+        Ok(())
+    }
+}
+
+/// This implements hardened erase policy implementation: basically, if developer mode
+/// is detected, erase the secret keys.
+#[inline(always)]
+pub fn hardened_erase_policy(
+    paranoid1: u32,
+    paranoid2: u32,
+    key: usize,
+    key_inv: usize,
+    tag: [u8; 4],
+    csprng: &mut Csprng,
+) -> Result<(), String> {
+    if key == DEVELOPER_KEY_SLOT {
+        // this is a common case - if we're not under attack, and we're in developer mode,
+        // just short circuit the rest of the checks and erase the keys.
+        return erase_secrets(&mut Some(csprng));
+    }
+    bollard!(die_no_std, 4);
+    csprng.random_delay();
+    // if the tag isn't one of the first 3 "blessed" tags, assume developer mode. This is
+    // a supplemental check, so we don't harden it.
+    if !KEYSLOT_INITIAL_TAGS[..3].contains(&&tag) {
+        erase_secrets(&mut Some(csprng))?;
+    }
+    bollard!(die_no_std, 4);
+    csprng.random_delay();
+    // second check on the inverse-key type - this requires a double-glitch to bypass the key number check
+    if !key_inv == DEVELOPER_KEY_SLOT {
+        erase_secrets(&mut Some(csprng))?;
+    }
+    bollard!(die_no_std, 4);
+    csprng.random_delay();
+    // these won't match if we're under attack - erase the keys if attack is detected in this case
+    if paranoid1 != paranoid2 {
+        erase_secrets(&mut Some(csprng))?;
+    }
+    bollard!(die_no_std, 4);
+    csprng.random_delay();
+
+    if paranoid1 != 0 || paranoid2 != 0 {
+        // the whole code up there is repeated again - check twice, written out in linear form, instead
+        // of a loop, so glitches have a chance to land basically somewhere in this morass.
+        if key == DEVELOPER_KEY_SLOT {
+            // this is a common case - if we're not under attack, and we're in developer mode,
+            // just short circuit the rest of the checks and erase the keys.
+            erase_secrets(&mut Some(csprng))?;
+        }
+        bollard!(die_no_std, 4);
+        csprng.random_delay();
+        // if the tag isn't one of the first 3 "blessed" tags, assume developer mode. This is
+        // a supplemental check, so we don't harden it.
+        if !KEYSLOT_INITIAL_TAGS[..3].contains(&&tag) {
+            erase_secrets(&mut Some(csprng))?;
+        }
+        bollard!(die_no_std, 4);
+        csprng.random_delay();
+        // second check on the key type - this requires a double-glitch to bypass the key number check
+        if !key_inv == DEVELOPER_KEY_SLOT {
+            erase_secrets(&mut Some(csprng))?;
+        }
+        bollard!(die_no_std, 4);
+        csprng.random_delay();
+        // these won't match if we're under attack - erase the keys if attack is detected in this case
+        if paranoid1 != paranoid2 {
+            erase_secrets(&mut Some(csprng))?;
+        }
+        bollard!(die_no_std, 4);
+        csprng.random_delay();
+        // these won't match if we're under attack - erase the keys if attack is detected in this case
+        if paranoid1 != paranoid2 {
+            erase_secrets(&mut Some(csprng))?;
+        }
+    }
+    Ok(())
 }
 
 pub fn jump_to(target: usize) -> ! {
@@ -303,6 +456,22 @@ pub fn die_no_std() -> ! {
         #[rustfmt::skip]
         core::arch::asm! (
             // TODO: any SCE other security-sensitive registers to be zeorized?
+
+            //  - bureg zeroize - this is priority because it has the ephemeral key
+            "li          x1, 0x40065000",
+            "li          x2, 0x40065020",
+        "30:",
+            "sw          x0, 0(x1)",
+            "addi        x1, x1, 4",
+            "bne         x1, x2, 30b",
+
+            //  - AORAM_MEM zeroize - also priority because it can have ephemeral secrets
+            "li          x1, 0x50300000",
+            "li          x2, 0x50304000",
+        "16:",
+            "sw          x0, 0(x1)",
+            "addi        x1, x1, 4",
+            "bne         x1, x2, 16b",
 
             // key regions
             "li          x1, 0x40020000",
@@ -340,14 +509,6 @@ pub fn die_no_std() -> ! {
             "sw          x0, 0(x1)",
             "addi        x1, x1, 4",
             "bne         x1, x2, 13b",
-
-            //  - AO_MEM zeroize
-            "li          x1, 0x40060000",
-            "li          x2, 0x40070000",
-        "16:",
-            "sw          x0, 0(x1)",
-            "addi        x1, x1, 4",
-            "bne         x1, x2, 16b",
 
             // zeroize main RAM
             "li          x1, 0x61000000",

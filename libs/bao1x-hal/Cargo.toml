@@ -41,6 +41,9 @@ ed25519-dalek = { package = "ed25519-dalek-bao1x", path = "../../bao1x-boot/ed25
 sha2-bao1x = { path = "../../bao1x-boot/sha2-bao1x", optional = true, default-features = false }
 linked_list_allocator = { version = "0.10.5", optional = true }
 
+# for generating glitch-protection delays
+rand_chacha = { version = "0.3.1", default-features = false }
+
 # [target.'cfg(target_os = "xous")'.dependencies]
 xous = { version = "0.9.67", features = ["v2p"] }
 

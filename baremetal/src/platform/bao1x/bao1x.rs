@@ -182,49 +182,6 @@ mod panic_handler {
     }
 }
 
-/// This takes in the FD input frequency (the frequency to be divided) in MHz
-/// and the fd value, and returns the resulting divided frequency.
-/// *not tested*
-#[allow(dead_code)]
-pub fn fd_to_clk(fd_in_mhz: u32, fd_val: u32) -> u32 { (fd_in_mhz * (fd_val + 1)) / 256 }
-
-/// Takes in the FD input frequencyin MHz, and then the desired frequency.
-/// Returns Some((fd value, deviation in *hz*, not MHz)) if the requirement is satisfiable
-/// Returns None if the equation is ill-formed.
-/// *not tested*
-#[allow(dead_code)]
-pub fn clk_to_fd(fd_in_mhz: u32, desired_mhz: u32) -> Option<(u32, i32)> {
-    let platonic_fd: u32 = (desired_mhz * 256) / fd_in_mhz;
-    if platonic_fd > 0 {
-        let actual_fd = platonic_fd - 1;
-        let actual_clk = fd_to_clk(fd_in_mhz, actual_fd);
-        Some((actual_fd, desired_mhz as i32 - actual_clk as i32))
-    } else {
-        None
-    }
-}
-
-/// Takes in the top clock in MHz, desired perclk in MHz, and returns a tuple of
-/// (min cycle, fd, actual freq)
-/// *tested*
-pub fn clk_to_per(top_in_mhz: u32, perclk_in_mhz: u32) -> Option<(u8, u8, u32)> {
-    let fd_platonic = ((256 * perclk_in_mhz) / (top_in_mhz / 2)).min(256);
-    if fd_platonic > 0 {
-        let fd = fd_platonic - 1;
-        let min_cycle = (2 * (256 / (fd + 1))).max(1);
-        let min_freq = top_in_mhz / min_cycle;
-        let target_freq = top_in_mhz * (fd + 1) / 512;
-        let actual_freq = target_freq.max(min_freq);
-        if fd < 256 && min_cycle < 256 && min_cycle > 0 {
-            Some(((min_cycle - 1) as u8, fd as u8, actual_freq))
-        } else {
-            None
-        }
-    } else {
-        None
-    }
-}
-
 // This function supercedes init_clock_asic() and needs to be back-ported
 // into xous-core
 // TODO:
@@ -240,8 +197,7 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     const UNIT_MHZ: u32 = 1000 * 1000;
     const PFD_F_MHZ: u32 = 16;
     const FREQ_0: u32 = 16 * UNIT_MHZ;
-    const FREQ_OSC_MHZ: u32 = 48; // Actually 48MHz
-    const M: u32 = FREQ_OSC_MHZ / PFD_F_MHZ; //  - 1;  // OSC input was 24, replace with 48
+    const M: u32 = bao1x_api::FREQ_OSC_MHZ / PFD_F_MHZ; //  - 1;  // OSC input was 24, replace with 48
 
     const TBL_Q: [u16; 7] = [
         // keep later DIV even number as possible
@@ -280,19 +236,19 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     // perclk divider - set to divide by 8 off of an 800Mhz base. Only found on bao1x.
     // TODO: this only works for two clock settings. Broken @ 600. Need to fix this to instead derive
     // what pclk is instead of always reporting 100mhz
-    let (min_cycle, fd, perclk) = if let Some((min_cycle, fd, perclk)) = clk_to_per(freq_hz / 1_000_000, 100)
-    {
-        daric_cgu
-            .add(utra::sysctrl::SFR_CGUFDPER.offset())
-            .write_volatile((min_cycle as u32) << 16 | (fd as u32) << 8 | fd as u32);
-        (min_cycle, fd, perclk * 1_000_000)
-    } else if freq_hz > 400_000_000 {
-        daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x07_ff_ff);
-        (7, 0xff, freq_hz / 8)
-    } else {
-        daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
-        (3, 0xff, freq_hz / 4)
-    };
+    let (min_cycle, fd, perclk) =
+        if let Some((min_cycle, fd, perclk)) = bao1x_api::clk_to_per(freq_hz / 1_000_000, 100) {
+            daric_cgu
+                .add(utra::sysctrl::SFR_CGUFDPER.offset())
+                .write_volatile((min_cycle as u32) << 16 | (fd as u32) << 8 | fd as u32);
+            (min_cycle, fd, perclk * 1_000_000)
+        } else if freq_hz > 400_000_000 {
+            daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x07_ff_ff);
+            (7, 0xff, freq_hz / 8)
+        } else {
+            daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
+            (3, 0xff, freq_hz / 4)
+        };
 
     /*
         perclk fields:  min-cycle-lp | min-cycle | fd-lp | fd
@@ -345,7 +301,7 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     // DARIC_CGU->cgusel1 = 1; // 0: RC, 1: XTAL
     cgu.wo(sysctrl::SFR_CGUSEL1, 1);
     // DARIC_CGU->cgufscr = FREQ_OSC_MHZ; // external crystal is 48MHz
-    cgu.wo(sysctrl::SFR_CGUFSCR, FREQ_OSC_MHZ);
+    cgu.wo(sysctrl::SFR_CGUFSCR, bao1x_api::FREQ_OSC_MHZ);
     // __DSB();
     // DARIC_CGU->cguset = 0x32UL;
     cgu.wo(sysctrl::SFR_CGUSET, 0x32);
@@ -354,7 +310,7 @@ pub unsafe fn init_clock_asic(freq_hz: u32) -> u32 {
     let duart = utra::duart::HW_DUART_BASE as *mut u32;
     duart.add(utra::duart::SFR_CR.offset()).write_volatile(0);
     // set the ETUC now that we're on the xosc.
-    duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(FREQ_OSC_MHZ);
+    duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(bao1x_api::FREQ_OSC_MHZ);
     duart.add(utra::duart::SFR_CR.offset()).write_volatile(1);
 
     if freq_hz <= 1_000_000 {
@@ -524,8 +480,6 @@ pub fn clockset_wrapper(freq: u32) -> u32 {
 
 #[allow(dead_code)]
 pub unsafe fn low_power() -> u32 {
-    const FREQ_OSC_MHZ: u32 = 48; // 48MHz
-
     use utra::sysctrl;
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
     let mut cgu = CSR::new(daric_cgu);
@@ -552,16 +506,16 @@ pub unsafe fn low_power() -> u32 {
     // DARIC_CGU->cgusel1 = 1; // 0: RC, 1: XTAL
     cgu.wo(sysctrl::SFR_CGUSEL0, 0);
     cgu.wo(sysctrl::SFR_CGUSEL1, 1);
-    cgu.wo(sysctrl::SFR_CGUFSCR, FREQ_OSC_MHZ);
+    cgu.wo(sysctrl::SFR_CGUFSCR, bao1x_api::FREQ_OSC_MHZ);
     cgu.wo(sysctrl::SFR_CGUSET, 0x32);
 
     let duart = utra::duart::HW_DUART_BASE as *mut u32;
     duart.add(utra::duart::SFR_CR.offset()).write_volatile(0);
     // set the ETUC now that we're on the xosc.
-    duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(FREQ_OSC_MHZ);
+    duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(bao1x_api::FREQ_OSC_MHZ);
     duart.add(utra::duart::SFR_CR.offset()).write_volatile(1);
 
-    cgu.wo(sysctrl::SFR_IPCOSC, FREQ_OSC_MHZ * 1_000_000);
+    cgu.wo(sysctrl::SFR_IPCOSC, bao1x_api::FREQ_OSC_MHZ * 1_000_000);
     cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
 
     // lower core voltage to 0.7v

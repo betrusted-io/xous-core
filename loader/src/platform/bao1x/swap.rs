@@ -2,7 +2,7 @@ use core::mem::size_of;
 
 use aes_gcm_siv::aead::Error;
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, KeyInit, Nonce, Tag};
-use bao1x_api::signatures::FunctionCode;
+use bao1x_api::pubkeys::LOADER_TO_SWAP;
 use bao1x_api::udma::*;
 use bao1x_api::*;
 use bao1x_hal::acram::SlotManager;
@@ -231,30 +231,32 @@ impl SwapHal {
             match hal.decrypt_src_page_at(0) {
                 Ok(_) => {
                     // check signature only if the swap key is all 0's
+                    // this is not very glitch-hardened because at this point, the adversary has full
+                    // control over the code coming in. A TOCTOU is extremely easy to pull off.
                     if swap.key == [0u8; 32] {
                         crate::println!("Fresh swap image found - checking signature before proceeding");
                         match bao1x_hal::sigcheck::validate_image(
-                            (bao1x_api::offsets::baosec::SWAP_HEADER_LEN
-                                - bao1x_api::signatures::SIGBLOCK_LEN)
-                                as *const u32,
-                            bao1x_api::LOADER_START as *const u32,
-                            bao1x_api::LOADER_REVOCATION_OFFSET,
-                            &[FunctionCode::Swap as u32, FunctionCode::UpdatedSwap as u32],
-                            false,
+                            LOADER_TO_SWAP,
                             Some(&mut hal.flash_spim),
+                            None,
                         ) {
-                            Ok((k, tag)) => {
+                            Ok((k, k2, tag, _target)) => {
                                 println!(
-                                    "*** Swap signature check by key @ {}({}) OK ***",
+                                    "*** Swap signature check by key @ {}/{}({}) OK ***",
                                     k,
+                                    !k2,
                                     core::str::from_utf8(&tag).unwrap_or("invalid tag")
                                 );
+                                if k != !k2 {
+                                    bao1x_hal::sigcheck::die_no_std();
+                                }
                                 // k is just a nominal slot number. If either match, assume we are dealing
                                 // with a developer image.
                                 if tag
                                     == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS
                                         [bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
                                     || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                                    || !k2 == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
                                 {
                                     // we can't erase keys in the loader, because the keys have already been
                                     // locked out at this point. Thus,
@@ -280,9 +282,13 @@ impl SwapHal {
                                 bao1x_hal::sigcheck::die_no_std();
                             }
                         }
+                        // TODO: encrypt the swap image to SWAP_KEY if PARANOID_MODE is set.
                     }
                 }
                 Err(_) => {
+                    // The fully-hardened system should be using a swap that is hardened to the swap key.
+                    // The premise is that the blue team has control of the system when the swap is loaded,
+                    // and thus the encryption step does not need to be hardened.
                     let slot_mgr = SlotManager::new();
                     let swap_key = slot_mgr.read(&SWAP_KEY).unwrap();
                     // replace the cipher with the new key

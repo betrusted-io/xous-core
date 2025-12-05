@@ -6,7 +6,7 @@ use bao1x_api::{
 use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
 use bao1x_hal::{
     acram::{OneWayCounter, SlotManager},
-    board::{CHAFF_KEYS, NUISANCE_KEYS_0, NUISANCE_KEYS_1, ROOT_SEED},
+    board::{CHAFF_KEYS, NUISANCE_KEYS_0, NUISANCE_KEYS_1, ROOT_SEED, THE_FLAG_1},
     rram::Reram,
 };
 use hkdf::Hkdf;
@@ -67,6 +67,10 @@ impl KeyStore {
             };
             let mut success = true;
             for key_range in key_set.iter() {
+                if *key_range == THE_FLAG_1 {
+                    // don't overwrite the flag, it's pre-loaded from static data
+                    continue;
+                }
                 let mut storage = Vec::<u8>::with_capacity(key_range.len() * SLOT_ELEMENT_LEN_BYTES);
                 storage.resize(key_range.len() * SLOT_ELEMENT_LEN_BYTES, 0);
                 trng.fill_bytes(&mut storage);
@@ -244,6 +248,14 @@ impl KeyStore {
             assert!(
                 self.owc.get(DEVELOPER_MODE).unwrap() != 0,
                 "Either we have the most improbable chaff, or (more likely) the chaff is set to all 0's"
+            );
+            // check that "the flag" is erased in this mode by leaking the first few bytes
+            #[cfg(feature = "hazardous-debug")]
+            log::info!(
+                "{}KEYSTORE.ERASEDFLAG,{},{:x?}",
+                BOOKEND_START,
+                BOOKEND_END,
+                self.slot_mgr.read(&THE_FLAG_1).unwrap()[..4]
             );
         } else {
             log::info!("{}KEYSTORE.OKCHAFF,{}", BOOKEND_START, BOOKEND_END);

@@ -60,6 +60,11 @@ pub const CP_COOKIE: SlotIndex = SlotIndex::Data(258, PartitionAccess::Fw0, RwPe
 /// The swap encryption key. Used to protect swap images beyond the signing key, if we so desire.
 pub const SWAP_KEY: SlotIndex = SlotIndex::Data(259, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
+/// A test value placed by FT into the memory array. If you can read the original value, you've captured a
+/// flag!
+/// There is a second flag stored somewhere else. Can you find it?
+pub const THE_FLAG_1: SlotIndex = SlotIndex::Data(260, PartitionAccess::Fw0, RwPerms::ReadWrite);
+
 /// `NUISANCE_KEYS` are hashed together with `ROOT_SEED` to derive the core secret.
 /// Their primary purpose is to annoy microscopists trying to read the secret key by
 /// directly imaging the RRAM array. They also exist to reduce power side channels
@@ -126,5 +131,5 @@ pub const DATA_SLOTS: [SlotIndex; 8] = [
 
 /// In addition to these KEY_SLOTS, the DEVELOPER_MODE one way counter is a security-important parameter
 /// that should be included as domain separation in any KDF.
-pub const KEY_SLOTS: [SlotIndex; 6] =
-    [CP_COOKIE, RMA_KEY, ROOT_SEED, NUISANCE_KEYS_0, NUISANCE_KEYS_1, CHAFF_KEYS];
+pub const KEY_SLOTS: [SlotIndex; 7] =
+    [THE_FLAG_1, CP_COOKIE, RMA_KEY, ROOT_SEED, NUISANCE_KEYS_0, NUISANCE_KEYS_1, CHAFF_KEYS];

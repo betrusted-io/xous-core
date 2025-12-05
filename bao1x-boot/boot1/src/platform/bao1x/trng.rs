@@ -98,6 +98,21 @@ impl ManagedTrng {
             None
         };
 
+        // do a quick health check on the TRNG before using it. Looks for repeated values over 8 samples.
+        // this will rule out e.g. TRNG output tied to 0 or 1, or an external feed just feeding it data.
+        // About 1 in 500 million chance of triggering falsely.
+        let mut values = [0u32; 8];
+        for value in values.iter_mut() {
+            *value = ro_trng.get_raw();
+        }
+        for _ in 0..values.len() {
+            if values.contains(&ro_trng.get_raw()) {
+                // don't proceed if we see a stuck value
+                crate::println!("TRNG had stuck value, dying!");
+                bao1x_hal::sigcheck::die_no_std();
+            }
+        }
+
         // The first seed is always 0.
         let mut seed = [0u8; 32];
         // println!("seed: {:x?}", seed); // used to eyeball that things are working correctly
