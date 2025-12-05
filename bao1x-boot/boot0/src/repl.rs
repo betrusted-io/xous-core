@@ -133,16 +133,10 @@ impl Repl {
                 }
                 crate::println!("");
             }
-            "check" => match bao1x_hal::sigcheck::validate_image(
-                bao1x_api::BOOT0_START as *const u32,
-                bao1x_api::BOOT0_START as *const u32,
-                bao1x_api::BOOT0_REVOCATION_OFFSET,
-                &[FunctionCode::Boot0 as u32], // only boot0 is allowed for boot0
-                false,
-                None,
-                None,
-            ) {
-                Ok(key_number, _key_number2, _id) => crate::println!("sigcheck passed on key {}", key_number),
+            "check" => match bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, None) {
+                Ok(key_number, _key_number2, _id, _target) => {
+                    crate::println!("sigcheck passed on key {}", key_number)
+                }
                 Err(e) => crate::println!("sigcheck failed: {}", e),
             },
             "reps" => {
@@ -163,16 +157,7 @@ impl Repl {
                     if new_time >= start_time + 5 {
                         break;
                     }
-                    bao1x_hal::sigcheck::validate_image(
-                        bao1x_api::BOOT0_START as *const u32,
-                        bao1x_api::BOOT0_START as *const u32,
-                        bao1x_api::BOOT0_REVOCATION_OFFSET,
-                        &[FunctionCode::Boot0 as u32], // only boot0 is allowed for boot0
-                        false,
-                        None,
-                        None,
-                    )
-                    .ok();
+                    bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, None).ok();
                     count += 1;
                 }
                 crate::println!("{} reps/sec", count / 5);
