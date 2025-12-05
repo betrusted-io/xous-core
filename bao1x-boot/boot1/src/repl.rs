@@ -4,7 +4,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::convert::TryInto;
 
-use bao1x_api::signatures::FunctionCode;
+use bao1x_api::pubkeys::{BOOT0_SELF_CHECK, BOOT0_TO_BOOT1, BOOT1_TO_LOADER_OR_BAREMETAL};
 #[allow(unused_imports)]
 use bao1x_api::*;
 use bao1x_hal::acram::OneWayCounter;
@@ -357,58 +357,33 @@ impl Repl {
                     crate::println!("");
                 }
 
-                match bao1x_hal::sigcheck::validate_image(
-                    bao1x_api::BOOT0_START as *const u32,
-                    bao1x_api::BOOT0_START as *const u32,
-                    bao1x_api::BOOT0_REVOCATION_OFFSET,
-                    &[FunctionCode::Boot0 as u32],
-                    false,
-                    None,
-                    None,
-                ) {
-                    Ok((k, k2, tag)) => crate::println!(
-                        "Boot0: key {}/{} ({})",
+                match bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, None) {
+                    Ok((k, k2, tag, target)) => crate::println!(
+                        "Boot0: key {}/{} ({}) -> {:x}",
                         k,
-                        k2,
-                        core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                        !k2,
+                        core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                        target ^ u32::from_le_bytes(tag)
                     ),
                     Err(e) => crate::println!("Boot0 did not validate: {:?}", e),
                 }
-                match bao1x_hal::sigcheck::validate_image(
-                    bao1x_api::BOOT1_START as *const u32,
-                    bao1x_api::BOOT0_START as *const u32,
-                    bao1x_api::BOOT0_REVOCATION_OFFSET,
-                    &[
-                        FunctionCode::Boot1 as u32,
-                        FunctionCode::UpdatedBoot1 as u32,
-                        FunctionCode::Developer as u32,
-                    ],
-                    false,
-                    None,
-                    None,
-                ) {
-                    Ok((k, k2, tag)) => crate::println!(
-                        "Boot1: key {}/{} ({})",
+                match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None) {
+                    Ok((k, k2, tag, target)) => crate::println!(
+                        "Boot1: key {}/{} ({}) -> {:x}",
                         k,
-                        k2,
-                        core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                        !k2,
+                        core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                        target ^ u32::from_le_bytes(tag)
                     ),
                     Err(e) => crate::println!("Boot1 did not validate: {:?}", e),
                 }
-                match bao1x_hal::sigcheck::validate_image(
-                    bao1x_api::LOADER_START as *const u32,
-                    bao1x_api::BOOT1_START as *const u32,
-                    bao1x_api::BOOT1_REVOCATION_OFFSET,
-                    &crate::secboot::ALLOWED_FUNCTIONS,
-                    false,
-                    None,
-                    None,
-                ) {
-                    Ok((k, k2, tag)) => crate::println!(
-                        "Next stage: key {}/{} ({})",
+                match bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, None) {
+                    Ok((k, k2, tag, target)) => crate::println!(
+                        "Next stage: key {}/{} ({}) -> {:x}",
                         k,
-                        k2,
-                        core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                        !k2,
+                        core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                        target ^ u32::from_le_bytes(tag)
                     ),
                     Err(e) => crate::println!("Next stage did not validate: {:?}", e),
                 }
@@ -475,38 +450,22 @@ impl Repl {
                     crate::println!("** System did not meet minimum requirements for security **");
                 }
             }
-            "lockdown" => {
-                match bao1x_hal::sigcheck::validate_image(
-                    bao1x_api::BOOT1_START as *const u32,
-                    bao1x_api::BOOT0_START as *const u32,
-                    bao1x_api::BOOT0_REVOCATION_OFFSET,
-                    &[
-                        FunctionCode::Boot1 as u32,
-                        FunctionCode::UpdatedBoot1 as u32,
-                        FunctionCode::Developer as u32,
-                    ],
-                    false,
-                    None,
-                    None,
-                ) {
-                    Ok((k, _k2, _tag)) => {
-                        if k != bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
-                            crate::println!(
-                                "This will permanently disable developer mode. It cannot be undone!"
-                            );
-                            crate::println!("Proceed? (type 'YES' in all caps to proceed)");
-                            self.lockdown_armed = true;
-                        } else {
-                            crate::println!(
-                                "Boot1 is signed with the developer key. Refusing to lockdown, as that would brick the chip."
-                            )
-                        }
-                    }
-                    Err(_e) => {
-                        crate::println!("Boot1 has no valid signature, lockdown would brick the chip.")
+            "lockdown" => match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None) {
+                Ok((k, _k2, _tag, _target)) => {
+                    if k != bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
+                        crate::println!("This will permanently disable developer mode. It cannot be undone!");
+                        crate::println!("Proceed? (type 'YES' in all caps to proceed)");
+                        self.lockdown_armed = true;
+                    } else {
+                        crate::println!(
+                            "Boot1 is signed with the developer key. Refusing to lockdown, as that would brick the chip."
+                        )
                     }
                 }
-            }
+                Err(_e) => {
+                    crate::println!("Boot1 has no valid signature, lockdown would brick the chip.")
+                }
+            },
             "baosec-init" => {
                 // this routine is used to initialize baosec products - sets the board type and
                 // erases the off-chip FLASH
