@@ -2,6 +2,8 @@ use bao1x_api::bollard;
 use bao1x_api::signatures::SIGBLOCK_LEN;
 use bao1x_hal::acram::OneWayCounter;
 use bao1x_hal::hardening::{Csprng, die, paranoid_mode};
+use digest::Digest;
+use sha2_bao1x::Sha512;
 use utralib::CSR;
 use utralib::utra;
 use utralib::utra::sysctrl;
@@ -174,6 +176,18 @@ pub fn early_init() -> Csprng {
     // write (it's a big operation, 10k of data written). So, we just do it once, without
     // any particular hardening.
     init_hash();
+
+    // SHA-512 Known Answer Test (KAT)
+    const TEST_SHA512_DATA: &[u8] = b"0NlY  TH3   50Urce   c@n 5et You fr3e";
+    const EXPECTED_HASH: [u8; 64] = hex_literal::hex!(
+        "00000007a8d4c9f11f6ad8a8d71aa73a53c7ac392098f7a731b159d50586d7d08e5174218dbb2eaa7c9599165e6746e199410b9a86e74840052afa23e4976189"
+    );
+    let mut hasher = Sha512::new();
+    hasher.update(TEST_SHA512_DATA);
+    let digest: [u8; 64] = hasher.finalize().try_into().unwrap();
+    if digest != EXPECTED_HASH {
+        die();
+    }
 
     // TxRx setup
     #[cfg(feature = "unsafe-dev")]
