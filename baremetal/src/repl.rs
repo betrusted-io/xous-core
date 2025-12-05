@@ -1305,7 +1305,7 @@ impl Repl {
                 crate::println!("...done!");
             }
             "glue" => {
-                let mut glue = CSR::new(utra::gluechain::HW_GLUECHAIN_BASE as *mut u32);
+                let glue = CSR::new(utra::gluechain::HW_GLUECHAIN_BASE as *mut u32);
                 let mut irq13 = CSR::new(utra::irqarray13::HW_IRQARRAY13_BASE as *mut u32);
                 let mut irq15 = CSR::new(utra::irqarray15::HW_IRQARRAY15_BASE as *mut u32);
                 irq15.wo(utra::irqarray15::EV_EDGE_TRIGGERED, 0xFFFF_FFFF);
