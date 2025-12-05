@@ -255,7 +255,7 @@ impl KeyStore {
                 "{}KEYSTORE.ERASEDFLAG,{},{:x?}",
                 BOOKEND_START,
                 BOOKEND_END,
-                self.slot_mgr.read(&THE_FLAG_1).unwrap()[..4]
+                &self.slot_mgr.read(&THE_FLAG_1).unwrap()[..4]
             );
         } else {
             log::info!("{}KEYSTORE.OKCHAFF,{}", BOOKEND_START, BOOKEND_END);
