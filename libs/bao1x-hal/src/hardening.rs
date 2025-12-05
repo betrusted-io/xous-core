@@ -29,7 +29,7 @@ pub fn check_pll() {
 /// This is wrapped in an API call so we can replace this if we need to
 /// Always inline the die call, makes it a bit harder to glitch over
 #[inline(always)]
-pub fn die() {
+pub fn die() -> ! {
     let owc = OneWayCounter::new();
     // safety: this is safe because the offset is from a checked, pre-defined value
     unsafe {
@@ -289,7 +289,7 @@ pub fn apply_attack_policy(csprng: &mut Csprng, one_way: &OneWayCounter) {
         bollard!(die, 4);
         if one_way.get(bao1x_api::POSSIBLE_ATTACKS).unwrap() > WIPE_THRESHOLD {
             bollard!(die, 4);
-            erase_secrets(&mut Some(csprng));
+            erase_secrets(&mut Some(csprng)).ok();
             die();
         }
     }
@@ -299,7 +299,7 @@ pub fn apply_attack_policy(csprng: &mut Csprng, one_way: &OneWayCounter) {
         bollard!(die, 4);
         if one_way.get(bao1x_api::POSSIBLE_ATTACKS).unwrap() > WIPE_THRESHOLD {
             bollard!(die, 4);
-            erase_secrets(&mut Some(csprng));
+            erase_secrets(&mut Some(csprng)).ok();
             die();
         }
     }

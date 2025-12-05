@@ -2,9 +2,11 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use bao1x_api::HardenedBool;
 use bao1x_api::REVOCATION_DUPE_DISTANCE;
 use bao1x_api::bollard;
+use bao1x_api::pubkeys::DEVELOPER_KEY_SLOT;
+use bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS;
+use bao1x_api::pubkeys::SecurityConfiguration;
 use bao1x_api::signatures::*;
 #[cfg(not(feature = "std"))]
 use bao1x_api::{DEVELOPER_MODE, DataSlotAccess, RwPerms, SLOT_ELEMENT_LEN_BYTES, SlotType};
@@ -33,33 +35,47 @@ pub const ERASE_VALUE: u8 = 0x03;
 /// IDD85 > 100mA. Thus we can't boot at max speed config, as not all system configurations have the
 /// external regulator. So, we have to work at reduced VDD/frequency and make sure this constraint is met.
 ///
-/// `img_offset` is a pointer to untrusted image data. It's assumed that the 0-offset of the pointer is
-/// a `SignatureInFlash` structure.
+/// The following arguments are packed into a `SecurityConfiguration` record. These records are defined
+/// in libs/bao1x-hal/src/pubkeys/mod.rs and are all of `const` type.
+///     `img_offset` is a pointer to untrusted image data. It's assumed that the 0-offset of the pointer is
+///     a `SignatureInFlash` structure.
 ///
-/// `pubkeys_offset` is a pointer to trusted public key data. Because 'pubkeys_offset` is assumed to be
-/// trusted minimal validation is done on this pointer. It's important that the caller has vetted this
-/// pointer before using it!
+///     `pubkeys_offset` is a pointer to trusted public key data. Because 'pubkeys_offset` is assumed to be
+///     trusted minimal validation is done on this pointer. It's important that the caller has vetted this
+///     pointer before using it!
 ///
-/// `revocation_offset` is the offset into the one-way counter array that contains the revocations
-/// corresponding to the pubkeys presented.
+///     `revocation_offset` is the offset into the one-way counter array that contains the revocations
+///     corresponding to the pubkeys presented.
 ///
-/// `function code` is a domain separator that ensures that signed sections can't be passed into
-/// the wrong phase of the boot sequence. Passed as a list of u32-values that are allowed.
-///
-/// `auto_jump` is a flag which, when `true`, causes the code to diverge into the signed block.
-/// If `false` the function returns the `(key_index, tag)` of the first passing public key, or an error
-/// if none were found.
+///     `function code` is a domain separator that ensures that signed sections can't be passed into
+///     the wrong phase of the boot sequence. Passed as a list of u32-values that are allowed.
 ///
 /// `spim`, when Some, informs validate_image to check an image contained in SPI flash.
+///
+/// `csprng`, when Some, allows the image validator to insert random delays to harden against glitch attacks
+///
+/// Returns either Ok(key_index, !key_index, tag, jump_target) or Err
+///   - `key_index` is returned twice, once as the compliment of itself, to harden the return value and to
+///     facilitate hardened logic based on the return values.
+///   - `tag` is an informative field, mostly, but can also be used to help with security checks as it should
+///     be correlated to the `key_index` value.
+///   - `jump_target` is the location to jump to, XOR'd with `tag` as a u32::le_bytes()
+///
+/// The purpose the XOR of `jump_target` with `tag` is to prevent the compiler from simply statically
+/// inferring a jump address, which becomes an ideal glitch target. The XOR itself doesn't provide
+/// cryptographic masking of the target address, it simply requires the CPU to do *something* to derive the
+/// jump target from a set of data that have not been corrupted by prior glitching.
 pub fn validate_image(
-    img_offset: *const u32,
-    pubkeys_offset: *const u32,
-    revocation_offset: usize,
-    function_codes: &[u32],
-    auto_jump: bool,
+    configuration: SecurityConfiguration,
     mut spim: Option<&mut Spim>,
     mut csprng: Option<&mut Csprng>,
-) -> Result<(usize, usize, [u8; 4]), String> {
+) -> Result<(usize, usize, [u8; 4], u32), String> {
+    // Unpack the arguments
+    let img_offset: *const u32 = configuration.image_ptr;
+    let pubkeys_offset: *const u32 = configuration.pubkey_ptr;
+    let revocation_offset: usize = configuration.revocation_owc;
+    let function_codes: &[u32] = configuration.function_codes;
+
     bollard!(die_no_std, 4);
     csprng.as_deref_mut().map(|rng| rng.random_delay());
     // Copy the signature into a structure so we can unpack it.
@@ -106,15 +122,9 @@ pub fn validate_image(
     }
 
     bollard!(die_no_std, 4);
-    let developer = if sig.sealed_data.function_code == FunctionCode::Developer as u32 {
-        HardenedBool::TRUE
-    } else {
-        HardenedBool::FALSE
-    };
 
     // crate::println!("Signature: {:x?}", sig.signature);
     let one_way_counters = OneWayCounter::new();
-    let mut secure = HardenedBool::FALSE;
     let mut passing_key: Option<usize> = None;
     let mut passing_key2: Option<usize> = None;
     csprng.as_deref_mut().map(|rng| rng.random_delay());
@@ -190,15 +200,8 @@ pub fn validate_image(
                     crate::println!("ed25519ph verification passed");
                     passing_key = Some(i);
                     csprng.as_deref_mut().map(|rng| rng.random_delay());
-                    passing_key2 = Some(i);
-                    if i != sig.sealed_data.pubkeys.len() - 1 {
-                        secure = HardenedBool::TRUE;
-                        break;
-                    } else if i == sig.sealed_data.pubkeys.len() - 1 {
-                        // this is the developer key slot
-                        secure = HardenedBool::FALSE;
-                        break;
-                    }
+                    passing_key2 = Some(!i);
+                    break;
                 }
                 _ => {
                     crate::println!("ed25519ph verification failed");
@@ -234,17 +237,8 @@ pub fn validate_image(
                     passing_key = Some(i);
                     bollard!(die_no_std, 4);
                     csprng.as_deref_mut().map(|rng| rng.random_delay());
-                    passing_key2 = Some(i);
-                    if i != sig.sealed_data.pubkeys.len() - 1 {
-                        bollard!(die_no_std, 4);
-                        secure = HardenedBool::TRUE;
-                        break;
-                    } else if i == sig.sealed_data.pubkeys.len() - 1 {
-                        bollard!(die_no_std, 4);
-                        // this is the developer key slot
-                        secure = HardenedBool::FALSE;
-                        break;
-                    }
+                    passing_key2 = Some(!i);
+                    break;
                 }
                 _ => {
                     crate::println!("FIDO2 verification failed");
@@ -259,31 +253,12 @@ pub fn validate_image(
         csprng.as_deref_mut().map(|rng| rng.random_delay());
         if let Some(valid_key) = passing_key {
             bollard!(die_no_std, 4);
-            if auto_jump {
-                bollard!(die_no_std, 4);
-                csprng.as_deref_mut().map(|rng| rng.random_delay());
-                // erase secrets if secure is false
-                match secure.is_true() {
-                    Some(true) => (),
-                    Some(false) => {
-                        bollard!(die_no_std, 4);
-                        erase_secrets(&mut csprng);
-                    }
-                    None => die_no_std(),
-                }
-                // erase secrets if developer is true
-                match developer.is_true() {
-                    Some(true) => {
-                        bollard!(die_no_std, 4);
-                        erase_secrets(&mut csprng);
-                    }
-                    Some(false) => (),
-                    None => die_no_std(),
-                }
-                bollard!(die_no_std, 4);
-                jump_to(img_offset as usize);
-            }
-            Ok((valid_key, valid_key2, pk_src.sealed_data.pubkeys[valid_key].tag))
+            Ok((
+                valid_key,
+                valid_key2,
+                pk_src.sealed_data.pubkeys[valid_key].tag,
+                (img_offset as u32) ^ u32::from_le_bytes(pk_src.sealed_data.pubkeys[valid_key].tag),
+            ))
         } else {
             Err(String::from("No valid pubkeys found or signature invalid"))
         }
@@ -293,14 +268,14 @@ pub fn validate_image(
 }
 
 #[cfg(feature = "std")]
-pub fn erase_secrets(_csprng: &mut Option<&mut Csprng>) {
+pub fn erase_secrets(_csprng: &mut Option<&mut Csprng>) -> Result<(), String> {
     unimplemented!(
         "erase_secrets() is not available in the run-time environment; access permissions are insufficient."
     );
 }
 
 #[cfg(not(feature = "std"))]
-pub fn erase_secrets(csprng: &mut Option<&mut Csprng>) {
+pub fn erase_secrets(csprng: &mut Option<&mut Csprng>) -> Result<(), String> {
     // ensure coreuser settings, as we could enter from a variety of loader stages
     let mut cu = crate::coreuser::Coreuser::new();
     cu.set();
@@ -314,10 +289,12 @@ pub fn erase_secrets(csprng: &mut Option<&mut Csprng>) {
     const ZERO_ERR_THRESH: usize = 64;
     bollard!(die_no_std, 4);
     for slot in crate::board::KEY_SLOTS.iter() {
+        bollard!(die_no_std, 4);
         csprng.as_deref_mut().map(|rng| rng.random_delay());
         if slot.get_type() == SlotType::Data {
             let (_pa, rw_perms) = slot.get_access_spec();
             for data_index in slot.try_into_data_iter().unwrap() {
+                bollard!(die_no_std, 4);
                 csprng.as_deref_mut().map(|rng| rng.random_delay());
                 match rw_perms {
                     RwPerms::ReadWrite | RwPerms::WriteOnly => {
@@ -361,18 +338,101 @@ pub fn erase_secrets(csprng: &mut Option<&mut Csprng>) {
                     }
                     _ => {}
                 }
-                if zero_key_count > ZERO_ERR_THRESH {
-                    crate::println!("Saw too many zero-keys. Insufficient privilege to erase keys!");
-                }
                 bollard!(die_no_std, 4);
             }
+            bollard!(die_no_std, 4);
         }
+        bollard!(die_no_std, 4);
     }
+    bollard!(die_no_std, 4);
     let owc = OneWayCounter::new();
     // once all secrets are erased, advance the DEVELOPER_MODE state
     // safety: the offset is correct because we're pulling it from our pre-defined constants and
     // those are manually checked.
-    unsafe { owc.inc(DEVELOPER_MODE).unwrap() };
+    if owc.get(DEVELOPER_MODE).unwrap() < 15 {
+        // limit incrementing to avoid memory wear-out, as erase_secrets() can be called every time on boot.
+        unsafe { owc.inc(DEVELOPER_MODE).unwrap() };
+    }
+    if zero_key_count > ZERO_ERR_THRESH {
+        Err(String::from("Saw too many zero-keys. Insufficient privilege to erase keys!"))
+    } else {
+        Ok(())
+    }
+}
+
+/// This implements hardened erase policy implementation: basically, if developer mode
+/// is detected, erase the secret keys.
+#[inline(always)]
+pub fn hardened_erase_policy(
+    paranoid1: u32,
+    paranoid2: u32,
+    key: usize,
+    key_inv: usize,
+    tag: [u8; 4],
+    csprng: &mut Csprng,
+) -> Result<(), String> {
+    if key == DEVELOPER_KEY_SLOT {
+        // this is a common case - if we're not under attack, and we're in developer mode,
+        // just short circuit the rest of the checks and erase the keys.
+        return erase_secrets(&mut Some(csprng));
+    }
+    bollard!(die_no_std, 4);
+    csprng.random_delay();
+    // if the tag isn't one of the first 3 "blessed" tags, assume developer mode. This is
+    // a supplemental check, so we don't harden it.
+    if !KEYSLOT_INITIAL_TAGS[..3].contains(&&tag) {
+        erase_secrets(&mut Some(csprng))?;
+    }
+    bollard!(die_no_std, 4);
+    csprng.random_delay();
+    // second check on the inverse-key type - this requires a double-glitch to bypass the key number check
+    if !key_inv == DEVELOPER_KEY_SLOT {
+        erase_secrets(&mut Some(csprng))?;
+    }
+    bollard!(die_no_std, 4);
+    csprng.random_delay();
+    // these won't match if we're under attack - erase the keys if attack is detected in this case
+    if paranoid1 != paranoid2 {
+        erase_secrets(&mut Some(csprng))?;
+    }
+    bollard!(die_no_std, 4);
+    csprng.random_delay();
+
+    if paranoid1 != 0 || paranoid2 != 0 {
+        // the whole code up there is repeated again - check twice, written out in linear form, instead
+        // of a loop, so glitches have a chance to land basically somewhere in this morass.
+        if key == DEVELOPER_KEY_SLOT {
+            // this is a common case - if we're not under attack, and we're in developer mode,
+            // just short circuit the rest of the checks and erase the keys.
+            erase_secrets(&mut Some(csprng))?;
+        }
+        bollard!(die_no_std, 4);
+        csprng.random_delay();
+        // if the tag isn't one of the first 3 "blessed" tags, assume developer mode. This is
+        // a supplemental check, so we don't harden it.
+        if !KEYSLOT_INITIAL_TAGS[..3].contains(&&tag) {
+            erase_secrets(&mut Some(csprng))?;
+        }
+        bollard!(die_no_std, 4);
+        csprng.random_delay();
+        // second check on the key type - this requires a double-glitch to bypass the key number check
+        if !key_inv == DEVELOPER_KEY_SLOT {
+            erase_secrets(&mut Some(csprng))?;
+        }
+        bollard!(die_no_std, 4);
+        csprng.random_delay();
+        // these won't match if we're under attack - erase the keys if attack is detected in this case
+        if paranoid1 != paranoid2 {
+            erase_secrets(&mut Some(csprng))?;
+        }
+        bollard!(die_no_std, 4);
+        csprng.random_delay();
+        // these won't match if we're under attack - erase the keys if attack is detected in this case
+        if paranoid1 != paranoid2 {
+            erase_secrets(&mut Some(csprng))?;
+        }
+    }
+    Ok(())
 }
 
 pub fn jump_to(target: usize) -> ! {
