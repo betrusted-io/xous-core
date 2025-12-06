@@ -89,10 +89,11 @@ mod platform;
 #[cfg(feature = "swap")]
 pub mod swap;
 
+#[cfg(feature = "bao1x")]
+use core::convert::TryInto;
 use core::{mem, ptr, slice};
 
 use asm::*;
-#[cfg(feature = "bao1x")]
 use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
 use bootconfig::BootConfig;
 use consts::*;
@@ -266,8 +267,10 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     #[cfg(feature = "bao1x")]
     let detached_app = {
         use bao1x_api::{PARANOID_MODE, PARANOID_MODE_DUPE, bollard, pubkeys::LOADER_TO_KERNEL};
+        use bao1x_hal::{buram::ERASURE_PROOF_RANGE_BYTES, sigcheck::ERASE_VALUE};
 
         let owc = bao1x_hal::acram::OneWayCounter::new();
+        let backup = bao1x_hal::buram::BackupManager::new();
         let (paranoid1, paranoid2) = owc.hardened_get2(PARANOID_MODE, PARANOID_MODE_DUPE).unwrap();
         let (dev_mode1, dev_mode2) = owc.hardened_get(bao1x_api::DEVELOPER_MODE).unwrap();
         csprng.random_delay();
@@ -298,7 +301,9 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                     || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
                 {
                     csprng.random_delay();
-                    if dev_mode1 == 0 {
+                    let erase_proof: &[u8; 32] =
+                        backup.get_slice(ERASURE_PROOF_RANGE_BYTES).try_into().unwrap();
+                    if dev_mode1 == 0 || erase_proof != &[ERASE_VALUE; 32] {
                         if paranoid1 == 0 && paranoid2 == 0 {
                             println!("{}LOADER.KERNDIE,{}", BOOKEND_START, BOOKEND_END);
                             println!("Kernel is devkey signed, but system is not in developer mode. Dying!");
@@ -315,7 +320,9 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                 bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                 if !key_inv == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
                     csprng.random_delay();
-                    if dev_mode2 == 0 {
+                    let erase_proof: &[u8; 32] =
+                        backup.get_slice(ERASURE_PROOF_RANGE_BYTES).try_into().unwrap();
+                    if dev_mode2 == 0 || erase_proof != &[ERASE_VALUE; 32] {
                         if paranoid1 == 0 && paranoid2 == 0 {
                             println!("{}LOADER.KERNDIE,{}", BOOKEND_START, BOOKEND_END);
                             println!("Kernel is devkey signed, but system is not in developer mode. Dying!");
@@ -371,9 +378,11 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                         == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
                         || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
                     {
+                        let erase_proof: &[u8; 32] =
+                            backup.get_slice(ERASURE_PROOF_RANGE_BYTES).try_into().unwrap();
                         // we can't erase keys in the loader, because the keys have already been locked
                         // out at this point. Thus, ensure that the system is already in developer mode.
-                        if dev_mode1 == 0 {
+                        if dev_mode1 == 0 || erase_proof != &[ERASE_VALUE; 32] {
                             if paranoid1 == 0 && paranoid2 == 0 {
                                 println!("{}LOADER.APPDIE,{}", BOOKEND_START, BOOKEND_END);
                                 println!(
@@ -389,7 +398,9 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                     csprng.random_delay();
                     bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                     if !key_inv == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
-                        if dev_mode2 == 0 {
+                        let erase_proof: &[u8; 32] =
+                            backup.get_slice(ERASURE_PROOF_RANGE_BYTES).try_into().unwrap();
+                        if dev_mode2 == 0 || erase_proof != &[ERASE_VALUE; 32] {
                             if paranoid1 == 0 && paranoid2 == 0 {
                                 println!("{}LOADER.APPDIE,{}", BOOKEND_START, BOOKEND_END);
                                 println!(
@@ -518,6 +529,14 @@ fn boot_sequence(
             check_load(&mut cfg);
         }
         println!("done initializing for cold boot.");
+        #[cfg(feature = "bao1x")]
+        {
+            // cleanup the leaked key to the backup registers
+            let mut buram = bao1x_hal::buram::BackupManager::new();
+            bao1x_api::bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+            buram.store_slice(&[0u8; 32], bao1x_hal::buram::ERASURE_PROOF_RANGE_BYTES.start);
+            bao1x_api::bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+        }
     }
     #[cfg(feature = "resume")]
     if clean {
@@ -564,6 +583,15 @@ fn boot_sequence(
     // condense debug and resume arguments into a single register, so we have space for XPT
     let debug_resume = if cfg.debug { 0x1 } else { 0x0 } | if clean { 0x2 } else { 0x0 };
     if !clean {
+        #[cfg(feature = "bao1x")]
+        {
+            // clean it twice, just in case the first cleanup was glitched past
+            let mut buram = bao1x_hal::buram::BackupManager::new();
+            bao1x_api::bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+            buram.store_slice(&[0u8; 32], bao1x_hal::buram::ERASURE_PROOF_RANGE_BYTES.start);
+            bao1x_api::bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+        }
+
         // The MMU should be set up now, and memory pages assigned to their
         // respective processes.
         let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size + cfg.swap_offset;

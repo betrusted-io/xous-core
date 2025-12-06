@@ -10,6 +10,7 @@ use bao1x_hal::board::{APP_UART_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRA
 use bao1x_hal::ifram::IframRange;
 use bao1x_hal::iox::Iox;
 use bao1x_hal::sce;
+use bao1x_hal::sigcheck::ERASE_VALUE;
 use bao1x_hal::udma::{GlobalConfig, Spim, SpimClkPha, SpimClkPol, SpimCs};
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::RngCore;
@@ -233,6 +234,11 @@ impl SwapHal {
                     // check signature only if the swap key is all 0's
                     // this is not very glitch-hardened because at this point, the adversary has full
                     // control over the code coming in. A TOCTOU is extremely easy to pull off.
+                    //
+                    // In practice for full security, the swap shall be encrypted to a custom symmetric
+                    // key unique to each device, which takes the place of the signature check. This
+                    // check is thus assumed to be performed only upon the first presentation of
+                    // a signed update.
                     if swap.key == [0u8; 32] {
                         crate::println!("Fresh swap image found - checking signature before proceeding");
                         match bao1x_hal::sigcheck::validate_image(
@@ -247,9 +253,11 @@ impl SwapHal {
                                     !k2,
                                     core::str::from_utf8(&tag).unwrap_or("invalid tag")
                                 );
+                                bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                                 if k != !k2 {
                                     bao1x_hal::sigcheck::die_no_std();
                                 }
+                                bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                                 // k is just a nominal slot number. If either match, assume we are dealing
                                 // with a developer image.
                                 if tag
@@ -262,6 +270,7 @@ impl SwapHal {
                                     // locked out at this point. Thus,
                                     // ensure that the system is already in developer mode.
                                     let owc = bao1x_hal::acram::OneWayCounter::new();
+                                    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                                     if owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0 {
                                         println!("{}LOADER.SWAPDIE,{}", BOOKEND_START, BOOKEND_END);
                                         println!(
@@ -274,6 +283,16 @@ impl SwapHal {
                                             "Developer key detected on swap. Proceeding in developer mode!"
                                         );
                                     }
+                                    let backup = bao1x_hal::buram::BackupManager::new();
+                                    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+                                    let erase_proof: &[u8; 32] = backup
+                                        .get_slice(bao1x_hal::buram::ERASURE_PROOF_RANGE_BYTES)
+                                        .try_into()
+                                        .unwrap();
+                                    if erase_proof != &[ERASE_VALUE; 32] {
+                                        bao1x_hal::sigcheck::die_no_std();
+                                    }
+                                    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                                 }
                             }
                             Err(e) => {
