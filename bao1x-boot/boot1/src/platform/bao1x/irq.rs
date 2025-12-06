@@ -6,6 +6,8 @@ use vexriscv::register::vexriscv::{mim, mip};
 use crate::usb::USB;
 use crate::*;
 
+static ATTACKS_SINCE_BOOT: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
 pub fn irq_setup() {
     unsafe {
         #[rustfmt::skip]
@@ -212,12 +214,17 @@ pub extern "C" fn trap_handler(
             timer0.wfo(utra::timer0::RELOAD_RELOAD, (DEFAULT_FCLK_FREQUENCY / 1_000) * ms);
         } else if (irqs_pending & (1 << utra::irqarray5::IRQARRAY5_IRQ)) != 0 {
             crate::uart_irq_handler();
-        } else if (irqs_pending & (1 << utra::irqarray2::IRQARRAY2_IRQ)) != 0 {
-            // just clear it for now
-            let mut irqarray2 = CSR::new(utralib::HW_IRQARRAY2_BASE as *mut u32);
-            let pending = irqarray2.r(utra::irqarray2::EV_PENDING);
-            crate::println!("keypress interrupt {:x}", pending);
-            irqarray2.wo(utra::irqarray2::EV_PENDING, pending);
+        } else if (irqs_pending & (1 << utra::irqarray13::IRQARRAY13_IRQ)) != 0 {
+            // irq13 -> {aoramerr, secirq, ifsuberr, sceerr, coresuberr}
+            // this IRQ will trigger an attack response if any of the sensors trigger *or*
+            // if the ECC-protected memory banks trigger an ECC error
+            bao1x_hal::hardening::glitch_handler(
+                ATTACKS_SINCE_BOOT.fetch_add(1, core::sync::atomic::Ordering::SeqCst),
+            );
+        } else if (irqs_pending & (1 << utra::irqarray15::IRQARRAY15_IRQ)) != 0 {
+            // irq15 -> {meshirq, sensorcirq, glcirq}
+            // those one is kind of redundant with irq13 in this scenario, because secirq is the OR
+            // of all three IRQs going into this array. So, we handle this simply in irqarray13.
         }
         if (irqs_pending & (1 << utralib::utra::irqarray1::IRQARRAY1_IRQ)) != 0 {
             // handle USB interrupt

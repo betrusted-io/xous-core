@@ -9,10 +9,8 @@ use utralib::utra;
 use utralib::utra::sysctrl;
 
 #[cfg(feature = "unsafe-dev")]
-use crate::platform::{
-    debug::setup_rx,
-    irq::{enable_irq, irq_setup},
-};
+use crate::platform::debug::setup_rx;
+use crate::platform::irq::{enable_irq, irq_setup};
 
 #[global_allocator]
 static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
@@ -149,6 +147,31 @@ pub fn early_init() -> Csprng {
     let mut csprng = Csprng::new();
     csprng.random_delay();
 
+    irq_setup();
+    // set up the reactive sensors
+    bao1x_api::bollard!(4);
+    bao1x_hal::hardening::reset_sensors();
+    bao1x_api::bollard!(4);
+    bollard!(die, 4);
+    csprng.random_delay();
+    // ensure paranoid mode is respected
+    if paranoid2 != 0 {
+        bollard!(die, 4);
+        paranoid_mode();
+    }
+    // set up IRQ to respond to all possible sensor errors
+    let mut irq13 = CSR::new(utra::irqarray13::HW_IRQARRAY13_BASE as *mut u32);
+    irq13.wo(utra::irqarray13::EV_EDGE_TRIGGERED, 0xFFFF_FFFF);
+    irq13.wo(utra::irqarray13::EV_POLARITY, 0xFFFF_FFFF);
+    irq13.wo(utra::irqarray13::EV_PENDING, 0xFFFF_FFFF);
+    irq13.wo(utra::irqarray13::EV_ENABLE, 0xFFFF_FFFF);
+    enable_irq(utra::irqarray13::IRQARRAY13_IRQ);
+    csprng.random_delay();
+    if paranoid1 != 0 {
+        bollard!(die, 4);
+        paranoid_mode();
+    }
+
     // setup heap alloc
     // glitch_safety: failing to initialize this will generally cause heap allocs to hang
     setup_alloc();
@@ -193,7 +216,6 @@ pub fn early_init() -> Csprng {
     #[cfg(feature = "unsafe-dev")]
     let mut udma_uart = {
         let mut udma_uart = setup_rx(perclk);
-        irq_setup();
         enable_irq(utra::irqarray5::IRQARRAY5_IRQ);
         udma_uart
     };
