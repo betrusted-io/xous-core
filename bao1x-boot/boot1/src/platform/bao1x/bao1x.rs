@@ -71,7 +71,10 @@ pub fn setup_backup_region() -> u32 {
     let mut bu_mgr = bao1x_hal::buram::BackupManager::new();
     if !bu_mgr.is_backup_valid() {
         // zeroize the backup RAM
-        bu_mgr.bu_ram_as_mut().fill(0);
+        // safety: make_valid is called after this is done.
+        unsafe {
+            bu_mgr.bu_ram_as_mut().fill(0);
+        }
         // calculate the hash and mark as valid
         bu_mgr.make_valid();
 

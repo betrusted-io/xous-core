@@ -17,6 +17,8 @@ use xous::arch::PAGE_SIZE;
 use crate::acram::OneWayCounter;
 #[cfg(not(feature = "std"))]
 use crate::acram::{AccessSettings, SlotManager};
+#[cfg(not(feature = "std"))]
+use crate::buram::{BackupManager, ERASURE_PROOF_RANGE_BYTES};
 use crate::hardening::Csprng;
 use crate::udma::Spim;
 
@@ -191,7 +193,7 @@ pub fn validate_image(
             // the function inside the ed25519 crate.
             bollard!(die_no_std, 4);
             csprng.as_deref_mut().map(|rng| rng.random_delay());
-            // this match statement is an achille's heel. I don't want to fork the cryptographic
+            // this match statement is an Achilles's heel. I don't want to fork the cryptographic
             // crates, so we have an unhardened comparison of the result. The work-around is
             // in paranoid mode, we command the system to verify things *twice*
             match verifying_key.verify_prehashed(h, None, &ed25519_signature) {
@@ -227,7 +229,7 @@ pub fn validate_image(
 
             bollard!(die_no_std, 4);
             csprng.as_deref_mut().map(|rng| rng.random_delay());
-            // this match statement is an achille's heel. I don't want to fork the cryptographic
+            // this match statement is an Achilles's heel. I don't want to fork the cryptographic
             // crates, so we have an unhardened comparison of the result. The work-around is
             // in paranoid mode, we command the system to verify things *twice*
             match verifying_key.verify_strict(&msg, &ed25519_signature) {
@@ -282,6 +284,12 @@ pub fn erase_secrets(csprng: &mut Option<&mut Csprng>) -> Result<(), String> {
 
     let slot_mgr = SlotManager::new();
     let mut rram = crate::rram::Reram::new();
+
+    let mut buram = BackupManager::new();
+    // erase the backup RAM region to 0 that is the erasure proof.
+    bollard!(die_no_std, 4);
+    csprng.as_deref_mut().map(|rng| rng.random_delay());
+    buram.store_slice(&[0u8; 32], crate::buram::ERASURE_PROOF_RANGE_BYTES.start);
 
     let mut zero_key_count = 0;
     // This is set to a higher level because we need to work around an earlier issue
@@ -345,10 +353,17 @@ pub fn erase_secrets(csprng: &mut Option<&mut Csprng>) -> Result<(), String> {
         bollard!(die_no_std, 4);
     }
     bollard!(die_no_std, 4);
+
+    // store the proof that the key array was erased - could lead to disclosure of one key,
+    // but we also can't simply trust that the oneway counter below is accurate
+    csprng.as_deref_mut().map(|rng| rng.random_delay());
+    buram.store_slice(slot_mgr.read(&crate::board::ERASE_PROOF).unwrap(), ERASURE_PROOF_RANGE_BYTES.start);
+
     let owc = OneWayCounter::new();
     // once all secrets are erased, advance the DEVELOPER_MODE state
     // safety: the offset is correct because we're pulling it from our pre-defined constants and
     // those are manually checked.
+    bollard!(die_no_std, 4);
     if owc.get(DEVELOPER_MODE).unwrap() < 15 {
         // limit incrementing to avoid memory wear-out, as erase_secrets() can be called every time on boot.
         unsafe { owc.inc(DEVELOPER_MODE).unwrap() };

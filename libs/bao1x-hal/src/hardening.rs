@@ -97,7 +97,7 @@ impl Csprng {
             word.copy_from_slice(&ro_trng.get_raw().to_ne_bytes());
         }
 
-        crate::println!("seed: {:x?}", seed); // used to eyeball that things are working correctly
+        // crate::println!("seed: {:x?}", seed); // used to eyeball that things are working correctly
         let mut csprng = ChaCha8Rng::from_seed(seed);
 
         let entropy_bank = csprng.next_u64();

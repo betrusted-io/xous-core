@@ -188,8 +188,12 @@ impl<'a> Reram {
         assert!(data.len() % 8 == 0, "unaligned source data!");
         // crate::print!("@ {:x} > ", addr);
         for (outer, d) in data.chunks_exact(8).enumerate() {
+            #[cfg(not(feature = "kernel"))]
+            bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
             // write the data to the buffer
             for (inner, &datum) in d.iter().enumerate() {
+                #[cfg(not(feature = "kernel"))]
+                bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
                 // crate::print!(" {:x}", datum);
                 self.array
                     .as_mut_ptr()
@@ -199,6 +203,8 @@ impl<'a> Reram {
             }
             // crate::println!("");
 
+            #[cfg(not(feature = "kernel"))]
+            bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
             self.csr.rmwf(utra::rrc::SFR_RRCCR_SFR_RRCCR, RRC_CR_WRITE_CMD | SECURITY_MODE);
             self.array
                 .as_mut_ptr()

@@ -43,6 +43,7 @@ pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables) {
 
     for tag in args.iter() {
         let mut env_header = crate::env::EnvHeader::default();
+        #[allow(unused_mut)]
         let mut pid_env = env_variables.clone();
 
         #[cfg(feature = "bao1x")]

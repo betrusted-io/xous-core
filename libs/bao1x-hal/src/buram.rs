@@ -6,6 +6,8 @@ const HASH_LOC: usize = 0;
 #[allow(dead_code)]
 const RESERVED_LOC: usize = 1;
 
+pub const ERASURE_PROOF_RANGE_BYTES: Range<usize> = 0..32;
+
 use crate::buram::murmur3::murmur3_32;
 
 const fn range_len(r: Range<usize>) -> usize { r.end - r.start }
@@ -86,9 +88,28 @@ impl BackupManager {
         }
     }
 
-    pub fn bu_ram_as_slice(&self) -> &[u8] { unsafe { self.bu_ram.as_slice() } }
+    pub fn store_slice<T: Copy>(&mut self, input: &[T], byte_offset: usize) {
+        let type_offset = byte_offset / size_of::<T>();
+        // safety: safe because make_valid() is called after the slice is accessed
+        let dest: &mut [T] = unsafe { &mut self.bu_ram_as_mut()[type_offset..type_offset + input.len()] };
+        dest.copy_from_slice(&input);
 
-    pub fn bu_ram_as_mut(&mut self) -> &mut [u8] { unsafe { self.bu_ram.as_slice_mut() } }
+        self.make_valid();
+    }
+
+    pub fn get_slice<T>(&self, byte_range: core::ops::Range<usize>) -> &[T] {
+        let type_offset = byte_range.start / size_of::<T>();
+        let type_len = (byte_range.end - byte_range.start) / size_of::<T>();
+        &self.bu_ram_as_slice()[type_offset..type_offset + type_len]
+    }
+
+    pub fn bu_ram_as_slice<T>(&self) -> &[T] { unsafe { self.bu_ram.as_slice::<T>() } }
+
+    /// Safety: modifications to the backup RAM array need a follow-up call to `make_valid`
+    /// in order for the boot check to pass.
+    ///
+    /// Could try to get clever and implement a `Drop` trait which includes a make_valid() call? maybe?
+    pub unsafe fn bu_ram_as_mut<T>(&mut self) -> &mut [T] { self.bu_ram.as_slice_mut::<T>() }
 }
 
 pub mod murmur3 {
