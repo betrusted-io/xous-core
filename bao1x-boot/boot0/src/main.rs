@@ -15,7 +15,7 @@ use alloc::collections::VecDeque;
 use core::cell::RefCell;
 
 use bao1x_api::pubkeys::{BOOT0_SELF_CHECK, BOOT0_TO_ALTBOOT1, BOOT0_TO_BOOT1};
-use bao1x_api::{BOOT0_PUBKEY_FAIL, bollard};
+use bao1x_api::{BOOT0_PUBKEY_FAIL, DEVELOPER_MODE, bollard};
 use bao1x_api::{HardenedBool, PARANOID_MODE, PARANOID_MODE_DUPE};
 use bao1x_hal::acram::OneWayCounter;
 use bao1x_hal::hardening::{check_pll, die, mesh_setup};
@@ -171,6 +171,25 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     }
     bollard!(die, 4);
     // == end self validation ==
+
+    // If the developer bit is set, ensure that keys are erased. The edge case we're worried about is
+    // if an attacker sets developer bit, even with signed images - this can allow for an easier
+    // time of booting a malicious kernel because we can't erase secret keys inside the loader
+    // due to access restrictions.
+    csprng.random_delay();
+    let (dev1, dev2) = owc.hardened_get(DEVELOPER_MODE).unwrap();
+    if dev1 != 0 {
+        bao1x_hal::sigcheck::erase_secrets(&mut Some(&mut csprng))
+            .inspect_err(|e| crate::println!("{}", e))
+            .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+    }
+    bollard!(die, 4);
+    csprng.random_delay();
+    if dev2 != 0 {
+        bao1x_hal::sigcheck::erase_secrets(&mut Some(&mut csprng))
+            .inspect_err(|e| crate::println!("{}", e))
+            .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+    }
 
     bollard!(die, 4);
     let boot_order = match owc.get_decoded::<bao1x_api::AltBootCoding>() {

@@ -1,4 +1,6 @@
-use bao1x_api::{PARANOID_MODE, PARANOID_MODE_DUPE, bollard, pubkeys::BOOT1_TO_LOADER_OR_BAREMETAL};
+use bao1x_api::{
+    DEVELOPER_MODE, PARANOID_MODE, PARANOID_MODE_DUPE, bollard, pubkeys::BOOT1_TO_LOADER_OR_BAREMETAL,
+};
 use bao1x_hal::hardening::Csprng;
 
 #[inline(always)]
@@ -19,6 +21,22 @@ fn seal_boot1_keys() {
 pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
     let one_way = bao1x_hal::acram::OneWayCounter::new();
     bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+
+    // If the developer bit is set, ensure that keys are erased. The edge case we're worried about is
+    // if an attacker sets developer bit, even with signed images - this can allow for an easier
+    // time of booting a malicious kernel because we can't erase secret keys inside the loader
+    // due to access restrictions.
+    csprng.random_delay();
+    let (dev1, dev2) = one_way.hardened_get(DEVELOPER_MODE).unwrap();
+    if dev1 != 0 {
+        bao1x_hal::sigcheck::erase_secrets(&mut Some(csprng)).inspect_err(|e| crate::println!("{}", e)).ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+    }
+    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+    csprng.random_delay();
+    if dev2 != 0 {
+        bao1x_hal::sigcheck::erase_secrets(&mut Some(csprng)).inspect_err(|e| crate::println!("{}", e)).ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+    }
+
     csprng.random_delay();
     let (paranoid1, paranoid2) = one_way.hardened_get2(PARANOID_MODE, PARANOID_MODE_DUPE).unwrap();
     csprng.random_delay();
