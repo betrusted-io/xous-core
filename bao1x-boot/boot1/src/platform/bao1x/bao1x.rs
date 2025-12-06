@@ -71,7 +71,10 @@ pub fn setup_backup_region() -> u32 {
     let mut bu_mgr = bao1x_hal::buram::BackupManager::new();
     if !bu_mgr.is_backup_valid() {
         // zeroize the backup RAM
-        bu_mgr.bu_ram_as_mut().fill(0);
+        // safety: make_valid is called after this is done.
+        unsafe {
+            bu_mgr.bu_ram_as_mut().fill(0);
+        }
         // calculate the hash and mark as valid
         bu_mgr.make_valid();
 
@@ -144,6 +147,16 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
     if setup_backup_region() == 0 {
         crate::println!("backup region is clean!");
     }
+
+    irq_setup();
+    // all sensors & IRQs setup already by boot0, but it doesn't hurt to re-write these registers
+    // in case they were defeated somehow previously
+    let mut irq13 = CSR::new(utra::irqarray13::HW_IRQARRAY13_BASE as *mut u32);
+    irq13.wo(utra::irqarray13::EV_EDGE_TRIGGERED, 0xFFFF_FFFF);
+    irq13.wo(utra::irqarray13::EV_POLARITY, 0xFFFF_FFFF);
+    irq13.wo(utra::irqarray13::EV_ENABLE, 0xFFFF_FFFF);
+    // enable the IRQ because it was disabled by the previous stage's exit
+    enable_irq(utra::irqarray13::IRQARRAY13_IRQ);
 
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
@@ -340,7 +353,6 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
 
     // Rx setup
     let _udma_uart = setup_console(&board_type, &iox, perclk);
-    irq_setup();
     enable_irq(utra::irqarray5::IRQARRAY5_IRQ);
 
     crate::debug::USE_CONSOLE.store(true, core::sync::atomic::Ordering::SeqCst);

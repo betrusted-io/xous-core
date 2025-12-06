@@ -255,6 +255,19 @@ pub fn sign_image(
             }
 
             dest_file.write_all(&protected)?;
+
+            if function_code == FunctionCode::Kernel {
+                let target = bao1x_api::RRAM_STORAGE_LEN - (bao1x_api::KERNEL_START - bao1x_api::BOOT0_START);
+                if dest_file.len() > target {
+                    println!(
+                        "ERROR: Xous RRAM image is too big to fit: {} bytes too large ({} bytes; {} limit)",
+                        dest_file.len() - target,
+                        dest_file.len(),
+                        target,
+                    );
+                    return Err(String::from("Image doesn't fit").into());
+                }
+            }
             Ok(dest_file)
         }
     }

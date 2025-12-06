@@ -9,6 +9,15 @@ use utralib::*;
 use crate::acram::OneWayCounter;
 use crate::sigcheck::erase_secrets;
 
+/// use a large threshold initially, under the theory that e.g. fault injections tend
+/// to take thousands of iterations to succeed, and we really don't want to accidentally
+/// wipe customer data. For now, the policy is to only wipe to those who have consented
+/// by turning on paranoid mode.
+///
+/// Pick a number that has a high hamming distance from 0 - and so, prefer e.g. 127 vs 128.
+pub const WIPE_THRESHOLD: u32 = 127;
+const DISTURB_THRESHOLD: u32 = 3;
+
 /// This is the range of delays we will pick from whenever we attempt a random delay,
 /// expressed as a number of bits.
 const DELAY_MARGIN_BITS: u64 = 8;
@@ -97,7 +106,7 @@ impl Csprng {
             word.copy_from_slice(&ro_trng.get_raw().to_ne_bytes());
         }
 
-        crate::println!("seed: {:x?}", seed); // used to eyeball that things are working correctly
+        // crate::println!("seed: {:x?}", seed); // used to eyeball that things are working correctly
         let mut csprng = ChaCha8Rng::from_seed(seed);
 
         let entropy_bank = csprng.next_u64();
@@ -128,9 +137,45 @@ pub fn paranoid_mode() {
     sensor.wo(utra::sensorc::SFR_VDMASK0, 0);
     bao1x_api::bollard!(die, 4);
     sensor.wo(utra::sensorc::SFR_VDMASK1, 0); // putting 0 here makes the chip reset on glitch detect
-    // redundant write in case of glitching
+}
 
-    // TODO: set up glue cells & interrupts
+/// This call clears any current alarms and resets sensors, but does not
+/// enable (or re-enable) interrupts
+pub fn reset_sensors() {
+    let glue = CSR::new(utra::gluechain::HW_GLUECHAIN_BASE as *mut u32);
+    let mut sensor = CSR::new(utra::sensorc::HW_SENSORC_BASE as *mut u32);
+    // reset the glue chain. Hard-coded constants are used here because
+    // the UTRA did not extract these constants correctly.
+    bao1x_api::bollard!(die, 4);
+    unsafe {
+        glue.base().add(4).write_volatile(0);
+        glue.base().add(5).write_volatile(0);
+    }
+    // wait for reset to propagate
+    for _ in 0..100 {
+        bao1x_api::bollard!(4);
+    }
+    // re-arm
+    bao1x_api::bollard!(die, 4);
+    unsafe {
+        glue.base().add(0).write_volatile(0x0);
+        glue.base().add(1).write_volatile(0x0);
+        glue.base().add(4).write_volatile(0xFFFF_FFFF);
+        glue.base().add(5).write_volatile(0xFFFF_FFFF);
+        glue.base().add(6).write_volatile(0x0);
+        glue.base().add(7).write_volatile(0x0);
+    }
+
+    // this enables all the sensors to create non-resetting interrupts
+    bao1x_api::bollard!(die, 4);
+    sensor.wo(utra::sensorc::SFR_VDFR, 0x3f); // clear any voltage alarms
+    sensor.wo(utra::sensorc::SFR_VDMASK0, 0);
+    // DONT TOUCH THIS - paranoid mode sets this, and can set it BEFORE reset_sensors is called!
+    // sensor.wo(utra::sensorc::SFR_VDMASK1, 0x3f);
+    sensor.wo(utra::sensorc::SFR_LDIP_FD, 0x1ff); // setup filtering parameters
+    sensor.wo(utra::sensorc::SFR_LDCFG, 0xc);
+    sensor.wo(utra::sensorc::SFR_LDMASK, 0x0); // turn on both sensors
+    bao1x_api::bollard!(die, 4);
 }
 
 /// Mesh is a bit challenging to check on a fast-boot system. This is because it
@@ -271,14 +316,6 @@ pub fn mesh_check_and_react(csprng: &mut Csprng, one_way: &OneWayCounter) {
 }
 
 pub fn apply_attack_policy(csprng: &mut Csprng, one_way: &OneWayCounter) {
-    // use a large threshold initially, under the theory that e.g. fault injections tend
-    // to take thousands of iterations to succeed, and we really don't want to accidentally
-    // wipe customer data. For now, the policy is to only wipe to those who have consented
-    // by turning on paranoid mode.
-    //
-    // Pick a number that has a high hamming distance from 0 - and so, prefer e.g. 127 vs 128.
-    const WIPE_THRESHOLD: u32 = 127;
-
     bollard!(die, 4);
     csprng.random_delay();
     let (paranoid1, paranoid2) =
@@ -303,4 +340,91 @@ pub fn apply_attack_policy(csprng: &mut Csprng, one_way: &OneWayCounter) {
             die();
         }
     }
+}
+
+pub fn glitch_handler(attacks_since_boot: u32) {
+    let owc = OneWayCounter::new();
+    let mut irq13 = CSR::new(utra::irqarray13::HW_IRQARRAY13_BASE as *mut u32);
+    let mut irq15 = CSR::new(utra::irqarray15::HW_IRQARRAY15_BASE as *mut u32);
+    // Only secirq is recoverable: this is a sensor that has triggered. This is the only
+    // type of "attack" that we envision would need recovering from, because the sensors
+    // could be too sensitive. Thus, for all other IRQ types, just halt.
+    let reason = irq13.r(utra::irqarray13::EV_PENDING);
+
+    let mut was_sensor = false;
+    bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
+    if reason & 0x8 != 0 {
+        // figure out which subsystem glitched
+        let sensor = irq15.r(utra::irqarray15::EV_PENDING);
+        const GLUE_MASK: u32 = 1 << 0;
+        const SENSOR_MASK: u32 = 1 << 1;
+        const MESH_MASK: u32 = 1 << 2;
+        if sensor & MESH_MASK != 0 {
+            // mesh events are handled by a separate routine
+            #[cfg(feature = "debug-countermeasures")]
+            crate::println!("mesh");
+        }
+        if sensor & SENSOR_MASK != 0 || sensor & GLUE_MASK != 0 {
+            #[cfg(feature = "debug-countermeasures")]
+            crate::println!("Sensor {:x}", sensor);
+            // this resets all the sensors that *can* be reset
+            crate::hardening::reset_sensors();
+            was_sensor = true;
+        }
+        irq15.wo(utra::irqarray15::EV_PENDING, sensor);
+    }
+    bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
+    if !was_sensor {
+        bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
+        // mesh sensor will trigger while settling measurements; and there is no way to mask it
+        irq13.wo(utra::irqarray13::EV_PENDING, reason);
+        bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
+        return;
+    }
+    bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
+
+    // safety: this is safe because the offset is from a checked, pre-defined value
+    unsafe {
+        // the increment is just OK'd because if for some reason it fails we still want
+        // to execute the following code.
+        owc.inc(bao1x_api::POSSIBLE_ATTACKS).ok();
+    }
+    let attacks = owc.get(bao1x_api::POSSIBLE_ATTACKS).unwrap_or(WIPE_THRESHOLD + 1);
+
+    // on the paranoid path: wipe secrets if we exceed a wipe threshold
+    let (paranoid1, paranoid2) =
+        owc.hardened_get2(bao1x_api::PARANOID_MODE, bao1x_api::PARANOID_MODE_DUPE).unwrap();
+    bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
+    if paranoid1 != 0 {
+        if attacks > WIPE_THRESHOLD {
+            crate::sigcheck::erase_secrets(&mut None).ok();
+        }
+        crate::sigcheck::die_no_std();
+    }
+    if paranoid2 != 0 {
+        if attacks > WIPE_THRESHOLD {
+            crate::sigcheck::erase_secrets(&mut None).ok();
+        }
+        crate::sigcheck::die_no_std();
+    }
+
+    // on the non-paranoid path: just wipe NV elements & halt if we see a lower threshold of attacks
+    bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
+    if attacks_since_boot > DISTURB_THRESHOLD {
+        // even output something on the DUART - this could be used as a trigger to prevent shutdown
+        // but at this point diagnostics are useful for seeing why the system shut down unexpectedly.
+        #[cfg(feature = "debug-countermeasures")]
+        crate::println!("Attack thresh");
+        crate::sigcheck::die_no_std();
+    }
+
+    bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
+    // non-sensor reasons are non-recoverable: we'll just repeatedly re-enter the interrupt state
+    // in this case, just erase the NV data and die.
+    if reason & !0x8 != 0 {
+        #[cfg(feature = "debug-countermeasures")]
+        crate::println!("Halt {:x}", reason);
+        crate::sigcheck::die_no_std();
+    }
+    irq13.wo(utra::irqarray13::EV_PENDING, reason);
 }

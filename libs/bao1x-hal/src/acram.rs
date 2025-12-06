@@ -360,8 +360,8 @@ impl SlotManager {
     /// Safety: the caller must resolve the index into either the data or the key array correctly.
     /// There is access or type checking done. This is a "raw read" primitive mostly used for debugging.
     pub unsafe fn read_data_slot(&self, absolute_offset: usize) -> &[u8] {
-        let ptr: *const u8 = &self.data_range.as_slice::<u8>()[absolute_offset] as *const u8;
-        crate::println!("data loc: {:x}, offset: {:x}", ptr as usize, absolute_offset);
+        // let ptr: *const u8 = &self.data_range.as_slice::<u8>()[absolute_offset] as *const u8;
+        // crate::println!("data loc: {:x}, offset: {:x}", ptr as usize, absolute_offset);
         &self.data_range.as_slice()[absolute_offset..absolute_offset + SLOT_ELEMENT_LEN_BYTES]
     }
 
