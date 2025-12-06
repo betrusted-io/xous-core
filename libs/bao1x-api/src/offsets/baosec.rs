@@ -116,6 +116,19 @@ pub const NUISANCE_KEYS: [SlotIndex; 2] = [NUISANCE_KEYS_0, NUISANCE_KEYS_1];
 /// running your own code on the device).
 pub const CHAFF_KEYS: SlotIndex = SlotIndex::DataRange(128..256, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
+/// This is intentionally the very last key in the chaff key range. It's "sampled" by copying
+/// the full value of this key into the BURAM, which is later passed on to the loader. It's then
+/// checked for a value being equal to the erasure value to confirm that a device is in developer
+/// mode or not. This process does introduce a risk that this one key is leaked but it also
+/// closes a loophole where an attacker can simply manipulate the value of the DEVELOPER_KEY
+/// one way counter and fool the system into running a developer-key signed image without the
+/// secret keys being erased.
+///
+/// Placing this at the end of the key array ostensibly means that all the keys before it were
+/// erased; it might be possible to glitch all the way to the end and just have this one erased
+/// but I think that is reasonably unlikely...
+pub const ERASE_PROOF: SlotIndex = SlotIndex::Data(256, PartitionAccess::Fw0, RwPerms::ReadWrite);
+
 /// All the slots of concern located in a single iterator. The idea is that everything is
 /// condensed here and used to check for access integrity using the array below.
 pub const DATA_SLOTS: [SlotIndex; 8] = [

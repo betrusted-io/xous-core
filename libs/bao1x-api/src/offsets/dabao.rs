@@ -43,6 +43,7 @@ pub const DATA_SLOTS: [SlotIndex; 8] = [
     crate::offsets::DEV_PUBKEY,
 ];
 
+pub use crate::baosec::ERASE_PROOF;
 pub use crate::baosec::{
     CHAFF_KEYS, NUISANCE_KEYS, NUISANCE_KEYS_0, NUISANCE_KEYS_1, RMA_KEY, ROOT_SEED, THE_FLAG_1,
 };
