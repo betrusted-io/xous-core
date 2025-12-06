@@ -94,6 +94,7 @@ use core::convert::TryInto;
 use core::{mem, ptr, slice};
 
 use asm::*;
+#[cfg(feature = "bao1x")]
 use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
 use bootconfig::BootConfig;
 use consts::*;
