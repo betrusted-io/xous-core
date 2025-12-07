@@ -28,7 +28,6 @@ use bao1x_api::*;
 use bao1x_emu::{
     camera::Gc2145,
     display::{MainThreadToken, Mono, Oled128x128, claim_main_thread},
-    i2c::I2c,
     udma::UdmaGlobal,
 };
 // breadcrumb to future self:
@@ -173,6 +172,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     // ---- basic hardware setup
     let iox = IoxHal::new();
     let udma_global = UdmaGlobal::new();
+    #[cfg(not(feature = "hosted-baosec"))]
     let mut i2c = I2c::new();
     #[allow(unused_variables)]
     #[cfg(not(feature = "hosted-baosec"))]
@@ -306,6 +306,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
         (cam, cam_pdwn)
     };
+    #[cfg(feature = "hosted-baosec")]
+    // unused dummy object
+    let mut cam = unsafe { Gc2145::new().expect("couldn't allocate camera") };
 
     #[cfg(not(feature = "hosted-baosec"))]
     let cid = xous::connect(sid).unwrap(); // self-connection always succeeds
@@ -461,12 +464,15 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     if qr_request.is_some() {
                         cam.capture_async();
                     } else {
-                        // power down the camera, now that the request is done
-                        // assert PWWDN
-                        iox.set_gpio_pin_value(cam_pdwn.0, cam_pdwn.1, IoxValue::High);
-                        // stop MCLK
-                        tt.sleep_ms(2).ok();
-                        timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 0);
+                        #[cfg(not(feature = "hosted-baosec"))]
+                        {
+                            // power down the camera, now that the request is done
+                            // assert PWWDN
+                            iox.set_gpio_pin_value(cam_pdwn.0, cam_pdwn.1, IoxValue::High);
+                            // stop MCLK
+                            tt.sleep_ms(2).ok();
+                            timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 0);
+                        }
                     }
 
                     // copy the camera data to our FB
