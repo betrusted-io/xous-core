@@ -4,7 +4,7 @@ use locales::t;
 use qrcode::{Color, QrCode};
 
 use super::*;
-use crate::minigfx::op::{HEIGHT, WIDTH};
+use crate::minigfx::op::HEIGHT;
 use crate::minigfx::*;
 use crate::service::api::*;
 use crate::service::gfx::Gfx;
@@ -52,14 +52,14 @@ impl Notification {
                     Err(_e) => QrCode::new(t!("notification.qrcode.error", locales::LANG)).unwrap(),
                 };
                 self.qrwidth = qrcode.width();
-                log::info!("qrcode {}x{} : {} bytes ", self.qrwidth, self.qrwidth, setting.len());
-                self.qrcode = Vec::new();
-                for color in qrcode.to_colors().iter() {
-                    match color {
-                        Color::Dark => self.qrcode.push(true),
-                        Color::Light => self.qrcode.push(false),
-                    }
-                }
+                self.qrcode = qrcode.into_colors().into_iter().map(|c| c != Color::Light).collect();
+                log::info!(
+                    "qrcode {}x{} : {} bytes, {} modules",
+                    self.qrwidth,
+                    self.qrwidth,
+                    setting.len(),
+                    self.qrcode.len()
+                );
             }
             None => {
                 self.qrcode = Vec::new();
@@ -99,7 +99,11 @@ impl Notification {
         self.gfx.draw_textview(&mut tv).expect("couldn't post tv");
     }
 
-    fn draw_qrcode(&self, at_height: isize, modal: &Modal) {
+    fn draw_qrcode(&self, at_height: isize, _modal: &Modal) {
+        self.gfx
+            .render_qr(&self.qrcode, self.qrwidth, Point { x: 0, y: at_height })
+            .expect("couldn't render QR");
+        /*
         // calculate pixel size of each module in the qrcode
         let qrcode_modules: isize = self.qrwidth.try_into().unwrap();
         let modules: isize = qrcode_modules + 2 * QUIET_MODULES;
@@ -147,6 +151,7 @@ impl Notification {
             module.translate(step);
         }
         self.gfx.draw_object_list(obj_list).expect("couldn't draw qrcode module");
+        */
     }
 }
 

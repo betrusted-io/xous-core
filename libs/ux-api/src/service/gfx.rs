@@ -729,6 +729,20 @@ impl Gfx {
         buf.lend(self.conn, GfxOpcode::UnclippedObjectList.to_u32().unwrap()).map(|_| ())
     }
 
+    /// On small screens, `top_left` is ignored and the code takes the whole screen, always
+    pub fn render_qr(
+        &self,
+        qr_stream: &Vec<bool>,
+        qr_width: usize,
+        top_left: Point,
+    ) -> Result<(), xous::Error> {
+        let qr_render = QrRender { width: qr_width, top_left, modules: qr_stream.to_owned() };
+        let mut buf = Buffer::into_buf(qr_render).unwrap();
+        buf.lend_mut(self.conn, GfxOpcode::RenderQr.to_u32().unwrap())?;
+        // do nothing with the response - function just blocks until the QR code is done rendering
+        Ok(())
+    }
+
     #[cfg(feature = "board-baosec")]
     pub fn acquire_qr(&self) -> Result<QrAcquisition, xous::Error> {
         let acquisition = QrAcquisition { content: None, meta: None };
