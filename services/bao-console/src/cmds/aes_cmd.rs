@@ -127,6 +127,7 @@ pub(crate) enum BenchOp {
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+#[allow(dead_code)]
 pub(crate) enum BenchResult {
     AesHwDone,
     AesSwDone,
