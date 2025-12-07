@@ -702,6 +702,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     }
                     // no failure if it's not
                 }
+                GfxOpcode::RenderQr => {
+                    minigfx::handlers::render_qr(&mut display, screen_clip.into(), msg);
+                }
                 GfxOpcode::Quit => break,
                 _ => {
                     // This is perfectly normal because not all opcodes are handled by all platforms.
