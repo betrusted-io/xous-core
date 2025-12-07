@@ -128,6 +128,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                 "keepon" => {
                     todo!("Fix this to use DCDC2 for keepon (as per baosec v2)");
                 }
+                #[cfg(feature = "board-baosec")]
                 "qrshow" => {
                     // note that 40 bytes gives 320 bits which fits nicely into a version 3 code,
                     // which allows 4 pixels per module rendering.
@@ -148,6 +149,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     let encoded = base45::encode(&test_data);
                     modals.show_notification("", Some(&encoded)).ok();
                 }
+                #[cfg(feature = "board-baosec")]
                 "qrget" => {
                     let gfx = ux_api::service::gfx::Gfx::new(&_env.xns).unwrap();
                     match gfx.acquire_qr() {
