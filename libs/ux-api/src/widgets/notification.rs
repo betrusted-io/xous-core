@@ -103,55 +103,6 @@ impl Notification {
         self.gfx
             .render_qr(&self.qrcode, self.qrwidth, Point { x: 0, y: at_height })
             .expect("couldn't render QR");
-        /*
-        // calculate pixel size of each module in the qrcode
-        let qrcode_modules: isize = self.qrwidth.try_into().unwrap();
-        let modules: isize = qrcode_modules + 2 * QUIET_MODULES;
-        let canvas_width = modal.canvas_width - 2 * modal.margin;
-        let mod_size_px: isize = canvas_width / modules;
-        let qrcode_width_px = qrcode_modules * mod_size_px;
-        let quiet_px: isize = (canvas_width - qrcode_width_px) / 2;
-
-        // Iterate thru qrcode and stamp each square module like a typewriter
-        let black = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
-        let top = at_height + quiet_px;
-
-        // draw a white background over the whole screen
-        self.gfx
-            .draw_rectangle(Rectangle::new_with_style(
-                Point::new(0, at_height),
-                Point::new(WIDTH, HEIGHT),
-                DrawStyle::new(PixelColor::Light, PixelColor::Light, 1),
-            ))
-            .unwrap();
-
-        let left = modal.margin + quiet_px;
-        let right = left + qrcode_modules * mod_size_px;
-        let mut module =
-            Rectangle::new_with_style(Point::new(0, 0), Point::new(mod_size_px - 1, mod_size_px - 1), black);
-        let step = Point::new(mod_size_px, 0);
-        let cr_lf = Point::new(-qrcode_modules * mod_size_px, mod_size_px);
-        let mut j: isize;
-        let mut obj_list = ObjectList::new();
-        module.translate(Point::new(right, top));
-        for (i, stamp) in self.qrcode.iter().enumerate() {
-            j = i.try_into().unwrap();
-            if j % qrcode_modules == 0 {
-                module.translate(cr_lf);
-            }
-            if *stamp {
-                if obj_list.push(ClipObjectType::Rect(module.clone())).is_err() {
-                    // the capacity of the list has exceeded the capacity of the buffer, send it and make a
-                    // new one
-                    self.gfx.draw_object_list(obj_list).expect("couldn't draw qrcode module");
-                    obj_list = ObjectList::new();
-                    obj_list.push(ClipObjectType::Rect(module.clone())).unwrap();
-                };
-            }
-            module.translate(step);
-        }
-        self.gfx.draw_object_list(obj_list).expect("couldn't draw qrcode module");
-        */
     }
 }
 
