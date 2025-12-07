@@ -128,6 +128,38 @@ impl<'a> ShellCmdApi<'a> for Test {
                 "keepon" => {
                     todo!("Fix this to use DCDC2 for keepon (as per baosec v2)");
                 }
+                "qrshow" => {
+                    let modals = modals::Modals::new(&_env.xns).unwrap();
+                    let mut test_data = [0u8; 40];
+                    for (i, d) in test_data.iter_mut().enumerate() {
+                        *d = i as u8;
+                    }
+                    let encoded = base45::encode(&test_data);
+                    modals.show_notification("", Some(&encoded)).ok();
+                }
+                "qrget" => {
+                    let gfx = ux_api::service::gfx::Gfx::new(&_env.xns).unwrap();
+                    match gfx.acquire_qr() {
+                        Ok(qr_data) => {
+                            if let Some(meta) = qr_data.meta {
+                                log::info!("QR code metadata: {}", meta);
+                            }
+                            if let Some(coded) = qr_data.content {
+                                match base45::decode(&coded) {
+                                    Ok(data) => {
+                                        log::info!("Recovered: {:x?}", data);
+                                    }
+                                    Err(e) => {
+                                        log::info!("Base45 decode err: {:?}", e);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::info!("QR error: {:?}", e);
+                        }
+                    }
+                }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
                 }

@@ -360,6 +360,7 @@ dependencies = [
  "bao1x-emu",
  "bao1x-hal",
  "bao1x-hal-service",
+ "base45",
  "bytemuck",
  "chrono",
  "log",
@@ -611,6 +612,12 @@ name = "base32"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23ce669cd6c8588f79e15cf450314f9638f967fc5770ff1c7c1deb0925ea7cfa"
+
+[[package]]
+name = "base45"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3103f6d6af63726e86b026ac66769fc578ea38aba33f409e5855a4def97a564"
 
 [[package]]
 name = "base64"
