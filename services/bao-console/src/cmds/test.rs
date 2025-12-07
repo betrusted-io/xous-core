@@ -129,6 +129,17 @@ impl<'a> ShellCmdApi<'a> for Test {
                     todo!("Fix this to use DCDC2 for keepon (as per baosec v2)");
                 }
                 "qrshow" => {
+                    // note that 40 bytes gives 320 bits which fits nicely into a version 3 code,
+                    // which allows 4 pixels per module rendering.
+                    // if we have to move to 3 pixels per module, the next code up that optimally
+                    // uses the full screen is version 6. This would give 102 bytes of transfer
+                    // in a single scan.
+                    //
+                    // The equation for capacity is:
+                    // `binary_bytes = floor((alphanumeric_capacity / 3) × 2)`
+                    //
+                    // where `alphameric_capacity` is the capacity of the QR code version
+                    // per spec lookup table.
                     let modals = modals::Modals::new(&_env.xns).unwrap();
                     let mut test_data = [0u8; 40];
                     for (i, d) in test_data.iter_mut().enumerate() {
