@@ -520,7 +520,7 @@ fn wrapped_main() -> ! {
                         renderer_modal.modify(
                             Some(ActionType::Notification(notification)),
                             Some(text),
-                            false,
+                            text.len() == 0,
                             None,
                             true,
                             Some(DEFAULT_STYLE),

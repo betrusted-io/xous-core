@@ -128,6 +128,51 @@ impl<'a> ShellCmdApi<'a> for Test {
                 "keepon" => {
                     todo!("Fix this to use DCDC2 for keepon (as per baosec v2)");
                 }
+                #[cfg(feature = "board-baosec")]
+                "qrshow" => {
+                    // note that 40 bytes gives 320 bits which fits nicely into a version 3 code,
+                    // which allows 4 pixels per module rendering.
+                    // if we have to move to 3 pixels per module, the next code up that optimally
+                    // uses the full screen is version 6. This would give 102 bytes of transfer
+                    // in a single scan.
+                    //
+                    // The equation for capacity is:
+                    // `binary_bytes = floor((alphanumeric_capacity / 3) × 2)`
+                    //
+                    // where `alphameric_capacity` is the capacity of the QR code version
+                    // per spec lookup table.
+                    let modals = modals::Modals::new(&_env.xns).unwrap();
+                    let mut test_data = [0u8; 40];
+                    for (i, d) in test_data.iter_mut().enumerate() {
+                        *d = i as u8;
+                    }
+                    let encoded = base45::encode(&test_data);
+                    modals.show_notification("", Some(&encoded)).ok();
+                }
+                #[cfg(feature = "board-baosec")]
+                "qrget" => {
+                    let gfx = ux_api::service::gfx::Gfx::new(&_env.xns).unwrap();
+                    match gfx.acquire_qr() {
+                        Ok(qr_data) => {
+                            if let Some(meta) = qr_data.meta {
+                                log::info!("QR code metadata: {}", meta);
+                            }
+                            if let Some(coded) = qr_data.content {
+                                match base45::decode(&coded) {
+                                    Ok(data) => {
+                                        log::info!("Recovered: {:x?}", data);
+                                    }
+                                    Err(e) => {
+                                        log::info!("Base45 decode err: {:?}", e);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::info!("QR error: {:?}", e);
+                        }
+                    }
+                }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
                 }

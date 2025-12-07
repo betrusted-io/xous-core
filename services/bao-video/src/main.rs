@@ -28,7 +28,6 @@ use bao1x_api::*;
 use bao1x_emu::{
     camera::Gc2145,
     display::{MainThreadToken, Mono, Oled128x128, claim_main_thread},
-    i2c::I2c,
     udma::UdmaGlobal,
 };
 // breadcrumb to future self:
@@ -173,6 +172,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     // ---- basic hardware setup
     let iox = IoxHal::new();
     let udma_global = UdmaGlobal::new();
+    #[cfg(not(feature = "hosted-baosec"))]
     let mut i2c = I2c::new();
     #[allow(unused_variables)]
     #[cfg(not(feature = "hosted-baosec"))]
@@ -206,17 +206,30 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     #[cfg(not(feature = "hosted-baosec"))]
     kbd.register_listener(SERVER_NAME_GFX, GfxOpcode::KeyPress.to_u32().unwrap() as usize);
 
+    #[cfg(not(feature = "hosted-baosec"))]
+    let mut timer = {
+        let timer_range = xous::map_memory(
+            xous::MemoryAddress::new(utra::pwm::HW_PWM_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map PWM range");
+        utralib::CSR::new(timer_range.as_ptr() as usize as *mut u32)
+    };
+
+    udma_global.udma_clock_config(PeriphId::Cam, true);
     // ---- camera initialization
     #[cfg(not(feature = "hosted-baosec"))]
-    {
+    let (mut cam, cam_pdwn) = {
         // wait for other inits to finish so we can do this roughly atomically
         tt.sleep_ms(1000).ok();
 
         // setup camera power
         match bao1x_hal::axp2101::Axp2101::new(&mut i2c) {
             Ok(mut pmic) => {
-                pmic.set_ldo(&mut i2c, Some(2.85), bao1x_hal::axp2101::WhichLdo::Bldo2).unwrap();
                 pmic.set_dcdc(&mut i2c, Some((1.8, false)), bao1x_hal::axp2101::WhichDcDc::Dcdc5).unwrap();
+                pmic.set_ldo(&mut i2c, Some(2.85), bao1x_hal::axp2101::WhichLdo::Bldo2).unwrap();
             }
             Err(e) => {
                 log::error!("Couldn't setup regulators for camera, camera will be non-functional: {:?}", e);
@@ -245,22 +258,12 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
             Some(IoxEnable::Disable),
             Some(IoxDriveStrength::Drive8mA),
         );
-        let timer_range = xous::map_memory(
-            xous::MemoryAddress::new(utra::pwm::HW_PWM_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map PWM range");
-        let mut timer = utralib::CSR::new(timer_range.as_ptr() as usize as *mut u32);
         timer.wo(utra::pwm::REG_CH_EN, 1);
         timer.rmwf(utra::pwm::REG_TIM0_CFG_R_TIMER0_SAW, 1);
         timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_TH, 0);
         timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_MODE, 3);
-        let pwm = timer_range.as_mut_ptr() as *mut u32;
-        unsafe { pwm.add(2).write_volatile(0) }; // for some reason the register extraction didn't get this register...
-        timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 1);
-        log::info!("PWM running on PA0");
+        unsafe { timer.base().add(2).write_volatile(0) }; // for some reason the register extraction didn't get this register...
+        timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 0);
         /* // register debug
         for i in 0..12 {
             println!("0x{:2x}: 0x{:08x}", i, unsafe { pwm.add(i).read_volatile() })
@@ -269,25 +272,43 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
         */
 
         // setup camera pins
-        let (cam_pdwn_bnk, cam_pdwn_pin) = bao1x_hal::board::setup_camera_pins(&iox);
-        // disable camera powerdown
-        iox.set_gpio_pin_value(cam_pdwn_bnk, cam_pdwn_pin, IoxValue::Low);
-    }
-    udma_global.udma_clock_config(PeriphId::Cam, true);
-    // this is safe because we turned on the clocks before calling it
+        let cam_pdwn = bao1x_hal::board::setup_camera_pins(&iox);
+        // this is safe because we turned on the clocks before calling it
+        let mut cam = unsafe { Gc2145::new().expect("couldn't allocate camera") };
+
+        timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 1);
+        tt.sleep_ms(2).ok(); // wait for camera to clock-up
+        iox.set_gpio_pin_value(cam_pdwn.0, cam_pdwn.1, IoxValue::Low);
+
+        // power up the camera
+        // starts MCLK
+        timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 1);
+        tt.sleep_ms(2).ok(); // wait for camera to clock-up
+        // bring camera out of powerdown
+        iox.set_gpio_pin_value(cam_pdwn.0, cam_pdwn.1, IoxValue::Low);
+        tt.sleep_ms(3).ok(); // wait for camera to power-up
+        let (pid, mid) = cam.read_id(&mut i2c);
+        log::info!("Camera pid {:x}, mid {:x}", pid, mid);
+        cam.init(&mut i2c, bao1x_api::camera::Resolution::Res320x240);
+        tt.sleep_ms(1).ok();
+
+        let (cols, _rows) = cam.resolution();
+        let border = (cols - IMAGE_WIDTH) / 2;
+        cam.set_slicing((border, 0), (cols - border, IMAGE_HEIGHT));
+        tt.sleep_ms(2).ok();
+
+        // power down the camera, now that all the internal registers have been set up
+        // assert PWWDN
+        iox.set_gpio_pin_value(cam_pdwn.0, cam_pdwn.1, IoxValue::High);
+        // stop MCLK
+        tt.sleep_ms(2).ok();
+        timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 0);
+
+        (cam, cam_pdwn)
+    };
+    #[cfg(feature = "hosted-baosec")]
+    // unused dummy object
     let mut cam = unsafe { Gc2145::new().expect("couldn't allocate camera") };
-
-    tt.sleep_ms(100).ok();
-
-    let (pid, mid) = cam.read_id(&mut i2c);
-    log::info!("Camera pid {:x}, mid {:x}", pid, mid);
-    cam.init(&mut i2c, bao1x_api::camera::Resolution::Res320x240);
-    tt.sleep_ms(1).ok();
-
-    let (cols, _rows) = cam.resolution();
-    let border = (cols - IMAGE_WIDTH) / 2;
-    cam.set_slicing((border, 0), (cols - border, IMAGE_HEIGHT));
-    log::info!("320x240 resolution setup with 256x240 slicing");
 
     #[cfg(not(feature = "hosted-baosec"))]
     let cid = xous::connect(sid).unwrap(); // self-connection always succeeds
@@ -324,17 +345,15 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     #[cfg(feature = "autotest")]
     {
         log::info!("initiating auto test");
-        cam.capture_async();
-        // cam_irq serves as a preemption timer source, every time it fires a different
-        // task can run after cam_irq is handled.
-        hal.set_preemption(false);
+        let acquisition = QrAcquisition { content: None, meta: None };
+        let mut buf = Buffer::into_buf(acquisition).unwrap();
+        buf.lend_mut(cid, GfxOpcode::AcquireQr.to_u32().unwrap()).ok();
     }
     #[cfg(feature = "no-gam")]
     let modals = modals::Modals::new(&xns).unwrap();
     let mut modal_queue = VecDeque::<Sender>::new();
     let mut frames = 0;
     let mut frame = [0u8; IMAGE_WIDTH * IMAGE_HEIGHT];
-    let mut decode_success;
     let mut msg_opt = None;
     #[cfg(feature = "gfx-testing")]
     testing::tests();
@@ -355,6 +374,23 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         display.stash(); // save a copy of the UI
                         // this will defer response until later
                         qr_request = msg_opt.take();
+
+                        // power up the camera
+                        // starts MCLK
+                        timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 1);
+                        tt.sleep_ms(2).ok(); // wait for camera to clock-up
+                        // bring camera out of powerdown
+                        iox.set_gpio_pin_value(cam_pdwn.0, cam_pdwn.1, IoxValue::Low);
+                        tt.sleep_ms(3).ok(); // wait for camera to power-up
+                        let (pid, mid) = cam.read_id(&mut i2c);
+                        log::info!("Camera pid {:x}, mid {:x}", pid, mid);
+                        cam.init(&mut i2c, bao1x_api::camera::Resolution::Res320x240);
+                        tt.sleep_ms(1).ok();
+
+                        let (cols, _rows) = cam.resolution();
+                        let border = (cols - IMAGE_WIDTH) / 2;
+                        cam.set_slicing((border, 0), (cols - border, IMAGE_HEIGHT));
+                        log::info!("320x240 resolution setup with 256x240 slicing");
 
                         // decode dummy data - what this does is load the swapped out QR decoding logic, thus
                         // improving the latency of the decoder on the "first hit". The sole purpose of this
@@ -427,6 +463,16 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 GfxOpcode::CamIrq => {
                     if qr_request.is_some() {
                         cam.capture_async();
+                    } else {
+                        #[cfg(not(feature = "hosted-baosec"))]
+                        {
+                            // power down the camera, now that the request is done
+                            // assert PWWDN
+                            iox.set_gpio_pin_value(cam_pdwn.0, cam_pdwn.1, IoxValue::High);
+                            // stop MCLK
+                            tt.sleep_ms(2).ok();
+                            timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 0);
+                        }
                     }
 
                     // copy the camera data to our FB
@@ -450,7 +496,6 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     frames += 1;
 
                     let mut candidates = Vec::<Point>::new();
-                    decode_success = false;
                     log::debug!("------------- SEARCH {} -----------", frames);
                     let _finder_width =
                         qr::find_finders(&mut candidates, &frame, bw_thresh, IMAGE_WIDTH) as isize;
@@ -459,24 +504,18 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     if candidates.len() == 3 {
                         gfx::msg(
                             &mut display,
-                            "Searching...",
+                            "Decoding...",
                             Point::new(0, 0),
                             Mono::White.into(),
                             Mono::Black.into(),
                         );
+                        display.draw();
                         let mut img =
                             rqrr::PreparedImage::prepare_from_greyscale(IMAGE_WIDTH, IMAGE_HEIGHT, |x, y| {
                                 frame[y * IMAGE_WIDTH + x]
                             });
                         let grids = img.detect_grids();
                         if grids.len() == 1 {
-                            gfx::msg(
-                                &mut display,
-                                "Decoding...",
-                                Point::new(0, 0),
-                                Mono::White.into(),
-                                Mono::Black.into(),
-                            );
                             match grids[0].decode() {
                                 Ok((meta, content)) => {
                                     gfx::msg(
@@ -505,7 +544,6 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                     } else {
                                         log::info!("meta: {:?}", meta);
                                         log::info!("************ {} ***********", content);
-                                        decode_success = true;
                                         gfx::msg(
                                             &mut display,
                                             &format!("{:?}", meta),
@@ -545,9 +583,6 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     }
 
                     display.draw();
-                    if decode_success {
-                        tt.sleep_ms(1500).ok();
-                    }
 
                     // clear the front buffer
                     display.clear();
@@ -701,6 +736,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         scalar.arg1 = 1;
                     }
                     // no failure if it's not
+                }
+                GfxOpcode::RenderQr => {
+                    minigfx::handlers::render_qr(&mut display, screen_clip.into(), msg);
                 }
                 GfxOpcode::Quit => break,
                 _ => {

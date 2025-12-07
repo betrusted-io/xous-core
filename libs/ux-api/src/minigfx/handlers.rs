@@ -7,6 +7,7 @@ use xous_ipc::Buffer;
 
 use super::FrameBuffer;
 use super::*;
+use crate::service::api::QrRender;
 use crate::wordwrap::*;
 
 pub fn draw_clip_object<T: FrameBuffer>(display: &mut T, msg: &mut xous::envelope::Envelope) {
@@ -399,4 +400,69 @@ pub fn draw_text_view<T: FrameBuffer>(display: &mut T, msg: &mut xous::envelope:
     log::trace!("cursor ret {:?}, bounds ret {:?}", tv.cursor, tv.bounds_computed);
     // pack our data back into the buffer to return
     buffer.replace(tv).unwrap();
+}
+
+pub fn render_qr<T: FrameBuffer>(
+    display: &mut T,
+    screen_clip: Option<Rectangle>,
+    msg: &mut xous::envelope::Envelope,
+) {
+    if msg.body.has_memory() {
+        let screensize = Rectangle::new(
+            Point::new(0, 0),
+            Point::new(crate::platform::WIDTH as _, crate::platform::HEIGHT as _),
+        );
+        let buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+        let qr_render = buffer.to_original::<QrRender, _>().unwrap();
+        log::debug!(
+            "qr_render width {}: {:?}",
+            qr_render.width,
+            &qr_render.modules[..32.min(qr_render.modules.len())]
+        );
+        const QUIET_MODULES: isize = 1;
+        let window_width = screen_clip.unwrap_or(screensize).width() as isize;
+        let total_width = qr_render.width as isize + QUIET_MODULES * 2;
+        let module_width = (window_width / total_width).max(1) as isize;
+        let left_edge = if module_width * total_width < window_width {
+            (window_width - (module_width * total_width)) as isize / 2
+        } else {
+            0
+        };
+
+        const USE_TOP_LEFT: bool = false;
+        let tl = if USE_TOP_LEFT { qr_render.top_left } else { Point::new(0, 0) };
+
+        // draw a white background over the rendering area
+        let r = Rectangle::new_with_style(
+            Point::from((left_edge, tl.y)),
+            screen_clip.unwrap_or(screensize).br,
+            DrawStyle::new(PixelColor::Light, PixelColor::Light, 1),
+        );
+        op::rectangle(display, r, screen_clip.into(), false);
+
+        // now raster in the modules
+        let mut line_top_left =
+            Point::new(left_edge + module_width * QUIET_MODULES, tl.y + module_width * QUIET_MODULES);
+        let dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
+        for line in qr_render.modules.chunks(qr_render.width) {
+            for (i, &module) in line.iter().enumerate() {
+                if module {
+                    // dark color: render a square
+                    let m = Rectangle::new_coords_with_style(
+                        line_top_left.x + i as isize * module_width,
+                        line_top_left.y,
+                        line_top_left.x + (i + 1) as isize * module_width,
+                        line_top_left.y + module_width,
+                        dark,
+                    );
+                    op::rectangle(display, m, screen_clip.into(), false);
+                } else {
+                    // light color: don't render, background is already light
+                }
+            }
+            line_top_left += Point::new(0, module_width);
+        }
+    } else {
+        panic!("Incorrect message type for RenderQr")
+    }
 }

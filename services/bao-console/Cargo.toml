@@ -37,6 +37,9 @@ aes = { path = "../aes", default-features = false, optional = true, features = [
 # time testing
 chrono = "0.4.33"
 
+# QR code encoding
+base45 = "3.1.0"
+
 # hid bringup
 xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main", optional = true }
 
@@ -50,6 +53,7 @@ board-baosec = [
     "usb-bao1x/board-baosec",
     "pddb/board-baosec",
     "xous-swapper",
+    "ux-api/board-baosec",
 ]
 hosted-baosec = [
     "modals/hosted-baosec",

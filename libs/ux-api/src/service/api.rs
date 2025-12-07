@@ -98,6 +98,7 @@ pub enum GfxOpcode {
     UnclippedObjectList,
     /// V2 API for getting filtered keyboard events
     FilteredKeyboardListener,
+    RenderQr,
 
     #[cfg(feature = "board-baosec")]
     AcquireQr,
@@ -135,6 +136,13 @@ impl BulkRead {
 pub struct QrAcquisition {
     pub content: Option<String>,
     pub meta: Option<String>,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct QrRender {
+    pub width: usize,
+    pub top_left: crate::minigfx::Point,
+    pub modules: Vec<bool>,
 }
 
 // this structure is used to register a keyboard listener.
