@@ -33,7 +33,11 @@ pub mod acram;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod buram;
 #[cfg(not(feature = "hosted-baosec"))]
+pub mod clocks;
+#[cfg(not(feature = "hosted-baosec"))]
 pub mod coreuser;
+#[cfg(all(not(feature = "hosted-baosec"), not(feature = "kernel")))]
+pub mod hardening;
 #[cfg(all(not(feature = "hosted-baosec"), feature = "std"))]
 pub mod kpc_aoint;
 #[cfg(not(feature = "hosted-baosec"))]
@@ -42,13 +46,10 @@ pub mod mbox;
 pub mod rram;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod rtc;
-#[cfg(not(feature = "hosted-baosec"))]
-pub mod sram_trim;
-
-#[cfg(all(not(feature = "hosted-baosec"), not(feature = "kernel")))]
-pub mod hardening;
 #[cfg(all(not(feature = "hosted-baosec"), not(feature = "kernel")))]
 pub mod sigcheck;
+#[cfg(not(feature = "hosted-baosec"))]
+pub mod sram_trim;
 
 #[inline(always)]
 pub fn cache_flush() {
