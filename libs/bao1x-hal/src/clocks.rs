@@ -220,9 +220,6 @@ pub unsafe fn init_clock_asic(
         let fsfreq = (daric_cgu.add(offset).read_volatile() >> shift) & 0xffff;
         crate::println!("{}: {} MHz", name, fsfreq);
     }
-    // Comment this out - I think we manage the UDMA clocks explicitly per-driver
-    // let mut udmacore = CSR::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
-    // udmacore.wo(utra::udma_ctrl::REG_CG, 0xFFFF_FFFF);
 
     crate::println!("Perclk solution: {:x}|{:x} -> {} MHz", min_cycle, fd, perclk / 1_000_000);
     crate::println!("PLL configured to {} MHz", freq_hz / 1_000_000);

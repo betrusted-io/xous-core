@@ -362,10 +362,10 @@ pub unsafe fn init_clock_asic_350mhz() -> u32 {
     let perclk = 175000000;
 
     // turn off gates
-    daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0xff);
-    daric_cgu.add(utra::sysctrl::SFR_HCLKGR.offset()).write_volatile(0xff);
-    daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0xff);
-    daric_cgu.add(utra::sysctrl::SFR_PCLKGR.offset()).write_volatile(0xff);
+    daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0x00); // mbox/qfc turned off
+    daric_cgu.add(utra::sysctrl::SFR_HCLKGR.offset()).write_volatile(0x02); // mdma off, sce on
+    daric_cgu.add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0x90); // bio/udc enable
+    daric_cgu.add(utra::sysctrl::SFR_PCLKGR.offset()).write_volatile(0x80); // enable mesh
     // commit dividers
     daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
 
@@ -427,9 +427,9 @@ pub unsafe fn init_clock_asic_350mhz() -> u32 {
     cgu.wo(sysctrl::SFR_CGUSET, 0x32);
     bao1x_api::bollard!(6);
 
-    // Taken in from latest daric_util.c
+    // UDMA subsystem controls its own gates
     let mut udmacore = CSR::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
-    udmacore.wo(utra::udma_ctrl::REG_CG, 0xFFFF_FFFF);
+    udmacore.wo(utra::udma_ctrl::REG_CG, 0x0);
 
     // glitch_safety: check that we're running on the PLL
     bao1x_hal::hardening::check_pll();
