@@ -69,12 +69,13 @@ memmap-flash = []
 debug-swap = []
 debug-swap-verbose = []
 raw-trng = ["xous-kernel/raw-trng"]
+debug-proc = []
 
 # patches for simulation targets ONLY. Applying these flags will result in totally broken security.
 hwsim = []
 
 # default = ["print-panics", "debug-print", "wrap-print"]
-default = ["print-panics"]
+default = ["debug-proc", "print-panics"]
 
 [target.'cfg(any(windows, unix))'.dependencies]
 crossbeam-channel = "0.5"

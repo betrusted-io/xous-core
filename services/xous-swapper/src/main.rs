@@ -822,6 +822,21 @@ fn main() {
                     .expect("couldn't Block Erase region");
                 }
             }
+            Some(Opcode::DebugProcesses) => {
+                xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::DebugProcesses as usize, 0, 0, 0, 0, 0, 0))
+                    .unwrap();
+            }
+            Some(Opcode::DebugServers) => {
+                xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::DebugServers as usize, 0, 0, 0, 0, 0, 0))
+                    .unwrap();
+            }
+            Some(Opcode::DebugFree) => {
+                xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::DebugFree as usize, 0, 0, 0, 0, 0, 0)).unwrap();
+            }
+            Some(Opcode::DebugInterrupts) => {
+                xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::DebugInterrupts as usize, 0, 0, 0, 0, 0, 0))
+                    .unwrap();
+            }
             #[cfg(feature = "swap-userspace-testing")]
             Some(Opcode::Test0) => {
                 log::info!("Free mem: {}kiB", get_free_pages() * PAGE_SIZE / 1024);
