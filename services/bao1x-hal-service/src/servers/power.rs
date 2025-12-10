@@ -1,5 +1,4 @@
 use bao1x_api::PowerOp;
-use utralib::*;
 
 pub fn start_power_service(sid: xous::SID) {
     std::thread::spawn(move || {
