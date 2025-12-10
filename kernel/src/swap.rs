@@ -43,6 +43,10 @@ pub enum SwapAbi {
     ReleaseMemory = 6,
     WritePage = 7,
     BlockErase = 8,
+    DebugProcesses = 9,
+    DebugServers = 10,
+    DebugFree = 11,
+    DebugInterrupts = 12,
 }
 /// SYNC WITH `xous-swapper/src/main.rs`
 impl SwapAbi {
@@ -57,6 +61,10 @@ impl SwapAbi {
             6 => ReleaseMemory,
             7 => WritePage,
             8 => BlockErase,
+            9 => DebugProcesses,
+            10 => DebugServers,
+            11 => DebugFree,
+            12 => DebugInterrupts,
             _ => Invalid,
         }
     }

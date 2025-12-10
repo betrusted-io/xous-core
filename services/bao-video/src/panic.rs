@@ -42,18 +42,21 @@ const TEXT_MARGIN: isize = 0;
 pub(crate) fn panic_handler_thread(
     is_panic: Arc<AtomicBool>,
     display_parts: (
-        usize,
-        udma::SpimCs,
-        u8,
-        u8,
-        Option<EventChannel>,
-        udma::SpimMode,
-        udma::SpimByteAlign,
-        IframRange,
-        usize,
-        usize,
-        u8,
-        Option<CommandSet>,
+        (
+            usize,
+            udma::SpimCs,
+            u8,
+            u8,
+            Option<EventChannel>,
+            udma::SpimMode,
+            udma::SpimByteAlign,
+            IframRange,
+            usize,
+            usize,
+            u8,
+            Option<CommandSet>,
+        ),
+        bool,
     ),
 ) {
     thread::spawn({

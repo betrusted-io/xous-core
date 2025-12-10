@@ -129,6 +129,8 @@ fn try_alloc(ifram_allocs: &mut Vec<Option<Sender>>, size: usize, sender: Sender
     }
 }
 fn main() {
+    #[cfg(feature = "with-duart")]
+    bao1x_hal::claim_duart();
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
@@ -200,7 +202,13 @@ fn main() {
         )
     };
     let mut i2c = unsafe {
-        bao1x_hal::udma::I2c::new_with_ifram(i2c_channel, 400_000, bao1x_api::PERCLK, i2c_ifram, &udma_global)
+        bao1x_hal::udma::I2cDriver::new_with_ifram(
+            i2c_channel,
+            400_000,
+            bao1x_api::PERCLK,
+            i2c_ifram,
+            &udma_global,
+        )
     };
 
     // os timer initializations
@@ -265,6 +273,13 @@ fn main() {
 
     servers::keyboard::start_keyboard_service();
 
+    #[cfg(feature = "board-baosec")]
+    let power_sid = xous::create_server().unwrap();
+    #[cfg(feature = "board-baosec")]
+    servers::power::start_power_service(power_sid);
+    #[cfg(feature = "board-baosec")]
+    let power_cid = xous::connect(power_sid).unwrap();
+
     // claim BIO
     #[cfg(feature = "board-baosec")]
     let bio_ss = Arc::new(Mutex::new(xous_bio_bdma::BioSharedState::new()));
@@ -285,6 +300,19 @@ fn main() {
         let opcode = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(HalOpcode::InvalidCall);
         log::debug!("{:?}", opcode);
         match opcode {
+            #[cfg(feature = "board-baosec")]
+            HalOpcode::Wfi => {
+                log::info!("turn off preemption");
+                os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0);
+                // this call *can't* block because WFI relies on HAL services to operate!
+                xous::send_message(
+                    power_cid,
+                    xous::Message::new_scalar(PowerOp::Wfi.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .unwrap();
+            }
+            #[cfg(not(feature = "board-baosec"))]
+            HalOpcode::Wfi => unimplemented!(),
             HalOpcode::MapIfram => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
                     let requested_size = scalar.arg1; // requested size

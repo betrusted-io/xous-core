@@ -258,7 +258,7 @@ pub(crate) fn main_hw() -> ! {
 
     let iox = bao1x_api::IoxHal::new();
     #[cfg(feature = "board-baosec")]
-    let mut i2c = bao1x_hal_service::I2c::new();
+    let mut i2c = bao1x_hal::i2c::I2c::new();
     #[cfg(feature = "board-baosec")]
     let pmic = {
         log::info!("Registering PMIC handler to detect USB plug/unplug events");

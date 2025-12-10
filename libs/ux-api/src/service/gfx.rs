@@ -752,6 +752,23 @@ impl Gfx {
         Ok(response)
     }
 
+    #[cfg(feature = "board-baosec")]
+    pub fn set_power(&self, turn_on: bool) -> Result<(), xous::Error> {
+        if turn_on {
+            send_message(
+                self.conn,
+                Message::new_blocking_scalar(GfxOpcode::PowerUp.to_usize().unwrap(), 0, 0, 0, 0),
+            )
+            .map(|_| ())
+        } else {
+            send_message(
+                self.conn,
+                Message::new_blocking_scalar(GfxOpcode::PowerDown.to_usize().unwrap(), 0, 0, 0, 0),
+            )
+            .map(|_| ())
+        }
+    }
+
     #[cfg(feature = "hosted-baosec")]
     pub fn acquire_qr(&self) -> Result<QrAcquisition, xous::Error> {
         let dummy = "otpauth://totp/ACME%20Co:john.doe@email.com?secret=HXDMVJECJJWSRB3HWIZR4IFUGFTMXBOZ&issuer=ACME%20Co&algorithm=SHA1&digits=6&period=30".to_string();

@@ -46,6 +46,7 @@ rand_chacha = { version = "0.3.1", default-features = false }
 
 # [target.'cfg(target_os = "xous")'.dependencies]
 xous = { version = "0.9.67", features = ["v2p"] }
+xous-ipc = { version = "0.10.7", optional = true }
 
 bitflags = "1.2.1"
 # TODO: migrate from bitflags to this crate
@@ -117,6 +118,7 @@ std = [
     "usb-device",
     "xous-api-ticktimer",
     "bao1x-api/std",
+    "xous-ipc",
 ]
 derive-rkyv = ["rkyv"]
 

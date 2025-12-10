@@ -104,6 +104,10 @@ pub enum GfxOpcode {
     AcquireQr,
     #[cfg(feature = "board-baosec")]
     KeyPress,
+    #[cfg(feature = "board-baosec")]
+    PowerDown,
+    #[cfg(feature = "board-baosec")]
+    PowerUp,
 
     /// Gutter for invalid calls
     InvalidCall,

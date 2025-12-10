@@ -42,3 +42,9 @@ pub fn clk_to_per(top_in_mhz: u32, perclk_in_mhz: u32) -> Option<(u8, u8, u32)> 
         None
     }
 }
+
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+pub enum PowerOp {
+    Wfi,
+    Invalid,
+}

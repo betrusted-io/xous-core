@@ -31,7 +31,7 @@ rand = "0.8.5"
 rand_core = "0.6.4"
 rand_chacha = "0.3.1"
 bitfield = "0.13.2"
-# TOODO: migrate from bitfield to bitbybit
+# TODO: migrate from bitfield to bitbybit
 bitbybit = "1.4.0"
 arbitrary-int = "1.2"
 bytemuck = "1.24.0"
@@ -54,4 +54,6 @@ bmp180 = ["bao1x-hal/bmp180"]
 board-baosec = ["bao1x-hal/board-baosec"]
 board-baosor = ["bao1x-hal/board-baosor"]
 board-dabao = ["bao1x-hal/board-dabao"]
+
+with-duart = ["bao1x-hal/debug-print-duart"]
 default = ["app-uart", "utralib"]

@@ -35,10 +35,11 @@ use bao1x_emu::{
 #[cfg(feature = "board-baosec")]
 use bao1x_hal::{
     gc2145::Gc2145,
+    i2c::I2c,
     sh1107::{MainThreadToken, Mono, Oled128x128, claim_main_thread},
 };
 #[cfg(feature = "board-baosec")]
-use bao1x_hal_service::{I2c, UdmaGlobal};
+use bao1x_hal_service::UdmaGlobal;
 #[cfg(feature = "b64-export")]
 use base64::{Engine as _, engine::general_purpose};
 #[cfg(feature = "board-baosec")]
@@ -236,18 +237,12 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
             }
         };
 
-        // setup camera clock
+        // ensure that muxed pins are tri-state for low power (maybe move this too loader?)
         iox.setup_pin(IoxPort::PF, 9, Some(IoxDir::Input), Some(IoxFunction::Gpio), None, None, None, None);
-        iox.setup_pin(
-            IoxPort::PA,
-            0,
-            Some(IoxDir::Output),
-            Some(IoxFunction::Gpio),
-            None,
-            None,
-            Some(IoxEnable::Disable),
-            Some(IoxDriveStrength::Drive8mA),
-        );
+        iox.setup_pin(IoxPort::PA, 1, Some(IoxDir::Input), Some(IoxFunction::Gpio), None, None, None, None);
+        iox.setup_pin(IoxPort::PA, 2, Some(IoxDir::Input), Some(IoxFunction::Gpio), None, None, None, None);
+
+        // setup camera clock
         iox.setup_pin(
             IoxPort::PA,
             0,
@@ -303,6 +298,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
         // stop MCLK
         tt.sleep_ms(2).ok();
         timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 0);
+        timer.wo(utra::pwm::REG_CH_EN, 0);
+        iox.setup_pin(IoxPort::PA, 0, Some(IoxDir::Input), Some(IoxFunction::Gpio), None, None, None, None);
 
         (cam, cam_pdwn)
     };
@@ -377,6 +374,17 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
                         // power up the camera
                         // starts MCLK
+                        iox.setup_pin(
+                            IoxPort::PA,
+                            0,
+                            Some(IoxDir::Output),
+                            Some(IoxFunction::AF3),
+                            None,
+                            None,
+                            Some(IoxEnable::Disable),
+                            Some(IoxDriveStrength::Drive8mA),
+                        );
+                        timer.wo(utra::pwm::REG_CH_EN, 1);
                         timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 1);
                         tt.sleep_ms(2).ok(); // wait for camera to clock-up
                         // bring camera out of powerdown
@@ -472,6 +480,17 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                             // stop MCLK
                             tt.sleep_ms(2).ok();
                             timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 0);
+                            timer.wo(utra::pwm::REG_CH_EN, 0);
+                            iox.setup_pin(
+                                IoxPort::PA,
+                                0,
+                                Some(IoxDir::Input),
+                                Some(IoxFunction::Gpio),
+                                None,
+                                None,
+                                None,
+                                None,
+                            );
                         }
                     }
 
@@ -739,6 +758,25 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 }
                 GfxOpcode::RenderQr => {
                     minigfx::handlers::render_qr(&mut display, screen_clip.into(), msg);
+                }
+                GfxOpcode::PowerDown => {
+                    display.stash();
+                    display.powerdown();
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
+                        // ack the message if it's a blocking scalar
+                        scalar.arg1 = 1;
+                    }
+                }
+                GfxOpcode::PowerUp => {
+                    // safety: this is safe because we call init() a prescribed delay after power-up
+                    unsafe { display.powerup() };
+                    tt.sleep_ms(5).ok();
+                    display.init();
+                    display.pop();
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
+                        // ack the message if it's a blocking scalar
+                        scalar.arg1 = 1;
+                    }
                 }
                 GfxOpcode::Quit => break,
                 _ => {

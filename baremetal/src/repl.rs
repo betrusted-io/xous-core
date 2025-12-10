@@ -702,7 +702,7 @@ impl Repl {
                     };
                     let perclk = 100_000_000; // assume this value
                     let mut i2c = unsafe {
-                        bao1x_hal::udma::I2c::new_with_ifram(
+                        bao1x_hal::udma::I2cDriver::new_with_ifram(
                             i2c_channel,
                             400_000,
                             perclk,
@@ -849,7 +849,7 @@ impl Repl {
                     )
                 };
                 let mut i2c = unsafe {
-                    bao1x_hal::udma::I2c::new_with_ifram(
+                    bao1x_hal::udma::I2cDriver::new_with_ifram(
                         i2c_channel,
                         400_000,
                         perclk,
