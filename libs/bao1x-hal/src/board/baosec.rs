@@ -176,6 +176,7 @@ pub fn setup_memory_pins(iox: &dyn IoSetup) -> SpimChannel {
     SPI_MEM_CHANNEL
 }
 
+const I2C_CHANNEL: I2cChannel = I2cChannel::Channel0;
 /// This also sets up I2C-adjacent interrupt inputs as well
 pub fn setup_i2c_pins(iox: &dyn IoSetup) -> I2cChannel {
     // I2C_SCL_B[0]
@@ -211,8 +212,11 @@ pub fn setup_i2c_pins(iox: &dyn IoSetup) -> I2cChannel {
         None,
         None,
     );
-    I2cChannel::Channel0
+    I2C_CHANNEL
 }
+
+/// A function just to get the channel.
+pub fn get_i2c_channel() -> I2cChannel { I2C_CHANNEL }
 
 /// returns the power-down port and pin number
 pub fn setup_camera_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {

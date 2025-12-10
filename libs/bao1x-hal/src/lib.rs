@@ -38,6 +38,8 @@ pub mod clocks;
 pub mod coreuser;
 #[cfg(all(not(feature = "hosted-baosec"), not(feature = "kernel")))]
 pub mod hardening;
+#[cfg(feature = "std")]
+pub mod i2c;
 #[cfg(all(not(feature = "hosted-baosec"), feature = "std"))]
 pub mod kpc_aoint;
 #[cfg(not(feature = "hosted-baosec"))]

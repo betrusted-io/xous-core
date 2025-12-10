@@ -189,7 +189,7 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
                 )
             };
             let mut i2c = unsafe {
-                bao1x_hal::udma::I2c::new_with_ifram(
+                bao1x_hal::udma::I2cDriver::new_with_ifram(
                     i2c_channel,
                     400_000,
                     100_000_000,

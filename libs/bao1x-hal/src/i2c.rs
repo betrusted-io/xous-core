@@ -10,9 +10,9 @@ pub struct I2c {
 impl I2c {
     pub fn new() -> Self {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
-        let xns = xous_names::XousNames::new().unwrap();
+        let xns = xous_api_names::XousNames::new().unwrap();
         let conn = xns
-            .request_connection(crate::SERVER_NAME_BAO1X_HAL)
+            .request_connection(bao1x_api::SERVER_NAME_BAO1X_HAL)
             .expect("Couldn't connect to bao1x HAL server");
         I2c { conn }
     }
