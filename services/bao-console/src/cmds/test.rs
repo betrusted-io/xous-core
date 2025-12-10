@@ -63,7 +63,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                 #[cfg(feature = "bmp180")]
                 "temp" => {
                     use bao1x_hal::bmp180::Bmp180;
-                    use bao1x_hal_service::I2c;
+                    use bao1x_hal::i2c::I2c;
                     let mut i2c = I2c::new();
 
                     match Bmp180::new(&mut i2c) {
@@ -83,7 +83,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                 #[cfg(not(feature = "hosted-baosec"))]
                 "shutdown" => {
                     use bao1x_api::*;
-                    use bao1x_hal_service::I2c;
+                    use bao1x_hal::i2c::I2c;
                     let iox = bao1x_api::IoxHal::new();
                     let mut i2c = I2c::new();
                     iox.setup_pin(
@@ -127,6 +127,51 @@ impl<'a> ShellCmdApi<'a> for Test {
                 }
                 "keepon" => {
                     todo!("Fix this to use DCDC2 for keepon (as per baosec v2)");
+                }
+                "wfi" => {
+                    let gfx = ux_api::service::gfx::Gfx::new(&_env.xns).unwrap();
+                    log::info!("turn off display");
+                    gfx.set_power(false).unwrap();
+                    log::info!("display off");
+                    let hal = bao1x_hal_service::Hal::new();
+                    log::info!("initiating wfi from test shell...");
+                    hal.wfi();
+                    log::info!("waiting after WFI return (system will be in WFI)");
+                    _env.ticktimer.sleep_ms(100).ok();
+                    log::info!("turn on display");
+                    gfx.set_power(true).unwrap();
+                }
+                "proc" => {
+                    // hard coded - debug feature - if the swap server changes its name or opcode map this can
+                    // break, but also this routine is not meant for public consumption
+                    // and coding it here avoids a dependency to the crate.
+                    let s = _env.xns.request_connection_blocking("_swapper server_").unwrap();
+                    xous::send_message(s, xous::Message::new_scalar(9, 0, 0, 0, 0)).unwrap();
+                    log::info!("Check kernel debug log for proc listing");
+                }
+                "servers" => {
+                    // hard coded - debug feature - if the swap server changes its name or opcode map this can
+                    // break, but also this routine is not meant for public consumption
+                    // and coding it here avoids a dependency to the crate.
+                    let s = _env.xns.request_connection_blocking("_swapper server_").unwrap();
+                    xous::send_message(s, xous::Message::new_scalar(10, 0, 0, 0, 0)).unwrap();
+                    log::info!("Check kernel debug log for server listing");
+                }
+                "freemem" => {
+                    // hard coded - debug feature - if the swap server changes its name or opcode map this can
+                    // break, but also this routine is not meant for public consumption
+                    // and coding it here avoids a dependency to the crate.
+                    let s = _env.xns.request_connection_blocking("_swapper server_").unwrap();
+                    xous::send_message(s, xous::Message::new_scalar(11, 0, 0, 0, 0)).unwrap();
+                    log::info!("Check kernel debug log for free memory listing");
+                }
+                "interrupts" => {
+                    // hard coded - debug feature - if the swap server changes its name or opcode map this can
+                    // break, but also this routine is not meant for public consumption
+                    // and coding it here avoids a dependency to the crate.
+                    let s = _env.xns.request_connection_blocking("_swapper server_").unwrap();
+                    xous::send_message(s, xous::Message::new_scalar(12, 0, 0, 0, 0)).unwrap();
+                    log::info!("Check kernel debug log for interrupt listing");
                 }
                 #[cfg(feature = "board-baosec")]
                 "qrshow" => {
