@@ -177,6 +177,13 @@ pub struct Oled128x128<'a> {
     cd_port: IoxPort,
     cd_pin: u8,
     iox: &'a dyn IoGpio,
+    powerdown: bool,
+    power_port: IoxPort,
+    power_pin: u8,
+    /// Note: this pin is also tied to the reset on the camera. We're assuming that there is no
+    /// possible state where we'd want the camera running without the display also on.
+    reset_port: IoxPort,
+    reset_pin: u8,
 }
 
 impl<'a> Oled128x128<'a> {
@@ -238,6 +245,8 @@ impl<'a> Oled128x128<'a> {
             )
         };
         spim.set_endianness(crate::udma::SpimEndian::MsbFirst);
+        let (power_port, power_pin) = crate::board::setup_oled_power_pin(iox);
+        let (reset_port, reset_pin) = crate::board::setup_periph_reset_pin(iox);
         Self {
             spim,
             // safety: this is safe because these ranges are in fact allocated, and all values can be
@@ -256,6 +265,11 @@ impl<'a> Oled128x128<'a> {
             cd_port,
             cd_pin,
             iox,
+            power_port,
+            power_pin,
+            reset_port,
+            reset_pin,
+            powerdown: false,
         }
     }
 
@@ -274,20 +288,23 @@ impl<'a> Oled128x128<'a> {
     pub unsafe fn to_raw_parts(
         &self,
     ) -> (
-        usize,
-        udma::SpimCs,
-        u8,
-        u8,
-        Option<EventChannel>,
-        udma::SpimMode,
-        udma::SpimByteAlign,
-        IframRange,
-        usize,
-        usize,
-        u8,
-        Option<CommandSet>,
+        (
+            usize,
+            udma::SpimCs,
+            u8,
+            u8,
+            Option<EventChannel>,
+            udma::SpimMode,
+            udma::SpimByteAlign,
+            IframRange,
+            usize,
+            usize,
+            u8,
+            Option<CommandSet>,
+        ),
+        bool,
     ) {
-        self.spim.into_raw_parts()
+        (self.spim.into_raw_parts(), self.powerdown)
     }
 
     /// Creates a clone of the display handle. This is only safe if the handles are used in a
@@ -302,38 +319,44 @@ impl<'a> Oled128x128<'a> {
     /// entangled between the original reference and the clone.
     pub unsafe fn from_raw_parts<T>(
         display_parts: (
-            usize,
-            udma::SpimCs,
-            u8,
-            u8,
-            Option<EventChannel>,
-            udma::SpimMode,
-            udma::SpimByteAlign,
-            IframRange,
-            usize,
-            usize,
-            u8,
-            Option<CommandSet>,
+            (
+                usize,
+                udma::SpimCs,
+                u8,
+                u8,
+                Option<EventChannel>,
+                udma::SpimMode,
+                udma::SpimByteAlign,
+                IframRange,
+                usize,
+                usize,
+                u8,
+                Option<CommandSet>,
+            ),
+            bool,
         ),
         iox: &'a T,
     ) -> Self
     where
-        T: IoGpio,
+        T: IoGpio + IoSetup,
     {
         // extract the raw parts
         let (
-            csr,
-            cs,
-            sot_wait,
-            eot_wait,
-            event_channel,
-            mode,
-            _align,
-            ifram,
-            tx_buf_len_bytes,
-            rx_buf_len_bytes,
-            dummy_cycles,
-            command_set,
+            (
+                csr,
+                cs,
+                sot_wait,
+                eot_wait,
+                event_channel,
+                mode,
+                _align,
+                ifram,
+                tx_buf_len_bytes,
+                rx_buf_len_bytes,
+                dummy_cycles,
+                command_set,
+            ),
+            powerdown,
         ) = display_parts;
         // compile them into a new object
         let mut spim = unsafe {
@@ -355,6 +378,8 @@ impl<'a> Oled128x128<'a> {
         spim.set_endianness(crate::udma::SpimEndian::MsbFirst);
         let ifram_vaddr = spim.ifram.virt_range.as_mut_ptr();
         let (_channel, cd_port, cd_pin, _cs_pin) = crate::board::get_display_pins();
+        let (power_port, power_pin) = crate::board::setup_oled_power_pin(iox);
+        let (reset_port, reset_pin) = crate::board::setup_periph_reset_pin(iox);
         Self {
             spim,
             // safety: this is safe because these ranges are in fact allocated, and all values can be
@@ -373,6 +398,11 @@ impl<'a> Oled128x128<'a> {
             cd_port,
             cd_pin,
             iox,
+            powerdown,
+            power_pin,
+            power_port,
+            reset_port,
+            reset_pin,
         }
     }
 
@@ -405,6 +435,9 @@ impl<'a> Oled128x128<'a> {
     where
         U: IntoIterator<Item = u8> + 'b,
     {
+        if self.powerdown {
+            return;
+        }
         self.set_command();
         let total_buf_len = self.buffer.len() * size_of::<u32>();
         let mut len = 0; // track the full length of the iterator
@@ -431,6 +464,9 @@ impl<'a> Oled128x128<'a> {
     }
 
     pub fn init(&mut self) {
+        if self.powerdown {
+            return;
+        }
         use Command::*;
         let init_sequence = [
             DisplayOnOff(DisplayState::Off),
@@ -456,12 +492,35 @@ impl<'a> Oled128x128<'a> {
             self.send_command(bytes);
         }
     }
+
+    pub fn powerdown(&mut self) {
+        self.powerdown = true;
+        // assert reset
+        self.iox.set_gpio_pin_value(self.reset_port, self.reset_pin, IoxValue::Low);
+        self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::Low);
+        // cut power
+        self.iox.set_gpio_pin_value(self.power_port, self.power_pin, IoxValue::Low);
+    }
+
+    /// Safety: this must be followed-up by a call to init(). The reason it's not bundled into
+    /// this call is we need to introduce a platform-dependent delay of a couple milliseconds
+    /// before calling init(), and we don't want to put the platform-dependent delay into this driver.
+    pub unsafe fn powerup(&mut self) {
+        // restore power
+        self.iox.set_gpio_pin_value(self.power_port, self.power_pin, IoxValue::High);
+        // de-assert reset
+        self.iox.set_gpio_pin_value(self.reset_port, self.reset_pin, IoxValue::High);
+        self.powerdown = false;
+    }
 }
 
 impl<'a> FrameBuffer for Oled128x128<'a> {
     /// Copies the SRAM buffer to IFRAM and then transfers that over SPI
     fn draw(&mut self) {
         self.hw_buf.copy_from_slice(&self.buffer);
+        if self.powerdown {
+            return;
+        }
         let chunk_size = 16;
         let chunks = self.buffer().len() * size_of::<u32>() / chunk_size;
         // we don't do this with an iterator because it involves an immutable borrow of
