@@ -1,11 +1,9 @@
 pub mod api;
-pub mod i2c_lib;
 pub mod trng;
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use bao1x_api::*;
-pub use i2c_lib::*;
 use num_traits::*;
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
@@ -95,6 +93,14 @@ impl Hal {
                 0,
                 0,
             ),
+        )
+        .expect("Couldn't setup preemption state");
+    }
+
+    pub fn wfi(&self) {
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(HalOpcode::Wfi.to_usize().unwrap(), 0, 0, 0, 0),
         )
         .expect("Couldn't setup preemption state");
     }
