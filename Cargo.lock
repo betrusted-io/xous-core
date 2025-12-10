@@ -510,6 +510,7 @@ dependencies = [
  "xous 0.9.67 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
  "xous-api-ticktimer",
+ "xous-ipc 0.10.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-riscv",
 ]
 
