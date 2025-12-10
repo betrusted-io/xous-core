@@ -3,5 +3,8 @@ pub mod keyboard;
 // TRNG server is only needed for baosec; dabao can cheat and use the kernel TRNG port
 #[cfg(feature = "board-baosec")]
 mod baosec_hw;
+// only baosec has power management facilities
+#[cfg(feature = "board-baosec")]
+pub mod power;
 pub mod rtc;
 pub mod trng; // not public - for internal use only
