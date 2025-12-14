@@ -12,6 +12,11 @@ use log::{error, info};
 mod platform;
 use platform::implementation::*;
 use platform::*;
+#[cfg(feature = "bao1x")]
+use rand_chacha::{
+    ChaCha8Rng,
+    rand_core::{RngCore, SeedableRng},
+};
 #[cfg(not(any(target_arch = "arm", feature = "bao1x")))]
 use susres::SuspendOrder;
 
@@ -60,6 +65,26 @@ fn main() -> ! {
     let mut susres =
         susres::Susres::new(Some(SuspendOrder::Last), &xns, api::Opcode::SuspendResume as u32, sr_cid)
             .expect("couldn't create suspend/resume object");
+
+    #[cfg(feature = "bao1x")]
+    let xns = xous_names::XousNames::new().unwrap();
+    #[cfg(feature = "bao1x")]
+    let wakeup_cid = xns
+        .request_connection(bao1x_api::SERVER_NAME_BAO1X_HAL)
+        .expect("Couldn't connect to bao1x HAL server");
+    #[cfg(feature = "bao1x")]
+    let mut csprng = {
+        let mut seed = [0u8; 32];
+        for chunk in seed.chunks_mut(16) {
+            let random = xous::syscall::create_server_id().unwrap();
+            for (dst, src) in chunk.chunks_mut(4).zip(random.to_array()) {
+                dst.copy_from_slice(&src.to_ne_bytes());
+            }
+        }
+        ChaCha8Rng::from_seed(seed)
+    };
+    #[cfg(feature = "bao1x")]
+    let mut rand_cache = csprng.next_u64();
 
     // A list of all sleep requests in the system, sorted by the time at which it
     // expires. That is, if a request comes in to sleep for 1000 ms, and the ticktimer
@@ -133,6 +158,24 @@ fn main() -> ! {
                     // but this definitely would need to be done for e.g. Memory messages).
                     core::mem::forget(msg_opt.take());
 
+                    // add some small timing jitter every time a sleep call is made. This helps
+                    // improve robustness against glitch attacks while running in OS mode.
+                    #[cfg(feature = "bao1x")]
+                    {
+                        // Probably, a short delay is sufficient to randomize execution from glitches
+                        const DELAY_LOG2: u32 = 2;
+                        let i = (rand_cache as u32) & ((1 << DELAY_LOG2) - 1);
+                        for _ in 0..(i * 2) {
+                            bao1x_api::bollard!(4);
+                        }
+                        rand_cache >>= DELAY_LOG2;
+                        // quite intentionally, this can terminate "early": doesn't always take the same
+                        // number of iterations to trigger a re-seed. This contributes a
+                        // bit to execution timing randomization without adding too much overhead.
+                        if rand_cache == 0 {
+                            rand_cache = csprng.next_u64();
+                        }
+                    }
                     // let timeout_queue = timeout_heap.entry(msg.sender.pid()).or_default();
                     ticktimer.recalculate_sleep(
                         &mut sleep_heap,
@@ -194,6 +237,23 @@ fn main() -> ! {
                 ticktimer.suspend();
                 #[cfg(not(any(target_arch = "arm", feature = "bao1x")))]
                 susres.suspend_until_resume(_token).expect("couldn't execute suspend/resume");
+                #[cfg(feature = "bao1x")]
+                {
+                    log::info!("waiting on good morning");
+                    // Do not use the HAL-Service API to avoid creating a circular dependency on the HAL crate
+                    xous::send_message(
+                        wakeup_cid,
+                        xous::Message::new_blocking_scalar(
+                            bao1x_api::HalOpcode::GoodNight as usize,
+                            0,
+                            0,
+                            0,
+                            0,
+                        ),
+                    )
+                    .unwrap();
+                    log::info!("good morning!");
+                }
                 ticktimer.resume();
             }),
 

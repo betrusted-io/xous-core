@@ -27,6 +27,7 @@ xous-semver = "0.1.5"
 utralib = { version = "0.1.26", optional = true, default-features = false }
 loader = { path = "../../loader", optional = true }
 bao1x-api = { path = "../../libs/bao1x-api", optional = true }
+rand_chacha = { version = "0.3.1", optional = true }
 
 # TODO: fix this
 #[target.'cfg(target_arch = "arm")'.dependencies]
@@ -43,7 +44,7 @@ renode = ["utralib/renode", "susres/renode", "watchdog"]
 
 board-dabao = []
 board-baosec = []
-bao1x = ["utralib/bao1x", "utralib/std", "bao1x-api"]
+bao1x = ["utralib/bao1x", "utralib/std", "bao1x-api", "rand_chacha"]
 hosted-baosec = []
 
 susres = []
