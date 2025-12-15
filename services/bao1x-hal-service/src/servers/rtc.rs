@@ -12,6 +12,15 @@ pub fn start_rtc_service() {
     });
 }
 
+/// `rtc_code` is the value of the RTC register, which represents 1/1024th of a second
+/// `rollovers` is the number of times we've seen the register rollover since the beginning of time
+///
+/// The return value is a number that represents the number of real-time milliseconds seen
+/// since an arbitrary point that is tracked by the outer loop (embodied in `utc_offset_ms`)
+fn rtc_code_to_ms(rtc_code: u32, rollovers: u32) -> i64 {
+    ((rtc_code as i64 + ((rollovers as i64) << 32)) * 1000) / 1024
+}
+
 fn rtc_service() -> ! {
     // the public SID is well known and accessible by anyone who uses `libstd`
     let pub_sid =
@@ -27,10 +36,8 @@ fn rtc_service() -> ! {
     .expect("couldn't map RTC range");
     let rtc = CSR::new(rtc_range.as_mut_ptr() as *mut u32);
 
-    // this loop allows us to fail slightly more gracefully in the case that there is an RTC hardware
-    // failure
-    let mut start_rtc_secs = rtc.r(DR);
-    let mut start_tt_ms = tt.elapsed_ms();
+    let mut rtc_rollovers: u32 = 0; // gives us up to 168 years
+    let mut last_rtc_val = rtc.r(DR); // use this to detect rollovers
     let mut utc_offset_ms = 0;
     let mut tz_offset_ms = 0;
 
@@ -41,16 +48,21 @@ fn rtc_service() -> ! {
         let msg = msg_opt.as_mut().unwrap();
         let opcode: Option<TimeOp> = num_traits::FromPrimitive::from_usize(msg.body.id());
         log::debug!("{:?}", opcode);
+        // capture the value once at the top so all comparisons work off of this as "the time"
+        let rtc_val_atomic = rtc.r(DR);
+        // every call, check for a rollover
+        if last_rtc_val > rtc_val_atomic {
+            rtc_rollovers += 1;
+            log::info!("RTC rollover: {}", rtc_rollovers);
+        }
+        last_rtc_val = rtc_val_atomic;
         match opcode {
             Some(TimeOp::HwSync) => {
-                start_rtc_secs = rtc.r(DR);
-                start_tt_ms = tt.elapsed_ms();
+                // not used as we're going direct to the hardware
             }
             Some(TimeOp::GetUtcTimeMs) => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
-                    let t = start_rtc_secs as i64 * 1000i64
-                        + (tt.elapsed_ms() - start_tt_ms) as i64
-                        + utc_offset_ms;
+                    let t = utc_offset_ms + rtc_code_to_ms(rtc_val_atomic, rtc_rollovers);
                     if t < 0 {
                         // the offset has some error in it, perhaps due to an RTC reset. reset the offset!
                         log::warn!(
@@ -67,14 +79,8 @@ fn rtc_service() -> ! {
             }
             Some(TimeOp::GetLocalTimeMs) => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
-                    log::trace!(
-                        "current offset {}",
-                        (start_rtc_secs as i64 * 1000i64 + (tt.elapsed_ms() - start_tt_ms) as i64) / 1000
-                    );
-                    let t = start_rtc_secs as i64 * 1000i64
-                        + (tt.elapsed_ms() - start_tt_ms) as i64
-                        + utc_offset_ms
-                        + tz_offset_ms;
+                    log::debug!("current offset {}", rtc.r(DR));
+                    let t = utc_offset_ms + tz_offset_ms + rtc_code_to_ms(rtc_val_atomic, rtc_rollovers);
                     if t < 0 {
                         log::warn!(
                             "Time was negative, recovering from time setting error by clearing utc and timezone offsets to 0."
@@ -88,54 +94,18 @@ fn rtc_service() -> ! {
                     scalar.arg2 = (t as u64 & 0xFFFF_FFFF) as usize;
                 }
             }
-            /*
-            Set with:
-                log::info!("Got NTP time: {}.{}", time.sec(), time.sec_fraction());
-                let current_time = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap()
-                    + chrono::Duration::seconds(time.sec() as i64);
-                xous::send_message(
-                    timeserver_cid,
-                    Message::new_scalar(
-                        crate::time::TimeOp::SetUtcTimeMs.to_usize().unwrap(),
-                        ((current_time.timestamp_millis() as u64) >> 32) as usize,
-                        (current_time.timestamp_millis() as u64 & 0xFFFF_FFFF) as usize,
-                        0,
-                        0,
-                    ),
-                )
-                .expect("couldn't set time");
-             */
             Some(TimeOp::SetUtcTimeMs) => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     let utc_hi_ms = scalar.arg1;
                     let utc_lo_ms = scalar.arg2;
                     let utc_time_ms = (utc_hi_ms as i64) << 32 | (utc_lo_ms as i64);
-                    start_rtc_secs = rtc.r(DR);
-                    start_tt_ms = tt.elapsed_ms();
+                    let rtc_offset_ms = rtc_code_to_ms(rtc_val_atomic, rtc_rollovers);
                     log::info!("utc_time: {}", utc_time_ms / 1000);
-                    log::info!("rtc_secs: {}", start_rtc_secs);
-                    log::info!("start_tt_ms: {}", start_tt_ms);
-                    let offset = utc_time_ms - (start_rtc_secs as i64) * 1000;
+                    log::info!("rtc_secs: {}", rtc_offset_ms / 1000);
+                    let offset = utc_time_ms - rtc_offset_ms;
                     utc_offset_ms = offset;
                 }
             }
-            /*
-               `tz` is a float that represents the current UTC time offset (e.g. -8 for singapore)
-               see simple_kilofloat_parse() in dns/src/time.rs for an efficient string parser if needed
-
-               let tz_offset_ms = (tz * 3600) as i64;
-               xous::send_message(
-                   timeserver_cid,
-                   Message::new_scalar(
-                       crate::time::TimeOp::SetTzOffsetMs.to_usize().unwrap(),
-                       (tz_offset_ms >> 32) as usize,
-                       (tz_offset_ms & 0xFFFF_FFFF) as usize,
-                       0,
-                       0,
-                   ),
-               )
-               .expect("couldn't set timezone");
-            */
             Some(TimeOp::SetTzOffsetMs) => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     let tz_hi_ms = scalar.arg1;
