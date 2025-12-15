@@ -25,7 +25,6 @@ fn rtc_service() -> ! {
     // the public SID is well known and accessible by anyone who uses `libstd`
     let pub_sid =
         xous::create_server_with_address(&TIME_SERVER_PUBLIC).expect("Couldn't create Ticktimer server");
-    let tt = ticktimer::Ticktimer::new().unwrap();
 
     let rtc_range = xous::map_memory(
         xous::MemoryAddress::new(bao1x_hal::rtc::HW_RTC_BASE),
