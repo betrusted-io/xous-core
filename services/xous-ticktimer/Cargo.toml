@@ -44,7 +44,13 @@ renode = ["utralib/renode", "susres/renode", "watchdog"]
 
 board-dabao = []
 board-baosec = []
-bao1x = ["utralib/bao1x", "utralib/std", "bao1x-api", "rand_chacha"]
+bao1x = [
+    "utralib/bao1x",
+    "utralib/std",
+    "bao1x-api",
+    "rand_chacha",
+    "susres/bao1x",
+]
 hosted-baosec = []
 
 susres = []

@@ -17,7 +17,7 @@ use rand_chacha::{
     ChaCha8Rng,
     rand_core::{RngCore, SeedableRng},
 };
-#[cfg(not(any(target_arch = "arm", feature = "bao1x")))]
+#[cfg(not(any(target_arch = "arm")))]
 use susres::SuspendOrder;
 
 fn main() -> ! {
@@ -55,23 +55,23 @@ fn main() -> ! {
     ticktimer.reset(); // reset the time to 0
 
     // register a suspend/resume listener
-    #[cfg(not(any(target_arch = "arm", feature = "bao1x")))]
+    #[cfg(not(any(target_arch = "arm")))]
     let xns = xous_names::XousNames::new().unwrap();
 
-    #[cfg(not(any(target_arch = "arm", feature = "bao1x")))]
+    #[cfg(not(any(target_arch = "arm")))]
     let sr_cid = xous::connect(ticktimer_server).expect("couldn't create suspend callback connection");
 
-    #[cfg(not(any(target_arch = "arm", feature = "bao1x")))]
+    #[cfg(not(any(target_arch = "arm")))]
     let mut susres =
         susres::Susres::new(Some(SuspendOrder::Last), &xns, api::Opcode::SuspendResume as u32, sr_cid)
             .expect("couldn't create suspend/resume object");
 
-    #[cfg(feature = "bao1x")]
+    /* #[cfg(feature = "bao1x")]
     let xns = xous_names::XousNames::new().unwrap();
     #[cfg(feature = "bao1x")]
     let wakeup_cid = xns
         .request_connection(bao1x_api::SERVER_NAME_BAO1X_HAL)
-        .expect("Couldn't connect to bao1x HAL server");
+        .expect("Couldn't connect to bao1x HAL server"); */
     #[cfg(feature = "bao1x")]
     let mut csprng = {
         let mut seed = [0u8; 32];
@@ -235,25 +235,8 @@ fn main() -> ! {
 
             api::Opcode::SuspendResume => xous::msg_scalar_unpack!(msg, _token, _, _, _, {
                 ticktimer.suspend();
-                #[cfg(not(any(target_arch = "arm", feature = "bao1x")))]
+                #[cfg(not(any(target_arch = "arm")))]
                 susres.suspend_until_resume(_token).expect("couldn't execute suspend/resume");
-                #[cfg(feature = "bao1x")]
-                {
-                    log::info!("waiting on good morning");
-                    // Do not use the HAL-Service API to avoid creating a circular dependency on the HAL crate
-                    xous::send_message(
-                        wakeup_cid,
-                        xous::Message::new_blocking_scalar(
-                            bao1x_api::HalOpcode::GoodNight as usize,
-                            0,
-                            0,
-                            0,
-                            0,
-                        ),
-                    )
-                    .unwrap();
-                    log::info!("good morning!");
-                }
                 ticktimer.resume();
             }),
 
