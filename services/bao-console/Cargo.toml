@@ -24,6 +24,7 @@ ux-api = { path = "../../libs/ux-api", optional = true }
 pddb = { path = "../pddb", optional = true }
 xous-swapper = { path = "../xous-swapper", optional = true }
 bytemuck = "1.24.0"
+susres = { package = "xous-api-susres", version = "0.9.66" }
 
 # pddb testing
 rand = { version = "0.8.5", features = ["getrandom"], optional = true }

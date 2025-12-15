@@ -128,14 +128,15 @@ impl<'a> ShellCmdApi<'a> for Test {
                 "keepon" => {
                     todo!("Fix this to use DCDC2 for keepon (as per baosec v2)");
                 }
+                #[cfg(not(feature = "hosted-baosec"))]
                 "wfi" => {
                     let gfx = ux_api::service::gfx::Gfx::new(&_env.xns).unwrap();
                     log::info!("turn off display");
                     gfx.set_power(false).unwrap();
                     log::info!("display off");
-                    let hal = bao1x_hal_service::Hal::new();
+                    let susres = susres::Susres::new_without_hook(&_env.xns).unwrap();
                     log::info!("initiating wfi from test shell...");
-                    hal.wfi();
+                    susres.initiate_suspend().unwrap();
                     log::info!("waiting after WFI return (system will be in WFI)");
                     _env.ticktimer.sleep_ms(100).ok();
                     log::info!("turn on display");
