@@ -273,12 +273,7 @@ fn main() {
 
     servers::keyboard::start_keyboard_service();
 
-    #[cfg(feature = "board-baosec")]
-    let power_sid = xous::create_server().unwrap();
-    #[cfg(feature = "board-baosec")]
-    servers::power::start_power_service(power_sid);
-    #[cfg(feature = "board-baosec")]
-    let power_cid = xous::connect(power_sid).unwrap();
+    servers::susres::start_susres_service();
 
     // claim BIO
     #[cfg(feature = "board-baosec")]
@@ -296,32 +291,28 @@ fn main() {
     log::debug!("Starting main loop");
     loop {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
-        let msg = msg_opt.as_mut().unwrap();
-        let opcode = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(HalOpcode::InvalidCall);
+        // this loop uses a unique form of reply_and_receive next that allows us to store and delegate
+        // scalar messages if necessary (that feature is currently unused). To do this, .take() the msg_opt
+        // and store it in a Vec; then use an explicit rsyscall to do a return_scalar1[2,5] to unblock all
+        // the blocking threads. The current loop doesn't actually do this - the feature was deemed unneeded
+        // in the end - but the structural refactor is left here because I can see it being useful in the
+        // future as this server does more and more hardware air traffic control.
+        let opcode = {
+            let msg = msg_opt.as_mut().unwrap();
+            num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(HalOpcode::InvalidCall)
+        };
         log::debug!("{:?}", opcode);
         match opcode {
-            #[cfg(feature = "board-baosec")]
-            HalOpcode::Wfi => {
-                log::info!("turn off preemption");
-                os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0);
-                // this call *can't* block because WFI relies on HAL services to operate!
-                xous::send_message(
-                    power_cid,
-                    xous::Message::new_scalar(PowerOp::Wfi.to_usize().unwrap(), 0, 0, 0, 0),
-                )
-                .unwrap();
-            }
-            #[cfg(not(feature = "board-baosec"))]
-            HalOpcode::Wfi => unimplemented!(),
             HalOpcode::MapIfram => {
-                if let Some(scalar) = msg.body.scalar_message_mut() {
+                let sender = msg_opt.as_ref().unwrap().sender;
+                if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
                     let requested_size = scalar.arg1; // requested size
                     let requested_bank = scalar.arg2; // Specifies bank 0, 1, or don't care (any number but 0 or 1)
 
                     let mut allocated_address = None;
                     for (bank, table) in ifram_allocs.iter_mut().enumerate() {
                         if bank == requested_bank || requested_bank > 1 {
-                            match try_alloc(table, requested_size, msg.sender) {
+                            match try_alloc(table, requested_size, sender) {
                                 Some(offset) => {
                                     let base = if bank == 0 {
                                         utralib::generated::HW_IFRAM0_MEM
@@ -359,7 +350,7 @@ fn main() {
                 }
             }
             HalOpcode::UnmapIfram => {
-                if let Some(scalar) = msg.body.scalar_message() {
+                if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message() {
                     let mapped_size = scalar.arg1;
                     let phys_addr = scalar.arg2;
 
@@ -390,8 +381,11 @@ fn main() {
                 }
             }
             HalOpcode::ConfigureIox => {
-                let buf =
-                    unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let buf = unsafe {
+                    xous_ipc::Buffer::from_memory_message(
+                        msg_opt.as_mut().unwrap().body.memory_message().unwrap(),
+                    )
+                };
                 let config = buf.to_original::<IoxConfigMessage, _>().unwrap();
                 if let Some(f) = config.function {
                     iox.set_alternate_function(config.port, config.pin, f);
@@ -413,8 +407,11 @@ fn main() {
                 }
             }
             HalOpcode::ConfigureIoxIrq => {
-                let buf =
-                    unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let buf = unsafe {
+                    xous_ipc::Buffer::from_memory_message(
+                        msg_opt.as_mut().unwrap().body.memory_message().unwrap(),
+                    )
+                };
                 let registration = buf.to_original::<IoxIrqRegistration, _>().unwrap();
                 log::info!("Got registration request: {:?}", registration);
                 if let Some(index) = find_first_none(&irq_table) {
@@ -463,7 +460,7 @@ fn main() {
                 }
             }
             HalOpcode::IrqLocalHandler => {
-                if let Some(scalar) = msg.body.scalar_message() {
+                if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message() {
                     // Figure out which port(s) caused the IRQ
                     let irq_flag = iox.csr.r(utralib::utra::iox::SFR_INTFR);
                     // clear the set bit by writing it back
@@ -510,7 +507,7 @@ fn main() {
                 }
             }
             HalOpcode::SetGpioBank => {
-                if let Some(scalar) = msg.body.scalar_message() {
+                if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message() {
                     let port: IoxPort = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     let value = scalar.arg2 as u16;
                     let bitmask = scalar.arg3 as u16;
@@ -518,13 +515,13 @@ fn main() {
                 }
             }
             HalOpcode::GetGpioBank => {
-                if let Some(scalar) = msg.body.scalar_message_mut() {
+                if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
                     let port: IoxPort = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     scalar.arg1 = iox.get_gpio_bank(port) as usize;
                 }
             }
             HalOpcode::ConfigureBio => {
-                if let Some(scalar) = msg.body.scalar_message_mut() {
+                if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
                     let port: IoxPort = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     let pin = scalar.arg2 as u8;
                     match iox.set_bio_bit_from_port_and_pin(port, pin) {
@@ -537,7 +534,7 @@ fn main() {
                 }
             }
             HalOpcode::ConfigureUdmaClock => {
-                if let Some(scalar) = msg.body.scalar_message() {
+                if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message() {
                     let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     let enable = if scalar.arg2 != 0 { true } else { false };
                     if enable {
@@ -548,7 +545,7 @@ fn main() {
                 }
             }
             HalOpcode::ConfigureUdmaEvent => {
-                if let Some(scalar) = msg.body.scalar_message() {
+                if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message() {
                     let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     let event_offset = scalar.arg2 as u32;
                     let to_channel: EventChannel =
@@ -560,21 +557,23 @@ fn main() {
                 }
             }
             HalOpcode::UdmaIrqStatusBits => {
-                if let Some(scalar) = msg.body.scalar_message_mut() {
+                if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
                     let bank = num_traits::FromPrimitive::from_usize(scalar.arg1)
                         .expect("Bad argument to UdmaIrqStatusBits");
                     scalar.arg1 = udma_global.irq_status_bits(bank) as usize;
                 }
             }
             HalOpcode::PeriphReset => {
-                if let Some(scalar) = msg.body.scalar_message() {
+                if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message() {
                     let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     udma_global.reset(periph);
                 }
             }
             HalOpcode::I2c => {
                 let mut buf = unsafe {
-                    xous_ipc::Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                    xous_ipc::Buffer::from_memory_message_mut(
+                        msg_opt.as_mut().unwrap().body.memory_message_mut().unwrap(),
+                    )
                 };
                 let mut list = buf.to_original::<I2cTransactions, _>().expect("I2c message format error");
                 for transaction in list.transactions.iter_mut() {
@@ -603,13 +602,13 @@ fn main() {
             HalOpcode::SetPreemptionState => {
                 // this is done as a blocking message because we want confirmation that
                 // this bit has been set before entering a critical section.
-                if let Some(scalar) = msg.body.scalar_message_mut() {
+                if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
                     timer_run = scalar.arg1 != 0;
                     os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, if timer_run { 1 } else { 0 });
                 }
             }
             HalOpcode::InvalidCall => {
-                log::error!("Invalid opcode received: {:?}", msg);
+                log::error!("Invalid opcode received: {:?}", msg_opt);
             }
             HalOpcode::Quit => {
                 log::info!("Received quit opcode, exiting.");
