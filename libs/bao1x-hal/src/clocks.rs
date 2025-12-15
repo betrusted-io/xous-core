@@ -1,10 +1,16 @@
-#[cfg(feature = "std")]
-use bao1x_api::IoxHal;
+use bao1x_api::find_pll_params;
+#[cfg(all(feature = "std", feature = "board-baosec"))]
+use bao1x_api::{IoxHal, IoxPort};
 use bitbybit::bitfield;
 use utralib::*;
 
-#[cfg(feature = "std")]
+#[cfg(feature = "board-baosec")]
+use crate::axp2101::Axp2101;
+#[cfg(all(feature = "std", feature = "board-baosec"))]
 use crate::i2c::I2c;
+
+#[cfg(feature = "std")]
+const MHZ: u32 = 1_000_000;
 
 #[bitfield(u32)]
 #[derive(PartialEq, Eq, Debug)]
@@ -62,30 +68,8 @@ where
     let daric_cgu = cgu_base as *mut u32;
     let mut cgu = CSR::new(daric_cgu);
 
-    const UNIT_MHZ: u32 = 1000 * 1000;
-    const PFD_F_MHZ: u32 = 16;
-    const FREQ_0: u32 = 16 * UNIT_MHZ;
-    const M: u32 = bao1x_api::FREQ_OSC_MHZ / PFD_F_MHZ; //  - 1;  // OSC input was 24, replace with 48
-
-    const TBL_Q: [u16; 7] = [
-        // keep later DIV even number as possible
-        0x7777, // 16-32 MHz
-        0x7737, // 32-64
-        0x3733, // 64-128
-        0x3313, // 128-256
-        0x3311, // 256-512 // keep ~ 100MHz
-        0x3301, // 512-1024
-        0x3301, // 1024-1600
-    ];
-    const TBL_MUL: [u32; 7] = [
-        64, // 16-32 MHz
-        32, // 32-64
-        16, // 64-128
-        8,  // 128-256
-        4,  // 256-512
-        2,  // 512-1024
-        2,  // 1024-1600
-    ];
+    // compute the params first. Consider passing errors up the stack but for now panic.
+    let pll_params = find_pll_params(freq_hz, true).expect("Couldn't find valid PLL solution");
 
     // Safest divider settings, assuming no overclocking.
     // If overclocking, need to lower hclk:iclk:pclk even futher; the CPU speed can outperform the bus fabric.
@@ -97,44 +81,18 @@ where
         daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x0700_017f); // fclk
     }
     daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x0f00_0f7f); // aclk
-    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x1f01_073f); // hclk
-    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x3f03_031f); // iclk
-    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x7f0f_010f); // pclk
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x1f00_073f); // hclk
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x3f00_031f); // iclk
+    daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x7f00_010f); // pclk
 
-    // calculate perclk divider. Target 100MHz.
-
-    // perclk divider - set to divide by 16 off of an 800Mhz base. Only found on bao1x.
-    // daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
-    // perclk divider - set to divide by 8 off of an 800Mhz base. Only found on bao1x.
-    let (min_cycle, fd, perclk) =
-        if let Some((min_cycle, fd, perclk)) = bao1x_api::clk_to_per(freq_hz / 1_000_000, 100) {
-            daric_cgu
-                .add(utra::sysctrl::SFR_CGUFDPER.offset())
-                .write_volatile((min_cycle as u32) << 16 | (fd as u32) << 8 | fd as u32);
-            (min_cycle, fd, perclk * 1_000_000)
-        } else if freq_hz > 400_000_000 {
-            daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x07_ff_ff);
-            (7, 0xff, freq_hz / 8)
-        } else {
-            daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x03_ff_ff);
-            (3, 0xff, freq_hz / 4)
-        };
-
-    /*
-        perclk fields:  min-cycle-lp | min-cycle | fd-lp | fd
-        clkper fd
-            0xff :   Fperclk = Fclktop/2
-            0x7f:   Fperclk = Fclktop/4
-            0x3f :   Fperclk = Fclktop/8
-            0x1f :   Fperclk = Fclktop/16
-            0x0f :   Fperclk = Fclktop/32
-            0x07 :   Fperclk = Fclktop/64
-            0x03:   Fperclk = Fclktop/128
-            0x01:   Fperclk = Fclktop/256
-
-        min cycle of clktop, F means frequency
-        Fperclk  Max = Fperclk/(min cycle+1)*2
-    */
+    // peripheral clock should always target 100MHz regardless of the top frequency
+    let peri_params = bao1x_api::find_optimal_divider(freq_hz / 2, 100_000_000).unwrap();
+    let fd0 = peri_params.fd0;
+    let fd2 = peri_params.fd2;
+    daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(
+        (peri_params.fd0 as u32) << 16 | (peri_params.fd2 as u32) << 8 | peri_params.fd2 as u32,
+    );
+    let perclk = peri_params.actual_freq_hz;
 
     // configure gates
     daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0x00); // mbox/qfc turned off
@@ -144,6 +102,26 @@ where
     // commit dividers
     daric_cgu.add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
 
+    // 0: RC, 1: XTAL
+    cgu.wo(sysctrl::SFR_CGUSEL1, 1);
+    cgu.wo(sysctrl::SFR_CGUFSCR, bao1x_api::FREQ_OSC_MHZ);
+    cgu.wo(sysctrl::SFR_CGUSET, 0x32);
+
+    // update the DUART to use XTAL params
+    if let Some(duart_ptr) = duart_base {
+        let duart = duart_ptr as *mut u32;
+        duart.add(utra::duart::SFR_CR.offset()).write_volatile(0);
+        // set the ETUC now that we're on the xosc.
+        duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(bao1x_api::FREQ_OSC_MHZ);
+        duart.add(utra::duart::SFR_CR.offset()).write_volatile(1);
+    }
+
+    // switch to OSC - now clocking off of external oscillator (glitch hazard!)
+    // clktop sel, 0:clksys, 1:clkpll0
+    cgu.wo(sysctrl::SFR_CGUSEL0, 0);
+    cgu.wo(sysctrl::SFR_CGUSET, 0x32);
+
+    // set internal LDO to match the requested frequency
     let mut ao_sysctrl = CSR::new(ao_sysctl_base as *mut u32);
     if freq_hz > 700_000_000 {
         // crate::println!("setting vdd85 to 0.893v");
@@ -165,76 +143,58 @@ where
         delay_at_sysfreq(20, 48_000_000);
     }
 
-    // 0: RC, 1: XTAL
-    cgu.wo(sysctrl::SFR_CGUSEL1, 1);
-    cgu.wo(sysctrl::SFR_CGUFSCR, bao1x_api::FREQ_OSC_MHZ);
-    cgu.wo(sysctrl::SFR_CGUSET, 0x32);
+    // PD PLL
+    cgu.wo(sysctrl::SFR_IPCLPEN, cgu.r(sysctrl::SFR_IPCLPEN) | 0x2);
+    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
 
-    if let Some(duart_ptr) = duart_base {
-        let duart = duart_ptr as *mut u32;
-        duart.add(utra::duart::SFR_CR.offset()).write_volatile(0);
-        // set the ETUC now that we're on the xosc.
-        duart.add(utra::duart::SFR_ETUC.offset()).write_volatile(bao1x_api::FREQ_OSC_MHZ);
-        duart.add(utra::duart::SFR_CR.offset()).write_volatile(1);
+    for _ in 0..4096 {
+        bao1x_api::bollard!(4);
     }
 
-    if freq_hz <= 1_000_000 {
-        cgu.wo(sysctrl::SFR_IPCOSC, freq_hz);
-        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
-    }
-    // switch to OSC - now clocking off of external oscillator (glitch hazard!)
-    // clktop sel, 0:clksys, 1:clkpll0
-    cgu.wo(sysctrl::SFR_CGUSEL0, 0);
-    cgu.wo(sysctrl::SFR_CGUSET, 0x32);
-
-    if freq_hz <= 1_000_000 {
-    } else {
-        let n_fxp24: u64; // fixed point
-        let f16mhz_log2: u32 = (freq_hz / FREQ_0).ilog2();
-
-        // PD PLL
-        cgu.wo(sysctrl::SFR_IPCLPEN, cgu.r(sysctrl::SFR_IPCLPEN) | 0x2);
-        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
-
-        for _ in 0..4096 {
-            bao1x_api::bollard!(4);
-        }
-
-        n_fxp24 = (((freq_hz as u64) << 24) * TBL_MUL[f16mhz_log2 as usize] as u64
-            + PFD_F_MHZ as u64 * UNIT_MHZ as u64 / 2)
-            / (PFD_F_MHZ as u64 * UNIT_MHZ as u64); // rounded
-        let n_frac: u32 = (n_fxp24 & 0x00ffffff) as u32;
-
-        cgu.wo(sysctrl::SFR_IPCPLLMN, ((M << 12) & 0x0001F000) | (((n_fxp24 >> 24) as u32) & 0x00000fff));
-        cgu.wo(sysctrl::SFR_IPCPLLF, n_frac | if 0 == n_frac { 0 } else { 1u32 << 24 });
-        cgu.wo(sysctrl::SFR_IPCPLLQ, TBL_Q[f16mhz_log2 as usize] as u32);
-        //               VCO bias   CPP bias   CPI bias
-        //                1          2          3
-        cgu.wo(sysctrl::SFR_IPCCR, (1 << 6) | (2 << 3) | (3));
-        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
-
-        cgu.wo(sysctrl::SFR_IPCLPEN, cgu.r(sysctrl::SFR_IPCLPEN) & !0x2);
-
-        cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
-
-        for _ in 0..4096 {
-            bao1x_api::bollard!(4);
-        }
-
-        bao1x_api::bollard!(6);
-        cgu.wo(sysctrl::SFR_CGUSEL0, 1);
-        cgu.wo(sysctrl::SFR_CGUSET, 0x32);
-        bao1x_api::bollard!(6);
-    }
-    // glitch_safety: check that we're running on the PLL
-    #[cfg(not(feature = "kernel"))]
-    crate::hardening::check_pll();
-
-    crate::println!(
-        "mn {:x}, q{:x}",
-        (0x400400a0 as *const u32).read_volatile(),
-        (0x400400a8 as *const u32).read_volatile()
+    cgu.wo(
+        sysctrl::SFR_IPCPLLMN,
+        (((pll_params.m as u32) << 12) & 0x0001F000) | ((pll_params.n as u32) & 0x00000fff),
     );
+    if pll_params.frac == 0 {
+        cgu.wo(sysctrl::SFR_IPCPLLF, 0);
+    } else {
+        cgu.wo(sysctrl::SFR_IPCPLLF, pll_params.frac | (1 << 24));
+    }
+    // TODO: don't cheeseball the pll1 output dividers to be 1/4th of pll0 - use a PKE target frequency
+    // instead
+    cgu.wo(
+        sysctrl::SFR_IPCPLLQ,
+        (4 * (pll_params.q1 as u32 - 1) << 12)
+            | 4 * (pll_params.q0 as u32 - 1) << 8
+            | ((pll_params.q1 as u32 - 1) << 4)
+            | pll_params.q0 as u32 - 1,
+    );
+
+    //               VCO bias   CPP bias   CPI bias
+    //                1          2          3
+    cgu.wo(sysctrl::SFR_IPCCR, (1 << 6) | (2 << 3) | (3));
+    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
+
+    cgu.wo(sysctrl::SFR_IPCLPEN, cgu.r(sysctrl::SFR_IPCLPEN) & !0x2);
+
+    cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
+
+    for _ in 0..4096 {
+        bao1x_api::bollard!(4);
+    }
+
+    bao1x_api::bollard!(6);
+    cgu.wo(sysctrl::SFR_CGUSEL0, 1);
+    cgu.wo(sysctrl::SFR_CGUSET, 0x32);
+    bao1x_api::bollard!(6);
+
+    // glitch_safety: check that we're running on the PLL
+    #[cfg(all(not(feature = "kernel"), not(feature = "std")))]
+    crate::hardening::check_pll();
+    #[cfg(feature = "std")]
+    check_pll_std(&mut cgu);
+
+    crate::println!("mn {:x}, q{:x}", cgu.r(sysctrl::SFR_IPCPLLMN), cgu.r(sysctrl::SFR_IPCPLLQ));
     crate::println!("fsvalid: {}", daric_cgu.add(sysctrl::SFR_CGUFSVLD.offset()).read_volatile());
     let clk_desc: [(&'static str, u32, usize); 8] = [
         ("fclk", 16, 0x40 / size_of::<u32>()),
@@ -251,14 +211,31 @@ where
         crate::println!("{}: {} MHz", name, fsfreq);
     }
 
-    crate::println!("Perclk solution: {:x}|{:x} -> {} MHz", min_cycle, fd, perclk / 1_000_000);
-    crate::println!("PLL configured to {} MHz", freq_hz / 1_000_000);
+    crate::println!(
+        "Perclk solution: {:x}|{:x} -> {}.{} MHz",
+        fd0,
+        fd2,
+        perclk / 1_000_000,
+        perclk % 1_000_000
+    );
+    crate::println!("PLL configured to {}.{} MHz", freq_hz / 1_000_000, freq_hz % 1_000_000);
 
     // glitch_safety: check that we're running on the PLL
-    #[cfg(not(feature = "kernel"))]
+    #[cfg(all(not(feature = "kernel"), not(feature = "std")))]
     crate::hardening::check_pll();
+    #[cfg(feature = "std")]
+    check_pll_std(&mut cgu);
 
     perclk
+}
+
+#[inline(always)]
+#[cfg(feature = "std")]
+fn check_pll_std(cgu: &mut CSR<u32>) {
+    if cgu.r(utra::sysctrl::SFR_CGUSEL0) & 1 == 0 {
+        // we're not on the PLL: reboot
+        cgu.wo(utra::sysctrl::SFR_RCURST0, 0x0000_55aa);
+    }
 }
 
 #[cfg(feature = "std")]
@@ -273,8 +250,15 @@ pub struct ClockManager {
     sysctrl: CSR<u32>,
     // this is a clone of what's in the kpc_aoint
     ao_sysctrl: CSR<u32>,
+    susres: CSR<u32>,
+    #[cfg(feature = "board-baosec")]
     i2c: I2c,
+    #[cfg(feature = "board-baosec")]
     iox: IoxHal,
+    #[cfg(feature = "board-baosec")]
+    dcdc2_io: (IoxPort, u8),
+    #[cfg(feature = "board-baosec")]
+    pmic: Axp2101,
 }
 
 /// maximum value representable in the fd counter
@@ -297,8 +281,13 @@ impl ClockManager {
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )?;
+        let susres = xous::map_memory(
+            xous::MemoryAddress::new(utra::susres::HW_SUSRES_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )?;
 
-        const MHZ: u32 = 1_000_000;
         // compute the actual frequency values by reading the PLL config
         let sysctrl = CSR::new(sysctrl_mem.as_mut_ptr() as *mut u32);
         let m = (sysctrl.r(utra::sysctrl::SFR_IPCPLLMN) >> 12) & 0xF;
@@ -321,24 +310,54 @@ impl ClockManager {
         let hclk = ClockManager::divide_by_fd(hclk_fd, pll0_freq);
         let iclk = ClockManager::divide_by_fd(iclk_fd, pll0_freq);
         let pclk = ClockManager::divide_by_fd(pclk_fd, pll0_freq);
+        log::info!("fracen: {:?}", fracen);
         // perclk has an extra /2 applied to it
         log::info!("perclk: {:x}, pll0_freq {}", sysctrl.r(utra::sysctrl::SFR_CGUFDPER), pll0_freq);
         let perclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFDPER) & 0xFF;
         let perclk = ClockManager::divide_by_fd(perclk_fd, pll0_freq) / 2;
+
+        /*
+        log::info!("m: {} n: {} q1: {} q0: {} frac: {}, fracen: {:?}", m, n, q1, q0, frac, fracen);
+        if let Some(params) = bao1x_api::find_pll_params(700_000_000, true) {
+            log::info!("700Mhz params: {:?}", params);
+        }
+        */
+
+        #[cfg(feature = "board-baosec")]
+        let iox = IoxHal::new();
+        #[cfg(feature = "board-baosec")]
+        let (port, pin) = crate::board::setup_dcdc2_pin(&iox);
+        #[cfg(feature = "board-baosec")]
+        let mut i2c = I2c::new();
+        #[cfg(feature = "board-baosec")]
+        let pmic = crate::axp2101::Axp2101::new(&mut i2c).unwrap();
+
         Ok(Self {
-            vco_freq, // 1_392_000_000,
-            fclk,     // 348_000_000,
-            aclk,     // 348_000_000,
+            vco_freq,
+            fclk,
+            aclk,
             hclk,
             iclk,
             pclk,
             perclk,
             sysctrl,
             ao_sysctrl: CSR::new(ao_mem.as_ptr() as *mut u32),
-            i2c: I2c::new(),
-            iox: IoxHal::new(),
+            susres: CSR::new(susres.as_ptr() as *mut u32),
+            #[cfg(feature = "board-baosec")]
+            i2c,
+            #[cfg(feature = "board-baosec")]
+            iox,
+            #[cfg(feature = "board-baosec")]
+            dcdc2_io: (port, pin),
+            #[cfg(feature = "board-baosec")]
+            pmic,
         })
     }
+
+    /// Safety: this pulls out the hardware base for the susres block. The receiver of this
+    /// address must manually manage all concurrency issues that could happen with respect to
+    /// using the susres block.
+    pub unsafe fn susres_base(&self) -> usize { self.susres.base() as usize }
 
     pub fn divide_by_fd(fd: u32, in_freq_hz: u32) -> u32 {
         // shift by 1_000 to prevent overflow
@@ -383,9 +402,26 @@ impl ClockManager {
                 self.sysctrl.base() as usize,
                 self.ao_sysctrl.base() as usize,
                 None,
-                |ms: usize, _freq: u32| {
-                    for i in 0..ms {
-                        crate::println!("delay {}", i);
+                |ms: usize, freq_hz: u32| {
+                    let freq_khz = (freq_hz / 1_000).max(1);
+                    let aclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1) & 0xFF;
+                    let aclk_khz = ClockManager::divide_by_fd(aclk_fd, freq_hz) / 1_000;
+
+                    fn get_hw_time(hw: &CSR<u32>) -> u64 {
+                        hw.r(utra::susres::TIME0) as u64 | ((hw.r(utra::susres::TIME1) as u64) << 32)
+                    }
+                    // counts_per_ms = aclk / 1000
+                    // 350_000_000 / 1000 -> 350,000
+                    // actual ms per count = freq / aclk, assuming freq < aclk
+                    let actual_ms_per_tick = if freq_khz < 350_000 { 350_000 / aclk_khz } else { 1 };
+                    // crate::println!("aclk {}kHz; ms_per_tick: {}", aclk_khz, actual_ms_per_tick);
+                    let start = get_hw_time(&self.susres);
+                    // round "up" by one tick to handle both the case that ms < actual_ms_per_tick
+                    // and also in general this routine must guarantee at least a minimum delay but
+                    // slightly longer delay is OK. This is a cheap way to not have to do precise rounding.
+                    let actual_ticks = (ms as u32 / actual_ms_per_tick) + 1;
+                    while get_hw_time(&self.susres) - start < actual_ticks as u64 {
+                        // busy wait
                     }
                 },
                 false,
@@ -394,402 +430,149 @@ impl ClockManager {
         Ok(perclk)
     }
 
+    pub fn reboot(&mut self, soc: bool) {
+        if soc {
+            self.sysctrl.wo(utra::sysctrl::SFR_RCURST0, 0x0000_55aa);
+        } else {
+            self.sysctrl.wo(utra::sysctrl::SFR_RCURST1, 0x0000_55aa);
+        }
+    }
+
     pub fn wfi(&mut self) {
-        crate::println!("entering wfi");
+        wfi_debug("entering wfi");
 
-        let (port, pin) = crate::board::setup_dcdc2_pin(&self.iox);
-        crate::println!("dcdc2 pin setup");
-        let mut pmic = crate::axp2101::Axp2101::new(&mut self.i2c).unwrap();
-        crate::println!("axp2101 handle");
-        // let tt = xous_api_ticktimer::Ticktimer::new().unwrap();
-        // crate::println!("tt handle");
+        #[cfg(feature = "board-baosec")]
+        {
+            self.pmic.set_dcdc(&mut self.i2c, Some((0.7, true)), crate::axp2101::WhichDcDc::Dcdc2).unwrap();
+            wfi_debug("DCDC2 to low voltage");
 
-        /*
-        // high disconnects DCDC2 from the chip
-        self.iox.set_gpio_pin_value(port, pin, bao1x_api::IoxValue::High);
-        // we're now running on the LDO
-        crate::println!("DCDC2 D/C");
-        tt.sleep_ms(2).ok();
-
-        // shut off the DCDC converter
-        pmic.set_dcdc(&mut self.i2c, None, crate::axp2101::WhichDcDc::Dcdc2).unwrap();
-        crate::println!("DCDC2 *off*");
-        */
-        /*
-        crate::println!("disconnect LDOs");
-        self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUCSR, 0);
-        self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUCRLP, 0);
-        self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUCRPD, 0x0);
-        self.sysctrl.wo(utra::sysctrl::SFR_IPCARIPFLOW, 0x57);
-        */
+            // this might be able to save additional power - TBD
+            // pmic.set_dcdc(&mut self.i2c, Some((3.0, true)), crate::axp2101::WhichDcDc::Dcdc1).unwrap();
+            // wfi_debug("DCDC1 to low voltage");
+        }
 
         // switch to internal osc only
         self.sysctrl.wo(utra::sysctrl::SFR_CGUSEL0, 0);
         self.sysctrl.wo(utra::sysctrl::SFR_CGUSEL1, 1);
         self.sysctrl.wo(utra::sysctrl::SFR_CGUSET, 0x32);
-        crate::println!("internal osc");
+        wfi_debug("internal osc");
 
-        /*
-        unsafe {
-            self.sysctrl.base().add(utra::sysctrl::SFR_CGUFDAO.offset()).write_volatile(0x01010101);
-            self.sysctrl.base().add(utra::sysctrl::SFR_CGUFDAORAM.offset()).write_volatile(0x01010101);
-            self.sysctrl.base().add(utra::sysctrl::SFR_CGUFDPKE.offset()).write_volatile(0x01010101);
-            // commit dividers
-            self.sysctrl.base().add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
-        }
-        */
+        // lower core voltage to 0.7v
+        self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08420002);
+        self.sysctrl.wo(utra::sysctrl::SFR_IPCARIPFLOW, 0x57);
+        wfi_debug("0.7v");
 
-        // pmic.set_dcdc(&mut self.i2c, Some((0.70, true)), crate::axp2101::WhichDcDc::Dcdc2).unwrap();
-        // crate::println!("DCDC2 to low voltage");
+        // pause the ticktimer - must happen after i2c request because i2c depends on ticktimer?
+        self.susres.wfo(utra::susres::CONTROL_PAUSE, 1);
+        while self.susres.rf(utra::susres::STATUS_PAUSED) == 0 {}
 
-        // pmic.set_dcdc(&mut self.i2c, Some((2.8, true)), crate::axp2101::WhichDcDc::Dcdc1).unwrap();
-        // crate::println!("DCDC1 to low voltage");
-
-        // mbox on
-        /*
-        unsafe {
-            self.sysctrl.base().add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0xff); // mbox/qfc turned off
-            self.sysctrl.base().add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
-        }
-        */
         // power down the PLL
         self.sysctrl.wo(utra::sysctrl::SFR_IPCEN, self.sysctrl.r(utra::sysctrl::SFR_IPCEN) & !0x2);
         self.sysctrl.wo(utra::sysctrl::SFR_IPCCR, 0x53);
         self.sysctrl.wo(utra::sysctrl::SFR_IPCARIPFLOW, 0x32);
-        crate::println!("PLL off");
+        wfi_debug("PLL off");
 
-        /*
-        unsafe {
-            self.sysctrl.base().add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0.offset()).write_volatile(0x3f0f); // fclk
-            self.sysctrl.base().add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1.offset()).write_volatile(0x3f0f); // aclk
-            self.sysctrl.base().add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2.offset()).write_volatile(0x1f0f); // hclk
-            self.sysctrl.base().add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3.offset()).write_volatile(0x0f0f); // iclk
-            self.sysctrl.base().add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x070f); // pclk
-
-            self.sysctrl.base().add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0x00); // mbox/qfc turned off
-            self.sysctrl.base().add(utra::sysctrl::SFR_HCLKGR.offset()).write_volatile(0x00); // mdma off, sce on
-            self.sysctrl.base().add(utra::sysctrl::SFR_ICLKGR.offset()).write_volatile(0x00); // bio/udc enable
-            self.sysctrl.base().add(utra::sysctrl::SFR_PCLKGR.offset()).write_volatile(0x00); // enable mesh
-            // commit dividers
-            self.sysctrl.base().add(utra::sysctrl::SFR_CGUSET.offset()).write_volatile(0x32);
-        }
-        */
-
-        // lower core voltage to 0.7v
-        // self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08420002);
-        // self.sysctrl.wo(utra::sysctrl::SFR_IPCARIPFLOW, 0x57);
-        // crate::println!("0.7v");
-
+        // ~~~~ magic code from crossbar
+        // this "magic code" doesn't entirely make sense to me, and reading through the RTL
+        // it probably should do approximately nothing (except for the part setting up the wakeup mask)
+        // however any attempt to reform this code has lead to the system failing to come out of sleep
+        // so there must be side-effects on the code that I'm not picking up reading the RTL
+        // We'll just mark this as "thar be dragons" and leave the dungeon crawl to another day.
         self.sysctrl.wo(utra::sysctrl::SFR_CGULP, 0x3);
-        crate::println!("ULP");
-
+        wfi_debug("ULP");
         // enter PD mode - cuts VDDCORE power - requires full reset to come out of this
         // only RTC is kept (check this!). ~1.5-2mA @ 4.2V consumption in this mode.
         self.ao_sysctrl.wo(utra::ao_sysctrl::CR_CR, 7);
-        crate::println!("CR");
+        wfi_debug("CR");
         // setup wakeup mask
         self.ao_sysctrl.wo(utra::ao_sysctrl::CR_WKUPMASK, 0x0001_003F);
         self.ao_sysctrl.wo(utra::ao_sysctrl::CR_RSTCRMASK, 0x1f);
         self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUDFTSR, 0);
         self.ao_sysctrl
             .wo(utra::ao_sysctrl::SFR_OSCCR, self.ao_sysctrl.r(utra::ao_sysctrl::SFR_OSCCR) & !0x0001_0000);
-        crate::println!("BEF AR1");
+        wfi_debug("BEF AR1");
         self.sysctrl.wo(utra::sysctrl::SFR_IPCARIPFLOW, 0x32);
-        crate::println!("AFT AR1");
+        wfi_debug("AFT AR1");
         self.sysctrl.wo(utra::sysctrl::SFR_CGUSET, 0x32);
         self.sysctrl.wo(utra::sysctrl::SFR_IPCLPEN, 0x1f);
-        crate::println!("BEF AR2");
+        wfi_debug("BEF AR2");
         self.sysctrl.wo(utra::sysctrl::SFR_IPCARIPFLOW, 0x32);
-        crate::println!("AFT AR2");
-        // knock();
-        // crate::println!("aft knock");
-        // self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUPDAR, 0x5a);
-        // crate::println!("AFT PD");
+        wfi_debug("AFT AR2");
+        // ~~~~ end magic code from crossbar
 
-        /*
-        let pmuctrl = PmuControl::new_with_raw_value(0)
-            .with_iout_ref_ena(true)
-            .with_power_on_control(true)
-            .with_pmu_2p5v_ena(true);
-        // .with_pmu_0p8v_dig_ena(true);
-        crate::println!("pmuctl {:x}", pmuctrl.raw_value);
-        self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUCSR, pmuctrl.raw_value);
-        */
-        // self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUCRLP, 0x4c); // does nothing? we can't enter LP
-        // self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUCRPD, 0x4c); // immediate shutdown
-        // self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRMLP0, 0x08420002); // 0.7v
-        // self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUPDAR, 0x5a);
-        crate::println!("PD -> WFI");
+        wfi_debug("PD -> WFI");
 
-        for _ in 0..10 {
+        // this loop is useful for trying to figure out what latent interrupts were not gated off
+        // diddling the top value on _i will give you a sense of how fast the interrupts are arriving and
+        // when, which helps eliminate possible interrupt sources
+        for _i in 0..1 {
             unsafe { core::arch::asm!("wfi", "nop", "nop", "nop", "nop") };
+            // crate::println!("wakeup {}", _i);
         }
         // unsafe { core::arch::asm!("wfi", "nop", "nop", "nop", "nop") };
 
-        crate::println!("out of WFI");
-        // tt.sleep_ms(20).ok();
+        wfi_debug("out of WFI");
+    }
 
-        // high disconnects DCDC2 from the chip
-        self.iox.set_gpio_pin_value(port, pin, bao1x_api::IoxValue::High);
+    pub fn restore_wfi(&mut self) {
+        wfi_debug("enter restore_wfi");
+
+        wfi_debug("unpause ticktimer");
+        self.susres.wfo(utra::susres::CONTROL_PAUSE, 0); // this *must* be unpaused before `request_freq`
+
+        // restore internal osc
+        wfi_debug("restore osc");
+        self.ao_sysctrl
+            .wo(utra::ao_sysctrl::SFR_OSCCR, self.ao_sysctrl.r(utra::ao_sysctrl::SFR_OSCCR) | 0x0001_0000);
+        self.sysctrl.wo(utra::sysctrl::SFR_IPCARIPFLOW, 0x32);
+
+        // high disconnects DCDC2 from the chip - the idea is to prevent DCDC2 shutdown due to VLDO going
+        // above DCDC2 value
+        #[cfg(feature = "board-baosec")]
+        {
+            wfi_debug("disconnect dcdc2");
+            self.iox.set_gpio_pin_value(self.dcdc2_io.0, self.dcdc2_io.1, bao1x_api::IoxValue::High);
+        }
 
         // set the clock back to 350MHz CPU
+        wfi_debug("request_freq");
         self.request_freq(crate::board::DEFAULT_FCLK_FREQUENCY / 1_000_000 / 2)
             .inspect_err(|e| crate::println!("req freq err {:?}", e))
             .ok();
-        crate::println!("back to 350MHz");
+        wfi_debug("back to 350MHz");
 
-        crate::println!("setting DCDC");
-        // pmic.set_dcdc(&mut self.i2c, Some((3.3, true)), crate::axp2101::WhichDcDc::Dcdc1).unwrap();
-        // crate::println!("DCDC1 to 3.3v");
-        pmic.set_dcdc(
-            &mut self.i2c,
-            Some((
-                (crate::board::DEFAULT_CPU_VOLTAGE_MV + crate::board::VDD85_SWITCH_MARGIN_MV) as f32 / 1000.0,
-                true,
-            )),
-            crate::axp2101::WhichDcDc::Dcdc2,
-        )
-        .inspect_err(|e| crate::println!("set dcdc err {:?}", e))
-        .ok();
+        #[cfg(feature = "board-baosec")]
+        {
+            wfi_debug("setting DCDC");
 
-        crate::println!("DCDC2 to normal voltage");
+            // needed if we changed DCDC1 above
+            // pmic.set_dcdc(&mut self.i2c, Some((3.3, true)), crate::axp2101::WhichDcDc::Dcdc1).unwrap();
+            // wfi_debug("DCDC1 to 3.3v");
 
-        // low connects DCDC2 to the chip
-        self.iox.set_gpio_pin_value(port, pin, bao1x_api::IoxValue::Low);
+            self.pmic
+                .set_dcdc(
+                    &mut self.i2c,
+                    Some((
+                        (crate::board::DEFAULT_CPU_VOLTAGE_MV + crate::board::VDD85_SWITCH_MARGIN_MV) as f32
+                            / 1000.0,
+                        true,
+                    )),
+                    crate::axp2101::WhichDcDc::Dcdc2,
+                )
+                .inspect_err(|e| crate::println!("set dcdc err {:?}", e))
+                .ok();
 
-        /*
-        // now re-enable the DCDC regulator for efficient power conversion
-        // set PWM mode on DCDC2. greatly reduces noise on the regulator line
-        pmic.set_pwm_mode(&mut self.i2c, crate::axp2101::WhichDcDc::Dcdc2, true).unwrap();
-        // make sure the DCDC2 is set. Target 20mV above the acceptable run threshold because
-        // we have to take into account the transistor loss on the
-        // power switch.
-        crate::println!("dcdc2 on");
-        pmic.set_dcdc(
-            &mut self.i2c,
-            Some((
-                (crate::board::DEFAULT_CPU_VOLTAGE_MV + crate::board::VDD85_SWITCH_MARGIN_MV) as f32 / 1000.0,
-                true,
-            )),
-            crate::axp2101::WhichDcDc::Dcdc2,
-        )
-        .unwrap();
+            wfi_debug("DCDC2 to normal voltage");
 
-        crate::println!("dcdc2 connected");
-        // low connects DCDC2 to the chip
-        self.iox.set_gpio_pin_value(port, pin, bao1x_api::IoxValue::Low);
-        */
-    }
-}
-
-use core::convert::TryFrom;
-pub fn knock() {
-    let mut mbox = Mbox::new();
-
-    let test_data = [0xC0DE_0000u32, 0x0000_600Du32, 0, 0, 0, 0, 0, 0];
-    let mut expected_result = 0;
-    for &d in test_data.iter() {
-        expected_result ^= d;
-    }
-    let test_pkt =
-        MboxToCm7Pkt { version: MBOX_PROTOCOL_REV, opcode: ToCm7Op::Knock, len: 2, data: test_data };
-    // crate::println!("sending knock...\n");
-    match mbox.try_send(test_pkt) {
-        Ok(_) => {
-            // crate::println!("Packet send Ok\n");
-            let mut timeout = 0;
-            while mbox.poll_not_ready() {
-                timeout += 1;
-                if (timeout % 1_000) == 0 {
-                    crate::println!("Waiting {}...", timeout);
-                }
-                if timeout >= 10_000 {
-                    crate::println!("Mbox timed out");
-                    return;
-                }
-            }
-            // now receive the packet
-            // crate::println!("try_rx()...");
-            match mbox.try_rx() {
-                Ok(rx_pkt) => {
-                    crate::println!("Knock result: {:x}", rx_pkt.data[0]);
-                    if rx_pkt.version != MBOX_PROTOCOL_REV {
-                        crate::println!("Version mismatch {} != {}", rx_pkt.version, MBOX_PROTOCOL_REV);
-                    }
-                    if rx_pkt.opcode != ToRvOp::RetKnock {
-                        crate::println!(
-                            "Opcode mismatch {} != {}",
-                            rx_pkt.opcode as u16,
-                            ToRvOp::RetKnock as u16
-                        );
-                    }
-                    if rx_pkt.len != 1 {
-                        crate::println!("Expected length mismatch {} != {}", rx_pkt.len, 1);
-                    } else {
-                        if rx_pkt.data[0] != expected_result {
-                            crate::println!(
-                                "Expected data mismatch {:x} != {:x}",
-                                rx_pkt.data[0],
-                                expected_result
-                            );
-                        } else {
-                            crate::println!("Knock test PASS: {:x}", rx_pkt.data[0]);
-                        }
-                    }
-                }
-                Err(e) => {
-                    crate::println!("Error while deserializing: {:?}\n", e);
-                }
-            }
-        }
-        Err(e) => {
-            crate::println!("Packet send error: {:?}\n", e);
-        }
-    };
-}
-use utra::mailbox;
-
-/// This constraint is limited by the size of the memory on the CM7 side
-const MAX_PKT_LEN: usize = 128;
-const MBOX_PROTOCOL_REV: u32 = 0;
-const TX_FIFO_DEPTH: u32 = 128;
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-#[allow(dead_code)]
-pub enum MboxError {
-    None,
-    NotReady,
-    TxOverflow,
-    TxUnderflow,
-    RxOverflow,
-    RxUnderflow,
-    InvalidOpcode,
-    AbortFailed,
-}
-
-#[repr(u16)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum ToRvOp {
-    Invalid = 0,
-
-    RetKnock = 128,
-    RetDct8x8 = 129,
-    RetClifford = 130,
-}
-impl TryFrom<u16> for ToRvOp {
-    type Error = MboxError;
-
-    fn try_from(value: u16) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(ToRvOp::Invalid),
-            128 => Ok(ToRvOp::RetKnock),
-            129 => Ok(ToRvOp::RetDct8x8),
-            130 => Ok(ToRvOp::RetClifford),
-            _ => Err(MboxError::InvalidOpcode),
+            // low connects DCDC2 to the chip
+            self.iox.set_gpio_pin_value(self.dcdc2_io.0, self.dcdc2_io.1, bao1x_api::IoxValue::Low);
         }
     }
 }
 
-#[repr(u16)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-#[allow(dead_code)]
-pub enum ToCm7Op {
-    Invalid = 0,
-
-    Knock = 1,
-    Dct8x8 = 2,
-    Clifford = 3,
-}
-
-const STATIC_DATA_LEN: usize = 8;
-pub struct MboxToCm7Pkt {
-    version: u32,
-    opcode: ToCm7Op,
-    len: usize,
-    data: [u32; STATIC_DATA_LEN],
-}
-
-pub struct MboxToRvPkt {
-    version: u32,
-    opcode: ToRvOp,
-    len: usize,
-    data: [u32; STATIC_DATA_LEN],
-}
-
-pub struct Mbox {
-    csr: CSR<u32>,
-}
-impl Mbox {
-    pub fn new() -> Mbox {
-        let mem = xous::map_memory(
-            xous::MemoryAddress::new(mailbox::HW_MAILBOX_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .unwrap();
-
-        Self { csr: CSR::new(mem.as_ptr() as *mut u32) }
-    }
-
-    fn expect_tx(&mut self, val: u32) -> Result<(), MboxError> {
-        if (TX_FIFO_DEPTH - self.csr.rf(mailbox::STATUS_TX_WORDS)) == 0 {
-            return Err(MboxError::TxOverflow);
-        } else {
-            self.csr.wo(mailbox::WDATA, val);
-            Ok(())
-        }
-    }
-
-    pub fn try_send(&mut self, to_cm7: MboxToCm7Pkt) -> Result<(), MboxError> {
-        // clear any pending bits from previous transactions
-        self.csr.wo(mailbox::EV_PENDING, self.csr.r(mailbox::EV_PENDING));
-
-        if to_cm7.len > MAX_PKT_LEN {
-            Err(MboxError::TxOverflow)
-        } else {
-            self.expect_tx(to_cm7.version)?;
-            self.expect_tx(to_cm7.opcode as u32 | (to_cm7.len as u32) << 16)?;
-            for &d in to_cm7.data[..to_cm7.len].iter() {
-                self.expect_tx(d)?;
-            }
-            // trigger the send
-            self.csr.wfo(mailbox::DONE_DONE, 1);
-            Ok(())
-        }
-    }
-
-    fn expect_rx(&mut self) -> Result<u32, MboxError> {
-        if self.csr.rf(mailbox::STATUS_RX_WORDS) == 0 {
-            Err(MboxError::RxUnderflow)
-        } else {
-            Ok(self.csr.r(mailbox::RDATA))
-        }
-    }
-
-    pub fn try_rx(&mut self) -> Result<MboxToRvPkt, MboxError> {
-        let version = self.expect_rx()?;
-        let op_and_len = self.expect_rx()?;
-        let opcode = ToRvOp::try_from((op_and_len & 0xFFFF) as u16)?;
-        let len = (op_and_len >> 16) as usize;
-        let mut data = [0u32; STATIC_DATA_LEN];
-        for d in data[..len.min(STATIC_DATA_LEN)].iter_mut() {
-            *d = self.expect_rx()?;
-        }
-        Ok(MboxToRvPkt { version, opcode, len, data })
-    }
-
-    pub fn poll_not_ready(&self) -> bool { self.csr.rf(mailbox::EV_PENDING_AVAILABLE) == 0 }
-
-    pub fn abort(&mut self) -> Result<(), MboxError> {
-        crate::println!("Initiating abort");
-        self.csr.wfo(utra::mailbox::CONTROL_ABORT, 1);
-        const TIMEOUT: usize = 1000;
-        for _ in 0..TIMEOUT {
-            if self.csr.rf(utra::mailbox::STATUS_ABORT_IN_PROGRESS) == 0 {
-                return Ok(());
-            }
-        }
-        return Err(MboxError::AbortFailed);
-    }
+#[inline(always)]
+#[cfg(feature = "std")]
+fn wfi_debug(_s: &str) {
+    #[cfg(feature = "debug-wfi")]
+    crate::println!("{}", _s);
 }

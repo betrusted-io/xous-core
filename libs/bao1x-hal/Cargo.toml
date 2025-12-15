@@ -106,6 +106,7 @@ debug-print = []
 debug-print-duart = ["debug-print", "debug-countermeasures"]
 debug-print-uart = ["debug-print"]
 debug-countermeasures = []
+debug-wfi = []
 
 udma-stress-test = [
 ] # For RTL simulation testing - aggravates a key corner case

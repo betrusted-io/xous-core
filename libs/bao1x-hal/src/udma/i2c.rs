@@ -119,7 +119,7 @@ impl<'a> I2cDriver<'a> {
         udma_global: &'a dyn UdmaGlobalConfig,
     ) -> Self {
         // divide-by-4 is an empirical observation
-        let divider: u16 = ((((perclk_freq / 2) / i2c_freq) / 4).min(u16::MAX as u32)) as u16;
+        let divider: u16 = ((perclk_freq / (i2c_freq * 4)).min(u16::MAX as u32)) as u16;
         // now setup the channel
         let base_addr = match channel {
             I2cChannel::Channel0 => utra::udma_i2c_0::HW_UDMA_I2C_0_BASE,
@@ -203,7 +203,8 @@ impl<'a> I2cDriver<'a> {
     }
 
     pub fn set_freq(&mut self, freq_hz: u32) {
-        self.divider = ((((self.perclk_freq / 2) / freq_hz) / 4).min(u16::MAX as u32)) as u16;
+        // divide-by-4 is an empirical observation
+        self.divider = ((self.perclk_freq / (freq_hz * 4)).min(u16::MAX as u32)) as u16;
     }
 
     // always blocks
