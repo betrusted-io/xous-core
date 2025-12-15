@@ -96,14 +96,6 @@ impl Hal {
         )
         .expect("Couldn't setup preemption state");
     }
-
-    pub fn wfi(&self) {
-        xous::send_message(
-            self.conn,
-            xous::Message::new_blocking_scalar(HalOpcode::Wfi.to_usize().unwrap(), 0, 0, 0, 0),
-        )
-        .expect("Couldn't setup preemption state");
-    }
 }
 
 impl UdmaGlobalConfig for UdmaGlobal {
