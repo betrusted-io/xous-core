@@ -9,16 +9,16 @@ version = "0.1.0"
 [dependencies]
 keyboard = { path = "../keyboard" }
 log = "0.4.14"
-log-server = { package = "xous-api-log", version = "0.1.66" }
-xous = "0.9.67"
-susres = { package = "xous-api-susres", version = "0.9.66" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.66" }
+log-server = { package = "xous-api-log", version = "0.1.67" }
+xous = "0.9.68"
+susres = { package = "xous-api-susres", version = "0.9.67" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.67" }
 locales = { path = "../../locales" }
 blitstr2 = { path = "../../libs/blitstr2" }
 ux-api = { path = "../../libs/ux-api" }
 
-xous-ipc = "0.10.7"
-xous-names = { package = "xous-api-names", version = "0.9.68" }
+xous-ipc = "0.10.8"
+xous-names = { package = "xous-api-names", version = "0.9.69" }
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [
