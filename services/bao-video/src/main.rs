@@ -759,6 +759,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 GfxOpcode::RenderQr => {
                     minigfx::handlers::render_qr(&mut display, screen_clip.into(), msg);
                 }
+                #[cfg(feature = "board-baosec")]
                 GfxOpcode::PowerDown => {
                     display.stash();
                     display.powerdown();
@@ -767,6 +768,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         scalar.arg1 = 1;
                     }
                 }
+                #[cfg(feature = "board-baosec")]
                 GfxOpcode::PowerUp => {
                     // safety: this is safe because we call init() a prescribed delay after power-up
                     unsafe { display.powerup() };
