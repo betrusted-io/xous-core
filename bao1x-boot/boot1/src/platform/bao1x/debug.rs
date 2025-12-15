@@ -130,7 +130,7 @@ pub fn setup_console<T: IoSetup + IoGpio>(
     udma_global.map_event(uart_id, PeriphEventType::Uart(EventUartOffset::Tx), EventChannel::Channel1);
 
     let baudrate: u32 = crate::UART_BAUD;
-    let freq: u32 = perclk / 2;
+    let freq: u32 = perclk;
 
     // the address of the UART buffer is "hard-allocated" at an offset one page from the top of
     // IFRAM0. This is a convention that must be respected by the UDMA UART library implementation
