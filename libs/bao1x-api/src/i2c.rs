@@ -33,6 +33,7 @@ pub enum I2cResult {
 }
 #[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 #[cfg(feature = "std")]
+#[derive(Debug)]
 pub struct I2cTransaction {
     pub i2c_type: I2cTransactionType,
     pub device: u8,
