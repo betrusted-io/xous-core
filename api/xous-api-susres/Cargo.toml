@@ -28,6 +28,7 @@ utralib = { version = "0.1.26", optional = true, default-features = false }
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
+bao1x = ["utralib/bao1x"]
 sus_reboot = [
 ] # when selected, suspend triggers an immediate reboot instead of suspend. For testing only.
 debugprint = []
