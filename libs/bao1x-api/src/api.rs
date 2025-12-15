@@ -54,9 +54,6 @@ pub enum HalOpcode {
     /// Manipulate the OS timer
     SetPreemptionState = 64,
 
-    /// Trigger wfi
-    Wfi = 128,
-
     /// Exit server
     Quit = 255,
 
