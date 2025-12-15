@@ -535,7 +535,10 @@ fn boot_sequence(
             // cleanup the leaked key to the backup registers
             let mut buram = bao1x_hal::buram::BackupManager::new();
             bao1x_api::bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-            buram.store_slice(&[0u8; 32], bao1x_hal::buram::ERASURE_PROOF_RANGE_BYTES.start);
+            // safety: this specific region is not part of the hash-checked register bank
+            unsafe {
+                buram.store_slice_no_hash(&[0u8; 32], bao1x_hal::buram::ERASURE_PROOF_RANGE_BYTES.start);
+            }
             bao1x_api::bollard!(bao1x_hal::sigcheck::die_no_std, 4);
         }
     }
@@ -589,7 +592,10 @@ fn boot_sequence(
             // clean it twice, just in case the first cleanup was glitched past
             let mut buram = bao1x_hal::buram::BackupManager::new();
             bao1x_api::bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-            buram.store_slice(&[0u8; 32], bao1x_hal::buram::ERASURE_PROOF_RANGE_BYTES.start);
+            // safety: this specific region is not part of the hash-checked register bank
+            unsafe {
+                buram.store_slice_no_hash(&[0u8; 32], bao1x_hal::buram::ERASURE_PROOF_RANGE_BYTES.start);
+            }
             bao1x_api::bollard!(bao1x_hal::sigcheck::die_no_std, 4);
         }
 

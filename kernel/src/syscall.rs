@@ -1180,6 +1180,94 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     });
                     Ok(xous_kernel::Result::Ok)
                 }
+                SwapAbi::DebugProcesses => {
+                    #[cfg(feature = "debug-proc")]
+                    crate::services::SystemServices::with(|system_services| {
+                        println!("Printing processes");
+                        let current_pid = system_services.current_pid();
+                        for process in &system_services.processes {
+                            if !process.free() {
+                                process.activate().unwrap();
+                                let mut connection_count = 0;
+                                ArchProcess::with_inner(|process_inner| {
+                                    for conn in &process_inner.connection_map {
+                                        if conn.is_some() {
+                                            connection_count += 1;
+                                        }
+                                    }
+                                });
+                                println!(
+                                    "{:x?} conns:{}/32 {}",
+                                    process,
+                                    connection_count,
+                                    system_services.process_name(process.pid).unwrap_or("")
+                                );
+                            }
+                        }
+                        system_services.get_process(current_pid).unwrap().activate().unwrap();
+                    });
+                    Ok(xous_kernel::Result::Ok)
+                }
+                SwapAbi::DebugServers => {
+                    #[cfg(feature = "debug-proc")]
+                    crate::services::SystemServices::with(|system_services| {
+                        println!("Servers in use:");
+                        println!(" idx | pid | process              | sid");
+                        println!(" --- + --- + -------------------- | ------------------");
+                        for (idx, server) in system_services.servers.iter().enumerate() {
+                            if let Some(s) = server {
+                                println!(
+                                    " {:3} | {:3} | {:20} | {:x?}",
+                                    idx,
+                                    s.pid,
+                                    system_services.process_name(s.pid).unwrap_or(""),
+                                    s.sid
+                                );
+                            }
+                        }
+                    });
+                    Ok(xous_kernel::Result::Ok)
+                }
+                SwapAbi::DebugFree => {
+                    #[cfg(feature = "debug-proc")]
+                    crate::services::SystemServices::with(|system_services| {
+                        println!("RAM usage:");
+                        let mut total_bytes = 0;
+                        crate::mem::MemoryManager::with(|mm| {
+                            for process in &system_services.processes {
+                                if !process.free() {
+                                    let bytes_used = mm.ram_used_by(process.pid);
+                                    total_bytes += bytes_used;
+                                    println!(
+                                        "    PID {:>3}: {:>4} k {}",
+                                        process.pid,
+                                        bytes_used / 1024,
+                                        system_services.process_name(process.pid).unwrap_or("")
+                                    );
+                                }
+                            }
+                        });
+                        println!("{} k total", total_bytes / 1024);
+                    });
+                    Ok(xous_kernel::Result::Ok)
+                }
+                SwapAbi::DebugInterrupts => {
+                    #[cfg(feature = "debug-proc")]
+                    crate::services::SystemServices::with(|system_services| {
+                        println!("Interrupt handlers:");
+                        println!("  IRQ | Process | Handler | Argument");
+                        crate::irq::for_each_irq(|irq, pid, address, arg| {
+                            println!(
+                                "    {}:  {} @ {:x?} {:x?}",
+                                irq,
+                                system_services.process_name(*pid).unwrap_or(""),
+                                address,
+                                arg
+                            );
+                        });
+                    });
+                    Ok(xous_kernel::Result::Ok)
+                }
                 SwapAbi::Invalid => {
                     println!(
                         "Invalid SwapOp: {:x} {:x} {:x} {:x} {:x} {:x} {:x}",

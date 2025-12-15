@@ -118,7 +118,7 @@ impl Uart {
     }
 
     pub fn set_baud(&self, baud: u32, clk_freq: u32) {
-        let clk_counter: u32 = (clk_freq + baud / 2) / baud;
+        let clk_counter = clk_freq / baud;
         // must disable the UART before adjusting any values
         unsafe {
             self.csr.base().add(Bank::Custom.into()).add(UartReg::Setup.into()).write_volatile(0x0);

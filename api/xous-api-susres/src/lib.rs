@@ -15,7 +15,7 @@ pub struct Susres {
     suspend_cb_sid: Option<xous::SID>,
 }
 impl Susres {
-    #[cfg(any(feature = "precursor", feature = "renode"))]
+    #[cfg(any(feature = "precursor", feature = "renode", feature = "bao1x"))]
     /// When created, the `susres` object can be configured with a `SuspendOrder` to enforce
     /// sequencing rules in shutdown. It also requires arguments to define a callback which is
     /// pinged when a suspend event arrives. The callback takes the form of a `CID, discriminant`

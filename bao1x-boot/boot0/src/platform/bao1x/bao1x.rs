@@ -358,8 +358,8 @@ pub unsafe fn init_clock_asic_350mhz() -> u32 {
     daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x070f); // pclk
 
     // hard coded
-    daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x19191);
-    let perclk = 175000000;
+    daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(0x009191);
+    let perclk = 100_000_000;
 
     // turn off gates
     daric_cgu.add(utra::sysctrl::SFR_ACLKGR.offset()).write_volatile(0x00); // mbox/qfc turned off

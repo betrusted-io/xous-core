@@ -1,11 +1,9 @@
 pub mod api;
-pub mod i2c_lib;
 pub mod trng;
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use bao1x_api::*;
-pub use i2c_lib::*;
 use num_traits::*;
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 

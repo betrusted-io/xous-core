@@ -14,6 +14,7 @@ services/cram-console/src/app_autogen.rs
 # shouldn't be committed
 apps/vault/tools/crypto_data
 tools/v2p.txt
+*nocheckin.bin
 
 *.map
 

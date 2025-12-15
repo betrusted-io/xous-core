@@ -320,27 +320,38 @@ pub fn usb_ep1_bulk_out_complete(
                             let mut sh1107 = unsafe {
                                 Oled128x128::from_raw_parts(
                                     (
-                                        match channel {
-                                            SpimChannel::Channel0 => utra::udma_spim_0::HW_UDMA_SPIM_0_BASE,
-                                            SpimChannel::Channel1 => utra::udma_spim_1::HW_UDMA_SPIM_1_BASE,
-                                            SpimChannel::Channel2 => utra::udma_spim_2::HW_UDMA_SPIM_2_BASE,
-                                            SpimChannel::Channel3 => utra::udma_spim_3::HW_UDMA_SPIM_3_BASE,
-                                        },
-                                        SpimCs::Cs0,
-                                        0,
-                                        0,
-                                        None,
-                                        SpimMode::Standard,
-                                        SpimByteAlign::Disable,
-                                        bao1x_hal::ifram::IframRange::from_raw_parts(
-                                            bao1x_hal::board::DISPLAY_IFRAM_ADDR,
-                                            bao1x_hal::board::DISPLAY_IFRAM_ADDR,
-                                            4096 * 2,
+                                        (
+                                            match channel {
+                                                SpimChannel::Channel0 => {
+                                                    utra::udma_spim_0::HW_UDMA_SPIM_0_BASE
+                                                }
+                                                SpimChannel::Channel1 => {
+                                                    utra::udma_spim_1::HW_UDMA_SPIM_1_BASE
+                                                }
+                                                SpimChannel::Channel2 => {
+                                                    utra::udma_spim_2::HW_UDMA_SPIM_2_BASE
+                                                }
+                                                SpimChannel::Channel3 => {
+                                                    utra::udma_spim_3::HW_UDMA_SPIM_3_BASE
+                                                }
+                                            },
+                                            SpimCs::Cs0,
+                                            0,
+                                            0,
+                                            None,
+                                            SpimMode::Standard,
+                                            SpimByteAlign::Disable,
+                                            bao1x_hal::ifram::IframRange::from_raw_parts(
+                                                bao1x_hal::board::DISPLAY_IFRAM_ADDR,
+                                                bao1x_hal::board::DISPLAY_IFRAM_ADDR,
+                                                4096 * 2,
+                                            ),
+                                            2048 + 256,
+                                            2048,
+                                            0,
+                                            None,
                                         ),
-                                        2048 + 256,
-                                        2048,
-                                        0,
-                                        None,
+                                        false,
                                     ),
                                     &iox,
                                 )

@@ -68,7 +68,7 @@ const MAX_I2C_TXLEN: usize = 512;
 const MAX_I2C_RXLEN: usize = 512;
 const MAX_I2C_CMDLEN: usize = 512;
 
-pub struct I2c<'a> {
+pub struct I2cDriver<'a> {
     csr: CSR<u32>,
     #[allow(dead_code)] // used in bao1x
     udma_global: &'a dyn UdmaGlobalConfig,
@@ -87,13 +87,13 @@ pub struct I2c<'a> {
     pending: I2cPending,
 }
 
-impl Udma for I2c<'_> {
+impl Udma for I2cDriver<'_> {
     fn csr_mut(&mut self) -> &mut CSR<u32> { &mut self.csr }
 
     fn csr(&self) -> &CSR<u32> { &self.csr }
 }
 
-impl<'a> I2c<'a> {
+impl<'a> I2cDriver<'a> {
     /// Safety: called only after global clock for I2C channel is enabled.
     /// It is also unsafe to `Drop` because you have to cleanup the clock manually.
     #[cfg(feature = "std")]
@@ -105,7 +105,7 @@ impl<'a> I2c<'a> {
     ) -> Option<Self> {
         // one page is the minimum size we can request
         if let Some(ifram) = IframRange::request(4096, None) {
-            Some(I2c::new_with_ifram(channel, i2c_freq, perclk_freq, ifram, udma_global))
+            Some(I2cDriver::new_with_ifram(channel, i2c_freq, perclk_freq, ifram, udma_global))
         } else {
             None
         }
@@ -119,7 +119,7 @@ impl<'a> I2c<'a> {
         udma_global: &'a dyn UdmaGlobalConfig,
     ) -> Self {
         // divide-by-4 is an empirical observation
-        let divider: u16 = ((((perclk_freq / 2) / i2c_freq) / 4).min(u16::MAX as u32)) as u16;
+        let divider: u16 = ((perclk_freq / (i2c_freq * 4)).min(u16::MAX as u32)) as u16;
         // now setup the channel
         let base_addr = match channel {
             I2cChannel::Channel0 => utra::udma_i2c_0::HW_UDMA_I2C_0_BASE,
@@ -159,7 +159,7 @@ impl<'a> I2c<'a> {
         // one page is the minimum size we can request
         let ifram_base = ifram.virt_range.as_ptr() as usize;
         let ifram_base_phys = ifram.phys_range.as_ptr() as usize;
-        let mut i2c = I2c {
+        let mut i2c = I2cDriver {
             csr,
             udma_global,
             channel,
@@ -203,7 +203,8 @@ impl<'a> I2c<'a> {
     }
 
     pub fn set_freq(&mut self, freq_hz: u32) {
-        self.divider = ((((self.perclk_freq / 2) / freq_hz) / 4).min(u16::MAX as u32)) as u16;
+        // divide-by-4 is an empirical observation
+        self.divider = ((self.perclk_freq / (freq_hz * 4)).min(u16::MAX as u32)) as u16;
     }
 
     // always blocks
@@ -495,7 +496,7 @@ impl<'a> I2c<'a> {
     }
 }
 
-impl I2cApi for I2c<'_> {
+impl I2cApi for I2cDriver<'_> {
     fn i2c_read(
         &mut self,
         dev: u8,

@@ -7,10 +7,10 @@ edition = "2021"
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-xous = "0.9.67"
-xous-ipc = "0.10.7"
-log-server = { package = "xous-api-log", version = "0.1.66" }
-xous-names = { package = "xous-api-names", version = "0.9.68" }
+xous = "0.9.68"
+xous-ipc = "0.10.8"
+log-server = { package = "xous-api-log", version = "0.1.67" }
+xous-names = { package = "xous-api-names", version = "0.9.69" }
 gam = { path = "../../services/gam" }
 ux-api = { path = "../../libs/ux-api" }
 blitstr2 = { path = "../../libs/blitstr2" }

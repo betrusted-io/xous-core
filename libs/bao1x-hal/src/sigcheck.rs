@@ -289,7 +289,11 @@ pub fn erase_secrets(csprng: &mut Option<&mut Csprng>) -> Result<(), String> {
     // erase the backup RAM region to 0 that is the erasure proof.
     bollard!(die_no_std, 4);
     csprng.as_deref_mut().map(|rng| rng.random_delay());
-    buram.store_slice(&[0u8; 32], crate::buram::ERASURE_PROOF_RANGE_BYTES.start);
+    // safety: these words are excluded from the hash check because we need to pass from boot0 through
+    // to the loader, but the "hard reset" check happens only in boot1
+    unsafe {
+        buram.store_slice_no_hash(&[0u8; 32], crate::buram::ERASURE_PROOF_RANGE_BYTES.start);
+    }
 
     let mut zero_key_count = 0;
     // This is set to a higher level because we need to work around an earlier issue
@@ -357,7 +361,14 @@ pub fn erase_secrets(csprng: &mut Option<&mut Csprng>) -> Result<(), String> {
     // store the proof that the key array was erased - could lead to disclosure of one key,
     // but we also can't simply trust that the oneway counter below is accurate
     csprng.as_deref_mut().map(|rng| rng.random_delay());
-    buram.store_slice(slot_mgr.read(&crate::board::ERASE_PROOF).unwrap(), ERASURE_PROOF_RANGE_BYTES.start);
+    // safety: these words are excluded from the hash check because we need to pass from boot0 through
+    // to the loader, but the "hard reset" check happens only in boot1
+    unsafe {
+        buram.store_slice_no_hash(
+            slot_mgr.read(&crate::board::ERASE_PROOF).unwrap(),
+            ERASURE_PROOF_RANGE_BYTES.start,
+        );
+    }
 
     let owc = OneWayCounter::new();
     // once all secrets are erased, advance the DEVELOPER_MODE state

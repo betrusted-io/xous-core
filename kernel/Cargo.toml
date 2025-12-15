@@ -11,7 +11,7 @@ resolver = "2"
 [dependencies]
 bitflags = "1.2.1"
 stats_alloc = { version = "0.1.8", optional = true }
-xous-kernel = { package = "xous", version = "0.9.67", features = [
+xous-kernel = { package = "xous", version = "0.9.68", features = [
     "forget-memory-messages",
 ] }
 utralib = { version = "0.1.26", optional = true, default-features = false }
@@ -19,7 +19,7 @@ rand_chacha = { version = "0.3.1", optional = true, default-features = false }
 bao1x-hal = { path = "../libs/bao1x-hal", optional = true, default-features = false }
 loader = { path = "../loader", optional = true, features = ["swap"] }
 [target.'cfg(any(windows,unix))'.dev-dependencies]
-xous-kernel = { package = "xous", version = "0.9.67", features = [
+xous-kernel = { package = "xous", version = "0.9.68", features = [
     "forget-memory-messages",
     "processes-as-threads",
 ] }
@@ -36,7 +36,7 @@ armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "upd
 ] }
 # FIXME: bring atsama5d27 target up to date so utralib dependency does not conflict
 # atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master" }
-xous-kernel = { package = "xous", version = "0.9.67", features = ["v2p"] }
+xous-kernel = { package = "xous", version = "0.9.68", features = ["v2p"] }
 critical-section = "1.1.1"
 
 [lints.rust]
@@ -69,12 +69,13 @@ memmap-flash = []
 debug-swap = []
 debug-swap-verbose = []
 raw-trng = ["xous-kernel/raw-trng"]
+debug-proc = []
 
 # patches for simulation targets ONLY. Applying these flags will result in totally broken security.
 hwsim = []
 
 # default = ["print-panics", "debug-print", "wrap-print"]
-default = ["print-panics"]
+default = ["debug-proc", "print-panics"]
 
 [target.'cfg(any(windows, unix))'.dependencies]
 crossbeam-channel = "0.5"

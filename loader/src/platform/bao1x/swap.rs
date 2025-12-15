@@ -58,8 +58,8 @@ impl SwapHal {
                     channel,
                     // has to be half the clock frequency reaching the block, but run it as fast
                     // as we can run perclk
-                    perclk_freq / 4,
                     perclk_freq / 2,
+                    perclk_freq,
                     SpimClkPol::LeadingEdgeRise,
                     SpimClkPha::CaptureOnLeading,
                     SpimCs::Cs0,
@@ -77,8 +77,8 @@ impl SwapHal {
             let mut ram_spim = unsafe {
                 Spim::new_with_ifram(
                     channel,
-                    perclk_freq / 4,
                     perclk_freq / 2,
+                    perclk_freq,
                     SpimClkPol::LeadingEdgeRise,
                     SpimClkPha::CaptureOnLeading,
                     SpimCs::Cs1,

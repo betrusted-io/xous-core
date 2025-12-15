@@ -339,7 +339,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_services(&bao_pkgs)
                 .add_apps(&get_cratespecs());
 
-            std::env::set_var("UUID", "1234567812345678123456781234567812345678123456781234567812345678");
+            // safe because xtask is single-threaded - the build to setup the emulation run is strictly
+            // single-threaded the read of the variable will be multi-threaded, but it will be set
+            // by that point in time.
+            unsafe {
+                std::env::set_var("UUID", "1234567812345678123456781234567812345678123456781234567812345678");
+            }
             // builder.add_feature("modal-testing");
         }
         Some("pddb-ci") => {
@@ -1020,6 +1025,8 @@ Hosted emulation:
  hosted-debug            Run user image in hosted mode with debug flags. [cratespecs] are apps
  gfx-dev                 Testing mode for graphics primitives. [cratespecs] are services
  pddb-dev                Testing for compilation errors on hardware targets on the PDDB.
+ hosted-ci               Check that precursor hosted mode isn't broken
+ hosted-bao1x-ci         Check that bao1x hosted mode isn't broken
 
 Renode emulation:
  renode-image            Renode user image. Unspecified [cratespecs] are apps

@@ -7,6 +7,10 @@ const HASH_LOC: usize = 0;
 const RESERVED_LOC: usize = 1;
 
 pub const ERASURE_PROOF_RANGE_BYTES: Range<usize> = 0..32;
+// special case: don't hash in the erasure_proof range, because this
+// value is passed between boot0 all the way to the loader for checking,
+// *but* the consistency check on backup regs is done in boot1!
+pub const HASH_REGION_START: usize = ERASURE_PROOF_RANGE_BYTES.end;
 
 use crate::buram::murmur3::murmur3_32;
 
@@ -52,8 +56,9 @@ impl BackupManager {
         BackupManager { bu_reg, bu_ram }
     }
 
+    /// Validity is computed using a hash of the backup RAM region less the "erase proof" slice.
     pub fn is_backup_valid(&self) -> bool {
-        let bu_ram_u32: &[u32] = unsafe { self.bu_ram.as_slice() };
+        let bu_ram_u32: &[u32] = &unsafe { self.bu_ram.as_slice() }[HASH_REGION_START..];
         let hash = murmur3_32(bu_ram_u32, 0x0);
         let bu_reg: &[u32] = &unsafe { self.bu_reg.as_slice() }[..utralib::utra::aobureg::AOBUREG_NUMREGS];
         hash == bu_reg[HASH_LOC]
@@ -65,7 +70,7 @@ impl BackupManager {
     }
 
     pub fn make_valid(&mut self) {
-        let bu_ram_u32: &[u32] = &unsafe { self.bu_ram.as_slice() };
+        let bu_ram_u32: &[u32] = &unsafe { self.bu_ram.as_slice() }[HASH_REGION_START..];
         let hash = murmur3_32(bu_ram_u32, 0x0);
         unsafe {
             (self.bu_reg.as_mut_ptr() as *mut u32).add(HASH_LOC).write_volatile(hash);
@@ -97,19 +102,44 @@ impl BackupManager {
         self.make_valid();
     }
 
+    /// Safety: the caller needs to follow up with `make_valid()` for the backup registers to be recognized as
+    /// valid
+    pub unsafe fn store_slice_no_hash<T: Copy>(&mut self, input: &[T], byte_offset: usize) {
+        let type_offset = byte_offset / size_of::<T>();
+        // safety: safe because make_valid() is called after the slice is accessed
+        let dest: &mut [T] = unsafe { &mut self.bu_ram_as_mut()[type_offset..type_offset + input.len()] };
+        dest.copy_from_slice(&input);
+    }
+
     pub fn get_slice<T>(&self, byte_range: core::ops::Range<usize>) -> &[T] {
         let type_offset = byte_range.start / size_of::<T>();
         let type_len = (byte_range.end - byte_range.start) / size_of::<T>();
         &self.bu_ram_as_slice()[type_offset..type_offset + type_len]
     }
 
+    /// Returns the full array of the backup RAM, including the erase validation region. Required by
+    /// the slice-based accessors above.
     pub fn bu_ram_as_slice<T>(&self) -> &[T] { unsafe { self.bu_ram.as_slice::<T>() } }
 
+    /// Returns the full array of the backup RAM, including the erase validation region. Required
+    /// by the slice-based accessors above.
+    ///
     /// Safety: modifications to the backup RAM array need a follow-up call to `make_valid`
     /// in order for the boot check to pass.
     ///
     /// Could try to get clever and implement a `Drop` trait which includes a make_valid() call? maybe?
     pub unsafe fn bu_ram_as_mut<T>(&mut self) -> &mut [T] { self.bu_ram.as_slice_mut::<T>() }
+
+    /// Returns only the *hashable* region of the backup RAM. The first 32 bytes are reserved for
+    /// passing erase validation structures through the boot loader.
+    ///
+    /// Safety: modifications to the backup RAM array need a follow-up call to `make_valid`
+    /// in order for the boot check to pass.
+    ///
+    /// Could try to get clever and implement a `Drop` trait which includes a make_valid() call? maybe?
+    pub unsafe fn bu_hashable_ram_as_mut<T>(&mut self) -> &mut [T] {
+        &mut self.bu_ram.as_slice_mut::<T>()[HASH_REGION_START..]
+    }
 }
 
 pub mod murmur3 {

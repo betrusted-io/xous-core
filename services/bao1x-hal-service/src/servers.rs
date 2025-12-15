@@ -4,4 +4,5 @@ pub mod keyboard;
 #[cfg(feature = "board-baosec")]
 mod baosec_hw;
 pub mod rtc;
-pub mod trng; // not public - for internal use only
+pub mod susres;
+pub mod trng;

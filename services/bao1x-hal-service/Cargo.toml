@@ -9,12 +9,13 @@ edition = "2021"
 utralib = { version = "0.1.26", optional = true, default-features = false, features = [
     "bao1x",
 ] }
-xous-names = { package = "xous-api-names", version = "0.9.68" }
-ticktimer = { package = "xous-api-ticktimer", version = "0.9.66" }
-xous = { version = "0.9.67", features = ["raw-trng"] }
-xous-ipc = "0.10.7"
-log-server = { package = "xous-api-log", version = "0.1.66" }
+xous-names = { package = "xous-api-names", version = "0.9.69" }
+ticktimer = { package = "xous-api-ticktimer", version = "0.9.67" }
+xous = { version = "0.9.68", features = ["raw-trng"] }
+xous-ipc = "0.10.8"
+log-server = { package = "xous-api-log", version = "0.1.67" }
 log = "0.4.14"
+xous-api-susres = "0.9.67"
 bao1x-hal = { path = "../../libs/bao1x-hal", default-features = false }
 bao1x-api = { path = "../../libs/bao1x-api", features = ["derive-rkyv", "std"] }
 # xous-pl230 = { path = "../../libs/xous-pl230", features = ["bao1x"] }
@@ -31,7 +32,7 @@ rand = "0.8.5"
 rand_core = "0.6.4"
 rand_chacha = "0.3.1"
 bitfield = "0.13.2"
-# TOODO: migrate from bitfield to bitbybit
+# TODO: migrate from bitfield to bitbybit
 bitbybit = "1.4.0"
 arbitrary-int = "1.2"
 bytemuck = "1.24.0"
@@ -54,4 +55,6 @@ bmp180 = ["bao1x-hal/bmp180"]
 board-baosec = ["bao1x-hal/board-baosec"]
 board-baosor = ["bao1x-hal/board-baosor"]
 board-dabao = ["bao1x-hal/board-dabao"]
+
+with-duart = ["bao1x-hal/debug-print-duart"]
 default = ["app-uart", "utralib"]

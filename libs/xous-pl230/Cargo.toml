@@ -15,7 +15,7 @@ pio = "0.2.1"
 bao1x-hal = { path = "../bao1x-hal", optional = true, default-features = false }
 
 [target.'cfg(target_os = "xous")'.dependencies]
-xous = "0.9.67"
+xous = "0.9.68"
 
 [features]
 bao1x = ["utralib/bao1x"]

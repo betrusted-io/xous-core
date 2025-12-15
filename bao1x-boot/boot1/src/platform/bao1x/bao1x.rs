@@ -70,10 +70,10 @@ pub fn setup_dabao_se0_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
 pub fn setup_backup_region() -> u32 {
     let mut bu_mgr = bao1x_hal::buram::BackupManager::new();
     if !bu_mgr.is_backup_valid() {
-        // zeroize the backup RAM
+        // zeroize the hashable backup RAM area
         // safety: make_valid is called after this is done.
         unsafe {
-            bu_mgr.bu_ram_as_mut().fill(0);
+            bu_mgr.bu_hashable_ram_as_mut().fill(0);
         }
         // calculate the hash and mark as valid
         bu_mgr.make_valid();
@@ -111,22 +111,19 @@ pub fn setup_backup_region() -> u32 {
         }
 
         // enable the RTC if it isn't already - on a cold boot, it would be off
+        let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
+        // set effective tick to 1/1024th of a second
+        // this causes the RTC to roll over every 48 days - the code before had some deniability about
+        // RTC offset because it would roll over every 168 years, but I think once every 48 days is within
+        // a reasonable window of deniability (previously it was a random number from 0-6 months) and
+        // also the system has to be powered on at least once every rollover window to capture the rollover.
+        // The device won't last 48 days on RTC battery alone - and every time a QR code is scanned you
+        // update the RTC offset. So I think this is a reasonable window to just leave "as so". The
+        // initial value is set to within minutes of a roll-over, so that an error in rollover handling
+        // would be detected quickly.
+        ao_sysctrl.wo(utra::ao_sysctrl::CR_CLK1HZFD, 15);
         let mut rtc = CSR::new(bao1x_hal::rtc::HW_RTC_BASE as *mut u32);
-        // RTC start randomization. Provides some deniability on how long a device has been
-        // powered on for, should that become a relevant metric for forensics.
-        //
-        // acc is used below just to "use" the value, it doesn't have a significant meaning.
-        // 15_000_000 (15 million decimal) => ~6 months. Sets lower bound on RTC start time.
-        // 0xFFF_FFFF mask on the random number XOR's in an interval from 0 to 8.5 years.
-        // the total counter value can go up to 136 years, so what this does is limits the
-        // uptime of the device to 127 years before the counter wraps around.
-        //
-        // The reason the "2038" problem doesn't affect us is that the current UTC time is
-        // computed as a 64-bit offset on top of this 32-bit counter. So basically our rollover
-        // horizon starts when the device is powered on less a few years for some deniability
-        // about when the device was first powered on.
-        crate::println!("Time offset initialized");
-        rtc.wo(bao1x_hal::rtc::LR, 15_000_000 + (trng.get_u32().unwrap() ^ acc) & 0xFFF_FFFF);
+        rtc.wo(bao1x_hal::rtc::LR, 0xFFFE_2000); // set base to "roll over" in 2 minutes - forces an edge case in testing
         rtc.wfo(bao1x_hal::rtc::CR_EN, 1);
 
         // soft-reset the system
@@ -189,7 +186,7 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
                 )
             };
             let mut i2c = unsafe {
-                bao1x_hal::udma::I2c::new_with_ifram(
+                bao1x_hal::udma::I2cDriver::new_with_ifram(
                     i2c_channel,
                     400_000,
                     100_000_000,

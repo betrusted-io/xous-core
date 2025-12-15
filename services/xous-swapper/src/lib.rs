@@ -22,6 +22,10 @@ pub enum SwapAbi {
     ReleaseMemory = 6,
     WritePage = 7,
     BlockErase = 8,
+    DebugProcesses = 9,
+    DebugServers = 10,
+    DebugFree = 11,
+    DebugInterrupts = 12,
 }
 /// SYNC WITH `kernel/src/swap.rs`
 impl SwapAbi {
@@ -36,6 +40,10 @@ impl SwapAbi {
             6 => ReleaseMemory,
             7 => WritePage,
             8 => BlockErase,
+            9 => DebugProcesses,
+            10 => DebugServers,
+            11 => DebugFree,
+            12 => DebugInterrupts,
             _ => Invalid,
         }
     }
@@ -46,18 +54,25 @@ impl SwapAbi {
 #[repr(usize)]
 pub enum Opcode {
     /// Userspace request to GC some physical pages
-    GarbageCollect,
+    GarbageCollect = 0,
     /// This call will only process full-page writes to an offset in SPI FLASH.
     /// The full-page criteria is acceptable because (a) we need the full page anyways
     /// due to the sector erase constraint and (b) the caller has to have the full page
     /// anyways because the page was read in and mapped into the caller's space at some
     /// point in time.
-    WritePage,
-    BulkErase,
+    WritePage = 1,
+    BulkErase = 2,
     /// Test messages
     #[cfg(feature = "swap-userspace-testing")]
-    Test0,
-    None,
+    Test0 = 3,
+    // kernel has to be compiled with "debug-proc" for these to work
+    // the Debug* series of opcodes are hard-coded in other crates, so don't change their discriminant.
+    DebugProcesses = 9,
+    DebugServers = 10,
+    DebugFree = 11,
+    DebugInterrupts = 12,
+
+    None = 255,
 }
 
 /// An aligned structure for sending FLASH data between structures. This only works
