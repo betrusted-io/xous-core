@@ -104,7 +104,7 @@ fn susres_service() {
             }
         } else {
             let opcode = FromPrimitive::from_usize(msg.body.id());
-            log::info!("{:?}", opcode);
+            log::debug!("{:?}", opcode);
             match opcode {
                 Some(Opcode::RebootRequest) => {
                     reboot_requested = true;
