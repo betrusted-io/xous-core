@@ -16,7 +16,7 @@ param(
     [string]$CredentialFile = "beta.json",
 
     [Parameter(Mandatory = $false)]
-    [string]$Target = "bunnie@10.0.245.183:code/jtag-tools/"
+    [string]$Target = "bunnie@10.0.245.50:code/csp-tool/"
 )
 
 # Configuration
