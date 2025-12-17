@@ -145,6 +145,100 @@ fn is_vco_valid(m: u8, n: u16, frac: u32) -> bool {
     calc_vco_hz(m, n, frac).map(|vco| vco >= VCO_MIN_HZ && vco <= VCO_MAX_HZ).unwrap_or(false)
 }
 
+const COMMON_CLOCKS: [(u32, PllParams); 7] = [
+    (
+        700_000_000,
+        PllParams {
+            m: 4,
+            n: 175,
+            frac: 0,
+            q0: 1,
+            q1: 3,
+            vco_freq_hz: 2100000000,
+            actual_freq_hz: 700000000,
+            error_ppm: 0,
+        },
+    ),
+    (
+        696_000_000,
+        PllParams {
+            m: 1,
+            n: 29,
+            frac: 0,
+            q0: 1,
+            q1: 2,
+            vco_freq_hz: 1392000000,
+            actual_freq_hz: 696000000,
+            error_ppm: 5714,
+        },
+    ),
+    (
+        400_000_000,
+        PllParams {
+            m: 1,
+            n: 25,
+            frac: 0,
+            q0: 1,
+            q1: 3,
+            vco_freq_hz: 1200000000,
+            actual_freq_hz: 400000000,
+            error_ppm: 0,
+        },
+    ),
+    (
+        350_000_000,
+        PllParams {
+            m: 4,
+            n: 175,
+            frac: 0,
+            q0: 1,
+            q1: 6,
+            vco_freq_hz: 2100000000,
+            actual_freq_hz: 350000000,
+            error_ppm: 0,
+        },
+    ),
+    (
+        200_000_000,
+        PllParams {
+            m: 1,
+            n: 25,
+            frac: 0,
+            q0: 1,
+            q1: 6,
+            vco_freq_hz: 1200000000,
+            actual_freq_hz: 200000000,
+            error_ppm: 0,
+        },
+    ),
+    (
+        100_000_000,
+        PllParams {
+            m: 1,
+            n: 25,
+            frac: 0,
+            q0: 2,
+            q1: 6,
+            vco_freq_hz: 1200000000,
+            actual_freq_hz: 100000000,
+            error_ppm: 0,
+        },
+    ),
+    // overclock
+    (
+        800_000_000,
+        PllParams {
+            m: 3,
+            n: 100,
+            frac: 0,
+            q0: 1,
+            q1: 2,
+            vco_freq_hz: 1600000000,
+            actual_freq_hz: 800000000,
+            error_ppm: 0,
+        },
+    ),
+];
 /// Find optimal PLL parameters for target frequency.
 ///
 /// If `allow_frac` is false, only integer solutions (frac=0) are considered.
@@ -152,6 +246,12 @@ fn is_vco_valid(m: u8, n: u16, frac: u32) -> bool {
 /// solutions are preferred when they achieve the same error.
 pub fn find_pll_params(target_freq_hz: u32, allow_frac: bool) -> Option<PllParams> {
     let target = target_freq_hz as u64;
+
+    // check a short list of the most common frequencies and just return the value, because
+    // the search space for an optimal solution is pretty big.
+    if let Some(memoized) = COMMON_CLOCKS.iter().find(|(freq, _param)| *freq == target_freq_hz) {
+        return Some(memoized.1);
+    }
 
     if target == 0 {
         return None;

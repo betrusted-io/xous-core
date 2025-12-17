@@ -285,12 +285,15 @@ impl SwapHal {
                                     }
                                     let backup = bao1x_hal::buram::BackupManager::new();
                                     bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                                    let erase_proof: &[u8; 32] = backup
-                                        .get_slice(bao1x_hal::buram::ERASURE_PROOF_RANGE_BYTES)
-                                        .try_into()
-                                        .unwrap();
-                                    if erase_proof != &[ERASE_VALUE; 32] {
-                                        bao1x_hal::sigcheck::die_no_std();
+                                    let owc = bao1x_hal::acram::OneWayCounter::new();
+                                    if owc.get(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() != 0 {
+                                        let erase_proof: &[u8; 32] = backup
+                                            .get_slice(bao1x_hal::buram::ERASURE_PROOF_RANGE_BYTES)
+                                            .try_into()
+                                            .unwrap();
+                                        if erase_proof != &[ERASE_VALUE; 32] {
+                                            bao1x_hal::sigcheck::die_no_std();
+                                        }
                                     }
                                     bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                                 }
@@ -508,7 +511,7 @@ pub fn userspace_maps(cfg: &mut BootConfig) {
 
     let baudrate: u32 = 1_000_000;
     let perclk = 100_000_000; // TODO: turn this into a symbolic const, or better yet, pass in from the loader
-    let freq: u32 = perclk / 2;
+    let freq: u32 = perclk;
 
     // the address of the UART buffer is "hard-allocated" at an offset one page from the top of
     // IFRAM0. This is a convention that must be respected by the UDMA UART library implementation
