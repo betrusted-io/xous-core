@@ -300,14 +300,13 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                 csprng.random_delay();
                 bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                 // this has to gate on keys being initialized, because without key setup nothing gets erased
-                if (tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
-                    || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT)
-                    && (init1 != 0)
+                if tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
+                    || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
                 {
                     csprng.random_delay();
                     let erase_proof: &[u8; 32] =
                         backup.get_slice(ERASURE_PROOF_RANGE_BYTES).try_into().unwrap();
-                    if dev_mode1 == 0 || erase_proof != &[ERASE_VALUE; 32] {
+                    if dev_mode1 == 0 || (erase_proof != &[ERASE_VALUE; 32]) && (init1 != 0) {
                         if paranoid1 == 0 && paranoid2 == 0 {
                             println!("{}LOADER.KERNDIE,{}", BOOKEND_START, BOOKEND_END);
                             println!("Kernel is devkey signed, but system is not in developer mode. Dying!");
@@ -322,11 +321,11 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                 // this consumes dev_mode2 & !k2 - the alternate version - preventing the check from being
                 // optimized out
                 bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                if (!key_inv == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT) && (init2 != 0) {
+                if !key_inv == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
                     csprng.random_delay();
                     let erase_proof: &[u8; 32] =
                         backup.get_slice(ERASURE_PROOF_RANGE_BYTES).try_into().unwrap();
-                    if dev_mode2 == 0 || erase_proof != &[ERASE_VALUE; 32] {
+                    if dev_mode2 == 0 || (erase_proof != &[ERASE_VALUE; 32] && (init2 != 0)) {
                         if paranoid1 == 0 && paranoid2 == 0 {
                             println!("{}LOADER.KERNDIE,{}", BOOKEND_START, BOOKEND_END);
                             println!("Kernel is devkey signed, but system is not in developer mode. Dying!");
