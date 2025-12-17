@@ -50,12 +50,7 @@ impl KeyStore {
 
         // one routine works for both dabao and baosec
         let board_type = self.owc.get_decoded::<BoardTypeCoding>().unwrap();
-        if (board_type == bao1x_api::BoardTypeCoding::Baosec
-            && self.owc.get(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0)
-            || (board_type == bao1x_api::BoardTypeCoding::Dabao
-                && self.owc.get(bao1x_api::INVOKE_DABAO_KEY_SETUP).unwrap() != 0
-                && self.owc.get(bao1x_api::DABAO_KEY_SETUP_DONE).unwrap() == 0)
-        {
+        if self.owc.get(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0 {
             log::info!("System setup not yet done. Initializing secret identifiers...");
             let xns = xous_names::XousNames::new().unwrap();
             let mut trng = bao1x_hal_service::trng::Trng::new(&xns).unwrap();
@@ -86,11 +81,7 @@ impl KeyStore {
             // safety: the offset is correct because we're pulling it from our pre-defined constants and
             // those are manually checked.
             if success {
-                if board_type == bao1x_api::BoardTypeCoding::Baosec {
-                    unsafe { self.owc.inc(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() };
-                } else if board_type == bao1x_api::BoardTypeCoding::Dabao {
-                    unsafe { self.owc.inc(bao1x_api::DABAO_KEY_SETUP_DONE).unwrap() };
-                }
+                unsafe { self.owc.inc(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() };
             }
             log::info!("Secret ID init done.");
             log::info!("{}KEYSTORE.INITDONE,{}", BOOKEND_START, BOOKEND_END);
