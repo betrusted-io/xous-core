@@ -188,12 +188,6 @@ pub fn early_init_hw() -> u32 {
         if one_way.get(bao1x_api::BootWaitCoding::OFFSET).unwrap() == 0 {
             one_way.inc_coded::<bao1x_api::BootWaitCoding>().ok();
         }
-        // set invoke_dabao_key_setup exactly once. On the next reboot, the keys
-        // for the dabao environment will be created using the on-chip TRNG.
-        if one_way.get(bao1x_api::INVOKE_DABAO_KEY_SETUP).unwrap() == 0 {
-            // safety: the argument is from a checked constant
-            unsafe { one_way.inc(bao1x_api::INVOKE_DABAO_KEY_SETUP).ok() };
-        }
     }
 
     // Setup some global control registers that will allow the TRNG to operate once the kernel is
@@ -234,7 +228,7 @@ pub fn setup_console<T: IoSetup + IoGpio>(
     udma_global.map_event(uart_id, PeriphEventType::Uart(EventUartOffset::Tx), EventChannel::Channel1);
 
     let baudrate: u32 = bao1x_api::UART_BAUD;
-    let freq: u32 = perclk / 2;
+    let freq: u32 = perclk;
 
     // the address of the UART buffer is "hard-allocated" at an offset one page from the top of
     // IFRAM0. This is a convention that must be respected by the UDMA UART library implementation

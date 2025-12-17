@@ -274,6 +274,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
         let backup = bao1x_hal::buram::BackupManager::new();
         let (paranoid1, paranoid2) = owc.hardened_get2(PARANOID_MODE, PARANOID_MODE_DUPE).unwrap();
         let (dev_mode1, dev_mode2) = owc.hardened_get(bao1x_api::DEVELOPER_MODE).unwrap();
+        let (init1, init2) = owc.hardened_get(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap();
         csprng.random_delay();
         bollard!(bao1x_hal::sigcheck::die_no_std, 4);
         // validate using the bao1x signature scheme
@@ -298,8 +299,10 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                 // developer image.
                 csprng.random_delay();
                 bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                if tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
-                    || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                // this has to gate on keys being initialized, because without key setup nothing gets erased
+                if (tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
+                    || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT)
+                    && (init1 != 0)
                 {
                     csprng.random_delay();
                     let erase_proof: &[u8; 32] =
@@ -319,7 +322,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                 // this consumes dev_mode2 & !k2 - the alternate version - preventing the check from being
                 // optimized out
                 bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                if !key_inv == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
+                if (!key_inv == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT) && (init2 != 0) {
                     csprng.random_delay();
                     let erase_proof: &[u8; 32] =
                         backup.get_slice(ERASURE_PROOF_RANGE_BYTES).try_into().unwrap();
@@ -375,9 +378,10 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                     }
                     csprng.random_delay();
                     bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                    if tag
+                    if (tag
                         == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
-                        || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                        || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT)
+                        && (init1 != 0)
                     {
                         let erase_proof: &[u8; 32] =
                             backup.get_slice(ERASURE_PROOF_RANGE_BYTES).try_into().unwrap();
@@ -398,7 +402,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                     }
                     csprng.random_delay();
                     bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                    if !key_inv == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
+                    if (!key_inv == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT) && (init2 != 0) {
                         let erase_proof: &[u8; 32] =
                             backup.get_slice(ERASURE_PROOF_RANGE_BYTES).try_into().unwrap();
                         if dev_mode2 == 0 || erase_proof != &[ERASE_VALUE; 32] {

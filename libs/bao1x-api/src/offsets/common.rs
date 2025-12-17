@@ -152,16 +152,6 @@ pub const OEM_MODE: usize = 86;
 /// the data store.
 pub const BOOT0_PUBKEY_FAIL: usize = 87;
 
-/// This pair of counters is used to invoke the key setup for dabao. It's not done until
-/// a Xous environment is loaded onto a dabao *and* the dabao is rebooted the first time.
-/// The reason it's not done all the time is that baosec boards want to set up their secure
-/// keys using the TRNG avalanche generator - which is not available on dabao. Thus we have
-/// to differentiate the two cases, because when a chip is "born" it thinks it's a "dabao",
-/// and has to be told it's a "baosec". This is the analogous path, but for dabaos that
-/// want the key store.
-pub const INVOKE_DABAO_KEY_SETUP: usize = 88;
-pub const DABAO_KEY_SETUP_DONE: usize = 89;
-
 encode_oneway! {
     #[offset = 90]
     /// When set, the system will prefer to present generic, fixed identifiers when challenged

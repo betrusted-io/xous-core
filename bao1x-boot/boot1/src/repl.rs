@@ -428,23 +428,11 @@ impl Repl {
                     crate::println!("== CP SETUP FAILED ==");
                     secure = false;
                 }
-                if (boardtype == BoardTypeCoding::Baosec && owc.get(IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0)
-                    || (boardtype == BoardTypeCoding::Dabao && owc.get(DABAO_KEY_SETUP_DONE).unwrap() == 0)
-                {
+                if owc.get(IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0 {
                     crate::println!("In-system keys have NOT been generated");
                     secure = false;
                 } else {
-                    if boardtype == BoardTypeCoding::Baosec {
-                        crate::println!("In-system keys have been generated");
-                    } else {
-                        // assume dabao-type board
-                        if owc.get(INVOKE_DABAO_KEY_SETUP).unwrap() != 0 {
-                            crate::println!("In-system keys have been generated");
-                        } else {
-                            crate::println!("In-system key generation is still pending");
-                            secure = false
-                        }
-                    }
+                    crate::println!("In-system keys have been generated");
                 }
                 if !secure {
                     crate::println!("** System did not meet minimum requirements for security **");
