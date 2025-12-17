@@ -224,7 +224,7 @@ pub fn clockset_wrapper(freq: u32) -> u32 {
         udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
     };
     let baudrate: u32 = crate::UART_BAUD;
-    let freq: u32 = perclk / 2;
+    let freq: u32 = perclk;
     udma_uart.set_baud(baudrate, freq);
 
     crate::println!("clock set done, perclk is {} MHz", perclk / 1_000_000);
