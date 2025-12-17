@@ -140,10 +140,9 @@ pub fn setup_backup_region() -> u32 {
 /// This can change the board type coding to a safer, simpler board type if the declared board type has
 /// problems booting.
 pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::BoardTypeCoding, u32) {
-    #[cfg(not(feature = "alt-boot1"))]
-    if setup_backup_region() == 0 {
-        crate::println!("backup region is clean!");
-    }
+    // This can be used to debug stuff early on dabao, assuming boot0 setup the console UART. It normally
+    // does, but we leave this commented out for non-debug situations because it's a weak guarantee.
+    // crate::debug::USE_CONSOLE.store(true, core::sync::atomic::Ordering::SeqCst);
 
     irq_setup();
     // all sensors & IRQs setup already by boot0, but it doesn't hurt to re-write these registers
@@ -156,6 +155,13 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
     enable_irq(utra::irqarray13::IRQARRAY13_IRQ);
 
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+
+    // this has to happen after the IRQs are enabled because if a false security alarm is triggered the
+    // system won't reboot properly at the end of the set_backup_region() routine
+    #[cfg(not(feature = "alt-boot1"))]
+    if setup_backup_region() == 0 {
+        crate::println!("backup region is clean!");
+    }
 
     // setup board-specific I/Os - early boot set. These are items that have to be
     // done in a time-sensitive fashion.
