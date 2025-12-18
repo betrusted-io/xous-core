@@ -141,7 +141,8 @@ pub fn early_init() -> Csprng {
     // external clock could make the chip very exploitable. See inside the function for details.
     let perclk = unsafe { init_clock_asic_350mhz() };
 
-    crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
+    // crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
+
     // the CSPRNG is built *after* we go to high speed mode. Note the discipline that after every
     // print, we insert a random_delay - so that you can't use the print as a reliable trigger.
     let mut csprng = Csprng::new();
@@ -249,8 +250,8 @@ pub fn setup_timer() {
 
 pub fn setup_alloc() {
     // Initialize the allocator with heap memory range
-    crate::println!("Setting up heap @ {:x}-{:x}", HEAP_START, HEAP_START + HEAP_LEN);
-    crate::println!("Stack @ {:x}-{:x}", HEAP_START + HEAP_LEN, RAM_BASE + RAM_SIZE);
+    // crate::println!("Setting up heap @ {:x}-{:x}", HEAP_START, HEAP_START + HEAP_LEN);
+    // crate::println!("Stack @ {:x}-{:x}", HEAP_START + HEAP_LEN, RAM_BASE + RAM_SIZE);
     unsafe {
         ALLOCATOR.lock().init(HEAP_START as *mut u8, HEAP_LEN);
     }
@@ -342,7 +343,6 @@ mod panic_handler {
 /// speed makes glitches more difficult to time. We also don't want any risk of a glitch bypassing
 /// the PLL.
 pub unsafe fn init_clock_asic_350mhz() -> u32 {
-    let freq_hz = 350_000_000;
     use utra::sysctrl;
     let daric_cgu = sysctrl::HW_SYSCTRL_BASE as *mut u32;
     let mut cgu = CSR::new(daric_cgu);
@@ -400,16 +400,23 @@ pub unsafe fn init_clock_asic_350mhz() -> u32 {
         bao1x_api::bollard!(4);
     }
 
+    // The frequency of boot0 is ever so slightly different than that of boot1. This originated
+    // from a bug in the chip - the fractional divider on the PLL doesn't work - but actually
+    // I currently like that the boot0 PLL is a little different from boot1 PLL from a security
+    // perspective, because it means any timing worked out on boot0 isn't going to map perfectly
+    // onto boot1 (the difference is 348MHz vs the target 350MHz; the VCO also runs at a
+    // lower frequency so it will have different stability & recovery against glitches)
+
     // hard-coded so that there's less chances for glitches to muck with PLL parameters
     cgu.wo(sysctrl::SFR_IPCPLLMN, 0x3057);
-    cgu.wo(sysctrl::SFR_IPCPLLF, 0x1800000);
+    cgu.wo(sysctrl::SFR_IPCPLLF, 0x0800000); // frac turned off - it doesn't work
     cgu.wo(sysctrl::SFR_IPCPLLQ, 0x3311);
     cgu.wo(sysctrl::SFR_IPCCR, 0x53);
 
     bao1x_api::bollard!(6);
     // written twice - this is safe to do, because values don't take hold until ARIPFLOW is triggered
     cgu.wo(sysctrl::SFR_IPCPLLMN, 0x3057);
-    cgu.wo(sysctrl::SFR_IPCPLLF, 0x1800000);
+    cgu.wo(sysctrl::SFR_IPCPLLF, 0x0800000); // frac turned off - it doesn't work
     cgu.wo(sysctrl::SFR_IPCPLLQ, 0x3311);
     cgu.wo(sysctrl::SFR_IPCCR, 0x53);
     cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
@@ -435,7 +442,7 @@ pub unsafe fn init_clock_asic_350mhz() -> u32 {
     bao1x_hal::hardening::check_pll();
 
     // pll print is put after the routine, so it can't be used as a glitch trigger
-    crate::println!("PLL configured to {} MHz", freq_hz / 1_000_000);
+    // crate::println!("PLL configured to 348 MHz");
 
     /*
     // these are the prints used to instrument the normal clock setting flow to derive the constants
