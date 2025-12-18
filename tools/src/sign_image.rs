@@ -211,7 +211,8 @@ pub fn sign_image(
                 Some("kernel") => FunctionCode::Kernel,
                 Some("app") => FunctionCode::App,
                 Some("swap") => FunctionCode::Swap,
-                _ => FunctionCode::Developer,
+                Some("baremetal") => FunctionCode::Baremetal,
+                _ => panic!("Invalid function code"),
             };
             let mut header = SignatureInFlash::default();
             header.sealed_data.version = version as u32;
