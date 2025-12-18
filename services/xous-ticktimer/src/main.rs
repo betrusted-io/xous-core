@@ -249,15 +249,7 @@ fn main() -> ! {
                 let mut buf = unsafe {
                     xous_ipc::Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                 };
-                #[cfg(feature = "timestamp")]
                 buf.replace(version::get_version()).unwrap();
-                #[cfg(not(feature = "timestamp"))]
-                {
-                    let v = crate::api::VersionString {
-                        version: String::from("--no-timestamp requested for build"),
-                    };
-                    buf.replace(v).unwrap();
-                }
             }
 
             api::Opcode::LockMutex => {
