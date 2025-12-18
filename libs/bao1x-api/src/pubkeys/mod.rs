@@ -68,11 +68,7 @@ pub const BOOT0_TO_BOOT1: SecurityConfiguration = SecurityConfiguration {
     image_ptr: crate::BOOT1_START as *const u32,
     pubkey_ptr: crate::BOOT0_START as *const u32,
     revocation_owc: crate::BOOT0_REVOCATION_OFFSET,
-    function_codes: &[
-        FunctionCode::Boot1 as u32,
-        FunctionCode::UpdatedBoot1 as u32,
-        FunctionCode::Developer as u32,
-    ],
+    function_codes: &[FunctionCode::Boot1 as u32, FunctionCode::UpdatedBoot1 as u32],
 };
 
 /// This is different from a jump directly to loader/baremetal because the
@@ -81,11 +77,7 @@ pub const BOOT0_TO_ALTBOOT1: SecurityConfiguration = SecurityConfiguration {
     image_ptr: crate::LOADER_START as *const u32,
     pubkey_ptr: crate::BOOT0_START as *const u32,
     revocation_owc: crate::BOOT0_REVOCATION_OFFSET,
-    function_codes: &[
-        FunctionCode::Boot1 as u32,
-        FunctionCode::UpdatedBoot1 as u32,
-        FunctionCode::Developer as u32,
-    ],
+    function_codes: &[FunctionCode::Boot1 as u32, FunctionCode::UpdatedBoot1 as u32],
 };
 
 pub const BOOT1_TO_LOADER_OR_BAREMETAL: SecurityConfiguration = SecurityConfiguration {
@@ -97,7 +89,6 @@ pub const BOOT1_TO_LOADER_OR_BAREMETAL: SecurityConfiguration = SecurityConfigur
         FunctionCode::UpdatedBaremetal as u32,
         FunctionCode::Loader as u32,
         FunctionCode::UpdatedLoader as u32,
-        FunctionCode::Developer as u32,
     ],
 };
 
@@ -105,11 +96,7 @@ pub const LOADER_TO_KERNEL: SecurityConfiguration = SecurityConfiguration {
     image_ptr: crate::KERNEL_START as *const u32,
     pubkey_ptr: crate::LOADER_START as *const u32,
     revocation_owc: crate::LOADER_REVOCATION_OFFSET,
-    function_codes: &[
-        FunctionCode::Kernel as u32,
-        FunctionCode::UpdatedKernel as u32,
-        FunctionCode::Developer as u32,
-    ],
+    function_codes: &[FunctionCode::Kernel as u32, FunctionCode::UpdatedKernel as u32],
 };
 
 pub const LOADER_TO_DETACHED_APP: SecurityConfiguration = SecurityConfiguration {

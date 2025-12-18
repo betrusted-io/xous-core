@@ -39,8 +39,6 @@ pub enum FunctionCode {
     /// Application region
     App = 0x10_0000,
     UpdatedApp = 0x10_0001,
-    /// Developer use - can go in any region, but only usable with secrets wiped.
-    Developer = 0x1000_0000,
 }
 
 pub const BAOCHIP_SIG_VERSION: u32 = 0x1_00;

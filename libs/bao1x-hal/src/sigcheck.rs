@@ -292,7 +292,7 @@ pub fn erase_secrets(csprng: &mut Option<&mut Csprng>) -> Result<(), String> {
     // safety: these words are excluded from the hash check because we need to pass from boot0 through
     // to the loader, but the "hard reset" check happens only in boot1
     unsafe {
-        buram.store_slice_no_hash(&[0u8; 32], crate::buram::ERASURE_PROOF_RANGE_BYTES.start);
+        buram.store_slice_no_hash(&[0u8; 32], ERASURE_PROOF_RANGE_BYTES.start);
     }
 
     let mut zero_key_count = 0;
@@ -305,6 +305,7 @@ pub fn erase_secrets(csprng: &mut Option<&mut Csprng>) -> Result<(), String> {
         csprng.as_deref_mut().map(|rng| rng.random_delay());
         if slot.get_type() == SlotType::Data {
             let (_pa, rw_perms) = slot.get_access_spec();
+            let mut erased_keys = 0;
             for data_index in slot.try_into_data_iter().unwrap() {
                 bollard!(die_no_std, 4);
                 csprng.as_deref_mut().map(|rng| rng.random_delay());
@@ -345,13 +346,19 @@ pub fn erase_secrets(csprng: &mut Option<&mut Csprng>) -> Result<(), String> {
                             rcurst.wo(utralib::utra::sysctrl::SFR_RCURST0, 0x55AA);
                             */
                         } else {
-                            crate::println!("Key range at {} confirmed erased", slot.get_base());
+                            erased_keys += 1;
                         }
                     }
                     _ => {}
                 }
                 bollard!(die_no_std, 4);
             }
+            crate::println!(
+                "Key range at {}: {}/{} keys confirmed erased",
+                slot.get_base(),
+                erased_keys,
+                slot.len()
+            );
             bollard!(die_no_std, 4);
         }
         bollard!(die_no_std, 4);

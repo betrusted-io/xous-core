@@ -16,7 +16,10 @@ use crate::sigcheck::erase_secrets;
 ///
 /// Pick a number that has a high hamming distance from 0 - and so, prefer e.g. 127 vs 128.
 pub const WIPE_THRESHOLD: u32 = 127;
-const DISTURB_THRESHOLD: u32 = 3;
+/// This number is empirically tuned. The main issue is we don't want to notch up the
+/// counter during "slow shutdowns" where the power supply falls gradually enough that
+/// the glitch detector can fire.
+const DISTURB_THRESHOLD: u32 = 2;
 
 /// This is the range of delays we will pick from whenever we attempt a random delay,
 /// expressed as a number of bits.
@@ -41,6 +44,7 @@ pub fn check_pll() {
 pub fn die() -> ! {
     let owc = OneWayCounter::new();
     // safety: this is safe because the offset is from a checked, pre-defined value
+    crate::println_d!("die!die!die!die!");
     unsafe {
         owc.inc(POSSIBLE_ATTACKS).unwrap();
     }
@@ -272,6 +276,7 @@ pub fn mesh_check_and_react(csprng: &mut Csprng, one_way: &OneWayCounter) {
                 unsafe {
                     one_way.inc(bao1x_api::POSSIBLE_ATTACKS).unwrap();
                 }
+                crate::println_d!("mesh");
             } else {
                 die();
             }
@@ -282,6 +287,7 @@ pub fn mesh_check_and_react(csprng: &mut Csprng, one_way: &OneWayCounter) {
                 unsafe {
                     one_way.inc(bao1x_api::POSSIBLE_ATTACKS).unwrap();
                 }
+                crate::println_d!("mesh");
             } else {
                 die();
             }
@@ -352,10 +358,10 @@ pub fn glitch_handler(attacks_since_boot: u32) {
     let reason = irq13.r(utra::irqarray13::EV_PENDING);
 
     let mut was_sensor = false;
+    // figure out which subsystem glitched
+    let sensor = irq15.r(utra::irqarray15::EV_PENDING);
     bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
     if reason & 0x8 != 0 {
-        // figure out which subsystem glitched
-        let sensor = irq15.r(utra::irqarray15::EV_PENDING);
         const GLUE_MASK: u32 = 1 << 0;
         const SENSOR_MASK: u32 = 1 << 1;
         const MESH_MASK: u32 = 1 << 2;
@@ -371,6 +377,13 @@ pub fn glitch_handler(attacks_since_boot: u32) {
             crate::hardening::reset_sensors();
             was_sensor = true;
         }
+        // this transfers the code to a set of GPIOs that can be observed on dabao
+        #[cfg(feature = "debug-countermeasures")]
+        {
+            let iox = crate::iox::Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+            iox.set_gpio_bank(bao1x_api::IoxPort::PC, (sensor as u16 & 0x7) << 9, 0b0000_1110_0000_0000);
+        }
+
         irq15.wo(utra::irqarray15::EV_PENDING, sensor);
     }
     bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
@@ -384,14 +397,12 @@ pub fn glitch_handler(attacks_since_boot: u32) {
     bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
 
     // safety: this is safe because the offset is from a checked, pre-defined value
-    unsafe {
-        // the increment is just OK'd because if for some reason it fails we still want
-        // to execute the following code.
-        owc.inc(bao1x_api::POSSIBLE_ATTACKS).ok();
-    }
     let attacks = owc.get(bao1x_api::POSSIBLE_ATTACKS).unwrap_or(WIPE_THRESHOLD + 1);
 
     // on the paranoid path: wipe secrets if we exceed a wipe threshold
+    // this path is measuring the accumulated attacks so far - the assumption is that a glitch attack
+    // will have to "search" for the right timing with multiple tries, and thus this would rapidly be
+    // triggered while doing the search.
     let (paranoid1, paranoid2) =
         owc.hardened_get2(bao1x_api::PARANOID_MODE, bao1x_api::PARANOID_MODE_DUPE).unwrap();
     bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
@@ -410,7 +421,16 @@ pub fn glitch_handler(attacks_since_boot: u32) {
 
     // on the non-paranoid path: just wipe NV elements & halt if we see a lower threshold of attacks
     bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
+    // this could be glitched over, but you'd have to have a repeatable glitch to skip it every time
     if attacks_since_boot > DISTURB_THRESHOLD {
+        // don't start logging possible attacks until we've seen more than DISTURB_THRESHOLD
+        // Reason: the sensors are naturally triggered during a slow power-off or power-on
+        // and we want to filter out those transients.
+        unsafe {
+            // the increment is just OK'd because if for some reason it fails we still want
+            // to execute the following code.
+            owc.inc(bao1x_api::POSSIBLE_ATTACKS).ok();
+        }
         // even output something on the DUART - this could be used as a trigger to prevent shutdown
         // but at this point diagnostics are useful for seeing why the system shut down unexpectedly.
         #[cfg(feature = "debug-countermeasures")]
