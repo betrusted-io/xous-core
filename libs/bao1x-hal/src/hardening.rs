@@ -273,10 +273,10 @@ pub fn mesh_check_and_react(csprng: &mut Csprng, one_way: &OneWayCounter) {
         Some(false) => {
             bollard!(die, 4);
             if paranoid1 == 0 {
-                crate::println_d!("mesh");
                 unsafe {
                     one_way.inc(bao1x_api::POSSIBLE_ATTACKS).unwrap();
                 }
+                crate::println_d!("mesh");
             } else {
                 die();
             }
@@ -284,10 +284,10 @@ pub fn mesh_check_and_react(csprng: &mut Csprng, one_way: &OneWayCounter) {
             csprng.random_delay();
             bollard!(die, 4);
             if paranoid2 == 0 {
-                crate::println_d!("mesh");
                 unsafe {
                     one_way.inc(bao1x_api::POSSIBLE_ATTACKS).unwrap();
                 }
+                crate::println_d!("mesh");
             } else {
                 die();
             }
@@ -299,7 +299,6 @@ pub fn mesh_check_and_react(csprng: &mut Csprng, one_way: &OneWayCounter) {
     if failures != 0 {
         bollard!(die, 4);
         if paranoid1 == 0 {
-            crate::println_d!("mesh");
             unsafe {
                 one_way.inc(bao1x_api::POSSIBLE_ATTACKS).unwrap();
             }
@@ -313,7 +312,6 @@ pub fn mesh_check_and_react(csprng: &mut Csprng, one_way: &OneWayCounter) {
         csprng.random_delay();
         bollard!(die, 4);
         if paranoid2 == 0 {
-            crate::println_d!("mesh");
             unsafe {
                 one_way.inc(bao1x_api::POSSIBLE_ATTACKS).unwrap();
             }
