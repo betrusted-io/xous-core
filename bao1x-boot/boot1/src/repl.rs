@@ -424,6 +424,10 @@ impl Repl {
                     crate::println!("== BOOT0 REPORTED PUBKEY CHECK FAILURE ==");
                     secure = false;
                 }
+                if owc.get(BOOT1_PUBKEY_FAIL).unwrap() != 0 {
+                    crate::println!("== BOOT1 REPORTED PUBKEY CHECK FAILURE ==");
+                    secure = false;
+                }
                 if owc.get(CP_BOOT_SETUP_DONE).unwrap() == 0 {
                     crate::println!("== CP SETUP FAILED ==");
                     secure = false;

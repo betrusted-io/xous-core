@@ -151,6 +151,10 @@ pub const OEM_MODE: usize = 86;
 /// This is incremented if the boot0 public keys failed to compare against the static keys in
 /// the data store.
 pub const BOOT0_PUBKEY_FAIL: usize = 87;
+/// This is incremented if the boot1 public keys failed to compare against the static keys in
+/// the data store. Note that on Alpha-rev dabaos, this was used to track the initialization
+/// of dabao security state, and so this may be set already due to that use.
+pub const BOOT1_PUBKEY_FAIL: usize = 88;
 
 encode_oneway! {
     #[offset = 90]
