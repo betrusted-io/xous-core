@@ -175,11 +175,12 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         None
     };
 
-    let (se0_port, se0_pin) = match board_type {
-        BoardTypeCoding::Baosec => bao1x_hal::board::setup_usb_pins(&iox),
-        _ => crate::platform::setup_dabao_se0_pin(&iox),
-    };
-    iox.set_gpio_pin(se0_port, se0_pin, bao1x_api::IoxValue::Low); // put the USB port into SE0
+    // put both options for USB port switch into SE0 - at this point we may not know what board
+    // type we have. This works for both dabao and for baosec.
+    let se0_baosec = bao1x_hal::board::setup_usb_pins(&iox);
+    let se0_dabao = crate::platform::setup_dabao_se0_pin(&iox);
+    iox.set_gpio_pin(se0_baosec.0, se0_baosec.1, bao1x_api::IoxValue::Low);
+    iox.set_gpio_pin(se0_dabao.0, se0_dabao.1, bao1x_api::IoxValue::Low);
     delay(100);
     // use the USB disconnect time to initialize the display - at least 100ms is
     // needed after reset for the display to initialize
@@ -197,8 +198,10 @@ pub unsafe extern "C" fn rust_entry() -> ! {
 
     // remainder of the 1-second total wait target time for USB disconnect
     delay(500);
+
     // release SE0
-    iox.set_gpio_pin(se0_port, se0_pin, bao1x_api::IoxValue::High);
+    iox.set_gpio_pin(se0_baosec.0, se0_baosec.1, bao1x_api::IoxValue::High);
+    iox.set_gpio_pin(se0_dabao.0, se0_dabao.1, bao1x_api::IoxValue::High);
     // return the pin to an input
     match board_type {
         BoardTypeCoding::Dabao | BoardTypeCoding::Oem => {
@@ -219,8 +222,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         crate::glue::setup_spim(perclk);
     }
 
-    // provide some feedback on the run state of the BIO by peeking at the program counter
-    // value, and provide feedback on the CPU operation by flashing the RGB LEDs.
+    // it's in this loop that the board type would be set after initial boot
     let mut repl = crate::repl::Repl::new();
     let mut new_key: Option<KeyPress>;
     loop {
@@ -314,6 +316,18 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     bollard!(die, 4);
     check_pll();
 
+    // se0 exact mapping should be known by now. Set the off-target mapping to an input - this is the safest
+    // option - and then pass the on-target mapping into the boot() routine
+    let (se0_port, se0_pin) = match board_type {
+        BoardTypeCoding::Baosec => {
+            iox.set_gpio_dir(se0_dabao.0, se0_dabao.1, bao1x_api::IoxDir::Input);
+            (se0_baosec.0, se0_baosec.1)
+        }
+        _ => {
+            iox.set_gpio_dir(se0_baosec.0, se0_baosec.1, bao1x_api::IoxDir::Input);
+            (se0_dabao.0, se0_dabao.1)
+        }
+    };
     boot(&iox, oled, se0_port, se0_pin, &mut csprng)
 }
 
