@@ -16,9 +16,9 @@ use core::cell::RefCell;
 
 use bao1x_api::pubkeys::{BOOT0_SELF_CHECK, BOOT0_TO_ALTBOOT1, BOOT0_TO_BOOT1};
 use bao1x_api::{BOOT0_PUBKEY_FAIL, BOOT1_PUBKEY_FAIL, DEVELOPER_MODE, bollard};
-use bao1x_api::{HardenedBool, PARANOID_MODE, PARANOID_MODE_DUPE};
+use bao1x_api::{PARANOID_MODE, PARANOID_MODE_DUPE};
 use bao1x_hal::acram::OneWayCounter;
-use bao1x_hal::hardening::{Csprng, check_pll, die, mesh_setup};
+use bao1x_hal::hardening::{check_pll, die, mesh_setup};
 use bao1x_hal::sigcheck::{hardened_erase_policy, jump_to};
 #[cfg(feature = "unsafe-dev")]
 use critical_section::Mutex;
@@ -117,7 +117,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     let slot_mgr = bao1x_hal::acram::SlotManager::new();
 
     // check that the pubkeys in boot0 matches the reference keys
-    compare_refkeys(
+    bao1x_hal::hardening::compare_refkeys(
         &owc,
         &slot_mgr,
         &mut csprng,
@@ -127,7 +127,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     bollard!(die, 4);
 
     // check that the pubkeys in boot1 matches the reference keys
-    compare_refkeys(
+    bao1x_hal::hardening::compare_refkeys(
         &owc,
         &slot_mgr,
         &mut csprng,
@@ -237,52 +237,4 @@ fn print_ifr() {
         crate::print!("{:08x} ", d);
     }
     crate::println!("");
-}
-
-/// check that pub keys in the images match those burned into the indelible key area
-/// glitch_safety: I'd imagine that glitching in this routine would lead to good_compare being `false`,
-/// so no additional hardening is done.
-fn compare_refkeys(
-    owc: &OneWayCounter,
-    slot_mgr: &bao1x_hal::acram::SlotManager,
-    csprng: &mut Csprng,
-    pubkey_ptr: *const bao1x_api::signatures::SignatureInFlash,
-    fail_counter: usize,
-) {
-    let reference_keys =
-        [bao1x_api::BAO1_PUBKEY, bao1x_api::BAO2_PUBKEY, bao1x_api::BETA_PUBKEY, bao1x_api::DEV_PUBKEY];
-    // check that the pub keys match those burned into the indelible key area
-    // glitch_safety: I'd imagine that glitching in this routine would lead to good_compare being `false`,
-    // so no additional hardening is done.
-    let pk_src: &bao1x_api::signatures::SignatureInFlash = unsafe { pubkey_ptr.as_ref().unwrap() };
-    let mut good_compare = HardenedBool::TRUE;
-    for (boot0_key, ref_key) in pk_src.sealed_data.pubkeys.iter().zip(reference_keys.iter()) {
-        let ref_data = slot_mgr.read(&ref_key).unwrap();
-        if ref_data != &boot0_key.pk {
-            good_compare = HardenedBool::FALSE;
-        }
-    }
-
-    csprng.random_delay();
-    match good_compare.is_true() {
-        Some(false) => {
-            bollard!(die, 4);
-            // don't over-increment this to avoid RRAM wear-out. However, do allow it to increment to higher
-            // than 1 so we have a higher hamming distance on the counter than a single bit.
-            if owc.get(fail_counter).unwrap() < 15 {
-                // safety: the offset is from a pre-validated constant, which meets the safety requirement
-                unsafe {
-                    owc.inc(fail_counter).unwrap();
-                }
-            }
-            // erase secrets (or ensure they are erased) if the boot pubkey doesn't check out.
-            bollard!(die, 4);
-            bao1x_hal::sigcheck::erase_secrets(&mut Some(csprng))
-                .inspect_err(|e| crate::println!("{}", e))
-                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
-        }
-        Some(true) => (),
-        None => die(),
-    }
-    bollard!(die, 4);
 }
