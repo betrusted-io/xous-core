@@ -164,6 +164,13 @@ impl<'a> Reram {
         rram
     }
 
+    /// This is unsafe because it erases the entire system. Only call this if you want to self destruct.
+    pub unsafe fn self_destruct(&mut self) -> ! {
+        self.csr.wo(utra::rrc::SFR_RRCAR, 0x2468);
+        // busy-wait the CPU so that the suicide flow can complete. There is no return.
+        loop {}
+    }
+
     #[cfg(feature = "std")]
     /// `base` specifies the actual offset from the beginning of the RRAM array
     /// to where this range maps to. This is necessary because `range` is virtually
