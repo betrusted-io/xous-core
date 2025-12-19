@@ -459,6 +459,12 @@ impl Repl {
                 }
             },
             "baosec-init" => {
+                if !matches!(args.as_slice(), [s] if s == "confirm") {
+                    return Err(Error::help(
+                        "Usage: 'baosec-init confirm'. WARNING: erases external storage!",
+                    ));
+                }
+
                 // this routine is used to initialize baosec products - sets the board type and
                 // erases the off-chip FLASH
                 use bao1x_api::{baosec::PDDB_LEN, baosec::PDDB_ORIGIN};
