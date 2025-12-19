@@ -448,3 +448,49 @@ pub fn glitch_handler(attacks_since_boot: u32) {
     }
     irq13.wo(utra::irqarray13::EV_PENDING, reason);
 }
+
+/// check that pub keys in the images match those burned into the indelible key area
+/// glitch_safety: I'd imagine that glitching in this routine would lead to good_compare being `false`,
+/// so no additional hardening is done.
+pub fn compare_refkeys(
+    owc: &OneWayCounter,
+    slot_mgr: &crate::acram::SlotManager,
+    csprng: &mut Csprng,
+    pubkey_ptr: *const bao1x_api::signatures::SignatureInFlash,
+    fail_counter: usize,
+) {
+    let reference_keys =
+        [bao1x_api::BAO1_PUBKEY, bao1x_api::BAO2_PUBKEY, bao1x_api::BETA_PUBKEY, bao1x_api::DEV_PUBKEY];
+    // check that the pub keys match those burned into the indelible key area
+    // glitch_safety: I'd imagine that glitching in this routine would lead to good_compare being `false`,
+    // so no additional hardening is done.
+    let pk_src: &bao1x_api::signatures::SignatureInFlash = unsafe { pubkey_ptr.as_ref().unwrap() };
+    let mut good_compare = HardenedBool::TRUE;
+    for (boot0_key, ref_key) in pk_src.sealed_data.pubkeys.iter().zip(reference_keys.iter()) {
+        let ref_data = slot_mgr.read(&ref_key).unwrap();
+        if ref_data != &boot0_key.pk {
+            good_compare = HardenedBool::FALSE;
+        }
+    }
+
+    csprng.random_delay();
+    match good_compare.is_true() {
+        Some(false) => {
+            bollard!(die, 4);
+            // don't over-increment this to avoid RRAM wear-out. However, do allow it to increment to higher
+            // than 1 so we have a higher hamming distance on the counter than a single bit.
+            if owc.get(fail_counter).unwrap() < 15 {
+                // safety: the offset is from a pre-validated constant, which meets the safety requirement
+                unsafe {
+                    owc.inc(fail_counter).unwrap();
+                }
+            }
+            // erase secrets (or ensure they are erased) if the boot pubkey doesn't check out.
+            bollard!(die, 4);
+            crate::sigcheck::erase_secrets(&mut Some(csprng)).inspect_err(|e| crate::println!("{}", e)).ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+        }
+        Some(true) => (),
+        None => die(),
+    }
+    bollard!(die, 4);
+}

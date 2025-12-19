@@ -458,7 +458,23 @@ impl Repl {
                     crate::println!("Boot1 has no valid signature, lockdown would brick the chip.")
                 }
             },
+            "self_destruct" => {
+                if !matches!(args.as_slice(), [s] if s == "void_my_warrantee") {
+                    return Err(Error::help(
+                        "Usage: 'self_destruct void_my_warrantee'. This PERMANENTLY wipes the chip and bricks it. No returns or exchanges are allowed after executing this command.",
+                    ));
+                }
+                let mut rram = bao1x_hal::rram::Reram::new();
+                unsafe { rram.self_destruct() }
+                // ... and all was null and void!
+            }
             "baosec-init" => {
+                if !matches!(args.as_slice(), [s] if s == "confirm") {
+                    return Err(Error::help(
+                        "Usage: 'baosec-init confirm'. WARNING: erases external storage!",
+                    ));
+                }
+
                 // this routine is used to initialize baosec products - sets the board type and
                 // erases the off-chip FLASH
                 use bao1x_api::{baosec::PDDB_LEN, baosec::PDDB_ORIGIN};
@@ -639,7 +655,7 @@ impl Repl {
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!(
-                    "Commands include: reset, echo, altboot, boot, bootwait, idmode, localecho, uf2, boardtype, audit, lockdown, paranoid"
+                    "Commands include: reset, echo, altboot, boot, bootwait, idmode, localecho, uf2, boardtype, audit, lockdown, paranoid, self_destruct"
                 );
                 #[cfg(feature = "test-boot0-keys")]
                 crate::print!(", publock");

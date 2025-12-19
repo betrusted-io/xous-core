@@ -14,7 +14,6 @@ use utralib::*;
 
 use crate::platform::usb::page_defrag::PageAssembler;
 use crate::uf2::Uf2Block;
-use crate::usb;
 
 pub(crate) static SECTOR: Mutex<RefCell<Uf2Sector>> = Mutex::new(RefCell::new(Uf2Sector::new(0)));
 pub type PageCallback = fn(usize, Box<[u8; SPINOR_ERASE_SIZE as usize]>);
@@ -106,12 +105,16 @@ pub fn write_spim_page(addr: usize, data: Box<[u8; SPINOR_ERASE_SIZE as usize]>)
 }
 
 pub fn setup() -> (UsbDeviceState, u32) {
+    /*
+    use crate::usb;
+
     crate::println!(
         "RAM disk starts at {:x} and advertises {}kiB in length, but is actually {}kiB of storage",
         usb::RAMDISK_ADDRESS,
         usb::RAMDISK_LEN / 1024,
         usb::RAMDISK_ACTUAL_LEN / 1024,
     );
+    */
 
     // safety: this is safe because we're calling this before any access to `USB` static mut
     // state, and we also understand that the .data section doesn't exist in the loader and
