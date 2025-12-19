@@ -16,6 +16,13 @@ Regardless of the board, the `bao1x` chip comes from the factory programmed with
 - `boot0` is a permanent root of trust burned onto the chip. Its sole purpose is to validate `boot1`. See [security model](./README-baochip.md#security-model) for details on the trust chain
 - `boot1` contains a USB driver, serial-over-USB driver, and serial driver capable of accepting code updates in the form of .u2f files or serial commands. It also contains a small command terminal for managing configurations, keys, and device lifecycle state.
 
+### Reserved pins (Board Designers Take Note!)
+
+`boot1` assumes the following pins
+
+- `PC13` and `PF5` are both briefly driven to 0 and then 1 before USB enumeration. A USB switch such as the EMS4000 will ensure "clean" enumeration as the USB PHY on Baochip has no way to definitively enter the SE0 state on its own. After exiting the bootloader, the pin not corresponding to the board type is set to an input (`PC13` is dabao, `PF5` is baosec).
+- `PB14` and `PB13` are `TX` and `RX` pairs of a serial console, set to 1,000,000 baud 8N1.
+
 ### Updating Boot1
 
 `boot1` is responsible for managing application loading. As such, updating `boot1` requires an intermediate step, because the actively executing program cannot overwrite its contents safely. The overview for updating `boot1` is as follows:
