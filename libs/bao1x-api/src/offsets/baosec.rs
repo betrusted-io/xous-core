@@ -144,5 +144,5 @@ pub const DATA_SLOTS: [SlotIndex; 8] = [
 
 /// In addition to these KEY_SLOTS, the DEVELOPER_MODE one way counter is a security-important parameter
 /// that should be included as domain separation in any KDF.
-pub const KEY_SLOTS: [SlotIndex; 7] =
-    [THE_FLAG_1, CP_COOKIE, RMA_KEY, ROOT_SEED, NUISANCE_KEYS_0, NUISANCE_KEYS_1, CHAFF_KEYS];
+pub const KEY_SLOTS: [SlotIndex; 8] =
+    [THE_FLAG_1, CP_COOKIE, RMA_KEY, ROOT_SEED, NUISANCE_KEYS_0, NUISANCE_KEYS_1, SWAP_KEY, CHAFF_KEYS];
