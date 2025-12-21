@@ -3,14 +3,20 @@ use core::ops::Range;
 const KEY_RANGE: Range<usize> = 2..8;
 const KEY_LEN: usize = range_len(KEY_RANGE) * size_of::<u32>();
 const HASH_LOC: usize = 0;
-#[allow(dead_code)]
-const RESERVED_LOC: usize = 1;
+const FLAGS_LOC: usize = 1;
 
 pub const ERASURE_PROOF_RANGE_BYTES: Range<usize> = 0..32;
 // special case: don't hash in the erasure_proof range, because this
 // value is passed between boot0 all the way to the loader for checking,
 // *but* the consistency check on backup regs is done in boot1!
+//
+// Conveniently, due to an errata, this location of RAM is not preserved
+// on soft reset, and thus it's perfect for this application.
 pub const HASH_REGION_START: usize = ERASURE_PROOF_RANGE_BYTES.end;
+
+// This is an additional range in backup RAM that is not preserved
+// across soft resets - and thus this value cannot be used in the hash.
+pub const ERRATUM_RANGE_BYTES: Range<usize> = 0x2000..0x2020;
 
 use crate::buram::murmur3::murmur3_32;
 
@@ -56,12 +62,26 @@ impl BackupManager {
         BackupManager { bu_reg, bu_ram }
     }
 
+    /// The RAM hash is complicated by an erratum where the first word of each bank of the BURAM
+    /// can be corrupted on a reset (the banking is an internal implementation detail that was
+    /// meant to be transparent to software).
+    fn hash_ram(&self) -> u32 {
+        // hash from the start of the hash region to the beginning of the erratum range
+        let bu_ram_front_u32: &[u32] = &unsafe { self.bu_ram.as_slice() }
+            [HASH_REGION_START / size_of::<u32>()..ERRATUM_RANGE_BYTES.start / size_of::<u32>()];
+        let hash_front = murmur3_32(bu_ram_front_u32, 0x0);
+
+        // hash from the end of the erratum range to the end of memory. Use the hash of the
+        // first half as the seed.
+        let bu_ram_back_u32: &[u32] =
+            &unsafe { self.bu_ram.as_slice() }[ERRATUM_RANGE_BYTES.end / size_of::<u32>()..];
+        murmur3_32(bu_ram_back_u32, hash_front)
+    }
+
     /// Validity is computed using a hash of the backup RAM region less the "erase proof" slice.
     pub fn is_backup_valid(&self) -> bool {
-        let bu_ram_u32: &[u32] = &unsafe { self.bu_ram.as_slice() }[HASH_REGION_START..];
-        let hash = murmur3_32(bu_ram_u32, 0x0);
         let bu_reg: &[u32] = &unsafe { self.bu_reg.as_slice() }[..utralib::utra::aobureg::AOBUREG_NUMREGS];
-        hash == bu_reg[HASH_LOC]
+        self.hash_ram() == bu_reg[HASH_LOC]
     }
 
     pub fn is_zero(&self) -> bool {
@@ -69,9 +89,16 @@ impl BackupManager {
         bu_reg.iter().all(|&x| x == 0)
     }
 
+    pub fn get_flags(&self) -> bao1x_api::BackupFlags {
+        bao1x_api::BackupFlags::new_with_raw_value(unsafe { self.bu_reg.as_slice()[FLAGS_LOC] })
+    }
+
+    pub fn set_flags(&mut self, flag: bao1x_api::BackupFlags) {
+        unsafe { self.bu_reg.as_slice_mut()[FLAGS_LOC] = flag.raw_value() };
+    }
+
     pub fn make_valid(&mut self) {
-        let bu_ram_u32: &[u32] = &unsafe { self.bu_ram.as_slice() }[HASH_REGION_START..];
-        let hash = murmur3_32(bu_ram_u32, 0x0);
+        let hash = self.hash_ram();
         unsafe {
             (self.bu_reg.as_mut_ptr() as *mut u32).add(HASH_LOC).write_volatile(hash);
         }

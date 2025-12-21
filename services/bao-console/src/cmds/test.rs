@@ -81,52 +81,56 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }
                 }
                 #[cfg(not(feature = "hosted-baosec"))]
-                "shutdown" => {
-                    use bao1x_api::*;
+                "shipmode" => {
                     use bao1x_hal::i2c::I2c;
-                    let iox = bao1x_api::IoxHal::new();
                     let mut i2c = I2c::new();
-                    iox.setup_pin(
-                        IoxPort::PF,
-                        0,
-                        Some(IoxDir::Output),
-                        Some(IoxFunction::Gpio),
-                        None,
-                        Some(IoxEnable::Disable),
-                        None,
-                        Some(IoxDriveStrength::Drive8mA),
-                    );
-                    iox.set_gpio_pin_value(IoxPort::PF, 0, IoxValue::Low);
-                    log::info!(
-                        "shutdown got {:x?}, {:x?}",
-                        iox.get_gpio_pin_value(IoxPort::PF, 0),
-                        iox.get_gpio_bank_value(IoxPort::PF)
-                    );
 
-                    let axp2101 = bao1x_hal::axp2101::Axp2101::new(&mut i2c).expect("couldn't get AXP2101");
-                    log::info!("sending shutdown to axp2101 pmic...in four seconds");
+                    let mut axp2101 =
+                        bao1x_hal::axp2101::Axp2101::new(&mut i2c).expect("couldn't get AXP2101");
+                    log::info!("sending shipmode to axp2101 pmic...in four seconds");
                     let tt = ticktimer::Ticktimer::new().unwrap();
                     tt.sleep_ms(4000).ok();
+                    // shut down BLDO1 - this should disconnect the battery
+                    axp2101.set_ldo(&mut i2c, None, bao1x_hal::axp2101::WhichLdo::Bldo1).ok();
+                    // shut down PMIC
                     axp2101.powerdown(&mut i2c).ok();
-                    iox.setup_pin(
-                        IoxPort::PF,
-                        6,
-                        Some(IoxDir::Output),
-                        Some(IoxFunction::Gpio),
-                        None,
-                        Some(IoxEnable::Disable),
-                        None,
-                        Some(IoxDriveStrength::Drive8mA),
-                    );
-                    iox.set_gpio_pin_value(IoxPort::PF, 6, IoxValue::Low);
                     log::info!("sent shutdown to axp2101");
+                }
+                #[cfg(not(feature = "hosted-baosec"))]
+                "deepsleep" => {
+                    let gfx = ux_api::service::gfx::Gfx::new(&_env.xns).unwrap();
+                    log::info!("turn off display");
+                    gfx.set_power(false).unwrap();
+                    log::info!("display off");
+                    use num_traits::*;
+                    // monkey patch over the standard xous IP
+                    let conn = _env
+                        .xns
+                        .request_connection_blocking(susres::api::SERVER_NAME_SUSRES)
+                        .expect("Can't connect to SUSRES");
+                    match xous::send_message(
+                        conn,
+                        xous::Message::new_blocking_scalar(
+                            susres::api::Opcode::SuspendRequest.to_usize().unwrap(),
+                            1, // this is a monkeypatch
+                            0,
+                            0,
+                            0,
+                        ),
+                    ) {
+                        Ok(xous::Result::Scalar1(result)) => {
+                            if result == 1 {
+                                log::info!("Should be in deep sleep!");
+                            } else {
+                                log::error!("Couldn't initiate deep sleep")
+                            }
+                        }
+                        _ => panic!("Couldn't send deep sleep message to susres"),
+                    }
                 }
                 "seed" => {
                     let (_, value) = std::env::vars().find(|(key, _value)| key == "SEED").unwrap();
                     log::info!("Seed: {:?}", value);
-                }
-                "keepon" => {
-                    todo!("Fix this to use DCDC2 for keepon (as per baosec v2)");
                 }
                 #[cfg(not(feature = "hosted-baosec"))]
                 "wfi" => {
