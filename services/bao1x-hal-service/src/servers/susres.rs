@@ -219,7 +219,14 @@ fn susres_service() {
                         log::trace!("still waiting on callbacks, returning to main loop");
                     }
                 }),
-                Some(Opcode::SuspendRequest) => {
+                Some(Opcode::SuspendRequest) => msg_blocking_scalar_unpack!(msg, deepsleep, 0, 0, 0, {
+                    // catch the case of deepsleep request
+                    if deepsleep == 1 {
+                        log::info!("entering deep sleep");
+                        clk_mgr.deep_sleep();
+                        xous::return_scalar(msg.sender, 1).ok();
+                        // system is shut down after this point, no code runs
+                    }
                     log::info!("registered suspend listeners:");
                     for sub in suspend_subscribers.iter() {
                         log::info!("{:?}", sub);
@@ -258,7 +265,7 @@ fn susres_service() {
                         );
                         xous::return_scalar(msg.sender, 0).ok();
                     }
-                }
+                }),
                 Some(Opcode::SuspendTimeout) => {
                     if timeout_pending {
                         // record which tokens had not reported in
