@@ -18,6 +18,8 @@ pub mod signatures;
 pub use offsets::*;
 pub mod clocks;
 pub mod pubkeys;
+use arbitrary_int::u31;
+use bitbybit::bitfield;
 pub use clocks::*;
 
 /// UF2 Family ID. Randomly generated, no collisions with the known list, still to be merged
@@ -43,6 +45,19 @@ pub const SERVER_NAME_KBD: &str = "_Matrix keyboard driver_";
 /// Do not change this constant, it is hard-coded into libraries in order to break
 /// circular dependencies on the IFRAM block.
 pub const SERVER_NAME_BAO1X_HAL: &str = "_bao1x-SoC HAL_";
+
+/// Flags register in the backup register bank. Used to track system state between soft resets.
+#[bitfield(u32)]
+#[derive(PartialEq, Eq, Debug)]
+pub struct BackupFlags {
+    #[bits(1..=31, rw)]
+    reserved: u31,
+    /// When `false`, indicates that the time in the RTC register is not synchronized to the offset
+    /// that is read from disk. Upon first encounter with an external time source, the offset should
+    /// be captured and recorded to disk.
+    #[bit(0, rw)]
+    rtc_synchronized: bool,
+}
 
 pub mod camera {
     #[derive(Clone, Copy)]
