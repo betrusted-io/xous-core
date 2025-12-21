@@ -110,21 +110,27 @@ pub fn setup_backup_region() -> u32 {
             acc += i as u32;
         }
 
-        // enable the RTC if it isn't already - on a cold boot, it would be off
         let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
-        // set effective tick to 1/1024th of a second
-        // this causes the RTC to roll over every 48 days - the code before had some deniability about
-        // RTC offset because it would roll over every 168 years, but I think once every 48 days is within
-        // a reasonable window of deniability (previously it was a random number from 0-6 months) and
-        // also the system has to be powered on at least once every rollover window to capture the rollover.
-        // The device won't last 48 days on RTC battery alone - and every time a QR code is scanned you
-        // update the RTC offset. So I think this is a reasonable window to just leave "as so". The
-        // initial value is set to within minutes of a roll-over, so that an error in rollover handling
-        // would be detected quickly.
-        ao_sysctrl.wo(utra::ao_sysctrl::CR_CLK1HZFD, 15);
         let mut rtc = CSR::new(bao1x_hal::rtc::HW_RTC_BASE as *mut u32);
-        rtc.wo(bao1x_hal::rtc::LR, 0xFFFE_2000); // set base to "roll over" in 2 minutes - forces an edge case in testing
-        rtc.wfo(bao1x_hal::rtc::CR_EN, 1);
+        // enable the RTC if it isn't already - on a cold boot, it would be off
+        if rtc.rf(bao1x_hal::rtc::CR_EN) != 1 {
+            // set effective tick to 1/1024th of a second
+            // this causes the RTC to roll over every 48 days - the code before had some deniability about
+            // RTC offset because it would roll over every 168 years, but I think once every 48 days is within
+            // a reasonable window of deniability (previously it was a random number from 0-6 months) and
+            // also the system has to be powered on at least once every rollover window to capture the
+            // rollover. The device won't last 48 days on RTC battery alone - and every time a QR
+            // code is scanned you update the RTC offset. So I think this is a reasonable window
+            // to just leave "as so". The initial value is set to within minutes of a roll-over,
+            // so that an error in rollover handling would be detected quickly.
+            ao_sysctrl.wo(utra::ao_sysctrl::CR_CLK1HZFD, 15);
+            rtc.wo(bao1x_hal::rtc::LR, 0xFFFE_2000); // set base to "roll over" in 2 minutes - forces an edge case in testing
+            rtc.wfo(bao1x_hal::rtc::CR_EN, 1);
+
+            let mut backup_flags = bu_mgr.get_flags();
+            backup_flags.set_rtc_synchronized(false);
+            bu_mgr.set_flags(backup_flags);
+        }
 
         // soft-reset the system
         let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
@@ -162,6 +168,12 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
     if setup_backup_region() == 0 {
         crate::println!("backup region is clean!");
     }
+    /* // debug RTC setting - remove once confident
+    let rtc = CSR::new(bao1x_hal::rtc::HW_RTC_BASE as *mut u32);
+    for i in 0..8 {
+        crate::println_d!("rtc {}: {:x}", i, unsafe { rtc.base().add(i).read_volatile() });
+    }
+    */
 
     // setup board-specific I/Os - early boot set. These are items that have to be
     // done in a time-sensitive fashion.
