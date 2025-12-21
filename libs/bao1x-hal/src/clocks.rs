@@ -438,6 +438,52 @@ impl ClockManager {
         }
     }
 
+    pub fn deep_sleep(&mut self) {
+        // setup wakeup mask
+        self.ao_sysctrl.wo(utra::ao_sysctrl::CR_WKUPMASK, 0x0001_003F);
+        self.ao_sysctrl.wo(utra::ao_sysctrl::CR_RSTCRMASK, 0x00);
+        self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUDFTSR, 0);
+
+        wfi_debug("entering deep sleep");
+        // switch to internal osc only
+        self.sysctrl.wo(utra::sysctrl::SFR_CGUSEL0, 0);
+        self.sysctrl.wo(utra::sysctrl::SFR_CGUSEL1, 1);
+        self.sysctrl.wo(utra::sysctrl::SFR_CGUSET, 0x32);
+        wfi_debug("internal osc");
+
+        #[cfg(feature = "board-baosec")]
+        {
+            wfi_debug("disconnect dcdc2");
+            self.iox.set_gpio_pin_value(self.dcdc2_io.0, self.dcdc2_io.1, bao1x_api::IoxValue::High);
+
+            self.pmic.set_dcdc(&mut self.i2c, None, crate::axp2101::WhichDcDc::Dcdc2).unwrap();
+            wfi_debug("DCDC2 off");
+
+            self.pmic.set_dcdc(&mut self.i2c, None, crate::axp2101::WhichDcDc::Dcdc5).unwrap();
+            self.pmic.set_ldo(&mut self.i2c, None, crate::axp2101::WhichLdo::Bldo2).unwrap();
+            wfi_debug("camera off");
+
+            // Turning this off probably requires disabling a bunch of interrupt handlers: it seems
+            // like the system gets "activated" into some sort of .. interrupt loop? either that, or
+            // there is significant leakage into an I/O from something being held up, because we see
+            // *more* power rather than less when this is turned off.
+            // self.pmic.set_dcdc(&mut self.i2c, None, crate::axp2101::WhichDcDc::Dcdc4).unwrap();
+            // wfi_debug("DCDC4 off");
+        }
+
+        // enter PD mode - cuts VDDCORE power - requires full reset to come out of this
+        // only RTC & backup regsiters are kept. ~1.2mA @ 4.2V consumption in this mode.
+
+        // ensure use of 32k external crystal
+        self.ao_sysctrl.wo(utra::ao_sysctrl::CR_CR, 7);
+
+        self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUCRPD, 0x0c); // immediate shutdown -- 0x0c will also turn off 2.5V domain
+        self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRMLP0, 0x08420002); // 0.7v
+        self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUPDAR, 0x5a);
+
+        // deep sleep recovery by touching any button
+    }
+
     pub fn wfi(&mut self) {
         wfi_debug("entering wfi");
 
@@ -480,8 +526,7 @@ impl ClockManager {
         // We'll just mark this as "thar be dragons" and leave the dungeon crawl to another day.
         self.sysctrl.wo(utra::sysctrl::SFR_CGULP, 0x3);
         wfi_debug("ULP");
-        // enter PD mode - cuts VDDCORE power - requires full reset to come out of this
-        // only RTC is kept (check this!). ~1.5-2mA @ 4.2V consumption in this mode.
+        // ensure use of 32k extenal crystal
         self.ao_sysctrl.wo(utra::ao_sysctrl::CR_CR, 7);
         wfi_debug("CR");
         // setup wakeup mask
