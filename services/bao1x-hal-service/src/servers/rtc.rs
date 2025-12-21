@@ -37,6 +37,9 @@ fn rtc_service() -> ! {
 
     let mut rtc_rollovers: u32 = 0; // gives us up to 168 years
     let mut last_rtc_val = rtc.r(DR); // use this to detect rollovers
+    // TODO:
+    //   - check backup register: is the RTC synchronized to the value on disk?
+    //   - if yes, read the value and use it to initialize the time offset, instead of using 0.
     let mut utc_offset_ms = 0;
     let mut tz_offset_ms = 0;
 
@@ -103,6 +106,9 @@ fn rtc_service() -> ! {
                     log::info!("rtc_secs: {}", rtc_offset_ms / 1000);
                     let offset = utc_time_ms - rtc_offset_ms;
                     utc_offset_ms = offset;
+                    // TODO:
+                    //  - commit the UTC offset to disk
+                    //  - set the flag on the backup register for time sync to `true`
                 }
             }
             Some(TimeOp::SetTzOffsetMs) => {
