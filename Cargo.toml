@@ -155,7 +155,7 @@ strip = false
 lto = "fat"
 incremental = true
 #panic = "abort" # Remove panic output, which can reduce file size
-opt-level = "s" # z,s: Optimize for size instead of performance; 1 for easier debugging; comment out for "best performance" (but in Rust 1.72 this causes regressions)
+opt-level = "z" # z,s: Optimize for size instead of performance; 1 for easier debugging; comment out for "best performance" (but in Rust 1.72 this causes regressions)
 
 # prefer hardware-accelerated versions of services
 [patch.crates-io]
