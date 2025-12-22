@@ -83,6 +83,7 @@ board-baosec = [
     "keystore-api/gen2",
     "bao1x-hal",
     "bao1x-hal-service/board-baosec",
+    "bao1x-hal/security",
 ] # USB form factor token
 loader-baosec = []
 test-baosec = []
@@ -103,6 +104,7 @@ board-dabao = [
     "keystore-api/gen2",
     "bao1x-hal",
     "bao1x-hal-service/board-dabao",
+    "bao1x-hal/security",
 ] # Dev board form factor
 loader-dabao = []
 
