@@ -106,12 +106,14 @@ board-baosec = [
     "digest",
     "ux-api/loader-baosec",
     "aes/loader-baosec",
+    "bao1x-hal/security",
 ]
 board-baosor = ["bao1x-hal/loader-baosor"]
 board-dabao = [
     "bao1x-hal/loader-dabao",
     "bao1x-hal/board-dabao",
     "aes/loader-dabao",
+    "bao1x-hal/security",
 ]
 atsama5d27 = ["utralib/atsama5d27", "armv7", "dep:atsama5d27"]
 

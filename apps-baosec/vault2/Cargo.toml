@@ -68,6 +68,7 @@ enum-iterator = "0.6.0"
 board-baosec = [
     "bao1x-hal-service",
     "ux-api/board-baosec",
+    "ux-api/bip39entry",
     "blitstr2/board-baosec",
     "usb-bao1x/board-baosec",
     "persistent_store/board-baosec",
@@ -75,6 +76,7 @@ board-baosec = [
 ]
 hosted-baosec = [
     "bao1x-emu",
+    "ux-api/bip39entry",
     "ux-api/hosted-baosec",
     "usb-bao1x/hosted-baosec",
     "ctap-crypto/hosted-baosec",
