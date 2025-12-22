@@ -24,6 +24,7 @@ bao1x = [
     "utralib/bao1x",
     "linked_list_allocator",
     "bao1x-hal/loader-baosec",
+    "bao1x-hal/security",
     "bao1x-api",
     # "bao1x-hal/debug-print-duart",
 ]

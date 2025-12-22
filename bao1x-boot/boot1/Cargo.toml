@@ -34,6 +34,7 @@ bao1x = [
     "utralib/bao1x",
     "linked_list_allocator",
     "bao1x-hal/loader-baosec",
+    "bao1x-hal/security",
     # "bao1x-hal/debug-print-duart",
     "bao1x-api",
     # needed for the boot logo

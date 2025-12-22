@@ -70,7 +70,6 @@ board-baosec = [
     "utralib/bao1x",
     "ux-api/board-baosec",
     "ux-api/std",
-    "sigcheck",
 ] # USB form factor token
 loader-baosec = [
     "utralib/bao1x",
@@ -79,7 +78,6 @@ loader-baosec = [
     "axp2101",
     "bmp180",
     "ux-api/loader-baosec",
-    "sigcheck",
 ]
 kernel = []
 kernel-baosec = ["utralib/bao1x", "kernel"]
@@ -93,11 +91,10 @@ board-baosor = [
     "axp2101",
     "utralib/bao1x",
     "ux-api/std",
-    "sigcheck",
 ] # Precursor form factor
 loader-baosor = []
-board-dabao = ["utralib/bao1x", "sigcheck"] # Dev board form factor
-loader-dabao = ["sigcheck"]
+board-dabao = ["utralib/bao1x"] # Dev board form factor
+loader-dabao = []
 verilator-only = ["utralib/bao1x"]
 mpw = ["utralib/bao1x"]
 hdl-test = ["utralib/bao1x"]
@@ -107,6 +104,7 @@ debug-print-duart = ["debug-print", "debug-countermeasures"]
 debug-print-uart = ["debug-print"]
 debug-countermeasures = []
 debug-wfi = []
+security = ["sigcheck"]
 
 udma-stress-test = [
 ] # For RTL simulation testing - aggravates a key corner case

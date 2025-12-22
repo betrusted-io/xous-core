@@ -267,6 +267,12 @@ pub fn sign_image(
                         target,
                     );
                     return Err(String::from("Image doesn't fit").into());
+                } else {
+                    println!(
+                        "=== Kernel is {} bytes: {} bytes free remaining ===",
+                        dest_file.len(),
+                        target - dest_file.len()
+                    );
                 }
             }
             Ok(dest_file)
