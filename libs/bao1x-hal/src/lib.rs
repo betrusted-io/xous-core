@@ -36,7 +36,7 @@ pub mod buram;
 pub mod clocks;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod coreuser;
-#[cfg(all(not(feature = "hosted-baosec"), not(feature = "kernel")))]
+#[cfg(feature = "security")]
 pub mod hardening;
 #[cfg(feature = "std")]
 pub mod i2c;
@@ -48,7 +48,7 @@ pub mod mbox;
 pub mod rram;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod rtc;
-#[cfg(all(not(feature = "hosted-baosec"), not(feature = "kernel")))]
+#[cfg(feature = "security")]
 pub mod sigcheck;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod sram_trim;
