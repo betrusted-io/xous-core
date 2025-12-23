@@ -181,6 +181,10 @@ fn keyboard_service() {
     {
         let iox = crate::iox::IoxHal::new();
         let (_row, _col) = bao1x_hal::board::setup_kpc_pins(&iox);
+        // for baosec-lite: this needs to be set to low for prstn to be de-asserted
+        // use bao1x_api::IoGpio;
+        // iox.set_gpio_pin_dir(bao1x_api::IoxPort::PA, 1, bao1x_api::IoxDir::Output);
+        // iox.set_gpio_pin_value(bao1x_api::IoxPort::PA, 1, bao1x_api::IoxValue::Low);
     }
     #[cfg(feature = "board-baosec")]
     let mut kpc_aoint = bao1x_hal::kpc_aoint::KpcAoInt::new(Some(handler));
@@ -194,8 +198,8 @@ fn keyboard_service() {
         // KPOE0 defines OE state in phase 0 - here we set it to drive
         // KPOE1 defines OE state in phase 1 - here we set it to drive
         let cfg0 = kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOPO0, 1)
-            // | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOPO1, 1)
-            | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOOE0, 1)
+            | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOPO1, 0)
+            | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOOE0, 0) // tri-state instead of drive for high
             | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_KPOOE1, 1)
             | kpc_aoint.kpc.ms(utra::dkpc::SFR_CFG0_DKPCEN, 1);
         kpc_aoint.kpc.wo(utra::dkpc::SFR_CFG0, cfg0);
