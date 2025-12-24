@@ -158,6 +158,7 @@ impl TryFrom<usize> for UsbDeviceType {
     }
 }
 
+#[allow(dead_code)]
 pub const SERIAL_BINARY_BUFLEN: usize = 3840; // save 256 bytes on the page for Rkyv overhead
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
 pub struct UsbSerialAscii {
@@ -200,6 +201,7 @@ pub(crate) struct UsbListenerRegistration {
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 #[repr(usize)]
+#[allow(dead_code)]
 pub enum LogLevel {
     Trace = 0,
     Debug = 1,
@@ -208,6 +210,7 @@ pub enum LogLevel {
     Err = 4,
 }
 
+#[allow(dead_code)]
 impl TryFrom<usize> for LogLevel {
     type Error = &'static str;
 

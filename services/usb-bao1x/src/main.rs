@@ -1,37 +1,13 @@
 mod api;
 mod debug;
+#[cfg(target_os = "xous")]
 mod hw;
 #[cfg(not(target_os = "xous"))]
 mod main_hosted;
 mod mappings;
 
-use core::convert::TryFrom;
-use core::num::NonZeroU8;
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::collections::VecDeque;
-// Install a local panic handler
-#[cfg(feature = "debug-print-usb")]
-use std::panic;
-use std::sync::Arc;
-
-use api::*;
-use bao1x_api::IoGpio;
-use bao1x_api::keyboard::KeyMap;
-#[cfg(feature = "board-baosec")]
-use bao1x_hal::axp2101::VbusIrq;
-use bao1x_hal::usb::driver::{CorigineUsb, CorigineWrapper};
-use hw::Bao1xUsb;
-use hw::UsbIrqReq;
-use num_traits::*;
-use packed_struct::PackedStructSlice;
-use usb_device::class_prelude::*;
-use utralib::{AtomicCsr, utra};
-use xous::msg_scalar_unpack;
-use xous_ipc::Buffer;
-use xous_usb_hid::device::fido::RawFidoReport;
-use xous_usb_hid::page::Keyboard;
-
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+#[cfg(target_os = "xous")]
 enum TimeoutOp {
     Pump,
     InvalidCall,
@@ -39,6 +15,7 @@ enum TimeoutOp {
 }
 
 #[derive(Debug)]
+#[cfg(target_os = "xous")]
 enum SerialListenMode {
     // this just causes data incoming to be printed to the debug log; it is the default
     NoListener,
@@ -61,7 +38,33 @@ fn main() -> ! {
     main_hosted::main_hosted();
 }
 
+#[cfg(target_os = "xous")]
 pub(crate) fn main_hw() -> ! {
+    use core::convert::TryFrom;
+    use core::num::NonZeroU8;
+    use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+    use std::collections::VecDeque;
+    // Install a local panic handler
+    #[cfg(feature = "debug-print-usb")]
+    use std::panic;
+    use std::sync::Arc;
+
+    use api::*;
+    use bao1x_api::IoGpio;
+    use bao1x_api::keyboard::KeyMap;
+    #[cfg(feature = "board-baosec")]
+    use bao1x_hal::axp2101::VbusIrq;
+    use bao1x_hal::usb::driver::{CorigineUsb, CorigineWrapper};
+    use hw::{Bao1xUsb, UsbIrqReq};
+    use num_traits::*;
+    use packed_struct::PackedStructSlice;
+    use usb_device::class_prelude::*;
+    use utralib::{AtomicCsr, utra};
+    use xous::msg_scalar_unpack;
+    use xous_ipc::Buffer;
+    use xous_usb_hid::device::fido::RawFidoReport;
+    use xous_usb_hid::page::Keyboard;
+
     #[cfg(feature = "usbd-debug")]
     bao1x_hal::claim_duart();
 
