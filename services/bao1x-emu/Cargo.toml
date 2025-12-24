@@ -20,6 +20,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "alloc",
 ] }
 bao1x-api = { path = "../../libs/bao1x-api", features = ["derive-rkyv", "std"] }
+xous-api-susres = "0.9.67"
 
 [target.'cfg(any(windows,unix))'.dependencies]
 minifb = "0.26.0"

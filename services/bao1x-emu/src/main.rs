@@ -1,4 +1,5 @@
 mod keyboard;
+mod susres;
 
 use bao1x_api::*;
 
@@ -12,6 +13,8 @@ fn main() {
 
     // start keyboard emulator service
     keyboard::start_keyboard_service();
+    // start susres responder
+    susres::start_susres_service();
 
     let mut msg_opt = None;
     log::debug!("Starting main loop");
