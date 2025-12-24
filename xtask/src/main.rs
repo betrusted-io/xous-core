@@ -324,7 +324,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "keystore",
                 "xous-log",
                 "xous-names",
-                // "usb-bao1x",
+                "usb-bao1x",
                 "bao1x-emu",
                 "bao-console",
                 "modals",

@@ -23,7 +23,7 @@ use xous_usb_hid::page::Keyboard;
 use xous_usb_hid::prelude::UsbHidClass;
 use xous_usb_hid::prelude::*;
 
-use crate::Opcode;
+use crate::api::Opcode;
 
 /// Maximum packet size for serial - tied to the speed of the port (HS)
 pub const SERIAL_MAX_PACKET_SIZE: usize = 512;

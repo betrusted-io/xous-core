@@ -102,7 +102,6 @@ pub enum GfxOpcode {
 
     #[cfg(feature = "board-baosec")]
     AcquireQr,
-    #[cfg(feature = "board-baosec")]
     KeyPress,
     #[cfg(feature = "board-baosec")]
     PowerDown,
