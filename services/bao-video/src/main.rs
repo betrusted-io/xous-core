@@ -42,7 +42,6 @@ use bao1x_hal::{
 use bao1x_hal_service::UdmaGlobal;
 #[cfg(feature = "b64-export")]
 use base64::{Engine as _, engine::general_purpose};
-#[cfg(feature = "board-baosec")]
 use num_traits::*;
 #[cfg(not(feature = "hosted-baosec"))]
 use utralib::utra;
@@ -202,9 +201,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     }
 
     // respond to keyboard presses - needed to abort QR code mode
-    #[cfg(not(feature = "hosted-baosec"))]
     let kbd = bao1x_api::keyboard::Keyboard::new(&xns).unwrap();
-    #[cfg(not(feature = "hosted-baosec"))]
     kbd.register_listener(SERVER_NAME_GFX, GfxOpcode::KeyPress.to_u32().unwrap() as usize);
 
     #[cfg(not(feature = "hosted-baosec"))]
@@ -435,9 +432,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     }
                     // if qr_request is already pending, ignore any new acquisition requests
                 }
-                #[cfg(not(feature = "hosted-baosec"))]
                 GfxOpcode::KeyPress => {
                     if let Some(scalar) = msg.body.scalar_message() {
+                        #[cfg(not(feature = "hosted-baosec"))]
                         // any key press will abort QR acquisition by taking the qr_request.
                         if let Some(mut envelope) = qr_request.take() {
                             let acquisition = QrAcquisition { content: None, meta: None };
