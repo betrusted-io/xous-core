@@ -21,6 +21,8 @@ pub mod pubkeys;
 use arbitrary_int::u31;
 use bitbybit::bitfield;
 pub use clocks::*;
+#[cfg(feature = "std")]
+pub mod bio;
 
 /// UF2 Family ID. Randomly generated, no collisions with the known list, still to be merged
 /// into the "official" list
