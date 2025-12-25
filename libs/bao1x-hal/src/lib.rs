@@ -30,6 +30,8 @@ pub mod usb;
 pub use shared_csr::*;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod acram;
+#[cfg(feature = "std")]
+pub mod bio;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod buram;
 #[cfg(not(feature = "hosted-baosec"))]
