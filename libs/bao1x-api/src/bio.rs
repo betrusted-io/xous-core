@@ -1,3 +1,12 @@
+//! BIO API
+//!
+//! For the first draft of this API, we're going to take an approach where all machines
+//! and pins are explicitly managed. That is: we don't try and be clever and try to imply any
+//! allocations. The developer has to correctly identify which engine to place their code on,
+//! and which I/Os, if any, the thing uses.
+//!
+//! Here is the reference for what register correspond to what functions in BIO:
+//!
 //! FIFO - 8-deep fifo head/tail access. Cores halt on overflow/underflow.
 //! - x16 r/w  fifo[0]
 //! - x17 r/w  fifo[1]
@@ -30,9 +39,11 @@
 //! Core ID & debug:
 //! - x31 r/-  [31:30] -> core ID; [29:0] -> cpu clocks since reset
 
+// Other notes:
+//
 // clock divider equation:
 // output frequency = fclk / (div_int + div_frac / 256)
-
+//
 // WS2812B timings - base cycle time is 210ns
 // 0: Hi 2 cycles, low 4 cycles
 // 1: Hi 4 cycles, low 2 cycles

@@ -1,10 +1,3 @@
-//! BIO API
-//!
-//! For the first draft of this API, we're going to take an approach where all machines
-//! and pins are explicitly managed. That is: we don't try and be clever and try to imply any
-//! allocations. The developer has to correctly identify which engine to place their code on,
-//! and which I/Os, if any, the thing uses.
-
 use std::marker::PhantomData;
 
 use bao1x_api::bio::*;
