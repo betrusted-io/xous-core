@@ -286,6 +286,7 @@ fn main() {
     #[cfg(feature = "board-dabao")]
     servers::trng::start_trng_service();
     servers::rtc::start_rtc_service();
+    servers::bio::start_bio_service();
 
     let mut msg_opt = None;
     log::debug!("Starting main loop");
@@ -524,12 +525,17 @@ fn main() {
                 if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
                     let port: IoxPort = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     let pin = scalar.arg2 as u8;
-                    match iox.set_bio_bit_from_port_and_pin(port, pin) {
-                        Some(bit) => {
-                            scalar.arg1 = bit as usize;
-                            scalar.arg2 = 1
+                    if scalar.arg3 == 0 {
+                        match iox.set_bio_bit_from_port_and_pin(port, pin) {
+                            Some(bit) => {
+                                scalar.arg1 = bit as usize;
+                                scalar.arg2 = 1
+                            }
+                            _ => scalar.arg2 = 0,
                         }
-                        _ => scalar.arg2 = 0,
+                    } else {
+                        iox.set_ports_from_bio_bitmask(scalar.arg1 as u32);
+                        // no return values need to be set
                     }
                 }
             }
