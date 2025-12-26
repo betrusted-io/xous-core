@@ -380,6 +380,10 @@ impl IoSetup for Iox {
     fn set_bio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8> {
         self.set_bio_bit_from_port_and_pin(port, pin)
     }
+
+    fn set_ports_from_bio_bitmask(&self, enable_bitmask: u32) {
+        self.set_ports_from_bio_bitmask(enable_bitmask);
+    }
 }
 
 impl IoGpio for Iox {
