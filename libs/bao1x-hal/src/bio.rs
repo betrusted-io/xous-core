@@ -81,14 +81,18 @@ impl<'a> BioApi<'a> for Bio {
         Ok(())
     }
 
-    unsafe fn get_core_handle(&'a mut self) -> Result<CoreHandle<'a>, BioError> {
+    unsafe fn get_core_handle(&'a mut self) -> Result<Option<CoreHandle<'a>>, BioError> {
         match send_message(
             self.conn,
             Message::new_blocking_scalar(BioOp::GetCoreHandle.to_usize().unwrap(), 0, 0, 0, 0),
         )
         .map_err(|e| <xous::Error as Into<BioError>>::into(e))?
         {
-            xous::Result::Scalar5(_, bank, _, _, _) => {
+            xous::Result::Scalar5(_, bank, valid, _, _) => {
+                if valid == 0 {
+                    // no handles available
+                    return Ok(None);
+                }
                 let base = match bank {
                     0 => utralib::HW_BIO_FIFO0_BASE,
                     1 => utralib::HW_BIO_FIFO1_BASE,
@@ -105,11 +109,11 @@ impl<'a> BioApi<'a> for Bio {
                     xous::MemoryFlags::R | xous::MemoryFlags::W,
                 )
                 .expect("couldn't map BIO memory handle");
-                Ok(CoreHandle::new(
+                Ok(Some(CoreHandle::new(
                     self.conn,
                     virtual_page.as_ptr() as usize,
                     arbitrary_int::u2::from_u32(bank as u32),
-                ))
+                )))
             }
             _ => unimplemented!("Unhandled return type on get_core_handle()"),
         }

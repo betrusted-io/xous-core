@@ -453,7 +453,7 @@ impl<'a> BioApi<'a> for BioSharedState {
         prev_freq
     }
 
-    unsafe fn get_core_handle(&'a mut self) -> Result<CoreHandle<'a>, BioError> {
+    unsafe fn get_core_handle(&'a mut self) -> Result<Option<CoreHandle<'a>>, BioError> {
         unimplemented!("This is managed by the main loop server, not the hardware interface");
     }
 

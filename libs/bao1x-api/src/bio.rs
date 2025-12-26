@@ -75,6 +75,7 @@ pub enum BioOp {
     IoConfig,
     FifoEventTriggers,
     GetVersion,
+    InvalidCall,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -100,6 +101,18 @@ pub enum BioCore {
     Core3 = 3,
 }
 
+impl From<usize> for BioCore {
+    fn from(value: usize) -> Self {
+        match value {
+            0 => BioCore::Core0,
+            1 => BioCore::Core1,
+            2 => BioCore::Core2,
+            3 => BioCore::Core3,
+            _ => panic!("Invalid BioCore value: {}", value),
+        }
+    }
+}
+
 #[repr(usize)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "std", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
@@ -109,14 +122,13 @@ pub enum CoreRunSetting {
     Stop = 2,
 }
 
-impl From<usize> for BioCore {
+impl From<usize> for CoreRunSetting {
     fn from(value: usize) -> Self {
         match value {
-            0 => BioCore::Core0,
-            1 => BioCore::Core1,
-            2 => BioCore::Core2,
-            3 => BioCore::Core3,
-            _ => panic!("Invalid BioCore value: {}", value),
+            0 => CoreRunSetting::Unchanged,
+            1 => CoreRunSetting::Start,
+            2 => CoreRunSetting::Start,
+            _ => panic!("Invalid CoreRunSetting: {}", value),
         }
     }
 }
@@ -478,7 +490,9 @@ pub trait BioApi<'a> {
     ///
     /// Safety: this has to be wrapped in an object that derives a CSR that also tracks
     /// the lifetime of this object, to prevent `Drop` from being called at the wrong time.
-    unsafe fn get_core_handle(&'a mut self) -> Result<CoreHandle<'a>, BioError>;
+    ///
+    /// Returns `None` if no more handles are available
+    unsafe fn get_core_handle(&'a mut self) -> Result<Option<CoreHandle<'a>>, BioError>;
 
     /// This call sets up the BIO's IRQ routing. It doesn't actually claim the IRQ
     /// or install the handler - that's up to the caller to do with Xous API calls.
