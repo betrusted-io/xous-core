@@ -286,7 +286,9 @@ fn main() {
     #[cfg(feature = "board-dabao")]
     servers::trng::start_trng_service();
     servers::rtc::start_rtc_service();
-    servers::bio::start_bio_service();
+
+    // TODO: implement a method to fetch the clock setting from susres and put it into here!
+    servers::bio::start_bio_service(bao1x_hal::board::DEFAULT_FCLK_FREQUENCY);
 
     let mut msg_opt = None;
     log::debug!("Starting main loop");
