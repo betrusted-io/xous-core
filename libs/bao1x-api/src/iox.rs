@@ -83,6 +83,7 @@ pub trait IoSetup {
         strength: Option<IoxDriveStrength>,
     );
     fn set_bio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8>;
+    fn set_ports_from_bio_bitmask(&self, enable_bitmask: u32);
 }
 
 /// Traits for accessing GPIOs after the port has been set up.
@@ -275,6 +276,20 @@ impl IoSetup for IoxHal {
             }
             _ => panic!("Internal error setting up BIO"),
         }
+    }
+
+    fn set_ports_from_bio_bitmask(&self, enable_bitmask: u32) {
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                HalOpcode::ConfigureBio.to_usize().unwrap(),
+                enable_bitmask as usize,
+                0,
+                1,
+                0,
+            ),
+        )
+        .expect("Internal error setting up BIO");
     }
 }
 
