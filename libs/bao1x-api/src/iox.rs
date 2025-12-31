@@ -225,8 +225,18 @@ impl IoxHal {
     /// by the mapping request. The index of the array corresponds to the bit position in
     /// the bitmask. You may use this to pass as arguments to further functions
     /// that do things like control slew rate or apply pull-ups.
-    pub fn set_ports_from_bio_bitmask(&self, _enable_bitmask: u32) -> [Option<(IoxPort, u8)>; 32] {
-        todo!("Do this when we get around to filling in the BIO drivers")
+    pub fn set_ports_from_bio_bitmask(&self, enable_bitmask: u32) {
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                HalOpcode::ConfigureBio.to_usize().unwrap(),
+                enable_bitmask as usize,
+                0,
+                1,
+                0,
+            ),
+        )
+        .expect("Internal error setting up BIO");
     }
 
     /// Returns the BIO bit that was disabled based on the port and pin specifier given;

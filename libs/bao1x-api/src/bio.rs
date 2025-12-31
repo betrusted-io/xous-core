@@ -44,12 +44,6 @@
 // clock divider equation:
 // output frequency = fclk / (div_int + div_frac / 256)
 //
-// WS2812B timings - base cycle time is 210ns
-// 0: Hi 2 cycles, low 4 cycles
-// 1: Hi 4 cycles, low 2 cycles
-// WS2812C timings - base cycle time is 312.5ns -0/+50ns
-// 0: Hi 1 cycle, low 3 cycle
-// 1: Hi 2 cycle, low 2 cycle
 
 use core::marker::PhantomData;
 use core::num::NonZeroU32;
@@ -127,7 +121,7 @@ impl From<usize> for CoreRunSetting {
         match value {
             0 => CoreRunSetting::Unchanged,
             1 => CoreRunSetting::Start,
-            2 => CoreRunSetting::Start,
+            2 => CoreRunSetting::Stop,
             _ => panic!("Invalid CoreRunSetting: {}", value),
         }
     }
@@ -146,8 +140,8 @@ pub enum BioError {
     Oom,
     /// no more machines available
     NoFreeMachines,
-    /// core is already in use
-    CoreInUse,
+    /// resource is already in use
+    ResourceInUse,
     /// Loaded code did not match, first error at argument
     CodeCheck(usize),
     /// Catch-all for programming bugs that shouldn't happen
@@ -401,13 +395,13 @@ pub struct FifoHandle {
 pub struct CoreHandle<'a> {
     conn: xous::CID,
     handle: usize,
-    bank: arbitrary_int::u2,
+    fifo: arbitrary_int::u2,
     _phantom: PhantomData<&'a ()>,
 }
 
 impl<'a> CoreHandle<'a> {
-    pub fn new(conn: xous::CID, handle: usize, bank: arbitrary_int::u2) -> Self {
-        Self { conn, handle, bank, _phantom: PhantomData }
+    pub fn new(conn: xous::CID, handle: usize, fifo: arbitrary_int::u2) -> Self {
+        Self { conn, handle, fifo, _phantom: PhantomData }
     }
 
     /// safety: this needs to be wrapped in a hardware-level CSR object that tracks the lifetime of
@@ -424,7 +418,7 @@ impl Drop for CoreHandle<'_> {
             self.conn,
             xous::Message::new_blocking_scalar(
                 BioOp::ReleaseCoreHandle.to_usize().unwrap(),
-                self.bank.value() as usize,
+                self.fifo.value() as usize,
                 0,
                 0,
                 0,
@@ -480,11 +474,14 @@ pub trait BioApi<'a> {
     /// this can then be dereferenced using UTRA abstractions to access the following
     /// registers:
     ///   - SFR_FLEVEL
-    ///   - SFR_TXF0-3
-    ///   - SFR_RXF0-3
+    ///   - SFR_TXF#
+    ///   - SFR_RXF#
     ///   - SFR_EVENT_SET
     ///   - SFR_EVENT_CLR
     ///   - SFR_EVENT_STATUS
+    ///
+    /// The handle can only access one of the FIFOs, but it has access to all the other
+    /// registers regardless of the FIFO.
     ///
     /// The handle has a `Drop` implementation that releases it when it goes out of scope.
     ///
@@ -492,7 +489,7 @@ pub trait BioApi<'a> {
     /// the lifetime of this object, to prevent `Drop` from being called at the wrong time.
     ///
     /// Returns `None` if no more handles are available
-    unsafe fn get_core_handle(&'a mut self) -> Result<Option<CoreHandle<'a>>, BioError>;
+    unsafe fn get_core_handle(&'a self, fifo: Fifo) -> Result<Option<CoreHandle<'a>>, BioError>;
 
     /// This call sets up the BIO's IRQ routing. It doesn't actually claim the IRQ
     /// or install the handler - that's up to the caller to do with Xous API calls.
