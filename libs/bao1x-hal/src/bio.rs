@@ -66,7 +66,7 @@ impl<'a> BioApi<'a> for Bio {
             ArchivedBioError::Uninit => panic!("Error in message passing"),
             ArchivedBioError::InvalidCore => Err(BioError::InvalidCore),
             ArchivedBioError::NoFreeMachines => Err(BioError::NoFreeMachines),
-            ArchivedBioError::CoreInUse => Err(BioError::CoreInUse),
+            ArchivedBioError::ResourceInUse => Err(BioError::ResourceInUse),
             ArchivedBioError::Oom => Err(BioError::Oom),
             _ => Err(BioError::InternalError),
         }
@@ -81,39 +81,40 @@ impl<'a> BioApi<'a> for Bio {
         Ok(())
     }
 
-    unsafe fn get_core_handle(&'a mut self) -> Result<Option<CoreHandle<'a>>, BioError> {
+    unsafe fn get_core_handle(&'a self, fifo: Fifo) -> Result<Option<CoreHandle<'a>>, BioError> {
         match send_message(
             self.conn,
-            Message::new_blocking_scalar(BioOp::GetCoreHandle.to_usize().unwrap(), 0, 0, 0, 0),
+            Message::new_blocking_scalar(BioOp::GetCoreHandle.to_usize().unwrap(), fifo as usize, 0, 0, 0),
         )
         .map_err(|e| <xous::Error as Into<BioError>>::into(e))?
         {
-            xous::Result::Scalar5(_, bank, valid, _, _) => {
+            xous::Result::Scalar5(_, valid, _, _, _) => {
                 if valid == 0 {
                     // no handles available
                     return Ok(None);
                 }
-                let base = match bank {
-                    0 => utralib::HW_BIO_FIFO0_BASE,
-                    1 => utralib::HW_BIO_FIFO1_BASE,
-                    2 => utralib::HW_BIO_FIFO2_BASE,
-                    3 => utralib::HW_BIO_FIFO3_BASE,
-                    _ => panic!("Incorrect bank value"),
+                let base = match fifo {
+                    Fifo::Fifo0 => utralib::HW_BIO_FIFO0_BASE,
+                    Fifo::Fifo1 => utralib::HW_BIO_FIFO1_BASE,
+                    Fifo::Fifo2 => utralib::HW_BIO_FIFO2_BASE,
+                    Fifo::Fifo3 => utralib::HW_BIO_FIFO3_BASE,
                 };
                 // the actual mapping is requested in the process space of the caller: this allows
                 // us to directly interact with the BIO without having to use a syscall.
-                let virtual_page = xous::map_memory(
+                if let Ok(virtual_page) = xous::map_memory(
                     MemoryAddress::new(base),
                     None,
-                    utralib::HW_BIO_FIFO1_MEM_LEN,
+                    utralib::HW_BIO_FIFO0_MEM_LEN,
                     xous::MemoryFlags::R | xous::MemoryFlags::W,
-                )
-                .expect("couldn't map BIO memory handle");
-                Ok(Some(CoreHandle::new(
-                    self.conn,
-                    virtual_page.as_ptr() as usize,
-                    arbitrary_int::u2::from_u32(bank as u32),
-                )))
+                ) {
+                    Ok(Some(CoreHandle::new(
+                        self.conn,
+                        virtual_page.as_ptr() as usize,
+                        arbitrary_int::u2::from_u32(fifo as u32),
+                    )))
+                } else {
+                    Err(BioError::Oom)
+                }
             }
             _ => unimplemented!("Unhandled return type on get_core_handle()"),
         }

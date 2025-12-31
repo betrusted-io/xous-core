@@ -403,8 +403,8 @@ impl<'a> BioApi<'a> for BioSharedState {
         offset: usize,
         config: CoreConfig,
     ) -> Result<Option<u32>, BioError> {
-        if self.core_config[core as usize].is_none() {
-            return Err(BioError::CoreInUse);
+        if self.core_config[core as usize].is_some() {
+            return Err(BioError::ResourceInUse);
         }
         self.core_config[core as usize] = Some(config);
         self.load_code(code, offset, core);
@@ -453,7 +453,7 @@ impl<'a> BioApi<'a> for BioSharedState {
         prev_freq
     }
 
-    unsafe fn get_core_handle(&'a mut self) -> Result<Option<CoreHandle<'a>>, BioError> {
+    unsafe fn get_core_handle(&'a self, _fifo: Fifo) -> Result<Option<CoreHandle<'a>>, BioError> {
         unimplemented!("This is managed by the main loop server, not the hardware interface");
     }
 
@@ -467,11 +467,30 @@ impl<'a> BioApi<'a> for BioSharedState {
                 CoreRunSetting::Unchanged => (),
             }
         }
+        let core_code = start_mask;
         start_mask = start_mask | start_mask << 4 | start_mask << 8;
         stop_mask = stop_mask | stop_mask << 4 | stop_mask << 8;
 
         let ctrl = self.bio.r(bio_bdma::SFR_CTRL);
         self.bio.wo(bio_bdma::SFR_CTRL, (ctrl & !stop_mask) | start_mask);
+
+        let mut timeout = 0;
+        loop {
+            let ctrl = self.bio.r(utra::bio_bdma::SFR_CTRL) & 0xFF0;
+            if ctrl == 0 {
+                break;
+            }
+            timeout += 1;
+            if timeout > 100000 {
+                crate::println!("Timeout on set_core_run_states: req {:x} != rbk {:x}", core_code, ctrl);
+                break;
+            }
+        }
+        let check = self.bio.r(utra::bio_bdma::SFR_CTRL);
+        if check != core_code {
+            crate::println!("run-state check failed: {:x}", check);
+        }
+
         Ok(())
     }
 
