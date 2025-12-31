@@ -525,9 +525,9 @@ fn main() {
             }
             HalOpcode::ConfigureBio => {
                 if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
-                    let port: IoxPort = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
-                    let pin = scalar.arg2 as u8;
                     if scalar.arg3 == 0 {
+                        let port: IoxPort = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
+                        let pin = scalar.arg2 as u8;
                         match iox.set_bio_bit_from_port_and_pin(port, pin) {
                             Some(bit) => {
                                 scalar.arg1 = bit as usize;

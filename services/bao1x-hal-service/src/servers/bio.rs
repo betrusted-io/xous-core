@@ -33,6 +33,7 @@ fn bio_service(clk_freq: u32) {
                 match bio_ss.init_core(config.core, &config.code, config.offset, config.config) {
                     Ok(freq) => {
                         config.actual_freq = freq;
+                        config.result = BioError::None;
                     }
                     Err(e) => {
                         config.result = e;
@@ -49,19 +50,12 @@ fn bio_service(clk_freq: u32) {
             }
             BioOp::GetCoreHandle => {
                 if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
-                    let mut free_handle: Option<usize> = None;
-                    for (i, used) in handles_used.iter().enumerate() {
-                        if !used {
-                            free_handle = Some(i);
-                            break;
-                        }
-                    }
-                    if let Some(index) = free_handle {
+                    let index = scalar.arg1;
+                    if !handles_used[index] {
                         handles_used[index] = true;
-                        scalar.arg1 = index;
-                        scalar.arg2 = 1; // set valid bit
+                        scalar.arg1 = 1; // set valid bit
                     } else {
-                        scalar.arg2 = 0; // set invalid - no free handles available
+                        scalar.arg1 = 0; // set invalid - handle already in use
                     }
                 }
             }
@@ -105,14 +99,11 @@ fn bio_service(clk_freq: u32) {
             }
             BioOp::CoreState => {
                 if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
-                    bio_ss
-                        .set_core_state([
-                            scalar.arg1.into(),
-                            scalar.arg2.into(),
-                            scalar.arg3.into(),
-                            scalar.arg4.into(),
-                        ])
-                        .unwrap();
+                    let which =
+                        [scalar.arg1.into(), scalar.arg2.into(), scalar.arg3.into(), scalar.arg4.into()];
+                    log::debug!("setting: {:?}", which);
+                    bio_ss.set_core_state(which).unwrap();
+                    log::debug!("core state: {:x}", bio_ss.bio.r(utralib::utra::bio_bdma::SFR_CTRL));
                 }
             }
             BioOp::DmaWindows => {
