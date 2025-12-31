@@ -32,7 +32,7 @@ bao1x = ["utralib/bao1x", "usb-bao1x/bao1x", "aes/bao1x"]
 board-dabao = [
     "bao1x-hal-service/board-dabao",
     "bao1x-hal/board-dabao",
-    # "bao1x-hal/debug-print-duart",
+    # "bao1x-hal/debug-print-uart",
     "usb-bao1x/board-dabao",
 ]
 ctap-bringup = []

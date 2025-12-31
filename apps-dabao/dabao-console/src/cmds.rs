@@ -90,6 +90,8 @@ mod aes_cmd;
 use aes_cmd::*;
 mod i2cdetect;
 use i2cdetect::*;
+mod ws2812;
+use ws2812::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
@@ -100,6 +102,7 @@ pub struct CmdEnv {
     usb: Usb,
     #[cfg(feature = "aestests")]
     aes_cmd: Aes,
+    ws2812_cmd: Ws2812,
 }
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
@@ -126,6 +129,7 @@ impl CmdEnv {
             usb: Usb::new(),
             #[cfg(feature = "aestests")]
             aes_cmd,
+            ws2812_cmd: Ws2812::new(),
         }
     }
 
@@ -152,6 +156,7 @@ impl CmdEnv {
             &mut self.usb,
             #[cfg(feature = "aestests")]
             &mut self.aes_cmd,
+            &mut self.ws2812_cmd,
         ];
 
         if let Some(cmdline) = maybe_cmdline {
