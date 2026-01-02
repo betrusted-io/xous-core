@@ -30,7 +30,7 @@ impl<'a> ShellCmdApi<'a> for Ws2812 {
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "test_b" => {
-                    let mut iox = iox::IoxHal::new();
+                    let iox = iox::IoxHal::new();
                     iox.setup_pin(
                         iox::IoxPort::PB,
                         5,
@@ -68,18 +68,18 @@ impl<'a> ShellCmdApi<'a> for Ws2812 {
 
                     // grab a handle
                     let core_handle =
-                        unsafe { bio.get_core_handle(bao1x_api::bio::Fifo::Fifo0).unwrap().unwrap() };
-                    let core_handle1 =
                         unsafe { bio.get_core_handle(bao1x_api::bio::Fifo::Fifo1).unwrap().unwrap() };
+                    let core_handle1 =
+                        unsafe { bio.get_core_handle(bao1x_api::bio::Fifo::Fifo2).unwrap().unwrap() };
                     // now start jamming data into the handle...we should see pixels come out!
 
                     // safety: core_handle lives as long as the CSR handle that we generate from it
-                    let mut handle: CSR<u32> = CSR::new(unsafe { core_handle.handle().0 as *mut u32 });
-                    let mut handle1: CSR<u32> = CSR::new(unsafe { core_handle1.handle().0 as *mut u32 });
+                    let mut handle: CSR<u32> = CSR::new(unsafe { core_handle.handle() as *mut u32 });
+                    let handle1: CSR<u32> = CSR::new(unsafe { core_handle1.handle() as *mut u32 });
 
                     // first value is the pin mask of the LED strip
                     log::info!("sending in mask {:x}", io_config.mapped);
-                    handle.wo(bio_bdma::SFR_TXF0, io_config.mapped);
+                    handle.wo(bio_bdma::SFR_TXF1, io_config.mapped);
 
                     let mut hue: [f32; 6] = [0.0, 30.0, 60.0, 90.0, 120.0, 150.0];
 
@@ -97,13 +97,13 @@ impl<'a> ShellCmdApi<'a> for Ws2812 {
                                 hue[i] = 0.0;
                             }
                             let go = if i != 5 { 0x0 } else { 0x1_00_00_00 };
-                            handle.wo(bio_bdma::SFR_TXF0, rgb_value | go);
+                            handle.wo(bio_bdma::SFR_TXF1, rgb_value | go);
                         }
                         // check if the data was sent
-                        while handle1.rf(bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) == 0 {
+                        while handle1.rf(bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL2) == 0 {
                             xous::yield_slice();
                         }
-                        let _ = handle1.r(bio_bdma::SFR_RXF1);
+                        let _ = handle1.r(bio_bdma::SFR_RXF2);
                         _env.ticktimer.sleep_ms(10).ok();
                     }
                 }
@@ -118,12 +118,12 @@ impl<'a> ShellCmdApi<'a> for Ws2812 {
                     let config =
                         CoreConfig { clock_mode: bao1x_api::bio::ClockMode::TargetFreqInt(4_761_904) };
                     // load the code
-                    bio.init_core(bao1x_api::bio::BioCore::Core0, &basic_test(), 0, config).unwrap();
+                    bio.init_core(bao1x_api::bio::BioCore::Core1, &basic_test(), 0, config).unwrap();
 
                     // start the core
                     bio.set_core_state([
+                        CoreRunSetting::Unchanged,
                         CoreRunSetting::Start,
-                        CoreRunSetting::Stop,
                         CoreRunSetting::Stop,
                         CoreRunSetting::Stop,
                     ])
@@ -131,25 +131,21 @@ impl<'a> ShellCmdApi<'a> for Ws2812 {
 
                     // grab a handle
                     let core_handle0 =
-                        unsafe { bio.get_core_handle(bao1x_api::bio::Fifo::Fifo0).unwrap().unwrap() };
-                    let core_handle1 =
                         unsafe { bio.get_core_handle(bao1x_api::bio::Fifo::Fifo1).unwrap().unwrap() };
+                    let core_handle1 =
+                        unsafe { bio.get_core_handle(bao1x_api::bio::Fifo::Fifo2).unwrap().unwrap() };
                     // now start jamming data into the handle...we should see pixels come out!
 
                     // safety: core_handle lives as long as the CSR handle that we generate from it
-                    let mut handle: CSR<u32> = CSR::new(unsafe { core_handle0.handle().0 as *mut u32 });
-                    let mut handle1: CSR<u32> = CSR::new(unsafe { core_handle1.handle().0 as *mut u32 });
+                    let handle: CSR<u32> = CSR::new(unsafe { core_handle0.handle() as *mut u32 });
+                    let handle1: CSR<u32> = CSR::new(unsafe { core_handle1.handle() as *mut u32 });
                     _env.ticktimer.sleep_ms(100).ok();
                     log::info!("fifo level: {}", handle.r(bio_bdma::SFR_FLEVEL));
                     for i in 0..8 {
-                        // handle.wo(bio_bdma::SFR_TXF0, i as u32);
                         unsafe {
-                            handle.base().add(bio_bdma::SFR_TXF0.offset()).write_volatile(i as u32);
-                            // handle.base().add(bio_bdma::SFR_TXF1.offset()).write_volatile(i as u32);
-                            // handle.base().add(bio_bdma::SFR_TXF2.offset()).write_volatile(i as u32);
-                            // handle.base().add(bio_bdma::SFR_TXF3.offset()).write_volatile(i as u32);
+                            handle.base().add(bio_bdma::SFR_TXF1.offset()).write_volatile(i as u32);
                         }
-                        log::info!("rbk1 {:x}", handle1.r(bio_bdma::SFR_RXF1));
+                        log::info!("rbk1 {:x}", handle1.r(bio_bdma::SFR_RXF2));
                     }
                 }
                 _ => {
@@ -240,9 +236,9 @@ bio_code!(basic_test, BASIC_TEST_START, BASIC_TEST_END,
 // 423 (414)ns / 843 ns total 1257ns (state A)
 // 835ns / 418 ns total 1256ns (state B)
 #[rustfmt::skip]
-bio_code!(ws2812b_kernel, WS2812B_START, WS2812B_END,
-    "mv x4, x16", // read from FIFO0 - the first argument is the GPIO pin mask we're using to transmit. stash this in x4
-    // "mv x17, x4", // debug by looping back -----------
+bio_code!(ws2812b_kernel, WS2812B_DEV_START, WS2812B_DEV_END,
+    "mv x4, x17", // read from FIFO1 - the first argument is the GPIO pin mask we're using to transmit. stash this in x4
+    // "mv x18, x4", // debug by looping back -----------
     "mv x26, x4", // apply mask to all GPIO operations
     // setup the pin as an output
     "mv x24, x4",
@@ -253,8 +249,8 @@ bio_code!(ws2812b_kernel, WS2812B_START, WS2812B_END,
     "li x9, 0x1000000", // bit 24 mask
     "li sp, 0x800", // start of the LED buffer
     "10:",
-    // read a 24-bit color number from FIFO0
-    "mv x8, x16",
+    // read a 24-bit color number from FIFO1
+    "mv x8, x17",
     "sw x8, 0(sp)",
     "addi sp, sp, 4", // stack builds *UP*, away from the code
     "and x10, x9, x8", // AND incoming word with bit 24 mask
@@ -270,7 +266,7 @@ bio_code!(ws2812b_kernel, WS2812B_START, WS2812B_END,
     "30:",
     "li x11, 24", // number of bits to shift through
     "lw x10, 0(x8)", // fetch the word to send
-    // "mv x17, x10", // debug by looping back -----------
+    // "mv x18, x10", // debug by looping back -----------
     "31:",
     "and x13, x12, x10", // the bit we're contemplating is at bit 23 position, extract it into x13
     "bne x13, x0, 40f", // if 1, go to 40f, where the 1 routine is
@@ -326,7 +322,7 @@ bio_code!(ws2812b_kernel, WS2812B_START, WS2812B_END,
     "mv x20, x0",
     "bne x14, x0, 70b",
 
-    "mv x17, x31", // put a token in to synchronize and indicate that the loop is done
+    "mv x18, x31", // put a token in to synchronize and indicate that the loop is done
 
     "j 10b" // go back and get more data
 );
