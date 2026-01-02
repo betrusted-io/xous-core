@@ -53,6 +53,124 @@ use xous::MemoryRange;
 
 pub const BIO_SERVER_NAME: &'static str = "_BIO server_";
 
+/// A platform-neutral API for the BIO. Intended to be usable in both baremetal and `std` environments
+pub trait BioApi<'a> {
+    /// Initializes a core with the given `code`, loading into `offset`, with a given
+    /// core configuration. This does not start the core running: that needs to be
+    /// done with a separate `set_core_state` call.
+    ///
+    /// Returns a `u32` which is the frequency in Hz of the actual quantum interval that
+    /// the core is running at. It's `None` if an external pin is configured as the quantum source.
+    fn init_core(
+        &mut self,
+        core: BioCore,
+        code: &[u8],
+        offset: usize,
+        config: CoreConfig,
+    ) -> Result<Option<u32>, BioError>;
+
+    /// Releases the core. As a side effect, the core is stopped.
+    fn de_init_core(&mut self, core: BioCore) -> Result<(), BioError>;
+
+    /// Updates the frequency of the cores, used to calculate dividers etc.
+    /// Returns the previous frequency used by the system. Setting this
+    /// allows the sleep/wake clock manager to do a best-effort rescaling of the
+    /// clock dividers for each core as DVFS is applied for power savings.
+    ///
+    /// This API call does not actually *set* the frequency of the BIO complex -
+    /// that is handled by the clock manager. This merely informs the BIO driver
+    /// that the clocks may have changed.
+    fn update_bio_freq(&mut self, freq: u32) -> u32;
+
+    /// Returns the frequency, in Hz, of the incoming clock to the BIO cores.
+    fn get_bio_freq(&self) -> u32;
+
+    /// Returns the currently running frequency of a given BIO core. This API
+    /// exists because `update_bio_freq()` call will result in the dividers being
+    /// adjusted in an attempt to maintain the target quantum; however, there will
+    /// often be some error between what was requested and the actual achievable
+    /// frequency of the quantum interval.
+    fn get_core_freq(&self, core: BioCore) -> Option<u32>;
+
+    /// The index of `which` corresponds to each of the cores, 0-3.
+    fn set_core_state(&mut self, which: [CoreRunSetting; 4]) -> Result<(), BioError>;
+
+    /// Returns a `usize` which should be turned into a CSR as *mut u32 by the caller
+    /// this can then be dereferenced using UTRA abstractions to access the following
+    /// registers:
+    ///   - SFR_FLEVEL
+    ///   - SFR_TXF#
+    ///   - SFR_RXF#
+    ///   - SFR_EVENT_SET
+    ///   - SFR_EVENT_CLR
+    ///   - SFR_EVENT_STATUS
+    ///
+    /// The handle can only access one of the FIFOs, but it has access to all the other
+    /// registers regardless of the FIFO.
+    ///
+    /// The handle has a `Drop` implementation that releases it when it goes out of scope.
+    ///
+    /// Safety: this has to be wrapped in an object that derives a CSR that also tracks
+    /// the lifetime of this object, to prevent `Drop` from being called at the wrong time.
+    ///
+    /// Returns `None` if no more handles are available
+    unsafe fn get_core_handle(&self, fifo: Fifo) -> Result<Option<CoreHandle>, BioError>;
+
+    /// This call sets up the BIO's IRQ routing. It doesn't actually claim the IRQ
+    /// or install the handler - that's up to the caller to do with Xous API calls.
+    fn setup_irq_config(&mut self, config: IrqConfig) -> Result<(), BioError>;
+
+    /// Allows BIO cores to DMA to/from the windows specified in `windows`. DMA filtering is
+    /// on by default with no windows allowed.
+    fn setup_dma_windows(&mut self, windows: DmaFilterWindows) -> Result<(), BioError>;
+
+    /// Sets up the BIO I/O configuration
+    fn setup_io_config(&mut self, config: IoConfig) -> Result<(), BioError>;
+
+    /// Sets up a FIFO event trigger
+    fn setup_fifo_event_triggers(&mut self, config: FifoEventConfig) -> Result<(), BioError>;
+
+    /// Returns a version code for the underlying hardware.
+    fn get_version(&self) -> u32;
+}
+
+#[macro_export]
+/// This macro takes three identifiers and assembly code:
+///   - name of the function to call to retrieve the assembled code
+///   - a unique identifier that serves as label name for the start of the code
+///   - a unique identifier that serves as label name for the end of the code
+///   - a comma separated list of strings that form the assembly itself
+///
+///   *** The comma separated list must *not* end in a comma. ***
+///
+///   The macro is unable to derive names of functions or identifiers for labels
+///   due to the partially hygienic macro rules of Rust, so you have to come
+///   up with a list of unique names by yourself.
+macro_rules! bio_code {
+    ($fn_name:ident, $name_start:ident, $name_end:ident, $($item:expr),*) => {
+        pub fn $fn_name() -> &'static [u8] {
+            extern "C" {
+                static $name_start: *const u8;
+                static $name_end: *const u8;
+            }
+            // skip the first 4 bytes, as they contain the loading offset
+            unsafe { core::slice::from_raw_parts($name_start.add(4), ($name_end as usize) - ($name_start as usize) - 4)}
+        }
+
+        core::arch::global_asm!(
+            ".align 4",
+            concat!(".globl ", stringify!($name_start)),
+            concat!(stringify!($name_start), ":"),
+            ".word .",
+            $($item),*
+            , ".align 4",
+            concat!(".globl ", stringify!($name_end)),
+            concat!(stringify!($name_end), ":"),
+            ".word .",
+        );
+    };
+}
+
 #[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum BioOp {
     InitCore,
@@ -396,122 +514,4 @@ impl Drop for CoreHandle {
         )
         .unwrap();
     }
-}
-
-/// A platform-neutral API for the BIO. Intended to be usable in both baremetal and `std` environments
-pub trait BioApi<'a> {
-    /// Initializes a core with the given `code`, loading into `offset`, with a given
-    /// core configuration. This does not start the core running: that needs to be
-    /// done with a separate `set_core_state` call.
-    ///
-    /// Returns a `u32` which is the frequency in Hz of the actual quantum interval that
-    /// the core is running at. It's `None` if an external pin is configured as the quantum source.
-    fn init_core(
-        &mut self,
-        core: BioCore,
-        code: &[u8],
-        offset: usize,
-        config: CoreConfig,
-    ) -> Result<Option<u32>, BioError>;
-
-    /// Releases the core. As a side effect, the core is stopped.
-    fn de_init_core(&mut self, core: BioCore) -> Result<(), BioError>;
-
-    /// Updates the frequency of the cores, used to calculate dividers etc.
-    /// Returns the previous frequency used by the system. Setting this
-    /// allows the sleep/wake clock manager to do a best-effort rescaling of the
-    /// clock dividers for each core as DVFS is applied for power savings.
-    ///
-    /// This API call does not actually *set* the frequency of the BIO complex -
-    /// that is handled by the clock manager. This merely informs the BIO driver
-    /// that the clocks may have changed.
-    fn update_bio_freq(&mut self, freq: u32) -> u32;
-
-    /// Returns the frequency, in Hz, of the incoming clock to the BIO cores.
-    fn get_bio_freq(&self) -> u32;
-
-    /// Returns the currently running frequency of a given BIO core. This API
-    /// exists because `update_bio_freq()` call will result in the dividers being
-    /// adjusted in an attempt to maintain the target quantum; however, there will
-    /// often be some error between what was requested and the actual achievable
-    /// frequency of the quantum interval.
-    fn get_core_freq(&self, core: BioCore) -> Option<u32>;
-
-    /// The index of `which` corresponds to each of the cores, 0-3.
-    fn set_core_state(&mut self, which: [CoreRunSetting; 4]) -> Result<(), BioError>;
-
-    /// Returns a `usize` which should be turned into a CSR as *mut u32 by the caller
-    /// this can then be dereferenced using UTRA abstractions to access the following
-    /// registers:
-    ///   - SFR_FLEVEL
-    ///   - SFR_TXF#
-    ///   - SFR_RXF#
-    ///   - SFR_EVENT_SET
-    ///   - SFR_EVENT_CLR
-    ///   - SFR_EVENT_STATUS
-    ///
-    /// The handle can only access one of the FIFOs, but it has access to all the other
-    /// registers regardless of the FIFO.
-    ///
-    /// The handle has a `Drop` implementation that releases it when it goes out of scope.
-    ///
-    /// Safety: this has to be wrapped in an object that derives a CSR that also tracks
-    /// the lifetime of this object, to prevent `Drop` from being called at the wrong time.
-    ///
-    /// Returns `None` if no more handles are available
-    unsafe fn get_core_handle(&self, fifo: Fifo) -> Result<Option<CoreHandle>, BioError>;
-
-    /// This call sets up the BIO's IRQ routing. It doesn't actually claim the IRQ
-    /// or install the handler - that's up to the caller to do with Xous API calls.
-    fn setup_irq_config(&mut self, config: IrqConfig) -> Result<(), BioError>;
-
-    /// Allows BIO cores to DMA to/from the windows specified in `windows`. DMA filtering is
-    /// on by default with no windows allowed.
-    fn setup_dma_windows(&mut self, windows: DmaFilterWindows) -> Result<(), BioError>;
-
-    /// Sets up the BIO I/O configuration
-    fn setup_io_config(&mut self, config: IoConfig) -> Result<(), BioError>;
-
-    /// Sets up a FIFO event trigger
-    fn setup_fifo_event_triggers(&mut self, config: FifoEventConfig) -> Result<(), BioError>;
-
-    /// Returns a version code for the underlying hardware.
-    fn get_version(&self) -> u32;
-}
-
-#[macro_export]
-/// This macro takes three identifiers and assembly code:
-///   - name of the function to call to retrieve the assembled code
-///   - a unique identifier that serves as label name for the start of the code
-///   - a unique identifier that serves as label name for the end of the code
-///   - a comma separated list of strings that form the assembly itself
-///
-///   *** The comma separated list must *not* end in a comma. ***
-///
-///   The macro is unable to derive names of functions or identifiers for labels
-///   due to the partially hygienic macro rules of Rust, so you have to come
-///   up with a list of unique names by yourself.
-macro_rules! bio_code {
-    ($fn_name:ident, $name_start:ident, $name_end:ident, $($item:expr),*) => {
-        pub fn $fn_name() -> &'static [u8] {
-            extern "C" {
-                static $name_start: *const u8;
-                static $name_end: *const u8;
-            }
-            // skip the first 4 bytes, as they contain the loading offset
-            unsafe { core::slice::from_raw_parts($name_start.add(4), ($name_end as usize) - ($name_start as usize) - 4)}
-        }
-
-        core::arch::global_asm!(
-            ".align 4",
-            concat!(".globl ", stringify!($name_start)),
-            concat!(stringify!($name_start), ":"),
-            ".word .",
-            $($item),*
-            , ".align 4",
-            concat!(".globl ", stringify!($name_end)),
-            concat!(stringify!($name_end), ":"),
-            ".word .",
-        );
-    };
 }
