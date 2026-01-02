@@ -4,7 +4,6 @@ use bao1x_api::bio_code;
 use bao1x_api::bio_resources::*;
 use bao1x_hal::bio::{Bio, CoreCsr};
 use utralib::utra::bio_bdma;
-use utralib::*;
 
 pub enum LedVariant {
     B,
@@ -14,10 +13,13 @@ pub enum LedVariant {
 pub struct Ws2812 {
     bio_ss: Bio,
     bio_pin: u5,
-    tx_handle: CoreHandle,
-    rx_handle: CoreHandle,
+    // handles have to be kept around or else the underlying CSR is dropped
+    _tx_handle: CoreHandle,
+    _rx_handle: CoreHandle,
+    // the CoreCsr is a convenience object that manages the CSR view of the handle
     tx: CoreCsr,
     rx: CoreCsr,
+    // tracks the resources used by the object
     resource_grant: ResourceGrant,
 }
 
@@ -34,7 +36,13 @@ impl Resources for Ws2812 {
 }
 
 impl Drop for Ws2812 {
-    fn drop(&mut self) { self.bio_ss.release_resources(self.resource_grant.grant_id).unwrap(); }
+    fn drop(&mut self) {
+        for &core in self.resource_grant.cores.iter() {
+            self.bio_ss.de_init_core(core).unwrap();
+        }
+        self.bio_ss.release_dynamic_pin(self.bio_pin.as_u8(), &Ws2812::resource_spec().claimer).unwrap();
+        self.bio_ss.release_resources(self.resource_grant.grant_id).unwrap();
+    }
 }
 
 impl Ws2812 {
@@ -47,6 +55,7 @@ impl Ws2812 {
             LedVariant::B => ws2812b_kernel(),
             LedVariant::C => ws2812c_kernel(),
         };
+        log::debug!("grant: {:?}", resource_grant);
         bio_ss.init_core(resource_grant.cores[0], &kernel, 0, config)?;
         bio_ss.set_core_run_state(&resource_grant, true);
 
@@ -73,8 +82,8 @@ impl Ws2812 {
             tx,
             rx: CoreCsr::from_handle(&rx_handle),
             // safety: tx and rx are wrapped in CSR objects whose lifetime matches that of the handles
-            tx_handle,
-            rx_handle,
+            _tx_handle: tx_handle,
+            _rx_handle: rx_handle,
             resource_grant,
         })
     }
@@ -106,9 +115,10 @@ impl Ws2812 {
         self.send_async(strip);
         self.send_await();
     }
-
-    pub fn rgb_to_u32(r: u8, g: u8, b: u8) -> u32 { ((g as u32) << 16) | ((r as u32) << 8) | (b as u32) }
 }
+
+/// Helper function to pack RGB values into u32s
+pub fn rgb_to_u32(r: u8, g: u8, b: u8) -> u32 { ((g as u32) << 16) | ((r as u32) << 8) | (b as u32) }
 
 // WS2812B kernel
 //
