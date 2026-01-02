@@ -94,6 +94,7 @@ members = [
   "services/usb-device-xous",
   "kernel",
   "loader",
+  "libs/bio-lib",
   "libs/blitstr2",
   "libs/chat",
   "libs/flatipc",
