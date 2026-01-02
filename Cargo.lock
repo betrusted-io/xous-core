@@ -691,6 +691,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bio-lib"
+version = "0.1.0"
+dependencies = [
+ "arbitrary-int",
+ "bao1x-api",
+ "bao1x-hal",
+ "bitbybit",
+ "log",
+ "utralib 0.1.26",
+ "xous 0.9.68 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-ticktimer",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1675,10 +1689,12 @@ name = "dabao-console"
 version = "0.1.0"
 dependencies = [
  "aes",
+ "arbitrary-int",
  "bao1x-api",
  "bao1x-emu",
  "bao1x-hal",
  "bao1x-hal-service",
+ "bio-lib",
  "bytemuck",
  "log",
  "num-derive 0.4.2",

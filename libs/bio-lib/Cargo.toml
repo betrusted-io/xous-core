@@ -1,0 +1,14 @@
+[package]
+name = "bio-lib"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+utralib = { version = "0.1.26", default-features = false }
+ticktimer = { package = "xous-api-ticktimer", version = "0.9.67" }
+xous = "0.9.68"
+log = "0.4.14"
+bao1x-hal = { path = "../../libs/bao1x-hal", features = ["std"] }
+bao1x-api = { path = "../../libs/bao1x-api" }
+bitbybit = "1.4.0"
+arbitrary-int = "1.2"

@@ -118,6 +118,7 @@ std = [
     "xous-api-ticktimer",
     "bao1x-api/std",
     "xous-ipc",
+    "rkyv",
 ]
 derive-rkyv = ["rkyv"]
 

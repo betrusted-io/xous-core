@@ -30,6 +30,12 @@ pub mod usb;
 pub use shared_csr::*;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod acram;
+// this implements the abstract library calls for BIO
+#[cfg(all(feature = "std", not(feature = "hosted-baosec")))]
+pub mod bio;
+// this implements the no-std hardware interfaces for BIO
+#[cfg(not(feature = "hosted-baosec"))]
+pub mod bio_hw;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod buram;
 #[cfg(not(feature = "hosted-baosec"))]
