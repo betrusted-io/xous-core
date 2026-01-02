@@ -45,7 +45,6 @@
 // output frequency = fclk / (div_int + div_frac / 256)
 //
 
-use core::marker::PhantomData;
 use core::num::NonZeroU32;
 
 use bitbybit::bitfield;
@@ -69,6 +68,16 @@ pub enum BioOp {
     IoConfig,
     FifoEventTriggers,
     GetVersion,
+
+    // Resource management opcodes
+    ClaimResources,
+    ReleaseResources,
+    ResourceAvailability,
+    CheckResources,
+    CheckResourcesBatch,
+    ClaimDynamicPin,
+    ReleaseDynamicPin,
+
     InvalidCall,
 }
 
@@ -267,7 +276,7 @@ pub struct FifoEventConfig {
     pub trigger_equal_to: bool,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "std", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 #[repr(usize)]
 pub enum Fifo {
@@ -354,62 +363,23 @@ pub struct DmaFilterWindows {
     pub windows: [Option<DmaWindow>; 4],
 }
 
-/*
-#[bitfield(u32)]
-pub struct PackedFifoLevels {
-    #[bits(16..=31)]
-    _padding: u16,
-    #[bits(12..=15)]
-    fifo3_level: arbitrary_int::u4,
-    #[bits(8..=11)]
-    fifo2_level: arbitrary_int::u4,
-    #[bits(4..=7)]
-    fifo1_level: arbitrary_int::u4,
-    #[bits(0..=3)]
-    fifo0_level: arbitrary_int::u4,
-}
-
-#[bitfield(u32)]
-pub struct PackedEvent {
-    #[bits(24..=31)]
-    _padding: u8,
-    #[bits(0..=23)]
-    event: arbitrary_int::u24,
-}
-/// Memory-mapped structure for a FIFO endpoint. The returned structure
-/// is literally mapped on top of the virtual address of the FIFO page starting at offset 0xC.
-/// You could also access these fields using the UTRA abstractions, but with the the CSR base
-/// set to the FIFO alias region
-#[repr(C)]
-pub struct FifoHandle {
-    pub packed_fifo_levels: PackedFifoLevels,
-    pub tx_fifo: [u32; 4],
-    pub rx_fifo: [u32; 4],
-    pub _unused: [u32; 2],
-    pub set_event: PackedEvent,
-    pub clear_event: PackedEvent,
-    pub event_status: PackedEvent,
-}
-*/
-
-pub struct CoreHandle<'a> {
+pub struct CoreHandle {
     conn: xous::CID,
     handle: usize,
     fifo: arbitrary_int::u2,
-    _phantom: PhantomData<&'a ()>,
 }
 
-impl<'a> CoreHandle<'a> {
+impl CoreHandle {
     pub fn new(conn: xous::CID, handle: usize, fifo: arbitrary_int::u2) -> Self {
-        Self { conn, handle, fifo, _phantom: PhantomData }
+        Self { conn, handle, fifo }
     }
 
     /// safety: this needs to be wrapped in a hardware-level CSR object that tracks the lifetime of
     /// the underlying pointer handle.
-    pub unsafe fn handle(&self) -> (usize, PhantomData<&'a ()>) { (self.handle, self._phantom) }
+    pub unsafe fn handle(&self) -> usize { self.handle }
 }
 
-impl Drop for CoreHandle<'_> {
+impl Drop for CoreHandle {
     fn drop(&mut self) {
         // safety: handle was allocated by the OS and is thus safe to re-create as a range
         // the length of the range (one page) is set by the hardware implementation and never changes
@@ -489,7 +459,7 @@ pub trait BioApi<'a> {
     /// the lifetime of this object, to prevent `Drop` from being called at the wrong time.
     ///
     /// Returns `None` if no more handles are available
-    unsafe fn get_core_handle(&'a self, fifo: Fifo) -> Result<Option<CoreHandle<'a>>, BioError>;
+    unsafe fn get_core_handle(&self, fifo: Fifo) -> Result<Option<CoreHandle>, BioError>;
 
     /// This call sets up the BIO's IRQ routing. It doesn't actually claim the IRQ
     /// or install the handler - that's up to the caller to do with Xous API calls.
@@ -528,12 +498,6 @@ macro_rules! bio_code {
                 static $name_start: *const u8;
                 static $name_end: *const u8;
             }
-            /*
-            unsafe {
-                report_api($name_start as u32);
-                report_api($name_end as u32);
-            }
-            */
             // skip the first 4 bytes, as they contain the loading offset
             unsafe { core::slice::from_raw_parts($name_start.add(4), ($name_end as usize) - ($name_start as usize) - 4)}
         }
