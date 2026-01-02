@@ -453,7 +453,7 @@ impl<'a> BioApi<'a> for BioSharedState {
         prev_freq
     }
 
-    unsafe fn get_core_handle(&'a self, _fifo: Fifo) -> Result<Option<CoreHandle<'a>>, BioError> {
+    unsafe fn get_core_handle(&self, _fifo: Fifo) -> Result<Option<CoreHandle>, BioError> {
         unimplemented!("This is managed by the main loop server, not the hardware interface");
     }
 
