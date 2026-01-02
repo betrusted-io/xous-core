@@ -79,7 +79,7 @@ fn bio_service(clk_freq: u32) {
                     // caller should have *already* de-allocated the handle on their side to avoid a race
                     // condition
                     let core = scalar.arg1;
-                    log::info!("core handle {} released", core);
+                    log::debug!("core handle {} released", core);
                     bio_ss.handle_used[core] = false;
                     // that's it - all the bookkeeping is now done.
                 }
