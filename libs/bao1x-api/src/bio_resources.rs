@@ -215,8 +215,10 @@ pub struct DynamicPinRequest {
 /// In no-std/baremetal environments, resource tracking is the programmer's
 /// responsibility.
 ///
-/// The `std`/`no-std` split in the API means that the resource tracking is fundamentally
-/// decoupled from the actual resource usage.
+/// The `std`/`no-std` split in the API means that the resource tracking has to be
+/// decoupled from the actual resource usage. In other words, all `std` drivers
+/// have to first do a step of securing the resources, and then a step of actually
+/// initializing them.
 #[cfg(feature = "std")]
 pub trait BioResources {
     /// Claim resources according to spec.
