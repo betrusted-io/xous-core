@@ -8,20 +8,11 @@ const LED_BIO_PIN: u8 = 5;
 const INIT_STRIP_LENGTH: usize = 6;
 
 pub struct Ws2812 {
-    ws2812: bio_lib::ws2812::Ws2812,
     len: usize,
+    pin: arbitrary_int::u5,
 }
 impl Ws2812 {
-    pub fn new() -> Self {
-        Ws2812 {
-            ws2812: bio_lib::ws2812::Ws2812::new(
-                bio_lib::ws2812::LedVariant::B,
-                arbitrary_int::u5::new(LED_BIO_PIN),
-            )
-            .unwrap(),
-            len: INIT_STRIP_LENGTH,
-        }
-    }
+    pub fn new() -> Self { Ws2812 { len: INIT_STRIP_LENGTH, pin: arbitrary_int::u5::new(LED_BIO_PIN) } }
 }
 
 impl<'a> ShellCmdApi<'a> for Ws2812 {
@@ -36,7 +27,17 @@ impl<'a> ShellCmdApi<'a> for Ws2812 {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "pin" => {
+                    if let Some(pin_str) = tokens.next() {
+                        let pin = u8::from_str_radix(pin_str, 10).unwrap_or(LED_BIO_PIN);
+                        log::info!("Setting output pin to BIO pin {}", pin);
+                        self.pin = arbitrary_int::u5::new(pin);
+                    }
+                }
                 "rainbow" => {
+                    let mut ws2812 =
+                        bio_lib::ws2812::Ws2812::new(bio_lib::ws2812::LedVariant::B, self.pin).unwrap();
+
                     let duration = Duration::from_secs(if let Some(duration) = tokens.next() {
                         u64::from_str_radix(duration, 10).unwrap_or(u64::MAX)
                     } else {
@@ -63,7 +64,7 @@ impl<'a> ShellCmdApi<'a> for Ws2812 {
                             }
                         }
                         // send
-                        self.ws2812.send(&strip);
+                        ws2812.send(&strip);
                         env.ticktimer.sleep_ms(10).ok();
                     }
                 }
@@ -77,6 +78,8 @@ impl<'a> ShellCmdApi<'a> for Ws2812 {
                 }
                 "hexcolor" => {
                     if let Some(hexcolor) = tokens.next() {
+                        let mut ws2812 =
+                            bio_lib::ws2812::Ws2812::new(bio_lib::ws2812::LedVariant::B, self.pin).unwrap();
                         if hexcolor.len() != 7 || &hexcolor[0..1] != "#" {
                             write!(ret, "Usage: 'hexcolor #rrggbb'; the # is mandatory").unwrap();
                             return Ok(Some(ret));
@@ -85,7 +88,7 @@ impl<'a> ShellCmdApi<'a> for Ws2812 {
                         let g = u8::from_str_radix(&hexcolor[3..5], 16).unwrap_or(0);
                         let b = u8::from_str_radix(&hexcolor[5..7], 16).unwrap_or(0);
                         let strip = vec![rgb_to_u32(r, g, b); self.len];
-                        self.ws2812.send(&strip);
+                        ws2812.send(&strip);
                     } else {
                         write!(ret, "Usage: 'hexcolor #rrggbb'; the # is mandatory").unwrap();
                     }
