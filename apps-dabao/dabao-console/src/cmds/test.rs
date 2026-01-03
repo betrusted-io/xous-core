@@ -21,6 +21,19 @@ impl<'a> ShellCmdApi<'a> for Test {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "mac" => {
+                    let mut md = bio_lib::mac_demo::MacDemo::new().unwrap();
+                    let a = [0, -1, 32, 6, -10, 5];
+                    let b = 7;
+                    let hw = md.mac_hw(&a, b);
+                    let sw = md.mac_sw(&a, b);
+                    log::info!("result: {}, {}", hw, sw);
+                    if hw == sw {
+                        writeln!(ret, "pass").unwrap();
+                    } else {
+                        writeln!(ret, "fail").unwrap();
+                    }
+                }
                 "timer" => {
                     let start = _env.ticktimer.elapsed_ms();
                     log::info!("Starting test");
