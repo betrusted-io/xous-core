@@ -103,7 +103,8 @@ impl<'a> ShellCmdApi<'a> for Ws2812 {
                     }
                     let mut strip = vec![0u32; self.len];
 
-                    let mut saturation = 0.8;
+                    let saturation = 0.8;
+                    let mut value = 0.05;
                     let mut touch_state = false;
 
                     let mut ws2812 = bio_lib::ws2812::Ws2812::new(
@@ -117,7 +118,7 @@ impl<'a> ShellCmdApi<'a> for Ws2812 {
                     while Instant::now().duration_since(start_time).lt(&duration) {
                         // convert and update values
                         for (i, led) in hues.iter_mut().enumerate() {
-                            let (r, g, b) = hsv_to_rgb(*led, saturation, 0.05);
+                            let (r, g, b) = hsv_to_rgb(*led, saturation, value);
                             // Pack into 24-bit RGB value
                             let rgb_value: u32 = rgb_to_u32(r, g, b);
                             strip[i] = rgb_value;
@@ -131,9 +132,9 @@ impl<'a> ShellCmdApi<'a> for Ws2812 {
 
                         env.ticktimer.sleep_ms(20).ok();
                         if !touch_state & captouch.is_touched() {
-                            saturation = saturation + 0.2;
-                            if saturation > 1.0 {
-                                saturation = 0.0;
+                            value = value + 0.1;
+                            if value > 0.5 {
+                                value = 0.01;
                             }
                         }
                         touch_state = captouch.is_touched();
