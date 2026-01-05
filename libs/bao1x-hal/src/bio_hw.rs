@@ -230,6 +230,7 @@ impl BioSharedState {
             // crate::println!("ldst trial end");
         }
         self.bio.wfo(utra::bio_bdma::SFR_FIFO_CLR_SFR_FIFO_CLR, 0xf);
+        self.set_core_run_states([false, false, false, false]);
     }
 
     pub fn load_code(&mut self, prog: &[u8], offset_bytes: usize, core: BioCore) {
@@ -373,7 +374,7 @@ impl BioSharedState {
             }
             ClockMode::TargetFreqFrac(target) => self.compute_dividers(target, true),
             ClockMode::TargetFreqInt(target) => self.compute_dividers(target, false),
-            ClockMode::ExternalPin(_) => {
+            ClockMode::ExternalPin(pin) => {
                 // disable divisor
                 match core {
                     BioCore::Core0 => self.bio.wo(bio_bdma::SFR_QDIV0, 0),
@@ -381,15 +382,59 @@ impl BioSharedState {
                     BioCore::Core2 => self.bio.wo(bio_bdma::SFR_QDIV2, 0),
                     BioCore::Core3 => self.bio.wo(bio_bdma::SFR_QDIV3, 0),
                 };
+                // set the pin for the clock origin
+                match core {
+                    BioCore::Core0 => {
+                        self.bio.rmwf(bio_bdma::SFR_EXTCLOCK_EXTCLK_GPIO_0, pin.pin_number() as u32)
+                    }
+                    BioCore::Core1 => {
+                        self.bio.rmwf(bio_bdma::SFR_EXTCLOCK_EXTCLK_GPIO_1, pin.pin_number() as u32)
+                    }
+                    BioCore::Core2 => {
+                        self.bio.rmwf(bio_bdma::SFR_EXTCLOCK_EXTCLK_GPIO_2, pin.pin_number() as u32)
+                    }
+                    BioCore::Core3 => {
+                        self.bio.rmwf(bio_bdma::SFR_EXTCLOCK_EXTCLK_GPIO_3, pin.pin_number() as u32)
+                    }
+                };
+                // mask in the core that is now listening to the clock
+                let existing_extclk = self.bio.rf(bio_bdma::SFR_EXTCLOCK_USE_EXTCLK);
+                self.bio.rmwf(bio_bdma::SFR_EXTCLOCK_USE_EXTCLK, (1 << core as u32) | existing_extclk);
+                crate::println!("core: {:?} - extclock {:x}", core, self.bio.r(bio_bdma::SFR_EXTCLOCK));
                 return None;
             }
         };
         let sfr_value = (div_int as u32) << 16 | (div_frac as u32) << 8;
         match core {
-            BioCore::Core0 => self.bio.wo(bio_bdma::SFR_QDIV0, sfr_value),
-            BioCore::Core1 => self.bio.wo(bio_bdma::SFR_QDIV1, sfr_value),
-            BioCore::Core2 => self.bio.wo(bio_bdma::SFR_QDIV2, sfr_value),
-            BioCore::Core3 => self.bio.wo(bio_bdma::SFR_QDIV3, sfr_value),
+            BioCore::Core0 => {
+                self.bio.wo(bio_bdma::SFR_QDIV0, sfr_value);
+                // also mask off extclock if it was previously set.
+                self.bio.rmwf(
+                    bio_bdma::SFR_EXTCLOCK_USE_EXTCLK,
+                    self.bio.rf(bio_bdma::SFR_EXTCLOCK_USE_EXTCLK) & 0b1110,
+                );
+            }
+            BioCore::Core1 => {
+                self.bio.wo(bio_bdma::SFR_QDIV1, sfr_value);
+                self.bio.rmwf(
+                    bio_bdma::SFR_EXTCLOCK_USE_EXTCLK,
+                    self.bio.rf(bio_bdma::SFR_EXTCLOCK_USE_EXTCLK) & 0b1101,
+                );
+            }
+            BioCore::Core2 => {
+                self.bio.wo(bio_bdma::SFR_QDIV2, sfr_value);
+                self.bio.rmwf(
+                    bio_bdma::SFR_EXTCLOCK_USE_EXTCLK,
+                    self.bio.rf(bio_bdma::SFR_EXTCLOCK_USE_EXTCLK) & 0b1011,
+                );
+            }
+            BioCore::Core3 => {
+                self.bio.wo(bio_bdma::SFR_QDIV3, sfr_value);
+                self.bio.rmwf(
+                    bio_bdma::SFR_EXTCLOCK_USE_EXTCLK,
+                    self.bio.rf(bio_bdma::SFR_EXTCLOCK_USE_EXTCLK) & 0xb0111,
+                );
+            }
         };
         Some(actual_freq)
     }
@@ -495,10 +540,33 @@ impl<'a> BioApi<'a> for BioSharedState {
     }
 
     fn setup_io_config(&mut self, config: IoConfig) -> Result<(), BioError> {
-        self.bio.wo(bio_bdma::SFR_IO_I_INV, config.i_inv);
-        self.bio.wo(bio_bdma::SFR_IO_O_INV, config.o_inv);
-        self.bio.wo(bio_bdma::SFR_IO_OE_INV, config.oe_inv);
-        self.bio.wo(bio_bdma::SFR_SYNC_BYPASS, config.sync_bypass);
+        match config.mode {
+            IoConfigMode::Overwrite => {
+                self.bio.wo(bio_bdma::SFR_IO_I_INV, config.i_inv);
+                self.bio.wo(bio_bdma::SFR_IO_O_INV, config.o_inv);
+                self.bio.wo(bio_bdma::SFR_IO_OE_INV, config.oe_inv);
+                self.bio.wo(bio_bdma::SFR_SYNC_BYPASS, config.sync_bypass);
+            }
+            IoConfigMode::SetOnly => {
+                self.bio.wo(bio_bdma::SFR_IO_I_INV, config.i_inv | self.bio.r(bio_bdma::SFR_IO_I_INV));
+                self.bio.wo(bio_bdma::SFR_IO_O_INV, config.o_inv | self.bio.r(bio_bdma::SFR_IO_O_INV));
+                self.bio.wo(bio_bdma::SFR_IO_OE_INV, config.oe_inv | self.bio.r(bio_bdma::SFR_IO_OE_INV));
+                self.bio.wo(
+                    bio_bdma::SFR_SYNC_BYPASS,
+                    config.sync_bypass | self.bio.r(bio_bdma::SFR_SYNC_BYPASS),
+                );
+            }
+            IoConfigMode::ClearOnly => {
+                self.bio.wo(bio_bdma::SFR_IO_I_INV, !config.i_inv & self.bio.r(bio_bdma::SFR_IO_I_INV));
+                self.bio.wo(bio_bdma::SFR_IO_O_INV, !config.o_inv & self.bio.r(bio_bdma::SFR_IO_O_INV));
+                self.bio.wo(bio_bdma::SFR_IO_OE_INV, !config.oe_inv & self.bio.r(bio_bdma::SFR_IO_OE_INV));
+                self.bio.wo(
+                    bio_bdma::SFR_SYNC_BYPASS,
+                    !config.sync_bypass & self.bio.r(bio_bdma::SFR_SYNC_BYPASS),
+                );
+            }
+        }
+        self.iox.set_ports_from_bio_bitmask(config.mapped, config.mode);
 
         let mut sfr = self.bio.r(bio_bdma::SFR_CONFIG);
         if let Some(core) = config.snap_inputs {
@@ -523,7 +591,6 @@ impl<'a> BioApi<'a> for BioSharedState {
         }
         self.bio.wo(bio_bdma::SFR_CONFIG, sfr);
 
-        self.iox.set_ports_from_bio_bitmask(config.mapped);
         Ok(())
     }
 

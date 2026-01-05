@@ -1,4 +1,4 @@
-use bao1x_api::*;
+use bao1x_api::{bio::IoConfigMode, *};
 use utralib::generated::utra::iox;
 
 use crate::SharedCsr;
@@ -191,11 +191,21 @@ impl Iox {
     /// by the mapping request. The index of the array corresponds to the bit position in
     /// the bitmask. You may use this to pass as arguments to further functions
     /// that do things like control slew rate or apply pull-ups.
-    pub fn set_ports_from_bio_bitmask(&self, enable_bitmask: u32) -> [Option<(IoxPort, u8)>; 32] {
+    ///
+    /// Note: IoConfigMode is only lightly tested. ClearOnlyMode in particular could have bugs.
+    pub fn set_ports_from_bio_bitmask(
+        &self,
+        enable_bitmask: u32,
+        mode: IoConfigMode,
+    ) -> [Option<(IoxPort, u8)>; 32] {
         let mut mapping: [Option<(IoxPort, u8)>; 32] = [None; 32];
 
         for i in 0..32 {
-            let enable = ((enable_bitmask >> i) & 1) != 0;
+            let mut enable = ((enable_bitmask >> i) & 1) != 0;
+
+            if mode == IoConfigMode::ClearOnly {
+                enable = !enable;
+            }
 
             if enable {
                 let map: Option<(IoxPort, u8)> = match i {
@@ -235,21 +245,32 @@ impl Iox {
                     31 => Some((IoxPort::PC, 15)),
                     _ => None,
                 };
-                if let Some((port, pin)) = map {
-                    // AF1 must be selected
-                    self.set_alternate_function(port, pin, IoxFunction::AF1);
-                    // then the BIO register must have its bit flipped to 1
-                    self.csr.wo(iox::SFR_PIOSEL, self.csr.r(iox::SFR_PIOSEL) | (1 << i));
-                    mapping[i] = Some((port, pin));
+                if mode == IoConfigMode::Overwrite || mode == IoConfigMode::SetOnly {
+                    if let Some((port, pin)) = map {
+                        // AF1 must be selected
+                        self.set_alternate_function(port, pin, IoxFunction::AF1);
+                        // then the BIO register must have its bit flipped to 1
+                        self.csr.wo(iox::SFR_PIOSEL, self.csr.r(iox::SFR_PIOSEL) | (1 << i));
+                        mapping[i] = Some((port, pin));
+                    }
+                }
+                if mode == IoConfigMode::ClearOnly {
+                    mapping[i] = None;
+                    // ensure that the BIO register bit is not set
+                    self.csr.wo(iox::SFR_PIOSEL, self.csr.r(iox::SFR_PIOSEL) & !(1 << i));
                 }
             } else {
-                mapping[i] = None;
-                // ensure that the BIO register bit is not set
-                self.csr.wo(iox::SFR_PIOSEL, self.csr.r(iox::SFR_PIOSEL) & !(1 << i));
+                if mode == IoConfigMode::Overwrite {
+                    mapping[i] = None;
+                    // ensure that the BIO register bit is not set
+                    self.csr.wo(iox::SFR_PIOSEL, self.csr.r(iox::SFR_PIOSEL) & !(1 << i));
+                }
             }
         }
         mapping
     }
+
+    pub fn get_bio_mapping_bitmask(&self) -> u32 { self.csr.r(iox::SFR_PIOSEL) }
 
     /// Returns the BIO bit that was enabled based on the port and pin specifier given;
     /// returns `None` if the proposed mapping is invalid.
@@ -381,8 +402,8 @@ impl IoSetup for Iox {
         self.set_bio_bit_from_port_and_pin(port, pin)
     }
 
-    fn set_ports_from_bio_bitmask(&self, enable_bitmask: u32) {
-        self.set_ports_from_bio_bitmask(enable_bitmask);
+    fn set_ports_from_bio_bitmask(&self, enable_bitmask: u32, io_mode: bao1x_api::bio::IoConfigMode) {
+        self.set_ports_from_bio_bitmask(enable_bitmask, io_mode);
     }
 }
 
