@@ -1,7 +1,5 @@
 mod api;
 mod servers;
-#[cfg(feature = "board-baosec")]
-use std::sync::{Arc, Mutex};
 
 use bao1x_api::*;
 use bao1x_hal::{iox::Iox, udma::GlobalConfig};
@@ -275,20 +273,12 @@ fn main() {
 
     servers::susres::start_susres_service();
 
-    // claim BIO
-    #[cfg(feature = "board-baosec")]
-    let bio_ss = Arc::new(Mutex::new(xous_bio_bdma::BioSharedState::new()));
-    #[cfg(feature = "board-baosec")]
-    bio_ss.lock().unwrap().init();
-    // setup TRNG server - baosec only because it has an external AV generator
-    #[cfg(feature = "board-baosec")]
-    servers::trng::start_trng_service(&bio_ss);
-    #[cfg(feature = "board-dabao")]
-    servers::trng::start_trng_service();
-    servers::rtc::start_rtc_service();
-
     // TODO: implement a method to fetch the clock setting from susres and put it into here!
     servers::bio::start_bio_service(bao1x_hal::board::DEFAULT_FCLK_FREQUENCY);
+
+    // claim BIO, based on the platform
+    servers::trng::start_trng_service();
+    servers::rtc::start_rtc_service();
 
     let mut msg_opt = None;
     log::debug!("Starting main loop");
@@ -536,7 +526,9 @@ fn main() {
                             _ => scalar.arg2 = 0,
                         }
                     } else {
-                        iox.set_ports_from_bio_bitmask(scalar.arg1 as u32);
+                        let io_mode: bio::IoConfigMode = scalar.arg4.into();
+                        iox.set_ports_from_bio_bitmask(scalar.arg1 as u32, io_mode);
+                        log::debug!("bio_bitmask: {:x}", iox.get_bio_mapping_bitmask());
                         // no return values need to be set
                     }
                 }

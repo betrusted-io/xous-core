@@ -523,6 +523,7 @@ dependencies = [
  "arbitrary-int",
  "bao1x-api",
  "bao1x-hal",
+ "bio-lib",
  "bitbybit",
  "bitfield",
  "bytemuck",
@@ -541,7 +542,6 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-bio-bdma",
  "xous-ipc 0.10.8 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

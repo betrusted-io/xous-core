@@ -21,13 +21,14 @@ Conventions:
 enables the runtime tracking of what resources are used by which application.
 - All libraries should implement a `Drop` trait that frees up the resources when the object
 goes out of scope.
+- The `baosec` platform reserves `FIFO0` and one core (`Core0`) to process the output of the TRNG. Applications intending to be compatible with this platform should thus avoid using these resources.
 
 ### API references
 
 Traits are documented in-line with their definition:
 
-- See `libs/bao1x-api/src/bio_resources.rs` for the `BioResources` trait.
-- See `libs/bao1x-api/src/bio.rs` for the `BioApi` trait.
+- See `libs/bao1x-api/src/bio_resources.rs` for the `BioResources` trait. These traits are concerned with communicating to the dynamic resource tracker to determine if the application can be run on the current system.
+- See `libs/bao1x-api/src/bio.rs` for the `BioApi` trait. These traits are concerned with configuring the actual hardware itself.
 
 BIO assembly code must be wrapped in the `bio_code` macro. Arguments are:
 

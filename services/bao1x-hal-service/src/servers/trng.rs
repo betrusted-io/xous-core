@@ -1,6 +1,5 @@
 #[cfg(feature = "board-baosec")]
-use std::sync::{Arc, Mutex};
-
+use bao1x_api::bio::IoConfigMode;
 #[cfg(feature = "board-dabao")]
 use bao1x_hal_service::trng::Trng;
 use bao1x_hal_service::trng::api;
@@ -9,12 +8,8 @@ use num_traits::*;
 #[cfg(feature = "board-baosec")]
 use rand::RngCore;
 use xous::CID;
-#[cfg(feature = "board-baosec")]
-use xous_bio_bdma::BioSharedState;
 use xous_ipc::Buffer;
 
-#[cfg(feature = "board-baosec")]
-use crate::servers::baosec_hw::HwTrng;
 #[derive(Copy, Clone, Debug)]
 #[allow(dead_code)]
 struct ScalarCallback {
@@ -24,21 +19,24 @@ struct ScalarCallback {
 }
 
 #[cfg(feature = "board-baosec")]
-pub fn start_trng_service(bio_ss: &Arc<Mutex<BioSharedState>>) {
+pub fn start_trng_service() {
     std::thread::spawn({
-        let bio_ss = bio_ss.clone();
         move || {
-            trng_service(bio_ss);
+            trng_service();
         }
     });
 }
 #[cfg(feature = "board-baosec")]
-fn trng_service(bio_ss: Arc<Mutex<BioSharedState>>) -> ! {
+fn trng_service() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     // unlimited connections allowed, anyone including less-trusted processes can get a random number
     let trng_sid = xns.register_name(api::SERVER_NAME_TRNG, None).expect("can't register server");
 
-    let mut trng = Box::new(HwTrng::new(bio_ss));
+    let iox = bao1x_api::IoxHal::new();
+    let power = bao1x_hal::board::setup_trng_power_pin(&iox);
+    let data = bao1x_hal::board::setup_trng_input_pin(&iox);
+    let av_trng = bio_lib::av_trng::AvTrng::new(data, power, Some(IoConfigMode::Overwrite)).unwrap();
+    let mut trng = crate::servers::baosec_hw::HwTrng::new(av_trng);
 
     let mut error_cb_conns = Vec::<ScalarCallback>::new();
 

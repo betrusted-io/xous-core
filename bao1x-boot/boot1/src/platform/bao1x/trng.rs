@@ -23,6 +23,7 @@ impl ManagedTrng {
             let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
 
             let trng_pin = bao1x_hal::board::setup_trng_input_pin(&iox);
+            let bio_bit = bao1x_api::bio::port_and_pin_to_bio_bit(trng_pin.0, trng_pin.1).unwrap();
             let trng_power = bao1x_hal::board::setup_trng_power_pin(&iox);
             iox.set_gpio_pin(trng_power.0, trng_power.1, bao1x_api::IoxValue::High);
             crate::delay(50); // wait for power to stabilize on the avalanche generator
@@ -40,12 +41,12 @@ impl ManagedTrng {
             bio_ss.bio.wo(
                 utra::bio_bdma::SFR_EXTCLOCK,
                 bio_ss.bio.ms(utra::bio_bdma::SFR_EXTCLOCK_USE_EXTCLK, 0b0001)
-                    | bio_ss.bio.ms(utra::bio_bdma::SFR_EXTCLOCK_EXTCLK_GPIO_0, trng_pin as u32),
+                    | bio_ss.bio.ms(utra::bio_bdma::SFR_EXTCLOCK_EXTCLK_GPIO_0, bio_bit.value() as u32),
             );
 
             // start the machine
             bio_ss.set_core_run_states([true, false, false, false]);
-            bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, trng_pin as u32); // start the sampling
+            bio_ss.bio.wo(utra::bio_bdma::SFR_TXF0, bio_bit.value() as u32); // start the sampling
 
             // check if the TRNG seems to be working. If not, reject the board setting and reboot
             /*
