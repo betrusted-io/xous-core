@@ -42,6 +42,7 @@ fn bio_service(clk_freq: u32) {
                     )
                 };
                 let mut config = buf.to_original::<CoreInitRkyv, _>().unwrap();
+                log::trace!("initing with {:x?}", config.config);
                 match bio_ss.init_core(config.core, &config.code, config.offset, config.config) {
                     Ok(freq) => {
                         config.actual_freq = freq;
@@ -53,6 +54,7 @@ fn bio_service(clk_freq: u32) {
                     }
                 }
                 buf.replace(config).unwrap();
+                log::debug!("extclk: {:x}", bio_ss.bio.r(utralib::utra::bio_bdma::SFR_EXTCLOCK));
             }
 
             BioOp::DeInitCore => {
@@ -125,6 +127,10 @@ fn bio_service(clk_freq: u32) {
                     log::debug!("setting: {:?}", which);
                     bio_ss.set_core_state(which).unwrap();
                     log::debug!("core state: {:x}", bio_ss.bio.r(utralib::utra::bio_bdma::SFR_CTRL));
+                    log::trace!("qdiv0 {:x}", bio_ss.bio.r(utralib::utra::bio_bdma::SFR_QDIV0));
+                    log::trace!("qdiv1 {:x}", bio_ss.bio.r(utralib::utra::bio_bdma::SFR_QDIV1));
+                    log::trace!("qdiv2 {:x}", bio_ss.bio.r(utralib::utra::bio_bdma::SFR_QDIV2));
+                    log::trace!("qdiv3 {:x}", bio_ss.bio.r(utralib::utra::bio_bdma::SFR_QDIV3));
                 }
             }
 

@@ -536,7 +536,9 @@ fn main() {
                             _ => scalar.arg2 = 0,
                         }
                     } else {
-                        iox.set_ports_from_bio_bitmask(scalar.arg1 as u32);
+                        let io_mode: bio::IoConfigMode = scalar.arg4.into();
+                        iox.set_ports_from_bio_bitmask(scalar.arg1 as u32, io_mode);
+                        log::debug!("bio_bitmask: {:x}", iox.get_bio_mapping_bitmask());
                         // no return values need to be set
                     }
                 }
