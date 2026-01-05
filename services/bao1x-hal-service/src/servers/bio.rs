@@ -16,16 +16,6 @@ fn bio_service(clk_freq: u32) {
     let mut resource_tracker = ResourceTracker::new();
 
     let mut bio_ss = bio_hw::BioSharedState::new(clk_freq);
-    // on baosec platforms, the TRNG occupies core0 and FIFO0. Mark these resources as used.
-    // The setup of the TRNG BIO application happened in the bootloader, so we just need to
-    // mark the resources as taken here.
-    #[cfg(feature = "board-baosec")]
-    {
-        bio_ss.handle_used = [true, false, false, false];
-        bio_ss.core_config =
-            [Some(CoreConfig { clock_mode: ClockMode::FixedDivider(1, 0) }), None, None, None];
-        resource_tracker.reserve_boot_resources("TRNG", Some(BioCore::Core0), Some(Fifo::Fifo0));
-    }
     let mut msg_opt = None;
     loop {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();

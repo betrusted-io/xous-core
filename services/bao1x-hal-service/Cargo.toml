@@ -18,12 +18,7 @@ log = "0.4.14"
 xous-api-susres = "0.9.67"
 bao1x-hal = { path = "../../libs/bao1x-hal", default-features = false }
 bao1x-api = { path = "../../libs/bao1x-api", features = ["derive-rkyv", "std"] }
-# xous-pl230 = { path = "../../libs/xous-pl230", features = ["bao1x"] }
-xous-bio-bdma = { path = "../../libs/xous-bio-bdma", default-features = false, features = [
-    "bao1x",
-    "bio-mul",
-    "std",
-] }
+bio-lib = { path = "../../libs/bio-lib" }
 # I'm not entirely in love with the aborted attempt to use flatipc in Xous, but we use
 # this because it makes the API backward-compatible with older Xous code.
 flatipc = { path = "../../libs/flatipc" }
