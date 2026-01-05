@@ -46,7 +46,7 @@ impl Drop for Ws2812 {
 }
 
 impl Ws2812 {
-    pub fn new(variant: LedVariant, bio_pin: u5) -> Result<Ws2812, BioError> {
+    pub fn new(variant: LedVariant, bio_pin: u5, io_mode: Option<IoConfigMode>) -> Result<Ws2812, BioError> {
         let mut bio_ss = Bio::new();
         // claim core resource and initialize it
         let resource_grant = bio_ss.claim_resources(&Ws2812::resource_spec())?;
@@ -64,8 +64,14 @@ impl Ws2812 {
         // now configure the claimed resource
         let mut io_config = IoConfig::default();
         io_config.mapped = 1 << bio_pin.as_u32();
+
         // snap the outputs to the quantum of the configured core
-        io_config.snap_outputs = Some(resource_grant.cores[0].into());
+        // don't use this - it causes ws2812 to not be compatible with other applications, e.g.
+        // captouch. The main drawback is the timing is every so slightly off but it seems
+        // within tolerance.
+        // io_config.snap_outputs = Some(resource_grant.cores[0].into());
+
+        io_config.mode = io_mode.unwrap_or(IoConfigMode::Overwrite);
         bio_ss.setup_io_config(io_config).unwrap();
 
         // safety: fifo1 and fifo2 are stored in the Ws2812 object so they aren't Drop'd before the object is
