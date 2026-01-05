@@ -4,40 +4,6 @@
 //! and pins are explicitly managed. That is: we don't try and be clever and try to imply any
 //! allocations. The developer has to correctly identify which engine to place their code on,
 //! and which I/Os, if any, the thing uses.
-//!
-//! Here is the reference for what register correspond to what functions in BIO:
-//!
-//! FIFO - 8-deep fifo head/tail access. Cores halt on overflow/underflow.
-//! - x16 r/w  fifo[0]
-//! - x17 r/w  fifo[1]
-//! - x18 r/w  fifo[2]
-//! - x19 r/w  fifo[3]
-//!
-//! Quantum - core will halt until host-configured clock divider pules occurs,
-//! or an external event comes in on a host-specified GPIO pin.
-//! - x20 -/w  halt to quantum
-//!
-//! GPIO - note clear-on-0 semantics for bit-clear for data pins!
-//!   This is done so we can do a shift-and-move without an invert to
-//!   bitbang a data pin. Direction retains a more "conventional" meaning
-//!   where a write of `1` to either clear or set will cause the action,
-//!   as pin direction toggling is less likely to be in a tight inner loop.
-//! - x21 r/w  write: (x26 & x21) -> gpio pins; read: gpio pins -> x21
-//! - x22 -/w  (x26 & x22) -> `1` will set corresponding pin on gpio
-//! - x23 -/w  (x26 & x23) -> `0` will clear corresponding pin on gpio
-//! - x24 -/w  (x26 & x24) -> `1` will make corresponding gpio pin an output
-//! - x25 -/w  (x26 & x25) -> `1` will make corresponding gpio pin an input
-//! - x26 r/w  mask GPIO action outputs
-//!
-//! Events - operate on a shared event register. Bits [31:24] are hard-wired to FIFO
-//! level flags, configured by the host; writes to bits [31:24] are ignored.
-//! - x27 -/w  mask event sensitivity bits
-//! - x28 -/w  `1` will set the corresponding event bit. Only [23:0] are wired up.
-//! - x29 -/w  `1` will clear the corresponding event bit Only [23:0] are wired up.
-//! - x30 r/-  halt until ((x27 & events) != 0), and return unmasked `events` value
-//!
-//! Core ID & debug:
-//! - x31 r/-  [31:30] -> core ID; [29:0] -> cpu clocks since reset
 
 // Other notes:
 //
@@ -50,6 +16,8 @@ use core::num::NonZeroU32;
 use bitbybit::bitfield;
 use num_traits::ToPrimitive;
 use xous::MemoryRange;
+
+use crate::IoxPort;
 
 pub const BIO_SERVER_NAME: &'static str = "_BIO server_";
 
@@ -323,9 +291,34 @@ pub struct CoreConfig {
     pub clock_mode: ClockMode,
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[repr(usize)]
+#[cfg_attr(feature = "std", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+pub enum IoConfigMode {
+    /// values in the structure will overwrite everything
+    Overwrite = 0,
+    /// only values that are `1` will set the corresponding bit
+    SetOnly = 1,
+    /// only values that are `1` will clear the corresponding bit
+    ClearOnly = 2,
+}
+
+impl From<usize> for IoConfigMode {
+    fn from(value: usize) -> Self {
+        match value {
+            0 => IoConfigMode::Overwrite,
+            1 => IoConfigMode::SetOnly,
+            2 => IoConfigMode::ClearOnly,
+            _ => unimplemented!(),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 #[cfg_attr(feature = "std", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct IoConfig {
+    /// See definition of IoConfigMode enum
+    pub mode: IoConfigMode,
     /// bits set to `1` here are mapped to the BIO instead of the GPIO
     pub mapped: u32,
     /// bits set to `1` in the u32 corresponding to BIO inputs passed in as raw, unsynchronized
@@ -347,6 +340,7 @@ pub struct IoConfig {
 impl Default for IoConfig {
     fn default() -> Self {
         Self {
+            mode: IoConfigMode::Overwrite,
             mapped: 0,
             sync_bypass: 0,
             oe_inv: 0,
@@ -513,5 +507,68 @@ impl Drop for CoreHandle {
             ),
         )
         .unwrap();
+    }
+}
+
+pub fn bio_bit_to_port_and_pin(bit: arbitrary_int::u5) -> (IoxPort, u8) {
+    match bit.value() {
+        // For bao1x the ports should be in correct order
+        0 => (IoxPort::PB, 0),
+        1 => (IoxPort::PB, 1),
+        2 => (IoxPort::PB, 2),
+        3 => (IoxPort::PB, 3),
+        4 => (IoxPort::PB, 4),
+        5 => (IoxPort::PB, 5),
+        6 => (IoxPort::PB, 6),
+        7 => (IoxPort::PB, 7),
+        8 => (IoxPort::PB, 8),
+        9 => (IoxPort::PB, 9),
+        10 => (IoxPort::PB, 10),
+        11 => (IoxPort::PB, 11),
+        12 => (IoxPort::PB, 12),
+        13 => (IoxPort::PB, 13),
+        14 => (IoxPort::PB, 14),
+        15 => (IoxPort::PB, 15),
+        // Port C
+        16 => (IoxPort::PC, 0),
+        17 => (IoxPort::PC, 1),
+        18 => (IoxPort::PC, 2),
+        19 => (IoxPort::PC, 3),
+        20 => (IoxPort::PC, 4),
+        21 => (IoxPort::PC, 5),
+        22 => (IoxPort::PC, 6),
+        23 => (IoxPort::PC, 7),
+        24 => (IoxPort::PC, 8),
+        25 => (IoxPort::PC, 9),
+        26 => (IoxPort::PC, 10),
+        27 => (IoxPort::PC, 11),
+        28 => (IoxPort::PC, 12),
+        29 => (IoxPort::PC, 13),
+        30 => (IoxPort::PC, 14),
+        31 => (IoxPort::PC, 15),
+        _ => unreachable!(),
+    }
+}
+
+pub fn port_and_pin_to_bio_bit(port: IoxPort, pin: u8) -> Option<arbitrary_int::u5> {
+    match port {
+        IoxPort::PA => None,
+        IoxPort::PB => {
+            if pin >= 16 {
+                None
+            } else {
+                let bio_bit = 15 - pin;
+                Some(arbitrary_int::u5::new(bio_bit))
+            }
+        }
+        IoxPort::PC => {
+            if pin < 16 {
+                let bio_bit = pin + 16;
+                Some(arbitrary_int::u5::new(bio_bit))
+            } else {
+                None
+            }
+        }
+        _ => None,
     }
 }

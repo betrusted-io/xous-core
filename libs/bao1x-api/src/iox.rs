@@ -83,7 +83,7 @@ pub trait IoSetup {
         strength: Option<IoxDriveStrength>,
     );
     fn set_bio_bit_from_port_and_pin(&self, port: IoxPort, pin: u8) -> Option<u8>;
-    fn set_ports_from_bio_bitmask(&self, enable_bitmask: u32);
+    fn set_ports_from_bio_bitmask(&self, enable_bitmask: u32, io_mode: crate::bio::IoConfigMode);
 }
 
 /// Traits for accessing GPIOs after the port has been set up.
@@ -225,7 +225,9 @@ impl IoxHal {
     /// by the mapping request. The index of the array corresponds to the bit position in
     /// the bitmask. You may use this to pass as arguments to further functions
     /// that do things like control slew rate or apply pull-ups.
-    pub fn set_ports_from_bio_bitmask(&self, enable_bitmask: u32) {
+    ///
+    /// Note: IoConfigMode is only lightly tested. ClearOnly mode in particular could have bugs.
+    pub fn set_ports_from_bio_bitmask(&self, enable_bitmask: u32, io_mode: crate::bio::IoConfigMode) {
         xous::send_message(
             self.conn,
             xous::Message::new_blocking_scalar(
@@ -233,7 +235,7 @@ impl IoxHal {
                 enable_bitmask as usize,
                 0,
                 1,
-                0,
+                io_mode as usize,
             ),
         )
         .expect("Internal error setting up BIO");
@@ -288,7 +290,7 @@ impl IoSetup for IoxHal {
         }
     }
 
-    fn set_ports_from_bio_bitmask(&self, enable_bitmask: u32) {
+    fn set_ports_from_bio_bitmask(&self, enable_bitmask: u32, io_mode: crate::bio::IoConfigMode) {
         xous::send_message(
             self.conn,
             xous::Message::new_blocking_scalar(
@@ -296,7 +298,7 @@ impl IoSetup for IoxHal {
                 enable_bitmask as usize,
                 0,
                 1,
-                0,
+                io_mode as usize,
             ),
         )
         .expect("Internal error setting up BIO");
