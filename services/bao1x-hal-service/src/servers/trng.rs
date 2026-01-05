@@ -1,3 +1,4 @@
+#[cfg(feature = "board-baosec")]
 use bao1x_api::bio::IoConfigMode;
 #[cfg(feature = "board-dabao")]
 use bao1x_hal_service::trng::Trng;
