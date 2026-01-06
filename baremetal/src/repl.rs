@@ -893,13 +893,14 @@ impl Repl {
                 let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
                 let (power_port, power_pin) = bao1x_hal::board::setup_trng_power_pin(&iox);
                 let bio_input = bao1x_hal::board::setup_trng_input_pin(&iox);
+                let bio_mask = bao1x_api::bio::port_and_pin_to_bio_bit(bio_input.0, bio_input.1).unwrap();
                 // turn on the system
                 iox.set_gpio_pin_value(power_port, power_pin, IoxValue::High);
 
                 let mut bio_ss = BioSharedState::new();
                 bio_ss.init();
-                crate::println!("bio_input: {}", bio_input);
-                crate::avtrng::setup(&mut bio_ss, bio_input);
+                crate::println!("bio_input: {}", bio_mask.value());
+                crate::avtrng::setup(&mut bio_ss, bio_mask.value());
 
                 crate::println!("====AVSTART====");
                 const BUFLEN: usize = 256;

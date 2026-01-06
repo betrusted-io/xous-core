@@ -30,7 +30,8 @@ impl<'a> ShellCmdApi<'a> for Ws2812 {
     fn process(&mut self, args: String, env: &mut super::CommonEnv) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::new();
-        let helpstring = "ws2812 [rainbow [<duration>]] [length <pixels>] [hexcolor <#rrggbb>]";
+        let helpstring =
+            "ws2812 [rainbow [<duration>]] [touch [<duration>]] [length <pixels>] [hexcolor <#rrggbb>]";
 
         let mut tokens = args.split(' ');
 
