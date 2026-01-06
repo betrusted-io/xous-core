@@ -17,7 +17,7 @@ impl<'a> ShellCmdApi<'a> for Touch {
     fn process(&mut self, args: String, env: &mut super::CommonEnv) -> Result<Option<String>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::new();
-        let helpstring = "ws2812 [rainbow [<duration>]] [length <pixels>] [hexcolor <#rrggbb>]";
+        let helpstring = "touch [pin] [monitor] [wait-touch] [wait-release] [touch-release]";
 
         let mut tokens = args.split(' ');
 
@@ -34,7 +34,7 @@ impl<'a> ShellCmdApi<'a> for Touch {
                     let mut captouch = bio_lib::captouch::Captouch::new(self.pin, None).unwrap();
                     captouch.calibrate(None).unwrap();
                     loop {
-                        log::info!("{:?}, {}", captouch.is_touched(), captouch.raw_status());
+                        log::info!("{}", captouch.raw_status());
                         env.ticktimer.sleep_ms(100).ok();
                     }
                 }
