@@ -171,7 +171,7 @@ bio_code!(ws2812b_kernel, WS2812B_START, WS2812B_END,
     // LEDs will go onto the stack
     "li x9, 0x1000000", // bit 24 mask
     "li sp, 0x800", // start of the LED buffer
-    "10:",
+"10:",
     // read a 24-bit color number from FIFO1
     "mv x8, x17",
     "sw x8, 0(sp)",
@@ -181,18 +181,23 @@ bio_code!(ws2812b_kernel, WS2812B_START, WS2812B_END,
     "j 10b", // go back and get more data
 
     // -- sending loop --
-    "20:",
+"20:",
     "li x8, 0x800", // x8 now has the starting address of the data we're going to send
     // x9 is the bit 24 mask used by the above loop
     "li x12, 0x800000", // bit 23 mask
     // loop setup done
-    "30:",
+"30:",
     "li x11, 24", // number of bits to shift through
     "lw x10, 0(x8)", // fetch the word to send
     // "mv x18, x10", // debug by looping back -----------
-    "31:",
+"31:",
     "and x13, x12, x10", // the bit we're contemplating is at bit 23 position, extract it into x13
     "bne x13, x0, 40f", // if 1, go to 40f, where the 1 routine is
+
+    "mv x20, x0", // snap to quantum before doing the send routine - this improves timing uniformity of high pulses
+    // at the expense of T1L time being a little out of spec, but this is better-tolerated than T0H time being variable.
+    // this quantum snap has to be introduced here because snap quantum to output makes the ws2812 driver not
+    // composable with other BIO applications
 
     // zero routine
     // 2 hi
@@ -214,7 +219,7 @@ bio_code!(ws2812b_kernel, WS2812B_START, WS2812B_END,
     "j 50f", // jump to the loop end check
 
     // one routine
-    "40:",
+"40:",
     // 7 hi
     "mv x22, x4", // sets to 1
     "mv x20, x0", // wait for quantum
@@ -232,16 +237,16 @@ bio_code!(ws2812b_kernel, WS2812B_START, WS2812B_END,
     "addi x11, x11, -1", // decrement the pixel bit counter
     "mv x20, x0",
 
-    "50:", // shift and do the next pixel value
+"50:", // shift and do the next pixel value
     "bne x11, x0, 31b", // go back for more in the loop
 
-    "60:", // check if we've exhausted all the LED values
+"60:", // check if we've exhausted all the LED values
     "addi x8, x8, 4",
     "bge sp, x8, 30b", // see if we've hit the value of current sp
     "li sp, 0x800", // reset the stack pointer for a fresh fetch
     // wait to reset the chain
     "li x14, 2000", // delay wait time to reset the chain per spec
-    "70:",
+"70:",
     "addi x14, x14, -1",
     "mv x20, x0",
     "bne x14, x0, 70b",
