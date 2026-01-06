@@ -249,26 +249,41 @@ bio_code!(
     CAPTOUCH_SENSE_START,
     CAPTOUCH_SENSE_END,
 
-    "mv    t0, x19",         // Load pin mask into register t0.
-    "mv    x26, t0",         // Set GPIO mask to our pin.
+    "mv    x5, x19",         // Load pin mask into register x5.
+    "mv    x26, x5",         // Set GPIO mask to our pin.
 "10:", // start of sensor loop
-    "mv    x24, t0",         // Configure pin as an OUTPUT.
+    "mv    x24, x5",         // Configure pin as an OUTPUT.
     "mv    x23, x0",         // Drive pin LOW.
 
-    "li    t3, 0x200",
-"20:", // wait loop for "low" settling
-    "addi  t3, t3, -1",
-    "bne   t3, x0, 20b",
+    "li    x6, 0x100",
+"20:", // wait loop for "low" settling - this can be made much shorter if needed
+    // as it is, the sampling rate is about 236kHz, which is already quite high
+    "addi  x6, x6, -1",
+    "bne   x6, x0, 20b",
 
-    "mv    s0,  x31",        // remember aclk time
-    "mv    x25, t0",         // make it an input
+    "mv    x7,  x31",        // remember aclk time
+    "mv    x25, x5",         // make it an input
     // now, the pull-up on the pin will slowly charge the capacitance on the pin. We wait
     // for the rising edge to be detected and that is our captouch interval
     "mv    x20, x0",         // wait for quantum: based on EXTCLK rising edge on the configured pin
 
-    "mv    s1,  x31",        // remember aclk time
-    "sub   t2, s1, s0",
-    "mv    x19, t2",         // report the delta-t
+    "mv    x8,  x31",        // remember aclk time
+
+    // mask out core ID
+    "li    x10, 0x3FFFFFFF",  // x10 is re-used in roll-over computation below
+    "and   x7, x7, x10",
+    "and   x8, x8, x10",
+
+    // handle roll-over case: x7 is greater than x8 in the case of roll-over
+    "bgtu  x7, x8, 30f",
+    "sub   x9, x8, x7",      // total cycles is x8 - x7
+    "j 40f",
+"30:", // roll-over path
+    "sub   x10, x10, x7",      // x10 now contains cycles from max versus start
+    "add   x9, x10, x8",      // total cycles is x10 + x8 (masked)
+
+"40:",
+    "mv    x19, x9",         // report the delta-t
     // the line below keeps us from blocking on the FIFO being full - we steal our own entry
     // and cause the host to read the stale value in the FIFO.
     "mv    x0, x19",         // drain the FIFO entry - host will read the "stale" empty entry
