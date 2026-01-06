@@ -55,6 +55,7 @@ pub fn claim_main_thread(f: impl FnOnce(MainThreadToken) -> Never + Send + 'stat
     let (send, recv) = mpsc::sync_channel(0);
 
     // Call the closure on a fake main thread
+    #[allow(unreachable_code)] // false positive
     let fake_main_thread = std::thread::Builder::new()
         .name("wrapped_main".into())
         .spawn(move || f(MainThreadToken(send)))

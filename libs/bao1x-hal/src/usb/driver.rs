@@ -20,6 +20,7 @@ use utralib::generated::*;
 use super::compat::AtomicCsr;
 #[cfg(not(feature = "std"))]
 use crate::print;
+#[allow(unused_imports)]
 use crate::println;
 use crate::usb::utra::*;
 

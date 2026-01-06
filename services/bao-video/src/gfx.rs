@@ -31,7 +31,6 @@ pub fn msg<'a>(fb: &mut dyn FrameBuffer, text: &'a str, ll_pos: Point, fg: Color
     // this routine is adapted from the embedded graphics crate https://docs.rs/embedded-graphics/0.7.1/embedded_graphics/
     let char_per_row = FONT_IMAGE_WIDTH / CHAR_WIDTH;
     let mut idx = 0;
-    let mut x_update = 0;
     for current_char in text.chars() {
         let mut char_walk_x = 0;
         let mut char_walk_y = 0;
@@ -82,10 +81,8 @@ pub fn msg<'a>(fb: &mut dyn FrameBuffer, text: &'a str, ll_pos: Point, fg: Color
                     } else if current_char as u8 == 0xa {
                         // '\r'
                         ll_pos.x = LEFT_MARGIN;
-                        x_update = 0;
                     } else {
                         idx += 1;
-                        x_update += CHAR_WIDTH;
                     }
 
                     break;
@@ -93,7 +90,6 @@ pub fn msg<'a>(fb: &mut dyn FrameBuffer, text: &'a str, ll_pos: Point, fg: Color
             }
         }
     }
-    ll_pos.x += x_update;
 }
 
 #[allow(dead_code)]

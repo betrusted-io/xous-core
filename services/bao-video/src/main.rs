@@ -146,6 +146,7 @@ fn handle_irq(_irq_no: usize, arg: *mut usize) {
 
 fn main() -> ! {
     let stack_size = 2 * 1024 * 1024;
+    #[allow(unreachable_code)] // false positive
     claim_main_thread(move |main_thread_token| {
         std::thread::Builder::new()
             .stack_size(stack_size)

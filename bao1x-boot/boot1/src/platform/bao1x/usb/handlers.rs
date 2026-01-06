@@ -762,6 +762,7 @@ fn process_read_command(this: &mut CorigineUsb, cbw: Cbw) {
             length as usize,
         );
         this.ms_state = UmsState::DataPhase;
+        csw.update_hw();
         return;
     }
     crate::println_d!(
@@ -796,6 +797,7 @@ fn process_read_command(this: &mut CorigineUsb, cbw: Cbw) {
         );
         this.ms_state = UmsState::DataPhase;
     }
+    csw.update_hw();
 }
 
 fn process_write_command(this: &mut CorigineUsb, cbw: Cbw) {
