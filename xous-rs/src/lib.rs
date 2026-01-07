@@ -5,6 +5,7 @@ pub mod arch;
 pub mod carton;
 pub mod definitions;
 
+pub mod pagebuffer;
 pub mod process;
 pub mod services;
 pub mod string;
@@ -13,6 +14,7 @@ pub mod syscall;
 
 pub use arch::{ProcessArgs, ProcessInit, ProcessKey, ProcessStartup, ThreadInit};
 pub use definitions::*;
+pub use pagebuffer::*;
 pub use string::*;
 pub use stringbuffer::*;
 pub use syscall::*;

@@ -16,7 +16,7 @@ impl<'a> ProcessArgs<'a> {
         stub: &[u8],
         load_address: crate::MemoryAddress,
         entrypoint: crate::MemoryAddress,
-    ) -> ProcessArgs {
+    ) -> ProcessArgs<'_> {
         ProcessArgs {
             load_address,
             entrypoint,

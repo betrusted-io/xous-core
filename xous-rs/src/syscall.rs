@@ -561,6 +561,17 @@ pub enum SysCall {
     #[cfg(feature = "raw-trng")]
     RawTrng(usize, usize, usize, usize, usize, usize, usize),
 
+    /// Used for platform specific kernel ABIs. Generally reserved for things like debug,
+    /// performance-monitoring, and power management.
+    ///
+    /// ## Arguments
+    ///   * In general, the first `usize` is a meta-opcode that helps dispatch what the nature of the
+    ///     remaining arguments should be.
+    ///
+    /// ## Returns
+    /// Returns a Scalar5, whose ABI is determined by the meta-opcode
+    PlatformSpecific(usize, usize, usize, usize, usize, usize, usize),
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -618,6 +629,7 @@ pub enum SysCallNumber {
     SwapOp = 44,
     #[cfg(feature = "raw-trng")]
     RawTrng = 45,
+    PlatformSpecific = 46,
 }
 
 impl SysCallNumber {
@@ -673,6 +685,7 @@ impl SysCallNumber {
             44 => SwapOp,
             #[cfg(feature = "raw-trng")]
             45 => RawTrng,
+            46 => PlatformSpecific,
             _ => Invalid,
         }
     }
@@ -926,6 +939,9 @@ impl SysCall {
             SysCall::RawTrng(a1, a2, a3, a4, a5, a6, a7) => {
                 [SysCallNumber::RawTrng as usize, *a1, *a2, *a3, *a4, *a5, *a6, *a7]
             }
+            SysCall::PlatformSpecific(a1, a2, a3, a4, a5, a6, a7) => {
+                [SysCallNumber::PlatformSpecific as usize, *a1, *a2, *a3, *a4, *a5, *a6, *a7]
+            }
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => {
                 [SysCallNumber::Invalid as usize, *a1, *a2, *a3, *a4, *a5, *a6, *a7]
             }
@@ -1080,6 +1096,7 @@ impl SysCall {
             SysCallNumber::SwapOp => SysCall::SwapOp(a1, a2, a3, a4, a5, a6, a7),
             #[cfg(feature = "raw-trng")]
             SysCallNumber::RawTrng => SysCall::RawTrng(a1, a2, a3, a4, a5, a6, a7),
+            SysCallNumber::PlatformSpecific => SysCall::PlatformSpecific(a1, a2, a3, a4, a5, a6, a7),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }

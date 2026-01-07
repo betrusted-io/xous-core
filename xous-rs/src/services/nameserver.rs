@@ -70,11 +70,11 @@ pub fn connect(name: &str) -> Option<crate::CID> {
 
         if result == 0 {
             let cid = unsafe { response_ptr.add(1).read() };
-            let mut token = [0u32; 4];
-            token[0] = unsafe { response_ptr.add(2).read() };
-            token[1] = unsafe { response_ptr.add(3).read() };
-            token[2] = unsafe { response_ptr.add(4).read() };
-            token[3] = unsafe { response_ptr.add(5).read() };
+            // let mut token = [0u32; 4];
+            // token[0] = unsafe { response_ptr.add(2).read() };
+            // token[1] = unsafe { response_ptr.add(3).read() };
+            // token[2] = unsafe { response_ptr.add(4).read() };
+            // token[3] = unsafe { response_ptr.add(5).read() };
             // println!("Successfully connected to {}. CID: {}, token: {:?}", name, cid, token);
             Some(cid)
         } else {
