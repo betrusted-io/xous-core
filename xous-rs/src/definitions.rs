@@ -143,6 +143,34 @@ pub enum Error {
     DoubleFree = 25,
     DebugInProgress = 26,
     InvalidLimit = 27,
+    /// For lookups that result in not found (e.g., searching for keys, resources, names)
+    NotFound = 28,
+    /// Used when try_from/try_into can't map a number into a smaller number of options
+    InvalidCoding = 29,
+    /// Used for ECC errors, glitches, power failures, etc.
+    HardwareError = 30,
+    /// Used when buffers & messages fail to serialize or deserialize
+    SerializationError = 31,
+    /// Used when a call is correct but its arguments are out of bounds, invalid, or otherwise poorly
+    /// specified
+    InvalidArgument = 32,
+    /// Catch-all for networking related problems (unreachable network, etc.)
+    NetworkError = 33,
+    /// Catch-all for storage related problems (particularly write/read ECC errors)
+    StorageError = 34,
+    /// Catch-all for resources that are busy or already allocated
+    Unavailable = 35,
+    /// For failed parsing attempts
+    ParseError = 36,
+    /// Invalid core number on multi-core APIs
+    InvalidCore = 37,
+    /// Reports when verification/check steps fail. Thrown when correctly functioning algorithms determine
+    /// that an object is invalid.
+    VerificationError = 38,
+    /// Used to report higher-severity system security/integrity issues, such as glitch attacks, ECC errors,
+    /// memory violations, bad states for hardened bools. Note that bad passwords/credentials should use
+    /// "AccessDenied"
+    SecurityError = 39,
 }
 
 impl Error {
@@ -176,6 +204,18 @@ impl Error {
             25 => DoubleFree,
             26 => DebugInProgress,
             27 => InvalidLimit,
+            28 => NotFound,
+            29 => InvalidCoding,
+            30 => HardwareError,
+            31 => SerializationError,
+            32 => InvalidArgument,
+            33 => NetworkError,
+            34 => StorageError,
+            35 => Unavailable,
+            36 => ParseError,
+            37 => InvalidCore,
+            38 => VerificationError,
+            39 => SecurityError,
             _ => UnknownError,
         }
     }
@@ -210,6 +250,18 @@ impl Error {
             DoubleFree => 25,
             DebugInProgress => 26,
             InvalidLimit => 27,
+            NotFound => 28,
+            InvalidCoding => 29,
+            HardwareError => 30,
+            SerializationError => 31,
+            InvalidArgument => 32,
+            NetworkError => 33,
+            StorageError => 34,
+            Unavailable => 35,
+            ParseError => 36,
+            InvalidCore => 37,
+            VerificationError => 38,
+            SecurityError => 39,
             UnknownError => usize::MAX,
         }
     }
