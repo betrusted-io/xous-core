@@ -54,9 +54,9 @@ pub fn handle(irqs_pending: usize) -> Result<xous_kernel::Result, xous_kernel::E
 }
 
 #[allow(dead_code)] // needed to silence a hosted mode warning
-pub fn for_each_irq<F>(op: F)
+pub fn for_each_irq<F>(mut op: F)
 where
-    F: Fn(usize, &PID, MemoryAddress, Option<MemoryAddress>),
+    F: FnMut(usize, &PID, MemoryAddress, Option<MemoryAddress>),
 {
     unsafe {
         for (idx, handler) in (&mut *(&raw mut IRQ_HANDLERS)).iter().enumerate() {

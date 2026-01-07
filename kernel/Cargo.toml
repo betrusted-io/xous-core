@@ -69,6 +69,8 @@ memmap-flash = []
 debug-swap = []
 debug-swap-verbose = []
 raw-trng = ["xous-kernel/raw-trng"]
+# this is somewhat unsafe because it introduces more attack surface for the kernel by allowing the
+# userspace to hand it a random page from the caller's virtual memory space, and populate it with debug information
 debug-proc = []
 
 # patches for simulation targets ONLY. Applying these flags will result in totally broken security.

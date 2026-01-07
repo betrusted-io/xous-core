@@ -264,6 +264,7 @@ impl MemoryMapping {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn phys_to_virt(&self, phys: usize) -> Result<Option<u32>, xous_kernel::Error> {
         let mut found = None;
         let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
