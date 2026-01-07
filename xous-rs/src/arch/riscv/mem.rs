@@ -17,6 +17,7 @@ pub const PAGE_SIZE: usize = 4096;
 pub const PAGE_TABLE_OFFSET: usize = 0xff40_0000;
 pub const PAGE_TABLE_ROOT_OFFSET: usize = 0xff80_0000;
 pub const THREAD_CONTEXT_AREA: usize = 0xff80_1000;
+pub const USERSPACE_BUFFER: usize = 0xff90_0000;
 
 pub const FLG_VALID: usize = 0x1;
 pub const FLG_R: usize = 0x2;
@@ -37,6 +38,7 @@ pub const SWAP_RPT_VADDR: usize = 0xE100_1000;
 pub const SWAP_COUNT_VADDR: usize = 0xE110_0000;
 pub const SWAP_APP_UART_VADDR: usize = 0xE180_0000;
 pub const SWAP_APP_UART_IFRAM_VADDR: usize = 0xE180_1000;
+pub const SWAP_STACK_TOP_VADDR: usize = 0xE800_0000;
 
 pub fn map_memory_pre(
     _phys: &Option<MemoryAddress>,
