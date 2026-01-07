@@ -9,13 +9,13 @@ edition = "2021"
 utralib = { version = "0.1.26", optional = true, default-features = false, features = [
     "bao1x",
 ] }
-xous-names = { package = "xous-api-names", version = "0.9.69" }
-ticktimer = { package = "xous-api-ticktimer", version = "0.9.67" }
-xous = { version = "0.9.68", features = ["raw-trng"] }
-xous-ipc = "0.10.8"
-log-server = { package = "xous-api-log", version = "0.1.67" }
+xous-names = { package = "xous-api-names", version = "0.9.70" }
+ticktimer = { package = "xous-api-ticktimer", version = "0.9.68" }
+xous = { version = "0.9.69", features = ["raw-trng"] }
+xous-ipc = "0.10.9"
+log-server = { package = "xous-api-log", version = "0.1.68" }
 log = "0.4.14"
-xous-api-susres = "0.9.67"
+xous-api-susres = "0.9.68"
 bao1x-hal = { path = "../../libs/bao1x-hal", default-features = false }
 bao1x-api = { path = "../../libs/bao1x-api", features = ["derive-rkyv", "std"] }
 bio-lib = { path = "../../libs/bio-lib" }

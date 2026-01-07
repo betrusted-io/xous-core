@@ -10,9 +10,9 @@ homepage = "https://betrusted.io/xous-book/"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous-api-log = { package = "xous-api-log", version = "0.1.67" }
-xous = "0.9.68"
-xous-ipc = "0.10.8"
+xous-api-log = { package = "xous-api-log", version = "0.1.68" }
+xous = "0.9.69"
+xous-ipc = "0.10.9"
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }

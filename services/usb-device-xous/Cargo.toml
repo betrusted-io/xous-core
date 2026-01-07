@@ -7,11 +7,11 @@ description = "Xous USB device drivers"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.68"
-xous-ipc = "0.10.8"
-log-server = { package = "xous-api-log", version = "0.1.67" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.67" }
-xous-names = { package = "xous-api-names", version = "0.9.69" }
+xous = "0.9.69"
+xous-ipc = "0.10.9"
+log-server = { package = "xous-api-log", version = "0.1.68" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.68" }
+xous-names = { package = "xous-api-names", version = "0.9.70" }
 log = "0.4.14"
 llio = { path = "../llio" }
 num-derive = { version = "0.4.2", default-features = false }
@@ -20,7 +20,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
 ] }
-susres = { package = "xous-api-susres", version = "0.9.67" }
+susres = { package = "xous-api-susres", version = "0.9.68" }
 modals = { path = "../modals", optional = true }
 keyboard = { path = "../keyboard", features = ["inject-api"], optional = true }
 bitfield = "0.13.2"
