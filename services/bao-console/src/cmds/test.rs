@@ -15,7 +15,7 @@ impl<'a> ShellCmdApi<'a> for Test {
         let mut ret = String::new();
 
         #[allow(unused_variables)]
-        let helpstring = "Test commands. See code for options.";
+        let helpstring = "test [proc] [freemem] [interrupts]; see code for other test commands.";
 
         #[cfg(feature = "bmp180")]
         let helpstring = "Usage:
@@ -147,36 +147,43 @@ impl<'a> ShellCmdApi<'a> for Test {
                     gfx.set_power(true).unwrap();
                 }
                 "proc" => {
-                    // hard coded - debug feature - if the swap server changes its name or opcode map this can
-                    // break, but also this routine is not meant for public consumption
-                    // and coding it here avoids a dependency to the crate.
-                    let s = _env.xns.request_connection_blocking("_swapper server_").unwrap();
-                    xous::send_message(s, xous::Message::new_scalar(9, 0, 0, 0, 0)).unwrap();
-                    log::info!("Check kernel debug log for proc listing");
-                }
-                "servers" => {
-                    // hard coded - debug feature - if the swap server changes its name or opcode map this can
-                    // break, but also this routine is not meant for public consumption
-                    // and coding it here avoids a dependency to the crate.
-                    let s = _env.xns.request_connection_blocking("_swapper server_").unwrap();
-                    xous::send_message(s, xous::Message::new_scalar(10, 0, 0, 0, 0)).unwrap();
-                    log::info!("Check kernel debug log for server listing");
+                    // hard coded - debug feature - if the platform ABI changes its name or opcode map this
+                    // can break, but also this routine is not meant for public
+                    // consumption and coding it here avoids breaking dependencies to the Xous API crate.
+                    let page_buf = xous::PageBuf::new();
+                    xous::rsyscall(xous::SysCall::PlatformSpecific(2, page_buf.as_ptr(), 0, 0, 0, 0, 0))
+                        .unwrap();
+
+                    log::info!("Process listing:");
+                    for line in page_buf.as_str().lines() {
+                        log::info!("{}", line);
+                    }
                 }
                 "freemem" => {
-                    // hard coded - debug feature - if the swap server changes its name or opcode map this can
-                    // break, but also this routine is not meant for public consumption
-                    // and coding it here avoids a dependency to the crate.
-                    let s = _env.xns.request_connection_blocking("_swapper server_").unwrap();
-                    xous::send_message(s, xous::Message::new_scalar(11, 0, 0, 0, 0)).unwrap();
-                    log::info!("Check kernel debug log for free memory listing");
+                    // hard coded - debug feature - if the platform ABI changes its name or opcode map this
+                    // can break, but also this routine is not meant for public
+                    // consumption and coding it here avoids breaking dependencies to the Xous API crate.
+                    let page_buf = xous::PageBuf::new();
+                    xous::rsyscall(xous::SysCall::PlatformSpecific(1, page_buf.as_ptr(), 0, 0, 0, 0, 0))
+                        .unwrap();
+
+                    log::info!("RAM usage:");
+                    for line in page_buf.as_str().lines() {
+                        log::info!("{}", line);
+                    }
                 }
                 "interrupts" => {
-                    // hard coded - debug feature - if the swap server changes its name or opcode map this can
-                    // break, but also this routine is not meant for public consumption
-                    // and coding it here avoids a dependency to the crate.
-                    let s = _env.xns.request_connection_blocking("_swapper server_").unwrap();
-                    xous::send_message(s, xous::Message::new_scalar(12, 0, 0, 0, 0)).unwrap();
-                    log::info!("Check kernel debug log for interrupt listing");
+                    // hard coded - debug feature - if the platform ABI changes its name or opcode map this
+                    // can break, but also this routine is not meant for public
+                    // consumption and coding it here avoids breaking dependencies to the Xous API crate.
+                    let page_buf = xous::PageBuf::new();
+                    xous::rsyscall(xous::SysCall::PlatformSpecific(3, page_buf.as_ptr(), 0, 0, 0, 0, 0))
+                        .unwrap();
+
+                    log::info!("Interrupt handlers:");
+                    for line in page_buf.as_str().lines() {
+                        log::info!("{}", line);
+                    }
                 }
                 #[cfg(feature = "board-baosec")]
                 "qrshow" => {
@@ -223,6 +230,20 @@ impl<'a> ShellCmdApi<'a> for Test {
                         }
                     }
                 }
+                /* // leave this around in case we have more swap bugs to debug
+                // needs to have `swaptest1`` & `swaptest2` added to the image for this to work.
+                "swap" => {
+                    log::info!("starting swap test");
+                    let swaptest1 = _env.xns.request_connection("swaptest1").unwrap();
+                    let swaptest2 = _env.xns.request_connection("swaptest2").unwrap();
+                    for i in 1..4 {
+                        log::info!("iter {}", i);
+                        xous::send_message(swaptest1, xous::Message::new_scalar(0, i, 0, 0, 0)).unwrap();
+                        xous::send_message(swaptest2, xous::Message::new_scalar(0, i + 1, 0, 0, 0)).unwrap();
+                    }
+                    log::info!("swaptest done");
+                }
+                */
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
                 }

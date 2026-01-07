@@ -1180,36 +1180,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     });
                     Ok(xous_kernel::Result::Ok)
                 }
-                SwapAbi::DebugProcesses => {
-                    #[cfg(feature = "debug-proc")]
-                    crate::services::SystemServices::with(|system_services| {
-                        println!("Printing processes");
-                        let current_pid = system_services.current_pid();
-                        for process in &system_services.processes {
-                            if !process.free() {
-                                process.activate().unwrap();
-                                let mut connection_count = 0;
-                                ArchProcess::with_inner(|process_inner| {
-                                    for conn in &process_inner.connection_map {
-                                        if conn.is_some() {
-                                            connection_count += 1;
-                                        }
-                                    }
-                                });
-                                println!(
-                                    "{:x?} conns:{}/32 {}",
-                                    process,
-                                    connection_count,
-                                    system_services.process_name(process.pid).unwrap_or("")
-                                );
-                            }
-                        }
-                        system_services.get_process(current_pid).unwrap().activate().unwrap();
-                    });
-                    Ok(xous_kernel::Result::Ok)
-                }
                 SwapAbi::DebugServers => {
-                    #[cfg(feature = "debug-proc")]
                     crate::services::SystemServices::with(|system_services| {
                         println!("Servers in use:");
                         println!(" idx | pid | process              | sid");
@@ -1221,50 +1192,11 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                                     idx,
                                     s.pid,
                                     system_services.process_name(s.pid).unwrap_or(""),
-                                    s.sid
+                                    /* s.sid */
+                                    "redacted" // redact SIDs for security, as some may be secrets
                                 );
                             }
                         }
-                    });
-                    Ok(xous_kernel::Result::Ok)
-                }
-                SwapAbi::DebugFree => {
-                    #[cfg(feature = "debug-proc")]
-                    crate::services::SystemServices::with(|system_services| {
-                        println!("RAM usage:");
-                        let mut total_bytes = 0;
-                        crate::mem::MemoryManager::with(|mm| {
-                            for process in &system_services.processes {
-                                if !process.free() {
-                                    let bytes_used = mm.ram_used_by(process.pid);
-                                    total_bytes += bytes_used;
-                                    println!(
-                                        "    PID {:>3}: {:>4} k {}",
-                                        process.pid,
-                                        bytes_used / 1024,
-                                        system_services.process_name(process.pid).unwrap_or("")
-                                    );
-                                }
-                            }
-                        });
-                        println!("{} k total", total_bytes / 1024);
-                    });
-                    Ok(xous_kernel::Result::Ok)
-                }
-                SwapAbi::DebugInterrupts => {
-                    #[cfg(feature = "debug-proc")]
-                    crate::services::SystemServices::with(|system_services| {
-                        println!("Interrupt handlers:");
-                        println!("  IRQ | Process | Handler | Argument");
-                        crate::irq::for_each_irq(|irq, pid, address, arg| {
-                            println!(
-                                "    {}:  {} @ {:x?} {:x?}",
-                                irq,
-                                system_services.process_name(*pid).unwrap_or(""),
-                                address,
-                                arg
-                            );
-                        });
                     });
                     Ok(xous_kernel::Result::Ok)
                 }
@@ -1288,6 +1220,172 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 crate::platform::rand::get_raw_u32() as usize,
                 0,
             ))
+        }
+
+        #[cfg(feature = "bao1x")]
+        SysCall::PlatformSpecific(op, a2, a3, a4, a5, a6, a7) => {
+            use core::fmt::Write;
+
+            use xous_kernel::PageBuf;
+
+            use crate::platform::bao1x::PlatformCallAbi;
+
+            match PlatformCallAbi::from(op) {
+                #[cfg(feature = "debug-proc")]
+                PlatformCallAbi::DebugProcesses
+                | PlatformCallAbi::DebugFreeMem
+                | PlatformCallAbi::DebugInterrupts => {
+                    // The address of the PageBuffer is in a2. This needs to be a page-sized, page-aligned
+                    // `PageBuf` object. anything else will cause this routine to write
+                    // garbage into a userspace page corresponding to the object at the
+                    // virtual address in a2.
+                    //
+                    // This could be a security risk, and so, the implementation is feature-gated.
+                    let userspace_vaddr = a2;
+                    let phys_addr = crate::arch::mem::virt_to_phys(userspace_vaddr as usize)?;
+                    // ensure that the physical page is actually somewhere in RAM. This helps protect against
+                    // this being used as a primitive to corrupt data into peripherals, ROM, etc.
+                    assert!(phys_addr >= utralib::HW_SRAM_MEM);
+                    assert!(phys_addr < utralib::HW_SRAM_MEM + utralib::HW_SRAM_MEM_LEN);
+                    // map the userspace page into the kernel so it can write it. In this case, we didn't
+                    // unmap it from userspace - which means we are temporarily violating
+                    // the rule that a page cannot be owned by two processes at once. I
+                    // think this is OK because it is immediately unmapped
+                    // at the conclusion of this call.
+                    SystemServices::with(|system_services| {
+                        // swap into the kernel's memory space
+                        let kernel_map = system_services.get_process(PID::new(1).unwrap()).unwrap().mapping;
+                        kernel_map.activate().unwrap();
+                    });
+                    crate::mem::MemoryManager::with_mut(|mm| {
+                        // map it to the USERSPACE_BUFFER virtuall address in the kernel
+                        crate::arch::mem::map_page_inner(
+                            mm,
+                            PID::new(1).unwrap(),
+                            phys_addr,
+                            xous_kernel::arch::USERSPACE_BUFFER,
+                            MemoryFlags::R | MemoryFlags::W,
+                            false,
+                        )
+                        .unwrap();
+                    });
+                    // USERSPACE_BUFFER now aliases to the physical page handed to us by the userspace.
+                    let page_buf = unsafe { PageBuf::from_raw_ptr_mut(xous_kernel::arch::USERSPACE_BUFFER) };
+                    // don't assume the userspace did this correctly
+                    page_buf.clear();
+                    // now dispatch the various debug calls, copying their output into the page provided
+                    match PlatformCallAbi::from(op) {
+                        PlatformCallAbi::DebugProcesses => {
+                            crate::services::SystemServices::with(|system_services| {
+                                let current_pid = system_services.current_pid();
+                                for process in &system_services.processes {
+                                    if !process.free() {
+                                        process.activate().unwrap();
+                                        let mut connection_count = 0;
+                                        ArchProcess::with_inner(|process_inner| {
+                                            for conn in &process_inner.connection_map {
+                                                if conn.is_some() {
+                                                    connection_count += 1;
+                                                }
+                                            }
+                                        });
+                                        SystemServices::with(|system_services| {
+                                            let kernel_map = system_services
+                                                .get_process(PID::new(1).unwrap())
+                                                .unwrap()
+                                                .mapping;
+                                            kernel_map.activate().unwrap();
+                                        });
+                                        writeln!(
+                                            page_buf,
+                                            "{:x?} conns:{}/32 {}",
+                                            process,
+                                            connection_count,
+                                            system_services.process_name(process.pid).unwrap_or("")
+                                        )
+                                        .ok();
+                                    }
+                                }
+                                system_services.get_process(current_pid).unwrap().activate().unwrap();
+                            });
+                        }
+                        PlatformCallAbi::DebugFreeMem => {
+                            let mut total_bytes = 0;
+                            crate::services::SystemServices::with(|system_services| {
+                                crate::mem::MemoryManager::with(|mm| {
+                                    for process in &system_services.processes {
+                                        if !process.free() {
+                                            let bytes_used = mm.ram_used_by(process.pid);
+                                            total_bytes += bytes_used;
+                                            SystemServices::with(|system_services| {
+                                                let kernel_map = system_services
+                                                    .get_process(PID::new(1).unwrap())
+                                                    .unwrap()
+                                                    .mapping;
+                                                kernel_map.activate().unwrap();
+                                            });
+                                            writeln!(
+                                                page_buf,
+                                                "    PID {:>3}: {:>4} k {}",
+                                                process.pid,
+                                                bytes_used / 1024,
+                                                system_services.process_name(process.pid).unwrap_or("")
+                                            )
+                                            .ok();
+                                        }
+                                    }
+                                });
+                            });
+                            writeln!(page_buf, "{} k total", total_bytes / 1024).ok();
+                        }
+                        PlatformCallAbi::DebugInterrupts => {
+                            writeln!(page_buf, "  IRQ | Process | Handler | Argument").ok();
+                            crate::services::SystemServices::with(|system_services| {
+                                crate::irq::for_each_irq(|irq, pid, address, arg| {
+                                    writeln!(
+                                        page_buf,
+                                        "    {}:  {} @ {:x?} {:x?}",
+                                        irq,
+                                        system_services.process_name(*pid).unwrap_or(""),
+                                        address,
+                                        arg
+                                    )
+                                    .ok();
+                                });
+                            });
+                        }
+                        _ => unreachable!(),
+                    }
+                    // return to the kernel memory space
+                    SystemServices::with(|system_services| {
+                        let kernel_map = system_services.get_process(PID::new(1).unwrap()).unwrap().mapping;
+                        kernel_map.activate().unwrap();
+                    });
+                    // unmap the aliased page from kernel memory space
+                    crate::mem::MemoryManager::with_mut(|mm| {
+                        crate::arch::mem::unmap_page_inner(mm, xous_kernel::arch::USERSPACE_BUFFER).unwrap();
+                    });
+                    // return to the caller's memory space
+                    SystemServices::with(|system_services| {
+                        let user_map = system_services.get_process(pid).unwrap().mapping;
+                        user_map.activate().unwrap();
+                    });
+                    // return with the calling virtual address as affirmation of the call
+                    Ok(xous_kernel::Result::Scalar5(a2, 0, 0, 0, 0))
+                }
+                _ => {
+                    println!(
+                        "Invalid PlatformCallAbi: {:x} {:x} {:x} {:x} {:x} {:x} {:x}",
+                        op, a2, a3, a4, a5, a6, a7
+                    );
+                    Err(xous_kernel::Error::UnhandledSyscall)
+                }
+            }
+        }
+
+        #[cfg(not(feature = "bao1x"))]
+        SysCall::PlatformSpecific(_a1, _a2, _a3, _a4, _a5, _a6, _a7) => {
+            unimplemented!("No platform specific calls for this platform")
         }
 
         /* https://github.com/betrusted-io/xous-core/issues/90

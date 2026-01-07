@@ -729,7 +729,13 @@ impl SystemServices {
             let sp = if pid.get() == 1 {
                 EXCEPTION_STACK_TOP
             } else {
-                arch_process.current_thread().stack_pointer()
+                match cb_type {
+                    // for swap, we have to provide our own stack, because we can have a fault
+                    // *inside* an IRQ handler, which leaves us with no stack (as the IRQ handler
+                    // is already planning on vampiring off an existing thread's stack).
+                    CallbackType::Swap(_) | CallbackType::SwapInIrq(_) => SWAP_STACK_TOP_VADDR,
+                    _ => arch_process.current_thread().stack_pointer(),
+                }
             };
 
             // Activate the current context

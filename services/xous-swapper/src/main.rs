@@ -582,7 +582,16 @@ fn swap_handler(
                     reserved_mem,
                 )
                 .ok();
-                xous::unmap_memory(reserved_mem).expect("couldn't free memory for hard OOM handler");
+                match xous::unmap_memory(reserved_mem) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        // unmap_memory doesn't work in an IRQ context - so this errors out. Let's
+                        // just pray we have enough free memory for the handler to do its thing?
+                        writeln!(DebugUart {}, "Likely in IRQ context: {:?} ***************", e).ok();
+                        // replace the pages because they weren't unmapped
+                        ss.hard_oom_reserved_page = Some(reserved_mem);
+                    }
+                };
             } else {
                 panic!("No space was reserved for the hard OOM manager to run!");
             }
@@ -645,17 +654,19 @@ fn swap_handler(
             )
             .ok();
             //  Restore some reserved memory for the next hard OOM invocation.
-            let mut reserved = xous::map_memory(
-                None,
-                None,
-                PAGE_SIZE * HARD_OOM_RESERVED_PAGES,
-                MemoryFlags::R | MemoryFlags::W | MemoryFlags::RESERVE,
-            )
-            .expect("could't reserve space for hard OOM handler");
-            // *touch* the memory -- otherwise it might not actually be demand-paged
-            let reserved_slice: &mut [u32] = unsafe { reserved.as_slice_mut() }; // this is safe because `u32` is fully representable
-            reserved_slice.fill(0);
-            ss.hard_oom_reserved_page = Some(reserved);
+            if ss.hard_oom_reserved_page.is_none() {
+                let mut reserved = xous::map_memory(
+                    None,
+                    None,
+                    PAGE_SIZE * HARD_OOM_RESERVED_PAGES,
+                    MemoryFlags::R | MemoryFlags::W | MemoryFlags::RESERVE,
+                )
+                .expect("could't reserve space for hard OOM handler");
+                // *touch* the memory -- otherwise it might not actually be demand-paged
+                let reserved_slice: &mut [u32] = unsafe { reserved.as_slice_mut() }; // this is safe because `u32` is fully representable
+                reserved_slice.fill(0);
+                ss.hard_oom_reserved_page = Some(reserved);
+            }
             if ss.report_full_rpt {
                 ss.report_full_rpt = false;
             }
@@ -822,19 +833,8 @@ fn main() {
                     .expect("couldn't Block Erase region");
                 }
             }
-            Some(Opcode::DebugProcesses) => {
-                xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::DebugProcesses as usize, 0, 0, 0, 0, 0, 0))
-                    .unwrap();
-            }
             Some(Opcode::DebugServers) => {
                 xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::DebugServers as usize, 0, 0, 0, 0, 0, 0))
-                    .unwrap();
-            }
-            Some(Opcode::DebugFree) => {
-                xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::DebugFree as usize, 0, 0, 0, 0, 0, 0)).unwrap();
-            }
-            Some(Opcode::DebugInterrupts) => {
-                xous::rsyscall(xous::SysCall::SwapOp(SwapAbi::DebugInterrupts as usize, 0, 0, 0, 0, 0, 0))
                     .unwrap();
             }
             #[cfg(feature = "swap-userspace-testing")]

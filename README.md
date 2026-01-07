@@ -21,6 +21,15 @@ The [Baochip README](./README-baochip.md) is the starting point for Baochip user
 
 The [Precursor README](./README-precursor.md) is the starting point for Precursor users.
 
+> [!IMPORTANT]
+> Xous checks version tags as part of the build process. If building from a "shallow clone" or fork, fetch the tags, or else image creation will fail:
+```
+git remote add upstream https://github.com/betrusted-io/xous-core.git
+git fetch upstream --tags
+```
+
+## Organization
+
 Xous is a mono-repo project. It contains the kernel, libraries, applications, and tools necessary to build full device images. Here is a brief description of the more important directories:
 
 * **api**: "Secular" API libraries - minimal-dependency, common-core APIs used by core Xous services

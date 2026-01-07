@@ -66,3 +66,26 @@ pub fn init() {
     #[cfg(any(feature = "debug-print", feature = "print-panics"))]
     self::uart::init();
 }
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+/// Has to manually synchronize into user space, to avoid propagating ABI changes into
+/// the version of the Xous crate every time this is updated.
+pub enum PlatformCallAbi {
+    Invalid = 0,
+    DebugFreeMem = 1,
+    DebugProcesses = 2,
+    DebugInterrupts = 3,
+}
+
+impl PlatformCallAbi {
+    pub fn from(val: usize) -> PlatformCallAbi {
+        use PlatformCallAbi::*;
+        match val {
+            0 => Invalid,
+            1 => DebugFreeMem,
+            2 => DebugProcesses,
+            3 => DebugInterrupts,
+            _ => Invalid,
+        }
+    }
+}

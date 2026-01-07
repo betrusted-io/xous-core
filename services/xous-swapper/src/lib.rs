@@ -67,10 +67,7 @@ pub enum Opcode {
     Test0 = 3,
     // kernel has to be compiled with "debug-proc" for these to work
     // the Debug* series of opcodes are hard-coded in other crates, so don't change their discriminant.
-    DebugProcesses = 9,
-    DebugServers = 10,
-    DebugFree = 11,
-    DebugInterrupts = 12,
+    DebugServers = 9,
 
     None = 255,
 }

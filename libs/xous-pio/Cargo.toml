@@ -13,7 +13,7 @@ defmt = { version = "0.3", optional = true }
 utralib = { version = "0.1.26", default-features = false }
 
 [target.'cfg(target_os = "xous")'.dependencies]
-xous = "0.9.68"
+xous = "0.9.69"
 
 [features]
 bao1x = ["utralib/bao1x"]

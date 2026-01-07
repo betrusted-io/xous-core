@@ -9,7 +9,7 @@ edition = "2018"
 description = "Initial kernel loader for Xous"
 
 [dependencies]
-xous = "0.9.68"
+xous = "0.9.69"
 ed25519-dalek-loader = { path = "ed25519-dalek-loader", default-features = false, optional = true }
 curve25519-dalek-loader = { path = "curve25519-dalek-loader", default-features = false, features = [
     "u32e_backend",

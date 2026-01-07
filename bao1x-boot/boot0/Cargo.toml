@@ -6,7 +6,7 @@ edition = "2021"
 description = "Boot0 partition"
 
 [dependencies]
-xous = "0.9.68"
+xous = "0.9.69"
 utralib = { version = "0.1.26", optional = true, default-features = false }
 bao1x-hal = { path = "../../libs/bao1x-hal", optional = true, default-features = false }
 bao1x-api = { path = "../../libs/bao1x-api", optional = true, default-features = false }

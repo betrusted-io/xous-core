@@ -12,12 +12,7 @@ use utralib::generated::*;
 use xous_kernel::{MemoryFlags, MemoryType};
 
 #[cfg(feature = "bao1x")]
-use crate::{
-    PID,
-    debug::shell::process_characters,
-    io::{SerialRead, SerialWrite},
-    mem::MemoryManager,
-};
+use crate::{PID, io::SerialWrite, mem::MemoryManager};
 
 /// UART virtual address.
 ///
@@ -48,11 +43,12 @@ pub fn init() {
             )
             .expect("unable to map serial port")
     });
-    let mut uart = Uart::new(UART_ADDR, IRQ0_ADDR, process_characters);
+    let mut uart = Uart::new(UART_ADDR, IRQ0_ADDR);
     uart.init();
     unsafe {
         UART = Some(uart);
-        crate::debug::shell::init((&mut *(&raw mut UART)).as_mut().unwrap());
+        // inaccessible because DUART is tx-only
+        // crate::debug::shell::init((&mut *(&raw mut UART)).as_mut().unwrap());
     }
 }
 
@@ -63,9 +59,7 @@ pub struct Uart {
 
 #[cfg(feature = "bao1x")]
 impl Uart {
-    pub fn new(addr: usize, _irq_addr: usize, _callback: fn(&mut Self)) -> Uart {
-        Uart { uart_csr: CSR::new(addr as *mut u32) }
-    }
+    pub fn new(addr: usize, _irq_addr: usize) -> Uart { Uart { uart_csr: CSR::new(addr as *mut u32) } }
 
     pub fn init(&mut self) {
         // duart requires no special initializations
@@ -78,9 +72,4 @@ impl SerialWrite for Uart {
         while self.uart_csr.r(utra::duart::SFR_SR) != 0 {}
         self.uart_csr.wo(utra::duart::SFR_TXD, c as u32);
     }
-}
-
-#[cfg(feature = "bao1x")]
-impl SerialRead for Uart {
-    fn getc(&mut self) -> Option<u8> { None }
 }

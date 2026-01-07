@@ -177,6 +177,8 @@ pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables) {
     }
     #[cfg(feature = "swap")]
     {
+        use xous::arch::SWAP_STACK_TOP_VADDR;
+
         // map the swap page table into PID space 2
         let tt_address = cfg.processes[SWAPPER_PID as usize - 1].satp << 12;
         let root = unsafe { &mut *(tt_address as *mut PageTable) };
@@ -275,6 +277,18 @@ pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables) {
             for i in 0..cfg.last_swap_page {
                 counts[i] = loader::FLG_SWAP_USED;
             }
+        }
+
+        // allocate swap private stack
+        for i in 0..2 {
+            let stack_page = cfg.alloc() as usize;
+            cfg.map_page(
+                root,
+                stack_page,
+                SWAP_STACK_TOP_VADDR - PAGE_SIZE * (i + 1),
+                FLG_R | FLG_W | FLG_U | FLG_VALID,
+                SWAPPER_PID,
+            );
         }
 
         // map any hardware-specific pages into the userspace swapper
