@@ -43,10 +43,7 @@ pub enum SwapAbi {
     ReleaseMemory = 6,
     WritePage = 7,
     BlockErase = 8,
-    DebugProcesses = 9,
-    DebugServers = 10,
-    DebugFree = 11,
-    DebugInterrupts = 12,
+    DebugServers = 9,
 }
 /// SYNC WITH `xous-swapper/src/main.rs`
 impl SwapAbi {
@@ -61,10 +58,7 @@ impl SwapAbi {
             6 => ReleaseMemory,
             7 => WritePage,
             8 => BlockErase,
-            9 => DebugProcesses,
-            10 => DebugServers,
-            11 => DebugFree,
-            12 => DebugInterrupts,
+            9 => DebugServers,
             _ => Invalid,
         }
     }
@@ -774,13 +768,14 @@ impl Swap {
                 println!("ERR: nesting depth of 2 exceeded! {:x?}", dop);
                 panic!("Nesting depth of 2 exceeded!");
             }
-            println!("Nesting {:x?}", op);
+            // this happens in the case of an IRQ happening during an OOM
+            println!("Nesting {:x?} {:?}", op, crate::arch::irq::is_handling_irq());
             self.nested_op = Some(op);
             panic!(
                 "Nesting should not happen - this code is vestigial but remains to see if this edge case remains"
             );
         }
-        // println!("Setting prev_op to {:?}", op);
+        // println!("Setting prev_op to {:x?}, {:?}", op, crate::arch::irq::is_handling_irq(),);
         self.prev_op = Some(op);
         let swapper_pid: PID = PID::new(xous_kernel::SWAPPER_PID).unwrap();
 
