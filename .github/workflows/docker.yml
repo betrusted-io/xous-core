@@ -1,0 +1,149 @@
+name: Build dabao and bao1x-boot firmware
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  build-apps-dabao:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        app:
+          - helloworld
+          - dabao-console
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch all tags
+        run: git fetch --prune --unshallow --tags
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            network=host
+            image=moby/buildkit:latest
+
+      - name: Configure Docker daemon for performance
+        run: |
+          echo '{"max-concurrent-downloads": 10, "max-concurrent-uploads": 10}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/dabao-${{ matrix.app }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build dabao ${{ matrix.app }} app firmware (uf2 files)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps-dabao/Dockerfile
+          build-args: |
+            app=${{ matrix.app }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }},ignore-error=true
+          outputs: type=local,dest=./output
+          provenance: false
+          sbom: false
+
+      - name: Upload ${{ matrix.app }} app UF2 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dabao-${{ matrix.app }}-uf2
+          path: |
+            ./output/*.uf2
+          retention-days: 90
+
+  build-bao1x-boot1:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch all tags
+        run: git fetch --prune --unshallow --tags
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            network=host
+            image=moby/buildkit:latest
+
+      - name: Configure Docker daemon for performance
+        run: |
+          echo '{"max-concurrent-downloads": 10, "max-concurrent-uploads": 10}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/bao1x-boot
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build bao1x boot1 firmware (uf2 files)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./bao1x-boot/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=bao1x-boot
+          cache-to: type=gha,mode=max,scope=bao1x-boot,ignore-error=true
+          outputs: type=local,dest=./output
+          provenance: false
+          sbom: false
+
+      - name: Upload boot1 UF2 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bao1x-boot1-uf2
+          path: |
+            ./output/*.uf2
+          retention-days: 90
