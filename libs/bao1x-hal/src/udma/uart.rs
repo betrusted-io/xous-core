@@ -5,9 +5,13 @@ use crate::udma::*;
 
 // ----------------------------------- UART ------------------------------------
 #[repr(usize)]
-enum UartReg {
+pub enum UartReg {
     Status = 0,
     Setup = 1,
+    Error = 2,
+    IrqEn = 3,
+    Valid = 4,
+    Data = 5,
 }
 impl Into<usize> for UartReg {
     fn into(self) -> usize { self as usize }
@@ -92,10 +96,13 @@ impl Uart {
 
         let clk_counter: u32 = (clk_freq + baud / 2) / baud;
         // setup baud, bits, parity, etc.
+        // bit 0x10 sets poll mode - data is read out through the command interface not the streaming Rx fifo
+        // the command interface is more reliable in terms of determining exactly how many bytes are left to
+        // read.
         csr.base()
             .add(Bank::Custom.into())
             .add(UartReg::Setup.into())
-            .write_volatile(0x0306 | (clk_counter << 16));
+            .write_volatile(0x0316 | (clk_counter << 16));
 
         Uart { csr, ifram: IframRange::request(UART_RX_BUF_SIZE + UART_TX_BUF_SIZE, None).unwrap() }
     }
@@ -125,12 +132,15 @@ impl Uart {
         }
         // setup baud, bits, parity, etc.
         // safety: this is safe to call as long as the base address points at a valid UART.
+        // bit 0x10 sets poll mode - data is read out through the command interface not the streaming Rx fifo
+        // the command interface is more reliable in terms of determining exactly how many bytes are left to
+        // read.
         unsafe {
             self.csr
                 .base()
                 .add(Bank::Custom.into())
                 .add(UartReg::Setup.into())
-                .write_volatile(0x0306 | (clk_counter << 16));
+                .write_volatile(0x0316 | (clk_counter << 16));
         }
     }
 
@@ -232,11 +242,11 @@ impl Uart {
                 );
             }
             self.wait_rx_done();
-            #[cfg(feature = "std")]
+            #[cfg(any(feature = "std", feature = "kernel"))]
             chunk.copy_from_slice(
                 &self.ifram.as_slice::<u8>()[UART_RX_BUF_START..UART_RX_BUF_START + chunk.len()],
             );
-            #[cfg(not(feature = "std"))]
+            #[cfg(not(any(feature = "std", feature = "kernel")))]
             unsafe {
                 chunk.copy_from_slice(
                     &self.ifram.as_phys_slice::<u8>()[UART_RX_BUF_START..UART_RX_BUF_START + chunk.len()],
@@ -251,44 +261,25 @@ impl Uart {
     ///
     /// Returns actual number of bytes read (0 or 1).
     pub fn read_async(&mut self, c: &mut u8) -> usize {
-        let bank_addr = unsafe { self.csr().base().add(Bank::Rx as usize) };
-        // retrieve total bytes available
-        let pending = unsafe { bank_addr.add(DmaReg::Size.into()).read_volatile() } as usize;
+        // retrieve valid
+        let valid =
+            unsafe { self.csr().base().add(Bank::Custom.into()).add(UartReg::Valid.into()).read_volatile() }
+                as usize;
 
-        // recover the pending byte. Hard-coded for case of RX_BUF_DEPTH == 1
-        assert!(RX_BUF_DEPTH == 1, "Need to refactor buf recovery code if RX_BUF_DEPTH > 1");
-        #[cfg(feature = "std")]
-        {
-            *c = self.ifram.as_slice::<u8>()[UART_RX_BUF_START];
-        }
-        #[cfg(not(feature = "std"))]
-        unsafe {
-            *c = self.ifram.as_phys_slice::<u8>()[UART_RX_BUF_START];
-        }
+        if valid != 0 {
+            *c = unsafe {
+                self.csr().base().add(Bank::Custom.into()).add(UartReg::Data.into()).read_volatile()
+            } as u8;
 
-        // queue the next round
-        #[cfg(feature = "std")]
-        unsafe {
-            self.udma_enqueue(
-                Bank::Rx,
-                &self.ifram.as_phys_slice::<u8>()[UART_RX_BUF_START..UART_RX_BUF_START + RX_BUF_DEPTH],
-                CFG_EN | CFG_CONT,
-            );
+            1
+        } else {
+            0
         }
-        #[cfg(not(feature = "std"))]
-        unsafe {
-            self.udma_enqueue(
-                Bank::Rx,
-                &self.ifram.as_phys_slice::<u8>()[UART_RX_BUF_START..UART_RX_BUF_START + RX_BUF_DEPTH],
-                CFG_EN | CFG_CONT,
-            );
-        }
-
-        pending
     }
 
     /// Call this to prime the system for async reads. This must be called at least once if any characters
-    /// are ever to be received.
+    /// are ever to be received, if the system is in FIFO mode (note that by default the system is now in POLL
+    /// mode)
     pub fn setup_async_read(&mut self) {
         #[cfg(feature = "std")]
         unsafe {
