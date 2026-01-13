@@ -1,28 +1,27 @@
 use core::fmt::{Error, Write};
-#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 use std::pin::Pin;
 
-#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 use bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
-#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 use bao1x_hal::udma;
+#[cfg(not(feature = "gdb-stub"))]
 use utralib::generated::*;
 
 pub struct Output {}
 
-#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 pub static mut UART_DMA_TX_BUF_VIRT: *mut u8 = 0x0000_0000 as *mut u8;
 
-#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 pub static mut UART_IRQ: Option<Pin<Box<bao1x_hal::udma::UartIrq>>> = None;
 
-#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 pub static mut KBD_CONN: u32 = 0;
 
 pub fn init() -> Output {
-    // TODO: migrate this to a "proper" UART that is available on SoC hardware, but for now all we have access
-    // to is the DUART.
-    #[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+    #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
     let uart = xous::syscall::map_memory(
         xous::MemoryAddress::new(utra::udma_uart_2::HW_UDMA_UART_2_BASE),
         None,
@@ -30,11 +29,11 @@ pub fn init() -> Output {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't map serial port");
-    #[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+    #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
     unsafe {
         crate::platform::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() as _
     };
-    #[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+    #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
     {
         // Note: for the TX buf, we allocate a pre-reserved portion of IFRAM as our
         // DMA buffer. We do *not* use the IFRAM allocator in `bao1x-hal-service` because
@@ -80,13 +79,14 @@ pub fn init() -> Output {
     unsafe {
         crate::platform::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() as _
     };
+    #[cfg(not(feature = "gdb-stub"))]
     println!("Mapped UART @ {:08x}", uart.as_ptr() as usize);
     println!("Process: map success!");
 
     Output {}
 }
 
-#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 fn uart_handler(_irq_no: usize, _arg: *mut usize) {
     let mut uart = unsafe {
         udma::Uart::get_handle(
@@ -131,8 +131,9 @@ pub struct OutputWriter {}
 
 #[allow(dead_code)]
 impl OutputWriter {
+    #[allow(unused_variables)]
     pub fn putc(&self, c: u8) {
-        #[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+        #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
         {
             // safety: safe to call as long as the raw parts are initialized and we exclusively
             // own it; and the UART has been initialized. For this peripheral, initialization
@@ -161,7 +162,7 @@ impl OutputWriter {
     /// bytes written. This is mostly compatible with `std::io::Write`,
     /// except it is infallible.
     pub fn write(&mut self, buf: &[u8]) -> usize {
-        #[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+        #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
         {
             // safety: safe to call as long as the raw parts are initialized and we exclusively
             // own it; and the UART has been initialized. For this peripheral, initialization
@@ -185,6 +186,8 @@ impl OutputWriter {
             }
             buf.len()
         }
+        #[cfg(feature = "gdb-stub")]
+        buf.len() // just fake the write
     }
 
     pub fn write_all(&mut self, buf: &[u8]) -> core::result::Result<usize, ()> { Ok(self.write(buf)) }
