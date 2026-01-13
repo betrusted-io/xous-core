@@ -200,6 +200,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gdb_stub = env::args().filter(|x| x == "--gdb-stub").count() != 0;
     if gdb_stub {
         builder.add_kernel_feature("gdb-stub");
+        builder.add_feature("gdb-stub");
     }
     if env::args().filter(|x| x == "--debug-loader").count() != 0 {
         builder.add_loader_feature("debug-print");
@@ -755,6 +756,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 builder.set_swap(0, bao1x_api::offsets::baosec::SWAP_RAM_LEN as _);
             }
             builder.add_loader_feature("swap");
+            builder.add_kernel_feature("print-panics");
             builder.add_kernel_feature("swap");
             builder.add_feature("swap");
 
@@ -914,6 +916,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             builder.add_loader_feature("debug-print");
             builder.add_kernel_feature("v2p");
+            builder.add_kernel_feature("print-panics");
+            builder.add_kernel_feature("debug-proc");
             match task.as_deref() {
                 Some("dabao") => builder.target_bao1x_soc(),
                 _ => panic!("should be unreachable"),
