@@ -11,9 +11,9 @@ impl Target for XousTarget {
     type Arch = gdbstub_arch::riscv::Riscv32;
     type Error = &'static str;
 
-    fn base_ops(&mut self) -> BaseOps<Self::Arch, Self::Error> { BaseOps::MultiThread(self) }
+    fn base_ops(&mut self) -> BaseOps<'_, Self::Arch, Self::Error> { BaseOps::MultiThread(self) }
 
-    fn support_breakpoints(&mut self) -> Option<BreakpointsOps<Self>> { Some(self) }
+    fn support_breakpoints(&mut self) -> Option<BreakpointsOps<'_, Self>> { Some(self) }
 
     /// Opt in to having GDB handle breakpoints for us. This allows for an unlimited number
     /// of breakpoints without having us keep track of the breakpoints ourselves, but

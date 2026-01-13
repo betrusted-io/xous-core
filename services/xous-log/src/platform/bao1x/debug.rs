@@ -1,6 +1,6 @@
 use core::fmt::{Error, Write};
 
-#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 use bao1x_hal::udma;
 
 #[macro_export]
@@ -28,9 +28,10 @@ macro_rules! println
 pub struct Uart {}
 
 // this is a hack to bypass an explicit initialization/allocation step for the debug structure
+#[cfg(not(feature = "gdb-stub"))]
 pub static mut DEFAULT_UART_ADDR: *mut usize = 0x0000_0000 as *mut usize;
 
-#[cfg(all(feature = "bao1x", not(feature = "hwsim")))]
+#[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 impl Uart {
     pub fn putc(&self, c: u8) {
         // check that we've been initialized before attempting to send any characters...
@@ -70,7 +71,9 @@ impl Uart {
 }
 
 impl Write for Uart {
+    #[allow(unused_variables)]
     fn write_str(&mut self, s: &str) -> Result<(), Error> {
+        #[cfg(not(feature = "gdb-stub"))]
         for c in s.bytes() {
             self.putc(c);
         }

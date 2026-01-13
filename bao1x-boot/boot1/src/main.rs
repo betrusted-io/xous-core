@@ -246,6 +246,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
             crate::println_d!("new state {:?}", new_usb_state);
             if new_usb_state == UsbDeviceState::Configured {
                 crate::println!("USB is connected!");
+                crate::println!("Console moved to USB serial");
                 last_usb_state = new_usb_state;
                 USB_CONNECTED.store(true, core::sync::atomic::Ordering::SeqCst);
                 if let Some(ref mut sh1107) = oled {

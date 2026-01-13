@@ -12,6 +12,11 @@ use crate::i2c::I2c;
 #[cfg(feature = "std")]
 const MHZ: u32 = 1_000_000;
 
+/// This is always the default target rate for peripheral clock, regardless of the pll setting
+/// It's not always achievable - for example, when the PLL is turned off, which is why the actual
+/// perclk is returned by the clock setting routines.
+pub const PERCLK_HZ: u32 = 100_000_000;
+
 #[bitfield(u32)]
 #[derive(PartialEq, Eq, Debug)]
 pub struct PmuControl {
@@ -86,7 +91,7 @@ where
     daric_cgu.add(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4.offset()).write_volatile(0x7f00_010f); // pclk
 
     // peripheral clock should always target 100MHz regardless of the top frequency
-    let peri_params = bao1x_api::find_optimal_divider(freq_hz / 2, 100_000_000).unwrap();
+    let peri_params = bao1x_api::find_optimal_divider(freq_hz / 2, PERCLK_HZ).unwrap();
     let fd0 = peri_params.fd0;
     let fd2 = peri_params.fd2;
     daric_cgu.add(utra::sysctrl::SFR_CGUFDPER.offset()).write_volatile(

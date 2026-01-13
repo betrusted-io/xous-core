@@ -34,6 +34,9 @@ Regardless of the board, the `bao1x` chip comes from the factory programmed with
 
 #### Detailed Boot1 Update for Dabao Users
 
+[!TIP]
+You can fetch pre-built verions of the .uf2 files from the CI pipeline [here](https://ci.betrusted.io/latest-ci/baochip/bootloader/). Once Baochip hits release status, we'll drop a link for a stable release version here as well.
+
 1. Build alt-boot1: `cargo xtask bao1x-alt-boot1`
 2. Build boot1: `cargo xtask bao1x-boot1`
 3. Plug the dabao board into the host. Confirm that the mass storage device has the volume label of `BAOCHIP`.

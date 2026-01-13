@@ -7,9 +7,10 @@
 
 use core::fmt;
 
-use crate::io::SerialWrite;
+use crate::args::KernelArguments;
 #[cfg(not(feature = "bao1x"))]
-use crate::{args::KernelArguments, io::SerialRead};
+use crate::io::SerialRead;
+use crate::io::SerialWrite;
 
 /// Instance of the shell output.
 pub static mut OUTPUT: Option<Output> = None;
@@ -58,7 +59,6 @@ impl fmt::Write for Output {
 /// Initialize the kernel shell.
 ///
 /// This should be called in platform initialization code.
-#[cfg(not(feature = "bao1x"))]
 pub fn init(serial: &'static mut dyn SerialWrite) {
     unsafe { OUTPUT = Some(Output::new(serial)) }
 
@@ -69,9 +69,12 @@ pub fn init(serial: &'static mut dyn SerialWrite) {
         println!("    {}", arg);
     }
 
-    println!("=== Kernel Debug Shell Available ====");
-    print_help();
-    println!("=====================================");
+    #[cfg(not(feature = "bao1x"))]
+    {
+        println!("=== Kernel Debug Shell Available ====");
+        print_help();
+        println!("=====================================");
+    }
 }
 
 /// Process possible characters received through a serial interface.

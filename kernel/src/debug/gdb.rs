@@ -5,6 +5,9 @@ use gdbstub::stub::{GdbStubBuilder, GdbStubError, MultiThreadStopReason};
 use gdbstub::target::Target;
 
 use crate::io::SerialRead;
+#[cfg(feature = "bao1x")]
+use crate::platform::bao1x::gdbuart::GdbUart;
+#[cfg(not(feature = "bao1x"))]
 use crate::platform::precursor::gdbuart::GdbUart;
 
 mod breakpoints;
@@ -29,6 +32,9 @@ pub struct XousTarget {
 
 pub struct XousDebugState<'a> {
     pub target: XousTarget,
+    #[cfg(feature = "bao1x")]
+    pub server: GdbStubStateMachine<'a, XousTarget, crate::platform::bao1x::gdbuart::GdbUart>,
+    #[cfg(not(feature = "bao1x"))]
     pub server: GdbStubStateMachine<'a, XousTarget, crate::platform::precursor::gdbuart::GdbUart>,
 }
 

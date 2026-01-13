@@ -45,6 +45,8 @@ board-baosor = ["bao1x-hal/board-baosor"]
 board-dabao = ["bao1x-hal/board-dabao"]
 hosted-baosec = []
 hwsim = []
+# when activated, disables the console so the kernel GDB stub can claim it.
+gdb-stub = []
 
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]

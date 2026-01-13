@@ -17,6 +17,7 @@ xous-kernel = { package = "xous", version = "0.9.69", features = [
 utralib = { version = "0.1.26", optional = true, default-features = false }
 rand_chacha = { version = "0.3.1", optional = true, default-features = false }
 bao1x-hal = { path = "../libs/bao1x-hal", optional = true, default-features = false }
+bao1x-api = { path = "../libs/bao1x-api", optional = true }
 loader = { path = "../loader", optional = true, features = ["swap"] }
 [target.'cfg(any(windows,unix))'.dev-dependencies]
 xous-kernel = { package = "xous", version = "0.9.69", features = [
@@ -57,12 +58,12 @@ hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 
 debug-print = []
-gdb-stub = ["gdbstub", "gdbstub_arch"]
+gdb-stub = ["gdbstub", "gdbstub_arch", "bao1x-api"]
 print-panics = []
-dump-kernel-pages = []                     # include kernel pages in panic dumps
+dump-kernel-pages = []                              # include kernel pages in panic dumps
 report-memory = ["stats_alloc"]
 wrap-print = []
-big-heap = []                              # Cause heaps to start at 12 MM instead of 512 kB
+big-heap = []                                       # Cause heaps to start at 12 MM instead of 512 kB
 v2p = ["xous-kernel/v2p"]
 swap = ["xous-kernel/swap", "loader/swap"]
 memmap-flash = []
