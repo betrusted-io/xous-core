@@ -75,8 +75,8 @@ impl MultiThreadBase for XousTarget {
         _tid: Tid, // same address space for each core
     ) -> TargetResult<(), Self> {
         let current_addr = start_addr as usize;
-        if (current_addr + data.len()) >= crate::arch::mem::USER_AREA_END
-            || (current_addr >= crate::arch::mem::USER_AREA_END)
+        if (current_addr + data.len()) >= xous_kernel::arch::USER_AREA_END
+            || (current_addr >= xous_kernel::arch::USER_AREA_END)
         {
             for entry in data.iter_mut() {
                 *entry = 0
@@ -143,7 +143,7 @@ impl MultiThreadBase for XousTarget {
             return Ok(());
         };
 
-        if (current_addr + data.len()) > crate::arch::mem::USER_AREA_END {
+        if (current_addr + data.len()) > xous_kernel::arch::USER_AREA_END {
             return Ok(()); // don't allow reads outside of the user area
         }
 
