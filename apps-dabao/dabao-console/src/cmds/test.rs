@@ -15,25 +15,12 @@ impl<'a> ShellCmdApi<'a> for Test {
         let mut ret = String::new();
 
         #[allow(unused_variables)]
-        let helpstring = "Test commands. See code for options.";
+        let helpstring = "test [proc] [freemem] [interrupts] [panic] [timer] [env]";
 
         let mut tokens = args.split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
-                "mac" => {
-                    let mut md = bio_lib::mac_demo::MacDemo::new().unwrap();
-                    let a = [0, -1, 32, 6, -10, 5];
-                    let b = 7;
-                    let hw = md.mac_hw(&a, b);
-                    let sw = md.mac_sw(&a, b);
-                    log::info!("result: {}, {}", hw, sw);
-                    if hw == sw {
-                        writeln!(ret, "pass").unwrap();
-                    } else {
-                        writeln!(ret, "fail").unwrap();
-                    }
-                }
                 "timer" => {
                     let start = _env.ticktimer.elapsed_ms();
                     log::info!("Starting test");
@@ -44,6 +31,49 @@ impl<'a> ShellCmdApi<'a> for Test {
                             log::info!("{} s", seconds);
                             seconds += 1;
                         }
+                    }
+                }
+                "panic" => {
+                    log::info!("System will panic now");
+                    panic!("test panic");
+                }
+                "proc" => {
+                    // hard coded - debug feature - if the platform ABI changes its name or opcode map this
+                    // can break, but also this routine is not meant for public
+                    // consumption and coding it here avoids breaking dependencies to the Xous API crate.
+                    let page_buf = xous::PageBuf::new();
+                    xous::rsyscall(xous::SysCall::PlatformSpecific(2, page_buf.as_ptr(), 0, 0, 0, 0, 0))
+                        .unwrap();
+
+                    log::info!("Process listing:");
+                    for line in page_buf.as_str().lines() {
+                        log::info!("{}", line);
+                    }
+                }
+                "freemem" => {
+                    // hard coded - debug feature - if the platform ABI changes its name or opcode map this
+                    // can break, but also this routine is not meant for public
+                    // consumption and coding it here avoids breaking dependencies to the Xous API crate.
+                    let page_buf = xous::PageBuf::new();
+                    xous::rsyscall(xous::SysCall::PlatformSpecific(1, page_buf.as_ptr(), 0, 0, 0, 0, 0))
+                        .unwrap();
+
+                    log::info!("RAM usage:");
+                    for line in page_buf.as_str().lines() {
+                        log::info!("{}", line);
+                    }
+                }
+                "interrupts" => {
+                    // hard coded - debug feature - if the platform ABI changes its name or opcode map this
+                    // can break, but also this routine is not meant for public
+                    // consumption and coding it here avoids breaking dependencies to the Xous API crate.
+                    let page_buf = xous::PageBuf::new();
+                    xous::rsyscall(xous::SysCall::PlatformSpecific(3, page_buf.as_ptr(), 0, 0, 0, 0, 0))
+                        .unwrap();
+
+                    log::info!("Interrupt handlers:");
+                    for line in page_buf.as_str().lines() {
+                        log::info!("{}", line);
                     }
                 }
                 "env" => {
