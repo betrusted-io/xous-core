@@ -549,7 +549,7 @@ pub fn peek_memory<T>(addr: *mut T) -> Result<T, xous_kernel::Error> {
     Ok(val)
 }
 
-#[cfg(feature = "gdb-stub")]
+#[cfg(all(feature = "gdb-stub", not(feature = "bao1x")))]
 pub fn poke_memory<T>(addr: *mut T, val: T) -> Result<(), xous_kernel::Error> {
     let virt = addr as usize;
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);
@@ -595,6 +595,101 @@ pub fn poke_memory<T>(addr: *mut T, val: T) -> Result<(), xous_kernel::Error> {
 
     // Perform the write
     unsafe { addr.write_volatile(val) };
+
+    // Remove supervisor access to user mode
+    unsafe { sstatus::clear_sum() };
+
+    // Remove the WRITE bit if it wasn't previously set
+    if !was_writable {
+        l0_pt.entries[vpn0] &= !MMUFlags::W.bits();
+        unsafe { flush_mmu() };
+    }
+
+    Ok(())
+}
+
+#[cfg(all(feature = "gdb-stub", feature = "bao1x"))]
+/// This routine looks like it *works* insofar as it really maps a RRAM page into RAM and patches it,
+/// but things like single stepping still don't work.
+pub fn poke_memory<T: core::fmt::Debug>(addr: *mut T, val: T) -> Result<(), xous_kernel::Error> {
+    let virt = addr as usize;
+    let vpn1 = (virt >> 22) & ((1 << 10) - 1);
+    let vpn0 = (virt >> 12) & ((1 << 10) - 1);
+    let vpo = virt & ((1 << 12) - 1);
+
+    assert!(vpn1 < 1024);
+    assert!(vpn0 < 1024);
+    assert!(vpo < 4096);
+
+    // The root (l1) pagetable is defined to be mapped into our virtual
+    // address space at this address.
+    let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
+    let l1_pt = &mut l1_pt.entries;
+
+    // Subsequent pagetables are defined as being mapped starting at
+    // PAGE_TABLE_OFFSET
+    let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
+    let l0_pt = &mut unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
+
+    // If the level 1 pagetable doesn't exist, then this address isn't valid.
+    if l1_pt[vpn1] & MMUFlags::VALID.bits() == 0 {
+        return Err(xous_kernel::Error::BadAddress);
+    }
+
+    // Ensure the entry has been mapped.
+    if l0_pt.entries[vpn0] & MMUFlags::VALID.bits() == 0 {
+        return Err(xous_kernel::Error::BadAddress);
+    }
+
+    // Ensure we're allowed to read it.
+    let was_writable = l0_pt.entries[vpn0] & MMUFlags::W.bits() != 0;
+
+    if l0_pt.entries[vpn0] & MMUFlags::P.bits != 0 {
+        return Err(xous_kernel::Error::StorageError); // can't access because it's swapped out
+    }
+
+    // check the physical location: if it's in RRAM, we're going to have to patch this into RAM
+    let pa = virt_to_phys(virt)?;
+    if pa >= utralib::HW_RERAM_MEM + bao1x_api::offsets::RRAM_STORAGE_LEN && pa < utralib::HW_SRAM_MEM {
+        // don't allow debug access to the keystore
+        return Err(xous_kernel::Error::BadAddress);
+    }
+
+    // Enable supervisor access to user mode
+    unsafe { sstatus::set_sum() };
+
+    if pa >= utralib::HW_RERAM_MEM && pa < utralib::HW_RERAM_MEM + bao1x_api::offsets::RRAM_STORAGE_LEN {
+        // this also forces the writeable bit
+        let v_backing =
+            MemoryManager::with_mut(|mm| mm.map_zeroed_page(crate::arch::process::current_pid(), true))?;
+        let p_backing = virt_to_phys(v_backing as usize)?;
+        let v_slice = unsafe { core::slice::from_raw_parts_mut(v_backing, PAGE_SIZE / size_of::<usize>()) };
+        let s_page = addr as usize & !4095;
+        let src_slice =
+            unsafe { core::slice::from_raw_parts(s_page as *mut usize, PAGE_SIZE / size_of::<usize>()) };
+        v_slice.copy_from_slice(src_slice);
+        // println!("copied from {:x}: {:x?}", s_page, &v_slice[..16]);
+
+        // v_slice now has a copy of src_slice. Unmap src_slice and replace with v_slice.
+        // currently, we just leak memory until we run out if we're doing this trick to map pages into memory.
+        let flags = l0_pt.entries[vpn0] & 0x3FF;
+        let ppn1 = (p_backing >> 22) & ((1 << 12) - 1);
+        let ppn0 = (p_backing >> 12) & ((1 << 10) - 1);
+        l0_pt.entries[vpn0] = (ppn1 << 20) | (ppn0 << 10) | flags | MMUFlags::W.bits();
+
+        // at this point, the page table now points to the physical memory.
+        // println!("flushing mmu {:x?} <- {:x?} {} {:x}", addr, val, size_of::<T>(), flags);
+        bao1x_hal::cache_flush();
+        unsafe { flush_mmu() };
+    } else if !was_writable {
+        // Add the WRITE bit, which allows us to patch things like
+        // program code.
+        l0_pt.entries[vpn0] |= MMUFlags::W.bits();
+        unsafe { flush_mmu() };
+    }
+    // Perform the write
+    unsafe { addr.write_volatile(val) };
+    bao1x_hal::cache_flush();
 
     // Remove supervisor access to user mode
     unsafe { sstatus::clear_sum() };
