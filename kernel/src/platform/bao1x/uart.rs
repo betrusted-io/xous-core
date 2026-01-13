@@ -19,8 +19,6 @@ use crate::{PID, io::SerialWrite, mem::MemoryManager};
 /// See https://github.com/betrusted-io/xous-core/blob/master/docs/memory.md
 #[cfg(feature = "bao1x")]
 pub const UART_ADDR: usize = 0xffcf_0000;
-#[cfg(feature = "bao1x")]
-pub const IRQ0_ADDR: usize = UART_ADDR + 0x1000;
 
 /// UART instance.
 ///
@@ -43,12 +41,11 @@ pub fn init() {
             )
             .expect("unable to map serial port")
     });
-    let mut uart = Uart::new(UART_ADDR, IRQ0_ADDR);
+    let mut uart = Uart::new(UART_ADDR);
     uart.init();
     unsafe {
         UART = Some(uart);
-        // inaccessible because DUART is tx-only
-        // crate::debug::shell::init((&mut *(&raw mut UART)).as_mut().unwrap());
+        crate::debug::shell::init((&mut *(&raw mut UART)).as_mut().unwrap());
     }
 }
 
@@ -59,7 +56,7 @@ pub struct Uart {
 
 #[cfg(feature = "bao1x")]
 impl Uart {
-    pub fn new(addr: usize, _irq_addr: usize) -> Uart { Uart { uart_csr: CSR::new(addr as *mut u32) } }
+    pub fn new(addr: usize) -> Uart { Uart { uart_csr: CSR::new(addr as *mut u32) } }
 
     pub fn init(&mut self) {
         // duart requires no special initializations

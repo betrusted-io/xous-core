@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2022 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-FileCopyrightText: 2024 bunnie <bunnie@kosagi.com>
 // SPDX-License-Identifier: Apache-2.0
+#[cfg(feature = "gdb-stub")]
+pub mod gdbuart;
 
 #[cfg(all(feature = "bao1x", not(feature = "verilator-only")))]
 #[path = "rand.rs"]
@@ -65,6 +67,8 @@ pub fn init() {
     self::rand::init();
     #[cfg(any(feature = "debug-print", feature = "print-panics"))]
     self::uart::init();
+    #[cfg(feature = "gdb-stub")]
+    crate::debug::gdb::init();
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
