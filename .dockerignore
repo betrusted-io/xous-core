@@ -1,0 +1,8 @@
+*.uf2
+.direnv
+.github
+.vscode
+.envrc
+.gitattributes
+.gitignore
+*.nix
