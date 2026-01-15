@@ -36,6 +36,22 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
     if dev2 != 0 {
         bao1x_hal::sigcheck::erase_secrets(&mut Some(csprng)).inspect_err(|e| crate::println!("{}", e)).ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
     }
+    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+    csprng.random_delay();
+    {
+        // check IFR settings - this confirms that the Cortex M7 is disabled, and that hardware JTAG debug is
+        // disabled
+        let ifr = unsafe { core::slice::from_raw_parts(0x6040_0180 as *const u8, 0x10) };
+        let ref_value = [
+            0x00u8, 0x00, 0x00, 0x00, 0x82, 0x8c, 0x42, 0x6a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        if ifr != &ref_value {
+            bao1x_hal::sigcheck::erase_secrets(&mut Some(csprng))
+                .inspect_err(|e| crate::println!("{}", e))
+                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+            crate::println!("Incorrect IFR: factory error, or under attack. Secrets erased.");
+        }
+    }
 
     csprng.random_delay();
     let (paranoid1, paranoid2) = one_way.hardened_get2(PARANOID_MODE, PARANOID_MODE_DUPE).unwrap();

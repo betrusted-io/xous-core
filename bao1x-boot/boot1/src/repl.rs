@@ -438,6 +438,17 @@ impl Repl {
                 } else {
                     crate::println!("In-system keys have been generated");
                 }
+                let ifr = unsafe { core::slice::from_raw_parts(0x6040_0180 as *const u8, 0x10) };
+                let ref_value = [
+                    0x00u8, 0x00, 0x00, 0x00, 0x82, 0x8c, 0x42, 0x6a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00,
+                ];
+                if ifr == &ref_value {
+                    crate::println!("CM7 & debug confirmed fused off");
+                } else {
+                    crate::println!("Factory configuration error - CM7 or debug is enabled!");
+                    secure = false;
+                }
                 if !secure {
                     crate::println!("** System did not meet minimum requirements for security **");
                 }
@@ -557,6 +568,14 @@ impl Repl {
                 let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
                 rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
             }
+            "ifr" => {
+                // safety: the IFR region is aligned and exists here. It is sealed by hardware in USER mode,
+                // and should report as all 0's.
+                let ifr = unsafe { core::slice::from_raw_parts(0x6040_0000 as *const u8, 0x400) };
+                for (i, chunk) in ifr.chunks(32).enumerate() {
+                    crate::println!("  {:03x}: {:02x?}", i * 32, chunk);
+                }
+            }
             #[cfg(feature = "test-boot0-keys")]
             "publock" => {
                 let rram = CSR::new(utra::rrc::HW_RRC_BASE as *mut u32);
@@ -655,7 +674,7 @@ impl Repl {
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!(
-                    "Commands include: reset, echo, altboot, boot, bootwait, idmode, localecho, uf2, boardtype, audit, lockdown, paranoid, self_destruct"
+                    "Commands include: reset, echo, altboot, boot, bootwait, idmode, localecho, uf2, boardtype, audit, lockdown, paranoid, self_destruct, ifr"
                 );
                 #[cfg(feature = "test-boot0-keys")]
                 crate::print!(", publock");

@@ -43,19 +43,22 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
         if slot_mgr.read(&CP_ID).unwrap().iter().all(|&b| b == 0 || b == 0xFF) {
             let cp_id =
                 unsafe { core::slice::from_raw_parts(IFR_CP_ID_BASE as *const u8, SLOT_ELEMENT_LEN_BYTES) };
-            slot_mgr.write(&mut rram, &CP_ID, cp_id.try_into().unwrap()).unwrap();
+            // don't fail on write failure - otherwise we get stuck here and can't debug the chip
+            slot_mgr.write(&mut rram, &CP_ID, cp_id.try_into().unwrap()).ok();
         }
 
         // this one may allocate a TRNG, which takes >50 ms to warm up.
         if slot_mgr.read(&SERIAL_NUMBER).unwrap().iter().all(|&b| b == 0 || b == 0xFF) {
             let trng = maybe_trng.get_or_insert_with(|| super::trng::ManagedTrng::new(&board_type));
             let k = trng.generate_key();
-            slot_mgr.write(&mut rram, &SERIAL_NUMBER, &k).unwrap();
+            // don't fail on write failure - otherwise we get stuck here and can't debug the chip
+            slot_mgr.write(&mut rram, &SERIAL_NUMBER, &k).ok();
         }
         if slot_mgr.read(&UUID).unwrap().iter().all(|&b| b == 0 || b == 0xFF) {
             let trng = maybe_trng.get_or_insert_with(|| super::trng::ManagedTrng::new(&board_type));
             let k = trng.generate_key();
-            slot_mgr.write(&mut rram, &UUID, &k).unwrap();
+            // don't fail on write failure - otherwise we get stuck here and can't debug the chip
+            slot_mgr.write(&mut rram, &UUID, &k).ok();
         }
         if slot_mgr.read(&IFR_HASH).unwrap().iter().all(|&b| b == 0 || b == 0xFF) {
             use digest::Digest;
@@ -65,7 +68,8 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
                 unsafe { core::slice::from_raw_parts(bao1x_api::IFR_BASE as *const u8, bao1x_api::IFR_LEN) };
             hasher.update(&ifr_slice);
             let digest = hasher.finalize();
-            slot_mgr.write(&mut rram, &IFR_HASH, digest.as_slice().try_into().unwrap()).unwrap();
+            // don't fail on write failure - otherwise we get stuck here and can't debug the chip
+            slot_mgr.write(&mut rram, &IFR_HASH, digest.as_slice().try_into().unwrap()).ok();
         }
         // once all values are written, advance the CP_BOOT_SETUP_DONE state
         // safety: the offset is correct because we're pulling it from our pre-defined constants and
