@@ -11,6 +11,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository }}
+  RUST_IMAGE_SHA256: f7a4434bddc5865c07ec0e2804fcde20e9898a2b4c12cac53b22310550a8d6f5
 
 jobs:
   build-apps-dabao:
@@ -60,6 +61,7 @@ jobs:
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
+
       - name: Build dabao ${{ matrix.app }} app firmware (uf2 files)
         uses: docker/build-push-action@v5
         with:
@@ -67,6 +69,7 @@ jobs:
           file: ./apps-dabao/Dockerfile
           build-args: |
             app=${{ matrix.app }}
+            IMG_SHA256=${{ env.RUST_IMAGE_SHA256 }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -126,11 +129,14 @@ jobs:
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
+
       - name: Build bao1x boot1 firmware (uf2 files)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./bao1x-boot/Dockerfile
+          build-args: |
+            IMG_SHA256=${{ env.RUST_IMAGE_SHA256 }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -1,3 +1,5 @@
+target/
+build/
 *.uf2
 .direnv
 .github
@@ -6,3 +8,5 @@
 .gitattributes
 .gitignore
 *.nix
+*~
+*.swp
