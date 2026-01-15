@@ -438,6 +438,17 @@ impl Repl {
                 } else {
                     crate::println!("In-system keys have been generated");
                 }
+                let ifr = unsafe { core::slice::from_raw_parts(0x6040_0180 as *const u8, 0x10) };
+                let ref_value = [
+                    0x00u8, 0x00, 0x00, 0x00, 0x82, 0x8c, 0x42, 0x6a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00,
+                ];
+                if ifr == &ref_value {
+                    crate::println!("CM7 & debug confirmed fused off");
+                } else {
+                    crate::println!("Factory configuration error - CM7 or debug is enabled!");
+                    secure = false;
+                }
                 if !secure {
                     crate::println!("** System did not meet minimum requirements for security **");
                 }
