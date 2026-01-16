@@ -1,7 +1,8 @@
 use aes::Aes256;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
 use bao1x_api::{
-    BOOT0_PUBKEY_FAIL, BoardTypeCoding, CP_ID, DEVELOPER_MODE, OEM_MODE, SLOT_ELEMENT_LEN_BYTES, UUID,
+    BOOT0_PUBKEY_FAIL, BoardTypeCoding, BootWaitCoding, CP_ID, DEVELOPER_MODE, OEM_MODE,
+    SLOT_ELEMENT_LEN_BYTES, UUID,
 };
 use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
 use bao1x_hal::{
@@ -355,5 +356,20 @@ impl KeyStore {
             }
         };
         Ok(())
+    }
+
+    pub fn set_bootwait(&self, enable: Option<bool>) -> Result<bool, xous::Error> {
+        let previous = self.owc.get_decoded::<bao1x_api::BootWaitCoding>().expect("couldn't fetch flag");
+        if let Some(enable) = enable {
+            while self.owc.get_decoded::<bao1x_api::BootWaitCoding>().expect("couldn't fetch flag")
+                != if enable { bao1x_api::BootWaitCoding::Enable } else { bao1x_api::BootWaitCoding::Disable }
+            {
+                self.owc.inc_coded::<bao1x_api::BootWaitCoding>().unwrap();
+            }
+        }
+        match previous {
+            BootWaitCoding::Enable => Ok(true),
+            BootWaitCoding::Disable => Ok(false),
+        }
     }
 }

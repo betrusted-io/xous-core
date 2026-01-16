@@ -18,6 +18,10 @@ pub enum Opcode {
     /// Ephemeral secret operations
     EphemeralOp = 256,
 
+    // ----- below are non-cryptographic opcodes but used to manipulate sensitive state -----
+    /// Set bootwait parameters
+    Bootwait = 4096,
+
     /// Used to map unknown opcodes
     InvalidCall = 65535,
 }
