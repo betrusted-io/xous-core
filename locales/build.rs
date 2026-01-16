@@ -27,19 +27,12 @@ macro_rules! build_debug {
 fn read_locales() -> Translations {
     let mut translations: Translations = HashMap::new();
 
-    let mut project_dir = project_root();
+    let project_dir = project_root();
     let build_directory = project_dir.to_str().unwrap();
     let locales = format!("{}/**/i18n.json", build_directory);
     build_debug!("Reading {}", &locales);
-    // TODO: once this works, get from external directory/location arguments from xtask script
-    project_dir.pop(); //sibling directory
-    project_dir.push("sigchat");
-    let external_directory = project_dir.to_str().unwrap();
-    let external_locales = format!("{}/**/i18n.json", external_directory);
-    build_debug!("Reading external {}", &external_locales);
     let paths = glob(&locales).expect("Failed to read glob pattern for in tree files");
-    let external_paths = glob(&external_locales).expect("Filed to read glob pattern for external files");
-    for entry in paths.chain(external_paths) {
+    for entry in paths {
         let entry = entry.unwrap();
         build_debug!("{:?}", entry);
         println!("cargo:rerun-if-changed={}", entry.display());
