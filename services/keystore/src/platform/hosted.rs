@@ -136,7 +136,7 @@ pub fn keystore(sid: SID) -> ! {
             Opcode::EphemeralOp => {
                 todo!()
             }
-            Opcode::InvalidCall => {
+            _ => {
                 log::error!("Invalid call in keystore: {:?}", opcode);
             }
         }
