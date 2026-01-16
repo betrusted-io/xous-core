@@ -30,6 +30,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                 let keystore = keystore::Keystore::new(&_env.xns);
                 if args.len() != 1 {
                     write!(ret, "bootwait [check | enable | disable]").ok();
+                    return Ok(Some(ret));
                 }
                 if args[0] == "check" {
                     write!(ret, "bootwait is {:?}", keystore.bootwait(None).unwrap()).ok();
