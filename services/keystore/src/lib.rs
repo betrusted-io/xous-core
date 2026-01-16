@@ -169,6 +169,29 @@ impl Keystore {
 
     #[inline(always)]
     pub(crate) fn get_dec_backend(&self) -> KeystoreDec<'_> { KeystoreDec(self) }
+
+    /// Returns the previous bootwait state
+    pub fn bootwait(&self, enable: Option<bool>) -> Result<bool, xous::Error> {
+        match xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::Bootwait.to_usize().unwrap(),
+                if enable.is_some() { 1 } else { 0 },
+                if enable.unwrap_or(false) { 1 } else { 0 },
+                0,
+                0,
+            ),
+        )? {
+            xous::Result::Scalar5(_, last, _, _, _) => {
+                if last != 0 {
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            _ => unimplemented!(),
+        }
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

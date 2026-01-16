@@ -44,6 +44,22 @@ pub fn keystore(sid: SID) -> ! {
                 // this will use the backup_mgr to store ephemeral secrets
                 todo!()
             }
+            Opcode::Bootwait => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let is_some = scalar.arg1 != 0;
+                    let enable = scalar.arg2 != 0;
+                    match store.set_bootwait(if is_some { Some(enable) } else { None }) {
+                        Ok(last) => {
+                            if last {
+                                scalar.arg1 = 1;
+                            } else {
+                                scalar.arg1 = 0;
+                            }
+                        }
+                        _ => panic!("Couldn't set bootwait"),
+                    }
+                }
+            }
             Opcode::InvalidCall => {
                 log::error!("Invalid call in keystore: {:?}", opcode);
             }
