@@ -1,3 +1,4 @@
+use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
 use bao1x_hal::rram::Reram;
 use keystore_api::*;
 use xous::SID;
@@ -14,6 +15,12 @@ pub fn keystore(sid: SID) -> ! {
     store.ensure_system_init(&mut rram);
     // derive the master key
     store.derive_master_key();
+
+    if store.is_collateral_erased() {
+        log::info!("{}COLLATERAL.ERASED,{}", BOOKEND_START, BOOKEND_END);
+    } else {
+        panic!("Collateral is not erased - protocol error for Baochip firmwares!");
+    }
 
     let mut msg_opt = None;
 
