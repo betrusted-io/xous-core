@@ -277,6 +277,41 @@ pub fn erase_secrets(_csprng: &mut Option<&mut Csprng>) -> Result<(), String> {
 }
 
 #[cfg(not(feature = "std"))]
+pub fn erase_collateral(csprng: &mut Option<&mut Csprng>) -> Result<(), String> {
+    let slot_mgr = SlotManager::new();
+    let mut rram = crate::rram::Reram::new();
+
+    let slot = &bao1x_api::offsets::COLLATERAL;
+    for data_index in slot.try_into_data_iter().unwrap() {
+        bollard!(die_no_std, 4);
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        // only clear ACL if it isn't already cleared
+        if slot_mgr.get_acl(slot).unwrap().raw_u32() != 0 {
+            // clear the ACL so we can operate on the data
+            slot_mgr
+                .set_acl(&mut rram, slot, &AccessSettings::Data(DataSlotAccess::new_with_raw_value(0)))
+                .expect("couldn't reset ACL");
+        }
+        let bytes = unsafe { slot_mgr.read_data_slot(data_index) };
+        // only erase if the key hasn't already been erased, to avoid stressing the RRAM array
+        // erase_secrets() may be called on every boot in some modes.
+        bollard!(die_no_std, 4);
+        if !bytes.iter().all(|&b| b == ERASE_VALUE) {
+            let mut eraser = alloc::vec::Vec::with_capacity(slot.len() * SLOT_ELEMENT_LEN_BYTES);
+            eraser.resize(slot.len() * SLOT_ELEMENT_LEN_BYTES, ERASE_VALUE);
+
+            slot_mgr.write(&mut rram, slot, &eraser).ok();
+        }
+        let check = unsafe { slot_mgr.read_data_slot(data_index) };
+        if !check.iter().all(|&b| b == ERASE_VALUE) {
+            crate::println!("Failed to erase key at {}: {:x?}", data_index, check);
+        }
+        bollard!(die_no_std, 4);
+    }
+    Ok(())
+}
+
+#[cfg(not(feature = "std"))]
 pub fn erase_secrets(csprng: &mut Option<&mut Csprng>) -> Result<(), String> {
     // ensure coreuser settings, as we could enter from a variety of loader stages
     let mut cu = crate::coreuser::Coreuser::new();

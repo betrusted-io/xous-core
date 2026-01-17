@@ -7,7 +7,7 @@ use bao1x_api::{
 use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
 use bao1x_hal::{
     acram::{OneWayCounter, SlotManager},
-    board::{CHAFF_KEYS, NUISANCE_KEYS_0, NUISANCE_KEYS_1, ROOT_SEED, THE_FLAG_1},
+    board::{CHAFF_KEYS, COLLATERAL, NUISANCE_KEYS_0, NUISANCE_KEYS_1, ROOT_SEED, THE_FLAG_1},
     rram::Reram,
 };
 use hkdf::Hkdf;
@@ -87,6 +87,15 @@ impl KeyStore {
             log::info!("Secret ID init done.");
             log::info!("{}KEYSTORE.INITDONE,{}", BOOKEND_START, BOOKEND_END);
         }
+    }
+
+    /// returns `true` if collateral is erased
+    pub fn is_collateral_erased(&mut self) -> bool {
+        let collateral = self.slot_mgr.read(&COLLATERAL).unwrap();
+        let check_val = vec![bao1x_hal::sigcheck::ERASE_VALUE; COLLATERAL.len() * SLOT_ELEMENT_LEN_BYTES];
+        // log::info!("collateral: {:x?}", &collateral);
+        // log::info!("check_val: {:x?}", &check_val);
+        collateral == &check_val
     }
 
     pub fn derive_master_key(&mut self) {

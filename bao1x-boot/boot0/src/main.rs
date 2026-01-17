@@ -15,7 +15,7 @@ use alloc::collections::VecDeque;
 use core::cell::RefCell;
 
 use bao1x_api::pubkeys::{BOOT0_SELF_CHECK, BOOT0_TO_ALTBOOT1, BOOT0_TO_BOOT1};
-use bao1x_api::{BOOT0_PUBKEY_FAIL, BOOT1_PUBKEY_FAIL, DEVELOPER_MODE, bollard};
+use bao1x_api::{BOOT0_PUBKEY_FAIL, BOOT1_PUBKEY_FAIL, DEVELOPER_MODE, HardenedBool, bollard};
 use bao1x_api::{PARANOID_MODE, PARANOID_MODE_DUPE};
 use bao1x_hal::acram::OneWayCounter;
 use bao1x_hal::hardening::{check_pll, die, mesh_setup};
@@ -117,23 +117,89 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     let slot_mgr = bao1x_hal::acram::SlotManager::new();
 
     // check that the pubkeys in boot0 matches the reference keys
-    bao1x_hal::hardening::compare_refkeys(
+    match bao1x_hal::hardening::compare_refkeys(
         &owc,
         &slot_mgr,
         &mut csprng,
         bao1x_api::BOOT0_START as *const bao1x_api::signatures::SignatureInFlash,
         BOOT0_PUBKEY_FAIL,
-    );
+    )
+    .is_true()
+    {
+        Some(true) => (),
+        // if comparison is false or None, erase secrets
+        _ => {
+            bao1x_hal::sigcheck::erase_secrets(&mut Some(&mut csprng))
+                .inspect_err(|e| crate::println!("{}", e))
+                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+        }
+    };
     bollard!(die, 4);
 
     // check that the pubkeys in boot1 matches the reference keys
-    bao1x_hal::hardening::compare_refkeys(
+    match bao1x_hal::hardening::compare_refkeys(
         &owc,
         &slot_mgr,
         &mut csprng,
         bao1x_api::BOOT1_START as *const bao1x_api::signatures::SignatureInFlash,
         BOOT1_PUBKEY_FAIL,
-    );
+    )
+    .is_true()
+    {
+        Some(true) => (),
+        // if comparison is false or None, erase secrets
+        _ => {
+            bao1x_hal::sigcheck::erase_secrets(&mut Some(&mut csprng))
+                .inspect_err(|e| crate::println!("{}", e))
+                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+        }
+    };
+    bollard!(die, 4);
+
+    // mutual distrust: if any boot1 keys match those in the indelible array, erase the collateral
+
+    // The IFR (indelible) copy is weird, because the highest byte doesn't match (it's actually a flag that
+    // indicates the region has to be write protected). Thus, the IFR keys are a set of four, disjointed
+    // 31-byte memory areas, plus a collection of 4 bytes that correspond to the missing MSB.
+    let ifr_keys = [
+        unsafe { core::slice::from_raw_parts(0x6040_01A0 as *const u8, 31) },
+        unsafe { core::slice::from_raw_parts(0x6040_01C0 as *const u8, 31) },
+        unsafe { core::slice::from_raw_parts(0x6040_01E0 as *const u8, 31) },
+        unsafe { core::slice::from_raw_parts(0x6040_0200 as *const u8, 31) },
+    ];
+    let ifr_msb = unsafe { core::slice::from_raw_parts(0x6040_0240 as *const u8, 4) };
+    let boot1_block_ptr = bao1x_api::BOOT1_START as *const bao1x_api::signatures::SignatureInFlash;
+    let boot1_block: &bao1x_api::signatures::SignatureInFlash = unsafe { boot1_block_ptr.as_ref().unwrap() };
+    let mut any_matches = HardenedBool::FALSE;
+    bollard!(die, 4);
+    for (i, &ifr_key) in ifr_keys.iter().enumerate() {
+        bollard!(die, 4);
+        for boot1_key in boot1_block.sealed_data.pubkeys.iter() {
+            csprng.random_delay();
+            bollard!(die, 4);
+            if ifr_key == &boot1_key.pk[..31] && ifr_msb[i] == boot1_key.pk[31] {
+                any_matches = HardenedBool::TRUE;
+                // crate::println!("Got IFR match");
+                break;
+            }
+        }
+        if Some(true) == any_matches.is_true() {
+            break;
+        }
+    }
+    bollard!(die, 4);
+    csprng.random_delay();
+    match any_matches.is_true() {
+        Some(false) => {
+            // crate::println!("Preserve collateral!");
+        }
+        _ => {
+            // crate::println!("Collateral erase check!");
+            bao1x_hal::sigcheck::erase_collateral(&mut Some(&mut csprng))
+                .inspect_err(|e| crate::println!("{}", e))
+                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+        }
+    }
     bollard!(die, 4);
 
     let (paranoid1, paranoid2) = owc.hardened_get2(PARANOID_MODE, PARANOID_MODE_DUPE).unwrap();

@@ -458,7 +458,7 @@ pub fn compare_refkeys(
     csprng: &mut Csprng,
     pubkey_ptr: *const bao1x_api::signatures::SignatureInFlash,
     fail_counter: usize,
-) {
+) -> HardenedBool {
     let reference_keys =
         [bao1x_api::BAO1_PUBKEY, bao1x_api::BAO2_PUBKEY, bao1x_api::BETA_PUBKEY, bao1x_api::DEV_PUBKEY];
     // check that the pub keys match those burned into the indelible key area
@@ -472,7 +472,22 @@ pub fn compare_refkeys(
             good_compare = HardenedBool::FALSE;
         }
     }
-
+    csprng.random_delay();
+    // The IFR (indelible) copy is weird, because the highest byte doesn't match (it's actually a flag that
+    // indicates the region has to be write protected). Thus, the IFR keys are a set of four, disjointed
+    // 31-byte memory areas, plus a collection of 4 bytes that correspond to the missing MSB.
+    let ifr_keys = [
+        unsafe { core::slice::from_raw_parts(0x6040_01A0 as *const u8, 31) },
+        unsafe { core::slice::from_raw_parts(0x6040_01C0 as *const u8, 31) },
+        unsafe { core::slice::from_raw_parts(0x6040_01E0 as *const u8, 31) },
+        unsafe { core::slice::from_raw_parts(0x6040_0200 as *const u8, 31) },
+    ];
+    let ifr_msb = unsafe { core::slice::from_raw_parts(0x6040_0240 as *const u8, 4) };
+    for (i, (boot0_key, ref_key)) in pk_src.sealed_data.pubkeys.iter().zip(ifr_keys).enumerate() {
+        if ref_key != &boot0_key.pk[..31] || ifr_msb[i] != boot0_key.pk[31] {
+            good_compare = HardenedBool::FALSE;
+        }
+    }
     csprng.random_delay();
     match good_compare.is_true() {
         Some(false) => {
@@ -493,4 +508,5 @@ pub fn compare_refkeys(
         None => die(),
     }
     bollard!(die, 4);
+    good_compare
 }

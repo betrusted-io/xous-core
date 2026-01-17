@@ -216,6 +216,26 @@ pub const BAO2_PUBKEY: SlotIndex = SlotIndex::Data(5, PartitionAccess::All, RwPe
 pub const BETA_PUBKEY: SlotIndex = SlotIndex::Data(6, PartitionAccess::All, RwPerms::ReadOnly);
 pub const DEV_PUBKEY: SlotIndex = SlotIndex::Data(7, PartitionAccess::All, RwPerms::ReadOnly);
 
+/// Collateral is a data range that is *always* erased every time the system transitions from boot0
+/// to a Baochip-signed boot1. The only condition under which it is not erased is if *all* the boot1 keys
+/// in slots 0, 1, *and* 2 do *not* match the Baochip set.
+///
+/// The purpose of the collateral keys is to ensure that no Baochip-signed images can be used to
+/// decrypt third-party signed images. Thus, the conditions for signing a third-party image with
+/// its own signing keys are as follows:
+///
+/// - It must be a Boot1 image
+/// - Keys 0, 1, and 2 must all be different from the Baochip keys
+/// - The third-party firmware must generate and populate all the COLLATERAL data slots.
+/// - The third-party firmware must incorporate at least one of the keys in slots 261, 262, or 263 into their
+///   root key mechanism.
+/// - Collateral key in slot 264 must be made disclosable through a public inspection mechanism. The purpose
+///   of the inspection is to verify that in fact the collateral keys have been populated with non-zero value
+///   by the third-party firmware, and to verify erase of the key range when necessary. Erasure always
+///   progresses from low slot to high slot, and thus one can infer the erasure state of the collateral by
+///   inspecting the value of the high key slot.
+pub const COLLATERAL: SlotIndex = SlotIndex::DataRange(261..265, PartitionAccess::Fw0, RwPerms::ReadWrite);
+
 // Notes on defining the boot0 IFR region.
 // RISC-V boot0 region start is defined by IFR slot 6, bits [55:48]
 // RISC-V boot1 region start (which is boot0 end) is defined by IFR slot 6, bits[47:40]
