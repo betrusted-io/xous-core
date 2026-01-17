@@ -72,6 +72,79 @@ By default, the `bao1x` will accept and run developer images; however upon encou
 
 The developer key can be revoked by running `lockdown` at the `boot1` stage. `baosec` boards have this done at the factory prior to shipment, to prevent tampering in the supply chain.
 
+### Third Party Firmware
+
+Baochip cannot be the ultimate guarantor of third party signature integrity. It doesn't have the resources or
+risk profile to (for example) sign cryptocurrency wallets. Thus, developers looking to build high-value applications
+on Baochip must also manage their own signing keys. To this end, a policy of "mutual distrust" is enforced by `boot0`.
+
+#### Preventing Third Party Access to Baochip Secrets
+
+Boot0 and Boot1 check the public key block presented by the next stage against a set of expected public
+keys that should match the Baochip OEM keys. If any of these do not match, most of the Baochip secret
+keys are erased before running the next stage. Thus any third party firmware may be free to inspect
+Baochip's keyslots, but by the time it runs, those keyslots have been erased.
+
+#### Preventing Baochip Access to Third Party Secrets
+
+An bank of 4x 256-bit keys known as `collateral` keys are provided. These keys are always erased by
+the boot0 / boot1 firmware whenever the public key block embedded in the header of the next stage matches Baochip's
+expected public keys. The only condition when they are not erased is when key slots 0, 1, and 2 are all
+different from Baochip's public keys (key slot 3 is a devkey slot, and anyone can sign an image for
+that key slot, so it is not erased).
+
+#### Details of the Mutual-Distrust Mechanism
+
+The Mutual-Distrust mechanism aims to achieve the following goals:
+
+1. Any firmware signed by a third party can't be used to decrypt Baochip secrets
+2. Any firmware signed by Baochip can't be used to decrypt third party secrets
+
+Before we get into how the above is implemented, some definitions:
+
+`third party firmware`: Code signed and maintained by a third party. Once a third party has a Baochip-signed `boot1`, they can freely sign further downstream application images using their own signing keys; updates to `boot1` would require a fresh Baochip signature.
+
+`key manifest`: Each stage contains an embedded header which contains a signature for the code in that stage.
+Immediately after the signature and within the signed region, there is a `key manifest` that
+consists of four ED25519 public keys. The `key manifest` declares what public keys the current
+stage intends to use for verifying the next stage's code.
+
+`reference keys`: Baochip's expected signing keys. These are burned into multiple redundant indelible locations. Collectively they are referred to as `reference keys`.
+
+`Baochip secrets`: Baochip stores its secret keys in a block of key slots expressly reserved for Baochip's use. These are erased anytime trust is transferred to a new entity, or if trust is lost (e.g. going into developer mode).
+
+`collateral`: A set of keys used to effect key destruction when crossing trust domains. To accomplish this, third party firmware *must* use at least 256 bits of the `collateral` key set in its master key derivation scheme.
+
+`developer key`: A public key stored in slot 3 of the `key manifest` that corresponds to a well-known private key. Anyone can sign an image with a `developer key`.
+
+Based on the above definitions, here are the mutual-distrust policies enforced by the Baochip bootloader:
+
+1. `boot0` verifies that its `key manifest` matches the `reference keys`. If not, `Baochip secrets` are erased.
+2. `boot0` verifies that `boot1`'s `key manifest` matches the `reference keys`. If any keys do not match, `Baochip secrets` are erased.
+3. `boot0` checks if any non-`developer key` keys in `key manifest` match the `reference keys`. If any matching keys are found, the `collateral` is erased. Otherwise, `collateral` is preserved.
+
+Let's observe what properties are guaranteed by this arrangement:
+
+- If `boot0` and `boot1`'s `key manifest`s match the `reference keys`, then `Baochip secrets` are intact.
+- If any of `boot1`'s `key manifest` non-developer entries match any of the `reference keys`, `collateral` is erased. Thus, any attempt to "downgrade" the firmware by loading a Baochip-signed image would not lead to third-party secret disclosure, because the `collateral` keys are part of the third party firmware's key derivation mechanism.
+- If any of `boot1`'s `key manifest` does not match the `reference keys` or if `boot1` is signed by the `developer key`, most of Baochip's secrets are erased. Thus the process of loading third party firmware would also cause any Baochip secrets to be lost.
+
+#### Conditions for Getting Signed Third-Party `boot1`
+
+Baochip will *only* sign third-party `boot1` images after the proposed firmware meets the following tests:
+
+1. The `boot1` `key manifest` block is entirely different (except for optionally the developer key) from Baochip's `reference keys`
+2. The proposed firmware can demonstrate that it has initialized the `collateral` key slots by revealing the contents of `collateral` slot 3 via an introspection command (slots 0, 1, and 2 are private; each slot is 256 bits in length).
+3. The proposed firmware demonstrates permanent loss of access to encrypted data if a Baochip-signed `boot1` is swapped in, and then reverted back to the third-party-signed `boot1`.
+4. The same introspection command used in step 2 is run again. The resulting value must be different from the value reported in the original run of step 2.
+
+The above four tests are written such that the test can be run without inspection of the details of the third party firmware, but ideally, Baochip can inspect the firmware to ensure the intended policies are in place.
+
+Note that if the third party firmware developer fails to use the `collateral` keys correctly to derive its master key, it can be subject to exploitation by a Baochip-signed image. Baochip takes no responsibility for any damages that may occur in that event.
+
+Baochip would also entertain giving third parties self-signed `boot0`s with indelible `reference keys` linked to their own keys, *but* this requires a minimum order of around 50,000 chips plus a per-lot engineering fee to retool the wafer probe infrastructure used to burn the keys into the chip (these numbers are just ballpark estimates; contact Baochip to finalize details). Thus for high-volume applications this is a viable option, while the third-party firmware mechanism is an economical option to bootstrap self-managed secure ecosystems.
+
+
 ## API Organization
 
 The Baochip platform has the following API structure.
