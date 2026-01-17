@@ -65,6 +65,8 @@ pub const SWAP_KEY: SlotIndex = SlotIndex::Data(259, PartitionAccess::Fw0, RwPer
 /// There is a second flag stored somewhere else. Can you find it?
 pub const THE_FLAG_1: SlotIndex = SlotIndex::Data(260, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
+// NOTE: COLLATERAL is from 261..265, but it is in the "common" page
+
 /// `NUISANCE_KEYS` are hashed together with `ROOT_SEED` to derive the core secret.
 /// Their primary purpose is to annoy microscopists trying to read the secret key by
 /// directly imaging the RRAM array. They also exist to reduce power side channels
