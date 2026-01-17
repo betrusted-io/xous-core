@@ -449,6 +449,15 @@ impl Repl {
                     crate::println!("Factory configuration error - CM7 or debug is enabled!");
                     secure = false;
                 }
+                let collateral = slot_mgr.read(&COLLATERAL).unwrap();
+                let check_val =
+                    alloc::vec![bao1x_hal::sigcheck::ERASE_VALUE; COLLATERAL.len() * SLOT_ELEMENT_LEN_BYTES];
+                if collateral == &check_val {
+                    crate::println!("Collateral erased");
+                } else {
+                    crate::println!("Collateral is set");
+                }
+
                 if !secure {
                     crate::println!("** System did not meet minimum requirements for security **");
                 }
