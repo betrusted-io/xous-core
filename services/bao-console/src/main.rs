@@ -15,6 +15,10 @@ fn main() {
     let tt = ticktimer::Ticktimer::new().unwrap();
     shell::start_shell();
 
+    tt.sleep_ms(500).ok(); // pause for the system to startup
+    let usb = usb_bao1x::UsbHid::new();
+    usb.serial_console_input_injection();
+
     tt.sleep_ms(4000).ok();
 
     #[cfg(all(feature = "board-baosec", feature = "test-flash"))]
