@@ -286,7 +286,12 @@ pub fn erase_collateral(csprng: &mut Option<&mut Csprng>) -> Result<(), String> 
         bollard!(die_no_std, 4);
         csprng.as_deref_mut().map(|rng| rng.random_delay());
         // only clear ACL if it isn't already cleared
-        if slot_mgr.get_acl(slot).unwrap().raw_u32() != 0 {
+        if slot_mgr
+            .get_acl(slot)
+            .unwrap_or(AccessSettings::Data(DataSlotAccess::new_with_raw_value(0xFFFF_FFFF)))
+            .raw_u32()
+            != 0
+        {
             // clear the ACL so we can operate on the data
             slot_mgr
                 .set_acl(&mut rram, slot, &AccessSettings::Data(DataSlotAccess::new_with_raw_value(0)))
