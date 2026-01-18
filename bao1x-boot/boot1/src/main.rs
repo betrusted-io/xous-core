@@ -33,7 +33,7 @@ use crate::secboot::try_boot;
 // Notes:
 // - "Towards" - not a release yet, but working towards the stated milestone
 // - Eliminating "Towards" is done at the tag-out point.
-const RELEASE_DESCRIPTION: &'static str = "Towards Beta-0";
+const RELEASE_DESCRIPTION: &'static str = "Beta-0";
 
 static UART_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
 #[allow(dead_code)]
