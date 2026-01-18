@@ -145,7 +145,7 @@ pub fn setup() -> (UsbDeviceState, u32) {
 }
 
 pub fn shutdown() {
-    crate::debug::USE_CONSOLE.store(false, core::sync::atomic::Ordering::SeqCst);
+    crate::USB_CONNECTED.store(false, core::sync::atomic::Ordering::SeqCst);
     unsafe {
         if let Some(ref mut usb_ref) = crate::platform::bao1x::usb::USB {
             let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
