@@ -72,12 +72,16 @@ pub const BOOT0_TO_BOOT1: SecurityConfiguration = SecurityConfiguration {
 };
 
 /// This is different from a jump directly to loader/baremetal because the
-/// function codes *must* be for Boot1.
+/// function codes *must* be for Boot1 or Baremetal. Loader is not a valid option.
 pub const BOOT0_TO_ALTBOOT1: SecurityConfiguration = SecurityConfiguration {
     image_ptr: crate::LOADER_START as *const u32,
     pubkey_ptr: crate::BOOT0_START as *const u32,
     revocation_owc: crate::BOOT0_REVOCATION_OFFSET,
-    function_codes: &[FunctionCode::Boot1 as u32, FunctionCode::UpdatedBoot1 as u32],
+    function_codes: &[
+        FunctionCode::Boot1 as u32,
+        FunctionCode::UpdatedBoot1 as u32,
+        FunctionCode::Baremetal as u32,
+    ],
 };
 
 pub const BOOT1_TO_LOADER_OR_BAREMETAL: SecurityConfiguration = SecurityConfiguration {
