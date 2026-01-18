@@ -109,22 +109,20 @@ impl KeyStore {
 
         // read key material
         ikm.extend_from_slice(self.slot_mgr.read(&ROOT_SEED).unwrap());
-        #[cfg(feature = "hazardous-debug")]
-        {
-            // analyze part of the key and print some informative statements during hazardous-debug
-            // we want to make sure that keys are actually being initialized, erased, or denied
-            // look at only 64 bits out of the 256 bit key - it's enough that it's highly unlikely that
-            // these 64 bits would match any of the zero/erased values, but not so much that if a
-            // dev image is accidentally signed & released that it'd be a serious threat to security
-            // as you'd still have 192 bits of secret material
-            let root_seed = self.slot_mgr.read(&ROOT_SEED).unwrap();
-            if root_seed[..8] == [0u8; 8] {
-                log::info!("{}KEYSTORE.ZERO,{}", BOOKEND_START, BOOKEND_END);
-            } else if root_seed[..8] == [bao1x_hal::sigcheck::ERASE_VALUE; 8] {
-                log::info!("{}KEYSTORE.ERASED,{}", BOOKEND_START, BOOKEND_END);
-            } else {
-                log::info!("{}KEYSTORE.KEYPASS,{}", BOOKEND_START, BOOKEND_END);
-            }
+
+        // Analyze part of the key and print some informative statements.
+        // We want to make sure that keys are actually being initialized, erased, or denied
+        // look at only 64 bits out of the 256 bit key - it's enough that it's highly unlikely that
+        // these 64 bits would match any of the zero/erased values, but not so much that if these
+        // values are leaked,  that it'd be a serious threat to security as you'd still have 192 bits of
+        // secret material, not to mention all the additional nuisance keys and chaff keys yet to come.
+        let root_seed = self.slot_mgr.read(&ROOT_SEED).unwrap();
+        if root_seed[..8] == [0u8; 8] {
+            log::info!("{}KEYSTORE.ZERO,{}", BOOKEND_START, BOOKEND_END);
+        } else if root_seed[..8] == [bao1x_hal::sigcheck::ERASE_VALUE; 8] {
+            log::info!("{}KEYSTORE.ERASED,{}", BOOKEND_START, BOOKEND_END);
+        } else {
+            log::info!("{}KEYSTORE.KEYPASS,{}", BOOKEND_START, BOOKEND_END);
         }
 
         // build nuisance key offsets - this is direct readout hardening
