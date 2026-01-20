@@ -9,29 +9,31 @@ on:
       - main
 
 jobs:
-  warmup-cache:
-    name: Build and cache shared dependencies
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v4
+  # TODO: re-enable if cachix is setup
+  #warmup-cache:
+  #  name: Build and cache shared dependencies
+  #  runs-on: ubuntu-latest
+  #  steps:
+  #    - name: Checkout sources
+  #      uses: actions/checkout@v4
 
-      - name: Install Nix
-        uses: DeterminateSystems/determinate-nix-action@v3
+  #    - name: Install Nix
+  #      uses: DeterminateSystems/determinate-nix-action@v3
 
-      - name: Setup cache
-        uses: cachix/cachix-action@v15
-        with:
-          name: xous-core
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+  #    - name: Setup cache
+  #      uses: cachix/cachix-action@v15
+  #      with:
+  #        name: xous-core
+  #        authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-      - name: Build shared dependencies
-        run: nix build .#ci-deps --print-build-logs
+  #    - name: Build shared dependencies
+  #      run: nix build .#ci-deps --print-build-logs
 
   build:
     name: Build ${{ matrix.package }}
     runs-on: ubuntu-latest
-    needs: warmup-cache
+    # TODO: re-enable if cachix is setup
+    #needs: warmup-cache
     strategy:
       fail-fast: false
       matrix:
@@ -54,7 +56,8 @@ jobs:
         uses: cachix/cachix-action@v15
         with:
           name: xous-core
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          # TODO: re-enable if cachix is setup
+          #authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Build ${{ matrix.package }}
         run: nix build .#${{ matrix.package }} --print-build-logs --out-link result-first
