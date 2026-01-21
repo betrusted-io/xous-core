@@ -1,9 +1,10 @@
-name: Build dabao and bao1x-boot firmware
+name: Docker - build baochip firmware
 
 on:
   push:
     branches:
       - main
+      - docker-*
   pull_request:
     branches:
       - main
@@ -11,19 +12,32 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository }}
-  RUST_IMAGE_SHA256: f7a4434bddc5865c07ec0e2804fcde20e9898a2b4c12cac53b22310550a8d6f5
+  RUST_IMAGE_SHA256: 5fdb652f0f6e83c24ebbba6d9c51a9836c6f3c4fa12dc3040e6327c6eb355769
+  RUST_VERSION: 1.93.0
 
 jobs:
-  build-apps-dabao:
+  docker-build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     strategy:
+      fail-fast: false
       matrix:
-        app:
-          - helloworld
-          - dabao-console
+        task:
+          - name: dabao
+            os: xous
+          - name: baosec
+            os: xous
+          - name: bao1x-boot0
+            os: none
+          - name: bao1x-boot1
+            os: none
+          - name: bao1x-alt-boot1
+            os: none
+          - name: bao1x-baremetal-dabao
+            os: none
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -54,102 +68,40 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/dabao-${{ matrix.app }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.task.name }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
-
-      - name: Build dabao ${{ matrix.app }} app firmware (uf2 files)
+      - name: Build ${{ matrix.task.name }} firmware
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./apps-dabao/Dockerfile
+          file: ./Dockerfile
           build-args: |
-            app=${{ matrix.app }}
+            RUST_VERSION=${{ env.RUST_VERSION }}
             IMG_SHA256=${{ env.RUST_IMAGE_SHA256 }}
+            task=${{ matrix.task.name }}
+            os=${{ matrix.task.os }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.app }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.app }},ignore-error=true
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/cache:${{ matrix.task.name }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/cache:base
+          cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref={0}/{1}/cache:{2},mode=max', env.REGISTRY, env.IMAGE_PREFIX, matrix.task.name) || '' }}
           outputs: type=local,dest=./output
           provenance: false
           sbom: false
 
-      - name: Upload ${{ matrix.app }} app UF2 artifacts
+      - name: Upload ${{ matrix.task.name }} artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dabao-${{ matrix.app }}-uf2
+          name: ${{ matrix.task.name }}
           path: |
             ./output/*.uf2
-          retention-days: 90
-
-  build-bao1x-boot1:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Fetch all tags
-        run: git fetch --prune --unshallow --tags
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            network=host
-            image=moby/buildkit:latest
-
-      - name: Configure Docker daemon for performance
-        run: |
-          echo '{"max-concurrent-downloads": 10, "max-concurrent-uploads": 10}' | sudo tee /etc/docker/daemon.json
-          sudo systemctl restart docker
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/bao1x-boot
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-
-      - name: Build bao1x boot1 firmware (uf2 files)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./bao1x-boot/Dockerfile
-          build-args: |
-            IMG_SHA256=${{ env.RUST_IMAGE_SHA256 }}
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=bao1x-boot
-          cache-to: type=gha,mode=max,scope=bao1x-boot,ignore-error=true
-          outputs: type=local,dest=./output
-          provenance: false
-          sbom: false
-
-      - name: Upload boot1 UF2 artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: bao1x-boot1-uf2
-          path: |
-            ./output/*.uf2
+            ./output/*.img
+            ./output/*.bin
           retention-days: 90
