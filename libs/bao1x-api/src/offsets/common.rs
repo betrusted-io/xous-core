@@ -66,6 +66,21 @@ macro_rules! encode_oneway {
 
 // =========== ONE WAY COUNTER SLOTS ==============
 
+/// Anti-rollback counters only count up and are used to note what is the minimum rollback
+/// version allowed for a firmware stage. Note that this is different from a semver because
+/// semvers can change without there being security problems. Anti-rollback counter is in
+/// principle limited to 10k increments due to wear out of the underlying memory, so we
+/// use a separate counter for that.
+pub const RESERVED0_ANTI_ROLLBACK: usize = 56;
+pub const RESERVED1_ANTI_ROLLBACK: usize = 57;
+pub const BOOT0_ANTI_ROLLBACK: usize = 58;
+pub const BOOT1_ANTI_ROLLBACK: usize = 59;
+pub const LOADER_ANTI_ROLLBACK: usize = 60;
+pub const KERNEL_ANTI_ROLLBACK: usize = 61;
+pub const SWAP_ANTI_ROLLBACK: usize = 62;
+pub const APP_ANTI_ROLLBACK: usize = 63;
+pub const BAREMETAL_ANTI_ROLLBACK: usize = 64;
+
 /// Paranoid mode is written twice; either being non-zero invokes paranoid mode
 /// In paranoid mode, the glitch detectors are set to trigger aggressively and reset the
 /// system through automatic hardware means. This can lead to false positives that can
@@ -235,6 +250,18 @@ pub const DEV_PUBKEY: SlotIndex = SlotIndex::Data(7, PartitionAccess::All, RwPer
 ///   progresses from low slot to high slot, and thus one can infer the erasure state of the collateral by
 ///   inspecting the value of the high key slot.
 pub const COLLATERAL: SlotIndex = SlotIndex::DataRange(261..265, PartitionAccess::Fw0, RwPerms::ReadWrite);
+
+/// Boot1 pubkey `receipt` fields record the last accepted public key used when running boot1.
+/// If this changes, the collateral keys need to be erased. This prevents one third-party signed firmware
+/// from being used to attack another third-party signed firmware. These keys have a 1:1 correlation
+/// with the BAO1, BAO2, BETA, and DEV _PUBKEY slots; the data type doesn't use a range so that iterators
+/// can have a cleaner parallel structure when comparing against these.
+pub const BOOT1_PK_RECEIPT_SLOT0: SlotIndex = SlotIndex::Data(265, PartitionAccess::Open, RwPerms::ReadWrite);
+pub const BOOT1_PK_RECEIPT_SLOT1: SlotIndex = SlotIndex::Data(266, PartitionAccess::Open, RwPerms::ReadWrite);
+pub const BOOT1_PK_RECEIPT_SLOT2: SlotIndex = SlotIndex::Data(267, PartitionAccess::Open, RwPerms::ReadWrite);
+pub const BOOT1_PK_RECEIPT_SLOT3: SlotIndex = SlotIndex::Data(268, PartitionAccess::Open, RwPerms::ReadWrite);
+pub const BOOT1_RECEIPT_SLOTS: [SlotIndex; 4] =
+    [BOOT1_PK_RECEIPT_SLOT0, BOOT1_PK_RECEIPT_SLOT1, BOOT1_PK_RECEIPT_SLOT2, BOOT1_PK_RECEIPT_SLOT3];
 
 // Notes on defining the boot0 IFR region.
 // RISC-V boot0 region start is defined by IFR slot 6, bits [55:48]

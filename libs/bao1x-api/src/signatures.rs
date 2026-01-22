@@ -1,5 +1,7 @@
 use bytemuck::{Pod, Zeroable};
 
+use crate::*;
+
 /// Total reserved space for the signature block
 pub const SIGBLOCK_LEN: usize = 768;
 /// The jump instruction and the signature itself are not protected
@@ -12,7 +14,7 @@ pub const AAD_LENGTH: usize = 60; // at least 37 bytes, rounded up to the neares
 
 /// These are notional and subject to change
 #[repr(u32)]
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(num_enum::TryFromPrimitive, PartialEq, Eq, Clone, Copy)]
 pub enum FunctionCode {
     /// Should never be used
     Invalid = 0,
@@ -39,6 +41,21 @@ pub enum FunctionCode {
     /// Application region
     App = 0x10_0000,
     UpdatedApp = 0x10_0001,
+}
+
+impl FunctionCode {
+    pub fn to_anti_rollback_counter(&self) -> Option<usize> {
+        match self {
+            Self::Boot0 => Some(BOOT0_ANTI_ROLLBACK),
+            Self::Boot1 | Self::UpdatedBoot1 => Some(BOOT1_ANTI_ROLLBACK),
+            Self::Loader | Self::UpdatedLoader => Some(LOADER_ANTI_ROLLBACK),
+            Self::Kernel | Self::UpdatedKernel => Some(KERNEL_ANTI_ROLLBACK),
+            Self::Swap | Self::UpdatedSwap => Some(SWAP_ANTI_ROLLBACK),
+            Self::App | Self::UpdatedApp => Some(APP_ANTI_ROLLBACK),
+            Self::Baremetal | Self::UpdatedBaremetal => Some(BAREMETAL_ANTI_ROLLBACK),
+            _ => None,
+        }
+    }
 }
 
 pub const BAOCHIP_SIG_VERSION: u32 = 0x1_00;
@@ -121,8 +138,9 @@ pub struct SealedFields {
     /// Function code of the signed block. Used to provide metadata about what is inside the signed
     /// block. See `FunctionCode`.
     pub function_code: u32,
-    /// Reserved for future use
-    pub reserved: u32,
+    /// Anti-rollback version number. This is matched against a one-way counter stored in the
+    /// one-way counter memory bank.
+    pub anti_rollback: u32,
     /// Minimum version of target code that can process this update. This allows us to break
     /// compatibility with extremely old code bases, should we need to.
     pub min_semver: [u8; 16],
@@ -156,7 +174,7 @@ impl Default for SealedFields {
             magic: MAGIC_NUMBER,
             signed_len: 0,
             function_code: 0,
-            reserved: 0,
+            anti_rollback: 0,
             min_semver: [0u8; 16],
             semver: [0u8; 16],
             pubkeys: [Pubkey::default(); 4],
