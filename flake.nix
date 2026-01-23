@@ -2,11 +2,11 @@
   description = "Xous development environment";
 
   inputs = {
-    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.2511.905687";
+    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.2511.906247";
     flake-utils.url = "github:numtide/flake-utils/11707dc2f618dd54ca8739b309ec4fc024de578b";
-    rust-xous.url = "github:sbellem/rust-xous-flake?rev=7afb9744e6393493a9357d1a64ec108780880bd0";
+    rust-xous.url = "github:sbellem/rust-xous-flake?rev=39eebf47342faf50a2892e9dfadee895068157b8";
     rust-xous.inputs.nixpkgs.follows = "nixpkgs";
-    rust-overlay.url = "https://flakehub.com/f/oxalica/rust-overlay/0.1.2040";
+    rust-overlay.url = "https://flakehub.com/f/oxalica/rust-overlay/0.1.2051";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     crane.url = "github:ipetkov/crane/0bda7e7d005ccb5522a76d11ccfbf562b71953ca";
   };
