@@ -32,7 +32,7 @@ pub const DEFAULT_FCLK_FREQUENCY: u32 = 700_000_000;
 
 /// All the slots of concern located in a single iterator. The idea is that everything is
 /// condensed here and used to check for access integrity using the array below.
-pub const DATA_SLOTS: [SlotIndex; 8] = [
+pub const DATA_SLOTS: [SlotIndex; 12] = [
     crate::offsets::SERIAL_NUMBER,
     crate::offsets::UUID,
     crate::offsets::IFR_HASH,
@@ -41,6 +41,10 @@ pub const DATA_SLOTS: [SlotIndex; 8] = [
     crate::offsets::BAO2_PUBKEY,
     crate::offsets::BETA_PUBKEY,
     crate::offsets::DEV_PUBKEY,
+    crate::offsets::BOOT1_PK_RECEIPT_SLOT0,
+    crate::offsets::BOOT1_PK_RECEIPT_SLOT1,
+    crate::offsets::BOOT1_PK_RECEIPT_SLOT2,
+    crate::offsets::BOOT1_PK_RECEIPT_SLOT3,
 ];
 
 pub use crate::baosec::ERASE_PROOF;

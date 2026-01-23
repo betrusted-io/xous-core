@@ -1,0 +1,22 @@
+// Anti-rollback version numbers. Increment these only when there is a security-relevant
+// event that requires anti-rollback. In practice the maximum value of these counters is limited
+// by the wear-out of the flash memory and the time it takes to set the anti-rollback counter
+// to the current rollback level. So in general, we would aim for the maximum value of the counter
+// to be in the "teens to dozens" count over the entire product lifetime.
+//
+// The 0 value is reserved to denote an uninitialized anti-rollback counter
+//
+// All variants of an image share the same anti-rollback counter. So, for example, dabao and baosec
+// images must share a common loader/kernel anit-rollback level. This prevents a weak dabao image from
+// being used to hack a baosec image. I have concerns about the scalability of this across more
+// and more device types; this might have to be handled with the reserved rollback counters and/or
+// reserved function codes in the future.
+{
+    "boot0": "1",
+    "boot1": "1",
+    "loader": "1",
+    "kernel": "1",
+    "app": "1",
+    "swap": "1",
+    "baremetal": "1"
+}

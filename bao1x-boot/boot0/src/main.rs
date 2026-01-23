@@ -15,7 +15,9 @@ use alloc::collections::VecDeque;
 use core::cell::RefCell;
 
 use bao1x_api::pubkeys::{BOOT0_SELF_CHECK, BOOT0_TO_ALTBOOT1, BOOT0_TO_BOOT1};
-use bao1x_api::{BOOT0_PUBKEY_FAIL, BOOT1_PUBKEY_FAIL, DEVELOPER_MODE, HardenedBool, bollard};
+use bao1x_api::{
+    BOOT0_PUBKEY_FAIL, BOOT1_PUBKEY_FAIL, BOOT1_RECEIPT_SLOTS, DEVELOPER_MODE, HardenedBool, bollard,
+};
 use bao1x_api::{PARANOID_MODE, PARANOID_MODE_DUPE};
 use bao1x_hal::acram::OneWayCounter;
 use bao1x_hal::hardening::{check_pll, die, mesh_setup};
@@ -156,7 +158,8 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     };
     bollard!(die, 4);
 
-    // mutual distrust: if any boot1 keys match those in the indelible array, erase the collateral
+    // mutual distrust - don't trust Baochip. If any boot1 keys match those in the indelible array, erase the
+    // collateral
 
     // The IFR (indelible) copy is weird, because the highest byte doesn't match (it's actually a flag that
     // indicates the region has to be write protected). Thus, the IFR keys are a set of four, disjointed
@@ -201,6 +204,35 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         }
     }
     bollard!(die, 4);
+
+    // mutual distrust - don't trust other third party firmware. If the boot1 key block doesn't match the
+    // previously captured receipt, erase collateral
+    for (key, slot) in boot1_block.sealed_data.pubkeys.iter().zip(BOOT1_RECEIPT_SLOTS) {
+        csprng.random_delay();
+        bollard!(die, 4);
+        let receipt = slot_mgr.read(&slot).unwrap();
+        if &key.pk != receipt {
+            // first, erase collateral
+            bao1x_hal::sigcheck::erase_collateral(&mut Some(&mut csprng))
+                .inspect_err(|e| crate::println!("{}", e))
+                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+
+            // next, copy all the keys into the receipt array
+            let mut rram = bao1x_hal::rram::Reram::new();
+            for (key, slot) in boot1_block.sealed_data.pubkeys.iter().zip(BOOT1_RECEIPT_SLOTS) {
+                csprng.random_delay();
+                bollard!(die, 4);
+                // make the error handling permissive so we don't fail to boot on coding errors
+                match slot_mgr.write(&mut rram, &slot, &key.pk) {
+                    Ok(_) => {}
+                    Err(e) => crate::println!("Warning: couldn't update receipt slots {:?}", e),
+                };
+            }
+
+            // finally break out of the loop - no need to compare any further
+            break;
+        }
+    }
 
     let (paranoid1, paranoid2) = owc.hardened_get2(PARANOID_MODE, PARANOID_MODE_DUPE).unwrap();
 

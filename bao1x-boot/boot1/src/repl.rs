@@ -457,6 +457,49 @@ impl Repl {
                 } else {
                     crate::println!("Collateral is set");
                 }
+                let boot1_block_ptr =
+                    bao1x_api::BOOT1_START as *const bao1x_api::signatures::SignatureInFlash;
+                let boot1_block: &bao1x_api::signatures::SignatureInFlash =
+                    unsafe { boot1_block_ptr.as_ref().unwrap() };
+                let mut receipts_ok = true;
+                for (key, slot) in boot1_block.sealed_data.pubkeys.iter().zip(BOOT1_RECEIPT_SLOTS) {
+                    let receipt = slot_mgr.read(&slot).unwrap();
+                    if &key.pk != receipt {
+                        receipts_ok = false;
+                        break;
+                    }
+                }
+                if !receipts_ok {
+                    crate::println!("Boot1 receipts do not match");
+                    secure = false;
+                } else {
+                    crate::println!("Boot1 receipts OK");
+                }
+                let claimed_function: bao1x_api::signatures::FunctionCode = boot1_block
+                    .sealed_data
+                    .function_code
+                    .try_into()
+                    .unwrap_or(bao1x_api::signatures::FunctionCode::Invalid);
+                let arb_offset = claimed_function.to_anti_rollback_counter();
+                match arb_offset {
+                    Some(arb) => {
+                        let arb_value = owc.get(arb).expect("Can't read anti-rollback value");
+                        if arb_value != boot1_block.sealed_data.anti_rollback {
+                            crate::println!(
+                                "Anti-rollback code mismatch! Counter {} / image {}",
+                                arb_value,
+                                boot1_block.sealed_data.anti_rollback
+                            );
+                            secure = false;
+                        } else {
+                            crate::println!("Boot1 anti-rollback OK");
+                        }
+                    }
+                    None => {
+                        crate::println!("Anti-rollback counter offset invalid!");
+                        secure = false;
+                    }
+                }
 
                 if !secure {
                     crate::println!("** System did not meet minimum requirements for security **");

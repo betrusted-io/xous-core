@@ -123,10 +123,10 @@ pub fn validate_image(
         return Err(String::from("Partition has invalid function code"));
     }
 
+    let one_way_counters = OneWayCounter::new();
     bollard!(die_no_std, 4);
 
     // crate::println!("Signature: {:x?}", sig.signature);
-    let one_way_counters = OneWayCounter::new();
     let mut passing_key: Option<usize> = None;
     let mut passing_key2: Option<usize> = None;
     csprng.as_deref_mut().map(|rng| rng.random_delay());
@@ -254,6 +254,42 @@ pub fn validate_image(
     if let Some(valid_key2) = passing_key2 {
         csprng.as_deref_mut().map(|rng| rng.random_delay());
         if let Some(valid_key) = passing_key {
+            // Check anti-rollback only after we have confirmed a signature to mitigate the
+            // possibility of wear-out attacks by unsigned images that set the anti-rollback
+            // field to a high number
+            let claimed_function: FunctionCode =
+                sig.sealed_data.function_code.try_into().unwrap_or(FunctionCode::Invalid);
+            let arb_offset = claimed_function.to_anti_rollback_counter();
+            match arb_offset {
+                Some(arb) => {
+                    let arb_value = one_way_counters.get(arb).expect("Can't read anti-rollback value");
+                    csprng.as_deref_mut().map(|rng| rng.random_delay());
+                    bollard!(die_no_std, 4);
+                    if arb_value > sig.sealed_data.anti_rollback {
+                        let mut err_msg = String::from("Anti-rollback code too old, refusing image: ");
+                        use alloc::string::ToString;
+                        err_msg.push_str(&arb_value.to_string());
+                        return Err(err_msg);
+                    }
+                    bollard!(die_no_std, 4);
+                    if arb_value < sig.sealed_data.anti_rollback {
+                        csprng.as_deref_mut().map(|rng| rng.random_delay());
+                        if sig.sealed_data.anti_rollback >= crate::acram::ONEWAY_MAX_VALUE {
+                            return Err(String::from("Proposed anti-rollback value out of range"));
+                        }
+                        // increment anti-rollback counter to match the current value of the signed image
+                        bollard!(die_no_std, 4);
+                        while one_way_counters.get(arb).unwrap() < sig.sealed_data.anti_rollback {
+                            bollard!(die_no_std, 4);
+                            // safety: anti-rollback counter argument is from a set of constants in bao1x_api
+                            // that are pre-validated.
+                            unsafe { one_way_counters.inc(arb).ok() };
+                        }
+                    }
+                }
+                _ => return Err(String::from("Invalid anti-rollback code, aborting")),
+            }
+
             bollard!(die_no_std, 4);
             Ok((
                 valid_key,

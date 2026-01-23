@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
 
@@ -186,6 +188,8 @@ pub fn sign_image(
             Ok(dest_file)
         }
         Version::Bao1xV1 => {
+            let anti_rollback = read_anti_rollback("./signing/anti-rollback.hjson")?;
+
             let pkinfo = PrivateKeyInfo::from_der(&private_key.contents).map_err(|e| format!("{}", e))?;
             // First 2 bytes of the `private_key` are a record specifier and length field. Check they are
             // correct.
@@ -203,6 +207,9 @@ pub fn sign_image(
                     .map_err(|e| format!("{}", e))?;
                 let pubkey = sk.public_key();
             */
+            let anti_rollback = anti_rollback
+                .get(function_code.unwrap_or("unspecified"))
+                .expect("anti-rollback code not specified");
 
             let function_code = match function_code {
                 Some("boot0") => FunctionCode::Boot0,
@@ -218,7 +225,7 @@ pub fn sign_image(
             header.sealed_data.version = version as u32;
             header.sealed_data.signed_len = (source.len() + SIGBLOCK_LEN - UNSIGNED_LEN) as u32;
             header.sealed_data.function_code = function_code as u32;
-            header.sealed_data.reserved = 0;
+            header.sealed_data.anti_rollback = *anti_rollback;
             header.sealed_data.min_semver = minver_bytes;
             header.sealed_data.semver = semver;
 
@@ -406,4 +413,34 @@ pub fn bin_to_uf2(bytes: &Vec<u8>, family_id: u32, app_start_addr: u32) -> Resul
         outp.write_u32::<LittleEndian>(UF2_MAGIC_END)?;
     }
     Ok(outp)
+}
+
+/// Strips // comments from HJSON and returns valid JSON
+fn hjson_to_json(hjson: &str) -> String {
+    hjson
+        .lines()
+        .map(|line| {
+            // Find the position of // comment marker
+            if let Some(pos) = line.find("//") { &line[..pos] } else { line }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Reads HJSON config file and returns a HashMap for lookups
+fn read_anti_rollback<P: AsRef<Path>>(path: P) -> Result<HashMap<String, u32>, Box<dyn std::error::Error>> {
+    let content = fs::read_to_string(path)?;
+    let json_content = hjson_to_json(&content);
+
+    // Parse as HashMap with string values first
+    let string_map: HashMap<String, String> = serde_json::from_str(&json_content)?;
+
+    // Convert string values to u32
+    let mut result = HashMap::new();
+    for (key, value) in string_map {
+        let version: u32 = value.parse()?;
+        result.insert(key, version);
+    }
+
+    Ok(result)
 }

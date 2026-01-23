@@ -24,6 +24,9 @@ const COUNTER_STRIDE_U32: usize = ONEWAY_LEN / size_of::<u32>();
 pub const MAX_ONEWAY_COUNTERS: usize = 8192 / ONEWAY_LEN;
 pub const CODESEL_END: usize = 0x603D_A000;
 
+/// This is set by the wear-out limit of the underlying RRAM.
+pub const ONEWAY_MAX_VALUE: u32 = 10_0000;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OneWayErr {
     OutOfBounds,
