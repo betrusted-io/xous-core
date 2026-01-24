@@ -180,10 +180,6 @@ pub struct Oled128x128<'a> {
     powerdown: bool,
     power_port: IoxPort,
     power_pin: u8,
-    /// Note: this pin is also tied to the reset on the camera. We're assuming that there is no
-    /// possible state where we'd want the camera running without the display also on.
-    reset_port: IoxPort,
-    reset_pin: u8,
 }
 
 impl<'a> Oled128x128<'a> {
@@ -246,7 +242,7 @@ impl<'a> Oled128x128<'a> {
         };
         spim.set_endianness(crate::udma::SpimEndian::MsbFirst);
         let (power_port, power_pin) = crate::board::setup_oled_power_pin(iox);
-        let (reset_port, reset_pin) = crate::board::setup_periph_reset_pin(iox);
+        crate::board::setup_periph_reset_pin(iox);
         Self {
             spim,
             // safety: this is safe because these ranges are in fact allocated, and all values can be
@@ -267,8 +263,6 @@ impl<'a> Oled128x128<'a> {
             iox,
             power_port,
             power_pin,
-            reset_port,
-            reset_pin,
             powerdown: false,
         }
     }
@@ -379,7 +373,7 @@ impl<'a> Oled128x128<'a> {
         let ifram_vaddr = spim.ifram.virt_range.as_mut_ptr();
         let (_channel, cd_port, cd_pin, _cs_pin) = crate::board::get_display_pins();
         let (power_port, power_pin) = crate::board::setup_oled_power_pin(iox);
-        let (reset_port, reset_pin) = crate::board::setup_periph_reset_pin(iox);
+        crate::board::setup_periph_reset_pin(iox);
         Self {
             spim,
             // safety: this is safe because these ranges are in fact allocated, and all values can be
@@ -401,8 +395,6 @@ impl<'a> Oled128x128<'a> {
             powerdown,
             power_pin,
             power_port,
-            reset_port,
-            reset_pin,
         }
     }
 
@@ -496,7 +488,7 @@ impl<'a> Oled128x128<'a> {
     pub fn powerdown(&mut self) {
         self.powerdown = true;
         // assert reset
-        self.iox.set_gpio_pin_value(self.reset_port, self.reset_pin, IoxValue::Low);
+        crate::board::assert_periph_reset(self.iox, true);
         self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::Low);
         // cut power
         self.iox.set_gpio_pin_value(self.power_port, self.power_pin, IoxValue::Low);
@@ -509,7 +501,7 @@ impl<'a> Oled128x128<'a> {
         // restore power
         self.iox.set_gpio_pin_value(self.power_port, self.power_pin, IoxValue::High);
         // de-assert reset
-        self.iox.set_gpio_pin_value(self.reset_port, self.reset_pin, IoxValue::High);
+        crate::board::assert_periph_reset(self.iox, false);
         self.powerdown = false;
     }
 }

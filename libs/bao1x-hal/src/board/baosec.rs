@@ -146,7 +146,7 @@ pub fn setup_memory_pins(iox: &dyn IoSetup) -> SpimChannel {
             None,
             Some(IoxFunction::AF1),
             None,
-            None,
+            Some(IoxEnable::Enable),
             Some(IoxEnable::Disable),
             Some(IoxDriveStrength::Drive8mA),
         );
@@ -169,7 +169,7 @@ pub fn setup_memory_pins(iox: &dyn IoSetup) -> SpimChannel {
         Some(IoxDir::Output),
         Some(IoxFunction::AF1),
         None,
-        None,
+        Some(IoxEnable::Enable),
         Some(IoxEnable::Disable),
         Some(IoxDriveStrength::Drive8mA),
     );
@@ -220,9 +220,13 @@ pub fn get_i2c_channel() -> I2cChannel { I2C_CHANNEL }
 
 /// returns the power-down port and pin number
 pub fn setup_camera_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    #[cfg(not(feature = "oem-baosec-lite"))]
+    let pwdn = (IoxPort::PC, 14);
+    #[cfg(feature = "oem-baosec-lite")]
+    let pwdn = (IoxPort::PA, 5);
     iox.setup_pin(
-        IoxPort::PC,
-        14,
+        pwdn.0,
+        pwdn.1,
         Some(IoxDir::Output),
         Some(IoxFunction::Gpio),
         None,
@@ -231,7 +235,7 @@ pub fn setup_camera_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         Some(IoxDriveStrength::Drive2mA),
     );
     // power-down pin - default to powered down
-    iox.set_gpio_pin_value(IoxPort::PC, 14, IoxValue::High);
+    iox.set_gpio_pin_value(pwdn.0, pwdn.1, IoxValue::High);
     // camera interface proper
     for pin in 2..11 {
         iox.setup_pin(
@@ -245,11 +249,13 @@ pub fn setup_camera_pins<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
             Some(IoxDriveStrength::Drive2mA),
         );
     }
-    (IoxPort::PC, 14)
+    pwdn
 }
 
 pub fn setup_periph_reset_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    #[cfg(not(feature = "oem-baosec-lite"))]
     let (port, pin) = (IoxPort::PC, 6);
+    #[cfg(not(feature = "oem-baosec-lite"))]
     iox.setup_pin(
         port,
         pin,
@@ -260,7 +266,42 @@ pub fn setup_periph_reset_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         None,
         Some(IoxDriveStrength::Drive2mA),
     );
+    #[cfg(feature = "oem-baosec-lite")]
+    let (port, pin) = (IoxPort::PA, 6);
+    #[cfg(feature = "oem-baosec-lite")]
+    iox.setup_pin(
+        port,
+        pin,
+        Some(IoxDir::Output),
+        Some(IoxFunction::Gpio),
+        None,
+        None,
+        None,
+        Some(IoxDriveStrength::Drive2mA),
+    );
     (port, pin)
+}
+
+/// ASSUME: setup_periph_reset_pin has already been invoked
+pub fn assert_periph_reset(iox: &dyn IoGpio, assert: bool) {
+    #[cfg(not(feature = "oem-baosec-lite"))]
+    {
+        let (port, pin) = (IoxPort::PC, 6);
+        if assert {
+            iox.set_gpio_pin_value(port, pin, IoxValue::Low);
+        } else {
+            iox.set_gpio_pin_value(port, pin, IoxValue::High);
+        }
+    }
+    #[cfg(feature = "oem-baosec-lite")]
+    {
+        let (port, pin) = (IoxPort::PA, 6);
+        if assert {
+            iox.set_gpio_pin_value(port, pin, IoxValue::High);
+        } else {
+            iox.set_gpio_pin_value(port, pin, IoxValue::Low);
+        }
+    }
 }
 
 /// returns the USB SE0 port and pin number
@@ -450,6 +491,7 @@ pub fn kpc_sr1_to_key(raw_event: u32) -> KeyPress {
     }
 }
 
+#[cfg(not(feature = "oem-baosec-lite"))]
 pub fn setup_pmic_irq<T: IoIrq>(iox: &T, server: &str, opcode: usize) {
     iox.set_irq_pin(IoxPort::PB, 15, IoxValue::Low, server, opcode);
 }
@@ -497,6 +539,12 @@ pub fn setup_trng_input_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
         Some(IoxDriveStrength::Drive2mA),
     );
     iox.set_bio_bit_from_port_and_pin(port, pin).expect("Couldn't allocate TRNG input pin");
+    (port, pin)
+}
+
+#[cfg(feature = "oem-baosec-lite")]
+pub fn get_power_off_pin() -> (IoxPort, u8) {
+    let (port, pin) = (IoxPort::PF, 0);
     (port, pin)
 }
 
