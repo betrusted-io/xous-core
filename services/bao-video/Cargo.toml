@@ -50,6 +50,7 @@ board-baosec = [
     "blitstr2/board-baosec",
     "no-gam",
 ]
+oem-baosec-lite = ["bao1x-hal/oem-baosec-lite"]
 hosted-baosec = ["bao1x-emu", "ux-api/hosted-baosec", "no-gam"]
 
 # temporary feature - remove after we have properly created a camera control API
