@@ -710,141 +710,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .set_sigblock_size(sigblock_size);
         }
 
-        Some("baosec") => {
-            let board = "board-baosec";
+        Some("bao1x-boot1-lite") => {
             let sigblock_size = 0x300;
             update_flash_origin(
-                "loader/src/platform/bao1x/link.x",
+                "bao1x-boot/boot1/src/platform/bao1x/link.x",
+                (bao1x_api::BOOT1_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            // builder.add_loader_feature("unsafe-debug");
+            builder
+                .set_baremetal(true)
+                .target_baremetal_bao1x("bao1x-boot1")
+                .add_loader_feature("oem-baosec-lite")
+                .set_sigblock_size(sigblock_size);
+        }
+
+        Some("bao1x-alt-boot1-lite") => {
+            let sigblock_size = 0x300;
+            update_flash_origin(
+                "bao1x-boot/boot1/src/platform/bao1x/link.x",
                 (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
             )?;
-            // select the board
-            builder.set_board(board);
-            builder.add_feature(board);
-            builder.add_loader_feature(board);
-            builder.add_kernel_feature(board);
-            builder.set_sigblock_size(sigblock_size);
+            builder.add_loader_feature("alt-boot1");
+            // builder.add_loader_feature("force-dabao");
+            builder
+                .set_baremetal(true)
+                .target_baremetal_bao1x("bao1x-alt-boot1")
+                .add_loader_feature("oem-baosec-lite")
+                .set_sigblock_size(sigblock_size);
+        }
 
-            // placement in flash is a tension between dev convenience and RAM usage. Things in flash
-            // are resident, non-swapable, but end up making the slow kernel burn process take longer.
-            // Layout:
-            //   - kernel, ticktimer, log, names, swapper are essential services and stay resident. Must be <1
-            //     MiB total.
-            //   - usb-bao1x is latency-sensitive and runs a handler in a non-swappable IRQ context, and thus
-            //     cannot be swapped out. It contains the USB stack and API layer. It needs to maintain a
-            //     mutex with bao-video as the camera cannot run simultaneously with the USB stack due to
-            //     sharing of the IFRAM space.
-            //   - bao1x-hal-service contains all the non-latency sensitive hardware APIs
-            //   - bao-video pulls camera + display + qr decoding into a single package single memory space to
-            //     optimize performance. Must maintain a mutex with usb-bao1x on the camera IFRAM space.
-            //   - bao-console is the serial debug console handler
-            //   - [planned] pddb server
-            //   - [planned] vault application
-            let bao_rram_pkgs = [
-                "xous-ticktimer",
-                "xous-log",
-                "xous-names",
-                "usb-bao1x",
-                "bao1x-hal-service",
-                "modals",
-                "pddb",
-                "bao-video",
-            ]
-            .to_vec();
-            let bao_swap_pkgs = ["bao-console", "vault2"].to_vec();
-            if !builder.is_swap_set() {
-                // reserve 3MiB for system services: ultimately, "pddb, modals, and bao-video"
-                builder.set_swap(0, bao1x_api::offsets::baosec::SWAP_RAM_LEN as _);
-            }
-            builder.add_loader_feature("swap");
-            builder.add_kernel_feature("print-panics");
-            builder.add_kernel_feature("swap");
-            builder.add_feature("swap");
-
-            builder.add_loader_feature("debug-print");
-            // the following feature needs to be uncommented if we also enable
-            // debug-print-swapper inside xous-swapper
-            if false {
-                builder.add_loader_feature("userspace-swap-debug");
-                builder.add_feature("debug-print-swapper");
-                // use this to enable debug in USB, when the package is selected
-                // builder.add_feature("debug-print-usb");
-            } else {
-            }
-            // builder.add_kernel_feature("debug-swap");
-            // builder.add_kernel_feature("debug-print");
-            // builder.add_kernel_feature("debug-swap-verbose");
-            // builder.add_feature("quantum-timer"); // this isn't in bao1x..
-            builder.add_kernel_feature("v2p");
-            builder.target_bao1x_soc();
-
-            // It is important that this is the first service added, because the swapper *must* be in PID 2
-            builder.add_service("xous-swapper", LoaderRegion::Flash);
-            // It is important that this is the second service added, as keystore *must* be in PID 3
-            // (as constrained by the coreuser setting that is locked out by the time Xous runs)
-            builder.add_service("keystore", LoaderRegion::Flash);
-
-            for service in bao_rram_pkgs {
-                builder.add_service(service, LoaderRegion::Flash);
-            }
-            builder.add_services(&get_cratespecs());
-            for service in bao_swap_pkgs {
-                builder.add_service(service, LoaderRegion::Swap);
-            }
-            for app in get_cratespecs() {
-                builder.add_service(&app, LoaderRegion::Swap);
-            }
-            // builder.add_feature("modal-testing");
+        Some("baosec") => {
+            baosec_common(&mut builder)?;
         }
 
         Some("baosec-lite") => {
-            let board = "board-baosec";
-            let sigblock_size = 0x300;
-            update_flash_origin(
-                "loader/src/platform/bao1x/link.x",
-                (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
-            )?;
-            // select the board
-            builder.set_board(board);
-            builder.add_feature(board);
-            builder.add_loader_feature(board);
-            builder.add_kernel_feature(board);
-            builder.set_sigblock_size(sigblock_size);
-
-            // needs a filesystem, which has to be implemented in...128k :-O
-            let bao_rram_pkgs = [
-                "xous-ticktimer",
-                "keystore",
-                "xous-log",
-                "xous-names",
-                "usb-bao1x",
-                "bao1x-hal-service",
-                "modals",
-                "bao-video",
-                "vault2",
-            ]
-            .to_vec();
-            let bao_swap_pkgs = [].to_vec();
-            if !builder.is_swap_set() {
-                // reserve 3MiB for system services: ultimately, "pddb, modals, and bao-video"
-                builder.set_swap(0, bao1x_api::offsets::baosec::SWAP_RAM_LEN as _);
-            }
-
-            builder.add_loader_feature("debug-print");
-            // the following feature needs to be uncommented if we also enable
-            builder.add_kernel_feature("v2p");
-            builder.target_bao1x_soc();
-
-            for service in bao_rram_pkgs {
-                builder.add_service(service, LoaderRegion::Flash);
-            }
-            builder.add_services(&get_cratespecs());
-            for service in bao_swap_pkgs {
-                builder.add_service(service, LoaderRegion::Swap);
-            }
-            for app in get_cratespecs() {
-                builder.add_service(&app, LoaderRegion::Swap);
-            }
-            // builder.add_feature("modal-testing");
+            baosec_common(&mut builder)?;
+            builder.add_feature("oem-baosec-lite");
+            builder.add_loader_feature("oem-baosec-lite");
         }
 
         Some("baosec-improper-keystore") => {
@@ -1232,5 +1134,92 @@ fn update_flash_origin<P: AsRef<Path>>(path: P, new_origin: u32) -> std::io::Res
         .join("\n");
 
     fs::write(path, updated)?;
+    Ok(())
+}
+
+fn baosec_common(builder: &mut Builder) -> std::io::Result<()> {
+    let board = "board-baosec";
+    let sigblock_size = 0x300;
+    update_flash_origin(
+        "loader/src/platform/bao1x/link.x",
+        (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
+    )?;
+    // select the board
+    builder.set_board(board);
+    builder.add_feature(board);
+    builder.add_loader_feature(board);
+    builder.add_kernel_feature(board);
+    builder.set_sigblock_size(sigblock_size);
+
+    // placement in flash is a tension between dev convenience and RAM usage. Things in flash
+    // are resident, non-swapable, but end up making the slow kernel burn process take longer.
+    // Layout:
+    //   - kernel, ticktimer, log, names, swapper are essential services and stay resident. Must be <1 MiB
+    //     total.
+    //   - usb-bao1x is latency-sensitive and runs a handler in a non-swappable IRQ context, and thus cannot
+    //     be swapped out. It contains the USB stack and API layer. It needs to maintain a mutex with
+    //     bao-video as the camera cannot run simultaneously with the USB stack due to sharing of the IFRAM
+    //     space.
+    //   - bao1x-hal-service contains all the non-latency sensitive hardware APIs
+    //   - bao-video pulls camera + display + qr decoding into a single package single memory space to
+    //     optimize performance. Must maintain a mutex with usb-bao1x on the camera IFRAM space.
+    //   - bao-console is the serial debug console handler
+    //   - [planned] pddb server
+    //   - [planned] vault application
+    let bao_rram_pkgs = [
+        "xous-ticktimer",
+        "xous-log",
+        "xous-names",
+        "usb-bao1x",
+        "bao1x-hal-service",
+        "modals",
+        "pddb",
+        "bao-video",
+    ]
+    .to_vec();
+    let bao_swap_pkgs = ["bao-console", "vault2"].to_vec();
+    if !builder.is_swap_set() {
+        // reserve 3MiB for system services: ultimately, "pddb, modals, and bao-video"
+        builder.set_swap(0, bao1x_api::offsets::baosec::SWAP_RAM_LEN as _);
+    }
+    builder.add_loader_feature("swap");
+    builder.add_kernel_feature("print-panics");
+    builder.add_kernel_feature("swap");
+    builder.add_feature("swap");
+
+    builder.add_loader_feature("debug-print");
+    // the following feature needs to be uncommented if we also enable
+    // debug-print-swapper inside xous-swapper
+    if false {
+        builder.add_loader_feature("userspace-swap-debug");
+        builder.add_feature("debug-print-swapper");
+        // use this to enable debug in USB, when the package is selected
+        // builder.add_feature("debug-print-usb");
+    } else {
+    }
+    // builder.add_kernel_feature("debug-swap");
+    // builder.add_kernel_feature("debug-print");
+    // builder.add_kernel_feature("debug-swap-verbose");
+    // builder.add_feature("quantum-timer"); // this isn't in bao1x..
+    builder.add_kernel_feature("v2p");
+    builder.target_bao1x_soc();
+
+    // It is important that this is the first service added, because the swapper *must* be in PID 2
+    builder.add_service("xous-swapper", LoaderRegion::Flash);
+    // It is important that this is the second service added, as keystore *must* be in PID 3
+    // (as constrained by the coreuser setting that is locked out by the time Xous runs)
+    builder.add_service("keystore", LoaderRegion::Flash);
+
+    for service in bao_rram_pkgs {
+        builder.add_service(service, LoaderRegion::Flash);
+    }
+    builder.add_services(&get_cratespecs());
+    for service in bao_swap_pkgs {
+        builder.add_service(service, LoaderRegion::Swap);
+    }
+    for app in get_cratespecs() {
+        builder.add_service(&app, LoaderRegion::Swap);
+    }
+    // builder.add_feature("modal-testing");
     Ok(())
 }
