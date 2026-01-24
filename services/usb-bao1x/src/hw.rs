@@ -87,14 +87,16 @@ impl<'a> Bao1xUsb<'a> {
         // to concurrently add that in - you have to kick out one of the interfaces above to add mass
         // storage!)
 
-        #[cfg(feature = "board-baosec")]
+        #[cfg(feature = "oem-baosec-lite")]
+        let product = "Baosec-lite";
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         let product = "Baosec";
         #[cfg(feature = "board-baosec")]
-        let pid = 0x6198; // pending PR acceptance
+        let pid = 0x6198;
         #[cfg(feature = "board-dabao")]
         let product = "Dabao";
         #[cfg(feature = "board-dabao")]
-        let pid = 0x6197; // pending PR acceptance
+        let pid = 0x6197;
         let device = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1d50, pid))
             .manufacturer("Baochip")
             .product(product)
@@ -160,7 +162,7 @@ impl<'a> Bao1xUsb<'a> {
 
     /// Process an unplug event - only valid on baosec, because dabao doesn't have a battery and unplugging
     /// it would power it down.
-    #[cfg(feature = "board-baosec")]
+    #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
     pub fn unplug(&mut self) {
         // disable all interrupts so we can safely go through initialization routines
         self.irq_csr.wo(utra::irqarray1::EV_ENABLE, 0);

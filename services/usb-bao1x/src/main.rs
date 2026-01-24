@@ -52,7 +52,7 @@ pub(crate) fn main_hw() -> ! {
     use api::*;
     use bao1x_api::IoGpio;
     use bao1x_api::keyboard::KeyMap;
-    #[cfg(feature = "board-baosec")]
+    #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
     use bao1x_hal::axp2101::VbusIrq;
     use bao1x_hal::usb::driver::{CorigineUsb, CorigineWrapper};
     use hw::{Bao1xUsb, UsbIrqReq};
@@ -260,9 +260,9 @@ pub(crate) fn main_hw() -> ! {
     });
 
     let iox = bao1x_api::IoxHal::new();
-    #[cfg(feature = "board-baosec")]
+    #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
     let mut i2c = bao1x_hal::i2c::I2c::new();
-    #[cfg(feature = "board-baosec")]
+    #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
     let pmic = {
         log::info!("Registering PMIC handler to detect USB plug/unplug events");
         bao1x_hal::board::setup_pmic_irq(
@@ -292,7 +292,7 @@ pub(crate) fn main_hw() -> ! {
             );
         }
         match opcode {
-            #[cfg(feature = "board-baosec")]
+            #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
             Opcode::PmicIrq => match pmic.get_vbus_irq_status(&mut i2c).unwrap() {
                 VbusIrq::Insert => {
                     log::error!("VBUS insert reported by PMIC, but we didn't ask for the event!");
