@@ -79,6 +79,16 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     let one_way = bao1x_hal::acram::OneWayCounter::new();
     let mut board_type =
         one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error");
+    #[cfg(feature = "oem-baosec-lite")]
+    {
+        // this this flag was explicitly passed, this firmware image is only useful for OEM boards.
+        // set the board type as thus.
+        while board_type != bao1x_api::BoardTypeCoding::Oem {
+            one_way.inc_coded::<bao1x_api::BoardTypeCoding>().ok();
+            board_type =
+                one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error");
+        }
+    }
 
     // crate::println_d!("TX_IDLE: {:?}", crate::platform::usb::TX_IDLE.load(Ordering::SeqCst));
     let perclk: u32;
@@ -105,6 +115,10 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     }
 
     if board_type == BoardTypeCoding::Baosec {
+        IS_BAOSEC.store(true, Ordering::SeqCst);
+    }
+    #[cfg(feature = "oem-baosec-lite")]
+    {
         IS_BAOSEC.store(true, Ordering::SeqCst);
     }
 
@@ -164,6 +178,14 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // grab a handle to the OLED if it exists on the board.
     let mut udma_global = GlobalConfig::new();
     let mut oled_iox = iox.clone();
+    #[cfg(feature = "oem-baosec-lite")]
+    let mut oled = Some(bao1x_hal::sh1107::Oled128x128::new(
+        bao1x_hal::sh1107::MainThreadToken::new(),
+        perclk,
+        &mut oled_iox,
+        &mut udma_global,
+    ));
+    #[cfg(not(feature = "oem-baosec-lite"))]
     let mut oled = if board_type == BoardTypeCoding::Baosec {
         Some(bao1x_hal::sh1107::Oled128x128::new(
             bao1x_hal::sh1107::MainThreadToken::new(),
@@ -221,6 +243,8 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     if board_type == BoardTypeCoding::Baosec {
         crate::glue::setup_spim(perclk);
     }
+    #[cfg(feature = "oem-baosec-lite")]
+    crate::glue::setup_spim(perclk);
 
     // it's in this loop that the board type would be set after initial boot
     let mut repl = crate::repl::Repl::new();
@@ -324,9 +348,15 @@ pub unsafe extern "C" fn rust_entry() -> ! {
             iox.set_gpio_dir(se0_dabao.0, se0_dabao.1, bao1x_api::IoxDir::Input);
             (se0_baosec.0, se0_baosec.1)
         }
+        #[cfg(not(feature = "oem-baosec-lite"))]
         _ => {
             iox.set_gpio_dir(se0_baosec.0, se0_baosec.1, bao1x_api::IoxDir::Input);
             (se0_dabao.0, se0_dabao.1)
+        }
+        #[cfg(feature = "oem-baosec-lite")]
+        _ => {
+            iox.set_gpio_dir(se0_dabao.0, se0_dabao.1, bao1x_api::IoxDir::Input);
+            (se0_baosec.0, se0_baosec.1)
         }
     };
     boot(&iox, oled, se0_port, se0_pin, &mut csprng)

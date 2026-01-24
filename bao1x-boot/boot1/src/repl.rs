@@ -597,9 +597,18 @@ impl Repl {
                 let one_way = bao1x_hal::acram::OneWayCounter::new();
                 let board_type =
                     one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error");
+                #[cfg(not(feature = "oem-baosec-lite"))]
                 if board_type != bao1x_api::BoardTypeCoding::Baosec {
                     while one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
                         != bao1x_api::BoardTypeCoding::Baosec
+                    {
+                        one_way.inc_coded::<bao1x_api::BoardTypeCoding>().expect("increment error");
+                    }
+                }
+                #[cfg(feature = "oem-baosec-lite")]
+                if board_type != bao1x_api::BoardTypeCoding::Oem {
+                    while one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
+                        != bao1x_api::BoardTypeCoding::Oem
                     {
                         one_way.inc_coded::<bao1x_api::BoardTypeCoding>().expect("increment error");
                     }
@@ -615,8 +624,16 @@ impl Repl {
                 // CI note: this appears on the "hard UART", not on USB serial. If we want this on USB
                 // serial, we would want to add some wait time to ensure the USB packets get sent before
                 // issuing the reboot command.
-                crate::println!("{}BOOT1.SETBOARD,{}", BOOKEND_START, BOOKEND_END);
-                crate::println!("Board type set to baosec, rebooting so boot1 can provision keys!");
+                #[cfg(not(feature = "oem-baosec-lite"))]
+                {
+                    crate::println!("{}BOOT1.SETBOARD,{}", BOOKEND_START, BOOKEND_END);
+                    crate::println!("Board type set to baosec, rebooting so boot1 can provision keys!");
+                }
+                #[cfg(feature = "oem-baosec-lite")]
+                {
+                    crate::println!("Board type set to baosec-lite, rebooting so boot1 can provision keys!");
+                    crate::println!("{}BOOT1.SETBOARD-LITE,{}", BOOKEND_START, BOOKEND_END);
+                }
                 let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
                 rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
             }
