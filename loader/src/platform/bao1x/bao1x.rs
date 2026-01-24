@@ -107,12 +107,17 @@ pub fn early_init_hw() -> u32 {
         let one_way = bao1x_hal::acram::OneWayCounter::new();
         let board_type =
             one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error");
-        if board_type != bao1x_api::BoardTypeCoding::Baosec {
+        #[cfg(not(feature = "oem-baosec-lite"))]
+        let expected_board = bao1x_api::BoardTypeCoding::Baosec;
+        #[cfg(feature = "oem-baosec-lite")]
+        let expected_board = bao1x_api::BoardTypeCoding::Oem;
+
+        if board_type != expected_board {
             use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
 
             crate::println!("Board type is not Baosec; resetting it and rebooting!");
             while one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
-                != bao1x_api::BoardTypeCoding::Baosec
+                != expected_board
             {
                 one_way.inc_coded::<bao1x_api::BoardTypeCoding>().expect("increment error");
             }
@@ -136,8 +141,10 @@ pub fn early_init_hw() -> u32 {
         bao1x_hal::board::setup_camera_pins(&iox);
         bao1x_hal::board::setup_kb_pins(&iox);
         bao1x_hal::board::setup_oled_power_pin(&iox);
+        #[cfg(not(feature = "oem-baosec-lite"))]
         let trng_power = bao1x_hal::board::setup_trng_power_pin(&iox);
         // kernel expects the TRNG to be on
+        #[cfg(not(feature = "oem-baosec-lite"))]
         iox.set_gpio_pin(trng_power.0, trng_power.1, bao1x_api::IoxValue::High);
 
         // select the 32khz external xosc for baosec targets

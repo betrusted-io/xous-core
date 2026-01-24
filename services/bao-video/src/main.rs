@@ -219,6 +219,11 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
     udma_global.udma_clock_config(PeriphId::Cam, true);
     // ---- camera initialization
+    #[cfg(not(feature = "oem-baosec-lite"))]
+    let cam_clk = (IoxPort::PA, 0);
+    #[cfg(feature = "oem-baosec-lite")]
+    let cam_clk = (IoxPort::PA, 3);
+
     #[cfg(not(feature = "hosted-baosec"))]
     let (mut cam, cam_pdwn) = {
         // wait for other inits to finish so we can do this roughly atomically
@@ -242,8 +247,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
         // setup camera clock
         iox.setup_pin(
-            IoxPort::PA,
-            0,
+            cam_clk.0,
+            cam_clk.1,
             Some(IoxDir::Output),
             Some(IoxFunction::AF3),
             None,
@@ -251,12 +256,24 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
             Some(IoxEnable::Disable),
             Some(IoxDriveStrength::Drive8mA),
         );
-        timer.wo(utra::pwm::REG_CH_EN, 1);
-        timer.rmwf(utra::pwm::REG_TIM0_CFG_R_TIMER0_SAW, 1);
-        timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_TH, 0);
-        timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_MODE, 3);
-        unsafe { timer.base().add(2).write_volatile(0) }; // for some reason the register extraction didn't get this register...
-        timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 0);
+        #[cfg(not(feature = "oem-baosec-lite"))]
+        {
+            timer.wo(utra::pwm::REG_CH_EN, 1);
+            timer.rmwf(utra::pwm::REG_TIM0_CFG_R_TIMER0_SAW, 1);
+            timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_TH, 0);
+            timer.rmwf(utra::pwm::REG_TIM0_CH0_TH_R_TIMER0_CH0_MODE, 3);
+            unsafe { timer.base().add(2).write_volatile(0) }; // for some reason the register extraction didn't get this register...
+            timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 0);
+        }
+        #[cfg(feature = "oem-baosec-lite")]
+        {
+            timer.wo(utra::pwm::REG_CH_EN, 1);
+            timer.rmwf(utra::pwm::REG_TIM0_CFG_R_TIMER0_SAW, 1);
+            timer.rmwf(utra::pwm::REG_TIM0_CH3_TH_R_TIMER0_CH3_TH, 0);
+            timer.rmwf(utra::pwm::REG_TIM0_CH3_TH_R_TIMER0_CH3_MODE, 3);
+            unsafe { timer.base().add(2).write_volatile(0) }; // for some reason the register extraction didn't get this register...
+            timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 0);
+        }
         /* // register debug
         for i in 0..12 {
             println!("0x{:2x}: 0x{:08x}", i, unsafe { pwm.add(i).read_volatile() })
@@ -297,7 +314,16 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
         tt.sleep_ms(2).ok();
         timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 0);
         timer.wo(utra::pwm::REG_CH_EN, 0);
-        iox.setup_pin(IoxPort::PA, 0, Some(IoxDir::Input), Some(IoxFunction::Gpio), None, None, None, None);
+        iox.setup_pin(
+            cam_clk.0,
+            cam_clk.1,
+            Some(IoxDir::Input),
+            Some(IoxFunction::Gpio),
+            None,
+            None,
+            None,
+            None,
+        );
 
         (cam, cam_pdwn)
     };
@@ -373,8 +399,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         // power up the camera
                         // starts MCLK
                         iox.setup_pin(
-                            IoxPort::PA,
-                            0,
+                            cam_clk.0,
+                            cam_clk.1,
                             Some(IoxDir::Output),
                             Some(IoxFunction::AF3),
                             None,
@@ -480,8 +506,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                             timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 0);
                             timer.wo(utra::pwm::REG_CH_EN, 0);
                             iox.setup_pin(
-                                IoxPort::PA,
-                                0,
+                                cam_clk.0,
+                                cam_clk.1,
                                 Some(IoxDir::Input),
                                 Some(IoxFunction::Gpio),
                                 None,

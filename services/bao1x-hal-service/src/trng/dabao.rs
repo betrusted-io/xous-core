@@ -104,6 +104,10 @@ impl Trng {
         }
     }
 
+    /// With no avalanche TRNG, this is just a pass-through to the RO as it has enough
+    /// bandwidth to provide random data at the speeds we need.
+    pub fn fill_seeded_bytes(&mut self, dest: &mut [u8]) { self.fill_bytes_via_next(dest); }
+
     /// Sets the test mode according to the argument. Blocks until mode is set.
     pub fn set_test_mode(&mut self, test_mode: api::TrngTestMode) { self.mode = test_mode; }
 

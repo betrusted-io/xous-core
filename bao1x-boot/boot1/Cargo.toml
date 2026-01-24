@@ -47,5 +47,8 @@ print-ifr = []
 test-boot0-keys = []
 alt-boot1 = []
 
+oem = []
+oem-baosec-lite = ["oem", "bao1x-hal/oem-baosec-lite"]
+
 verilator-only = []
-default = []
+default = ["oem-baosec-lite"]

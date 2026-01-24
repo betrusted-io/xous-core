@@ -32,6 +32,7 @@ pub const FREE_MEM_LEN: usize = (RAM_BASE + RAM_SIZE) - FREE_MEM_START - STACK_L
 // NOTE: this forces the mapping to be the same on both baosec and dabao
 pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 
+#[allow(dead_code)]
 const SAFE_FCLK_FREQUENCY: u32 = 350_000_000;
 
 // Dabao port/pin constants have to be vendored in because this crate is compiled with baosec as the target.
@@ -168,17 +169,73 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
     if setup_backup_region() == 0 {
         crate::println!("backup region is clean!");
     }
-    /* // debug RTC setting - remove once confident
-    let rtc = CSR::new(bao1x_hal::rtc::HW_RTC_BASE as *mut u32);
-    for i in 0..8 {
-        crate::println_d!("rtc {}: {:x}", i, unsafe { rtc.base().add(i).read_volatile() });
-    }
-    */
 
     // setup board-specific I/Os - early boot set. These are items that have to be
     // done in a time-sensitive fashion.
     match board_type {
-        BoardTypeCoding::Dabao | BoardTypeCoding::Oem => {
+        #[cfg(feature = "oem-baosec-lite")]
+        BoardTypeCoding::Oem => {
+            let power_off_port = bao1x_hal::board::get_power_off_pin();
+            iox.setup_pin(
+                power_off_port.0,
+                power_off_port.1,
+                Some(IoxDir::Output),
+                Some(IoxFunction::Gpio),
+                None,
+                Some(IoxEnable::Disable),
+                None,
+                Some(IoxDriveStrength::Drive2mA),
+            );
+            // ensures the device stays on
+            iox.set_gpio_pin(power_off_port.0, power_off_port.1, IoxValue::Low);
+
+            let mut sramtrm = CSR::new(utra::coresub_sramtrm::HW_CORESUB_SRAMTRM_BASE as *mut u32);
+            sramtrm.wo(utra::coresub_sramtrm::SFR_CACHE, 0x3);
+            sramtrm.wo(utra::coresub_sramtrm::SFR_ITCM, 0x3);
+            sramtrm.wo(utra::coresub_sramtrm::SFR_DTCM, 0x3);
+            sramtrm.wo(utra::coresub_sramtrm::SFR_VEXRAM, 0x1);
+
+            let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(
+                bao1x_api::offsets::baosec::CPU_VDD_LDO_BOOT_MV,
+            );
+            let mut rbist = CSR::new(utra::rbist_wrp::HW_RBIST_WRP_BASE as *mut u32);
+            for item in trim_table {
+                rbist.wo(utra::rbist_wrp::SFRCR_TRM, item.raw_value());
+                rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
+            }
+
+            let (se0_port, se0_pin) = bao1x_hal::board::setup_usb_pins(&iox);
+            iox.set_gpio_pin(se0_port, se0_pin, IoxValue::Low); // put the USB port into SE0 while we initialize things
+
+            // setup display - turn on its power, reset the framebuffer
+            bao1x_hal::board::setup_display_pins(&iox);
+            // power on
+            let (oled_on_port, oled_on_pin) = bao1x_hal::board::setup_oled_power_pin(&iox);
+            iox.set_gpio_pin_value(oled_on_port, oled_on_pin, IoxValue::High);
+
+            // reset enable - note inversion compared to baosec (at least as of this board rev of baosec)
+            bao1x_hal::board::setup_periph_reset_pin(&iox);
+            bao1x_hal::board::assert_periph_reset(&iox, true);
+            // delay for reset assert
+            delay(1);
+            bao1x_hal::board::assert_periph_reset(&iox, false);
+        }
+        #[cfg(not(feature = "oem"))]
+        BoardTypeCoding::Oem => {
+            // provide a default behavior for unbound OEM board settings
+            setup_dabao_boot_pin(&iox);
+
+            // setup the RAMs for our trim voltage
+            let trim_table = bao1x_hal::sram_trim::get_sram_trim_for_voltage(
+                bao1x_api::offsets::dabao::CPU_VDD_LDO_BOOT_MV,
+            );
+            let mut rbist = CSR::new(utra::rbist_wrp::HW_RBIST_WRP_BASE as *mut u32);
+            for item in trim_table {
+                rbist.wo(utra::rbist_wrp::SFRCR_TRM, item.raw_value());
+                rbist.wo(utra::rbist_wrp::SFRAR_TRM, 0x5a);
+            }
+        }
+        BoardTypeCoding::Dabao => {
             // setup the dabao 'boot' read pin for reading. This also connects the USB port temporarily.
             setup_dabao_boot_pin(&iox);
 
@@ -342,6 +399,9 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
     // set the clock
     let fclk_freq = match board_type {
         BoardTypeCoding::Baosec => bao1x_api::offsets::baosec::DEFAULT_FCLK_FREQUENCY,
+        #[cfg(feature = "oem-baosec-lite")]
+        BoardTypeCoding::Oem => bao1x_api::offsets::baosec::DEFAULT_FCLK_FREQUENCY,
+        #[cfg(not(feature = "oem-baosec-lite"))]
         BoardTypeCoding::Oem => SAFE_FCLK_FREQUENCY,
         BoardTypeCoding::Dabao => bao1x_api::offsets::dabao::DEFAULT_FCLK_FREQUENCY,
     };
@@ -456,7 +516,25 @@ pub fn get_key<T: IoSetup + IoGpio>(board_type: &BoardTypeCoding, iox: &T) -> Op
             // record which key is pressed
             if kps[0] != KeyPress::None { Some(kps[0]) } else { None }
         }
-        _ => {
+        BoardTypeCoding::Dabao => {
+            let (port, pin) = crate::platform::setup_dabao_boot_pin(iox);
+            // sample the pin
+            if iox.get_gpio_pin_value(port, pin) == IoxValue::Low {
+                // "borrow" the dabao keypress meaning for this pin
+                Some(KeyPress::Select)
+            } else {
+                None
+            }
+        }
+        #[cfg(feature = "oem-baosec-lite")]
+        BoardTypeCoding::Oem => {
+            let (rows, cols) = bao1x_hal::board::setup_kb_pins(iox);
+            let kps = bao1x_hal::board::scan_keyboard(iox, &rows, &cols);
+            // record which key is pressed
+            if kps[0] != KeyPress::None { Some(kps[0]) } else { None }
+        }
+        #[cfg(not(feature = "oem-baosec-lite"))]
+        BoardTypeCoding::Oem => {
             let (port, pin) = crate::platform::setup_dabao_boot_pin(iox);
             // sample the pin
             if iox.get_gpio_pin_value(port, pin) == IoxValue::Low {

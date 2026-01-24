@@ -71,6 +71,9 @@ board-baosec = [
     "ux-api/board-baosec",
     "ux-api/std",
 ] # USB form factor token
+# "lite" variant of baosec. Shares the same basic flags but some things remapped when this is added.
+oem-baosec-lite = []
+
 loader-baosec = [
     "utralib/bao1x",
     "camera-gc2145",
