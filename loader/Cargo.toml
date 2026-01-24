@@ -108,6 +108,7 @@ board-baosec = [
     "aes/loader-baosec",
     "bao1x-hal/security",
 ]
+oem-baosec-lite = []
 board-baosor = ["bao1x-hal/loader-baosor"]
 board-dabao = [
     "bao1x-hal/loader-dabao",
