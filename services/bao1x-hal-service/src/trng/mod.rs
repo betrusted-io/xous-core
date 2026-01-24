@@ -1,10 +1,10 @@
-#[cfg(feature = "board-baosec")]
+#[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
 pub mod baosec;
-#[cfg(feature = "board-baosec")]
+#[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
 pub use baosec::*;
-#[cfg(feature = "board-dabao")]
+#[cfg(any(feature = "board-dabao", feature = "oem-baosec-lite"))]
 pub mod dabao;
-#[cfg(feature = "board-dabao")]
+#[cfg(any(feature = "board-dabao", feature = "oem-baosec-lite"))]
 pub use dabao::*;
 
 pub mod api {

@@ -48,6 +48,7 @@ swap = []
 mpw = ["bao1x-hal/mpw"]
 bmp180 = ["bao1x-hal/bmp180"]
 board-baosec = ["bao1x-hal/board-baosec"]
+oem-baosec-lite = []
 board-baosor = ["bao1x-hal/board-baosor"]
 board-dabao = ["bao1x-hal/board-dabao"]
 

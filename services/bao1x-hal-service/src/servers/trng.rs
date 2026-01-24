@@ -1,11 +1,11 @@
-#[cfg(feature = "board-baosec")]
+#[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
 use bao1x_api::bio::IoConfigMode;
-#[cfg(feature = "board-dabao")]
+#[cfg(any(feature = "board-dabao", feature = "oem-baosec-lite"))]
 use bao1x_hal_service::trng::Trng;
 use bao1x_hal_service::trng::api;
 use flatipc::Ipc;
 use num_traits::*;
-#[cfg(feature = "board-baosec")]
+#[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
 use rand::RngCore;
 use xous::CID;
 use xous_ipc::Buffer;
@@ -18,7 +18,7 @@ struct ScalarCallback {
     cb_to_client_id: u32,
 }
 
-#[cfg(feature = "board-baosec")]
+#[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
 pub fn start_trng_service() {
     std::thread::spawn({
         move || {
@@ -26,7 +26,7 @@ pub fn start_trng_service() {
         }
     });
 }
-#[cfg(feature = "board-baosec")]
+#[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
 fn trng_service() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     // unlimited connections allowed, anyone including less-trusted processes can get a random number
@@ -88,7 +88,7 @@ fn trng_service() -> ! {
     }
 }
 
-#[cfg(feature = "board-dabao")]
+#[cfg(any(feature = "board-dabao", feature = "oem-baosec-lite"))]
 pub fn start_trng_service() {
     std::thread::spawn({
         move || {
@@ -96,7 +96,7 @@ pub fn start_trng_service() {
         }
     });
 }
-#[cfg(feature = "board-dabao")]
+#[cfg(any(feature = "board-dabao", feature = "oem-baosec-lite"))]
 fn trng_service() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     // unlimited connections allowed, anyone including less-trusted processes can get a random number
