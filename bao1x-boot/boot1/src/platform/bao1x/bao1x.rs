@@ -151,6 +151,36 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
     // does, but we leave this commented out for non-debug situations because it's a weak guarantee.
     // crate::debug::USE_CONSOLE.store(true, core::sync::atomic::Ordering::SeqCst);
 
+    // ======= setup .data section ========
+    // this has to happen "up top" before any IRQs happen because IRQs rely on static variables for
+    // correctness. So:
+    //   - ASSUME: basic clocks are sane because boot0 set those up.
+    //   - ASSUME: SRAM trim wait states are set up correctly (sram0 has 1 wait state)
+
+    // Now that SRAM trims are setup, initialize all the statics by writing to memory.
+    // For baremetal, the statics structure is just at the flash base.
+    const STATICS_LOC: usize = bao1x_api::BOOT1_START + SIGBLOCK_LEN;
+
+    // safety: this data structure is pre-loaded by the image loader and is guaranteed to
+    // only have representable, valid values that are aligned according to the repr(C) spec
+    let statics_in_rom: &bao1x_api::StaticsInRom =
+        unsafe { (STATICS_LOC as *const bao1x_api::StaticsInRom).as_ref().unwrap() };
+    assert!(statics_in_rom.version == bao1x_api::STATICS_IN_ROM_VERSION, "Can't find valid statics table");
+
+    // Clear .data, .bss, .stack, .heap regions & setup .data values
+    // Safety: only safe if the values computed by the loader are correct.
+    unsafe {
+        let data_ptr = statics_in_rom.data_origin as *mut u32;
+        for i in 0..statics_in_rom.data_size_bytes as usize / size_of::<u32>() {
+            data_ptr.add(i).write_volatile(0);
+        }
+        for &(offset, data) in &statics_in_rom.poke_table[..statics_in_rom.valid_pokes as usize] {
+            let offset = u16::from_le_bytes(offset) as usize;
+            let data = u32::from_le_bytes(data);
+            data_ptr.add(offset / size_of::<u32>()).write_volatile(data);
+        }
+    }
+
     irq_setup();
     // all sensors & IRQs setup already by boot0, but it doesn't hurt to re-write these registers
     // in case they were defeated somehow previously
@@ -208,17 +238,17 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
             iox.set_gpio_pin(se0_port, se0_pin, IoxValue::Low); // put the USB port into SE0 while we initialize things
 
             // setup display - turn on its power, reset the framebuffer
-            bao1x_hal::board::setup_display_pins(&iox);
-            // power on
-            let (oled_on_port, oled_on_pin) = bao1x_hal::board::setup_oled_power_pin(&iox);
-            iox.set_gpio_pin_value(oled_on_port, oled_on_pin, IoxValue::High);
-
             // reset enable - note inversion compared to baosec (at least as of this board rev of baosec)
             bao1x_hal::board::setup_periph_reset_pin(&iox);
+
             bao1x_hal::board::assert_periph_reset(&iox, true);
-            // delay for reset assert
-            delay(1);
+            // delay while reset assert - setup display pins at this time
+            bao1x_hal::board::setup_display_pins(&iox);
+            let (oled_on_port, oled_on_pin) = bao1x_hal::board::setup_oled_power_pin(&iox);
             bao1x_hal::board::assert_periph_reset(&iox, false);
+
+            // power on
+            iox.set_gpio_pin_value(oled_on_port, oled_on_pin, IoxValue::High);
         }
         #[cfg(not(feature = "oem"))]
         BoardTypeCoding::Oem => {
@@ -353,46 +383,19 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
                 iox.set_gpio_pin(se0_port, se0_pin, IoxValue::Low); // put the USB port into SE0 while we initialize things
 
                 // setup display - turn on its power, reset the framebuffer
-                bao1x_hal::board::setup_display_pins(&iox);
-                // power on
-                let (oled_on_port, oled_on_pin) = bao1x_hal::board::setup_oled_power_pin(&iox);
-                iox.set_gpio_pin_value(oled_on_port, oled_on_pin, IoxValue::High);
                 // reset enable
                 let (peri_rst_port, peri_reset_pin) = bao1x_hal::board::setup_periph_reset_pin(&iox);
                 iox.set_gpio_pin_value(peri_rst_port, peri_reset_pin, IoxValue::Low);
-                // delay for reset assert
-                delay(1);
+                // delay for reset assert - setup display pins during this time
+                bao1x_hal::board::setup_display_pins(&iox);
+                let (oled_on_port, oled_on_pin) = bao1x_hal::board::setup_oled_power_pin(&iox);
                 iox.set_gpio_pin_value(peri_rst_port, peri_reset_pin, IoxValue::High);
+
+                // power on
+                iox.set_gpio_pin_value(oled_on_port, oled_on_pin, IoxValue::High);
 
                 // keyboard can setup at keyboard read time
             }
-        }
-    }
-
-    // ASSUME: basic clocks are sane because boot0 set those up.
-    // ASSUME: SRAM trim wait states are set up correctly (sram0 has 1 wait state)
-
-    // Now that SRAM trims are setup, initialize all the statics by writing to memory.
-    // For baremetal, the statics structure is just at the flash base.
-    const STATICS_LOC: usize = bao1x_api::BOOT1_START + SIGBLOCK_LEN;
-
-    // safety: this data structure is pre-loaded by the image loader and is guaranteed to
-    // only have representable, valid values that are aligned according to the repr(C) spec
-    let statics_in_rom: &bao1x_api::StaticsInRom =
-        unsafe { (STATICS_LOC as *const bao1x_api::StaticsInRom).as_ref().unwrap() };
-    assert!(statics_in_rom.version == bao1x_api::STATICS_IN_ROM_VERSION, "Can't find valid statics table");
-
-    // Clear .data, .bss, .stack, .heap regions & setup .data values
-    // Safety: only safe if the values computed by the loader are correct.
-    unsafe {
-        let data_ptr = statics_in_rom.data_origin as *mut u32;
-        for i in 0..statics_in_rom.data_size_bytes as usize / size_of::<u32>() {
-            data_ptr.add(i).write_volatile(0);
-        }
-        for &(offset, data) in &statics_in_rom.poke_table[..statics_in_rom.valid_pokes as usize] {
-            let offset = u16::from_le_bytes(offset) as usize;
-            let data = u32::from_le_bytes(data);
-            data_ptr.add(offset / size_of::<u32>()).write_volatile(data);
         }
     }
 
