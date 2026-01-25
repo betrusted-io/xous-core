@@ -19,7 +19,9 @@ pub const WIPE_THRESHOLD: u32 = 127;
 /// This number is empirically tuned. The main issue is we don't want to notch up the
 /// counter during "slow shutdowns" where the power supply falls gradually enough that
 /// the glitch detector can fire.
-const DISTURB_THRESHOLD: u32 = 2;
+/// Empirically, during a shutdown, this reaches a value of around 10 on some boards.
+/// Margin it up to 16, to avoid false alarms.
+const DISTURB_THRESHOLD: u32 = 16;
 
 /// This is the range of delays we will pick from whenever we attempt a random delay,
 /// expressed as a number of bits.
@@ -434,7 +436,7 @@ pub fn glitch_handler(attacks_since_boot: u32) {
         // even output something on the DUART - this could be used as a trigger to prevent shutdown
         // but at this point diagnostics are useful for seeing why the system shut down unexpectedly.
         #[cfg(feature = "debug-countermeasures")]
-        crate::println!("Attack thresh");
+        crate::println!("Attack thresh trip: {}", attacks_since_boot);
         crate::sigcheck::die_no_std();
     }
 
