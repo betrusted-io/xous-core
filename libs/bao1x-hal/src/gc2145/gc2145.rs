@@ -150,8 +150,8 @@ impl Gc2145 {
         // let c_ratio = 4u16;
         // let r_ratio = 4u16;
         // 320x240 base scaling
-        let c_ratio = 3u16;
-        let r_ratio = 3u16;
+        let c_ratio = 2u16;
+        let r_ratio = 2u16;
         // 640x480 base scaling
         // let c_ratio = 2u16;
         // let r_ratio = 2u16;
@@ -165,6 +165,16 @@ impl Gc2145 {
         let win_y = (UXGA_VSIZE - win_h) / 2;
 
         /* Set readout window first. */
+        /*
+        self.gc2145_set_window(
+            i2c,
+            GC2145_REG_BLANK_WINDOW_BASE,
+            win_x / 2,
+            win_y / 2,
+            (win_w + 16) * 2,
+            (win_h + 8) * 2,
+        );
+        */
         self.gc2145_set_window(i2c, GC2145_REG_BLANK_WINDOW_BASE, win_x, win_y, win_w + 16, win_h + 8);
 
         /* Set cropping window next. */
@@ -177,15 +187,13 @@ impl Gc2145 {
         /* Set Sub-sampling ratio and mode */
         self.poke(i2c, GC2145_REG_SUBSAMPLE, ((r_ratio << 4) | c_ratio) as u8);
 
-        self.poke(i2c, GC2145_REG_SUBSAMPLE_MODE, GC2145_SUBSAMPLE_MODE_SMOOTH);
+        self.poke(i2c, GC2145_REG_SUBSAMPLE_MODE, 0x32);
 
         self.delay(30);
 
-        // divide the clock down, so that the system can keep up.
-        // self.poke(i2c, 0xFA, 0x32); // this offers a higher frame rate, but a greater bus congestion -
-        // maybe available on bao1x
-        // self.poke(i2c, 0xFA, 0x63); // this is necessary for MPW due to SPI backpressure bug
-        self.poke(i2c, 0xFA, 0x52); // this is necessary for MPW due to SPI backpressure bug
+        self.poke(i2c, 0xFA, 0x19);
+
+        // now at 35Hz frame rate
     }
 
     #[inline(never)]
