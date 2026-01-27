@@ -17,6 +17,10 @@ const MHZ: u32 = 1_000_000;
 /// perclk is returned by the clock setting routines.
 pub const PERCLK_HZ: u32 = 100_000_000;
 
+pub const HCLK_HZ: u32 = 200_000_000;
+pub const ICLK_HZ: u32 = 100_000_000;
+pub const PCLK_HZ: u32 = 50_000_000;
+
 #[bitfield(u32)]
 #[derive(PartialEq, Eq, Debug)]
 pub struct PmuControl {
@@ -243,6 +247,29 @@ fn check_pll_std(cgu: &mut CSR<u32>) {
     }
 }
 
+/// maximum value representable in the fd counter
+const FD_MAX: u32 = 256;
+
+pub fn fd_from_frequency(desired_freq_hz: u32, in_freq_hz: u32) -> u32 {
+    // Shift by 1_000 to prevent overflow
+    let desired_freq_khz = desired_freq_hz / 1_000;
+    let in_freq_khz = in_freq_hz / 1_000;
+
+    // Calculate (fd + 1) with rounding for accuracy
+    let fd_plus_1 = (desired_freq_khz * FD_MAX + in_freq_khz / 2) / in_freq_khz;
+
+    // Subtract 1 to get fd, handling underflow and clamping to valid range
+    if fd_plus_1 == 0 { 0 } else { (fd_plus_1 - 1).min(FD_MAX - 1) }
+}
+
+pub fn divide_by_fd(fd: u32, in_freq_hz: u32) -> u32 {
+    // shift by 1_000 to prevent overflow
+    let in_freq_khz = in_freq_hz / 1_000;
+    let out_freq_khz = (in_freq_khz * (fd + 1)) / FD_MAX;
+    // restore to Hz
+    out_freq_khz * 1_000
+}
+
 #[cfg(feature = "std")]
 pub struct ClockManager {
     pub vco_freq: u32,
@@ -265,10 +292,6 @@ pub struct ClockManager {
     #[cfg(feature = "board-baosec")]
     pmic: Axp2101,
 }
-
-/// maximum value representable in the fd counter
-#[cfg(feature = "std")]
-const FD_MAX: u32 = 256;
 
 #[cfg(feature = "std")]
 impl ClockManager {
@@ -310,16 +333,16 @@ impl ClockManager {
         let iclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3) & 0xFF;
         let pclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4) & 0xFF;
 
-        let fclk = ClockManager::divide_by_fd(fclk_fd, pll0_freq);
-        let aclk = ClockManager::divide_by_fd(aclk_fd, pll0_freq);
-        let hclk = ClockManager::divide_by_fd(hclk_fd, pll0_freq);
-        let iclk = ClockManager::divide_by_fd(iclk_fd, pll0_freq);
-        let pclk = ClockManager::divide_by_fd(pclk_fd, pll0_freq);
+        let fclk = divide_by_fd(fclk_fd, pll0_freq);
+        let aclk = divide_by_fd(aclk_fd, pll0_freq);
+        let hclk = divide_by_fd(hclk_fd, pll0_freq);
+        let iclk = divide_by_fd(iclk_fd, pll0_freq);
+        let pclk = divide_by_fd(pclk_fd, pll0_freq);
         log::info!("fracen: {:?}", fracen);
         // perclk has an extra /2 applied to it
         log::info!("perclk: {:x}, pll0_freq {}", sysctrl.r(utra::sysctrl::SFR_CGUFDPER), pll0_freq);
         let perclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFDPER) & 0xFF;
-        let perclk = ClockManager::divide_by_fd(perclk_fd, pll0_freq) / 2;
+        let perclk = divide_by_fd(perclk_fd, pll0_freq) / 2;
 
         /*
         log::info!("m: {} n: {} q1: {} q0: {} frac: {}, fracen: {:?}", m, n, q1, q0, frac, fracen);
@@ -364,14 +387,6 @@ impl ClockManager {
     /// using the susres block.
     pub unsafe fn susres_base(&self) -> usize { self.susres.base() as usize }
 
-    pub fn divide_by_fd(fd: u32, in_freq_hz: u32) -> u32 {
-        // shift by 1_000 to prevent overflow
-        let in_freq_khz = in_freq_hz / 1_000;
-        let out_freq_khz = (in_freq_khz * (fd + 1)) / FD_MAX;
-        // restore to Hz
-        out_freq_khz * 1_000
-    }
-
     pub fn measured_freqs(&self) -> Vec<(String, u32)> {
         let mut readings = Vec::new();
         let clk_desc: [(&'static str, u32, usize); 8] = [
@@ -410,7 +425,7 @@ impl ClockManager {
                 |ms: usize, freq_hz: u32| {
                     let freq_khz = (freq_hz / 1_000).max(1);
                     let aclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1) & 0xFF;
-                    let aclk_khz = ClockManager::divide_by_fd(aclk_fd, freq_hz) / 1_000;
+                    let aclk_khz = divide_by_fd(aclk_fd, freq_hz) / 1_000;
 
                     fn get_hw_time(hw: &CSR<u32>) -> u64 {
                         hw.r(utra::susres::TIME0) as u64 | ((hw.r(utra::susres::TIME1) as u64) << 32)
