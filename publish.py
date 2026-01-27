@@ -17,7 +17,7 @@ CRATES = [
     ["xous-ipc", "xous-ipc"],
     ["xous-api-log", "api/xous-api-log"],
     ["xous-api-names", "api/xous-api-names"],
-    ["xous-api-susres", "api/xous-api-susres"],
+    # ["xous-api-susres", "api/xous-api-susres"],
     ["xous-api-ticktimer", "api/xous-api-ticktimer"],
     # ["xous-log", "services/xous-log"],  # implementations, no longer published
     # ["xous-names", "services/xous-names"],
