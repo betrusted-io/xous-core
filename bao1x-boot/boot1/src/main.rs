@@ -203,23 +203,23 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     let se0_dabao = crate::platform::setup_dabao_se0_pin(&iox);
     iox.set_gpio_pin(se0_baosec.0, se0_baosec.1, bao1x_api::IoxValue::Low);
     iox.set_gpio_pin(se0_dabao.0, se0_dabao.1, bao1x_api::IoxValue::Low);
-    delay(100);
     // use the USB disconnect time to initialize the display - at least 100ms is
     // needed after reset for the display to initialize
     if let Some(ref mut sh1107) = oled {
         // show the boot logo
         sh1107.init();
-        sh1107.buffer_mut().fill(0xFFFF_FFFF);
+        delay(100);
         sh1107.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
         sh1107.draw();
+        delay(150);
+    } else {
+        delay(250);
     }
-    delay(400);
 
+    delay(250);
     // setup the USB port
     let (mut last_usb_state, mut portsc) = glue::setup();
-
-    // remainder of the 1-second total wait target time for USB disconnect
-    delay(500);
+    delay(150);
 
     // release SE0
     iox.set_gpio_pin(se0_baosec.0, se0_baosec.1, bao1x_api::IoxValue::High);
