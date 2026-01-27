@@ -31,7 +31,7 @@ chrono = { version = "0.4.33", default-features = false, features = ["std"] }
 sntpc = { version = "0.3.1" }                                                 #, features = ["log"]
 locales = { path = "../../locales" }
 gam = { path = "../gam" }
-susres = { package = "xous-api-susres", version = "0.9.68" }
+susres = { path = "../../api/xous-api-susres", package = "xous-api-susres" }
 userprefs = { path = "../../libs/userprefs" }
 modals = { path = "../modals" }
 precursor-hal = { path = "../../libs/precursor-hal" }

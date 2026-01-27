@@ -20,7 +20,7 @@ xous-names = { package = "xous-api-names", version = "0.9.70" }
 ux-api = { path = "../../libs/ux-api" }
 gam = { path = "../gam" }
 locales = { path = "../../locales" }
-susres = { package = "xous-api-susres", version = "0.9.68" }
+susres = { path = "../../api/xous-api-susres", package = "xous-api-susres" }
 root-keys = { path = "../root-keys" }
 keystore-api = { path = "../../libs/keystore-api", features = ["gen1"] }
 modals = { path = "../modals" }

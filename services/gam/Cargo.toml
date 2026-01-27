@@ -30,7 +30,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "alloc",
 ] }
 
-susres = { package = "xous-api-susres", version = "0.9.68", optional = true }                  # used for the sleep now menu item
+susres = { path = "../../api/xous-api-susres", package = "xous-api-susres", optional = true }                  # used for the sleep now menu item
 bao1x-hal-service = { path = "../bao1x-hal-service", optional = true, default-features = false }
 
 enum_dispatch = "0.3.7"              # used for trait-based dispatch off of multiple layout objects.

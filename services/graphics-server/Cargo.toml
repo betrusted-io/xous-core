@@ -11,7 +11,7 @@ keyboard = { path = "../keyboard" }
 log = "0.4.14"
 log-server = { package = "xous-api-log", version = "0.1.68" }
 xous = "0.9.69"
-susres = { package = "xous-api-susres", version = "0.9.68" }
+susres = { path = "../../api/xous-api-susres", package = "xous-api-susres" }
 ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.68" }
 locales = { path = "../../locales" }
 blitstr2 = { path = "../../libs/blitstr2" }
@@ -39,12 +39,7 @@ bao1x-hal = { path = "../../libs/bao1x-hal", optional = true, features = [
 minifb = "0.26.0"
 
 [features]
-bao1x = [
-    "utralib/bao1x",
-    "bao1x-hal-service",
-    "bao1x-hal",
-    "bao1x-hal/std",
-]
+bao1x = ["utralib/bao1x", "bao1x-hal-service", "bao1x-hal", "bao1x-hal/std"]
 board-baosor = ["bao1x-hal/board-baosor", "blitstr2/board-baosor"]
 
 precursor = [

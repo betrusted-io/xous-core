@@ -23,7 +23,7 @@ xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branc
 pddb = { path = "../../services/pddb" }
 modals = { path = "../../services/modals" }
 trng = { path = "../../services/trng" }
-susres = { package = "xous-api-susres", version = "0.9.68" }
+susres = { path = "../../api/xous-api-susres", package = "xous-api-susres" }
 ime-plugin-api = { path = "../../services/ime-plugin-api" }
 content-plugin-api = { path = "../../services/content-plugin-api" } # all content canvas providers must provide this API
 backup = { path = "libraries/backup" }

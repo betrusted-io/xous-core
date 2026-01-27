@@ -60,6 +60,8 @@ sntpc = { version = "0.3.1" }
 # net = { path = "../../services/net" }
 # com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 
+# QR code encoding
+base45 = "3.1.0"
 
 [dev-dependencies]
 enum-iterator = "0.6.0"

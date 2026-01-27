@@ -16,7 +16,7 @@ ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.68" }
 xous = "0.9.69"
 xous-ipc = "0.10.9"
 xous-names = { package = "xous-api-names", version = "0.9.70" }
-susres = { package = "xous-api-susres", version = "0.9.68" }
+susres = { path = "../../api/xous-api-susres", package = "xous-api-susres" }
 spinor = { path = "../../services/spinor" }
 precursor-hal = { path = "../../libs/precursor-hal" }
 
