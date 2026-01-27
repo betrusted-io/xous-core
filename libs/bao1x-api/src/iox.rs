@@ -336,7 +336,7 @@ impl Drop for IoxHal {
         // connection.
         if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe {
-                xous::disconnect(self.conn).unwrap();
+                xous::disconnect(self.conn).ok();
             }
         }
     }
