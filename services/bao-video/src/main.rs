@@ -85,6 +85,7 @@ fn encode_base64(input: &[u8]) -> String { general_purpose::STANDARD.encode(inpu
 
 /// This converts a frame of `[u8]` grayscale pixels that may be larger than the native
 /// frame buffer resolution into a black and white bitmap.
+#[cfg(not(feature = "oem-baosec-lite"))]
 pub fn blit_to_display(display: &mut Oled128x128, frame: &[u8], display_cleared: bool, bw_thresh: &mut u8) {
     let mut sum: u32 = 0;
     let mut count: u32 = 0;
@@ -117,6 +118,52 @@ pub fn blit_to_display(display: &mut Oled128x128, frame: &[u8], display_cleared:
                     }
                 }
             }
+        }
+    }
+    *bw_thresh = (sum / count) as u8;
+}
+
+#[cfg(feature = "oem-baosec-lite")]
+pub fn blit_to_display(display: &mut Oled128x128, frame: &[u8], display_cleared: bool, bw_thresh: &mut u8) {
+    let mut sum: u32 = 0;
+    let mut count: u32 = 0;
+    let frame_height = frame.len() / IMAGE_WIDTH;
+    let thresh = *bw_thresh; // Dereference once
+
+    let max_display_x = display.dimensions().x as isize;
+    let max_display_y = display.dimensions().y as isize - (gfx::CHAR_HEIGHT as isize + 1);
+
+    for y in (0..frame_height).step_by(2) {
+        // Skip every other line directly
+        let row = &frame[y * IMAGE_WIDTH..(y + 1) * IMAGE_WIDTH];
+        let display_y = (frame_height - y - 1) as isize / 2;
+
+        if display_y < 0 || display_y >= max_display_y {
+            continue;
+        }
+
+        for x in (0..IMAGE_WIDTH).step_by(2) {
+            // Skip every other pixel directly
+            let display_x = x as isize / 2;
+
+            if display_x >= max_display_x {
+                break;
+            }
+
+            let luminance = row[x] & 0xff;
+            sum += luminance as u32;
+            count += 1;
+
+            if luminance > thresh {
+                unsafe {
+                    display.put_pixel_unchecked(Point::new(display_x, display_y), Mono::White.into());
+                }
+            } else if !display_cleared {
+                unsafe {
+                    display.put_pixel_unchecked(Point::new(display_x, display_y), Mono::Black.into());
+                }
+            }
+            // else: display already cleared, skip writing black pixels
         }
     }
     *bw_thresh = (sum / count) as u8;
@@ -230,6 +277,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
         tt.sleep_ms(1000).ok();
 
         // setup camera power
+        #[cfg(not(feature = "oem-baosec-lite"))]
         match bao1x_hal::axp2101::Axp2101::new(&mut i2c) {
             Ok(mut pmic) => {
                 pmic.set_dcdc(&mut i2c, Some((1.8, false)), bao1x_hal::axp2101::WhichDcDc::Dcdc5).unwrap();
@@ -493,6 +541,26 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     }
                 }
                 GfxOpcode::CamIrq => {
+                    // copy the camera data to our FB
+                    let fb: &[u32] = cam.rx_buf();
+                    // fb is an array of IMAGE_WIDTH x IMAGE_HEIGHT x u16
+                    // frame is an array of IMAGE_WIDTH x IMAGE_HEIGHT x u8
+                    // Take only the "Y" channel out of the fb array and write it to frame, but do it
+                    // such that we are fetching a u32 each read from fb as this matches the native
+                    // width of the bus (because fb is non-cacheable reading u16 ends up fetching the
+                    // same word twice, then masking it at the CPU side in hardware). Also, the fb
+                    // is slow to access relative to main memory.
+                    //
+                    // Also, commit the data to `frame` in inverse line order, e.g. flip the image
+                    // vertically.
+                    for (y_src, line) in fb.chunks(IMAGE_WIDTH / 2).enumerate() {
+                        for (x_src, &u32src) in line.iter().enumerate() {
+                            frame[y_src * IMAGE_WIDTH + 2 * x_src] = ((u32src >> 8) & 0xff) as u8;
+                            frame[y_src * IMAGE_WIDTH + 2 * x_src + 1] = ((u32src >> 24) & 0xff) as u8;
+                        }
+                    }
+                    frames += 1;
+
                     if qr_request.is_some() {
                         cam.capture_async();
                     } else {
@@ -517,26 +585,6 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                             );
                         }
                     }
-
-                    // copy the camera data to our FB
-                    let fb: &[u32] = cam.rx_buf();
-                    // fb is an array of IMAGE_WIDTH x IMAGE_HEIGHT x u16
-                    // frame is an array of IMAGE_WIDTH x IMAGE_HEIGHT x u8
-                    // Take only the "Y" channel out of the fb array and write it to frame, but do it
-                    // such that we are fetching a u32 each read from fb as this matches the native
-                    // width of the bus (because fb is non-cacheable reading u16 ends up fetching the
-                    // same word twice, then masking it at the CPU side in hardware). Also, the fb
-                    // is slow to access relative to main memory.
-                    //
-                    // Also, commit the data to `frame` in inverse line order, e.g. flip the image
-                    // vertically.
-                    for (y_src, line) in fb.chunks(IMAGE_WIDTH / 2).enumerate() {
-                        for (x_src, &u32src) in line.iter().enumerate() {
-                            frame[y_src * IMAGE_WIDTH + 2 * x_src] = ((u32src >> 8) & 0xff) as u8;
-                            frame[y_src * IMAGE_WIDTH + 2 * x_src + 1] = ((u32src >> 24) & 0xff) as u8;
-                        }
-                    }
-                    frames += 1;
 
                     let mut candidates = Vec::<Point>::new();
                     log::debug!("------------- SEARCH {} -----------", frames);
