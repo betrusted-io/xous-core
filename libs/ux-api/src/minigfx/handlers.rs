@@ -441,9 +441,11 @@ pub fn render_qr<T: FrameBuffer>(
         op::rectangle(display, r, screen_clip.into(), false);
 
         // now raster in the modules
+        // TODO: on dense codes, the dark colors are over-sized by a pixel. Figure this out.
+        // TODO: on smaller than optimal codes, align the QR code into the center of the screen.
         let mut line_top_left =
             Point::new(left_edge + module_width * QUIET_MODULES, tl.y + module_width * QUIET_MODULES);
-        let dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
+        let dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 0);
         for line in qr_render.modules.chunks(qr_render.width) {
             for (i, &module) in line.iter().enumerate() {
                 if module {
