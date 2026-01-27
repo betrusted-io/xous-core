@@ -465,7 +465,7 @@ impl<'a> Oled128x128<'a> {
             SetDCDCSettings(0x0),
             SetStartLine(0),
             SetDisplayOffset(0),
-            SetContrastControl(0x2f), // was 0x4f, was a bit too bright
+            SetContrastControl(0x3f), // was 0x4f, was a bit too bright
             SetAddressMode(AddressMode::Column),
             SetSegmentReMap(false),
             SetCOMScanDirection(Direction::Inverted),
@@ -476,10 +476,18 @@ impl<'a> Oled128x128<'a> {
             SetPageAddress(0),
             ForceEntireDisplay(false),
             SetDisplayMode(DisplayMode::WhiteOnBlack),
-            DisplayOnOff(DisplayState::On),
         ];
 
         for command in init_sequence {
+            let bytes = command.encode();
+            self.send_command(bytes);
+        }
+        // clear the frame buffer
+        self.buffer_mut().fill(0xFFFF_FFFF);
+        self.draw();
+
+        let display_on = [DisplayOnOff(DisplayState::On)];
+        for command in display_on {
             let bytes = command.encode();
             self.send_command(bytes);
         }
@@ -553,6 +561,18 @@ impl<'a> FrameBuffer for Oled128x128<'a> {
             self.buffer[bitnum / 32] |= 1 << (bitnum % 32);
         } else {
             self.buffer[bitnum / 32] &= !(1 << (bitnum % 32));
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn put_pixel_unchecked(&mut self, p: Point, on: ColorNative) {
+        let bitnum = (p.x + p.y * COLUMN) as usize;
+        let word_idx = bitnum >> 5; // bitnum / 32
+        let bit_idx = bitnum & 0x1F; // bitnum % 32
+        if on.0 != 0 {
+            self.buffer[word_idx] |= 1 << bit_idx;
+        } else {
+            self.buffer[word_idx] &= !(1 << bit_idx);
         }
     }
 
