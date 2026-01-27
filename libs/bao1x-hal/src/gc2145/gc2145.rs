@@ -143,18 +143,10 @@ impl Gc2145 {
     }
 
     fn set_resolution(&self, i2c: &mut dyn I2cApi, w: u16, h: u16) {
-        // TODO: figure out what this parameter even means in the context of an...unconstrained variable
-        // resolution? Maybe? It's not even clear to me that was the original intent from the C driver.
-
-        // 160x120 base scaling
-        // let c_ratio = 4u16;
-        // let r_ratio = 4u16;
-        // 320x240 base scaling
+        // these define the scaling of the image. If "digital zoom" is required, increase
+        // these numbers to get a higher magnification.
         let c_ratio = 2u16;
         let r_ratio = 2u16;
-        // 640x480 base scaling
-        // let c_ratio = 2u16;
-        // let r_ratio = 2u16;
 
         /* Calculates the window boundaries to obtain the desired resolution */
         let win_w = w * c_ratio;
@@ -165,16 +157,6 @@ impl Gc2145 {
         let win_y = (UXGA_VSIZE - win_h) / 2;
 
         /* Set readout window first. */
-        /*
-        self.gc2145_set_window(
-            i2c,
-            GC2145_REG_BLANK_WINDOW_BASE,
-            win_x / 2,
-            win_y / 2,
-            (win_w + 16) * 2,
-            (win_h + 8) * 2,
-        );
-        */
         self.gc2145_set_window(i2c, GC2145_REG_BLANK_WINDOW_BASE, win_x, win_y, win_w + 16, win_h + 8);
 
         /* Set cropping window next. */
@@ -182,18 +164,18 @@ impl Gc2145 {
 
         /* Enable crop */
         self.poke(i2c, GC2145_REG_CROP_ENABLE, GC2145_CROP_SET_ENABLE);
-        // self.poke(i2c, GC2145_REG_CROP_ENABLE, 0);
 
         /* Set Sub-sampling ratio and mode */
         self.poke(i2c, GC2145_REG_SUBSAMPLE, ((r_ratio << 4) | c_ratio) as u8);
 
+        // set to nearest-neighbor averaging plus "use" mode
         self.poke(i2c, GC2145_REG_SUBSAMPLE_MODE, 0x32);
 
         self.delay(30);
 
-        self.poke(i2c, 0xFA, 0x19);
-
+        // faster clock enables a faster frame rate
         // now at 35Hz frame rate
+        self.poke(i2c, 0xFA, 0x19);
     }
 
     #[inline(never)]
