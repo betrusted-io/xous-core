@@ -5535,7 +5535,7 @@ dependencies = [
 [[package]]
 name = "sha2"
 version = "0.10.8"
-source = "git+https://github.com/betrusted-io/hashes.git?branch=sha2-v0.10.8-xous#ef15aee3576eda5429b361bdee51eae3379ba8ff"
+source = "git+https://github.com/betrusted-io/hashes.git?branch=sha2-v0.10.8-xous#c190327961172f8160db39f178ca6232fda8c8bf"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -7539,6 +7539,7 @@ dependencies = [
  "num-derive 0.4.2",
  "num-traits",
  "rkyv 0.8.8",
+ "utralib 0.1.26",
  "xous 0.9.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
