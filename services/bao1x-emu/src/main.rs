@@ -129,10 +129,6 @@ fn main() {
             HalOpcode::SetPreemptionState => {
                 todo!("unimplemented opcode: {:?}", opcode);
             }
-            HalOpcode::Quit => {
-                log::info!("Received quit opcode, exiting.");
-                break;
-            }
             _ => {
                 unimplemented!("Not available in hosted mode");
             }
