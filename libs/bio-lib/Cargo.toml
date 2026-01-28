@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 utralib = { version = "0.1.26", default-features = false }
-ticktimer = { package = "xous-api-ticktimer", version = "0.9.68" }
+ticktimer = { package = "xous-api-ticktimer", version = "0.9.69" }
 xous = "0.9.69"
 log = "0.4.14"
 bao1x-hal = { path = "../../libs/bao1x-hal", features = ["std"] }

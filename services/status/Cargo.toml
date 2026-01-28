@@ -11,7 +11,7 @@ com = { path = "../com" }
 content-plugin-api = { path = "../content-plugin-api" }
 log = "0.4.14"
 log-server = { package = "xous-api-log", version = "0.1.68" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.68" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.69" }
 trng = { path = "../trng" }
 llio = { path = "../llio" }
 xous = "0.9.69"

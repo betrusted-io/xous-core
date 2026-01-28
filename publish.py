@@ -12,13 +12,14 @@ UTRA_CRATES = [
     ["utralib", "utralib"],
 ]
 CRATES = [
-    ["xous", "xous-rs"],
-    # ["xous-kernel", "kernel"], # this is no longer published, as it is an implementation
-    ["xous-ipc", "xous-ipc"],
-    ["xous-api-log", "api/xous-api-log"],
-    ["xous-api-names", "api/xous-api-names"],
-    # ["xous-api-susres", "api/xous-api-susres"],
+    # ["xous", "xous-rs"],
+    # ["xous-ipc", "xous-ipc"],
+    # ["xous-api-log", "api/xous-api-log"],
+    # ["xous-api-names", "api/xous-api-names"],
     ["xous-api-ticktimer", "api/xous-api-ticktimer"],
+
+    # ["xous-api-susres", "api/xous-api-susres"],
+    # ["xous-kernel", "kernel"], # this is no longer published, as it is an implementation
     # ["xous-log", "services/xous-log"],  # implementations, no longer published
     # ["xous-names", "services/xous-names"],
     # ["xous-susres", "services/xous-susres"],

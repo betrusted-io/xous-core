@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 xous-api-names = { version = "0.9.70", optional = true }
-xous-api-ticktimer = { version = "0.9.68", optional = true }
+xous-api-ticktimer = { version = "0.9.69", optional = true }
 log = { version = "0.4.14", optional = true }
 utralib = { version = "0.1.26", default-features = false, optional = true }
 rkyv = { version = "0.8.8", default-features = false, features = [

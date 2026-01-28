@@ -10,7 +10,7 @@ utralib = { version = "0.1.26", optional = true, default-features = false, featu
     "bao1x",
 ] }
 xous-names = { package = "xous-api-names", version = "0.9.70" }
-ticktimer = { package = "xous-api-ticktimer", version = "0.9.68" }
+ticktimer = { package = "xous-api-ticktimer", version = "0.9.69" }
 xous = { version = "0.9.69", features = ["raw-trng"] }
 xous-ipc = "0.10.9"
 log-server = { package = "xous-api-log", version = "0.1.68" }
