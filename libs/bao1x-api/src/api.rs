@@ -54,9 +54,6 @@ pub enum HalOpcode {
     /// Manipulate the OS timer
     SetPreemptionState = 64,
 
-    /// Exit server
-    Quit = 255,
-
     /// Behavior opcode base
     #[cfg(feature = "bio")]
     BehaviorBase0 = 0x1000,
