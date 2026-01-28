@@ -4,9 +4,9 @@ use bao1x_api::{IoxHal, IoxPort};
 use bitbybit::bitfield;
 use utralib::*;
 
-#[cfg(feature = "board-baosec")]
+#[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
 use crate::axp2101::Axp2101;
-#[cfg(all(feature = "std", feature = "board-baosec"))]
+#[cfg(all(feature = "std", feature = "board-baosec", not(feature = "oem-baosec-lite")))]
 use crate::i2c::I2c;
 
 #[cfg(feature = "std")]
@@ -16,6 +16,10 @@ const MHZ: u32 = 1_000_000;
 /// It's not always achievable - for example, when the PLL is turned off, which is why the actual
 /// perclk is returned by the clock setting routines.
 pub const PERCLK_HZ: u32 = 100_000_000;
+
+pub const HCLK_HZ: u32 = 200_000_000;
+pub const ICLK_HZ: u32 = 100_000_000;
+pub const PCLK_HZ: u32 = 50_000_000;
 
 #[bitfield(u32)]
 #[derive(PartialEq, Eq, Debug)]
@@ -243,8 +247,31 @@ fn check_pll_std(cgu: &mut CSR<u32>) {
     }
 }
 
+/// maximum value representable in the fd counter
+const FD_MAX: u32 = 256;
+
+pub fn fd_from_frequency(desired_freq_hz: u32, in_freq_hz: u32) -> u32 {
+    // Shift by 1_000 to prevent overflow
+    let desired_freq_khz = desired_freq_hz / 1_000;
+    let in_freq_khz = in_freq_hz / 1_000;
+
+    // Calculate (fd + 1) with rounding for accuracy
+    let fd_plus_1 = (desired_freq_khz * FD_MAX + in_freq_khz / 2) / in_freq_khz;
+
+    // Subtract 1 to get fd, handling underflow and clamping to valid range
+    if fd_plus_1 == 0 { 0 } else { (fd_plus_1 - 1).min(FD_MAX - 1) }
+}
+
+pub fn divide_by_fd(fd: u32, in_freq_hz: u32) -> u32 {
+    // shift by 1_000 to prevent overflow
+    let in_freq_khz = in_freq_hz / 1_000;
+    let out_freq_khz = (in_freq_khz * (fd + 1)) / FD_MAX;
+    // restore to Hz
+    out_freq_khz * 1_000
+}
+
 #[cfg(feature = "std")]
-pub struct ClockManager {
+pub struct ClockManagerImpl {
     pub vco_freq: u32,
     pub fclk: u32,
     pub aclk: u32,
@@ -256,22 +283,20 @@ pub struct ClockManager {
     // this is a clone of what's in the kpc_aoint
     ao_sysctrl: CSR<u32>,
     susres: CSR<u32>,
-    #[cfg(feature = "board-baosec")]
+    #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
     i2c: I2c,
     #[cfg(feature = "board-baosec")]
     iox: IoxHal,
-    #[cfg(feature = "board-baosec")]
+    #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
     dcdc2_io: (IoxPort, u8),
-    #[cfg(feature = "board-baosec")]
+    #[cfg(all(feature = "board-baosec", feature = "oem-baosec-lite"))]
+    core_on: (IoxPort, u8),
+    #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
     pmic: Axp2101,
 }
 
-/// maximum value representable in the fd counter
 #[cfg(feature = "std")]
-const FD_MAX: u32 = 256;
-
-#[cfg(feature = "std")]
-impl ClockManager {
+impl ClockManagerImpl {
     pub fn new() -> Result<Self, xous::Error> {
         let sysctrl_mem = xous::map_memory(
             xous::MemoryAddress::new(utra::sysctrl::HW_SYSCTRL_BASE),
@@ -310,16 +335,16 @@ impl ClockManager {
         let iclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3) & 0xFF;
         let pclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4) & 0xFF;
 
-        let fclk = ClockManager::divide_by_fd(fclk_fd, pll0_freq);
-        let aclk = ClockManager::divide_by_fd(aclk_fd, pll0_freq);
-        let hclk = ClockManager::divide_by_fd(hclk_fd, pll0_freq);
-        let iclk = ClockManager::divide_by_fd(iclk_fd, pll0_freq);
-        let pclk = ClockManager::divide_by_fd(pclk_fd, pll0_freq);
+        let fclk = divide_by_fd(fclk_fd, pll0_freq);
+        let aclk = divide_by_fd(aclk_fd, pll0_freq);
+        let hclk = divide_by_fd(hclk_fd, pll0_freq);
+        let iclk = divide_by_fd(iclk_fd, pll0_freq);
+        let pclk = divide_by_fd(pclk_fd, pll0_freq);
         log::info!("fracen: {:?}", fracen);
         // perclk has an extra /2 applied to it
         log::info!("perclk: {:x}, pll0_freq {}", sysctrl.r(utra::sysctrl::SFR_CGUFDPER), pll0_freq);
         let perclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFDPER) & 0xFF;
-        let perclk = ClockManager::divide_by_fd(perclk_fd, pll0_freq) / 2;
+        let perclk = divide_by_fd(perclk_fd, pll0_freq) / 2;
 
         /*
         log::info!("m: {} n: {} q1: {} q0: {} frac: {}, fracen: {:?}", m, n, q1, q0, frac, fracen);
@@ -328,13 +353,15 @@ impl ClockManager {
         }
         */
 
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec"))]
         let iox = IoxHal::new();
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         let (port, pin) = crate::board::setup_dcdc2_pin(&iox);
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec", feature = "oem-baosec-lite"))]
+        let (port, pin) = crate::board::get_power_off_pin();
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         let mut i2c = I2c::new();
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         let pmic = crate::axp2101::Axp2101::new(&mut i2c).unwrap();
 
         Ok(Self {
@@ -348,13 +375,15 @@ impl ClockManager {
             sysctrl,
             ao_sysctrl: CSR::new(ao_mem.as_ptr() as *mut u32),
             susres: CSR::new(susres.as_ptr() as *mut u32),
-            #[cfg(feature = "board-baosec")]
+            #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
             i2c,
             #[cfg(feature = "board-baosec")]
             iox,
-            #[cfg(feature = "board-baosec")]
+            #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
             dcdc2_io: (port, pin),
-            #[cfg(feature = "board-baosec")]
+            #[cfg(all(feature = "board-baosec", feature = "oem-baosec-lite"))]
+            core_on: (port, pin),
+            #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
             pmic,
         })
     }
@@ -363,14 +392,6 @@ impl ClockManager {
     /// address must manually manage all concurrency issues that could happen with respect to
     /// using the susres block.
     pub unsafe fn susres_base(&self) -> usize { self.susres.base() as usize }
-
-    pub fn divide_by_fd(fd: u32, in_freq_hz: u32) -> u32 {
-        // shift by 1_000 to prevent overflow
-        let in_freq_khz = in_freq_hz / 1_000;
-        let out_freq_khz = (in_freq_khz * (fd + 1)) / FD_MAX;
-        // restore to Hz
-        out_freq_khz * 1_000
-    }
 
     pub fn measured_freqs(&self) -> Vec<(String, u32)> {
         let mut readings = Vec::new();
@@ -410,7 +431,7 @@ impl ClockManager {
                 |ms: usize, freq_hz: u32| {
                     let freq_khz = (freq_hz / 1_000).max(1);
                     let aclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1) & 0xFF;
-                    let aclk_khz = ClockManager::divide_by_fd(aclk_fd, freq_hz) / 1_000;
+                    let aclk_khz = divide_by_fd(aclk_fd, freq_hz) / 1_000;
 
                     fn get_hw_time(hw: &CSR<u32>) -> u64 {
                         hw.r(utra::susres::TIME0) as u64 | ((hw.r(utra::susres::TIME1) as u64) << 32)
@@ -456,7 +477,7 @@ impl ClockManager {
         self.sysctrl.wo(utra::sysctrl::SFR_CGUSET, 0x32);
         wfi_debug("internal osc");
 
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         {
             wfi_debug("disconnect dcdc2");
             self.iox.set_gpio_pin_value(self.dcdc2_io.0, self.dcdc2_io.1, bao1x_api::IoxValue::High);
@@ -476,6 +497,10 @@ impl ClockManager {
             // wfi_debug("DCDC4 off");
         }
 
+        // set CoreOff to high
+        #[cfg(all(feature = "board-baosec", feature = "oem-baosec-lite"))]
+        self.iox.set_gpio_pin_value(self.core_on.0, self.core_on.1, bao1x_api::IoxValue::High);
+
         // enter PD mode - cuts VDDCORE power - requires full reset to come out of this
         // only RTC & backup regsiters are kept. ~1.2mA @ 4.2V consumption in this mode.
 
@@ -492,7 +517,7 @@ impl ClockManager {
     pub fn wfi(&mut self) {
         wfi_debug("entering wfi");
 
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         {
             self.pmic.set_dcdc(&mut self.i2c, Some((0.7, true)), crate::axp2101::WhichDcDc::Dcdc2).unwrap();
             wfi_debug("DCDC2 to low voltage");
@@ -578,7 +603,7 @@ impl ClockManager {
 
         // high disconnects DCDC2 from the chip - the idea is to prevent DCDC2 shutdown due to VLDO going
         // above DCDC2 value
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         {
             wfi_debug("disconnect dcdc2");
             self.iox.set_gpio_pin_value(self.dcdc2_io.0, self.dcdc2_io.1, bao1x_api::IoxValue::High);
@@ -591,7 +616,7 @@ impl ClockManager {
             .ok();
         wfi_debug("back to 350MHz");
 
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         {
             wfi_debug("setting DCDC");
 

@@ -6,6 +6,8 @@ use xous::{CID, Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_mes
 use xous_api_susres::*;
 use xous_ipc::Buffer;
 
+use crate::api::ClockOp;
+
 static TIMEOUT_TIME: AtomicU32 = AtomicU32::new(5000);
 
 #[derive(Copy, Clone, Debug)]
@@ -31,7 +33,7 @@ fn susres_service() {
     let susres_sid = xns.register_name(api::SERVER_NAME_SUSRES, None).expect("can't register server");
     let susres_conn = xous::connect(susres_sid).unwrap();
 
-    let mut clk_mgr = bao1x_hal::clocks::ClockManager::new().unwrap();
+    let mut clk_mgr = bao1x_hal::clocks::ClockManagerImpl::new().unwrap();
     let measured = clk_mgr.measured_freqs();
     log::info!("computed frequencies:");
     log::info!("  vco: {}", clk_mgr.vco_freq);
@@ -219,14 +221,7 @@ fn susres_service() {
                         log::trace!("still waiting on callbacks, returning to main loop");
                     }
                 }),
-                Some(Opcode::SuspendRequest) => msg_blocking_scalar_unpack!(msg, deepsleep, 0, 0, 0, {
-                    // catch the case of deepsleep request
-                    if deepsleep == 1 {
-                        log::info!("entering deep sleep");
-                        clk_mgr.deep_sleep();
-                        xous::return_scalar(msg.sender, 1).ok();
-                        // system is shut down after this point, no code runs
-                    }
+                Some(Opcode::SuspendRequest) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                     log::info!("registered suspend listeners:");
                     for sub in suspend_subscribers.iter() {
                         log::info!("{:?}", sub);
@@ -340,6 +335,41 @@ fn susres_service() {
                     }
                 }),
                 Some(Opcode::Quit) => break,
+                Some(Opcode::PlatformSpecific) => {
+                    msg_blocking_scalar_unpack!(msg, op, _arg2, _arg3, _arg4, {
+                        let platform_op = FromPrimitive::from_usize(op);
+                        match platform_op {
+                            Some(ClockOp::GetVco) => {
+                                xous::return_scalar(msg.sender, clk_mgr.vco_freq as usize).unwrap()
+                            }
+                            Some(ClockOp::GetFclk) => {
+                                xous::return_scalar(msg.sender, clk_mgr.fclk as usize).unwrap()
+                            }
+                            Some(ClockOp::GetAclk) => {
+                                xous::return_scalar(msg.sender, clk_mgr.aclk as usize).unwrap()
+                            }
+                            Some(ClockOp::GetHclk) => {
+                                xous::return_scalar(msg.sender, clk_mgr.hclk as usize).unwrap()
+                            }
+                            Some(ClockOp::GetIclk) => {
+                                xous::return_scalar(msg.sender, clk_mgr.iclk as usize).unwrap()
+                            }
+                            Some(ClockOp::GetPclk) => {
+                                xous::return_scalar(msg.sender, clk_mgr.pclk as usize).unwrap()
+                            }
+                            Some(ClockOp::GetPer) => {
+                                xous::return_scalar(msg.sender, clk_mgr.perclk as usize).unwrap()
+                            }
+                            Some(ClockOp::DeepSleep) => {
+                                log::info!("entering deep sleep");
+                                clk_mgr.deep_sleep();
+                                xous::return_scalar(msg.sender, 1).ok();
+                                // system is shut down after this point, no code runs
+                            }
+                            _ => panic!("Incorrect PlatformOp"),
+                        }
+                    })
+                }
                 None => {
                     log::error!("couldn't convert opcode");
                 }

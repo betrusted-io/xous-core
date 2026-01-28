@@ -536,6 +536,19 @@ fn main() -> ! {
                 )
                 .ok();
             }
+            Some(VaultOp::ShowQr) => {
+                let previous = allow_totp_rendering.load(Ordering::SeqCst);
+                allow_totp_rendering.store(false, Ordering::SeqCst);
+                let mut test_data = [0u8; 40];
+                #[cfg(feature = "hosted-baosec")]
+                let mut trng = bao1x_emu::trng::Trng::new(&xns).unwrap();
+                #[cfg(not(feature = "hosted-baosec"))]
+                let mut trng = bao1x_hal_service::trng::Trng::new(&xns).unwrap();
+                trng.fill_bytes_via_next(&mut test_data);
+                let encoded = base45::encode(&test_data);
+                modals.show_notification("", Some(&encoded)).ok();
+                allow_totp_rendering.store(previous, Ordering::SeqCst);
+            }
             _ => {
                 log::error!("Got unknown message: {:?}", msg);
             }

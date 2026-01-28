@@ -42,6 +42,8 @@ pub(crate) enum VaultOp {
     MenuPwMode,
 
     BasisChange,
+
+    ShowQr,
 }
 
 pub fn atime_to_str(req_atime: u64) -> String {

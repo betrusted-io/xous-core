@@ -58,6 +58,7 @@ bytemuck = "1.24.0"
 camera-ov2640 = []
 camera-gc2145 = []
 display-sh1107 = []
+sensor-lis2dh12 = []
 axp2101 = []
 bmp180 = []
 sigcheck = ["ed25519-dalek", "sha2-bao1x", "digest", "linked_list_allocator"]
@@ -72,7 +73,7 @@ board-baosec = [
     "ux-api/std",
 ] # USB form factor token
 # "lite" variant of baosec. Shares the same basic flags but some things remapped when this is added.
-oem-baosec-lite = []
+oem-baosec-lite = ["sensor-lis2dh12"]
 
 loader-baosec = [
     "utralib/bao1x",

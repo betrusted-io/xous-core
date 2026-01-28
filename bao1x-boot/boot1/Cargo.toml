@@ -36,6 +36,7 @@ bao1x = [
     "bao1x-hal/loader-baosec",
     "bao1x-hal/security",
     # "bao1x-hal/debug-print-duart",
+    # "bao1x-hal/debug-countermeasures",
     "bao1x-api",
     # needed for the boot logo
     "ux-api/loader-baosec",

@@ -273,8 +273,8 @@ fn main() {
 
     servers::susres::start_susres_service();
 
-    // TODO: implement a method to fetch the clock setting from susres and put it into here!
-    servers::bio::start_bio_service(bao1x_hal::board::DEFAULT_FCLK_FREQUENCY);
+    let clk_mgr = bao1x_hal_service::ClockManager::new();
+    servers::bio::start_bio_service(clk_mgr.get_fclk());
 
     // claim BIO, based on the platform
     servers::trng::start_trng_service();

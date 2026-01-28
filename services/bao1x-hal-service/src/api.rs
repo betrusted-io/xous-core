@@ -20,3 +20,15 @@ pub enum TimeOp {
     /// Serialize the internal state for storage across reboots
     GetState = 1024,
 }
+
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub enum ClockOp {
+    GetVco,
+    GetFclk,
+    GetAclk,
+    GetHclk,
+    GetIclk,
+    GetPclk,
+    GetPer,
+    DeepSleep,
+}

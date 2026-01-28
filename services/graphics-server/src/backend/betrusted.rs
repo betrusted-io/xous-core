@@ -310,6 +310,11 @@ impl FrameBuffer for XousDisplay {
         fb[clip_y * LCD_WORDS_PER_LINE + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
     }
 
+    unsafe fn put_pixel_unchecked(&mut self, p: Point, color: ColorNative) {
+        // compatibility shim for other builds
+        self.put_pixel(p, color);
+    }
+
     /// Retrieves a pixel value from the frame buffer; returns None if the point is out of bounds.
     ///
     /// Note: this has not be carefully tested as this API is not used by the legacy code base.

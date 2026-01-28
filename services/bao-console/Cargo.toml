@@ -24,8 +24,11 @@ ux-api = { path = "../../libs/ux-api", optional = true }
 pddb = { path = "../pddb", optional = true }
 xous-swapper = { path = "../xous-swapper", optional = true }
 bytemuck = "1.24.0"
-susres = { package = "xous-api-susres", version = "0.9.68" }
+susres = { path = "../../api/xous-api-susres", package = "xous-api-susres" }
 keystore = { path = "../keystore" }
+
+bio-lib = { path = "../../libs/bio-lib", optional = true }
+arbitrary-int = "1.2"
 
 # pddb testing
 rand = { version = "0.8.5", features = ["getrandom"], optional = true }
@@ -56,7 +59,9 @@ board-baosec = [
     "pddb/board-baosec",
     "xous-swapper",
     "ux-api/board-baosec",
+    "bio-lib",
 ]
+oem-baosec-lite = ["bao1x-hal/sensor-lis2dh12"]
 hosted-baosec = [
     "modals/hosted-baosec",
     "usb-bao1x/hosted-baosec",

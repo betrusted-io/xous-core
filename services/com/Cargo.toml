@@ -11,7 +11,7 @@ com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f
 log = "0.4.14"
 log-server = { package = "xous-api-log", version = "0.1.68" }
 ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.68" }
-susres = { package = "xous-api-susres", version = "0.9.68" }
+susres = { path = "../../api/xous-api-susres", package = "xous-api-susres" }
 typenum = "1.12"
 xous = "0.9.69"
 xous-ipc = "0.10.9"

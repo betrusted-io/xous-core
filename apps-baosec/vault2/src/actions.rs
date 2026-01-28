@@ -1444,6 +1444,10 @@ impl ActionManager {
                                     .ok();
                             }
                         }
+                    } else {
+                        let mut qr_str = String::from(t!("vault.error.qr", locales::LANG));
+                        qr_str.push_str(&format!(": {}", &qr_uri));
+                        self.modals.show_notification(&qr_str, None).ok();
                     }
                 }
             }

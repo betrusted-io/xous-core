@@ -10,7 +10,7 @@ version = "0.1.0"
 xous = "0.9.69"
 log = "0.4.14"
 log-server = { package = "xous-api-log", version = "0.1.68" }
-susres = { package = "xous-api-susres", version = "0.9.68", optional = true }
+susres = { path = "../../api/xous-api-susres", package = "xous-api-susres", optional = true }
 xous-names = { package = "xous-api-names", version = "0.9.70", optional = true }
 
 [features]
