@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use String;
 
 use crate::{CommonEnv, ShellCmdApi};
@@ -134,8 +136,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                 match xous::send_message(
                     conn,
                     xous::Message::new_blocking_scalar(
-                        susres::api::Opcode::SuspendRequest.to_usize().unwrap(),
-                        1, // this is a monkeypatch
+                        susres::api::Opcode::PlatformSpecific.to_usize().unwrap(),
+                        bao1x_hal_service::api::ClockOp::DeepSleep.to_usize().unwrap(),
                         0,
                         0,
                         0,
@@ -248,6 +250,80 @@ impl<'a> ShellCmdApi<'a> for Test {
                     Err(e) => {
                         log::info!("QR error: {:?}", e);
                     }
+                }
+            }
+            "cam" => {
+                use bao1x_api::I2cApi;
+                let mut i2c = bao1x_hal::i2c::I2c::new();
+                if args.len() < 1 {
+                    write!(ret, "cam [poke adr data]").ok();
+                    return Ok(Some(ret));
+                }
+                if args[0] == "poke" {
+                    if args.len() != 3 {
+                        write!(ret, "cam poke adr(hex) data(hex)").ok();
+                        return Ok(Some(ret));
+                    }
+                    let adr = u8::from_str_radix(&args[1], 16).map_err(|_| xous::Error::InvalidArgument)?;
+                    let data = u8::from_str_radix(&args[2], 16).map_err(|_| xous::Error::InvalidArgument)?;
+                    i2c.i2c_write(0x3C, adr, &[data]).expect("write failed");
+                    write!(ret, "Wrote {:x} into {:x}", data, adr).ok();
+                }
+            }
+            "accel" => {
+                use std::time::Instant;
+
+                use bao1x_hal::i2c::I2c;
+                use bao1x_hal::lis2dh12::{Lis2dh12, Orientation};
+
+                let mut i2c = I2c::new();
+                // Initialize
+                let mut accel = Lis2dh12::new(&mut i2c).unwrap();
+
+                // Check orientation
+                let duration = Duration::from_secs(2);
+                let start_time = Instant::now();
+                while Instant::now().duration_since(start_time).lt(&duration) {
+                    let orientation = accel.get_orientation(&mut i2c).unwrap();
+                    match orientation {
+                        Orientation::FaceUp => println!("Face up"),
+                        Orientation::FaceDown => println!("Face down"),
+                        Orientation::Unknown => println!("Tilted/transitioning"),
+                    }
+                    let raw_data = accel.read_accel_mg(&mut i2c).unwrap();
+                    log::info!("mg data: {:?}", raw_data);
+                    _env.ticktimer.sleep_ms(50).ok();
+                }
+
+                // Set up motion interrupt (200mg threshold, 5 samples duration)
+                // accel.set_int1_latch(&mut i2c, true)?;
+                // accel.setup_motion_interrupt(&mut i2c, 100, 2)?;
+                log::info!("result: {:?}", accel.debug_test_int1_simple(&mut i2c)?);
+
+                let debug = accel.debug_dump_int_config(&mut i2c)?;
+                debug.interpret();
+                log::info!("debug: {:?}", debug);
+
+                // Later, when INT1 fires, read and clear the interrupt source
+                let duration = Duration::from_secs(30);
+                let start_time = Instant::now();
+                while Instant::now().duration_since(start_time).lt(&duration) {
+                    let source = accel.read_int1_source(&mut i2c)?;
+                    if source.active {
+                        log::info!(
+                            "Motion detected! {:?} {:?}",
+                            source,
+                            accel.read_accel_mg(&mut i2c).unwrap()
+                        );
+                        accel.reset_highpass(&mut i2c)?;
+                    }
+                    _env.ticktimer.sleep_ms(150).ok();
+                    /*
+                    if accel.poll_int1_active(&mut i2c)? {
+                        log::info!("int active");
+                        let raw_data = accel.read_accel_mg(&mut i2c).unwrap();
+                        log::info!("mg data: {:?}", raw_data);
+                    }*/
                 }
             }
             /* // leave this around in case we have more swap bugs to debug
