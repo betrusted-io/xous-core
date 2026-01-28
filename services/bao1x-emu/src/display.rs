@@ -172,6 +172,15 @@ impl FrameBuffer for Oled128x128 {
         }
     }
 
+    unsafe fn put_pixel_unchecked(&mut self, p: Point, on: ColorNative) {
+        let bitnum = (p.x + p.y * COLUMN) as usize;
+        if on.0 != 0 {
+            self.buffer[bitnum / 32] |= 1 << (bitnum % 32);
+        } else {
+            self.buffer[bitnum / 32] &= !(1 << (bitnum % 32));
+        }
+    }
+
     fn dimensions(&self) -> Point { Point::new(COLUMN, ROW) }
 
     fn get_pixel(&self, p: Point) -> Option<ColorNative> {

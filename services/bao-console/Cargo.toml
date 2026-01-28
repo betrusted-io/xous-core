@@ -27,7 +27,7 @@ bytemuck = "1.24.0"
 susres = { path = "../../api/xous-api-susres", package = "xous-api-susres" }
 keystore = { path = "../keystore" }
 
-bio-lib = { path = "../../libs/bio-lib" }
+bio-lib = { path = "../../libs/bio-lib", optional = true }
 arbitrary-int = "1.2"
 
 # pddb testing
@@ -59,6 +59,7 @@ board-baosec = [
     "pddb/board-baosec",
     "xous-swapper",
     "ux-api/board-baosec",
+    "bio-lib",
 ]
 oem-baosec-lite = ["bao1x-hal/sensor-lis2dh12"]
 hosted-baosec = [

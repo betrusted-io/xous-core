@@ -266,7 +266,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
     udma_global.udma_clock_config(PeriphId::Cam, true);
     // ---- camera initialization
-    #[cfg(not(feature = "oem-baosec-lite"))]
+    #[cfg(all(not(feature = "oem-baosec-lite"), not(feature = "hosted-baosec")))]
     let cam_clk = (IoxPort::PA, 0);
     #[cfg(feature = "oem-baosec-lite")]
     let cam_clk = (IoxPort::PA, 3);

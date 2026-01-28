@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use String;
 
 use crate::{CommonEnv, ShellCmdApi};
@@ -252,6 +250,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }
                 }
             }
+            #[cfg(not(feature = "hosted-baosec"))]
             "cam" => {
                 use bao1x_api::I2cApi;
                 let mut i2c = bao1x_hal::i2c::I2c::new();
@@ -270,8 +269,9 @@ impl<'a> ShellCmdApi<'a> for Test {
                     write!(ret, "Wrote {:x} into {:x}", data, adr).ok();
                 }
             }
+            #[cfg(all(not(feature = "hosted-baosec"), feature = "oem-baosec-lite"))]
             "accel" => {
-                use std::time::Instant;
+                use std::time::{Duration, Instant};
 
                 use bao1x_hal::i2c::I2c;
                 use bao1x_hal::lis2dh12::{Lis2dh12, Orientation};

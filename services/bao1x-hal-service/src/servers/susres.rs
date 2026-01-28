@@ -1,6 +1,5 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use bao1x_hal_service::api::ClockOp;
 use num_traits::*;
 use utralib::*;
 use xous::{CID, Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, sender::Sender};
@@ -222,7 +221,7 @@ fn susres_service() {
                         log::trace!("still waiting on callbacks, returning to main loop");
                     }
                 }),
-                Some(Opcode::SuspendRequest) => msg_blocking_scalar_unpack!(msg, deepsleep, 0, 0, 0, {
+                Some(Opcode::SuspendRequest) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                     log::info!("registered suspend listeners:");
                     for sub in suspend_subscribers.iter() {
                         log::info!("{:?}", sub);
