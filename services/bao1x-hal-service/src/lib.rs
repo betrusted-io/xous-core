@@ -5,6 +5,10 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 use bao1x_api::*;
 use num_traits::*;
+use xous::{Message, send_message};
+use xous_api_susres::api::Opcode as SusresOp;
+
+use crate::api::ClockOp;
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
 pub struct UdmaGlobal {
@@ -125,6 +129,131 @@ impl UdmaGlobalConfig for UdmaGlobal {
         ) {
             Ok(xous::Result::Scalar5(_, value, _, _, _)) => value as u32,
             _ => panic!("Unhandled response on irq_status_bits"),
+        }
+    }
+}
+
+pub struct ClockManager {
+    conn: xous::CID,
+}
+impl ClockManager {
+    pub fn new() -> Self {
+        let xns = xous_names::XousNames::new().unwrap();
+        let conn = xns
+            .request_connection_blocking(xous_api_susres::api::SERVER_NAME_SUSRES)
+            .expect("Couldn't connect to susres server");
+        ClockManager { conn }
+    }
+
+    pub fn get_fclk(&self) -> u32 {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                SusresOp::PlatformSpecific.to_usize().unwrap(),
+                ClockOp::GetFclk.to_usize().unwrap(),
+                0,
+                0,
+                0,
+            ),
+        ) {
+            Ok(xous::Result::Scalar1(clk)) => clk as u32,
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn get_aclk(&self) -> u32 {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                SusresOp::PlatformSpecific.to_usize().unwrap(),
+                ClockOp::GetAclk.to_usize().unwrap(),
+                0,
+                0,
+                0,
+            ),
+        ) {
+            Ok(xous::Result::Scalar1(clk)) => clk as u32,
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn get_hclk(&self) -> u32 {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                SusresOp::PlatformSpecific.to_usize().unwrap(),
+                ClockOp::GetHclk.to_usize().unwrap(),
+                0,
+                0,
+                0,
+            ),
+        ) {
+            Ok(xous::Result::Scalar1(clk)) => clk as u32,
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn get_iclk(&self) -> u32 {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                SusresOp::PlatformSpecific.to_usize().unwrap(),
+                ClockOp::GetIclk.to_usize().unwrap(),
+                0,
+                0,
+                0,
+            ),
+        ) {
+            Ok(xous::Result::Scalar1(clk)) => clk as u32,
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn get_pclk(&self) -> u32 {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                SusresOp::PlatformSpecific.to_usize().unwrap(),
+                ClockOp::GetPclk.to_usize().unwrap(),
+                0,
+                0,
+                0,
+            ),
+        ) {
+            Ok(xous::Result::Scalar1(clk)) => clk as u32,
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn get_per(&self) -> u32 {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                SusresOp::PlatformSpecific.to_usize().unwrap(),
+                ClockOp::GetPer.to_usize().unwrap(),
+                0,
+                0,
+                0,
+            ),
+        ) {
+            Ok(xous::Result::Scalar1(clk)) => clk as u32,
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn get_vco(&self) -> u32 {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                SusresOp::PlatformSpecific.to_usize().unwrap(),
+                ClockOp::GetVco.to_usize().unwrap(),
+                0,
+                0,
+                0,
+            ),
+        ) {
+            Ok(xous::Result::Scalar1(clk)) => clk as u32,
+            _ => unimplemented!(),
         }
     }
 }
