@@ -482,7 +482,8 @@ impl Builder {
         }
         if dup_indices.len() > 0 {
             println!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
-            for (dupe_ns, dupe_i) in dup_indices {
+            // Remove in reverse order to keep indices valid after each removal
+            for (dupe_ns, dupe_i) in dup_indices.into_iter().rev() {
                 let removed =
                     if dupe_ns == 0 { self.services.remove(dupe_i) } else { self.apps.remove(dupe_i) };
                 println!("WARNING: Found duplicate package name, removing later instances of {:?}", removed);
