@@ -486,7 +486,7 @@ dependencies = [
  "xous 0.9.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-api-susres 0.9.68 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-susres 0.9.68",
  "xous-ipc 0.10.9 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -544,7 +544,7 @@ dependencies = [
  "xous 0.9.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-api-susres 0.9.68 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-susres 0.9.68",
  "xous-api-ticktimer",
  "xous-ipc 0.10.9 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -6064,7 +6064,7 @@ dependencies = [
  "xous 0.9.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-api-susres 0.9.68 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-susres 0.9.68",
  "xous-ipc 0.10.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-swapper",
 ]
@@ -7710,7 +7710,7 @@ dependencies = [
  "xous 0.9.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-api-susres 0.9.68 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-susres 0.9.68",
  "xous-ipc 0.10.9 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
