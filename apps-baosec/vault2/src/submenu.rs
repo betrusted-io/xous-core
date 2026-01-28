@@ -53,6 +53,13 @@ pub fn create_submenu(vault_conn: xous::CID, actions_conn: xous::CID, menu_mgr: 
         close_on_select: true,
     });
     menu_items.push(MenuItem {
+        name: String::from("Test QR code"),
+        action_conn: Some(vault_conn),
+        action_opcode: VaultOp::ShowQr.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+        close_on_select: true,
+    });
+    menu_items.push(MenuItem {
         name: String::from(t!("vault.menu_close", locales::LANG)),
         action_conn: Some(actions_conn),
         action_opcode: ActionOp::MenuClose.to_u32().unwrap(),
