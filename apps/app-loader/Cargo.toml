@@ -15,7 +15,7 @@ xous-names = { package = "xous-api-names", version = "0.9.70" }
 gam = { path = "../../services/gam" }
 ux-api = { path = "../../libs/ux-api" }
 modals = { path = "../../services/modals" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.68" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.69" }
 locales = { path = "../../locales" }
 
 num-derive = { version = "0.4.2", default-features = false }

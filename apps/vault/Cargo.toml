@@ -31,7 +31,7 @@ byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
 subtle = { version = "2.5.0", features = ["core_hint_black_box"] }
 rand_core = "0.6.3"
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.68" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.69" }
 userprefs = { path = "../../libs/userprefs" }
 ux-api = { path = "../../libs/ux-api", default-features = false }
 precursor-hal = { path = "../../libs/precursor-hal" }

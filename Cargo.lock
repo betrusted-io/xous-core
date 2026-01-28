@@ -5535,7 +5535,7 @@ dependencies = [
 [[package]]
 name = "sha2"
 version = "0.10.8"
-source = "git+https://github.com/betrusted-io/hashes.git?branch=sha2-v0.10.8-xous#c190327961172f8160db39f178ca6232fda8c8bf"
+source = "git+https://github.com/betrusted-io/hashes.git?branch=sha2-v0.10.8-xous#ab2ab59c41f294eef1d90ac768a5d94a08c12d63"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -7548,9 +7548,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-ticktimer"
-version = "0.9.68"
+version = "0.9.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b282a2b10e0bbd92c60fef8326f65e5576e7c7a33ea482f041167008d814045"
+checksum = "10bf408494d07a960ca603c00f9c1480cc846d0b34d3b6bd61d1a826c55b59b0"
 dependencies = [
  "log",
  "num-derive 0.4.2",
@@ -7559,7 +7559,6 @@ dependencies = [
  "xous 0.9.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-api-susres 0.9.68 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-ipc 0.10.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
 ]

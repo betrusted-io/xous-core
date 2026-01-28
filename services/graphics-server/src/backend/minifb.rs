@@ -32,6 +32,7 @@ pub fn claim_main_thread(f: impl FnOnce(MainThreadToken) -> Never + Send + 'stat
     let (send, recv) = mpsc::sync_channel(0);
 
     // Call the closure on a fake main thread
+    #[allow(unreachable_code)]
     let fake_main_thread = std::thread::Builder::new()
         .name("wrapped_main".into())
         .spawn(move || f(MainThreadToken(send)))
@@ -174,6 +175,9 @@ impl FrameBuffer for XousDisplay {
         // set the dirty bit on the line that contains the pixel
         fb[clip_y * LCD_WORDS_PER_LINE + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
     }
+
+    /// Wrapper for compatibility sake
+    unsafe fn put_pixel_unchecked(&mut self, p: Point, color: ColorNative) { self.put_pixel(p, color); }
 
     /// Retrieves a pixel value from the frame buffer; returns None if the point is out of bounds.
     ///
