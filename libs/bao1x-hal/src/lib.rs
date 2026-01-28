@@ -48,7 +48,7 @@ pub mod hardening;
 pub mod i2c;
 #[cfg(all(not(feature = "hosted-baosec"), feature = "std"))]
 pub mod kpc_aoint;
-#[cfg(feature = "sensor-lis2dh12")]
+#[cfg(all(feature = "sensor-lis2dh12", feature = "std"))]
 pub mod lis2dh12;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod mbox;

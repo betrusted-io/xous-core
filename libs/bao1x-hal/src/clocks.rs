@@ -4,9 +4,9 @@ use bao1x_api::{IoxHal, IoxPort};
 use bitbybit::bitfield;
 use utralib::*;
 
-#[cfg(feature = "board-baosec")]
+#[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
 use crate::axp2101::Axp2101;
-#[cfg(all(feature = "std", feature = "board-baosec"))]
+#[cfg(all(feature = "std", feature = "board-baosec", not(feature = "oem-baosec-lite")))]
 use crate::i2c::I2c;
 
 #[cfg(feature = "std")]
@@ -271,7 +271,7 @@ pub fn divide_by_fd(fd: u32, in_freq_hz: u32) -> u32 {
 }
 
 #[cfg(feature = "std")]
-pub struct ClockManager {
+pub struct ClockManagerImpl {
     pub vco_freq: u32,
     pub fclk: u32,
     pub aclk: u32,
@@ -283,18 +283,20 @@ pub struct ClockManager {
     // this is a clone of what's in the kpc_aoint
     ao_sysctrl: CSR<u32>,
     susres: CSR<u32>,
-    #[cfg(feature = "board-baosec")]
+    #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
     i2c: I2c,
     #[cfg(feature = "board-baosec")]
     iox: IoxHal,
-    #[cfg(feature = "board-baosec")]
+    #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
     dcdc2_io: (IoxPort, u8),
-    #[cfg(feature = "board-baosec")]
+    #[cfg(all(feature = "board-baosec", feature = "oem-baosec-lite"))]
+    core_on: (IoxPort, u8),
+    #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
     pmic: Axp2101,
 }
 
 #[cfg(feature = "std")]
-impl ClockManager {
+impl ClockManagerImpl {
     pub fn new() -> Result<Self, xous::Error> {
         let sysctrl_mem = xous::map_memory(
             xous::MemoryAddress::new(utra::sysctrl::HW_SYSCTRL_BASE),
@@ -351,13 +353,15 @@ impl ClockManager {
         }
         */
 
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec"))]
         let iox = IoxHal::new();
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         let (port, pin) = crate::board::setup_dcdc2_pin(&iox);
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec", feature = "oem-baosec-lite"))]
+        let (port, pin) = crate::board::get_power_off_pin();
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         let mut i2c = I2c::new();
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         let pmic = crate::axp2101::Axp2101::new(&mut i2c).unwrap();
 
         Ok(Self {
@@ -371,13 +375,15 @@ impl ClockManager {
             sysctrl,
             ao_sysctrl: CSR::new(ao_mem.as_ptr() as *mut u32),
             susres: CSR::new(susres.as_ptr() as *mut u32),
-            #[cfg(feature = "board-baosec")]
+            #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
             i2c,
             #[cfg(feature = "board-baosec")]
             iox,
-            #[cfg(feature = "board-baosec")]
+            #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
             dcdc2_io: (port, pin),
-            #[cfg(feature = "board-baosec")]
+            #[cfg(all(feature = "board-baosec", feature = "oem-baosec-lite"))]
+            core_on: (port, pin),
+            #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
             pmic,
         })
     }
@@ -471,7 +477,7 @@ impl ClockManager {
         self.sysctrl.wo(utra::sysctrl::SFR_CGUSET, 0x32);
         wfi_debug("internal osc");
 
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         {
             wfi_debug("disconnect dcdc2");
             self.iox.set_gpio_pin_value(self.dcdc2_io.0, self.dcdc2_io.1, bao1x_api::IoxValue::High);
@@ -491,6 +497,10 @@ impl ClockManager {
             // wfi_debug("DCDC4 off");
         }
 
+        // set CoreOff to high
+        #[cfg(all(feature = "board-baosec", feature = "oem-baosec-lite"))]
+        self.iox.set_gpio_pin_value(self.core_on.0, self.core_on.1, bao1x_api::IoxValue::High);
+
         // enter PD mode - cuts VDDCORE power - requires full reset to come out of this
         // only RTC & backup regsiters are kept. ~1.2mA @ 4.2V consumption in this mode.
 
@@ -507,7 +517,7 @@ impl ClockManager {
     pub fn wfi(&mut self) {
         wfi_debug("entering wfi");
 
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         {
             self.pmic.set_dcdc(&mut self.i2c, Some((0.7, true)), crate::axp2101::WhichDcDc::Dcdc2).unwrap();
             wfi_debug("DCDC2 to low voltage");
@@ -593,7 +603,7 @@ impl ClockManager {
 
         // high disconnects DCDC2 from the chip - the idea is to prevent DCDC2 shutdown due to VLDO going
         // above DCDC2 value
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         {
             wfi_debug("disconnect dcdc2");
             self.iox.set_gpio_pin_value(self.dcdc2_io.0, self.dcdc2_io.1, bao1x_api::IoxValue::High);
@@ -606,7 +616,7 @@ impl ClockManager {
             .ok();
         wfi_debug("back to 350MHz");
 
-        #[cfg(feature = "board-baosec")]
+        #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
         {
             wfi_debug("setting DCDC");
 
