@@ -16,8 +16,7 @@ pub fn check_project_consistency() -> Result<(), DynError> {
         "xous-ipc^0.10.9",
         "xous-api-log^0.1.68",
         "xous-api-names^0.9.70",
-        // "xous-api-susres^0.9.68",
-        "xous-api-ticktimer^0.9.68",
+        "xous-api-ticktimer^0.9.69",
     ];
     // utra/svd2utra changes are downgraded to warnings because these now prefer to pull
     // from the local patch version, so any inconsistency simply indicates we forgot to
