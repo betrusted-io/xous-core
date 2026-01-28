@@ -1,0 +1,91 @@
+name: Guix - build baochip firmware
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Guix build ${{ matrix.task }}
+    runs-on: ubuntu-latest
+    env:
+      GUIX_PACKAGE_PATH: ${{ github.workspace }}/guix
+    strategy:
+      fail-fast: false
+      matrix:
+        task:
+          - bao1x-boot0
+          - bao1x-boot1
+          - bao1x-alt-boot1
+          - bao1x-baremetal-dabao
+          - dabao-helloworld
+          - baosec
+          - bootloader
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Guix cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/guix
+          key: guix-cache-${{ github.sha }}
+          restore-keys: |
+            guix-cache-
+
+      - name: Install Guix
+        uses: PromyLOPh/guix-install-action@v1.6
+        with:
+          channels: |-
+            (list (channel
+                   (inherit %default-guix-channel))
+                  (channel
+                   (name 'rustup)
+                   (url "https://github.com/sbellem/guix-rustup")
+                   (branch "dev")
+                   (introduction
+                    (make-channel-introduction
+                     "d9bcf7f979506b880a5ba25674a606a824d9c890"
+                     (openpgp-fingerprint
+                      "E39D 2B3D 0564 BA43 7BD9  2756 C38A E0EC CAB7 D5C8"))))
+                  (channel
+                   (name 'rust-xous)
+                   (url "https://github.com/sbellem/rust-xous-guix")
+                   (branch "main")
+                   (introduction
+                    (make-channel-introduction
+                     "bcdb7bb2b220288545114b140f5079ba4f98a157"
+                     (openpgp-fingerprint
+                      "E39D 2B3D 0564 BA43 7BD9  2756 C38A E0EC CAB7 D5C8")))))
+
+      - name: Guix build ${{ matrix.task }}
+        run: |
+          guix build ${{ matrix.task }} --root=guix-result-${{ matrix.task }}
+
+      - name: Show build output
+        run: |
+          echo "Build output:"
+          ls -la guix-result-${{ matrix.task }}/
+
+      - name: Copy artifacts
+        run: |
+          mkdir -p artifacts
+          cp guix-result-${{ matrix.task }}/*.uf2 artifacts/ 2>/dev/null || true
+          cp guix-result-${{ matrix.task }}/*.img artifacts/ 2>/dev/null || true
+          cp guix-result-${{ matrix.task }}/*.bin artifacts/ 2>/dev/null || true
+          ls -la artifacts/ || echo "No artifacts found"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.task }}
+          path: artifacts/
+          if-no-files-found: warn
