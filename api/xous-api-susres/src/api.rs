@@ -69,6 +69,10 @@ pub enum Opcode {
 
     /// exit the server
     Quit,
+
+    /// Platform specific
+    #[cfg(feature = "bao1x")]
+    PlatformSpecific,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
