@@ -537,6 +537,10 @@
   (crate-source "xous" "0.9.69"
                 "1qm5ic0p8mbb00zqz8v84h9lpg1m557fyvxhs63al6fixmngzbmc"))
 
+(define rust-xous-0.9.70
+  (crate-source "xous" "0.9.70"
+                "1y3nipz7xj7zmz2ikc22z3wsc5cp83jw2pbrzby98gk28akf0xl0"))
+
 (define rust-zeroize-1.8.1
   (crate-source "zeroize" "1.8.1"
                 "1pjdrmjwmszpxfd7r860jx54cyk94qk59x13sc307cvr5256glyf"))
@@ -2561,9 +2565,17 @@
   (crate-source "xous-api-log" "0.1.68"
                 "0im49nln08kcykdpcbb6f1fndxgvrq3i282i1asn6f4yf1ndf3vv"))
 
+(define rust-xous-api-log-0.1.69
+  (crate-source "xous-api-log" "0.1.69"
+                "15gflydag57hw62jv9l8bcywrmzrkz9abw59fzrd4ic2nrpg006c"))
+
 (define rust-xous-api-names-0.9.70
   (crate-source "xous-api-names" "0.9.70"
                 "1cwm9l9ync8hlddwzj0hngfwrqv5scjmya7r6l2gbncf7h68gw21"))
+
+(define rust-xous-api-names-0.9.71
+  (crate-source "xous-api-names" "0.9.71"
+                "0lh1759sm68g21rnw6jc33cpqy0923zh39x5nkszxpnpmfslx2lr"))
 
 (define rust-xous-api-susres-0.9.68
   (crate-source "xous-api-susres" "0.9.68"
@@ -2573,9 +2585,17 @@
   (crate-source "xous-api-ticktimer" "0.9.69"
                 "1c2rbg2jda6ic6yvdlrl1dnq9k402jf0zh03lq69cynhjj241gqh"))
 
+(define rust-xous-api-ticktimer-0.9.70
+  (crate-source "xous-api-ticktimer" "0.9.70"
+                "1783hpl3wyqsk9xlivpns21h9yi781a2hf77k5zsz363qf9hm879"))
+
 (define rust-xous-ipc-0.10.9
   (crate-source "xous-ipc" "0.10.9"
                 "1xmdlml3kmfwkxbq8vgjz0gp14q9yf30n9mpzymd62wc7l20svji"))
+
+(define rust-xous-ipc-0.10.10
+  (crate-source "xous-ipc" "0.10.10"
+                "0c214b44lpqdabkhj7zh66pyii0m34rb0ym0x7ybp959y6ga7pkp"))
 
 (define rust-xous-ipc-0.9.63
   (crate-source "xous-ipc" "0.9.63"
@@ -3212,11 +3232,16 @@
    rust-xmas-elf-0.9.1
    rust-xml-rs-0.8.19
    rust-xous-0.9.69
+   rust-xous-0.9.70
    rust-xous-api-log-0.1.68
+   rust-xous-api-log-0.1.69
    rust-xous-api-names-0.9.70
+   rust-xous-api-names-0.9.71
    rust-xous-api-susres-0.9.68
    rust-xous-api-ticktimer-0.9.69
+   rust-xous-api-ticktimer-0.9.70
    rust-xous-ipc-0.10.9
+   rust-xous-ipc-0.10.10
    rust-xous-ipc-0.9.63
    rust-xous-riscv-0.5.6
    rust-xous-semver-0.1.5
