@@ -45,6 +45,7 @@ board-baosec = [
     "no-gam",
     "bao1x-hal-service/board-baosec",
     "bao1x",
+    "blitstr2/bao1x",
 ]
 doc-deps = ["gam", "ux-api/doc-deps"]
 modal-testing = []

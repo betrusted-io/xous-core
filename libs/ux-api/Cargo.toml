@@ -63,7 +63,7 @@ hosted-baosec = ["blitstr2/hosted-baosec"]
 # Used by font codegen routine
 hosted = ["blitstr2/hosted"]
 renode = ["blitstr2/renode"]
-bao1x = []
+bao1x = ["blitstr2/bao1x"]
 precursor = ["blitstr2/precursor"]
 derive-rkyv = ["rkyv"]
 
