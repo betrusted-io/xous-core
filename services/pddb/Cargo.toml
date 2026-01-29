@@ -8,11 +8,11 @@ description = "Plausibly Deniable Database"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 bitflags = { version = "1" }
-xous = "0.9.69"
-xous-ipc = "0.10.9"
-log-server = { package = "xous-api-log", version = "0.1.68" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.69" }
-xous-names = { package = "xous-api-names", version = "0.9.70" }
+xous = "0.9.70"
+xous-ipc = "0.10.10"
+log-server = { package = "xous-api-log", version = "0.1.69" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.70" }
+xous-names = { package = "xous-api-names", version = "0.9.71" }
 susres = { path = "../../api/xous-api-susres", package = "xous-api-susres", optional = true }
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
@@ -56,7 +56,7 @@ ux-api = { path = "../../libs/ux-api" }
 locales = { path = "../../locales" }
 modals = { path = "../modals", optional = true }
 
-utralib = { version = "0.1.26", optional = true, default-features = false }
+utralib = { version = "0.1.27", optional = true, default-features = false }
 
 # performance profiling
 perflib = { path = "../../libs/perflib", optional = true }

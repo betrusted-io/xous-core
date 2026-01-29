@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-xous = "0.9.69"
-xous-ipc = { version = "0.10.9", optional = true }
-xous-names = { package = "xous-api-names", version = "0.9.70", optional = true }
+xous = "0.9.70"
+xous-ipc = { version = "0.10.10", optional = true }
+xous-names = { package = "xous-api-names", version = "0.9.71", optional = true }
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [

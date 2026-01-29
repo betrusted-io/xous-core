@@ -277,6 +277,7 @@ pub(crate) fn main_hw() -> ! {
 
     let (se0_port, se0_pin) = bao1x_hal::board::setup_usb_pins(&iox);
     iox.set_gpio_pin_dir(se0_port, se0_pin, bao1x_api::IoxDir::Input); // release SE0 state, allowing for enumeration
+    // NOTE: if SE0 is required, the KPC has to be un-configured to allow the SE0 I/O to actually be driven
 
     log::info!("Entering main loop");
 

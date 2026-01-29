@@ -8,4 +8,4 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
 ] }
-xous = "0.9.69"
+xous = "0.9.70"

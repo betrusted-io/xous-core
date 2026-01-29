@@ -11,10 +11,10 @@ homepage = "https://betrusted.io/xous-book/"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 xous-api-susres = { path = "../../api/xous-api-susres" }
-xous-names = { package = "xous-api-names", version = "0.9.70" }
-log-server = { package = "xous-api-log", version = "0.1.68" }
-xous = "0.9.69"
-xous-ipc = "0.10.9"
+xous-names = { package = "xous-api-names", version = "0.9.71" }
+log-server = { package = "xous-api-log", version = "0.1.69" }
+xous = "0.9.70"
+xous-ipc = "0.10.10"
 log = "0.4.14"
 precursor-hal = { path = "../../libs/precursor-hal" }
 
@@ -26,7 +26,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
 ] }
 
 
-utralib = { version = "0.1.26", optional = true, default-features = false }
+utralib = { version = "0.1.27", optional = true, default-features = false }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 loader = { path = "../../loader", default-features = false }
