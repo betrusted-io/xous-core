@@ -45,9 +45,6 @@ name = "xous-copy-object"
 [[bin]]
 name = "xous-create-image"
 
-# [[bin]]
-# name = "xous-make-renode-boot"
-
 [[bin]]
 name = "xous-make-tags"
 
