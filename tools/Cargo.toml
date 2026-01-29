@@ -1,9 +1,11 @@
 [package]
-authors = ["Sean Cross <sean@xobs.io>"]
-default-run = "xous-create-image"
+authors = ["Sean Cross <sean@xobs.io>", "bunnie <bunnie@baochip.com>"]
+default-run = "xous-app-uf2"
 edition = "2018"
 name = "xous-tools"
 version = "0.1.0"
+description = "A set of tools for managing Xous ecosystem binaries"
+license = "Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -26,11 +28,16 @@ pkcs8 = { version = "0.8.0", features = ["pem"] }
 base64 = "0.20.0"
 rand = "0.8.5"
 aes-gcm-siv = "0.11.1"
-bao1x-api = { path = "../libs/bao1x-api" }
 hex-literal = "1.0.0"
 byteorder = "1.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+# Maintainer's note: bao1x-api has to be bumped anytime parameters such as the
+# size of the signature block or offsets in RRAM are changed, so that it can be
+# absorbed into this package.
+# bao1x-api = { path = "../libs/bao1x-api" }
+bao1x-api = "0.1.0" # use crates.io to refer to this
 
 [[bin]]
 name = "xous-copy-object"
