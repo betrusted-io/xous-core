@@ -53,6 +53,9 @@ name = "xous-sign-image"
 [[bin]]
 name = "xous-create-detached-app"
 
+[[bin]]
+name = "xous-app-uf2"
+
 [features]
 precursor = []
 renode = []
