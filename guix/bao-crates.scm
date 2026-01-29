@@ -1,15 +1,16 @@
-;;; Xous-core crate sources
+;;; Baochip crate sources
 ;;;
 ;;; This file supplements Guix's (gnu packages rust-crates) with
-;;; crates that are missing or have different versions needed for xous-core.
+;;; crates that are missing or have different versions needed for baochip builds.
 ;;;
 ;;; Git dependencies: manually defined from Cargo.lock [source] sections
 ;;; Crates.io deps: generated with guix import crate
 
-(define-module (xous-crates)
+(define-module (bao-crates)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
+  #:use-module (guix gexp)
   #:use-module (guix build-system cargo)
   #:export (;; Helper function
             crate-source
@@ -27,8 +28,8 @@
             rust-usb-device-git
             rust-usbd-serial-git
             rust-xous-usb-hid-git
-            ;; Crate inputs lists
-            bao1x-boot0-crate-inputs
+            ;; Crate inputs lists (all crates, used by all targets for now)
+            %bao-crate-inputs
             ;; Lookup function
             lookup-cargo-inputs))
 
@@ -59,6 +60,7 @@
     (sha256 (base32 "0q720v21rcpq0pi1di0yjdbqzmbgk7xhayangwb6fhyn9bbql48l"))))
 
 ;; atsama5d27 0.1.0 + utralib 0.1.18 from Foundation-Devices (same repo)
+;; Snippet removes optional dependencies not needed for xous-core builds
 (define rust-atsama5d27-git
   (origin
     (method git-fetch)
@@ -66,7 +68,32 @@
           (url "https://github.com/Foundation-Devices/atsama5d27.git")
           (commit "9e83a502e68384754bb328a5717c56f34c8618f7")))
     (file-name "rust-atsama5d27-0.1.0-checkout")
-    (sha256 (base32 "0gjfcrn8dia0nqag035c431qaxw7qa13h8mb17kwgbfkabg2w6b9"))))
+    (sha256 (base32 "0gjfcrn8dia0nqag035c431qaxw7qa13h8mb17kwgbfkabg2w6b9"))
+    (snippet
+     #~(begin
+         (use-modules (guix build utils))
+         ;; Remove optional dependencies that would require extra vendored crates
+         (substitute* "Cargo.toml"
+           ;; Remove dependency entries: name = {...}
+           (("rtt-target *= *\\{[^}]*\\}\n?") "")
+           (("ft3269 *= *\\{[^}]*\\}\n?") "")
+           (("ovm7690-rs *= *\\{[^}]*\\}\n?") "")
+           (("bq24157 *= *\\{[^}]*\\}\n?") "")
+           (("bq27421 *= *\\{[^}]*\\}\n?") "")
+           (("ehci *= *\\{[^}]*\\}\n?") "")
+           (("mass-storage *= *\\{[^}]*\\}\n?") "")
+           (("drv2605 *= *\\{[^}]*\\}\n?") "")
+           (("is31fl32xx *= *\\{[^}]*\\}\n?") "")
+           (("embedded-sdmmc *= *\\{[^}]*\\}\n?") "")
+           (("hex *= *\\{[^}]*\\}\n?") "")
+           ;; Remove feature arrays: name = [...]
+           (("camera *= *\\[[^]]*\\]\n?") "")
+           (("charger *= *\\[[^]]*\\]\n?") "")
+           (("usb-host *= *\\[[^]]*\\]\n?") "")
+           (("rtt *= *\\[[^]]*\\]\n?") "")
+           (("fitment *= *\\[[^]]*\\]\n?") "")
+           (("mmc *= *\\[[^]]*\\]\n?") "")
+           (("sha *= *\\[[^]]*\\]\n?") ""))))))
 
 ;; com_rs 0.1.0 from betrusted-io
 (define rust-com-rs-git
@@ -119,6 +146,7 @@
     (sha256 (base32 "1yvzghjwvyp2l4kf6j5m3spwz2nsci64gj4nsx06mgcgpm616389"))))
 
 ;; rqrr 0.10.0 from betrusted-io
+;; Snippet removes image dependency not needed for xous-core
 (define rust-rqrr-git
   (origin
     (method git-fetch)
@@ -126,7 +154,16 @@
           (url "https://github.com/betrusted-io/rqrr.git")
           (commit "388fc6c0b7ee6cd7e5a2261a9d67a0c0692184f1")))
     (file-name "rust-rqrr-0.10.0-checkout")
-    (sha256 (base32 "0il0cr1wpkj32f1bih4xq2bbf2iwanmlavlq9f6ls0c80qn6vz1d"))))
+    (sha256 (base32 "0il0cr1wpkj32f1bih4xq2bbf2iwanmlavlq9f6ls0c80qn6vz1d"))
+    (snippet
+     #~(begin
+         (use-modules (guix build utils))
+         (substitute* "Cargo.toml"
+           ;; Remove default and img features
+           (("default *= *\\[\"img\"\\]\n?") "")
+           (("img *= *\\[\"image\"\\]\n?") "")
+           ;; Remove image dependency
+           (("image *= *\\{[^}]*\\}\n?") ""))))))
 
 ;; sha2 0.10.8 from betrusted-io (hashes fork)
 ;; Commit from Cargo.lock: ab2ab59c41f294eef1d90ac768a5d94a08c12d63
@@ -170,6 +207,7 @@
     (sha256 (base32 "1vj5s488n9gpxlkb99l3jvyj8b5z2qp4m9dh4kj258k7bkk3x7m3"))))
 
 ;; xous-usb-hid 0.4.3 from betrusted-io
+;; Snippet fixes defmt feature to not reference usb-device/defmt
 (define rust-xous-usb-hid-git
   (origin
     (method git-fetch)
@@ -177,7 +215,14 @@
           (url "https://github.com/betrusted-io/xous-usb-hid.git")
           (commit "793ec00243c525f2d17dc1d3a185abdeec57aaf6")))
     (file-name "rust-xous-usb-hid-0.4.3-checkout")
-    (sha256 (base32 "172bw2p6hj3478ns5c06nlwy1hqflrhz3ngnmriy7zxp4bpqsr5y"))))
+    (sha256 (base32 "172bw2p6hj3478ns5c06nlwy1hqflrhz3ngnmriy7zxp4bpqsr5y"))
+    (snippet
+     #~(begin
+         (use-modules (guix build utils))
+         (substitute* "Cargo.toml"
+           ;; Fix defmt feature: remove usb-device/defmt reference
+           (("defmt *= *\\[\"dep:defmt\", *\"usb-device/defmt\"\\]")
+            "defmt = [\"dep:defmt\"]"))))))
 
 ;;;
 ;;; Crates.io dependencies for locales (older versions from locales/Cargo.lock)
@@ -650,6 +695,10 @@
 (define rust-az-1.2.1
   (crate-source "az" "1.2.1"
                 "0ww9k1w3al7x5qmb7f13v3s9c2pg1pdxbs8xshqy6zyrchj4qzkv"))
+
+(define rust-bao1x-api-0.1.0
+  (crate-source "bao1x-api" "0.1.0"
+                "12jbi2fa3g2mwbkypfchzv1zkm8qscnxbba737g1r203q8ddpl51"))
 
 (define rust-base16ct-0.1.1
   (crate-source "base16ct" "0.1.1"
@@ -2639,9 +2688,10 @@
 
 ;;;
 ;;; Crate input lists for packages
+;;; %bao-crate-inputs contains all crates needed by any target
 ;;;
 
-(define bao1x-boot0-crate-inputs
+(define %bao-crate-inputs
   (list
    rust-adler-1.0.2
    rust-aead-0.5.2
@@ -2673,6 +2723,7 @@
    rust-autocfg-1.1.0
    rust-autocfg-0.1.8
    rust-az-1.2.1
+   rust-bao1x-api-0.1.0
    rust-bare-metal-0.2.4
    rust-base16ct-0.1.1
    rust-base32-0.4.0
@@ -3257,8 +3308,16 @@
 ))
 
 ;;;
-;;; Cargo inputs lookup (legacy, for future expansion)
+;;; Cargo inputs lookup
+;;; Maps target names to their crate inputs lists
+;;; Currently all targets use %bao-crate-inputs; can be split per-target later
 ;;;
 
 (define-cargo-inputs lookup-cargo-inputs
-  (bao1x-boot0 => bao1x-boot0-crate-inputs))
+  (bao1x-boot0 => %bao-crate-inputs)
+  (bao1x-boot1 => %bao-crate-inputs)
+  (bao1x-alt-boot1 => %bao-crate-inputs)
+  (bao1x-baremetal-dabao => %bao-crate-inputs)
+  (dabao => %bao-crate-inputs)
+  (dabao-helloworld => %bao-crate-inputs)
+  (baosec => %bao-crate-inputs))
