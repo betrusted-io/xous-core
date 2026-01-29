@@ -638,7 +638,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.set_board(board);
             builder.add_loader_feature(board);
             builder.add_loader_feature("bao1x-usb");
-            let sigblock_size = 0x300;
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
             update_flash_origin(
                 "baremetal/src/platform/bao1x/link.x",
                 (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
@@ -651,7 +651,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.set_board(board);
             builder.add_loader_feature(board);
             builder.add_loader_feature("bao1x-usb");
-            let sigblock_size = 0x300;
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
             update_flash_origin(
                 "baremetal/src/platform/bao1x/link.x",
                 (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
@@ -660,7 +660,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Some("baremetal-bao1x-evb") => {
-            let sigblock_size = 0x300;
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
             update_flash_origin(
                 "baremetal/src/platform/bao1x/link.x",
                 (0x6100_0000 + sigblock_size + STATICS_LEN) as u32,
@@ -672,7 +672,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Some("bao1x-boot0") => {
-            let sigblock_size = 0x300;
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
             update_flash_origin(
                 "bao1x-boot/boot0/link.x",
                 (bao1x_api::BOOT0_START + sigblock_size + STATICS_LEN) as u32,
@@ -684,7 +684,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Some("bao1x-boot1") => {
-            let sigblock_size = 0x300;
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
             update_flash_origin(
                 "bao1x-boot/boot1/src/platform/bao1x/link.x",
                 (bao1x_api::BOOT1_START + sigblock_size + STATICS_LEN) as u32,
@@ -697,7 +697,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Some("bao1x-alt-boot1") => {
-            let sigblock_size = 0x300;
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
             update_flash_origin(
                 "bao1x-boot/boot1/src/platform/bao1x/link.x",
                 (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
@@ -711,7 +711,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Some("bao1x-boot1-lite") => {
-            let sigblock_size = 0x300;
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
             update_flash_origin(
                 "bao1x-boot/boot1/src/platform/bao1x/link.x",
                 (bao1x_api::BOOT1_START + sigblock_size + STATICS_LEN) as u32,
@@ -725,7 +725,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Some("bao1x-alt-boot1-lite") => {
-            let sigblock_size = 0x300;
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
             update_flash_origin(
                 "bao1x-boot/boot1/src/platform/bao1x/link.x",
                 (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
@@ -751,7 +751,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         Some("baosec-improper-keystore") => {
             let board = "board-baosec";
-            let sigblock_size = 0x300;
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
             update_flash_origin(
                 "loader/src/platform/bao1x/link.x",
                 (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
@@ -797,7 +797,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         Some("dabao") => {
             let board = "board-dabao";
-            let sigblock_size = 0x300;
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
             update_flash_origin(
                 "loader/src/platform/bao1x/link.x",
                 (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
@@ -1139,7 +1139,7 @@ fn update_flash_origin<P: AsRef<Path>>(path: P, new_origin: u32) -> std::io::Res
 
 fn baosec_common(builder: &mut Builder) -> std::io::Result<()> {
     let board = "board-baosec";
-    let sigblock_size = 0x300;
+    let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
     update_flash_origin(
         "loader/src/platform/bao1x/link.x",
         (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
