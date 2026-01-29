@@ -7,11 +7,11 @@ description = "Keystore server for compact devices"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-utralib = { version = "0.1.26", optional = true, default-features = false }
-xous-names = { package = "xous-api-names", version = "0.9.70" }
-ticktimer = { package = "xous-api-ticktimer", version = "0.9.69" }
-xous = "0.9.69"
-log-server = { package = "xous-api-log", version = "0.1.68" }
+utralib = { version = "0.1.27", optional = true, default-features = false }
+xous-names = { package = "xous-api-names", version = "0.9.71" }
+ticktimer = { package = "xous-api-ticktimer", version = "0.9.70" }
+xous = "0.9.70"
+log-server = { package = "xous-api-log", version = "0.1.69" }
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
@@ -21,7 +21,7 @@ bao1x-hal = { path = "../../libs/bao1x-hal", features = [
 bao1x-hal-service = { path = "../bao1x-hal-service", optional = true }
 bao1x-emu = { path = "../bao1x-emu", optional = true }
 bao1x-api = { path = "../../libs/bao1x-api" }
-xous-ipc = "0.10.9"
+xous-ipc = "0.10.10"
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",

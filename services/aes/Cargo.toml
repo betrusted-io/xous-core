@@ -13,7 +13,7 @@ rand_chacha = { version = "0.3.1", optional = true, default-features = false }
 hex = { version = "0.4.3", optional = true, default-features = false, features = [
     "alloc",
 ] }
-utralib = { version = "0.1.26", optional = true, default-features = false }
+utralib = { version = "0.1.27", optional = true, default-features = false }
 bao1x-hal = { path = "../../libs/bao1x-hal", default-features = false, optional = true }
 
 [lints.rust.unexpected_cfgs]

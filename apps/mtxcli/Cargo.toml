@@ -10,11 +10,11 @@ description = "Matrix chat"
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
-xous = "0.9.69"
-xous-ipc = "0.10.9"
-log-server = { package = "xous-api-log", version = "0.1.68" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.69" }
-xous-names = { package = "xous-api-names", version = "0.9.70" }
+xous = "0.9.70"
+xous-ipc = "0.10.10"
+log-server = { package = "xous-api-log", version = "0.1.69" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.70" }
+xous-names = { package = "xous-api-names", version = "0.9.71" }
 gam = { path = "../../services/gam" }
 ux-api = { path = "../../libs/ux-api" }
 blitstr2 = { path = "../../libs/blitstr2" }

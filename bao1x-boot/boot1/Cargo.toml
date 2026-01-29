@@ -6,8 +6,8 @@ edition = "2018"
 description = "Boot1 partition"
 
 [dependencies]
-xous = "0.9.69"
-utralib = { version = "0.1.26", optional = true, default-features = false }
+xous = "0.9.70"
+utralib = { version = "0.1.27", optional = true, default-features = false }
 bao1x-hal = { path = "../../libs/bao1x-hal", optional = true, default-features = false }
 bao1x-api = { path = "../../libs/bao1x-api", optional = true, default-features = false }
 vexriscv = { version = "0.5.6", package = "xous-riscv" }
