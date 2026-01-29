@@ -949,9 +949,9 @@ impl Builder {
                     .args([
                         "run",
                         "--package",
-                        "tools",
+                        "xous-tools",
                         "--bin",
-                        "copy-object",
+                        "xous-copy-object",
                         "--",
                         &loader[0],
                         presign_file.as_os_str().to_str().unwrap(),
@@ -981,9 +981,9 @@ impl Builder {
                         .args([
                             "run",
                             "--package",
-                            "tools",
+                            "xous-tools",
                             "--bin",
-                            "sign-image",
+                            "xous-sign-image",
                             "--",
                             "--loader-image",
                             presign_file.to_str().unwrap(),
@@ -1075,9 +1075,9 @@ impl Builder {
                 .args([
                     "run",
                     "--package",
-                    "tools",
+                    "xous-tools",
                     "--bin",
-                    "copy-object",
+                    "xous-copy-object",
                     "--",
                     &loader[0],
                     loader_presign.as_os_str().to_str().unwrap(),
@@ -1094,9 +1094,9 @@ impl Builder {
                     .args([
                         "run",
                         "--package",
-                        "tools",
+                        "xous-tools",
                         "--bin",
-                        "sign-image",
+                        "xous-sign-image",
                         "--",
                         "--loader-image",
                         loader_presign.to_str().unwrap(),
@@ -1120,9 +1120,9 @@ impl Builder {
                     .args([
                         "run",
                         "--package",
-                        "tools",
+                        "xous-tools",
                         "--bin",
-                        "sign-image",
+                        "xous-sign-image",
                         "--",
                         "--loader-image",
                         loader_presign.to_str().unwrap(),
@@ -1148,9 +1148,9 @@ impl Builder {
                     .args([
                         "run",
                         "--package",
-                        "tools",
+                        "xous-tools",
                         "--bin",
-                        "sign-image",
+                        "xous-sign-image",
                         "--",
                         "--kernel-image",
                         output_bundle.to_str().unwrap(),
@@ -1175,9 +1175,9 @@ impl Builder {
                     .args([
                         "run",
                         "--package",
-                        "tools",
+                        "xous-tools",
                         "--bin",
-                        "sign-image",
+                        "xous-sign-image",
                         "--",
                         "--kernel-image",
                         output_bundle.to_str().unwrap(),
@@ -1213,7 +1213,7 @@ impl Builder {
         memory_spec: Vec<String>,
     ) -> Result<PathBuf, DynError> {
         let stream = self.stream.as_str();
-        let mut args = vec!["run", "--package", "tools", "--bin", "create-image"];
+        let mut args = vec!["run", "--package", "xous-tools", "--bin", "xous-create-image"];
         args.push("--features");
         if self.utra_target.contains("renode") {
             args.push("renode");
@@ -1304,7 +1304,7 @@ impl Builder {
     fn create_detached_image(&self, inif: &[String]) -> Result<PathBuf, DynError> {
         assert!(self.board == "board-dabao", "Detached app images are only supported on dabao target");
         let stream = self.stream.as_str();
-        let mut args = vec!["run", "--package", "tools", "--bin", "create-detached-app"];
+        let mut args = vec!["run", "--package", "xous-tools", "--bin", "xous-create-detached-app"];
         args.push("--features");
         args.push("bao1x");
         args.push("--");
@@ -1341,9 +1341,9 @@ impl Builder {
             .args([
                 "run",
                 "--package",
-                "tools",
+                "xous-tools",
                 "--bin",
-                "sign-image",
+                "xous-sign-image",
                 "--",
                 "--kernel-image",
                 output_file.to_str().unwrap(),

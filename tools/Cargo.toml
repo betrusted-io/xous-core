@@ -1,8 +1,8 @@
 [package]
 authors = ["Sean Cross <sean@xobs.io>"]
-default-run = "create-image"
+default-run = "xous-create-image"
 edition = "2018"
-name = "tools"
+name = "xous-tools"
 version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -33,25 +33,25 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 [[bin]]
-name = "copy-object"
+name = "xous-copy-object"
 
 [[bin]]
-name = "create-image"
+name = "xous-create-image"
 
 [[bin]]
-name = "make-renode-boot"
+name = "xous-make-renode-boot"
 
 [[bin]]
-name = "make-tags"
+name = "xous-make-tags"
 
 [[bin]]
-name = "read-tags"
+name = "xous-read-tags"
 
 [[bin]]
-name = "sign-image"
+name = "xous-sign-image"
 
 [[bin]]
-name = "create-detached-app"
+name = "xous-create-detached-app"
 
 [features]
 precursor = []

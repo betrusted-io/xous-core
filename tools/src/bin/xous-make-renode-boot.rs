@@ -5,13 +5,13 @@ use std::convert::TryInto;
 use std::fs::File;
 use std::io::Write;
 
-use tools::elf::{process_minielf, process_program, read_minielf};
-use tools::sign_image::sign_image;
-use tools::tags::inie::IniE;
-use tools::tags::memory::{MemoryRegion, MemoryRegions};
-use tools::tags::pnam::ProcessNames;
-use tools::tags::xkrn::XousKernel;
-use tools::xous_arguments::XousArguments;
+use xous_tools::elf::{process_minielf, process_program, read_minielf};
+use xous_tools::sign_image::sign_image;
+use xous_tools::tags::inie::IniE;
+use xous_tools::tags::memory::{MemoryRegion, MemoryRegions};
+use xous_tools::tags::pnam::ProcessNames;
+use xous_tools::tags::xkrn::XousKernel;
+use xous_tools::xous_arguments::XousArguments;
 
 struct RamConfig {
     offset: u32,
@@ -21,7 +21,7 @@ struct RamConfig {
     memory_required: u32,
 }
 
-fn csr_to_config(hv: tools::utils::CsrConfig, ram_config: &mut RamConfig) {
+fn csr_to_config(hv: xous_tools::utils::CsrConfig, ram_config: &mut RamConfig) {
     let mut found_ram_name = None;
     fn round_mem(src: u32) -> u32 { (src + 4095) & !4095 }
     // Look for the largest "ram" block, which we'll treat as main memory
@@ -92,7 +92,7 @@ fn create_image(init_programs: &[String]) -> std::io::Result<Vec<u8>> {
             } + PAGE_SIZE;
             map.insert(
                 region.name.to_lowercase(),
-                tools::utils::CsrMemoryRegion {
+                xous_tools::utils::CsrMemoryRegion {
                     start: region.base.try_into().unwrap(),
                     length: length.try_into().unwrap(),
                 },
@@ -100,14 +100,14 @@ fn create_image(init_programs: &[String]) -> std::io::Result<Vec<u8>> {
         } else {
             map.insert(
                 region.name.to_lowercase(),
-                tools::utils::CsrMemoryRegion {
+                xous_tools::utils::CsrMemoryRegion {
                     start: region.base.try_into().unwrap(),
                     length: region.size.try_into().unwrap(),
                 },
             );
         }
     }
-    csr_to_config(tools::utils::CsrConfig { regions: map }, &mut ram_config);
+    csr_to_config(xous_tools::utils::CsrConfig { regions: map }, &mut ram_config);
 
     let mut args = XousArguments::new(ram_config.offset, ram_config.size, ram_config.name);
 

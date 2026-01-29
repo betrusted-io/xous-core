@@ -6,11 +6,11 @@ extern crate crc;
 use std::fs::File;
 
 use clap::{App, Arg};
-use tools::elf::read_minielf;
-use tools::tags::inif::IniF;
-use tools::tags::pnam::ProcessNames;
-use tools::utils::parse_u32;
-use tools::xous_arguments::XousArguments;
+use xous_tools::elf::read_minielf;
+use xous_tools::tags::inif::IniF;
+use xous_tools::tags::pnam::ProcessNames;
+use xous_tools::utils::parse_u32;
+use xous_tools::xous_arguments::XousArguments;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
