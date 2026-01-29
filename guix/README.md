@@ -45,7 +45,7 @@ cargo xtask dabao --no-verify
 
 ## Building Packages
 
-From the xous-core directory:
+From the repository root:
 
 ```bash
 # Build a specific target
