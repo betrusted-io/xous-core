@@ -1,7 +1,7 @@
 use std::io::{Error, ErrorKind};
 
 use clap::{App, Arg, crate_version};
-use tools::sign_image::{convert_to_uf2, load_pem, sign_file};
+use xous_tools::sign_image::{convert_to_uf2, load_pem, sign_file};
 
 const DEVKEY_PATH: &str = "devkey/dev.key";
 
@@ -126,9 +126,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // precursor uses the older style because we are avoiding updating the boot ROM in the SoC to avoid
         // bricking.
         let version = if matches.is_present("bao1x") {
-            tools::sign_image::Version::Bao1xV1
+            xous_tools::sign_image::Version::Bao1xV1
         } else {
-            tools::sign_image::Version::Loader
+            xous_tools::sign_image::Version::Loader
         };
         sign_file(
             &loader_image,
@@ -167,9 +167,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         println!("Signing kernel");
         let version = if matches.is_present("bao1x") {
-            tools::sign_image::Version::Bao1xV1
+            xous_tools::sign_image::Version::Bao1xV1
         } else {
-            tools::sign_image::Version::LoaderPrehash
+            xous_tools::sign_image::Version::LoaderPrehash
         };
         sign_file(
             &kernel_image,

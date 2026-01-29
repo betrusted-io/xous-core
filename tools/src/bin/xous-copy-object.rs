@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
 
-use tools::elf;
+use xous_tools::elf;
 
 fn main() {
     env_logger::init();

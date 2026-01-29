@@ -2,6 +2,13 @@
 name = "bao1x-api"
 version = "0.1.0"
 edition = "2021"
+description = "Baochip-1x API Crate"
+license = "Apache-2.0"
+
+# Maintainer's note: changes to things like the size of the signature field or
+# offsets in memory will require a version bump and publish to crates.io, so that
+# it can be picked up by the xous-tools package, which is also published to
+# crates.io.
 
 [dependencies]
 xous = "0.9.70"

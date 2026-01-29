@@ -1,8 +1,8 @@
 use std::fs::File;
 
-use tools::tags::memory::{MemoryRegion, MemoryRegions};
-use tools::tags::xkrn::XousKernel;
-use tools::xous_arguments::{XousArguments, XousSize};
+use xous_tools::tags::memory::{MemoryRegion, MemoryRegions};
+use xous_tools::tags::xkrn::XousKernel;
+use xous_tools::xous_arguments::{XousArguments, XousSize};
 
 const RAM_START: XousSize = 0x4000_0000;
 const RAM_SIZE: XousSize = 4 * 1024 * 1024;

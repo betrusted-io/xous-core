@@ -8,19 +8,19 @@ use std::fs::File;
 use std::io::Read;
 
 use clap::{App, Arg};
-use tools::elf::{read_minielf, read_program};
-use tools::sign_image::convert_to_uf2;
-use tools::swap_writer::SwapWriter;
-use tools::tags::bflg::Bflg;
-use tools::tags::inie::IniE;
-use tools::tags::inif::IniF;
-use tools::tags::inis::IniS;
-use tools::tags::memory::{MemoryRegion, MemoryRegions};
-use tools::tags::pnam::ProcessNames;
-use tools::tags::swap::Swap;
-use tools::tags::xkrn::XousKernel;
-use tools::utils::{parse_csr_csv, parse_u32};
-use tools::xous_arguments::XousArguments;
+use xous_tools::elf::{read_minielf, read_program};
+use xous_tools::sign_image::convert_to_uf2;
+use xous_tools::swap_writer::SwapWriter;
+use xous_tools::tags::bflg::Bflg;
+use xous_tools::tags::inie::IniE;
+use xous_tools::tags::inif::IniF;
+use xous_tools::tags::inis::IniS;
+use xous_tools::tags::memory::{MemoryRegion, MemoryRegions};
+use xous_tools::tags::pnam::ProcessNames;
+use xous_tools::tags::swap::Swap;
+use xous_tools::tags::xkrn::XousKernel;
+use xous_tools::utils::{parse_csr_csv, parse_u32};
+use xous_tools::xous_arguments::XousArguments;
 
 const DEVKEY_PATH: &str = "devkey/dev.key";
 
@@ -32,7 +32,7 @@ struct RamConfig {
     memory_required: u32,
 }
 
-fn csr_to_config(hv: tools::utils::CsrConfig, ram_config: &mut RamConfig) {
+fn csr_to_config(hv: xous_tools::utils::CsrConfig, ram_config: &mut RamConfig) {
     let mut found_ram_name = None;
     fn round_mem(src: u32) -> u32 { (src + 4095) & !4095 }
     // Look for the largest memory block, which we'll treat as main memory
@@ -283,7 +283,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } + PAGE_SIZE;
                 map.insert(
                     region.name.to_lowercase(),
-                    tools::utils::CsrMemoryRegion {
+                    xous_tools::utils::CsrMemoryRegion {
                         start: region.base.try_into().unwrap(),
                         length: length.try_into().unwrap(),
                     },
@@ -291,7 +291,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 map.insert(
                     region.name.to_lowercase(),
-                    tools::utils::CsrMemoryRegion {
+                    xous_tools::utils::CsrMemoryRegion {
                         start: region.base.try_into().unwrap(),
                         length: region.size.try_into().unwrap(),
                     },
@@ -325,7 +325,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("{:10}: {:x} - {:x}", region.name, region.base, region.base + region.size);
                     map.insert(
                         region.name.to_lowercase(),
-                        tools::utils::CsrMemoryRegion {
+                        xous_tools::utils::CsrMemoryRegion {
                             start: region.base.try_into().unwrap(),
                             length: region.size.try_into().unwrap(),
                         },
@@ -334,7 +334,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        csr_to_config(tools::utils::CsrConfig { regions: map }, &mut ram_config);
+        csr_to_config(xous_tools::utils::CsrConfig { regions: map }, &mut ram_config);
     }
 
     // Swap has an architecture-dependent meaning.
@@ -525,7 +525,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut sf =
                     File::create(sf_dbg).unwrap_or_else(|_| panic!("Couldn't create debug file {}", sf_dbg));
                 // serialize the unencrypted header into the debug image
-                let header = tools::swap_writer::SwapHeader::new(buf_len);
+                let header = xous_tools::swap_writer::SwapHeader::new(buf_len);
                 sf.write(&header.serialize()?)?;
                 // directly write our unencrypted data from sargs into file sf. It's an exact copy of
                 // what ended up in swap_buffer.
