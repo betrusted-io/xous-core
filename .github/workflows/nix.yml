@@ -1,4 +1,4 @@
-name: Nix Build
+name: Nix Build baochip firmware
 
 on:
   push:
@@ -30,7 +30,7 @@ jobs:
   #      run: nix build .#ci-deps --print-build-logs
 
   build:
-    name: Build ${{ matrix.package }}
+    name: Nix build ${{ matrix.package }}
     runs-on: ubuntu-latest
     # TODO: re-enable if cachix is setup
     #needs: warmup-cache
@@ -38,12 +38,12 @@ jobs:
       fail-fast: false
       matrix:
         package:
-          - dabao-helloworld
           - bao1x-boot0
-          - bao1x-alt-boot1
           - bao1x-boot1
-          - baosec
+          - bao1x-alt-boot1
           - bao1x-baremetal-dabao
+          - dabao-helloworld
+          - baosec
 
     steps:
       - name: Checkout sources
