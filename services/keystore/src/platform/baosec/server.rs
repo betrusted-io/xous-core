@@ -19,7 +19,8 @@ pub fn keystore(sid: SID) -> ! {
     if store.is_collateral_erased() {
         log::info!("{}COLLATERAL.ERASED,{}", BOOKEND_START, BOOKEND_END);
     } else {
-        panic!("Collateral is not erased - protocol error for Baochip firmwares!");
+        log::error!("Collateral is not erased - protocol error for Baochip firmwares!");
+        log::info!("{}COLLATERAL.FAIL,{}", BOOKEND_START, BOOKEND_END);
     }
 
     let mut msg_opt = None;
