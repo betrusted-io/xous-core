@@ -84,17 +84,41 @@ impl CrateSpec {
         }
     }
 }
+
+/// Detects a pattern of "crate~region", as in "vault2~swap" to specify where
+/// a crate should go. The region is case-insensitive. This feature is added to help
+/// give more control for bao1x builds, but as of yet no configurations need to
+/// use anything other than the default locations, so this is only lightly tested.
+pub fn region_from_name(name_spec: &str, default_region: LoaderRegion) -> (&str, LoaderRegion) {
+    if name_spec.contains('~') {
+        let (name, spec) = name_spec.split_once('~').unwrap();
+        let region = match spec.to_ascii_lowercase().as_str() {
+            "swap" => LoaderRegion::Swap,
+            "flash" => LoaderRegion::Flash,
+            "ram" => LoaderRegion::Ram,
+            _ => LoaderRegion::Invalid,
+        };
+        (name, region)
+    } else {
+        (name_spec, default_region)
+    }
+}
+
 impl From<&str> for CrateSpec {
     fn from(spec: &str) -> CrateSpec {
         // remote crates are specified as "name^version", i.e. "xous-names^0.9.9"
         if spec.contains('^') {
             let (name, version) = spec.split_once('^').expect("couldn't parse crate specifier");
-            CrateSpec::CratesIo(name.to_string(), version.to_string(), LoaderRegion::Ram)
+            let (name, region) = region_from_name(name, LoaderRegion::Ram);
+            CrateSpec::CratesIo(name.to_string(), version.to_string(), region)
+
         // prebuilt crates are specified as "name#url"
         // i.e. "espeak-embedded#https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/"
         } else if spec.contains('#') {
             let (name, url) = spec.split_once('#').expect("couldn't parse crate specifier");
-            CrateSpec::Prebuilt(name.to_string(), url.to_string(), LoaderRegion::Ram)
+            let (name, region) = region_from_name(name, LoaderRegion::Ram);
+            CrateSpec::Prebuilt(name.to_string(), url.to_string(), region)
+
         // local files are specified as paths, which, at a minimum include one directory separator "/" or "\"
         // i.e. "./local_file"
         // Note that this is after a test for the '#' character, so that disambiguates URL slashes
@@ -104,12 +128,15 @@ impl From<&str> for CrateSpec {
             //optionally a BinaryFile can have a name associated with it as "name:path"
             if spec.find(':').is_some() {
                 let (name, path) = spec.split_once(':').unwrap();
-                CrateSpec::BinaryFile(Some(name.to_string()), path.to_string(), LoaderRegion::Ram)
+                let (name, region) = region_from_name(name, LoaderRegion::Ram);
+                CrateSpec::BinaryFile(Some(name.to_string()), path.to_string(), region)
             } else {
-                CrateSpec::BinaryFile(None, spec.to_string(), LoaderRegion::Ram)
+                let (name, region) = region_from_name(spec, LoaderRegion::Ram);
+                CrateSpec::BinaryFile(None, name.to_string(), region)
             }
         } else {
-            CrateSpec::Local(spec.to_string(), LoaderRegion::Ram)
+            let (name, region) = region_from_name(spec, LoaderRegion::Ram);
+            CrateSpec::Local(name.to_string(), region)
         }
     }
 }

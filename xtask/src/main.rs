@@ -814,7 +814,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let bao_rram_pkgs =
                 ["xous-ticktimer", "keystore", "xous-log", "xous-names", "usb-bao1x", "bao1x-hal-service"]
                     .to_vec();
-            let bao_app_pkgs: Vec<&'static str> = ["dabao-console"].to_vec();
+            let bao_app_pkgs: Vec<&'static str> = [].to_vec();
 
             builder.add_loader_feature("debug-print");
             builder.add_kernel_feature("v2p");
@@ -829,7 +829,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 builder.add_service(service, LoaderRegion::Flash);
             }
             builder.add_apps(&bao_app_pkgs);
-            builder.add_apps(&get_cratespecs());
+
+            for app in get_cratespecs() {
+                let (name, region) = crate::builder::region_from_name(&app, LoaderRegion::Flash);
+                builder.add_service(name, region);
+            }
         }
 
         // ------ ARM hardware image configs ------
@@ -1177,7 +1181,7 @@ fn baosec_common(builder: &mut Builder) -> std::io::Result<()> {
         "bao-video",
     ]
     .to_vec();
-    let bao_swap_pkgs = ["bao-console", "vault2"].to_vec();
+    let bao_swap_pkgs = [].to_vec();
     if !builder.is_swap_set() {
         // reserve 3MiB for system services: ultimately, "pddb, modals, and bao-video"
         builder.set_swap(0, bao1x_api::offsets::baosec::SWAP_RAM_LEN as _);
@@ -1213,12 +1217,13 @@ fn baosec_common(builder: &mut Builder) -> std::io::Result<()> {
     for service in bao_rram_pkgs {
         builder.add_service(service, LoaderRegion::Flash);
     }
-    builder.add_services(&get_cratespecs());
     for service in bao_swap_pkgs {
         builder.add_service(service, LoaderRegion::Swap);
     }
+
     for app in get_cratespecs() {
-        builder.add_service(&app, LoaderRegion::Swap);
+        let (name, region) = crate::builder::region_from_name(&app, LoaderRegion::Swap);
+        builder.add_service(name, region);
     }
     // builder.add_feature("modal-testing");
     Ok(())
