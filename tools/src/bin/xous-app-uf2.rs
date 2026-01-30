@@ -5,8 +5,10 @@ extern crate crc;
 
 use std::fs::File;
 use std::io::{Cursor, Write};
+use std::str::FromStr;
 
 use clap::{App, Arg};
+use xous_semver::SemVer;
 use xous_tools::elf::read_minielf;
 use xous_tools::sign_image::bin_to_uf2;
 use xous_tools::swap_writer::SwapWriter;
@@ -107,12 +109,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut source = Cursor::new(Vec::new());
         args.write(&mut source).expect("Couldn't write out ELF files");
 
+        let version = xous_tools::git_remote_version::get_xous_version().unwrap_or("v0.0.0".to_string());
+        let semver: [u8; 16] = SemVer::from_str(&version)?.into();
+
         let result = xous_tools::sign_image::sign_image(
             &source.get_ref(),
             &private_key,
             false,
             &None,
-            None,
+            Some(semver),
             true,
             bao1x_api::signatures::SIGBLOCK_LEN,
             xous_tools::sign_image::Version::Bao1xV1,

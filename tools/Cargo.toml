@@ -39,6 +39,11 @@ serde_json = "1.0"
 # bao1x-api = { path = "../libs/bao1x-api" }
 bao1x-api = "0.1.0" # use crates.io to refer to this
 
+# for remote resolution of github version in out-of-tree builds
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+anyhow = "1.0"
+toml = "0.8"
+
 [[bin]]
 name = "xous-copy-object"
 
