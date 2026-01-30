@@ -58,6 +58,22 @@ Three application targets are supported by Xous:
 
 Code is delivered via `boot1`. `boot1` is entered by holding down a button while power the device on. The device will show up as a USB mass storage device, at which point a .uf2 file containing the application image is copied to the device, and the update is applied.
 
+#### Out of Tree Application Builds
+
+For developers that don't need strong security, "out of tree" builds are available. An out of tree build allows just the app to be built on its own, targeting a xous-core revision via a github revision. See this [out of tree demo app](https://github.com/bunnie/dabao-console) for more information on how to set up and run an out of tree build.
+
+Out of tree advantages:
+- Just the application code is cloned
+- Faster, lighter-weight builds
+
+Out of tree disadvantages:
+- Application and kernel can be out of sync
+- Features like anti-rollback, version checking, and secure signing don't work
+
+If you're looking to use the Baochip as a lightweight microcontroller for write-once projects, out of tree builds might be a good match for your scenario.
+
+If you're looking to build a more durable application meant to be distributed as a product with firmware signing, you'll want to do an in-tree build.
+
 ## Security Model
 
 The default `bao1x` chips come from the factory with four public keys burned into them:
