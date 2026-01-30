@@ -39,10 +39,13 @@ serde_json = "1.0"
 # bao1x-api = { path = "../libs/bao1x-api" }
 bao1x-api = "0.1.0" # use crates.io to refer to this
 
-# for remote resolution of github version in out-of-tree builds
-reqwest = { version = "0.11", features = ["blocking", "json"] }
-anyhow = "1.0"
-toml = "0.8"
+# for remote resolution of github version in out-of-tree builds. Note that pulling
+# in this dependency tree *greatly* increases the attack surface of the SBOM. I don't
+# think the convenience is worth it. But these are noted here in case we need to revisit
+# this decision later.
+# reqwest = { version = "0.11", features = ["blocking", "json"] }
+# anyhow = "1.0"
+# toml = "0.8"
 
 [[bin]]
 name = "xous-copy-object"

@@ -109,7 +109,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut source = Cursor::new(Vec::new());
         args.write(&mut source).expect("Couldn't write out ELF files");
 
-        let version = xous_tools::git_remote_version::get_xous_version().unwrap_or("v0.0.0".to_string());
+        // whack a dummy version into the image. This will cause version compatibility checks to fail,
+        // if and when they happen. The alternatives are:
+        //  - force the user to specify a version. I think this annoys the user and they probably won't get it
+        //    right
+        //  - automatically resolve the version from the web. A commit
+        //    e41195e3495cb27b447f0aec897c8928f29ced9d temporarily pulls in the code to do this, but the
+        //    problem is that querying github to automatically resolve versions pulls in a *huge* attack
+        //    surface, and also builds now try to tickle network resources which feels distasteful to me and
+        //    not the right direction to go.
+        //
+        // So between two bad options, the decision for now is to do nothing and leave this field at 0, which
+        // as of now doesn't cause trouble but if in the future we want to do something where a kernel checks
+        // the version of a binary to make sure it's compatible before running it - it'll break.
+        let version = "v0.0.0".to_string();
         let semver: [u8; 16] = SemVer::from_str(&version)?.into();
 
         let result = xous_tools::sign_image::sign_image(

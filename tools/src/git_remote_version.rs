@@ -1,3 +1,9 @@
+// This code is noted as an option we could pull into the tool set, but the problem with it is
+// that its dependence on `reqwest` to interface with github to try and guess semantic versions
+// pulls a huge amount of code into the dependency tree that I prefer not to have in the SBOM.
+// Thus to get a semantic version users have to either check out tags, assign a version manually,
+// or just go with a nil-rev on the versioning.
+
 use std::collections::HashMap;
 use std::fs;
 
