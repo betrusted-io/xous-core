@@ -508,7 +508,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         {
             let sf = File::create(swap_filename)
                 .unwrap_or_else(|_| panic!("Couldn't create output file {}", swap_filename));
-            swap_buffer.encrypt_to(sf, &swap_pkey).expect("Couldn't flush swap buffer to disk");
+            swap_buffer.encrypt_to(sf, &swap_pkey, None).expect("Couldn't flush swap buffer to disk");
         } // drop sf, so it closes
 
         println!("Swap arguments: {}", sargs);

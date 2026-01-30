@@ -83,7 +83,12 @@ impl SwapWriter {
 
     /// Take the swap file and wrap it data structures that facilitate per-device encryption
     /// after deployment to a user device.
-    pub fn encrypt_to<T>(&mut self, mut f: T, private_key: &pem::Pem) -> Result<usize>
+    pub fn encrypt_to<T>(
+        &mut self,
+        mut f: T,
+        private_key: &pem::Pem,
+        anti_rollback_manual: Option<usize>,
+    ) -> Result<usize>
     where
         T: Write + Seek,
     {
@@ -136,6 +141,7 @@ impl SwapWriter {
             bao1x_api::signatures::SIGBLOCK_LEN,
             Version::Bao1xV1,
             function,
+            anti_rollback_manual,
         )
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Can't sign swap image"))?;
         // write the header, less space for the signature

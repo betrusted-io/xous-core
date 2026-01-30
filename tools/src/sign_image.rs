@@ -75,6 +75,7 @@ pub fn sign_image(
     length: usize,
     version: Version,
     function_code: Option<&str>,
+    anti_rollback_manual: Option<usize>,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut dest_file = vec![];
 
@@ -188,8 +189,6 @@ pub fn sign_image(
             Ok(dest_file)
         }
         Version::Bao1xV1 => {
-            let anti_rollback = read_anti_rollback("./signing/anti-rollback.hjson")?;
-
             let pkinfo = PrivateKeyInfo::from_der(&private_key.contents).map_err(|e| format!("{}", e))?;
             // First 2 bytes of the `private_key` are a record specifier and length field. Check they are
             // correct.
@@ -207,9 +206,17 @@ pub fn sign_image(
                     .map_err(|e| format!("{}", e))?;
                 let pubkey = sk.public_key();
             */
-            let anti_rollback = anti_rollback
-                .get(function_code.unwrap_or("unspecified"))
-                .expect("anti-rollback code not specified");
+            let anti_rollback = if let Some(code) = anti_rollback_manual {
+                code as u32
+            } else {
+                let anti_rollback =
+                    read_anti_rollback("./signing/anti-rollback.hjson").inspect_err(|_e| {
+                        println!("anti-rollback.hjson file not present, can't determine anti-rollback code!");
+                    })?;
+                *(anti_rollback
+                    .get(function_code.unwrap_or("unspecified"))
+                    .expect("anti-rollback code not specified"))
+            };
 
             let function_code = match function_code {
                 Some("boot0") => FunctionCode::Boot0,
@@ -225,7 +232,7 @@ pub fn sign_image(
             header.sealed_data.version = version as u32;
             header.sealed_data.signed_len = (source.len() + SIGBLOCK_LEN - UNSIGNED_LEN) as u32;
             header.sealed_data.function_code = function_code as u32;
-            header.sealed_data.anti_rollback = *anti_rollback;
+            header.sealed_data.anti_rollback = anti_rollback;
             header.sealed_data.min_semver = minver_bytes;
             header.sealed_data.semver = semver;
 
@@ -317,6 +324,7 @@ where
         sector_length,
         version,
         function_code,
+        None,
     )?;
     dest_file.write_all(&result)?;
     Ok(())
