@@ -33,6 +33,8 @@ buildpush.ps1
 tools/test-backup-analyze.sh
 todo.md
 notes/
+# no uf2 files in the root directory
+/*.uf2
 
 # SSH id file for convenience
 /id_pi
