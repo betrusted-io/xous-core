@@ -3,7 +3,7 @@ authors = ["Sean Cross <sean@xobs.io>", "bunnie <bunnie@baochip.com>"]
 default-run = "xous-app-uf2"
 edition = "2018"
 name = "xous-tools"
-version = "0.1.0"
+version = "0.1.1"
 description = "A set of tools for managing Xous ecosystem binaries"
 license = "Apache-2.0"
 
