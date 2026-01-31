@@ -832,7 +832,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             for app in get_cratespecs() {
                 let (name, region) = crate::builder::region_from_name(&app, LoaderRegion::Flash);
-                builder.add_service(name, region);
+                builder.add_app(name, region);
             }
         }
 
