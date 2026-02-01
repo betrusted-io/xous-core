@@ -358,8 +358,6 @@ fn main() -> ! {
     // placed into this pool.
     let mut waiting_connections: Vec<MessageEnvelope> = vec![];
 
-    // this limits the number of available servers to be requested to 128...!
-    //let mut name_table = FnvIndexMap::<XousServerName, xous::SID, 128>::new();
     let mut name_table = CheckedHashMap::new();
 
     info!("started");
