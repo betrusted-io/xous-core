@@ -70,6 +70,28 @@ jobs:
         run: |
           guix build ${{ matrix.task }} --root=guix-result-${{ matrix.task }}
 
+      - name: Is Build Deterministic?
+        id: deterministic-build-check
+        run: |
+          guix build ${{ matrix.task }} --rounds=2
+
+      - name: Debug non-reproducibility
+        if: failure() && steps.deterministic-build-check.outcome == 'failure'
+        run: |
+          echo "=== Reproducibility check failed ==="
+          echo "The build succeeded but produces different outputs on repeated builds."
+          echo ""
+          echo "=== Store contents for ${{ matrix.task }} ==="
+          ls -la /gnu/store/ | grep ${{ matrix.task }} | head -20 || true
+          echo ""
+          echo "=== Attempting diffoscope analysis ==="
+          STORE_PATH=$(guix build ${{ matrix.task }} 2>/dev/null)
+          if [ -n "$STORE_PATH" ] && [ -d "${STORE_PATH}.check" ]; then
+            guix shell diffoscope -- diffoscope "$STORE_PATH" "${STORE_PATH}.check" || true
+          else
+            echo "Could not find .check path for diffoscope comparison"
+          fi
+
       - name: Show build output
         run: |
           echo "Build output:"
