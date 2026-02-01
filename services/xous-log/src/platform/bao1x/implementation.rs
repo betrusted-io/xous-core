@@ -1,6 +1,8 @@
 use core::fmt::{Error, Write};
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 use std::pin::Pin;
+#[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
+use std::sync::atomic::AtomicU32;
 
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 use bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
@@ -18,7 +20,7 @@ pub static mut UART_DMA_TX_BUF_VIRT: *mut u8 = 0x0000_0000 as *mut u8;
 pub static mut UART_IRQ: Option<Pin<Box<bao1x_hal::udma::UartIrq>>> = None;
 
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
-pub static mut KBD_CONN: u32 = 0;
+pub static KBD_CONN: AtomicU32 = AtomicU32::new(0);
 
 pub fn init() -> Output {
     #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
@@ -97,22 +99,25 @@ fn uart_handler(_irq_no: usize, _arg: *mut usize) {
     };
     let mut c: u8 = 0;
     if uart.read_async(&mut c) != 0 {
-        if unsafe { KBD_CONN } == 0 {
+        use std::sync::atomic::Ordering;
+
+        if KBD_CONN.load(Ordering::SeqCst) == 0 {
+            println!("connecting to keyboard_bouncer");
             match xous::try_connect(xous::SID::from_bytes(b"keyboard_bouncer").unwrap()) {
-                Ok(cid) => unsafe { KBD_CONN = cid },
+                Ok(cid) => KBD_CONN.store(cid, Ordering::SeqCst),
                 // ignore the character and wait until there's a server for us to send it to
                 _ => return,
             }
         }
-        if unsafe { KBD_CONN != 0 } {
+        let conn = KBD_CONN.load(Ordering::SeqCst);
+        if c != 0 {
             let c = char::from_u32(c as u32).unwrap_or('.');
             if c == '\r' {
                 println!(""); // add line feed to carriage return
             } else {
                 print!("{}", c); // local echo
             }
-            xous::try_send_message(unsafe { KBD_CONN }, xous::Message::new_scalar(0, c as usize, 0, 0, 0))
-                .ok();
+            xous::try_send_message(conn, xous::Message::new_scalar(0, c as usize, 0, 0, 0)).ok();
         }
     }
 }
