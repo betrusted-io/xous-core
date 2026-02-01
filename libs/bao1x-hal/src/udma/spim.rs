@@ -1,4 +1,9 @@
+#[cfg(feature = "std")]
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use bao1x_api::*;
+#[cfg(feature = "std")]
+use num_traits::*;
 use utralib::*;
 
 use crate::ifram::IframRange;
@@ -7,6 +12,9 @@ use crate::udma::*;
 pub const FLASH_PAGE_LEN: usize = crate::board::SPINOR_PAGE_LEN as usize;
 pub const FLASH_SECTOR_LEN: usize = crate::board::SPINOR_ERASE_SIZE as usize;
 pub const BLOCK_ERASE_LEN: usize = crate::board::SPINOR_BULK_ERASE_SIZE as usize;
+
+#[cfg(feature = "std")]
+static TT_CONN: AtomicU32 = AtomicU32::new(0);
 
 // ----------------------------------- SPIM ------------------------------------
 
@@ -657,113 +665,150 @@ impl Spim {
         #[cfg(feature = "std")]
         {
             if let Some(pending) = self.pending_txrx.take() {
-                let tt = xous_api_ticktimer::Ticktimer::new().unwrap();
-                let start = tt.elapsed_ms();
-                let mut now = start;
-                const TIMEOUT_MS: u64 = 500;
-                while (self.udma_busy(Bank::Tx) || self.udma_busy(Bank::Rx) || self.udma_busy(Bank::Custom))
-                    && ((now - start) < TIMEOUT_MS)
-                {
-                    now = tt.elapsed_ms();
+                fn elapsed_ms(tt_conn: u32) -> u64 {
+                    let response = xous::send_message(
+                        tt_conn,
+                        xous::Message::new_blocking_scalar(
+                            xous_api_ticktimer::api::Opcode::ElapsedMs.to_usize().unwrap(),
+                            0,
+                            0,
+                            0,
+                            0,
+                        ),
+                    )
+                    .expect("Ticktimer: failure to send message to Ticktimer");
+                    if let xous::Result::Scalar2(upper, lower) = response {
+                        upper as u64 | ((lower as u64) << 32)
+                    } else {
+                        unimplemented!();
+                    }
                 }
-                if now - start >= TIMEOUT_MS {
-                    let tx_timeout = self.udma_busy(Bank::Tx);
-                    let rx_timeout = self.udma_busy(Bank::Rx);
-                    let custom_timeout = self.udma_busy(Bank::Custom);
-                    log::warn!(
-                        "Timeout in txrx_await(): Tx {:?} Rx {:?} Custom {:?}, Rx SA: {:x}, Rx Cfg: {:x}",
-                        tx_timeout,
-                        rx_timeout,
-                        custom_timeout,
-                        unsafe {
-                            self.csr().base().add(Bank::Rx as usize).add(DmaReg::Saddr.into()).read_volatile()
-                        },
-                        unsafe {
-                            self.csr().base().add(Bank::Rx as usize).add(DmaReg::Cfg.into()).read_volatile()
-                        },
-                    );
-                    if rx_timeout {
-                        unsafe {
-                            self.csr()
-                                .base()
-                                .add(Bank::Rx as usize)
-                                .add(DmaReg::Cfg.into())
-                                .write_volatile(CFG_CLEAR);
-                            log::info!(
-                                "Rx Cfg: {:x}",
+                let mut tt_conn = TT_CONN.load(Ordering::SeqCst);
+                if tt_conn == 0 {
+                    tt_conn = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap()).unwrap();
+                    TT_CONN.store(tt_conn, Ordering::SeqCst);
+                }
+                // wrapped in "if" because if the packet is short, we might be done already; don't make
+                // the syscall and waste time
+                if self.udma_busy(Bank::Tx) || self.udma_busy(Bank::Rx) || self.udma_busy(Bank::Custom) {
+                    let start = elapsed_ms(tt_conn);
+                    let mut now = start;
+                    const TIMEOUT_MS: u64 = 250;
+                    // this checks again after the syscall - could be done already!
+                    while (self.udma_busy(Bank::Tx)
+                        || self.udma_busy(Bank::Rx)
+                        || self.udma_busy(Bank::Custom))
+                        && ((now - start) < TIMEOUT_MS)
+                    {
+                        now = elapsed_ms(tt_conn);
+                    }
+                    if now - start >= TIMEOUT_MS {
+                        let tx_timeout = self.udma_busy(Bank::Tx);
+                        let rx_timeout = self.udma_busy(Bank::Rx);
+                        let custom_timeout = self.udma_busy(Bank::Custom);
+                        log::warn!(
+                            "Timeout in txrx_await(): Tx {:?} Rx {:?} Custom {:?}, Rx SA: {:x}, Rx Cfg: {:x}",
+                            tx_timeout,
+                            rx_timeout,
+                            custom_timeout,
+                            unsafe {
+                                self.csr()
+                                    .base()
+                                    .add(Bank::Rx as usize)
+                                    .add(DmaReg::Saddr.into())
+                                    .read_volatile()
+                            },
+                            unsafe {
                                 self.csr()
                                     .base()
                                     .add(Bank::Rx as usize)
                                     .add(DmaReg::Cfg.into())
                                     .read_volatile()
-                            );
-                            self.csr()
-                                .base()
-                                .add(Bank::Rx as usize)
-                                .add(DmaReg::Saddr.into())
-                                .write_volatile(0);
-                            self.csr()
-                                .base()
-                                .add(Bank::Rx as usize)
-                                .add(DmaReg::Cfg.into())
-                                .write_volatile(0); // clear bit is not self-clearing
-                        };
-                    }
-                    if tx_timeout {
-                        unsafe {
-                            self.csr()
-                                .base()
-                                .add(Bank::Tx as usize)
-                                .add(DmaReg::Cfg.into())
-                                .write_volatile(CFG_CLEAR);
-                            log::info!(
-                                "Tx Cfg: {:x}",
+                            },
+                        );
+                        if rx_timeout {
+                            unsafe {
+                                self.csr()
+                                    .base()
+                                    .add(Bank::Rx as usize)
+                                    .add(DmaReg::Cfg.into())
+                                    .write_volatile(CFG_CLEAR);
+                                log::info!(
+                                    "Rx Cfg: {:x}",
+                                    self.csr()
+                                        .base()
+                                        .add(Bank::Rx as usize)
+                                        .add(DmaReg::Cfg.into())
+                                        .read_volatile()
+                                );
+                                self.csr()
+                                    .base()
+                                    .add(Bank::Rx as usize)
+                                    .add(DmaReg::Saddr.into())
+                                    .write_volatile(0);
+                                self.csr()
+                                    .base()
+                                    .add(Bank::Rx as usize)
+                                    .add(DmaReg::Cfg.into())
+                                    .write_volatile(0); // clear bit is not self-clearing
+                            };
+                        }
+                        if tx_timeout {
+                            unsafe {
                                 self.csr()
                                     .base()
                                     .add(Bank::Tx as usize)
                                     .add(DmaReg::Cfg.into())
-                                    .read_volatile()
-                            );
-                            self.csr()
-                                .base()
-                                .add(Bank::Tx as usize)
-                                .add(DmaReg::Saddr.into())
-                                .write_volatile(0);
-                            self.csr()
-                                .base()
-                                .add(Bank::Tx as usize)
-                                .add(DmaReg::Cfg.into())
-                                .write_volatile(0); // clear bit is not self-clearing
-                        };
-                    }
-                    if custom_timeout {
-                        unsafe {
-                            self.csr()
-                                .base()
-                                .add(Bank::Custom as usize)
-                                .add(DmaReg::Cfg.into())
-                                .write_volatile(CFG_CLEAR);
-                            log::info!(
-                                "Custom Cfg: {:x}",
+                                    .write_volatile(CFG_CLEAR);
+                                log::info!(
+                                    "Tx Cfg: {:x}",
+                                    self.csr()
+                                        .base()
+                                        .add(Bank::Tx as usize)
+                                        .add(DmaReg::Cfg.into())
+                                        .read_volatile()
+                                );
+                                self.csr()
+                                    .base()
+                                    .add(Bank::Tx as usize)
+                                    .add(DmaReg::Saddr.into())
+                                    .write_volatile(0);
+                                self.csr()
+                                    .base()
+                                    .add(Bank::Tx as usize)
+                                    .add(DmaReg::Cfg.into())
+                                    .write_volatile(0); // clear bit is not self-clearing
+                            };
+                        }
+                        if custom_timeout {
+                            unsafe {
                                 self.csr()
                                     .base()
                                     .add(Bank::Custom as usize)
                                     .add(DmaReg::Cfg.into())
-                                    .read_volatile()
-                            );
-                            self.csr()
-                                .base()
-                                .add(Bank::Custom as usize)
-                                .add(DmaReg::Saddr.into())
-                                .write_volatile(0);
-                            self.csr()
-                                .base()
-                                .add(Bank::Custom as usize)
-                                .add(DmaReg::Cfg.into())
-                                .write_volatile(0); // clear bit is not self-clearing
-                        };
+                                    .write_volatile(CFG_CLEAR);
+                                log::info!(
+                                    "Custom Cfg: {:x}",
+                                    self.csr()
+                                        .base()
+                                        .add(Bank::Custom as usize)
+                                        .add(DmaReg::Cfg.into())
+                                        .read_volatile()
+                                );
+                                self.csr()
+                                    .base()
+                                    .add(Bank::Custom as usize)
+                                    .add(DmaReg::Saddr.into())
+                                    .write_volatile(0);
+                                self.csr()
+                                    .base()
+                                    .add(Bank::Custom as usize)
+                                    .add(DmaReg::Cfg.into())
+                                    .write_volatile(0); // clear bit is not self-clearing
+                            };
+                        }
+                        return Err(xous::Error::Timeout);
                     }
-                    return Err(xous::Error::Timeout);
                 }
                 Ok(&self.rx_buf()[..pending])
             } else {
