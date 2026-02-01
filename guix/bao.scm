@@ -21,6 +21,7 @@
   #:use-module (srfi srfi-1)
   #:use-module (ice-9 popen)
   #:use-module (ice-9 rdelim)
+  #:use-module (ice-9 textual-ports)
   #:use-module (rust-xous)
   #:use-module (bao-crates))
 
@@ -40,11 +41,21 @@
             (string? output)
             output)))))
 
+;;; Helper to check git command exit status only (for commands with no output)
+(define (git-status-zero? . args)
+  "Run a git command and return #t if exit status is 0, #f otherwise."
+  (let ((dir (dirname (current-source-directory))))
+    (false-if-exception
+     (let* ((port (apply open-pipe* OPEN_READ "git" "-C" dir args))
+            (_ (get-string-all port))  ; consume any output
+            (status (close-pipe port)))
+       (zero? (status:exit-val status))))))
+
 ;;; Git revision (full 40-char hash) - detected at evaluation time
 ;;; Falls back to zeros if not in git repo or working tree is dirty
 (define %git-rev
-  (or (and (git-command "diff" "--quiet")      ; clean working tree?
-           (git-command "rev-parse" "HEAD"))   ; get commit hash
+  (or (and (git-status-zero? "diff" "--quiet")  ; clean working tree?
+           (git-command "rev-parse" "HEAD"))    ; get commit hash
       "0000000000000000000000000000000000000000"))
 
 ;;; Short hash for version string (8 chars like git describe)
