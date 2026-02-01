@@ -1,6 +1,8 @@
 mod api;
 mod servers;
 
+use std::pin::Pin;
+
 use bao1x_api::*;
 use bao1x_hal::{iox::Iox, udma::GlobalConfig};
 use bitfield::*;
@@ -252,7 +254,7 @@ fn main() {
         )
         .expect("couldn't claim IRQ control page");
         let irq_csr = CSR::new(irq_page.as_mut_ptr() as *mut u32);
-        let mut irq = IrqHandler { irq_csr, cid: self_cid };
+        let mut irq = Box::pin(IrqHandler { irq_csr, cid: self_cid });
         // ensure that iox interrupts are gated off by default
         for index in 0..8 {
             unsafe {
@@ -267,7 +269,7 @@ fn main() {
         xous::claim_interrupt(
             utralib::utra::irqarray10::IRQARRAY10_IRQ,
             iox_irq_handler,
-            &mut irq as *mut IrqHandler as *mut usize,
+            Pin::as_mut(&mut irq).get_mut() as *mut IrqHandler as *mut usize,
         )
         .expect("couldn't claim Iox interrupt");
         irq.irq_csr.wo(utralib::utra::irqarray10::EV_PENDING, 0xFFFF_FFFF);
