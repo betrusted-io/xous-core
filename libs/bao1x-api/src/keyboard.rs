@@ -121,7 +121,6 @@ pub struct Keyboard {
 }
 impl Keyboard {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
-        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(crate::SERVER_NAME_KBD).expect("Can't connect to KBD");
         Ok(Keyboard { conn })
     }
@@ -204,18 +203,4 @@ impl Keyboard {
 
     /// Reveal the connection ID for use with unsafe FFI calls
     pub fn conn(&self) -> xous::CID { self.conn }
-}
-
-use core::sync::atomic::{AtomicU32, Ordering};
-static REFCOUNT: AtomicU32 = AtomicU32::new(0);
-impl Drop for Keyboard {
-    fn drop(&mut self) {
-        // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using
-        // the connection.
-        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
-            unsafe {
-                xous::disconnect(self.conn).unwrap();
-            }
-        }
-    }
 }

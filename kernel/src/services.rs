@@ -1964,35 +1964,36 @@ impl SystemServices {
         ArchProcess::with_inner_mut(|process_inner| {
             assert_eq!(pid, process_inner.pid);
             let mut slot_idx = None;
-            // Look through the connection map for (1) a free slot, and (2) an
-            // existing connection
+            // Look through the connection map for (1) an existing connection, and (2) a free slot
+            for (connection_idx, server_idx) in process_inner.connection_map.iter().enumerate() {
+                if let Some(server_idx) = server_idx {
+                    let server_idx = server_idx.get() as usize;
+                    // Tombstone or unallocated server index
+                    if server_idx < 2 {
+                        continue;
+                    }
+                    // If a connection to this server ID exists already, return it.
+                    let server_idx = server_idx - 2;
+                    if let Some(allocated_server) = &self.servers[server_idx] {
+                        if allocated_server.sid == sid {
+                            // println!(
+                            //     "KERNEL({}): Existing connection to SID {:x?} found in this process @ {},
+                            // process connection map is: {:?}",     pid.get(),
+                            //     sid,
+                            //     (connection_idx as CID) + 2,
+                            //     process_inner.connection_map,
+                            // );
+                            return Ok((connection_idx as CID) + 2);
+                        }
+                    }
+                }
+            }
             for (connection_idx, server_idx) in process_inner.connection_map.iter().enumerate() {
                 // If we find an empty slot, use it
-                let Some(server_idx) = server_idx else {
-                    if slot_idx.is_none() {
-                        slot_idx = Some(connection_idx);
-                    }
-                    continue;
-                };
-                let server_idx = server_idx.get() as usize;
-
-                // Tombstone or unallocated server index
-                if server_idx < 2 {
-                    continue;
-                }
-
-                // If a connection to this server ID exists already, return it.
-                let server_idx = server_idx - 2;
-                if let Some(allocated_server) = &self.servers[server_idx] {
-                    if allocated_server.sid == sid {
-                        // println!("KERNEL({}): Existing connection to SID {:?} found in this process @ {},
-                        // process connection map is: {:?}",     _pid.get(),
-                        //     sid,
-                        //     (connection_idx as CID) + 2,
-                        //     process_inner.connection_map,
-                        // );
-                        return Ok((connection_idx as CID) + 2);
-                    }
+                if server_idx.is_none() {
+                    assert!(slot_idx.is_none());
+                    slot_idx = Some(connection_idx);
+                    break;
                 }
             }
             let slot_idx = slot_idx.ok_or(Error::OutOfMemory)?;
@@ -2004,7 +2005,7 @@ impl SystemServices {
                         process_inner.connection_map[slot_idx] =
                             Some(NonZeroU8::new((server_idx as u8) + 2).unwrap());
                         // println!(
-                        //     "KERNEL({}): New connection to {:?}. After connection, cid is {} and process
+                        //     "KERNEL({}): New connection to {:x?}. After connection, cid is {} and process
                         // connection map is: {:?}",     pid.get(),
                         //     sid,
                         //     slot_idx + 2,
@@ -2049,6 +2050,7 @@ impl SystemServices {
 
             // Nullify this connection ID. It may now be reused.
             *idx = None;
+            // println!("***** disconnected {} {:?}", slot_idx, process_inner.connection_map);
             klog!("Removing server from table");
             Ok(())
         })

@@ -966,25 +966,30 @@ impl Lis2dh12 {
     // =========================================================================
 
     /// Read a single register
-    fn read_register(&self, i2c: &mut dyn I2cApi, reg: u8) -> Result<u8, xous::Error> {
+    pub fn read_register(&self, i2c: &mut dyn I2cApi, reg: u8) -> Result<u8, xous::Error> {
         let mut buf = [0u8; 1];
         i2c.i2c_read(LIS2DH12_ADDR, reg, &mut buf, true).check()?;
         Ok(buf[0])
     }
 
     /// Write a single register
-    fn write_register(&self, i2c: &mut dyn I2cApi, reg: u8, value: u8) -> Result<(), xous::Error> {
+    pub fn write_register(&self, i2c: &mut dyn I2cApi, reg: u8, value: u8) -> Result<(), xous::Error> {
         i2c.i2c_write(LIS2DH12_ADDR, reg, &[value]).check()
     }
 
     /// Read multiple consecutive registers
-    fn read_registers(&self, i2c: &mut dyn I2cApi, start_reg: u8, buf: &mut [u8]) -> Result<(), xous::Error> {
+    pub fn read_registers(
+        &self,
+        i2c: &mut dyn I2cApi,
+        start_reg: u8,
+        buf: &mut [u8],
+    ) -> Result<(), xous::Error> {
         // Set MSB for auto-increment
         i2c.i2c_read(LIS2DH12_ADDR, start_reg | regs::AUTO_INCREMENT, buf, true).check()
     }
 
     /// Modify a register using read-modify-write
-    fn modify_register<F>(&self, i2c: &mut dyn I2cApi, reg: u8, f: F) -> Result<(), xous::Error>
+    pub fn modify_register<F>(&self, i2c: &mut dyn I2cApi, reg: u8, f: F) -> Result<(), xous::Error>
     where
         F: FnOnce(u8) -> u8,
     {

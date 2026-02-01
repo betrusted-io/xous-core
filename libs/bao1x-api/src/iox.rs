@@ -1,9 +1,4 @@
 #[cfg(feature = "std")]
-use core::sync::atomic::{AtomicU32, Ordering};
-#[cfg(feature = "std")]
-static REFCOUNT: AtomicU32 = AtomicU32::new(0);
-
-#[cfg(feature = "std")]
 use num_traits::ToPrimitive;
 
 #[cfg(feature = "std")]
@@ -133,7 +128,6 @@ pub struct IoxHal {
 #[cfg(feature = "std")]
 impl IoxHal {
     pub fn new() -> Self {
-        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let xns = xous_names::XousNames::new().unwrap();
         let conn =
             xns.request_connection(SERVER_NAME_BAO1X_HAL).expect("Couldn't connect to bao1x HAL server");
@@ -326,19 +320,6 @@ impl IoGpio for IoxHal {
 
     fn set_gpio_pin_value(&self, port: IoxPort, pin: u8, value: IoxValue) {
         self.set_gpio_pin_value(port, pin, value);
-    }
-}
-
-#[cfg(feature = "std")]
-impl Drop for IoxHal {
-    fn drop(&mut self) {
-        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the
-        // connection.
-        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
-            unsafe {
-                xous::disconnect(self.conn).ok();
-            }
-        }
     }
 }
 

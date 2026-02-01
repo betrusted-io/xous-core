@@ -27,7 +27,6 @@ pub struct Trng {
 }
 impl Trng {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
-        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn =
             xns.request_connection_blocking(api::SERVER_NAME_TRNG).expect("Can't connect to TRNG server");
         Ok(Trng { conn, error_sid: None })
@@ -211,20 +210,6 @@ impl RngCore for Trng {
 }
 
 impl CryptoRng for Trng {}
-
-use core::sync::atomic::{AtomicU32, Ordering};
-static REFCOUNT: AtomicU32 = AtomicU32::new(0);
-impl Drop for Trng {
-    fn drop(&mut self) {
-        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the
-        // connection.
-        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
-            unsafe {
-                xous::disconnect(self.conn).unwrap();
-            }
-        }
-    }
-}
 
 fn error_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);

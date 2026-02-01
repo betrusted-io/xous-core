@@ -1,5 +1,3 @@
-use core::sync::atomic::{AtomicU32, Ordering};
-
 use bao1x_api::*;
 use xous_ipc::Buffer;
 
@@ -9,7 +7,6 @@ pub struct I2c {
 
 impl I2c {
     pub fn new() -> Self {
-        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let xns = xous_api_names::XousNames::new().unwrap();
         let conn = xns
             .request_connection(bao1x_api::SERVER_NAME_BAO1X_HAL)
@@ -67,19 +64,6 @@ impl I2cApi for I2c {
             Err(xous::Error::InternalError)
         } else {
             Ok(result.transactions[0].result)
-        }
-    }
-}
-
-static REFCOUNT: AtomicU32 = AtomicU32::new(0);
-impl Drop for I2c {
-    fn drop(&mut self) {
-        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the
-        // connection.
-        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
-            unsafe {
-                xous::disconnect(self.conn).unwrap();
-            }
         }
     }
 }

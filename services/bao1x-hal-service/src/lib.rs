@@ -1,15 +1,12 @@
 pub mod api;
 pub mod trng;
 
-use core::sync::atomic::{AtomicU32, Ordering};
-
 use bao1x_api::*;
 use num_traits::*;
 use xous::{Message, send_message};
 use xous_api_susres::api::Opcode as SusresOp;
 
 use crate::api::ClockOp;
-static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
 pub struct UdmaGlobal {
     conn: xous::CID,
@@ -17,7 +14,6 @@ pub struct UdmaGlobal {
 
 impl UdmaGlobal {
     pub fn new() -> Self {
-        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let xns = xous_names::XousNames::new().unwrap();
         let conn =
             xns.request_connection(SERVER_NAME_BAO1X_HAL).expect("Couldn't connect to bao1x HAL server");
@@ -80,7 +76,6 @@ pub struct Hal {
 }
 impl Hal {
     pub fn new() -> Self {
-        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let xns = xous_names::XousNames::new().unwrap();
         let conn =
             xns.request_connection(SERVER_NAME_BAO1X_HAL).expect("Couldn't connect to bao1x HAL server");
