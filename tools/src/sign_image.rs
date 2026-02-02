@@ -304,6 +304,7 @@ pub fn sign_file<S, T>(
     with_jump: bool,
     sector_length: usize,
     function_code: Option<&str>,
+    arb_override: Option<usize>,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     S: AsRef<Path>,
@@ -324,7 +325,7 @@ where
         sector_length,
         version,
         function_code,
-        None,
+        arb_override,
     )?;
     dest_file.write_all(&result)?;
     Ok(())
