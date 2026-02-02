@@ -1,7 +1,10 @@
 use std::io::{Error, ErrorKind};
 
 use clap::{App, Arg, crate_version};
-use xous_tools::sign_image::{convert_to_uf2, load_pem, sign_file};
+use xous_tools::{
+    sign_image::{convert_to_uf2, load_pem, sign_file},
+    utils::parse_u32,
+};
 
 const DEVKEY_PATH: &str = "devkey/dev.key";
 
@@ -98,6 +101,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .help("Function code to embed in the signature block. Only meaningful in combination with --bao1x")
             .required(false)
         )
+        .arg(
+            Arg::with_name("antirollback-override")
+            .long("antirollback-override")
+            .takes_value(true)
+            .help("Manually specify an anti-rollback value for the image. Overrides the system configuration file.")
+            .required(false)
+        )
         .get_matches();
 
     let minver =
@@ -108,6 +118,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             None
         };
+
+    let arb_override = if let Some(arb_str) = matches.value_of("antirollback-override") {
+        parse_u32(arb_str).ok()
+    } else {
+        None
+    };
 
     let sig_length = usize::from_str_radix(matches.value_of("sig-length").unwrap_or("4096"), 10)
         .expect("sig-length should be a decimal number");
@@ -140,6 +156,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             matches.is_present("with-jump"),
             sig_length,
             matches.value_of("function-code"),
+            arb_override.map(|x| x as usize),
         )?;
 
         if matches.is_present("bao1x") {
@@ -181,6 +198,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             matches.is_present("with-jump"),
             sig_length,
             Some(matches.value_of("function-code").unwrap_or("kernel")),
+            arb_override.map(|x| x as usize),
         )?;
 
         if matches.is_present("bao1x") {
