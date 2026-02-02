@@ -42,8 +42,10 @@ jobs:
             guix-cache-
 
       - name: Install Guix
-        uses: PromyLOPh/guix-install-action@v1.6
+        #uses: PromyLOPh/guix-install-action@v1.6
+        uses: sbellem/guix-install-action@dev
         with:
+          version: "1.5.0"
           channels: |-
             (list (channel
                    (inherit %default-guix-channel))
