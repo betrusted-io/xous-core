@@ -178,11 +178,18 @@ fn susres_service() {
                         log::info!("all callbacks reporting in, doing suspend");
                         timeout_pending = false;
 
+                        use bao1x_api::bio::BioApi;
+                        let mut bio = bao1x_hal::bio::Bio::new();
+                        // hard-coded to the value of the external crystal - this is a hardware
+                        // reference value that should never change; eg, USB doesn't work if this
+                        // isn't 48 MHz.
+                        bio.update_bio_freq(48_000_000);
                         clk_mgr.wfi();
 
                         // ~~~ time passes, but we're on carbonite so we don't notice ~~~
 
                         clk_mgr.restore_wfi();
+                        bio.update_bio_freq(clk_mgr.fclk);
 
                         // when wfi() returns, it means we've resumed
                         let sender = suspend_requested

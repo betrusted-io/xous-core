@@ -388,6 +388,32 @@ impl ClockManagerImpl {
         })
     }
 
+    /// Used to update the computed clock numbers. Call after resetting the PLLs or timing sources.
+    pub fn update_clocks(&mut self) {
+        let m = (self.sysctrl.r(utra::sysctrl::SFR_IPCPLLMN) >> 12) & 0xF;
+        let n = self.sysctrl.r(utra::sysctrl::SFR_IPCPLLMN) & 0xFFF;
+        let q1 = (self.sysctrl.r(utra::sysctrl::SFR_IPCPLLQ) >> 4) & 0x7;
+        let q0 = (self.sysctrl.r(utra::sysctrl::SFR_IPCPLLQ) >> 0) & 0x7;
+        let fracen = self.sysctrl.r(utra::sysctrl::SFR_IPCPLLF) & 0x100_0000 != 0;
+        let frac = self.sysctrl.r(utra::sysctrl::SFR_IPCPLLF) & 0xFF_FFFF;
+        let vco_freq =
+            if fracen { ((48 * n + (48 * frac) / (1 << 24)) / m) * MHZ } else { ((48 * n) / m) * MHZ };
+        let pll0_freq = vco_freq / (1 + q0) / (1 + q1);
+        let fclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0) & 0xFF;
+        let aclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1) & 0xFF;
+        let hclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2) & 0xFF;
+        let iclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3) & 0xFF;
+        let pclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4) & 0xFF;
+
+        self.fclk = divide_by_fd(fclk_fd, pll0_freq);
+        self.aclk = divide_by_fd(aclk_fd, pll0_freq);
+        self.hclk = divide_by_fd(hclk_fd, pll0_freq);
+        self.iclk = divide_by_fd(iclk_fd, pll0_freq);
+        self.pclk = divide_by_fd(pclk_fd, pll0_freq);
+        let perclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFDPER) & 0xFF;
+        self.perclk = divide_by_fd(perclk_fd, pll0_freq) / 2;
+    }
+
     /// Safety: this pulls out the hardware base for the susres block. The receiver of this
     /// address must manually manage all concurrency issues that could happen with respect to
     /// using the susres block.
@@ -453,6 +479,7 @@ impl ClockManagerImpl {
                 false,
             )
         };
+        self.update_clocks();
         Ok(perclk)
     }
 
@@ -532,6 +559,8 @@ impl ClockManagerImpl {
         self.sysctrl.wo(utra::sysctrl::SFR_CGUSEL1, 1);
         self.sysctrl.wo(utra::sysctrl::SFR_CGUSET, 0x32);
         wfi_debug("internal osc");
+        // don't divide fclk -- allows BIO to keep operating at 48MHz rate
+        self.sysctrl.wo(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0, 0x0700_01ff);
 
         // lower core voltage to 0.7v
         self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08420002);
@@ -609,7 +638,7 @@ impl ClockManagerImpl {
             self.iox.set_gpio_pin_value(self.dcdc2_io.0, self.dcdc2_io.1, bao1x_api::IoxValue::High);
         }
 
-        // set the clock back to 350MHz CPU
+        // set the clock back to 350MHz CPU. This also restores the FCLK divider.
         wfi_debug("request_freq");
         self.request_freq(crate::board::DEFAULT_FCLK_FREQUENCY / 1_000_000 / 2)
             .inspect_err(|e| crate::println!("req freq err {:?}", e))
