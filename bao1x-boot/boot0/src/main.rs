@@ -312,7 +312,11 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                 bollard!(die, 4);
                 jump_to((target ^ u32::from_le_bytes(tag)) as usize);
             }
-            _ => {}
+            Err(e) => {
+                crate::println!("Sigcheck err: {:?}", e);
+                csprng.random_delay();
+                bollard!(die, 4);
+            }
         }
     }
 
