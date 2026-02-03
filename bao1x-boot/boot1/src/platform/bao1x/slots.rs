@@ -16,7 +16,7 @@ use bao1x_hal::{
 ///    - Repair any ACLs that are not set correctly. "Repair" is expected on first boot at the factory, since
 ///      the chip comes blank. But repair is also useful in case an adversary manages to flip any ACL states
 ///      on us.
-pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
+pub fn check_slots() {
     let owc = bao1x_hal::acram::OneWayCounter::new();
     let mut slot_mgr = bao1x_hal::acram::SlotManager::new();
     let mut maybe_trng: Option<super::trng::ManagedTrng> = None;
@@ -49,13 +49,13 @@ pub fn check_slots(board_type: &bao1x_api::BoardTypeCoding) {
 
         // this one may allocate a TRNG, which takes >50 ms to warm up.
         if slot_mgr.read(&SERIAL_NUMBER).unwrap().iter().all(|&b| b == 0 || b == 0xFF) {
-            let trng = maybe_trng.get_or_insert_with(|| super::trng::ManagedTrng::new(&board_type));
+            let trng = maybe_trng.get_or_insert_with(|| super::trng::ManagedTrng::new());
             let k = trng.generate_key();
             // don't fail on write failure - otherwise we get stuck here and can't debug the chip
             slot_mgr.write(&mut rram, &SERIAL_NUMBER, &k).ok();
         }
         if slot_mgr.read(&UUID).unwrap().iter().all(|&b| b == 0 || b == 0xFF) {
-            let trng = maybe_trng.get_or_insert_with(|| super::trng::ManagedTrng::new(&board_type));
+            let trng = maybe_trng.get_or_insert_with(|| super::trng::ManagedTrng::new());
             let k = trng.generate_key();
             // don't fail on write failure - otherwise we get stuck here and can't debug the chip
             slot_mgr.write(&mut rram, &UUID, &k).ok();

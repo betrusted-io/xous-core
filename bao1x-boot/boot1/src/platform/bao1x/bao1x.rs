@@ -437,7 +437,7 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
     cu.set();
     // can't check slots in alt-boot mode because it's effectively baremetal as far as permissions go
     #[cfg(not(feature = "alt-boot1"))]
-    crate::platform::slots::check_slots(&board_type);
+    crate::platform::slots::check_slots();
     // protect() is called inside sigcheck on boot!
 
     // Rx setup
