@@ -19,6 +19,7 @@ use xous_tools::utils::parse_u32;
 use xous_tools::xous_arguments::XousArgumentCode;
 use xous_tools::xous_arguments::XousArguments;
 
+// this must match exactly what's in devkey/dev.key
 const DEV_KEY_PEM: &'static str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIKindlyNoteThisIsADevKeyDontUseForProduction\n-----END PRIVATE KEY-----";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
