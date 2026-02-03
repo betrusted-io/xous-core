@@ -360,6 +360,27 @@ impl SlotManager {
         }
     }
 
+    /// Safety: may return garbage data if the ACLs aren't correct. No security is compromised
+    /// in the case that the ACL isn't correct, but the caller would not be notified of the
+    /// mismatch. This call is mostly useful for verifying that data is in fact being disregarded
+    /// or erased.
+    ///
+    /// SlotIndex is also assumed to be correct; if it is invalid, the function will panic.
+    pub unsafe fn read_unchecked(&self, slot: &SlotIndex) -> &[u8] {
+        let offset = slot.try_into_data_offset().unwrap();
+
+        // safety: the unsafes below remind us to check that all values are valid during
+        // the pointer type cast. In this case, there are no invalid values for a `u8`.
+        match slot {
+            SlotIndex::Data(_, _, _) => unsafe {
+                &self.data_range.as_slice()[offset..offset + SLOT_ELEMENT_LEN_BYTES]
+            },
+            SlotIndex::DataRange(range, _, _) => unsafe {
+                &self.data_range.as_slice()[offset..offset + SLOT_ELEMENT_LEN_BYTES * range.len()]
+            },
+        }
+    }
+
     /// Safety: the caller must resolve the index into either the data or the key array correctly.
     /// There is access or type checking done. This is a "raw read" primitive mostly used for debugging.
     pub unsafe fn read_data_slot(&self, absolute_offset: usize) -> &[u8] {
