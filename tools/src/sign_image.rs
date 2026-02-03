@@ -266,8 +266,8 @@ pub fn sign_image(
                     .map_err(|e| format!("{}", e))?;
                 let derived_public_key = sk.public_key();
 
-                // replace first random data with the derived public key of the fake signer
-                header.sealed_data.pubkeys[0].pk.copy_from_slice(derived_public_key.as_ref());
+                // replace devkey slot with the derived public key of the fake signer
+                header.sealed_data.pubkeys[3].pk.copy_from_slice(derived_public_key.as_ref());
             }
 
             let mut protected = Vec::new();
