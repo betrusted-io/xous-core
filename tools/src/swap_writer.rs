@@ -142,6 +142,7 @@ impl SwapWriter {
             Version::Bao1xV1,
             function,
             anti_rollback_manual,
+            false,
         )
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Can't sign swap image"))?;
         // write the header, less space for the signature

@@ -4,11 +4,12 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 use bao1x_api::signatures::{
-    FunctionCode, PADDING_LEN, SIGBLOCK_LEN, SealedFields, SignatureInFlash, UNSIGNED_LEN,
+    FunctionCode, PADDING_LEN, Pubkey, SIGBLOCK_LEN, SealedFields, SignatureInFlash, UNSIGNED_LEN,
 };
 use ed25519_dalek::{DigestSigner, SigningKey};
 use pkcs8::PrivateKeyInfo;
 use pkcs8::der::Decodable;
+use rand::RngCore;
 use ring::signature::{Ed25519KeyPair, KeyPair};
 use sha2::{Digest, Sha512};
 
@@ -76,6 +77,7 @@ pub fn sign_image(
     version: Version,
     function_code: Option<&str>,
     anti_rollback_manual: Option<usize>,
+    fake_pubkeys: bool,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut dest_file = vec![];
 
@@ -237,10 +239,20 @@ pub fn sign_image(
             header.sealed_data.semver = semver;
 
             // whack in all the public keys, defined in the bao1x-api crate
-            for (dst, src) in
-                header.sealed_data.pubkeys.iter_mut().zip(bao1x_api::pubkeys::PUBKEY_HEADER.iter())
-            {
-                dst.populate_from(src);
+            if !fake_pubkeys {
+                for (dst, src) in
+                    header.sealed_data.pubkeys.iter_mut().zip(bao1x_api::pubkeys::PUBKEY_HEADER.iter())
+                {
+                    dst.populate_from(src);
+                }
+            } else {
+                // populate with fake, random data. The data changes every time.
+                for dst in header.sealed_data.pubkeys.iter_mut() {
+                    let mut fake_pk = Pubkey::default();
+                    rand::rngs::OsRng.fill_bytes(&mut fake_pk.pk);
+                    rand::rngs::OsRng.fill_bytes(&mut fake_pk.tag);
+                    dst.populate_from(&fake_pk);
+                }
             }
 
             let mut protected = Vec::new();
@@ -305,6 +317,7 @@ pub fn sign_file<S, T>(
     sector_length: usize,
     function_code: Option<&str>,
     arb_override: Option<usize>,
+    fake_pubkeys: bool,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     S: AsRef<Path>,
@@ -326,6 +339,7 @@ where
         version,
         function_code,
         arb_override,
+        fake_pubkeys,
     )?;
     dest_file.write_all(&result)?;
     Ok(())

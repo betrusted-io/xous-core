@@ -108,6 +108,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .help("Manually specify an anti-rollback value for the image. Overrides the system configuration file.")
             .required(false)
         )
+        .arg(
+            Arg::with_name("fake-pubkeys")
+            .long("fake public key block")
+            .takes_value(false)
+            .help("When specified, fills the public key block with random, fake data. Used for testing third-party boot flow policies")
+            .required(false)
+        )
         .get_matches();
 
     let minver =
@@ -157,6 +164,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             sig_length,
             matches.value_of("function-code"),
             arb_override.map(|x| x as usize),
+            matches.is_present("fake-pubkeys"),
         )?;
 
         if matches.is_present("bao1x") {
@@ -199,6 +207,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             sig_length,
             Some(matches.value_of("function-code").unwrap_or("kernel")),
             arb_override.map(|x| x as usize),
+            matches.is_present("fake-pubkeys"),
         )?;
 
         if matches.is_present("bao1x") {
