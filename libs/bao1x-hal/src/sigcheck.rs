@@ -5,7 +5,6 @@ use alloc::vec::Vec;
 use bao1x_api::REVOCATION_DUPE_DISTANCE;
 use bao1x_api::bollard;
 use bao1x_api::pubkeys::DEVELOPER_KEY_SLOT;
-use bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS;
 use bao1x_api::pubkeys::SecurityConfiguration;
 use bao1x_api::signatures::*;
 #[cfg(not(feature = "std"))]
@@ -485,9 +484,8 @@ pub fn hardened_erase_policy(
     }
     bollard!(die_no_std, 4);
     csprng.random_delay();
-    // if the tag isn't one of the first 3 "blessed" tags, assume developer mode. This is
-    // a supplemental check, so we don't harden it.
-    if !KEYSLOT_INITIAL_TAGS[..3].contains(&&tag) {
+    // if the tag is the developer tag, erase the keys.
+    if &tag == b"dev " {
         erase_secrets(&mut Some(csprng))?;
     }
     bollard!(die_no_std, 4);
@@ -515,9 +513,8 @@ pub fn hardened_erase_policy(
         }
         bollard!(die_no_std, 4);
         csprng.random_delay();
-        // if the tag isn't one of the first 3 "blessed" tags, assume developer mode. This is
-        // a supplemental check, so we don't harden it.
-        if !KEYSLOT_INITIAL_TAGS[..3].contains(&&tag) {
+        // if the tag is the developer tag, erase the keys.
+        if &tag == b"dev " {
             erase_secrets(&mut Some(csprng))?;
         }
         bollard!(die_no_std, 4);
