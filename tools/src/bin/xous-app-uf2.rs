@@ -163,6 +163,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             xous_tools::sign_image::Version::Bao1xV1,
             Some("app"),
             Some(anti_rollback as usize),
+            false,
         )?;
 
         let app_uf2 = "apps.uf2";

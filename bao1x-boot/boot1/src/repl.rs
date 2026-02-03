@@ -267,7 +267,7 @@ impl Repl {
                     count += 1;
                 }
                 crate::println!("Board type set to {:?} after {} increments", new_type, count);
-                crate::platform::slots::check_slots(&new_type);
+                crate::platform::slots::check_slots();
                 crate::println!("Key & data slots checked according to the new type");
             }
             "altboot" => {
@@ -452,8 +452,12 @@ impl Repl {
                 let collateral = slot_mgr.read(&COLLATERAL).unwrap();
                 let check_val =
                     alloc::vec![bao1x_hal::sigcheck::ERASE_VALUE; COLLATERAL.len() * SLOT_ELEMENT_LEN_BYTES];
+                let uninit_val = alloc::vec![0; COLLATERAL.len() * SLOT_ELEMENT_LEN_BYTES];
+                // these strings below are used in CI. If they are changed, CI needs to be updated
                 if collateral == &check_val {
                     crate::println!("Collateral erased");
+                } else if collateral == &uninit_val {
+                    crate::println!("Collateral is uninitialized or access is denied");
                 } else {
                     crate::println!("Collateral is set");
                 }
@@ -642,6 +646,45 @@ impl Repl {
                 // and should report as all 0's.
                 let ifr = unsafe { core::slice::from_raw_parts(0x6040_0000 as *const u8, 0x400) };
                 for (i, chunk) in ifr.chunks(32).enumerate() {
+                    crate::println!("  {:03x}: {:02x?}", i * 32, chunk);
+                }
+            }
+            #[cfg(feature = "test-boot0-keys")]
+            "rand_collateral" => {
+                use bao1x_hal::acram::AccessSettings;
+                // put random data in collateral - to simulate a third party keying
+                let slot_mgr = bao1x_hal::acram::SlotManager::new();
+                let mut rram = bao1x_hal::rram::Reram::new();
+                let slot = &bao1x_api::offsets::COLLATERAL;
+                let mut trng = super::trng::ManagedTrng::new();
+                // only clear ACL if it isn't already cleared
+                if slot_mgr
+                    .get_acl(slot)
+                    .unwrap_or(AccessSettings::Data(DataSlotAccess::new_with_raw_value(0xFFFF_FFFF)))
+                    .raw_u32()
+                    != 0
+                {
+                    // clear the ACL so we can operate on the data
+                    slot_mgr
+                        .set_acl(
+                            &mut rram,
+                            slot,
+                            &AccessSettings::Data(DataSlotAccess::new_with_raw_value(0)),
+                        )
+                        .expect("couldn't reset ACL");
+                }
+                let mut random: Vec<u8> = alloc::vec::Vec::with_capacity(slot.len() * SLOT_ELEMENT_LEN_BYTES);
+                random.resize(slot.len() * SLOT_ELEMENT_LEN_BYTES, 0);
+                for chunk in random.chunks_mut(SLOT_ELEMENT_LEN_BYTES) {
+                    let r = trng.generate_key();
+                    chunk.copy_from_slice(&r);
+                }
+
+                slot_mgr.write(&mut rram, slot, &random).ok();
+
+                let bytes = unsafe { slot_mgr.read_unchecked(slot) };
+                crate::println!("Random test data:");
+                for (i, chunk) in bytes.chunks(32).enumerate() {
                     crate::println!("  {:03x}: {:02x?}", i * 32, chunk);
                 }
             }
