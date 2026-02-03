@@ -13,6 +13,9 @@ use rand::RngCore;
 use ring::signature::{Ed25519KeyPair, KeyPair};
 use sha2::{Digest, Sha512};
 
+// this must match exactly what's in devkey/testing.key
+const TEST_KEY_PEM: &'static str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIKindlyNoteThisIsTestKeyDontUseForProduction\n-----END PRIVATE KEY-----";
+
 #[repr(u32)]
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Version {
@@ -201,13 +204,6 @@ pub fn sign_image(
             // Now we can use the private key data.
             let signing_key = SigningKey::from_bytes(&secbytes);
 
-            // This is handy code to remember - a quick way to get the public key from the private key. Just
-            // in case I need this in the future to sanity check some values.
-            /*
-                let sk = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&private_key.contents)
-                    .map_err(|e| format!("{}", e))?;
-                let pubkey = sk.public_key();
-            */
             let anti_rollback = if let Some(code) = anti_rollback_manual {
                 code as u32
             } else {
@@ -253,6 +249,15 @@ pub fn sign_image(
                     rand::rngs::OsRng.fill_bytes(&mut fake_pk.tag);
                     dst.populate_from(&fake_pk);
                 }
+
+                let testing_key = pem::parse(TEST_KEY_PEM)?;
+                // derive the public key for use in "fake keys" routines
+                let sk = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&testing_key.contents)
+                    .map_err(|e| format!("{}", e))?;
+                let derived_public_key = sk.public_key();
+
+                // replace first random data with the derived public key of the fake signer
+                header.sealed_data.pubkeys[0].pk.copy_from_slice(derived_public_key.as_ref());
             }
 
             let mut protected = Vec::new();
