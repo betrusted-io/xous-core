@@ -242,10 +242,20 @@ pub fn sign_image(
                     dst.populate_from(src);
                 }
             } else {
-                // populate with fake, random data. The data changes every time.
+                // populate with a random key. Use actual key generation to ensure that the committed
+                // public key is actually a valid public key.
                 for dst in header.sealed_data.pubkeys.iter_mut() {
+                    use ed25519_dalek::VerifyingKey;
+                    use rand::rngs::OsRng;
+
                     let mut fake_pk = Pubkey::default();
-                    rand::rngs::OsRng.fill_bytes(&mut fake_pk.pk);
+                    // Generate a random signing (private) key
+                    let signing_key = SigningKey::generate(&mut OsRng);
+                    // Derive the verifying (public) key
+                    let verifying_key: VerifyingKey = signing_key.verifying_key();
+                    let public_bytes = verifying_key.to_bytes();
+                    fake_pk.pk.copy_from_slice(&public_bytes);
+
                     rand::rngs::OsRng.fill_bytes(&mut fake_pk.tag);
                     dst.populate_from(&fake_pk);
                 }
