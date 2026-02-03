@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .arg(
             Arg::with_name("fake-pubkeys")
-            .long("fake public key block")
+            .long("fake-pubkeys")
             .takes_value(false)
             .help("When specified, fills the public key block with random, fake data. Used for testing third-party boot flow policies")
             .required(false)
