@@ -2,7 +2,6 @@ use xous::arch::PAGE_SIZE;
 
 use crate::offsets::{PartitionAccess, RwPerms, SlotIndex};
 
-// we actually have 16MiB on the initial prototypes, but constraining to smaller for cost reduction
 pub const SPI_FLASH_LEN: usize = 8192 * 1024;
 pub const SPI_FLASH_ID_MASK: u32 = 0xff_ff_ff;
 
@@ -29,7 +28,10 @@ pub const SWAP_HEADER_LEN: usize = PAGE_SIZE;
 // PDDB takes up "the rest of the space" - about 4MiB envisioned. Should be
 // "enough" for storing a few hundred, passwords, dozens of x.509 certs, dozens of private keys, etc.
 pub const PDDB_ORIGIN: usize = SWAP_FLASH_ORIGIN + SWAP_FLASH_RESERVED_LEN;
+#[cfg(not(feature = "key-testing"))]
 pub const PDDB_LEN: usize = SPI_FLASH_LEN - PDDB_ORIGIN;
+#[cfg(feature = "key-testing")]
+pub const PDDB_LEN: usize = 256 * 1024; // 256k - big enough to do something with, but much faster to init
 
 // Location of on-chip application segment, as offset from RRAM start
 pub const APP_RRAM_OFFSET: usize = 0;
