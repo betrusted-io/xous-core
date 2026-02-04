@@ -113,6 +113,8 @@ security = ["sigcheck"]
 udma-stress-test = [
 ] # For RTL simulation testing - aggravates a key corner case
 
+key-testing = ["bao1x-api/key-testing"]
+
 compress-entropy = []
 magic-manual = []
 std = [
