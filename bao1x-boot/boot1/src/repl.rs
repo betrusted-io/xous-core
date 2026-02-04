@@ -9,6 +9,7 @@ use bao1x_api::pubkeys::{BOOT0_SELF_CHECK, BOOT0_TO_BOOT1, BOOT1_TO_LOADER_OR_BA
 use bao1x_api::*;
 use bao1x_hal::acram::OneWayCounter;
 use bao1x_hal::hardening::Csprng;
+use bao1x_hal::sigcheck::ERASE_VALUE;
 use utralib::*;
 
 pub struct Error {
@@ -386,6 +387,23 @@ impl Repl {
                         target ^ u32::from_le_bytes(tag)
                     ),
                     Err(e) => crate::println!("Next stage did not validate: {:?}", e),
+                }
+
+                // leak info about the erase proof coupon - this makes CI testing *so much easier*
+                // the erase proof coupon is a "key" that's treated in a similar fashion in terms of lifecyle
+                // to all the other keys, except its purpose is to be inspected.
+                let erase_check = slot_mgr.read(&bao1x_hal::board::ERASE_PROOF).unwrap();
+                // check length is a subset of the full 256-bit key, just because...why leak the whole thing
+                // if you don't need to? 96 bits is a pretty big collision space for a single pair of values.
+                const CHECK_LEN: usize = 12;
+                let erased_state = [ERASE_VALUE; CHECK_LEN];
+                let uninit_state = [0u8; CHECK_LEN];
+                if &erase_check[..CHECK_LEN] == &erased_state {
+                    crate::println!("Erase proof: erased");
+                } else if &erase_check[..CHECK_LEN] == &uninit_state {
+                    crate::println!("Erase proof: uninit or access denied");
+                } else {
+                    crate::println!("Erase proof: not erased");
                 }
 
                 // detailed state checks
