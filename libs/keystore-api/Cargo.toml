@@ -29,6 +29,7 @@ efuse = []
 policy-menu = []
 
 gen2 = []
+key-testing = []
 
 std = ["derive-rkyv", "xous-names", "xous-ipc", "locales"]
 derive-rkyv = ["rkyv"]

@@ -108,8 +108,13 @@ board-dabao = [
 ] # Dev board form factor
 loader-dabao = []
 
-hazardous-debug = [
-] # this feature enables the printing of secret materials for debug purposes
-tts = []
-efuse = []
+# this feature enables the printing of secret materials for debug purposes
+hazardous-debug = []
+
+# this feature indicates the system is being booted to do keying testing.
+# it enables some features that allows the keystore to be overwritten
+# so that we can rapidly iterate through various combinations of boot
+# signatures
+key-testing = ["keystore-api/key-testing"]
+
 default = []

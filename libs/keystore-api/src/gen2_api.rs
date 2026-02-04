@@ -21,6 +21,9 @@ pub enum Opcode {
     // ----- below are non-cryptographic opcodes but used to manipulate sensitive state -----
     /// Set bootwait parameters
     Bootwait = 4096,
+    /// For testing only: overwrite secret keys
+    #[cfg(feature = "key-testing")]
+    OverwriteKeys = 4097,
 
     /// Used to map unknown opcodes
     InvalidCall = 65535,
