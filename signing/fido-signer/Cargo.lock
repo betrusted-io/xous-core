@@ -1266,9 +1266,9 @@ dependencies = [
 
 [[package]]
 name = "xous"
-version = "0.9.69"
+version = "0.9.70"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acaeff6cedd119aa86d1b06fef4e2935bc4b132468a38f3f006b5574018ba5e2"
+checksum = "8076e0a642623e94fcfa795dc1e5409715a6f9f842b019c5afffc87efe8d76f8"
 dependencies = [
  "lazy_static",
 ]
