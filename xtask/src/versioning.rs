@@ -6,7 +6,7 @@ use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::process::Command;
 
-use chrono::Local;
+use chrono::{Local, TimeZone, Utc};
 
 pub(crate) fn generate_version(add_timestamp: bool) {
     let output = if cfg!(target_os = "windows") {
@@ -30,13 +30,16 @@ pub(crate) fn generate_version(add_timestamp: bool) {
     let mut new_data = Vec::new();
     print_header(&mut new_data);
     if add_timestamp {
-        let now = Local::now();
-        write!(
-            new_data,
-            "#[allow(dead_code)]\npub const TIMESTAMP: &'static str = \"{}\";\n",
-            now.to_rfc2822()
-        )
-        .expect("couldn't add our timestamp");
+        // Use SOURCE_DATE_EPOCH for reproducible builds if available
+        // See: https://reproducible-builds.org/docs/source-date-epoch/
+        let timestamp_str = if let Ok(sde) = std::env::var("SOURCE_DATE_EPOCH") {
+            let secs: i64 = sde.parse().expect("SOURCE_DATE_EPOCH must be a valid Unix timestamp");
+            Utc.timestamp_opt(secs, 0).single().expect("Invalid SOURCE_DATE_EPOCH timestamp").to_rfc2822()
+        } else {
+            Local::now().to_rfc2822()
+        };
+        write!(new_data, "#[allow(dead_code)]\npub const TIMESTAMP: &'static str = \"{}\";\n", timestamp_str)
+            .expect("couldn't add our timestamp");
     } else {
         write!(new_data, "#[allow(dead_code)]\npub const TIMESTAMP: &'static str = \"omitted\";\n")
             .expect("couldn't add our timestamp");
