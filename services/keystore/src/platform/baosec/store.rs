@@ -35,7 +35,47 @@ impl KeyStore {
         Self { slot_mgr, owc, master_key: None }
     }
 
+    fn system_init_inner(&mut self, rram: &mut Reram) {
+        // one routine works for both dabao and baosec
+        let board_type = self.owc.get_decoded::<BoardTypeCoding>().unwrap();
+
+        let xns = xous_names::XousNames::new().unwrap();
+        let mut trng = bao1x_hal_service::trng::Trng::new(&xns).unwrap();
+        // generate all the keys
+        let key_set = if board_type == bao1x_api::BoardTypeCoding::Baosec {
+            &bao1x_api::baosec::KEY_SLOTS[..]
+        } else {
+            &bao1x_api::dabao::KEY_SLOTS[..]
+        };
+        let mut success = true;
+        for key_range in key_set.iter() {
+            if *key_range == THE_FLAG_1 {
+                // don't overwrite the flag, it's pre-loaded from static data
+                continue;
+            }
+            let mut storage = Vec::<u8>::with_capacity(key_range.len() * SLOT_ELEMENT_LEN_BYTES);
+            storage.resize(key_range.len() * SLOT_ELEMENT_LEN_BYTES, 0);
+            trng.fill_bytes(&mut storage);
+            match self.slot_mgr.write(rram, key_range, &storage) {
+                Ok(_) => {}
+                Err(e) => {
+                    success = false;
+                    log::error!("Couldn't initialize slot {:?}: {:?}", key_range, e);
+                }
+            }
+        }
+        // once all values are written, advance the IN_SYSTEM_BOOT_SETUP_DONE state
+        // safety: the offset is correct because we're pulling it from our pre-defined constants and
+        // those are manually checked.
+        if success {
+            unsafe { self.owc.inc(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() };
+        }
+        log::info!("Secret ID init done.");
+        log::info!("{}KEYSTORE.INITDONE,{}", BOOKEND_START, BOOKEND_END);
+    }
+
     pub fn ensure_system_init(&mut self, rram: &mut Reram) {
+        log::info!("System setup not yet done. Initializing secret identifiers...");
         // debug coreuser status
         /*
         let coreuser_range = xous::map_memory(
@@ -49,43 +89,8 @@ impl KeyStore {
         log::info!("coreuser status: {:x}", coreuser.r(utralib::utra::coreuser::STATUS));
         */
 
-        // one routine works for both dabao and baosec
-        let board_type = self.owc.get_decoded::<BoardTypeCoding>().unwrap();
         if self.owc.get(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0 {
-            log::info!("System setup not yet done. Initializing secret identifiers...");
-            let xns = xous_names::XousNames::new().unwrap();
-            let mut trng = bao1x_hal_service::trng::Trng::new(&xns).unwrap();
-            // generate all the keys
-            let key_set = if board_type == bao1x_api::BoardTypeCoding::Baosec {
-                &bao1x_api::baosec::KEY_SLOTS[..]
-            } else {
-                &bao1x_api::dabao::KEY_SLOTS[..]
-            };
-            let mut success = true;
-            for key_range in key_set.iter() {
-                if *key_range == THE_FLAG_1 {
-                    // don't overwrite the flag, it's pre-loaded from static data
-                    continue;
-                }
-                let mut storage = Vec::<u8>::with_capacity(key_range.len() * SLOT_ELEMENT_LEN_BYTES);
-                storage.resize(key_range.len() * SLOT_ELEMENT_LEN_BYTES, 0);
-                trng.fill_bytes(&mut storage);
-                match self.slot_mgr.write(rram, key_range, &storage) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        success = false;
-                        log::error!("Couldn't initialize slot {:?}: {:?}", key_range, e);
-                    }
-                }
-            }
-            // once all values are written, advance the IN_SYSTEM_BOOT_SETUP_DONE state
-            // safety: the offset is correct because we're pulling it from our pre-defined constants and
-            // those are manually checked.
-            if success {
-                unsafe { self.owc.inc(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() };
-            }
-            log::info!("Secret ID init done.");
-            log::info!("{}KEYSTORE.INITDONE,{}", BOOKEND_START, BOOKEND_END);
+            self.system_init_inner(rram);
         }
     }
 

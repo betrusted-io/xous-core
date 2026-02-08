@@ -26,6 +26,9 @@ arbitrary-int = "1.2"
 num_enum = { version = "0.5", default-features = false }
 
 [features]
+# testing flag that causes the PDDB to be small
+key-testing = []
+
 std = ["derive-rkyv", "xous-names", "xous-ipc"]
 derive-rkyv = ["rkyv"]
 bio = []

@@ -123,6 +123,7 @@ board-baosor = [
     "aes/bao1x",
 ] # Precursor form factor
 # board-dabao is not a valid target as it lacks external SPI flash
+key-testing = ["bao1x-hal/key-testing"]
 
 doc-deps = ["precursor-hal"]
 

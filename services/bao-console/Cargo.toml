@@ -26,6 +26,7 @@ xous-swapper = { path = "../xous-swapper", optional = true }
 bytemuck = "1.24.0"
 susres = { path = "../../api/xous-api-susres", package = "xous-api-susres" }
 keystore = { path = "../keystore" }
+keystore-api = { path = "../../libs/keystore-api" }
 
 bio-lib = { path = "../../libs/bio-lib", optional = true }
 arbitrary-int = "1.2"

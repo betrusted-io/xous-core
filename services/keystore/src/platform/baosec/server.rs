@@ -38,6 +38,8 @@ pub fn keystore(sid: SID) -> ! {
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 // as_flat saves a copy step, but we have to deserialize some enums manually
                 let mut aes_op = buffer.to_original::<AesOp, _>().unwrap();
+                // TODO: add hardening checks to the deserialization of AesOp. Can't assume the
+                // values are correct coming into this server.
                 store.aes_op(&mut aes_op).expect("couldn't perform AES op");
                 buffer.replace(aes_op).unwrap();
             }
@@ -45,6 +47,8 @@ pub fn keystore(sid: SID) -> ! {
                 let mut buffer =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut kwp = buffer.to_original::<KeyWrapper, _>().unwrap();
+                // TODO: add hardening checks to the deserialization of AesOp. Can't assume the
+                // values are correct coming into this server.
                 store.aes_kwp(&mut kwp).expect("couldn't wrap key");
                 buffer.replace(kwp).unwrap();
             }

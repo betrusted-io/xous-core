@@ -366,6 +366,7 @@ dependencies = [
  "bytemuck",
  "chrono",
  "keystore",
+ "keystore-api",
  "log",
  "modals",
  "num-derive 0.4.2",

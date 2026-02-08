@@ -108,8 +108,7 @@ board-dabao = [
 ] # Dev board form factor
 loader-dabao = []
 
-hazardous-debug = [
-] # this feature enables the printing of secret materials for debug purposes
-tts = []
-efuse = []
+# this feature enables the printing of secret materials for debug purposes
+hazardous-debug = []
+
 default = []
