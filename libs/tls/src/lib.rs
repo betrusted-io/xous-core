@@ -301,7 +301,7 @@ impl Tls {
     ///
     /// * A Vec<CertificateDer> containing the TLS chain of trust offered by the host
     /// * Error if the communication with the host fails
-    pub fn probe(&self, host: &str) -> Result<Vec<CertificateDer>, Error> {
+    pub fn probe(&self, host: &str) -> Result<Vec<CertificateDer<'_>>, Error> {
         log::info!("starting TLS probe");
         match host.to_owned().try_into() {
             Ok(server_name) => {
