@@ -279,6 +279,12 @@ impl SwapHal {
                                         );
                                         bao1x_hal::sigcheck::die_no_std();
                                     } else {
+                                        bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+                                        // check if it's still 0 - force a double-glitch
+                                        if owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0 {
+                                            bao1x_hal::sigcheck::die_no_std();
+                                        }
+                                        bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                                         println!("{}LOADER.SWAPDEV,{}", BOOKEND_START, BOOKEND_END);
                                         println!(
                                             "Developer key detected on swap. Proceeding in developer mode!"

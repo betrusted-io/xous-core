@@ -313,8 +313,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                         }
                         bao1x_hal::sigcheck::die_no_std();
                     } else {
-                        println!("{}LOADER.KERNDEV,{}", BOOKEND_START, BOOKEND_END);
-                        println!("Developer key detected on kernel. Proceeding in developer mode!");
+                        // don't print anything on the first check, so a double-glitch is harder
                     }
                 }
                 csprng.random_delay();
