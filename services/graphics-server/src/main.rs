@@ -132,6 +132,7 @@ fn main() -> ! {
     // Some operating systems and GUI frameworks don't allow creating an event
     // loop from a thread other than TID 1. Let the backend claim this thread
     // if this may be the case.
+    #[allow(unreachable_code)]
     backend::claim_main_thread(move |main_thread_token| {
         #[cfg(not(feature = "ditherpunk"))]
         wrapped_main(main_thread_token);

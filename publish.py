@@ -4,6 +4,12 @@ from pathlib import Path
 import re
 import subprocess
 import time
+from enum import Enum
+
+class SemverBump(Enum):
+    REVISION = 'rev'
+    MINOR = 'minor'
+    MAJOR = 'major'
 
 # format is [crate : path]
 # this is an ordered list that also prescribes the publication order to crates.io
@@ -74,7 +80,7 @@ class PatchInfo:
             self.file.write(line)
 
     # assumes that VERSIONS has been initialized.
-    def increment_versions(self, mode='bump'):
+    def increment_versions(self, mode='bump', which=SemverBump.REVISION):
         # check that global variables are in sane states
         assert len(VERSIONS) > 0 # "No VERSIONS found, something is weird."
         with open(self.filepath, 'r') as file:
@@ -100,7 +106,7 @@ class PatchInfo:
                     # increment my own version, if I'm in the listed crates and we're in 'bump' mode
                     if (self.cratename is not None) and (mode == 'bump'):
                         if line.strip().startswith('version'):
-                            self.output('version = "{}"\n'.format(bump_version(VERSIONS[self.cratename])))
+                            self.output('version = "{}"\n'.format(bump_version(VERSIONS[self.cratename], which)))
                         else:
                             self.output(line)
                     else:
@@ -134,7 +140,7 @@ class PatchInfo:
                     if depcrate in VERSIONS:
                         if mode == 'bump':
                             oldver = VERSIONS[depcrate]
-                            (newline, numsubs) = re.subn(oldver, bump_version(oldver), line)
+                            (newline, numsubs) = re.subn(oldver, bump_version(oldver, which), line)
                             if numsubs != 1 and not "\"*\"" in newline:
                                 print("Warning! Version substitution failed for {}:{} in crate {} ({})".format(depcrate, oldver, this_crate, numsubs))
 
@@ -196,9 +202,21 @@ class PatchInfo:
                 if self.debug:
                     self.file.write(line)
 
-def bump_version(semver):
+def bump_version(semver, which: SemverBump):
     components = semver.split('.')
-    components[-1] = str(int(components[-1]) + 1)
+    if which == SemverBump.REVISION:
+        index = -1
+    elif which == SemverBump.MINOR:
+        index = -2
+        components[-1] = "0"
+    elif which == SemverBump.MAJOR:
+        index = -3
+        components[-1] = "0"
+        components[-2] = "0"
+    else:
+        print("Invalid version bump request")
+        exit(-1)
+    components[index] = str(int(components[index]) + 1)
     retver = ""
     for (index, component) in enumerate(components):
         retver += str(component)
@@ -215,7 +233,13 @@ def main():
         "-u", "--utralib", help="Process UTRA dependent crates", action="store_true",
     )
     parser.add_argument(
-        "-b", "--bump", help="Do a version bump", action="store_true",
+        "-b", "--bump", help="Do a revision version bump", action="store_true",
+    )
+    parser.add_argument(
+        "-m", "--minor-bump", help="Do a minor revision bump", action="store_true",
+    )
+    parser.add_argument(
+        "-M", "--major-bump", help="Do a major revision bump", action="store_true",
     )
     parser.add_argument(
         "-p", "--publish", help="Publish crates", action="store_true",
@@ -231,6 +255,26 @@ def main():
     )
     args = parser.parse_args()
 
+    bump_check = 0
+    if args.bump:
+        bump_check += 1
+    if args.minor_bump:
+        bump_check += 1
+    if args.major_bump:
+        bump_check += 1
+    if bump_check > 1:
+        print("Only one of --bump, --minor_bump, or --major-bump may be active at one time")
+        exit(1)
+
+    if args.bump:
+        which = SemverBump.REVISION
+    elif args.minor_bump:
+        which = SemverBump.MINOR
+    elif args.major_bump:
+        which = SemverBump.MAJOR
+    else:
+        which = None
+
     if not(args.xous or args.utralib):
         print("Warning: no dependencies selected, operation is a no-op. Use -x/-u/... to select dependency trees")
         exit(1)
@@ -243,7 +287,7 @@ def main():
     if args.xous:
         cratelist += CRATES
 
-    if (args.bump or args.publish) and (args.local_paths or args.remote_paths):
+    if ((args.bump or args.minor_bump or args.major_bump) or args.publish) and (args.local_paths or args.remote_paths):
         print("Do not mix path changes with bump and publish operations. Do them serially.")
         exit(1)
     if args.local_paths and args.remote_paths:
@@ -252,7 +296,7 @@ def main():
 
     crate_roots = ['.', '../hashes/sha2', '../curve25519-dalek/curve25519-dalek']
 
-    if args.bump or args.local_paths or args.remote_paths:
+    if args.bump or args.minor_bump or args.major_bump or args.local_paths or args.remote_paths:
         cargo_toml_paths = []
         for roots in crate_roots:
             for path in Path(roots).rglob('Cargo.toml'):
@@ -275,7 +319,7 @@ def main():
         patches = []
         # extract the versions of crates to patch
         for [crate, path] in cratelist:
-            #print("extracting {}".format(path))
+            # print("extracting {}".format(path))
             patchinfo = PatchInfo(path + '/Cargo.toml', cratelist, crate)
             if not patchinfo.get_version():
                 print("Couldn't extract version info from {} crate".format(crate))
@@ -288,15 +332,15 @@ def main():
             patchinfo = PatchInfo(path, cratelist)
             patches += [patchinfo]
 
-        if args.bump:
+        if args.bump or args.minor_bump or args.major_bump:
             for (name, ver) in VERSIONS.items():
-                print("{}: {} -> {}".format(name, ver, bump_version(ver)))
+                print("{}: {} -> {}".format(name, ver, bump_version(ver, which)))
         if args.local_paths or args.remote_paths:
             print("Target crate list")
             for (name, ver) in VERSIONS.items():
                 print("{}: {}".format(name, ver))
 
-        if args.bump:
+        if args.bump or args.minor_bump or args.major_bump:
             mode = 'bump'
         elif args.local_paths:
             mode = 'to_local'
@@ -305,7 +349,7 @@ def main():
 
         for patch in patches:
             patch.debug_mode(not args.wet_run)
-            patch.increment_versions(mode)
+            patch.increment_versions(mode, which)
         print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         print("Don't forget to check in & update git rev in Cargo.lock for: {}".format(crate_roots[1:]))
         print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")

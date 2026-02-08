@@ -1626,10 +1626,10 @@ fn main() -> ! {
             }
             Some(Opcode::UxBbramCheckReturn) => {
                 let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let console_text = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
-                log::info!("got console text:{}", console_text.first().as_str());
-                if console_text.first().as_str().starts_with("HELPER_OK") {
-                    log::info!("got '{}', moving on", console_text.first().as_str());
+                let console_text = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                log::info!("got console text:{}", console_text.as_str());
+                if console_text.as_str().starts_with("HELPER_OK") {
+                    log::info!("got '{}', moving on", console_text.as_str());
                     // proceed
                     if keys.is_pcache_update_password_valid() || !keys.is_initialized() {
                         send_message(
