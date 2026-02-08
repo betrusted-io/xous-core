@@ -94,12 +94,6 @@ impl KeyStore {
         }
     }
 
-    #[cfg(feature = "key-testing")]
-    pub fn force_system_init(&mut self, rram: &mut Reram) {
-        self.system_init_inner(rram);
-        log::info!("{}KEYSTORE.FORCEINIT,{}", BOOKEND_START, BOOKEND_END);
-    }
-
     /// returns `true` if collateral is erased
     pub fn is_collateral_erased(&mut self) -> bool {
         let collateral = self.slot_mgr.read(&COLLATERAL).unwrap();

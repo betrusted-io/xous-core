@@ -326,29 +326,6 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }*/
                 }
             }
-            #[cfg(feature = "key-testing")]
-            "overwrite_keys" => {
-                // used primary to refresh the key store with a new set of random keys between CI tests
-                // that are iterating through various configurations to ensure that the key store is erased.
-                use num_traits::*;
-                let keystore = _env.xns.request_connection_blocking(keystore_api::SERVER_NAME_KEYS).unwrap();
-                xous::send_message(
-                    keystore,
-                    xous::Message::new_scalar(
-                        keystore_api::Opcode::OverwriteKeys.to_usize().unwrap(),
-                        0,
-                        0,
-                        0,
-                        0,
-                    ),
-                )
-                .unwrap();
-                log::info!(
-                    "{}KEYSTORE.OVERWRITE,{}",
-                    bao1x_hal::board::BOOKEND_START,
-                    bao1x_hal::board::BOOKEND_END
-                );
-            }
             /* // leave this around in case we have more swap bugs to debug
             // needs to have `swaptest1`` & `swaptest2` added to the image for this to work.
             "swap" => {

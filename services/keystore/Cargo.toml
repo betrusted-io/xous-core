@@ -111,10 +111,4 @@ loader-dabao = []
 # this feature enables the printing of secret materials for debug purposes
 hazardous-debug = []
 
-# this feature indicates the system is being booted to do keying testing.
-# it enables some features that allows the keystore to be overwritten
-# so that we can rapidly iterate through various combinations of boot
-# signatures
-key-testing = ["keystore-api/key-testing"]
-
 default = []

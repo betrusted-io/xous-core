@@ -90,8 +90,6 @@ test-flash = []
 ctap-bringup = ["xous-usb-hid"]
 # this is mutually exclusive with the keystore, as keystore owns rram
 rramtests = []
-# for testing key erasure in CI
-key-testing = ["keystore-api/key-testing", "keystore-api/gen2"]
 
 # Activating this makes this crate *try* to grab the DUART. To improve its odds
 # of winning the race, shift its position to first in the list in the PIDs to be

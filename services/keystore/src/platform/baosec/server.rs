@@ -75,10 +75,6 @@ pub fn keystore(sid: SID) -> ! {
             Opcode::InvalidCall => {
                 log::error!("Invalid call in keystore: {:?}", opcode);
             }
-            #[cfg(feature = "key-testing")]
-            Opcode::OverwriteKeys => {
-                store.force_system_init(&mut rram);
-            }
         }
     }
 }
