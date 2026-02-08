@@ -60,7 +60,7 @@ pub fn uart_irq_handler() {
 pub unsafe extern "C" fn rust_entry() -> ! {
     // set the security bits on the RRAM - without these set, most security is bypassed
     // this issue is fixed on A1 silicon stepping (which is production silicon)
-    // glitch_safety: this is fixed by metal mask so no hardening is needed
+    // glitch_safety: it is safe to write this register multiple times, and so it is.
     let mut rram = CSR::new(utra::rrc::HW_RRC_BASE as *mut u32);
     rram.wfo(utra::rrc::SFR_RRCCR_SFR_RRCCR, bao1x_hal::rram::SECURITY_MODE);
 
@@ -71,11 +71,16 @@ pub unsafe extern "C" fn rust_entry() -> ! {
 
     let mut csprng = crate::platform::early_init();
     csprng.random_delay();
+    rram.wfo(utra::rrc::SFR_RRCCR_SFR_RRCCR, bao1x_hal::rram::SECURITY_MODE);
 
     bollard!(4);
     // Mesh check takes 100ms for the signal to propagate. Setup the mesh check here, then check the
     // result in boot1. In boot1, the opposite state (`true`) is checked.
     mesh_setup(false, None);
+    bollard!(4);
+    csprng.random_delay();
+    bollard!(4);
+    rram.wfo(utra::rrc::SFR_RRCCR_SFR_RRCCR, bao1x_hal::rram::SECURITY_MODE);
     bollard!(4);
 
     crate::println!("\n~~boot0 up! ({})~~\n", crate::version::SEMVER);
@@ -204,6 +209,43 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         }
     }
     bollard!(die, 4);
+
+    // now do a check of the consistency of IFR vs boot1 block keys
+    let mut all_matches = HardenedBool::TRUE;
+    // check the LSBs
+    for (&a, b) in ifr_keys.iter().zip(boot1_block.sealed_data.pubkeys.iter()) {
+        bollard!(die, 4);
+        csprng.random_delay();
+        if a != &b.pk[..31] {
+            bollard!(die, 4);
+            all_matches = HardenedBool::FALSE;
+            bollard!(die, 4);
+        }
+    }
+    bollard!(die, 4);
+    // check the MSB
+    for (a, b) in ifr_msb.iter().zip(boot1_block.sealed_data.pubkeys.iter()) {
+        bollard!(die, 4);
+        csprng.random_delay();
+        if *a != b.pk[31] {
+            bollard!(die, 4);
+            all_matches = HardenedBool::FALSE;
+            bollard!(die, 4);
+        }
+    }
+    bollard!(die, 4);
+    csprng.random_delay();
+    match all_matches.is_true() {
+        Some(true) => {
+            // matched, don't do anything
+        }
+        _ => {
+            // all other cases, erase secrets
+            bao1x_hal::sigcheck::erase_secrets(&mut Some(&mut csprng))
+                .inspect_err(|e| crate::println!("{}", e))
+                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+        }
+    }
 
     // mutual distrust - don't trust other third party firmware. If the boot1 key block doesn't match the
     // previously captured receipt, erase collateral
