@@ -8,13 +8,26 @@ use std::process::Command;
 
 use chrono::Local;
 
-pub(crate) fn generate_version(add_timestamp: bool) {
-    let output = if cfg!(target_os = "windows") {
-        Command::new("cmd").args(["/C", "git describe --long"]).output().expect("failed to execute process")
-    } else {
-        Command::new("sh").arg("-c").arg("git describe --long").output().expect("failed to execute process")
+pub(crate) fn generate_version(add_timestamp: bool, forced_version: Option<String>) {
+    let gitver = {
+        if let Some(ver) = forced_version {
+            ver.as_bytes().to_vec()
+        } else {
+            let output = if cfg!(target_os = "windows") {
+                Command::new("cmd")
+                    .args(["/C", "git describe --long"])
+                    .output()
+                    .expect("failed to execute process")
+            } else {
+                Command::new("sh")
+                    .arg("-c")
+                    .arg("git describe --long")
+                    .output()
+                    .expect("failed to execute process")
+            };
+            output.stdout
+        }
     };
-    let gitver = output.stdout;
     let semver = String::from_utf8_lossy(&gitver);
 
     let version_file = "services/xous-ticktimer/src/version.rs";
