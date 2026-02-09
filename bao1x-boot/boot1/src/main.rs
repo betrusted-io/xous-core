@@ -4,6 +4,7 @@
 extern crate alloc;
 // contains runtime setup
 mod asm;
+mod audit;
 mod platform;
 mod repl;
 mod secboot;
@@ -161,6 +162,16 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // This checks the attack counter and applies a reaction policy. This is done in boot1 so that it
     // has a chance to be updated.
     bao1x_hal::hardening::apply_attack_policy(&mut csprng, &one_way);
+
+    // This causes the chip to automatically emit an audit log on the first few boots. The main
+    // purpose of this is to get a reading out of the chip probe station if the chip was programmed
+    // correctly or not. Apparently it is "impossible" to send serial data to the chip, and it's
+    // questionable even if I can attach a serial adapter to the probe station - the chip tester
+    // is claiming the best they can do is "give me an oscilloscope trace of the serial line".
+    // I think there is some restriction on what equipment is allowed to connect to the tester, but
+    // everyone is being super-dodgy about answering any question I have about this.
+    #[cfg(not(feature = "alt-boot1"))]
+    crate::audit::early_audit();
 
     // Below is our first divergence out of boot1, and thus, all security checks must happen above
     // this line!
