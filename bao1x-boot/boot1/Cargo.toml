@@ -27,6 +27,7 @@ xous-bio-bdma = { path = "../../libs/xous-bio-bdma", default-features = false, f
     "baremetal",
 ] }
 rand_chacha = { version = "0.3.1", default-features = false }
+hex = { version = "0.4.3", default-features = false }
 
 [features]
 # Baochip feature tree below
