@@ -50,6 +50,13 @@ pub const SERVER_NAME_KBD: &str = "_Matrix keyboard driver_";
 /// circular dependencies on the IFRAM block.
 pub const SERVER_NAME_BAO1X_HAL: &str = "_bao1x-SoC HAL_";
 
+/// Number of boots to trigger the 'audit' command. It's set to be bigger than 1, because
+/// the chip tester may power cycle the chip during the provisioning process before the
+/// log can be displayed. Once we have seen the actual chip tester infrastructure working,
+/// we can dial this down; but 3 times should be enough for us to capture a log during
+/// tester bring-up.
+pub const AUTO_AUDIT_LIMIT: u32 = 3;
+
 /// Flags register in the backup register bank. Used to track system state between soft resets.
 #[bitfield(u32)]
 #[derive(PartialEq, Eq, Debug)]

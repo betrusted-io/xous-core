@@ -66,6 +66,12 @@ macro_rules! encode_oneway {
 
 // =========== ONE WAY COUNTER SLOTS ==============
 
+/// This is used to count the number of boots, up to a certain threshold. The main
+/// purpose is to turn off the "audit" auto-print which is used to verify chip testing.
+pub const EARLY_BOOT_COUNT: usize = 47;
+
+// gap of 8 slots [48..=55] left in case more anti-rollback slots are desired
+
 /// Anti-rollback counters only count up and are used to note what is the minimum rollback
 /// version allowed for a firmware stage. Note that this is different from a semver because
 /// semvers can change without there being security problems. Anti-rollback counter is in
