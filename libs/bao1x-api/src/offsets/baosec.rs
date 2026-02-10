@@ -42,33 +42,6 @@ pub const CPU_VDD_LDO_BOOT_MV: u32 = 810;
 pub const DEFAULT_FCLK_FREQUENCY: u32 = 700_000_000;
 
 // =========== KEY SLOTS ==============
-/// The `ROOT_SEED` is the "mothership" secret that all device identity and secrets
-/// are derived from. The seed may be blended with other bits of data scattered about
-/// the RRAM array, other device identifiers and hardware measurements to create the final
-/// device secret key.
-pub const ROOT_SEED: SlotIndex = SlotIndex::Data(256, PartitionAccess::Fw0, RwPerms::ReadWrite);
-
-/// The `RMA_KEY` is a secret parameter that is unique per-device secret which is recorded
-/// at manufacturing time. Its purpose is to facilitate the creation of a signed RMA
-/// authorization certificate which upon receipt would blank the device and unlock various
-/// features for debugging failed hardware.
-pub const RMA_KEY: SlotIndex = SlotIndex::Data(257, PartitionAccess::Fw0, RwPerms::ReadWrite);
-
-/// Reserved for use as a CP to FT tracking cookie. This is used to help track inventory
-/// between CP and FT, if such a feature is desired in the supply chain. Blanked on entry
-/// to developer mode.
-pub const CP_COOKIE: SlotIndex = SlotIndex::Data(258, PartitionAccess::Fw0, RwPerms::ReadWrite);
-
-/// The swap encryption key. Used to protect swap images beyond the signing key, if we so desire.
-pub const SWAP_KEY: SlotIndex = SlotIndex::Data(259, PartitionAccess::Fw0, RwPerms::ReadWrite);
-
-/// A test value placed by FT into the memory array. If you can read the original value, you've captured a
-/// flag!
-/// There is a second flag stored somewhere else. Can you find it?
-pub const THE_FLAG_1: SlotIndex = SlotIndex::Data(260, PartitionAccess::Fw0, RwPerms::ReadWrite);
-
-// NOTE: COLLATERAL is from 261..265, but it is in the "common" page
-
 /// `NUISANCE_KEYS` are hashed together with `ROOT_SEED` to derive the core secret.
 /// Their primary purpose is to annoy microscopists trying to read the secret key by
 /// directly imaging the RRAM array. They also exist to reduce power side channels
@@ -89,15 +62,14 @@ pub const THE_FLAG_1: SlotIndex = SlotIndex::Data(260, PartitionAccess::Fw0, RwP
 /// is convenient because that's the natural page size over which the key range will be carved up before
 /// handing to other processes.
 ///
-/// The first 8 keys in bank 0 of NUISANCE_KEYS is not used. This is because due to an ECO in the A1
-/// spin of silicon, the JTAG-wired access control on these is going to be tied to those on the similarly
-/// numbered data slots. Some of the data slots in the first 8 slots will be read-only at CP time, and
-/// thus they can't be initialized with random data and be used as a nuisance key. This is a minor degradation
-/// in security margin.
+/// The first 8 keys in bank 0 of NUISANCE_KEYS alias with data slots 0..7. This is because due to an ECO in
+/// the A1 spin of silicon that effectively removes the key bank, meaning only data banks exist.
+/// The IFR-managed access control on these is going to be tied to those on the similarly numbered data slots,
+/// and the control happens on a stride of 8 slots at a time.
+///
+/// Notice there is a second range of nuisance keys at the end of the slot range (1920..2048), stuck there
+/// to force spatial diversity in the nuisance keys.
 pub const NUISANCE_KEYS_0: SlotIndex = SlotIndex::DataRange(8..128, PartitionAccess::Fw0, RwPerms::ReadWrite);
-pub const NUISANCE_KEYS_1: SlotIndex =
-    SlotIndex::DataRange(1920..2048, PartitionAccess::Fw0, RwPerms::ReadWrite);
-pub const NUISANCE_KEYS: [SlotIndex; 2] = [NUISANCE_KEYS_0, NUISANCE_KEYS_1];
 
 /// `CHAFF_KEYS` are a bank of keys that are hashed into the key array, but instead of
 /// being read out in strict order, they are read in a random permutation every time.
@@ -131,7 +103,41 @@ pub const CHAFF_KEYS: SlotIndex = SlotIndex::DataRange(128..256, PartitionAccess
 /// Placing this at the end of the key array ostensibly means that all the keys before it were
 /// erased; it might be possible to glitch all the way to the end and just have this one erased
 /// but I think that is reasonably unlikely...
-pub const ERASE_PROOF: SlotIndex = SlotIndex::Data(256, PartitionAccess::Fw0, RwPerms::ReadWrite);
+pub const ERASE_PROOF: SlotIndex = SlotIndex::Data(255, PartitionAccess::Fw0, RwPerms::ReadWrite);
+
+/// The `ROOT_SEED` is the "mothership" secret that all device identity and secrets
+/// are derived from. The seed may be blended with other bits of data scattered about
+/// the RRAM array, other device identifiers and hardware measurements to create the final
+/// device secret key.
+pub const ROOT_SEED: SlotIndex = SlotIndex::Data(256, PartitionAccess::Fw0, RwPerms::ReadWrite);
+
+/// The `RMA_KEY` is a secret parameter that is unique per-device secret which is recorded
+/// at manufacturing time. Its purpose is to facilitate the creation of a signed RMA
+/// authorization certificate which upon receipt would blank the device and unlock various
+/// features for debugging failed hardware.
+pub const RMA_KEY: SlotIndex = SlotIndex::Data(257, PartitionAccess::Fw0, RwPerms::ReadWrite);
+
+/// Reserved for use as a CP to FT tracking cookie. This is used to help track inventory
+/// between CP and FT, if such a feature is desired in the supply chain. Blanked on entry
+/// to developer mode.
+pub const CP_COOKIE: SlotIndex = SlotIndex::Data(258, PartitionAccess::Fw0, RwPerms::ReadWrite);
+
+/// The swap encryption key. Used to protect swap images beyond the signing key, if we so desire.
+pub const SWAP_KEY: SlotIndex = SlotIndex::Data(259, PartitionAccess::Fw0, RwPerms::ReadWrite);
+
+/// A test value placed by FT into the memory array. If you can read the original value, you've captured a
+/// flag!
+/// There is a second flag stored somewhere else. Can you find it?
+pub const THE_FLAG_1: SlotIndex = SlotIndex::Data(260, PartitionAccess::Fw0, RwPerms::ReadWrite);
+
+// [261..=383] reserved for Baochip data slot usage, see the "common" page for more details
+// NOTE: COLLATERAL is from 261..265, but it is in the "common" page
+
+// [384..=1919] are unused and available for third party use
+
+pub const NUISANCE_KEYS_1: SlotIndex =
+    SlotIndex::DataRange(1920..2048, PartitionAccess::Fw0, RwPerms::ReadWrite);
+pub const NUISANCE_KEYS: [SlotIndex; 2] = [NUISANCE_KEYS_0, NUISANCE_KEYS_1];
 
 /// All the slots of concern located in a single iterator. The idea is that everything is
 /// condensed here and used to check for access integrity using the array below.
