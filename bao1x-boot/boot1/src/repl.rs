@@ -6,8 +6,8 @@ use alloc::vec::Vec;
 use bao1x_api::pubkeys::BOOT0_TO_BOOT1;
 #[allow(unused_imports)]
 use bao1x_api::*;
-use bao1x_hal::acram::OneWayCounter;
-use bao1x_hal::hardening::Csprng;
+use bao1x_hal::acram::{OneWayCounter, SlotManager};
+use bao1x_hal::hardening::{Csprng, skipping_enabled};
 use utralib::*;
 
 pub struct Error {
@@ -239,6 +239,65 @@ impl Repl {
                         "paranoid [check | enable] (Note: it cannot be unset once set!)",
                     ));
                 }
+            }
+            "skipping" => {
+                let slot_mgr = SlotManager::new();
+                if args.len() != 1 {
+                    return Err(Error::help("skipping [check | enable | disable]"));
+                }
+                if args[0] == "check" {
+                    let skipping_cfg = slot_mgr.read(&bao1x_api::CLOCK_SCRAMBLE_PARAMS).unwrap();
+                    crate::println!("Clock skipping: {:?}", skipping_enabled(skipping_cfg));
+                } else if args[0] == "enable" {
+                    bao1x_hal::hardening::enable_skipping();
+                } else if args[0] == "disable" {
+                    bao1x_hal::hardening::disable_skipping();
+                } else {
+                    return Err(Error::help("skipping [check | enable | disable]"));
+                }
+            }
+            #[cfg(feature = "test-clock-skipping")]
+            "bogomips" => {
+                crate::println!("start test");
+                bao1x_hal::hardening::enable_skipping();
+                // start the RTC
+                let mut ao_sysctrl = CSR::new(utralib::HW_AO_SYSCTRL_BASE as *mut u32);
+                ao_sysctrl.wo(utra::ao_sysctrl::CR_CLK1HZFD, 0x3fff);
+                unsafe { (0x4006100c as *mut u32).write_volatile(1) };
+                let mut count: usize;
+                unsafe {
+                    #[rustfmt::skip]
+                    core::arch::asm!(
+                        // grab the RTC value
+                        "li t0, 0x40061000",
+                        "lw t1, 0x0(t0)",
+                        "li t3, 0",
+                        // wait until the next second
+                    "10:",
+                        "lw t2, 0x0(t0)",
+                        "beq t1, t2, 10b",
+                        // start of test
+                    "20:",
+                        // count outer loops
+                        "addi t3, t3, 1",
+                        // inner loop 10,000 times
+                        "li t4, 10000",
+                    "30:",
+                        "addi t4, t4, -1",
+                        "bne  x0, t4, 30b",
+                        // after inner loop, check current time; do another outer loop if time is same
+                        "lw t1, 0x0(t0)",
+                        "beq t1, t2, 20b",
+                        out("t0") _,
+                        out("t1") _,
+                        out("t2") _,
+                        out("t3") count,
+                        out("t4") _,
+                    );
+                }
+                crate::println!("{}.{} bogomips", (count * 2 * 10_000) / 1_000_000, (count * 2) % 10_000);
+                bao1x_hal::hardening::disable_skipping();
+                ao_sysctrl.wo(utra::ao_sysctrl::CR_CLK1HZFD, 15);
             }
             "boardtype" => {
                 let one_way = OneWayCounter::new();
@@ -581,7 +640,7 @@ impl Repl {
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!(
-                    "Commands include: reset, echo, altboot, boot, bootwait, idmode, localecho, uf2, boardtype, audit, lockdown, paranoid, self_destruct, ifr"
+                    "Commands include: reset, echo, altboot, boot, bootwait, idmode, localecho, uf2, boardtype, audit, lockdown, paranoid, self_destruct, ifr, skipping"
                 );
                 #[cfg(feature = "test-boot0-keys")]
                 crate::print!(", publock");
