@@ -1,7 +1,7 @@
 use bao1x_api::{
     DEVELOPER_MODE, PARANOID_MODE, PARANOID_MODE_DUPE, bollard, pubkeys::BOOT1_TO_LOADER_OR_BAREMETAL,
 };
-use bao1x_hal::hardening::Csprng;
+use bao1x_hal::hardening::{Csprng, disable_clock_skipping, reseed_skipping, setup_clock_skipping};
 
 #[inline(always)]
 fn seal_boot1_keys() {
@@ -19,6 +19,7 @@ fn seal_boot1_keys() {
 }
 
 pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
+    let use_skipping = setup_clock_skipping(csprng.get_u32());
     let one_way = bao1x_hal::acram::OneWayCounter::new();
     bollard!(bao1x_hal::sigcheck::die_no_std, 4);
 
@@ -96,6 +97,9 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
             // double up the security check if in paranoid mode
             csprng.random_delay();
             if paranoid1 != 0 || paranoid2 != 0 {
+                if use_skipping {
+                    reseed_skipping(csprng.get_u32());
+                }
                 bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                 bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, Some(csprng))
                     .unwrap_or_else(|_| bao1x_hal::hardening::die());
@@ -108,6 +112,9 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
             // like we do in boot0.
             seal_boot1_keys();
             bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+            if use_skipping {
+                disable_clock_skipping();
+            }
             bao1x_hal::sigcheck::jump_to((target ^ u32::from_le_bytes(tag)) as usize);
         }
         Err(e) => crate::println!("Image did not validate: {:?}", e),
@@ -115,5 +122,8 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
     if or_die {
         crate::println!("No valid loader or baremetal image found. Halting!");
         bao1x_hal::sigcheck::die_no_std();
+    }
+    if use_skipping {
+        disable_clock_skipping();
     }
 }

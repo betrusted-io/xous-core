@@ -237,6 +237,8 @@ pub const BAO2_PUBKEY: SlotIndex = SlotIndex::Data(5, PartitionAccess::All, RwPe
 pub const BETA_PUBKEY: SlotIndex = SlotIndex::Data(6, PartitionAccess::All, RwPerms::ReadOnly);
 pub const DEV_PUBKEY: SlotIndex = SlotIndex::Data(7, PartitionAccess::All, RwPerms::ReadOnly);
 
+// [8..=260 used as nuisance and master keys]
+
 /// Collateral is a data range that is *always* erased every time the system transitions from boot0
 /// to a Baochip-signed boot1. The only condition under which it is not erased is if *all* the boot1 keys
 /// in slots 0, 1, *and* 2 do *not* match the Baochip set.
@@ -268,6 +270,14 @@ pub const BOOT1_PK_RECEIPT_SLOT2: SlotIndex = SlotIndex::Data(267, PartitionAcce
 pub const BOOT1_PK_RECEIPT_SLOT3: SlotIndex = SlotIndex::Data(268, PartitionAccess::Open, RwPerms::ReadWrite);
 pub const BOOT1_RECEIPT_SLOTS: [SlotIndex; 4] =
     [BOOT1_PK_RECEIPT_SLOT0, BOOT1_PK_RECEIPT_SLOT1, BOOT1_PK_RECEIPT_SLOT2, BOOT1_PK_RECEIPT_SLOT3];
+
+// [269..=271] reserved for future use
+
+// 32 bytes reserved to configure/set up clock scrambling
+pub const CLOCK_SCRAMBLE_PARAMS: SlotIndex = SlotIndex::Data(272, PartitionAccess::Open, RwPerms::ReadWrite);
+
+// [273..=383] available for future data slot usage - in particular opentitan provisioning block (2k of data)
+// can fit in this with some margin.
 
 // Notes on defining the boot0 IFR region.
 // RISC-V boot0 region start is defined by IFR slot 6, bits [55:48]

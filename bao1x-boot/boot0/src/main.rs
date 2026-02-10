@@ -20,7 +20,9 @@ use bao1x_api::{
 };
 use bao1x_api::{PARANOID_MODE, PARANOID_MODE_DUPE};
 use bao1x_hal::acram::OneWayCounter;
-use bao1x_hal::hardening::{check_pll, die, mesh_setup};
+use bao1x_hal::hardening::{
+    check_pll, die, disable_clock_skipping, mesh_setup, reseed_skipping, setup_clock_skipping,
+};
 use bao1x_hal::sigcheck::{hardened_erase_policy, jump_to};
 #[cfg(feature = "unsafe-dev")]
 use critical_section::Mutex;
@@ -276,6 +278,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         }
     }
 
+    let use_skipping = setup_clock_skipping(csprng.get_u32());
     let (paranoid1, paranoid2) = owc.hardened_get2(PARANOID_MODE, PARANOID_MODE_DUPE).unwrap();
 
     // == self-validate the image with the keys we put in, just to make sure our code wasn't tampered with ==
@@ -332,6 +335,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     for configuration in boot_order {
         bollard!(die, 4);
         csprng.random_delay();
+        if use_skipping {
+            reseed_skipping(csprng.get_u32());
+        }
         match bao1x_hal::sigcheck::validate_image(configuration, None, Some(&mut csprng)) {
             Ok((key, key_inv, tag, target)) => {
                 if key != !key_inv {
@@ -352,6 +358,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                 }
                 csprng.random_delay();
                 bollard!(die, 4);
+                if use_skipping {
+                    disable_clock_skipping();
+                }
                 jump_to((target ^ u32::from_le_bytes(tag)) as usize);
             }
             Err(e) => {
