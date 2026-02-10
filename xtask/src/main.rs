@@ -58,7 +58,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = Builder::new();
     // encodes a timestamp into the build, unless '--no-timestamp' is passed
     let do_version = env::args().filter(|x| x == "--no-timestamp").count() == 0;
-    generate_version(do_version);
+    let manual_version = get_flag("--gitrev")?;
+    if manual_version.is_empty() {
+        generate_version(do_version, None);
+    } else {
+        generate_version(do_version, Some(manual_version[0].to_owned()));
+    }
     if do_version {
         builder.add_feature("timestamp");
     };
@@ -927,6 +932,7 @@ fn print_help() {
     [--debug-loader]
     [--offline]
     [--change-target]
+    [--gitrev revision]
 
 [cratespecs] is a list of 0 or more items of the following syntax:
    [name]                crate 'name' to be built from local source
@@ -953,6 +959,8 @@ be merged in with explicit app/service treatment with the following flags:
 [--swap offset:size]     Specify a region for swap memory. The behavior of this depends on the target.
 [--change-target]        Used to clean the cached target/*/*/build/SVD_PATH when changing build targets.
                          This will also force a full rebuild every time the flag is specified.
+[--gitrev revision]      Force a git revision and do not execute `git describe --long` as part of the build process. For build systems that lack git state.
+                         Note: there is no sanity checking on the passed revision. If it's specified incorrectly, subtle, weird things could happen.
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.
