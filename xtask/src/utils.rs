@@ -270,16 +270,30 @@ pub(crate) fn ensure_compiler(
                 },
             };
 
-            let first_asset = match assets.first() {
-                None => continue,
-                Some(s) => s,
-            };
+            // Find the asset that matches the target architecture
+            let matching_asset = assets.iter().find(|asset| {
+                asset
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .map(|name| {
+                        // Extract the toolchain prefix (everything before the version number)
+                        if let Some(toolchain_prefix) = name.split('_').next() {
+                            target.starts_with(toolchain_prefix)
+                        } else {
+                            false
+                        }
+                    })
+                    .unwrap_or(false)
+            });
 
-            let download_url = match first_asset.get("browser_download_url") {
+            let download_url = match matching_asset {
                 None => continue,
-                Some(s) => match s.as_str() {
+                Some(asset) => match asset.get("browser_download_url") {
                     None => continue,
-                    Some(s) => s,
+                    Some(s) => match s.as_str() {
+                        None => continue,
+                        Some(s) => s,
+                    },
                 },
             };
             // println!("Candidate Release: {}", download_url);

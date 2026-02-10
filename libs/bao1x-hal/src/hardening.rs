@@ -133,6 +133,8 @@ impl Csprng {
             bao1x_api::bollard!(die, 4);
         }
     }
+
+    pub fn get_u32(&mut self) -> u32 { self.csprng.next_u32() }
 }
 
 #[inline(always)]
@@ -143,6 +145,81 @@ pub fn paranoid_mode() {
     sensor.wo(utra::sensorc::SFR_VDMASK0, 0);
     bao1x_api::bollard!(die, 4);
     sensor.wo(utra::sensorc::SFR_VDMASK1, 0); // putting 0 here makes the chip reset on glitch detect
+}
+
+// getters to unpack the data slot
+pub fn skipping_enabled(cfg: &[u8]) -> bool { cfg[0] != 0 }
+pub fn skipping_config(cfg: &[u8]) -> u32 { u32::from_le_bytes(cfg[4..8].try_into().unwrap_or([0u8; 4])) }
+
+pub fn enable_skipping() {
+    let slot_mgr = crate::acram::SlotManager::new();
+    let mut rram = crate::rram::Reram::new();
+    // hard-coded config:
+    // [0] => enable if != 0
+    // [4] => bits [7:0] of cgu_sec
+    // [5] => bits [15:8] of cgu_sec
+    // enable for main clock:
+    //  assign clkcipherlevel = cgusec[3:0];
+    //  assign clkcipheren = cgusec[4];
+    // enable for PKE engine:
+    //  assign clkpkecipherlevel = cgusec[11:8];
+    //  assign clkpkecipheren = cgusec[12];
+    //
+    // Pseudocode:
+    //    let prng: u8 = lfsr.get_u8();
+    //    if prng >= ((cipher_level as u8) << 4) {
+    //        clock_run
+    //     } else {
+    //        clock_skip
+    //     }
+    //
+    // A value of 2 for cipherlevel means, on average, 12.5% of clocks are skipped. This means the CPU
+    // runs effectively this much slower.
+    slot_mgr
+        .write(
+            &mut rram,
+            &bao1x_api::CLOCK_SCRAMBLE_PARAMS,
+            // tested
+            //  - skipping on PKE is OK
+            //  - skipping on CPU has some instability
+            &[
+                1, 0, 0, 0, 0b0_0010, 0b1_0010, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0,
+            ],
+        )
+        .ok();
+}
+
+pub fn disable_skipping() {
+    let slot_mgr = crate::acram::SlotManager::new();
+    let mut rram = crate::rram::Reram::new();
+    slot_mgr.write(&mut rram, &bao1x_api::CLOCK_SCRAMBLE_PARAMS, &[0u8; 32]).ok();
+}
+
+pub fn setup_clock_skipping(seed: u32) -> bool {
+    let slot_mgr = crate::acram::SlotManager::new();
+    let scramble_cfg = slot_mgr.read(&bao1x_api::CLOCK_SCRAMBLE_PARAMS).unwrap_or(&[0u8; 32]);
+    let use_scrambling = skipping_enabled(scramble_cfg);
+    if use_scrambling {
+        let cgu_sec = skipping_config(scramble_cfg);
+        let mut cgu = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+        cgu.wo(utra::sysctrl::SFR_SEED, seed);
+        cgu.wo(utra::sysctrl::SFR_SEEDAR, 0x5a);
+        cgu.wo(utra::sysctrl::SFR_CGUSEC, cgu_sec);
+    }
+    use_scrambling
+}
+
+pub fn disable_clock_skipping() {
+    let mut cgu = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+    cgu.wo(utra::sysctrl::SFR_CGUSEC, 0);
+    cgu.wo(utra::sysctrl::SFR_CGUSEC, 0);
+}
+
+pub fn reseed_skipping(seed: u32) {
+    let mut cgu = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+    cgu.wo(utra::sysctrl::SFR_SEED, seed);
+    cgu.wo(utra::sysctrl::SFR_SEEDAR, 0x5a);
 }
 
 /// This call clears any current alarms and resets sensors, but does not
@@ -182,6 +259,12 @@ pub fn reset_sensors() {
     sensor.wo(utra::sensorc::SFR_LDCFG, 0xc);
     sensor.wo(utra::sensorc::SFR_LDMASK, 0x0); // turn on both sensors
     bao1x_api::bollard!(die, 4);
+
+    // enable SRAM parity alarms
+    let mut sramtrm = CSR::new(utra::coresub_sramtrm::HW_CORESUB_SRAMTRM_BASE as *mut u32);
+    // enables for all SRAM types:
+    // assign { aorameven, iframeven, tcmeven, srameven } = ramsec;
+    sramtrm.wo(utra::coresub_sramtrm::SFR_RAMSEC, 0xF);
 }
 
 /// Mesh is a bit challenging to check on a fast-boot system. This is because it
