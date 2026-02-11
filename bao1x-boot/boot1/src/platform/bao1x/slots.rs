@@ -80,8 +80,9 @@ pub fn check_slots() {
 
     #[cfg(feature = "print-ifr")]
     print_ifr();
-
+    #[cfg(feature = "print-ifr")]
     print_slots(&slot_mgr, &bao1x_hal::board::DATA_SLOTS);
+
     check_and_fix_acls(&mut rram, &mut slot_mgr, &bao1x_hal::board::DATA_SLOTS);
 
     // only check & fix key ACLs if we haven't been into developer mode. This is necessary to avoid
