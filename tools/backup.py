@@ -10,7 +10,7 @@ import hashlib
 import csv
 import urllib.request
 from datetime import datetime
-from Crypto.Hash import SHA512
+from Cryptodome.Hash import SHA512
 
 from progressbar.bar import ProgressBar
 
