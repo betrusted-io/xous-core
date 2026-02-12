@@ -29,6 +29,28 @@ fn hash_region(region: &[u8], description: &str) {
     crate::println!("{}: {}", description, hex_str);
 }
 
+/// Stepping detection: attempt to modify the RRCR configuration. If bit 12 (code area protection)
+/// can be flipped, then we are A0 stepping.
+fn detect_stepping() -> &'static str {
+    use bao1x_hal::hardening::die;
+    let mut rram = utralib::CSR::new(utralib::utra::rrc::HW_RRC_BASE as *mut u32);
+    // this sets bit 12
+    rram.wfo(utralib::utra::rrc::SFR_RRCCR_SFR_RRCCR, bao1x_hal::rram::SECURITY_MODE);
+    // attempt to clear bit 12
+    rram.wfo(utralib::utra::rrc::SFR_RRCCR_SFR_RRCCR, bao1x_hal::rram::SECURITY_MODE & !(1 << 12));
+    let check_val = rram.rf(utralib::utra::rrc::SFR_RRCCR_SFR_RRCCR);
+    let ret = if check_val != bao1x_hal::rram::SECURITY_MODE { "A0" } else { "A1" };
+    // reset security mode
+    bollard!(die, 4);
+    rram.wfo(utralib::utra::rrc::SFR_RRCCR_SFR_RRCCR, bao1x_hal::rram::SECURITY_MODE);
+    bollard!(die, 4);
+    rram.wfo(utralib::utra::rrc::SFR_RRCCR_SFR_RRCCR, bao1x_hal::rram::SECURITY_MODE);
+    bollard!(die, 4);
+    rram.wfo(utralib::utra::rrc::SFR_RRCCR_SFR_RRCCR, bao1x_hal::rram::SECURITY_MODE);
+    bollard!(die, 4);
+    ret
+}
+
 pub fn audit() {
     let owc = OneWayCounter::new();
     let boardtype = owc.get_decoded::<BoardTypeCoding>().unwrap();
@@ -36,6 +58,7 @@ pub fn audit() {
     crate::println!("Boot partition is: {:?}", owc.get_decoded::<AltBootCoding>());
     crate::println!("Semver is: {}", crate::version::SEMVER);
     crate::println!("Description is: {}", crate::RELEASE_DESCRIPTION);
+    crate::println!("Stepping is: {}", detect_stepping());
     let slot_mgr = bao1x_hal::acram::SlotManager::new();
     let sn = slot_mgr.read(&bao1x_hal::board::SERIAL_NUMBER).unwrap();
     crate::println!(
