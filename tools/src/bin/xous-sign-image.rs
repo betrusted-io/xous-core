@@ -115,6 +115,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .help("When specified, fills the public key block with random, fake data. Used for testing third-party boot flow policies")
             .required(false)
         )
+        .arg(
+            Arg::with_name("git-describe")
+            .long("git-describe")
+            .takes_value(true)
+            .help("Explicit git describe version to embed (e.g., 'v0.10.0-19-g0d934e1'). If not specified, uses git describe.")
+            .required(false)
+        )
         .get_matches();
 
     let minver =
@@ -128,6 +135,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let arb_override = if let Some(arb_str) = matches.value_of("antirollback-override") {
         parse_u32(arb_str).ok()
+    } else {
+        None
+    };
+
+    let semver: Option<[u8; 16]> = if let Some(git_describe_str) = matches.value_of("git-describe") {
+        Some(
+            SemVer::from_str(git_describe_str)
+                .map_err(|_| Error::new(ErrorKind::InvalidInput, "git-describe format incorrect"))?
+                .into(),
+        )
     } else {
         None
     };
@@ -159,6 +176,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &loader_pkey,
             matches.is_present("defile"),
             &minver,
+            semver,
             version,
             matches.is_present("with-jump"),
             sig_length,
@@ -202,6 +220,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &kernel_pkey,
             matches.is_present("defile"),
             &minver,
+            semver,
             version,
             matches.is_present("with-jump"),
             sig_length,
