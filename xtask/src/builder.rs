@@ -182,6 +182,8 @@ pub(crate) struct Builder {
     sigblock_size: usize,
     board: String,
     detached_app_features: Vec<String>,
+    git_describe: Option<String>,
+    git_rev: Option<String>,
 }
 
 impl Builder {
@@ -215,7 +217,19 @@ impl Builder {
             sigblock_size: 4096,
             board: String::new(),
             detached_app_features: Vec::new(),
+            git_describe: None,
+            git_rev: None,
         }
+    }
+
+    pub fn set_git_describe(&mut self, git_describe: String) -> &mut Builder {
+        self.git_describe = Some(git_describe);
+        self
+    }
+
+    pub fn set_git_rev(&mut self, git_rev: String) -> &mut Builder {
+        self.git_rev = Some(git_rev);
+        self
     }
 
     /// Sets up the signature block size
@@ -1003,6 +1017,10 @@ impl Builder {
                         }
                         _ => return Err(String::from("Can't determine bootloader region").into()),
                     };
+                    let git_describe_args: Vec<&str> = match &self.git_describe {
+                        Some(gd) => vec!["--git-describe", gd],
+                        None => vec![],
+                    };
                     Command::new(cargo())
                         .current_dir(project_root())
                         .args([
@@ -1027,6 +1045,7 @@ impl Builder {
                             "--function-code",
                             function_code,
                         ])
+                        .args(&git_describe_args)
                         .status()?;
                     return Ok(());
                 }
@@ -1115,6 +1134,10 @@ impl Builder {
                 return Err("cargo build failed".into());
             }
 
+            let git_describe_args: Vec<&str> = match &self.git_describe {
+                Some(gd) => vec!["--git-describe", gd],
+                None => vec![],
+            };
             let status = if self.utra_target.contains("bao1x") {
                 Command::new(cargo())
                     .current_dir(project_root())
@@ -1140,6 +1163,7 @@ impl Builder {
                         "--function-code",
                         "loader",
                     ])
+                    .args(&git_describe_args)
                     .status()?
             } else {
                 Command::new(cargo())
@@ -1160,6 +1184,7 @@ impl Builder {
                         "--min-xous-ver",
                         &self.min_ver,
                     ])
+                    .args(&git_describe_args)
                     .status()?
             };
             if !status.success() {
@@ -1195,6 +1220,7 @@ impl Builder {
                         "kernel",
                         // "--defile",
                     ])
+                    .args(&git_describe_args)
                     .status()?
             } else {
                 Command::new(cargo())
@@ -1216,6 +1242,7 @@ impl Builder {
                         &self.min_ver,
                         // "--defile",
                     ])
+                    .args(&git_describe_args)
                     .status()?
             };
             if !status.success() {
@@ -1320,6 +1347,11 @@ impl Builder {
             }
         }
 
+        if let Some(ref git_rev) = self.git_rev {
+            args.push("--git-rev");
+            args.push(git_rev);
+        }
+
         let status = Command::new(cargo()).current_dir(project_root()).args(&args).status()?;
 
         if !status.success() {
@@ -1363,6 +1395,10 @@ impl Builder {
         let mut app_img_path = output_file.parent().unwrap().to_owned();
         app_img_path.push("apps.img");
 
+        let git_describe_args: Vec<&str> = match &self.git_describe {
+            Some(gd) => vec!["--git-describe", gd],
+            None => vec![],
+        };
         Command::new(cargo())
             .current_dir(project_root())
             .args([
@@ -1388,6 +1424,7 @@ impl Builder {
                 "app",
                 // "--defile",
             ])
+            .args(&git_describe_args)
             .status()?;
 
         Ok(project_root().join(output_file))

@@ -12,28 +12,32 @@ use crate::sign_image::{Version, sign_image};
 
 const SWAP_VERSION: u32 = 0x01_01_0000;
 
-pub fn git_rev() -> u64 {
-    // Execute the git command
-    let output =
-        Command::new("git").args(&["rev-parse", "HEAD"]).output().expect("Failed to execute command");
-
-    // Check if the command was successful
-    if output.status.success() {
-        // Convert the output bytes to a string
-        let hash = std::str::from_utf8(&output.stdout).expect("Failed to convert output to string");
-
-        // Print the commit hash
-        let partial_hash =
-            u64::from_str_radix(&hash.trim_end_matches('\n')[hash.trim_end_matches('\n').len() - 16..], 16)
-                .expect("couldn't convert git hash");
-        println!("Current commit hash: {}  Extracted nonce: {:x}", hash, partial_hash);
-        partial_hash
+pub fn git_rev(override_rev: Option<&str>) -> u64 {
+    let hash = if let Some(rev) = override_rev {
+        rev.to_string()
     } else {
-        // Print an error message if the command failed
-        let error_message =
-            std::str::from_utf8(&output.stderr).expect("Failed to convert error message to string");
-        panic!("Failed to get commit hash: {}", error_message);
-    }
+        // Execute the git command
+        let output =
+            Command::new("git").args(&["rev-parse", "HEAD"]).output().expect("Failed to execute command");
+
+        // Check if the command was successful
+        if output.status.success() {
+            // Convert the output bytes to a string
+            std::str::from_utf8(&output.stdout).expect("Failed to convert output to string").to_string()
+        } else {
+            // Print an error message if the command failed
+            let error_message =
+                std::str::from_utf8(&output.stderr).expect("Failed to convert error message to string");
+            panic!("Failed to get commit hash: {}", error_message);
+        }
+    };
+
+    // Print the commit hash
+    let partial_hash =
+        u64::from_str_radix(&hash.trim_end_matches('\n')[hash.trim_end_matches('\n').len() - 16..], 16)
+            .expect("couldn't convert git hash");
+    println!("Current commit hash: {}  Extracted nonce: {:x}", hash, partial_hash);
+    partial_hash
 }
 
 pub struct SwapWriter {
@@ -47,10 +51,10 @@ pub struct SwapHeader {
     mac_offset: usize,
 }
 impl SwapHeader {
-    pub fn new(swap_len: usize) -> Self {
+    pub fn new(swap_len: usize, git_rev_override: Option<&str>) -> Self {
         SwapHeader {
             aad: "swap".as_bytes().to_vec(),
-            partial_nonce: git_rev(),
+            partial_nonce: git_rev(git_rev_override),
             mac_offset: ((swap_len + 0xFFF) / 0x1000) * 0x1000,
         }
     }
@@ -88,11 +92,12 @@ impl SwapWriter {
         mut f: T,
         private_key: &pem::Pem,
         anti_rollback_manual: Option<usize>,
+        git_rev_override: Option<&str>,
     ) -> Result<usize>
     where
         T: Write + Seek,
     {
-        let header = SwapHeader::new(self.buffer.get_ref().len());
+        let header = SwapHeader::new(self.buffer.get_ref().len(), git_rev_override);
         let mut macs = Vec::<u8>::new();
 
         let unsigned_header = header.serialize()?;

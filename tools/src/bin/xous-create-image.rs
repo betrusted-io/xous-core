@@ -215,6 +215,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .value_name("swap signing key")
                 .default_value(DEVKEY_PATH),
         )
+        .arg(
+            Arg::with_name("git-rev")
+                .long("git-rev")
+                .takes_value(true)
+                .required(false)
+                .help("Explicit git commit hash for swap nonce (e.g., '0d934e1...'). If not specified, uses git rev-parse HEAD.")
+                .value_name("commit hash"),
+        )
         .get_matches();
 
     let mut ram_config = RamConfig {
@@ -497,6 +505,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err("invalid kernel private key type")?;
     }
 
+    let git_rev = matches.value_of("git-rev");
+
     if let Some(mut sargs) = swap_args {
         let mut swap_buffer = SwapWriter::new();
         // Transfer our unencrypted data inside sargs to swap_buffer
@@ -508,7 +518,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         {
             let sf = File::create(swap_filename)
                 .unwrap_or_else(|_| panic!("Couldn't create output file {}", swap_filename));
-            swap_buffer.encrypt_to(sf, &swap_pkey, None).expect("Couldn't flush swap buffer to disk");
+            swap_buffer
+                .encrypt_to(sf, &swap_pkey, None, git_rev)
+                .expect("Couldn't flush swap buffer to disk");
         } // drop sf, so it closes
 
         println!("Swap arguments: {}", sargs);
@@ -525,7 +537,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut sf =
                     File::create(sf_dbg).unwrap_or_else(|_| panic!("Couldn't create debug file {}", sf_dbg));
                 // serialize the unencrypted header into the debug image
-                let header = xous_tools::swap_writer::SwapHeader::new(buf_len);
+                let header = xous_tools::swap_writer::SwapHeader::new(buf_len, git_rev);
                 sf.write(&header.serialize()?)?;
                 // directly write our unencrypted data from sargs into file sf. It's an exact copy of
                 // what ended up in swap_buffer.

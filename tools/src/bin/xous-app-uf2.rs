@@ -57,6 +57,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .takes_value(false)
                 .help("When specified, creates a swap image"),
         )
+        .arg(
+            Arg::with_name("git-rev")
+                .long("git-rev")
+                .takes_value(true)
+                .required(false)
+                .help("Explicit git commit hash for swap nonce (e.g., '0d934e1...'). If not specified, uses git rev-parse HEAD."),
+        )
         .get_matches();
 
     let mut process_names = ProcessNames::new();
@@ -117,13 +124,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let private_key = pem::parse(DEV_KEY_PEM)?;
 
+    let git_rev = matches.value_of("git-rev");
+
     if matches.is_present("swap") {
         let mut swap_buffer = SwapWriter::new();
         args.write(&mut swap_buffer)?;
 
         // Create the swap target image and encrypt swap_buffer to it
         let mut swap = Cursor::new(Vec::new());
-        swap_buffer.encrypt_to(&mut swap, &private_key, Some(anti_rollback as usize))?;
+        swap_buffer.encrypt_to(&mut swap, &private_key, Some(anti_rollback as usize), git_rev)?;
 
         // generate a uf2 file
         let swap_uf2 = "swap.uf2";
