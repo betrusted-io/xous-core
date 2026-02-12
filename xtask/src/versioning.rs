@@ -8,20 +8,25 @@ use std::process::Command;
 
 use chrono::{Local, TimeZone, Utc};
 
+/// Fixed abbreviation length for `git describe` output.
+/// Ensures consistent version strings regardless of clone depth.
+const GIT_ABBREV_LEN: u8 = 9;
+
 pub(crate) fn generate_version(add_timestamp: bool, forced_version: Option<String>) {
     let gitver = {
         if let Some(ver) = forced_version {
             ver.as_bytes().to_vec()
         } else {
+            let cmd = format!("git describe --long --abbrev={}", GIT_ABBREV_LEN);
             let output = if cfg!(target_os = "windows") {
                 Command::new("cmd")
-                    .args(["/C", "git describe --long"])
+                    .args(["/C", &cmd])
                     .output()
                     .expect("failed to execute process")
             } else {
                 Command::new("sh")
                     .arg("-c")
-                    .arg("git describe --long")
+                    .arg(&cmd)
                     .output()
                     .expect("failed to execute process")
             };
