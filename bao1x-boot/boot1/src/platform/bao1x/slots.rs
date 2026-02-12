@@ -1,5 +1,6 @@
 use core::convert::TryInto;
 
+#[allow(unused_imports)]
 use bao1x_api::{
     CP_ID, IFR_CP_ID_BASE, IFR_HASH, SERIAL_NUMBER, SLOT_ELEMENT_LEN_BYTES, SlotIndex, SlotType, UUID,
 };
@@ -160,6 +161,7 @@ fn check_and_fix_acls(rram: &mut Reram, slot_mgr: &mut SlotManager, slot_list: &
     }
 }
 
+#[cfg(feature = "print-ifr")]
 fn print_slots(slot_mgr: &SlotManager, slot_list: &[SlotIndex]) {
     for slot in slot_list.iter() {
         let access = slot.get_access_spec();
