@@ -64,6 +64,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .required(false)
                 .help("Explicit git commit hash for swap nonce (e.g., '0d934e1...'). If not specified, uses git rev-parse HEAD."),
         )
+        .arg(
+            Arg::with_name("git-describe")
+                .long("git-describe")
+                .takes_value(true)
+                .required(false)
+                .help("Explicit git describe version for swap signing (e.g., 'v0.10.0-19-g0d934e1'). If not specified, uses git describe."),
+        )
         .get_matches();
 
     let mut process_names = ProcessNames::new();
@@ -125,6 +132,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let private_key = pem::parse(DEV_KEY_PEM)?;
 
     let git_rev = matches.value_of("git-rev");
+    let semver: Option<[u8; 16]> = if let Some(git_describe_str) = matches.value_of("git-describe") {
+        Some(
+            git_describe_str
+                .parse::<SemVer>()
+                .expect("git-describe format incorrect")
+                .into(),
+        )
+    } else {
+        None
+    };
 
     if matches.is_present("swap") {
         let mut swap_buffer = SwapWriter::new();
@@ -132,7 +149,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Create the swap target image and encrypt swap_buffer to it
         let mut swap = Cursor::new(Vec::new());
-        swap_buffer.encrypt_to(&mut swap, &private_key, Some(anti_rollback as usize), git_rev)?;
+        swap_buffer.encrypt_to(&mut swap, &private_key, Some(anti_rollback as usize), git_rev, semver)?;
 
         // generate a uf2 file
         let swap_uf2 = "swap.uf2";
