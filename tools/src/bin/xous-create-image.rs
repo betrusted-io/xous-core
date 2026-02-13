@@ -8,6 +8,7 @@ use std::fs::File;
 use std::io::Read;
 
 use clap::{App, Arg};
+use xous_semver::SemVer;
 use xous_tools::elf::{read_minielf, read_program};
 use xous_tools::sign_image::convert_to_uf2;
 use xous_tools::swap_writer::SwapWriter;
@@ -222,6 +223,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .required(false)
                 .help("Explicit git commit hash for swap nonce (e.g., '0d934e1...'). If not specified, uses git rev-parse HEAD.")
                 .value_name("commit hash"),
+        )
+        .arg(
+            Arg::with_name("git-describe")
+                .long("git-describe")
+                .takes_value(true)
+                .required(false)
+                .help("Explicit git describe version for swap signing (e.g., 'v0.10.0-19-g0d934e1'). If not specified, uses git describe.")
+                .value_name("version"),
         )
         .get_matches();
 
@@ -506,6 +515,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let git_rev = matches.value_of("git-rev");
+    let semver: Option<[u8; 16]> = if let Some(git_describe_str) = matches.value_of("git-describe") {
+        Some(
+            git_describe_str
+                .parse::<SemVer>()
+                .expect("git-describe format incorrect")
+                .into(),
+        )
+    } else {
+        None
+    };
 
     if let Some(mut sargs) = swap_args {
         let mut swap_buffer = SwapWriter::new();
@@ -519,7 +538,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let sf = File::create(swap_filename)
                 .unwrap_or_else(|_| panic!("Couldn't create output file {}", swap_filename));
             swap_buffer
-                .encrypt_to(sf, &swap_pkey, None, git_rev)
+                .encrypt_to(sf, &swap_pkey, None, git_rev, semver)
                 .expect("Couldn't flush swap buffer to disk");
         } // drop sf, so it closes
 

@@ -1352,6 +1352,11 @@ impl Builder {
             args.push(git_rev);
         }
 
+        if let Some(ref git_describe) = self.git_describe {
+            args.push("--git-describe");
+            args.push(git_describe);
+        }
+
         let status = Command::new(cargo()).current_dir(project_root()).args(&args).status()?;
 
         if !status.success() {

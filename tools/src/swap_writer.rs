@@ -93,6 +93,7 @@ impl SwapWriter {
         private_key: &pem::Pem,
         anti_rollback_manual: Option<usize>,
         git_rev_override: Option<&str>,
+        semver: Option<[u8; 16]>,
     ) -> Result<usize>
     where
         T: Write + Seek,
@@ -141,7 +142,7 @@ impl SwapWriter {
             private_key,
             false,
             &None,
-            None,
+            semver,
             true,
             bao1x_api::signatures::SIGBLOCK_LEN,
             Version::Bao1xV1,
