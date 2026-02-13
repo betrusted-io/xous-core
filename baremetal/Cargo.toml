@@ -27,6 +27,7 @@ base64 = { version = "0.22.1", optional = true, default-features = false, featur
 ] }
 sha2-bao1x = { path = "../bao1x-boot/sha2-bao1x", optional = true, default-features = false }
 hex-literal = "1.0.0"
+hex = { version = "0.4.3", default-features = false }
 
 [features]
 artybio = [
