@@ -75,15 +75,15 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     csprng.random_delay();
     rram.wfo(utra::rrc::SFR_RRCCR_SFR_RRCCR, bao1x_hal::rram::SECURITY_MODE);
 
-    bollard!(4);
+    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
     // Mesh check takes 100ms for the signal to propagate. Setup the mesh check here, then check the
     // result in boot1. In boot1, the opposite state (`true`) is checked.
     mesh_setup(false, None);
-    bollard!(4);
+    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
     csprng.random_delay();
-    bollard!(4);
+    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
     rram.wfo(utra::rrc::SFR_RRCCR_SFR_RRCCR, bao1x_hal::rram::SECURITY_MODE);
-    bollard!(4);
+    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
 
     crate::println!("\n~~boot0 up! ({})~~\n", crate::version::SEMVER);
     csprng.random_delay(); // always random-delay after printing
@@ -361,7 +361,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                 if use_skipping {
                     disable_clock_skipping();
                 }
-                jump_to((target ^ u32::from_le_bytes(tag)) as usize);
+                jump_to(target as usize, u32::from_le_bytes(tag) as usize);
             }
             Err(e) => {
                 crate::println!("Sigcheck err: {:?}", e);

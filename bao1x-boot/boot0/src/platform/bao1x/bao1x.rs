@@ -150,9 +150,8 @@ pub fn early_init() -> Csprng {
 
     irq_setup();
     // set up the reactive sensors
-    bao1x_api::bollard!(4);
+    bollard!(die, 4);
     bao1x_hal::hardening::reset_sensors();
-    bao1x_api::bollard!(4);
     bollard!(die, 4);
     csprng.random_delay();
     // ensure paranoid mode is respected
@@ -186,9 +185,9 @@ pub fn early_init() -> Csprng {
     // in combination with the previous check inside init_clock_asic_350mhz means you need
     // three successful glitches to bypass these checks: one to skip PLL setting, and one each
     // for the checks. There is also a random_delay() inserted between the previous check and now.
-    bao1x_api::bollard!(4);
+    bollard!(die, 4);
     bao1x_hal::hardening::check_pll();
-    bao1x_api::bollard!(4);
+    bollard!(die, 4);
 
     // this is a security-critical initialization. Failure to do this correctly breaks
     // all the hardware hashes. It's done once, in boot0. Note that the constants *are*
@@ -215,8 +214,8 @@ pub fn early_init() -> Csprng {
 
     // TxRx setup
     #[cfg(feature = "unsafe-dev")]
-    let mut udma_uart = {
-        let mut udma_uart = setup_rx(perclk);
+    let _udma_uart = {
+        let udma_uart = setup_rx(perclk);
         enable_irq(utra::irqarray5::IRQARRAY5_IRQ);
         udma_uart
     };
@@ -285,11 +284,11 @@ pub fn init_hash() {
         RIPMD_X.iter().chain(
         RAMSEG_SHA3.iter()
     ))))))))))));
-    bao1x_api::bollard!(4);
+    bao1x_api::bollard!(die, 4);
     for (dst, &src) in sce_mem.iter_mut().zip(constants) {
         *dst = src;
     }
-    bao1x_api::bollard!(4);
+    bao1x_api::bollard!(die, 4);
     let mut combo_hash = CSR::new(utra::combohash::HW_COMBOHASH_BASE as *mut u32);
     combo_hash.wo(utra::combohash::SFR_OPT3, 0); // u32 big-endian constant load
     combo_hash.wfo(utra::combohash::SFR_CRFUNC_CR_FUNC, HashFunction::Init as u32);
@@ -335,7 +334,9 @@ mod panic_handler {
     #[panic_handler]
     fn handle_panic(_arg: &PanicInfo) -> ! {
         crate::println!("{}", _arg);
-        loop {}
+        loop {
+            bao1x_hal::sigcheck::die_no_std();
+        }
     }
 }
 
