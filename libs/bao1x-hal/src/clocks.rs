@@ -157,7 +157,7 @@ where
     cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
 
     for _ in 0..4096 {
-        bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
+        bao1x_api::bollard!(4);
     }
 
     cgu.wo(
@@ -189,7 +189,7 @@ where
     cgu.wo(sysctrl::SFR_IPCARIPFLOW, 0x32);
 
     for _ in 0..4096 {
-        bao1x_api::bollard!(crate::sigcheck::die_no_std, 4);
+        bao1x_api::bollard!(4);
     }
 
     bao1x_api::bollard!(6);
