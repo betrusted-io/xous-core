@@ -8,6 +8,24 @@ mod page_defrag;
 
 use crate::irq::*;
 
+pub(crate) const APP_BUF_LEN: usize = 4096 * 2;
+
+/// This macro checks that any raw pointers passed back from the hardware
+/// are within the allocated ranges for the UDC block to use. A macro is used
+/// because we want the line number information on failure. A function would always
+/// fail at the same spot, stripping out context.
+#[macro_export]
+macro_rules! udc_pointer_check {
+    ($base:expr, $len:expr) => {
+        assert!(
+            ($base >= utralib::HW_IFRAM1_MEM && ($base + $len) <= utralib::HW_IFRAM1_MEM + APP_BUF_LEN)
+                || ($base >= bao1x_hal::board::CRG_UDC_MEMBASE
+                    && ($base + $len)
+                        <= (bao1x_hal::board::CRG_UDC_MEMBASE + bao1x_hal::board::CRG_IFRAM_PAGES * 4096)),
+        );
+    };
+}
+
 const USB_TYPE_MASK: u8 = 0x03 << 5;
 const USB_TYPE_STANDARD: u8 = 0x00 << 5;
 const USB_TYPE_CLASS: u8 = 0x01 << 5;
@@ -600,7 +618,7 @@ struct Csw {
 impl Csw {
     fn derive() -> Csw {
         let mut csw = Csw::default();
-        udc_pointer_check(handlers::CSW_ADDR, size_of::<Csw>());
+        udc_pointer_check!(handlers::CSW_ADDR, size_of::<Csw>());
         csw.as_mut().copy_from_slice(unsafe {
             core::slice::from_raw_parts(handlers::CSW_ADDR as *mut u8, size_of::<Csw>())
         });
@@ -608,13 +626,13 @@ impl Csw {
     }
 
     fn update_hw(&self) {
-        udc_pointer_check(handlers::CSW_ADDR, size_of::<Csw>());
+        udc_pointer_check!(handlers::CSW_ADDR, size_of::<Csw>());
         let csw_buf = unsafe { core::slice::from_raw_parts_mut(CSW_ADDR as *mut u8, size_of::<Csw>()) };
         csw_buf.copy_from_slice(self.as_ref());
     }
 
     fn send(&self, usb: &mut bao1x_hal::usb::driver::CorigineUsb) {
-        udc_pointer_check(handlers::CSW_ADDR, size_of::<Csw>());
+        udc_pointer_check!(handlers::CSW_ADDR, size_of::<Csw>());
         let csw_buf = unsafe { core::slice::from_raw_parts_mut(CSW_ADDR as *mut u8, size_of::<Csw>()) };
         csw_buf.copy_from_slice(self.as_ref());
         usb.bulk_xfer(1, bao1x_hal::usb::driver::USB_SEND, CSW_ADDR, size_of::<Csw>(), 0, 0);
