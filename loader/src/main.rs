@@ -982,6 +982,9 @@ mod panic_handler {
     #[panic_handler]
     fn handle_panic(_arg: &PanicInfo) -> ! {
         crate::println!("{}", _arg);
-        loop {}
+        loop {
+            #[cfg(feature = "bao1x")]
+            bao1x_hal::sigcheck::die_no_std();
+        }
     }
 }

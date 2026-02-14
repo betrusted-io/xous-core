@@ -133,12 +133,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let git_rev = matches.value_of("git-rev");
     let semver: Option<[u8; 16]> = if let Some(git_describe_str) = matches.value_of("git-describe") {
-        Some(
-            git_describe_str
-                .parse::<SemVer>()
-                .expect("git-describe format incorrect")
-                .into(),
-        )
+        Some(git_describe_str.parse::<SemVer>().expect("git-describe format incorrect").into())
     } else {
         None
     };

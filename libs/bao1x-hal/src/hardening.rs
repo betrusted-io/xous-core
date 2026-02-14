@@ -46,7 +46,6 @@ pub fn check_pll() {
 pub fn die() -> ! {
     let owc = OneWayCounter::new();
     // safety: this is safe because the offset is from a checked, pre-defined value
-    crate::println_d!("die!die!die!die!");
     unsafe {
         owc.inc(POSSIBLE_ATTACKS).unwrap();
     }
@@ -95,7 +94,7 @@ impl Csprng {
 
         // do a quick health check on the TRNG before using it. Looks for repeated values over 8 samples.
         // this will rule out e.g. TRNG output tied to 0 or 1, or an external feed just feeding it repetitive
-        // data. About 1 in 500 million chance of triggering falsely if the TRNG is truly random.
+        // data. About 1 in 33 million chance of triggering falsely if the TRNG is truly random.
         let mut values = [0u32; 8];
         for value in values.iter_mut() {
             *value = ro_trng.get_raw();
@@ -236,7 +235,7 @@ pub fn reset_sensors() {
     }
     // wait for reset to propagate
     for _ in 0..100 {
-        bao1x_api::bollard!(4);
+        bao1x_api::bollard!(die, 4);
     }
     // re-arm
     bao1x_api::bollard!(die, 4);

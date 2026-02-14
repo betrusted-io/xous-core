@@ -154,11 +154,11 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // So, what alpha users miss out on is the half of the states set up & checked by boot0 in the beta+
     // firmwares.
     bao1x_hal::hardening::mesh_check_and_react(&mut csprng, &one_way);
-    bollard!(4);
+    bollard!(die, 4);
     // Mesh check takes 100ms for the signal to propagate. Setup the mesh check here, then check the
     // result in loader. This is the opposite polarity of what was checked in boot0.
     mesh_setup(true, None);
-    bollard!(4);
+    bollard!(die, 4);
     // This checks the attack counter and applies a reaction policy. This is done in boot1 so that it
     // has a chance to be updated.
     bao1x_hal::hardening::apply_attack_policy(&mut csprng, &one_way);

@@ -224,7 +224,7 @@ impl HardenedBool {
     const TRUE_VALUE: u32 = 0x5A5A_A5A5;
 
     /// Check if true - returns None if value is corrupted
-    #[inline(never)]
+    #[inline(always)]
     pub fn is_true(self) -> Option<bool> {
         match self.0 {
             Self::TRUE_VALUE => Some(true),
@@ -234,7 +234,7 @@ impl HardenedBool {
     }
 
     /// Constant-time equality check against TRUE
-    #[inline(never)]
+    #[inline(always)]
     pub fn check_true(self) -> bool {
         // Use volatile to prevent optimizer from simplifying
         let val = unsafe { core::ptr::read_volatile(&self.0) };

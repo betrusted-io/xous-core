@@ -115,7 +115,7 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
             if use_skipping {
                 disable_clock_skipping();
             }
-            bao1x_hal::sigcheck::jump_to((target ^ u32::from_le_bytes(tag)) as usize);
+            bao1x_hal::sigcheck::jump_to(target as usize, u32::from_le_bytes(tag) as usize);
         }
         Err(e) => crate::println!("Image did not validate: {:?}", e),
     }

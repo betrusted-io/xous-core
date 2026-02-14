@@ -8,6 +8,24 @@ mod page_defrag;
 
 use crate::irq::*;
 
+pub(crate) const APP_BUF_LEN: usize = 4096 * 2;
+
+/// This macro checks that any raw pointers passed back from the hardware
+/// are within the allocated ranges for the UDC block to use. A macro is used
+/// because we want the line number information on failure. A function would always
+/// fail at the same spot, stripping out context.
+#[macro_export]
+macro_rules! udc_pointer_check {
+    ($base:expr, $len:expr) => {
+        assert!(
+            ($base >= utralib::HW_IFRAM1_MEM && ($base + $len) <= utralib::HW_IFRAM1_MEM + APP_BUF_LEN)
+                || ($base >= bao1x_hal::board::CRG_UDC_MEMBASE
+                    && ($base + $len)
+                        <= (bao1x_hal::board::CRG_UDC_MEMBASE + bao1x_hal::board::CRG_IFRAM_PAGES * 4096)),
+        );
+    };
+}
+
 const USB_TYPE_MASK: u8 = 0x03 << 5;
 const USB_TYPE_STANDARD: u8 = 0x00 << 5;
 const USB_TYPE_CLASS: u8 = 0x01 << 5;
@@ -201,6 +219,7 @@ impl DeviceDescriptor {
 
 impl AsRef<[u8]> for DeviceDescriptor {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(
                 self as *const DeviceDescriptor as *const u8,
@@ -241,6 +260,7 @@ impl QualifierDescriptor {
 }
 impl AsRef<[u8]> for QualifierDescriptor {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(
                 self as *const QualifierDescriptor as *const u8,
@@ -279,6 +299,7 @@ impl ConfigDescriptor {
 }
 impl AsRef<[u8]> for ConfigDescriptor {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(
                 self as *const ConfigDescriptor as *const u8,
@@ -352,6 +373,7 @@ impl InterfaceDescriptor {
 }
 impl AsRef<[u8]> for InterfaceDescriptor {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(
                 self as *const InterfaceDescriptor as *const u8,
@@ -451,6 +473,7 @@ impl EndpointDescriptor {
 
 impl AsRef<[u8]> for EndpointDescriptor {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(
                 self as *const EndpointDescriptor as *const u8,
@@ -471,6 +494,7 @@ struct CtrlRequest {
 }
 impl AsMut<[u8]> for CtrlRequest {
     fn as_mut(&mut self) -> &mut [u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts_mut(
                 self as *const CtrlRequest as *mut u8,
@@ -501,6 +525,7 @@ impl BosDescriptor {
 
 impl AsRef<[u8]> for BosDescriptor {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(
                 self as *const BosDescriptor as *const u8,
@@ -531,6 +556,7 @@ impl ExtCapDescriptor {
 
 impl AsRef<[u8]> for ExtCapDescriptor {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(
                 self as *const ExtCapDescriptor as *const u8,
@@ -562,6 +588,7 @@ struct Cbw {
 }
 impl AsMut<[u8]> for Cbw {
     fn as_mut(&mut self) -> &mut [u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts_mut(self as *mut Cbw as *mut u8, core::mem::size_of::<Cbw>())
                 as &mut [u8]
@@ -570,6 +597,7 @@ impl AsMut<[u8]> for Cbw {
 }
 impl AsRef<[u8]> for Cbw {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(self as *const Cbw as *const u8, core::mem::size_of::<Cbw>())
                 as &[u8]
@@ -590,6 +618,7 @@ struct Csw {
 impl Csw {
     fn derive() -> Csw {
         let mut csw = Csw::default();
+        udc_pointer_check!(handlers::CSW_ADDR, size_of::<Csw>());
         csw.as_mut().copy_from_slice(unsafe {
             core::slice::from_raw_parts(handlers::CSW_ADDR as *mut u8, size_of::<Csw>())
         });
@@ -597,11 +626,13 @@ impl Csw {
     }
 
     fn update_hw(&self) {
+        udc_pointer_check!(handlers::CSW_ADDR, size_of::<Csw>());
         let csw_buf = unsafe { core::slice::from_raw_parts_mut(CSW_ADDR as *mut u8, size_of::<Csw>()) };
         csw_buf.copy_from_slice(self.as_ref());
     }
 
     fn send(&self, usb: &mut bao1x_hal::usb::driver::CorigineUsb) {
+        udc_pointer_check!(handlers::CSW_ADDR, size_of::<Csw>());
         let csw_buf = unsafe { core::slice::from_raw_parts_mut(CSW_ADDR as *mut u8, size_of::<Csw>()) };
         csw_buf.copy_from_slice(self.as_ref());
         usb.bulk_xfer(1, bao1x_hal::usb::driver::USB_SEND, CSW_ADDR, size_of::<Csw>(), 0, 0);
@@ -612,6 +643,7 @@ const BULK_CSW_SIG: u32 = 0x53425355; /* Spells out 'USBS' */
 
 impl AsRef<[u8]> for Csw {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(self as *const Csw as *const u8, core::mem::size_of::<Csw>())
                 as &[u8]
@@ -621,6 +653,7 @@ impl AsRef<[u8]> for Csw {
 
 impl AsMut<[u8]> for Csw {
     fn as_mut(&mut self) -> &mut [u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts_mut(self as *mut Csw as *mut u8, core::mem::size_of::<Csw>())
                 as &mut [u8]
@@ -644,6 +677,7 @@ struct InquiryResponse {
 }
 impl AsRef<[u8]> for InquiryResponse {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(
                 self as *const InquiryResponse as *const u8,
@@ -681,6 +715,7 @@ impl IadDescriptor {
 }
 impl AsRef<[u8]> for IadDescriptor {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(
                 self as *const IadDescriptor as *const u8,
@@ -710,6 +745,7 @@ impl CdcHeaderFuncDesc {
 }
 impl AsRef<[u8]> for CdcHeaderFuncDesc {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(
                 self as *const CdcHeaderFuncDesc as *const u8,
@@ -740,6 +776,7 @@ impl CdcCallMgmtFuncDesc {
 }
 impl AsRef<[u8]> for CdcCallMgmtFuncDesc {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(
                 self as *const CdcCallMgmtFuncDesc as *const u8,
@@ -768,6 +805,7 @@ impl CdcAcmFuncDesc {
 }
 impl AsRef<[u8]> for CdcAcmFuncDesc {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(
                 self as *const CdcAcmFuncDesc as *const u8,
@@ -798,6 +836,7 @@ impl CdcUnionFuncDesc {
 }
 impl AsRef<[u8]> for CdcUnionFuncDesc {
     fn as_ref(&self) -> &[u8] {
+        // all values are representable in this cast, since we're going to slice-u8
         unsafe {
             core::slice::from_raw_parts(
                 self as *const CdcUnionFuncDesc as *const u8,

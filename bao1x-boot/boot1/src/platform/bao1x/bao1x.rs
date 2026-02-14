@@ -421,7 +421,7 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
         )
     };
 
-    crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
+    // crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
 
     // setup heap alloc
     setup_alloc();
@@ -468,8 +468,8 @@ pub fn setup_timer(sysclk_freq: u32) {
 
 pub fn setup_alloc() {
     // Initialize the allocator with heap memory range
-    crate::println!("Setting up heap @ {:x}-{:x}", HEAP_START, HEAP_START + HEAP_LEN);
-    crate::println!("Stack @ {:x}-{:x}", HEAP_START + HEAP_LEN, RAM_BASE + RAM_SIZE);
+    // crate::println!("Setting up heap @ {:x}-{:x}", HEAP_START, HEAP_START + HEAP_LEN);
+    // crate::println!("Stack @ {:x}-{:x}", HEAP_START + HEAP_LEN, RAM_BASE + RAM_SIZE);
     unsafe {
         ALLOCATOR.lock().init(HEAP_START as *mut u8, HEAP_LEN);
     }
@@ -503,10 +503,15 @@ pub fn delay(ms: usize) {
 
 mod panic_handler {
     use core::panic::PanicInfo;
+
+    use crate::USB_CONNECTED;
     #[panic_handler]
     fn handle_panic(_arg: &PanicInfo) -> ! {
+        USB_CONNECTED.store(false, core::sync::atomic::Ordering::SeqCst);
         crate::println!("{}", _arg);
-        loop {}
+        loop {
+            bao1x_hal::sigcheck::die_no_std();
+        }
     }
 }
 
