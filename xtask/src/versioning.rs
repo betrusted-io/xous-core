@@ -19,16 +19,9 @@ pub(crate) fn generate_version(add_timestamp: bool, forced_version: Option<Strin
         } else {
             let cmd = format!("git describe --long --abbrev={}", GIT_ABBREV_LEN);
             let output = if cfg!(target_os = "windows") {
-                Command::new("cmd")
-                    .args(["/C", &cmd])
-                    .output()
-                    .expect("failed to execute process")
+                Command::new("cmd").args(["/C", &cmd]).output().expect("failed to execute process")
             } else {
-                Command::new("sh")
-                    .arg("-c")
-                    .arg(&cmd)
-                    .output()
-                    .expect("failed to execute process")
+                Command::new("sh").arg("-c").arg(&cmd).output().expect("failed to execute process")
             };
             output.stdout
         }
