@@ -168,6 +168,7 @@ pub fn validate_image(
             // ASSUME: the SPIM driver has allocated a read buffer that is actually PAGE_SIZE. If the SPIM
             // driver has a smaller buffer, reads get less efficient.
             let end = img_offset as usize + UNSIGNED_LEN + signed_len as usize;
+            assert!(end <= bao1x_api::offsets::baosec::SPI_FLASH_LEN);
             for offset in ((img_offset as usize + UNSIGNED_LEN)..end).step_by(PAGE_SIZE) {
                 let mut buf = [0u8; PAGE_SIZE];
                 spim.mem_read(offset as u32, &mut buf, false);
@@ -175,7 +176,13 @@ pub fn validate_image(
                 h.update(&buf[..valid_length]);
             }
         } else {
-            // easy peasy
+            // sanity check the purported length of the image. It can't be any bigger than the available
+            // storage in RRAM.
+            assert!(
+                (signed_len as usize)
+                    <= bao1x_api::RRAM_STORAGE_LEN
+                        - ((img_offset as usize - utralib::HW_RERAM_MEM) + UNSIGNED_LEN)
+            );
             let image: &[u8] = unsafe {
                 core::slice::from_raw_parts(
                     (img_offset as usize + UNSIGNED_LEN) as *const u8,
@@ -222,6 +229,7 @@ pub fn validate_image(
             // crate::println!("hashed hash: {:x?}", hashed_hash.as_slice());
 
             let mut msg: Vec<u8> = Vec::new();
+            assert!((sig.aad_len as usize) <= sig.aad.len());
             msg.extend_from_slice(&sig.aad[..sig.aad_len as usize]);
             msg.extend_from_slice(hashed_hash.as_slice());
             // crate::println!("assembled msg({}): {:x?}", msg.len(), msg);
@@ -276,6 +284,8 @@ pub fn validate_image(
                         if sig.sealed_data.anti_rollback >= crate::acram::ONEWAY_MAX_VALUE {
                             return Err(String::from("Proposed anti-rollback value out of range"));
                         }
+                        // enforce a maximum "reasonable" increment - just as belt-and-suspenders
+                        assert!(sig.sealed_data.anti_rollback - arb_value < crate::acram::ONEWAY_MAX_DELTA);
                         // increment anti-rollback counter to match the current value of the signed image
                         bollard!(die_no_std, 4);
                         while one_way_counters.get(arb).unwrap() < sig.sealed_data.anti_rollback {
@@ -290,6 +300,8 @@ pub fn validate_image(
             }
 
             bollard!(die_no_std, 4);
+            // key is defined as !key2, so they should never have the same value. Confirm that invariant here.
+            assert!(valid_key != valid_key2);
             Ok((
                 valid_key,
                 valid_key2,
@@ -327,9 +339,9 @@ pub fn erase_collateral(csprng: &mut Option<&mut Csprng>) -> Result<(), String> 
         != 0
     {
         // clear the ACL so we can operate on the data
-        slot_mgr
-            .set_acl(&mut rram, slot, &AccessSettings::Data(DataSlotAccess::new_with_raw_value(0)))
-            .expect("couldn't reset ACL");
+        // Don't panic on failure: the panic can be used as a primitive to prevent
+        // further erasure.
+        slot_mgr.set_acl(&mut rram, slot, &AccessSettings::Data(DataSlotAccess::new_with_raw_value(0))).ok();
     }
     let bytes = unsafe { slot_mgr.read_unchecked(slot) };
     // only erase if the key hasn't already been erased, to avoid stressing the RRAM array
@@ -491,7 +503,7 @@ pub fn hardened_erase_policy(
     bollard!(die_no_std, 4);
     csprng.random_delay();
     // second check on the inverse-key type - this requires a double-glitch to bypass the key number check
-    if !key_inv == DEVELOPER_KEY_SLOT {
+    if (!key_inv) == DEVELOPER_KEY_SLOT {
         erase_secrets(&mut Some(csprng))?;
     }
     bollard!(die_no_std, 4);
@@ -539,16 +551,19 @@ pub fn hardened_erase_policy(
     Ok(())
 }
 
-pub fn jump_to(target: usize) -> ! {
+pub fn jump_to(target: usize, mask: usize) -> ! {
     // loader expects a0 to have the address of the kernel image pre-loaded
     let kernel_loc = bao1x_api::offsets::KERNEL_START;
     unsafe {
         core::arch::asm!(
             "mv t0, {target}",
+            "mv t1, {mask}",
             "mv a0, {kernel_loc}",
             "mv a1, x0",
+            "xor t0, t1, t0",
             "jr t0",
             target = in(reg) target,
+            mask = in(reg) mask,
             kernel_loc = in(reg) kernel_loc,
             options(noreturn)
         );
@@ -559,7 +574,7 @@ pub fn die_no_std() -> ! {
     unsafe {
         #[rustfmt::skip]
         core::arch::asm! (
-            // TODO: any SCE other security-sensitive registers to be zeorized?
+            // TODO: any SCE other security-sensitive registers to zeroize?
 
             //  - bureg zeroize - this is priority because it has the ephemeral key
             "li          x1, 0x40065000",
@@ -654,6 +669,8 @@ pub fn die_no_std() -> ! {
             "mv          x29, x0",
             "mv          x30, x0",
             "mv          x31, x0",
+
+            "csrw        mscratch, x0",
 
             // emit a loop out of DUART to indicate successful death
             "li          t0, 0x40042000",

@@ -26,6 +26,9 @@ pub const CODESEL_END: usize = 0x603D_A000;
 
 /// This is set by the wear-out limit of the underlying RRAM.
 pub const ONEWAY_MAX_VALUE: u32 = 10_0000;
+/// Maximum number of times the one way counter can be incremented in
+/// a single boot attempt.
+pub const ONEWAY_MAX_DELTA: u32 = 512;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OneWayErr {
