@@ -190,11 +190,11 @@ pub fn usb_ep1_bulk_out_complete(
     udc_pointer_check!(buf_addr, info as usize & 0xFFFF);
     // safety: the buffer is checked to be in-range for the UDC handler
     let buf = unsafe { core::slice::from_raw_parts(buf_addr as *const u8, info as usize & 0xFFFF) };
-    let mut cbw = Cbw::default();
-    cbw.as_mut().copy_from_slice(&buf[..size_of::<Cbw>()]);
     let mut csw = Csw::derive();
 
     if UmsState::CommandPhase == this.ms_state && (length == 31) {
+        let mut cbw = Cbw::default();
+        cbw.as_mut().copy_from_slice(&buf[..size_of::<Cbw>()]);
         // CBW
         if cbw.signature == BULK_CBW_SIG {
             csw.signature = BULK_CSW_SIG;
@@ -383,7 +383,7 @@ pub fn usb_ep1_bulk_out_complete(
                     critical_section::with(|cs| super::glue::SECTOR.borrow(cs).replace(block));
                 }
             }
-            if write_offset + len < disk.len() {
+            if write_offset.checked_add(len).map_or(false, |end| end < disk.len()) {
                 // update the received data to the disk if it fits within the allocated region
                 disk[write_offset..write_offset + len].copy_from_slice(&app_buf[..len]);
             }
