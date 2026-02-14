@@ -90,6 +90,26 @@ pub const CRG_XFER_AZP: u8 = 1 << 4; //append zero length packet after a max pac
 #[cfg(feature = "std")]
 static INTERRUPT_INIT_DONE: AtomicBool = AtomicBool::new(false);
 
+/// This macro checks that any raw pointers passed back from the hardware
+/// are within the allocated ranges for the UDC block to use.
+macro_rules! udc_pointer_check {
+    ($base:expr, $len:expr) => {
+        // the bounds on this are simply within the range of the IFRAM. The reason this is so
+        // loose is that one check has to apply across all possible hardware configurations;
+        // each hardware configuration is free to assign the USB buffers to whatever pages
+        // it sees fit. Thus this check could allow, for example, a USB buffer to run over
+        // and possibly read data going to or from other IFRAM-based elements. This is
+        // *probably* not the end of the world because IFRAM by definition is for I/O transfers
+        // all of which could also be probed using a logic analyzer, and because of this anything
+        // sensitive that goes over I/O is encrypted/authenticated. Still, could make for an
+        // interesting remote exploit if the loose bounds checking can be weaponized.
+        assert!(
+            $base >= utralib::HW_IFRAM0_MEM
+                && ($base + $len) <= utralib::HW_IFRAM1_MEM + utralib::HW_IFRAM1_MEM_LEN
+        );
+    };
+}
+
 /*
 #[cfg(feature = "std")]
 fn handle_usb(_irq_no: usize, arg: *mut usize) {
@@ -768,6 +788,7 @@ impl UdcEp {
         unsafe {
             // increment to the next record
             self.enq_pt = AtomicPtr::new(self.enq_pt.load(Ordering::SeqCst).add(1));
+            udc_pointer_check!(self.enq_pt.load(Ordering::SeqCst) as usize, size_of::<TransferTrbS>());
             // unpack the record
             let ret = self.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer");
             if ret.dw3.trb_type() == TrbType::Link as u32 {
@@ -777,6 +798,7 @@ impl UdcEp {
                 crate::println!(">>toggling PCS<<");
                 self.pcs = !self.pcs;
                 self.enq_pt = AtomicPtr::new(self.first_trb.load(Ordering::SeqCst));
+                udc_pointer_check!(self.enq_pt.load(Ordering::SeqCst) as usize, size_of::<TransferTrbS>());
                 (self.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer"), self.pcs)
             } else {
                 (ret, self.pcs)
@@ -1121,6 +1143,7 @@ impl CorigineUsb {
                 let addr = self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET + enq_index;
                 #[cfg(feature = "verbose-debug")]
                 crate::println!("ep0 app_ptr: {:x} index {}", addr, enq_index);
+                udc_pointer_check!(addr, CRG_UDC_APP_BUF_LEN);
                 Some(addr)
             } else if ep_num <= CRG_EP_NUM {
                 let addr = self.ifram_base_ptr
@@ -1129,6 +1152,7 @@ impl CorigineUsb {
                     + enq_index;
                 #[cfg(feature = "verbose-debug")]
                 crate::println!("ep{} app_ptr: {:x} index {}", ep_num, addr, enq_index);
+                udc_pointer_check!(addr, CRG_UDC_APP_BUF_LEN);
                 Some(addr)
             } else {
                 crate::println!("ep_num {} is out of range", ep_num);
@@ -1157,12 +1181,16 @@ impl CorigineUsb {
             self.app_enq_index[ep_num] = 0;
         }
         if ep_num == 0 {
-            self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET + deq_index
+            let ptr = self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET + deq_index;
+            udc_pointer_check!(ptr, CRG_UDC_APP_BUF_LEN);
+            ptr
         } else if ep_num <= CRG_EP_NUM {
-            self.ifram_base_ptr
+            let ptr = self.ifram_base_ptr
                 + CRG_UDC_APP_BUFOFFSET
                 + ((ep_num - 1) as usize * 2 + if dir { 1 } else { 0 }) * CRG_UDC_APP_BUF_LEN
-                + deq_index
+                + deq_index;
+            udc_pointer_check!(ptr, CRG_UDC_APP_BUF_LEN);
+            ptr
         } else {
             panic!("ep_num is out of range");
         }
@@ -1291,6 +1319,10 @@ impl CorigineUsb {
         }
         self.udc_event.erst.len = erst.len() * size_of::<ErstS>();
         self.udc_event.erst.vaddr = AtomicPtr::new(erst.as_mut_ptr() as *mut u8); // ErstS ??
+        udc_pointer_check!(
+            self.udc_event.erst.vaddr.load(Ordering::SeqCst) as usize,
+            self.udc_event.erst.len
+        );
         self.udc_event.p_erst =
             AtomicPtr::new(self.udc_event.erst.vaddr.load(Ordering::SeqCst) as *mut ErstS);
 
@@ -1305,6 +1337,10 @@ impl CorigineUsb {
 
         self.udc_event.event_ring.len = event_ring.len();
         self.udc_event.event_ring.vaddr = AtomicPtr::new(event_ring.as_mut_ptr()); // EventTrbS ??
+        udc_pointer_check!(
+            self.udc_event.event_ring.vaddr.load(Ordering::SeqCst) as usize,
+            self.udc_event.event_ring.len
+        );
         self.udc_event.evt_dq_pt =
             AtomicPtr::new(self.udc_event.event_ring.vaddr.load(Ordering::SeqCst) as *mut EventTrbS);
         self.udc_event.evt_seg0_last_trb = AtomicPtr::new(unsafe {
@@ -1374,6 +1410,7 @@ impl CorigineUsb {
                 CRG_EP0_TD_RING_SIZE,
             )
         };
+        udc_pointer_check!(ep0_tr_ring.as_ptr() as usize, ep0_tr_ring.len() * size_of::<TransferTrbS>());
         for e in ep0_tr_ring.iter_mut() {
             e.zeroize();
         }
@@ -1541,6 +1578,7 @@ impl CorigineUsb {
                     return CrgEvent::None;
                 }
                 let event_ptr = self.udc_event.evt_dq_pt.load(Ordering::SeqCst) as usize;
+                udc_pointer_check!(event_ptr, size_of::<EventTrbS>());
                 unsafe { (event_ptr as *mut EventTrbS).as_mut().expect("couldn't deref pointer") }
             };
 
@@ -1583,6 +1621,10 @@ impl CorigineUsb {
                 self.udc_event.evt_dq_pt =
                     AtomicPtr::new(unsafe { self.udc_event.evt_dq_pt.load(Ordering::SeqCst).add(1) });
             }
+            udc_pointer_check!(
+                self.udc_event.evt_dq_pt.load(Ordering::SeqCst) as usize,
+                size_of::<EventTrbS>()
+            );
         }
 
         // update dequeue pointer
@@ -1879,6 +1921,7 @@ impl CorigineUsb {
         let udc_ep = &mut self.udc_ep[pei];
         let mut enq_pt =
             unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
+        udc_pointer_check!(udc_ep.enq_pt.load(Ordering::SeqCst) as usize, size_of::<TransferTrbS>());
         #[cfg(feature = "verbose-debug")]
         crate::println!(
             "ep_xfer() pei: {}, enq_pt: {:x}, buf_addr: {:x}, pcs: {}, len: {:x}",
@@ -1959,6 +2002,7 @@ impl CorigineUsb {
             vaddr != 0 && vaddr <= CRG_UDC_EP0_TR_OFFSET + self.ifram_base_ptr + CRG_UDC_EP_TRSIZE,
             "failed to allocate trb ring"
         );
+        udc_pointer_check!(vaddr, len);
         udc_ep.ep_num = ep_num;
         udc_ep.direction = dir;
         udc_ep.max_packet_size = max_packet_size;
@@ -1971,6 +2015,7 @@ impl CorigineUsb {
         udc_ep.first_trb = AtomicPtr::new(vaddr as *mut TransferTrbS);
         udc_ep.last_trb =
             unsafe { AtomicPtr::new(udc_ep.first_trb.load(Ordering::SeqCst).add(CRG_TD_RING_SIZE - 1)) };
+        udc_pointer_check!(udc_ep.last_trb.load(Ordering::SeqCst) as usize, size_of::<TransferTrbS>());
         // clear the entire TRB region
         let clear_region =
             unsafe { core::slice::from_raw_parts_mut(vaddr as *mut u32, len / size_of::<u32>()) };
@@ -1986,9 +2031,9 @@ impl CorigineUsb {
         udc_ep.tran_ring_full = false;
 
         // setup endpoint context: EpCxS
-        let epcx = unsafe {
-            self.p_epcx.load(Ordering::SeqCst).add(pei - 2).as_mut().expect("couldn't deref pointer")
-        };
+        let epcx_ptr = unsafe { self.p_epcx.load(Ordering::SeqCst).add(pei - 2) };
+        udc_pointer_check!(epcx_ptr as usize, size_of::<EpCxS>());
+        let epcx = unsafe { epcx_ptr.as_mut().expect("couldn't deref pointer") };
         epcx.epcx_setup(&udc_ep);
         #[cfg(feature = "verbose-debug")]
         crate::println!(
@@ -2559,6 +2604,7 @@ impl UsbBus for CorigineWrapper {
                 return Err(UsbError::WouldBlock);
             };
             let hw_buf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, CRG_UDC_APP_BUF_LEN) };
+            udc_pointer_check!(addr as usize, CRG_UDC_APP_BUF_LEN);
             assert!(buf.len() <= CRG_UDC_APP_BUF_LEN, "write buffer size exceeded");
             hw_buf[..buf.len()].copy_from_slice(&buf);
             let pei = CorigineUsb::pei(ep_addr.index() as u8, CRG_IN);
@@ -2647,6 +2693,7 @@ impl UsbBus for CorigineWrapper {
                             self.core().app_ptr[pei_offset].take().expect("inconistent app_ptr state");
                         let ptr = app_ptr.addr;
                         let len = app_ptr.len;
+                        udc_pointer_check!(ptr, len);
                         self.ep_out_ready[ep_addr.index()].store(false, Ordering::SeqCst);
                         let app_buf = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
                         if buf.len() < app_buf.len() {
@@ -2698,11 +2745,13 @@ impl UsbBus for CorigineWrapper {
                                     ep_addr.index(),
                                     addr
                                 );
+                                let len = CRG_UDC_APP_BUF_LEN.min(buf.len()).min(max_packet_size);
+                                udc_pointer_check!(addr, len);
                                 self.core().bulk_xfer(
                                     ep_addr.index() as u8,
                                     CRG_OUT,
                                     addr,
-                                    CRG_UDC_APP_BUF_LEN.min(buf.len()).min(max_packet_size),
+                                    len,
                                     CRG_INT_TARGET,
                                     0, // CRG_XFER_SET_CHAIN,
                                 );
@@ -2715,11 +2764,13 @@ impl UsbBus for CorigineWrapper {
                                     addr
                                 );
                                 // crate::println!("ep_type {:?}", hw_ep_type);
+                                let len = CRG_UDC_APP_BUF_LEN.min(buf.len()).min(max_packet_size);
+                                udc_pointer_check!(addr, len);
                                 self.core().ep_xfer(
                                     ep_addr.index() as u8,
                                     CRG_OUT,
                                     addr,
-                                    CRG_UDC_APP_BUF_LEN.min(buf.len()).min(max_packet_size),
+                                    len,
                                     CRG_INT_TARGET,
                                     false,
                                     false,
@@ -2878,6 +2929,7 @@ pub fn handle_event_inner(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> 
             let residual_length = event_trb.dw2.trb_tran_len() as u16;
 
             // update the dequeue pointer
+            udc_pointer_check!(event_trb.dw0 as usize, size_of::<TransferTrbS>() * 2);
             let deq_pt =
                 unsafe { (event_trb.dw0 as *mut TransferTrbS).add(1).as_mut().expect("Couldn't deref ptr") };
             if deq_pt.get_trb_type() == TrbType::Link {
@@ -2885,6 +2937,7 @@ pub fn handle_event_inner(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> 
             } else {
                 udc_ep.deq_pt = AtomicPtr::new(deq_pt as *mut TransferTrbS);
             }
+            udc_pointer_check!(udc_ep.deq_pt.load(Ordering::SeqCst) as usize, size_of::<TransferTrbS>());
             #[cfg(feature = "verbose-debug")]
             crate::println!("EventTransfer: comp_code {:?}, PEI {}", comp_code, pei);
 
@@ -2919,6 +2972,7 @@ pub fn handle_event_inner(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> 
 
                     // so unsafe. so unsafe. We're counting on the hardware to hand us a raw pointer
                     // that isn't corrupted.
+                    udc_pointer_check!(event_trb.dw0 as usize, size_of::<TransferTrbS>());
                     let p_trb = unsafe { &*(event_trb.dw0 as *const TransferTrbS) };
                     this.app_ptr[pei as usize - 2] = Some(AppPtr {
                         addr: p_trb.dplo as usize,
