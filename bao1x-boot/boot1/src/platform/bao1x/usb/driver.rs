@@ -61,6 +61,7 @@ fn get_status_request(this: &mut CorigineUsb, request_type: u8, index: u16) {
             CRG_UDC_EP0_REQBUFSIZE,
         )
     };
+    udc_pointer_check(ep0_buf.as_ptr() as usize, ep0_buf.len());
 
     let mut status_val: u32 = 0;
     let recipient = request_type & 0x1f;
@@ -134,6 +135,8 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
             let residual_length = event_trb.dw2.trb_tran_len() as u16;
             // update the dequeue pointer
             // crate::println_d!("event_transfer {:x?}", event_trb);
+            udc_pointer_check(event_trb.dw0 as usize, size_of::<TransferTrbS>() * 2);
+            // safety: checked that there's at least space for the increment of the pointer
             let deq_pt =
                 unsafe { (event_trb.dw0 as *mut TransferTrbS).add(1).as_mut().expect("Couldn't deref ptr") };
             if deq_pt.get_trb_type() == TrbType::Link {
@@ -161,8 +164,10 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                     // crate::println_d!("EP{} xfer event, dir {}", ep_num, if dir { "OUT" } else { "IN" });
                     // xfer_complete
                     if let Some(f) = this.udc_ep[pei as usize].completion_handler {
+                        udc_pointer_check(event_trb.dw0 as usize, size_of::<TransferTrbS>());
                         // so unsafe. so unsafe. We're counting on the hardware to hand us a raw pointer
-                        // that isn't corrupted.
+                        // that isn't corrupted. The check above assures that the pointer is at least within
+                        // the designated range of memory for the UDC hardware controller
                         let p_trb = unsafe { &*(event_trb.dw0 as *const TransferTrbS) };
                         #[cfg(feature = "verbose-debug")]
                         crate::println_d!(
@@ -280,6 +285,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                                 CRG_UDC_EP0_REQBUFSIZE,
                             )
                         };
+                        udc_pointer_check(ep0_buf.as_ptr() as usize, ep0_buf.len());
                         if this.get_device_state() != UsbDeviceState::Configured {
                             ep0_buf[0] = 0;
                         } else {
@@ -301,6 +307,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                                 CRG_UDC_EP0_REQBUFSIZE,
                             )
                         };
+                        udc_pointer_check(ep0_buf.as_ptr() as usize, ep0_buf.len());
                         ep0_buf[0] = this.cur_interface_num;
                         this.ep0_send(ep0_buf.as_ptr() as usize, 1, 0);
                     }
@@ -344,6 +351,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                                     CRG_UDC_EP0_REQBUFSIZE,
                                 )
                             };
+                            udc_pointer_check(ep0_buf.as_ptr() as usize, ep0_buf.len());
                             ep0_buf[0] = 0;
                             this.ep0_send(ep0_buf.as_ptr() as usize, 1, 0);
                         }
@@ -369,6 +377,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                                 CRG_UDC_EP0_REQBUFSIZE,
                             )
                         };
+                        udc_pointer_check(ep0_buf.as_ptr() as usize, ep0_buf.len());
                         // Fill with a dummy 115200 8N1 config
                         ep0_buf[0..4].copy_from_slice(&115200u32.to_le_bytes()); // dwDTERate
                         ep0_buf[4] = 0; // 1 stop bit

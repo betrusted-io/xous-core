@@ -3,6 +3,7 @@ use core::sync::atomic::Ordering;
 
 use bao1x_api::KERNEL_START;
 use bao1x_api::*;
+use bao1x_hal::hardening::die;
 use bao1x_hal::iox::Iox;
 use bao1x_hal::sh1107::Oled128x128;
 use bao1x_hal::udma::*;
@@ -22,6 +23,18 @@ pub(crate) const RAMDISK_ADDRESS: usize = crate::FREE_MEM_START;
 pub(crate) const RAMDISK_ACTUAL_LEN: usize = crate::FREE_MEM_LEN;
 pub(crate) const RAMDISK_LEN: usize = 128 * 1024 * 1024; // present as a 128MiB disk. Big enough for "any" update?
 pub(crate) const SECTOR_SIZE: u16 = 512;
+pub(crate) const APP_BUF_LEN: usize = 4096 * 2;
+
+#[inline(always)]
+/// This function checks that any raw pointers passed back from the hardware
+/// are within the allocated ranges for the UDC block to use.
+pub(crate) fn udc_pointer_check(base: usize, len: usize) {
+    assert!(
+        (base >= HW_IFRAM1_MEM && (base + len) <= HW_IFRAM1_MEM + APP_BUF_LEN)
+            || (base >= bao1x_hal::board::CRG_UDC_MEMBASE
+                && (base + len) <= (bao1x_hal::board::CRG_UDC_MEMBASE + CRG_IFRAM_PAGES * 4096)),
+    );
+}
 
 fn fill_sparse_data(dest: &mut [u8], offset: usize) {
     let dest_start = offset;
@@ -105,6 +118,7 @@ pub fn get_descriptor_request(this: &mut CorigineUsb, value: u16, _index: usize,
             CRG_UDC_EP0_REQBUFSIZE,
         )
     };
+    udc_pointer_check(ep0_buf.as_ptr() as usize, ep0_buf.len());
 
     match (value >> 8) as u8 {
         USB_DT_DEVICE => {
@@ -185,6 +199,8 @@ pub fn usb_ep1_bulk_out_complete(
     _residual: u16,
 ) {
     let length = info & 0xFFFF;
+    udc_pointer_check(buf_addr, info as usize & 0xFFFF);
+    // safety: the buffer is checked to be in-range for the UDC handler
     let buf = unsafe { core::slice::from_raw_parts(buf_addr as *const u8, info as usize & 0xFFFF) };
     let mut cbw = Cbw::default();
     cbw.as_mut().copy_from_slice(&buf[..size_of::<Cbw>()]);
@@ -216,7 +232,11 @@ pub fn usb_ep1_bulk_out_complete(
             let app_buf = conjure_app_buf();
             let disk = conjure_disk();
             // process the received data as if it were a uf2 sector
+            // This loop is perhaps the most dangerous loop in the bootloader: if these range checks
+            // on the addresses can be bypassed, then you potentially have an arbitrary-write primitive
+            // into RRAM via USB.
             for (i, chunk) in app_buf[..len].chunks(512).enumerate() {
+                bollard!(die, 4);
                 let (new_block, uf2_data) = critical_section::with(|cs| {
                     super::glue::SECTOR
                         .borrow(cs)
@@ -235,11 +255,15 @@ pub fn usb_ep1_bulk_out_complete(
                 const START_RANGE: usize = bao1x_api::BOOT1_START;
                 // program the flash if a valid u2f block was found
                 if let Some(record) = uf2_data {
+                    bollard!(die, 4);
+                    // This range check prevents UF2 from being an arbitrary-write primitive to e.g. RAM
+                    // or sensitive bootloader code.
                     if matches!(record.address() as usize, START_RANGE..=STORAGE_END_ADDR)
                         && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
                     {
                         let mut rram = bao1x_hal::rram::Reram::new();
                         let offset = record.address() as usize - utralib::HW_RERAM_MEM;
+                        bollard!(die, 4);
                         match rram.write_slice(offset, record.data()) {
                             Err(e) => crate::print_d!("Write error {:?} @ {:x}", e, offset),
                             Ok(_) => (),
@@ -407,6 +431,8 @@ pub fn usb_ep1_bulk_in_complete(
         if let Some((offset, len)) = this.remaining_rd.take() {
             let app_buf = conjure_app_buf();
             let disk = conjure_disk();
+            // this is protected by the `disk` slice having a defined length. `setup_big_read` copies data
+            // from `disk` to `app_buf` using only safe operations, and "fakes" the data if it's out of range.
             this.setup_big_read(app_buf, disk, offset, len, Some(fill_sparse_data));
             this.ms_state = UmsState::DataPhase;
         } else {
@@ -438,6 +464,8 @@ pub fn usb_ep3_bulk_out_complete(
     }
 
     // Slice of received data
+    udc_pointer_check(buf_addr, actual);
+    // safety: buffer is checked to be within the UDC memory range
     let buf = unsafe { core::slice::from_raw_parts(buf_addr as *const u8, actual as usize) };
 
     // For now: just print, or push into a ring buffer for your "virtual terminal"
@@ -622,6 +650,7 @@ fn process_request_sense(this: &mut CorigineUsb, cbw: Cbw) {
         // crate::println_d!("UMS_STATE_STATUS_PHASE\r\n");
     } else if cbw.flags & 0x80 != 0 {
         if cbw.data_transfer_length < 18 {
+            udc_pointer_check(EP1_IN_BUF, EP1_IN_BUF_LEN);
             let ep1_in = unsafe { core::slice::from_raw_parts_mut(EP1_IN_BUF as *mut u8, EP1_IN_BUF_LEN) };
             ep1_in[..18].fill(0);
             this.bulk_xfer(1, USB_SEND, EP1_IN_BUF, cbw.data_transfer_length as usize, 0, 0);
@@ -629,6 +658,7 @@ fn process_request_sense(this: &mut CorigineUsb, cbw: Cbw) {
             csw.residue = 0;
             csw.status = 0;
         } else if cbw.data_transfer_length >= 18 {
+            udc_pointer_check(EP1_IN_BUF, EP1_IN_BUF_LEN);
             let ep1_in = unsafe { core::slice::from_raw_parts_mut(EP1_IN_BUF as *mut u8, EP1_IN_BUF_LEN) };
             ep1_in[..18].fill(0);
             this.bulk_xfer(1, USB_SEND, EP1_IN_BUF, 18, 0, 0);
@@ -662,6 +692,7 @@ fn process_inquiry_command(this: &mut CorigineUsb, cbw: Cbw) {
         csw.send(this);
     } else if cbw.flags & 0x80 != 0 {
         if cbw.data_transfer_length < 36 {
+            udc_pointer_check(EP1_IN_BUF, EP1_IN_BUF_LEN);
             let ep1_in = unsafe { core::slice::from_raw_parts_mut(EP1_IN_BUF as *mut u8, EP1_IN_BUF_LEN) };
             ep1_in[..36].fill(0);
             this.bulk_xfer(1, USB_SEND, EP1_IN_BUF, cbw.data_transfer_length as usize, 0, 0);
@@ -669,6 +700,7 @@ fn process_inquiry_command(this: &mut CorigineUsb, cbw: Cbw) {
             csw.residue = 0;
             csw.status = 0;
         } else if cbw.data_transfer_length as usize >= size_of::<InquiryResponse>() {
+            udc_pointer_check(EP1_IN_BUF, EP1_IN_BUF_LEN);
             let ep1_in = unsafe { core::slice::from_raw_parts_mut(EP1_IN_BUF as *mut u8, EP1_IN_BUF_LEN) };
             ep1_in[..size_of::<InquiryResponse>()].copy_from_slice(inquiry_data.as_ref());
 
@@ -699,6 +731,7 @@ fn process_report_capacity(this: &mut CorigineUsb, cbw: Cbw) {
     capacity[4..].copy_from_slice(&rc_bl.to_be_bytes());
 
     if cbw.flags & 0x80 != 0 {
+        udc_pointer_check(EP1_IN_BUF, EP1_IN_BUF_LEN);
         let ep1_in = unsafe { core::slice::from_raw_parts_mut(EP1_IN_BUF as *mut u8, EP1_IN_BUF_LEN) };
         ep1_in[..8].fill(0);
         ep1_in[..8].copy_from_slice(&capacity);
@@ -719,6 +752,7 @@ fn process_read_capacity_16(this: &mut CorigineUsb, _cbw: Cbw) {
     let mut response = [0u8; 32];
     response[..8].copy_from_slice(&rc_lba.to_be_bytes());
     response[8..12].copy_from_slice(&rc_bl.to_be_bytes());
+    udc_pointer_check(EP1_IN_BUF, EP1_IN_BUF_LEN);
     let ep1_in = unsafe { core::slice::from_raw_parts_mut(EP1_IN_BUF as *mut u8, EP1_IN_BUF_LEN) };
     ep1_in[..32].copy_from_slice(&response);
     this.bulk_xfer(1, USB_SEND, EP1_IN_BUF, 32, 0, 0);
@@ -932,11 +966,14 @@ fn process_write12_command(this: &mut CorigineUsb, cbw: Cbw) {
 // Place the application buf in IFRAM1 range - this removes any conflicts with the USB stack's IFRAM0
 // allocations
 pub(crate) fn app_buf_addr() -> usize { HW_IFRAM1_MEM }
-pub(crate) fn app_buf_len() -> usize { 4096 * 2 }
+pub(crate) fn app_buf_len() -> usize { APP_BUF_LEN }
 pub(crate) fn conjure_app_buf() -> &'static mut [u8] {
+    udc_pointer_check(app_buf_addr(), app_buf_len());
     unsafe { core::slice::from_raw_parts_mut(app_buf_addr() as *mut u8, app_buf_len()) }
 }
 
 pub(crate) fn conjure_disk() -> &'static mut [u8] {
+    // safety: these constants just have to be very carefully vetted. Definitely a risk that
+    // the ramdisk size could overrun e.g. the stack, etc.
     unsafe { core::slice::from_raw_parts_mut(RAMDISK_ADDRESS as *mut u8, RAMDISK_ACTUAL_LEN) }
 }
