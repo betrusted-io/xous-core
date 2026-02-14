@@ -3014,7 +3014,7 @@ pub fn handle_event_inner(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> 
             ret = CrgEvent::Data(0, 0, 1);
         }
         TrbType::DataStage => {
-            panic!("data stage needs handling");
+            unimplemented!("data stage needs handling");
         }
         _ => {
             println!("Unexpected trb_type {:?}", event_trb.get_trb_type());
