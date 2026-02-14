@@ -1,5 +1,7 @@
 use core::convert::TryInto;
 
+const PAYLOAD_LEN: usize = 476;
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Uf2Block {
@@ -11,7 +13,7 @@ pub struct Uf2Block {
     pub block_no: u32,
     pub num_blocks: u32,
     pub file_size_family_id: u32, // may be zero
-    pub data: [u8; 476],          // payload data
+    pub data: [u8; PAYLOAD_LEN],  // payload data
     pub magic_end: u32,           // should be 0x0AB16F30
 }
 
@@ -30,12 +32,17 @@ impl Uf2Block {
         let num_blocks = u32::from_le_bytes(bytes[24..28].try_into().unwrap());
         let file_size_family_id = u32::from_le_bytes(bytes[28..32].try_into().unwrap());
 
-        let mut data = [0u8; 476];
+        let mut data = [0u8; PAYLOAD_LEN];
         data.copy_from_slice(&bytes[32..508]);
 
         let magic_end = u32::from_le_bytes(bytes[508..512].try_into().unwrap());
 
-        if magic_start0 != 0x0A32_4655 || magic_start1 != 0x9E5D_5157 || magic_end != 0x0AB16F30 {
+        if magic_start0 != 0x0A32_4655
+            || magic_start1 != 0x9E5D_5157
+            || magic_end != 0x0AB16F30
+            // also reject blocks with malformed payload lengths
+            || payload_size > PAYLOAD_LEN as u32
+        {
             None
         } else {
             Some(Uf2Block {
@@ -53,7 +60,7 @@ impl Uf2Block {
         }
     }
 
-    pub fn data(&self) -> &[u8] { &self.data[..self.payload_size as usize] }
+    pub fn data(&self) -> &[u8] { &self.data[..self.payload_size.min(PAYLOAD_LEN as u32) as usize] }
 
     pub fn family(&self) -> u32 { self.file_size_family_id }
 
