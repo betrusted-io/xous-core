@@ -509,7 +509,9 @@ mod panic_handler {
     fn handle_panic(_arg: &PanicInfo) -> ! {
         USB_CONNECTED.store(false, core::sync::atomic::Ordering::SeqCst);
         crate::println!("{}", _arg);
-        loop {}
+        loop {
+            bao1x_hal::sigcheck::die_no_std();
+        }
     }
 }
 
