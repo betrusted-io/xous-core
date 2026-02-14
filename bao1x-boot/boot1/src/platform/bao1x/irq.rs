@@ -185,16 +185,6 @@ pub extern "C" fn trap_handler(
     // crate::println!("cause {:x}", cause.bits());
     // 2 is illegal instruction
     if cause.bits() == 2 {
-        // skip past the illegal instruction, in case that's what we want to do...
-        unsafe {
-            #[rustfmt::skip]
-            core::arch::asm!(
-                "csrr        t0, mepc",
-                "addi        t0, t0, 4",
-                "csrw        mepc, t0",
-            );
-        }
-        // ...but also panic.
         panic!("Illegal Instruction");
     } else if cause.bits() == 4 {
         let epc = riscv::register::mepc::read();
