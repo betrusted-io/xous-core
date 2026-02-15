@@ -12,6 +12,21 @@ use chrono::{Local, TimeZone, Utc};
 /// Ensures consistent version strings regardless of clone depth.
 const GIT_ABBREV_LEN: u8 = 9;
 
+fn write_if_changed(path: &str, new_data: &[u8]) {
+    if let Ok(existing) = std::fs::read(path) {
+        if existing == new_data {
+            return;
+        }
+    }
+    let mut vfile = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(path)
+        .expect(&format!("Can't open {} for writing", path));
+    vfile.write_all(new_data).expect(&format!("couldn't write to {}", path));
+}
+
 pub(crate) fn generate_version(
     add_timestamp: bool,
     forced_version: Option<String>,
@@ -62,39 +77,20 @@ pub(crate) fn generate_version(
     .expect("couldn't add our semver");
     new_data.extend_from_slice(&semver_code);
 
-    // BAOBIT_COMMIT for boot version files
-    let mut baobit_commit_code = Vec::new();
+    // Baochip versioning is just SEMVER + BAOBIT_COMMIT. Now that
+    // the semver_code has been added to new_data, we can extend it with the Baobit commit.
     if let Some(ref commit) = baobit_commit {
-        writeln!(baobit_commit_code, "pub const BAOBIT_COMMIT: &'static str = \"{}\";", commit)
+        writeln!(semver_code, "pub const BAOBIT_COMMIT: &'static str = \"{}\";", commit)
             .expect("couldn't add baobit commit");
     } else {
-        writeln!(baobit_commit_code, "pub const BAOBIT_COMMIT: &'static str = \"unknown\";")
+        // For builds that aren't built in the reproducible environment, the baobit commit is unspecified
+        writeln!(semver_code, "pub const BAOBIT_COMMIT: &'static str = \"unspecified\";")
             .expect("couldn't add baobit commit placeholder");
     }
 
-    let mut vfile = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(version_file)
-        .expect("Can't open our version file for writing");
-    vfile.write_all(&new_data).expect("couldn't write new timestamp to version.rs");
-    let mut vfile = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(boot0_version_file)
-        .expect("Can't open our version file for writing");
-    vfile.write_all(&semver_code).expect("couldn't write semver to version.rs");
-    vfile.write_all(&baobit_commit_code).expect("couldn't write baobit commit to version.rs");
-    let mut vfile = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(boot1_version_file)
-        .expect("Can't open our version file for writing");
-    vfile.write_all(&semver_code).expect("couldn't write semver to version.rs");
-    vfile.write_all(&baobit_commit_code).expect("couldn't write baobit commit to version.rs");
+    write_if_changed(version_file, &new_data);
+    write_if_changed(boot0_version_file, &semver_code);
+    write_if_changed(boot1_version_file, &semver_code);
 }
 
 fn print_header<U: Write>(out: &mut U) {
