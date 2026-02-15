@@ -3,7 +3,7 @@
 // It also generates timestamps, if demanded.
 
 use std::fs::OpenOptions;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::process::Command;
 
 use chrono::{Local, TimeZone, Utc};
@@ -12,7 +12,26 @@ use chrono::{Local, TimeZone, Utc};
 /// Ensures consistent version strings regardless of clone depth.
 const GIT_ABBREV_LEN: u8 = 9;
 
-pub(crate) fn generate_version(add_timestamp: bool, forced_version: Option<String>) {
+fn write_if_changed(path: &str, new_data: &[u8]) {
+    if let Ok(existing) = std::fs::read(path) {
+        if existing == new_data {
+            return;
+        }
+    }
+    let mut vfile = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(path)
+        .expect(&format!("Can't open {} for writing", path));
+    vfile.write_all(new_data).expect(&format!("couldn't write to {}", path));
+}
+
+pub(crate) fn generate_version(
+    add_timestamp: bool,
+    forced_version: Option<String>,
+    baobit_commit: Option<String>,
+) {
     let gitver = {
         if let Some(ver) = forced_version {
             ver.as_bytes().to_vec()
@@ -31,12 +50,6 @@ pub(crate) fn generate_version(add_timestamp: bool, forced_version: Option<Strin
     let version_file = "services/xous-ticktimer/src/version.rs";
     let boot0_version_file = "bao1x-boot/boot0/src/version.rs";
     let boot1_version_file = "bao1x-boot/boot1/src/version.rs";
-
-    // Read the existing file to see if it needs to be updated.
-    let mut existing_data = Vec::new();
-    if let Ok(mut f) = std::fs::File::open(version_file) {
-        f.read_to_end(&mut existing_data).ok();
-    }
 
     let mut new_data = Vec::new();
     print_header(&mut new_data);
@@ -64,32 +77,20 @@ pub(crate) fn generate_version(add_timestamp: bool, forced_version: Option<Strin
     .expect("couldn't add our semver");
     new_data.extend_from_slice(&semver_code);
 
-    if existing_data != new_data {
-        let mut vfile = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(version_file)
-            .expect("Can't open our version file for writing");
-        vfile.write_all(&new_data).expect("couldn't write new timestamp to version.rs");
-        let mut vfile = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(boot0_version_file)
-            .expect("Can't open our version file for writing");
-        vfile.write_all(&semver_code).expect("couldn't write semver to version.rs");
-        let mut vfile = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(boot1_version_file)
-            .expect("Can't open our version file for writing");
-        vfile.write_all(&semver_code).expect("couldn't write semver to version.rs");
+    // Baochip versioning is just SEMVER + BAOBIT_COMMIT. Now that
+    // the semver_code has been added to new_data, we can extend it with the Baobit commit.
+    if let Some(ref commit) = baobit_commit {
+        writeln!(semver_code, "pub const BAOBIT_COMMIT: &'static str = \"{}\";", commit)
+            .expect("couldn't add baobit commit");
+    } else {
+        // For builds that aren't built in the reproducible environment, the baobit commit is unspecified
+        writeln!(semver_code, "pub const BAOBIT_COMMIT: &'static str = \"unspecified\";")
+            .expect("couldn't add baobit commit placeholder");
     }
+
+    write_if_changed(version_file, &new_data);
+    write_if_changed(boot0_version_file, &semver_code);
+    write_if_changed(boot1_version_file, &semver_code);
 }
 
 fn print_header<U: Write>(out: &mut U) {

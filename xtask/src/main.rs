@@ -58,16 +58,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = Builder::new();
     // encodes a timestamp into the build, unless '--no-timestamp' is passed
     let do_version = env::args().filter(|x| x == "--no-timestamp").count() == 0;
-    let git_describe = get_flag("--git-describe")?;
-    let git_rev = get_flag("--git-rev")?;
-    if git_describe.is_empty() {
-        generate_version(do_version, None);
-    } else {
-        generate_version(do_version, Some(git_describe[0].to_owned()));
-        builder.set_git_describe(git_describe[0].to_owned());
+    let git_describe_opt = get_flag("--git-describe")?.first().cloned();
+    let git_rev_opt = get_flag("--git-rev")?.first().cloned();
+    let baobit_commit_opt = get_flag("--baobit-commit")?.first().cloned();
+    generate_version(do_version, git_describe_opt.clone(), baobit_commit_opt.clone());
+    if let Some(desc) = git_describe_opt {
+        builder.set_git_describe(desc);
     }
-    if !git_rev.is_empty() {
-        builder.set_git_rev(git_rev[0].to_owned());
+    if let Some(rev) = git_rev_opt {
+        builder.set_git_rev(rev);
     }
     if do_version {
         builder.add_feature("timestamp");

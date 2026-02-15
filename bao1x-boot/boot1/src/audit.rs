@@ -57,6 +57,7 @@ pub fn audit() {
     crate::println!("Board type reads as: {:?}", boardtype);
     crate::println!("Boot partition is: {:?}", owc.get_decoded::<AltBootCoding>());
     crate::println!("Semver is: {}", crate::version::SEMVER);
+    crate::println!("Baobit commit is: {}", crate::version::BAOBIT_COMMIT);
     crate::println!("Description is: {}", crate::RELEASE_DESCRIPTION);
     crate::println!("Stepping is: {}", detect_stepping());
     let slot_mgr = bao1x_hal::acram::SlotManager::new();
