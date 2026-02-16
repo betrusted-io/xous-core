@@ -162,6 +162,16 @@ pub struct SealedFields {
     ///
     /// If no valid keys are found, the device is effectively bricked and goes into a "die" state.
     pub pubkeys: [Pubkey; 4],
+    /// Placeholder for baobit commit: this is the hash of the toolchain used to generate the image.
+    /// In many images, this is just 0's; but for signed release images, this is injected into the file
+    /// prior to applying the final signature. This injection has to happen after everything is done
+    /// because the rules of the reproducible build system disallow it from knowing its final commit
+    /// state: you have to commit its final state, which changes its reported commit state, and so
+    /// forth, so at build time you can't know what toolchain was used to build you - only after
+    /// the build is complete is the information revealed to the user.
+    ///
+    /// This field is long enough to hold a SHA-1 git hash.
+    pub toolchain: [u8; 20],
 }
 
 impl AsRef<[u8]> for SealedFields {
@@ -178,6 +188,7 @@ impl Default for SealedFields {
             min_semver: [0u8; 16],
             semver: [0u8; 16],
             pubkeys: [Pubkey::default(); 4],
+            toolchain: [0u8; 20],
         }
     }
 }
