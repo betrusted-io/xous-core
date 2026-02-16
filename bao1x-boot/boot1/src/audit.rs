@@ -1,7 +1,7 @@
 use core::convert::TryInto;
 
 use bao1x_api::pubkeys::{BOOT0_SELF_CHECK, BOOT0_TO_BOOT1, BOOT1_TO_LOADER_OR_BAREMETAL};
-use bao1x_api::signatures::{SignatureInFlash, UNSIGNED_LEN};
+use bao1x_api::signatures::{SIGBLOCK_LEN, SignatureInFlash, UNSIGNED_LEN};
 use bao1x_api::*;
 use bao1x_hal::acram::OneWayCounter;
 use bao1x_hal::sigcheck::ERASE_VALUE;
@@ -27,6 +27,18 @@ fn hash_region(region: &[u8], description: &str) {
     hex::encode_to_slice(digest, &mut buffer).unwrap();
     let hex_str = core::str::from_utf8(&buffer).unwrap();
     crate::println!("{}: {}", description, hex_str);
+}
+
+fn report_toolchain(sig: &SignatureInFlash, description: &str) {
+    let hash = sig.sealed_data.toolchain;
+    if hash == [0u8; 20] {
+        crate::println!("{}: unspecified", description);
+    } else {
+        let mut buffer = [0u8; 40];
+        hex::encode_to_slice(&hash, &mut buffer).unwrap();
+        let hex_str = core::str::from_utf8(&buffer).unwrap();
+        crate::println!("{}: {}", description, hex_str);
+    }
 }
 
 /// Stepping detection: attempt to modify the RRCR configuration. If bit 12 (code area protection)
@@ -57,7 +69,6 @@ pub fn audit() {
     crate::println!("Board type reads as: {:?}", boardtype);
     crate::println!("Boot partition is: {:?}", owc.get_decoded::<AltBootCoding>());
     crate::println!("Semver is: {}", crate::version::SEMVER);
-    crate::println!("Baobit commit is: {}", crate::version::BAOBIT_COMMIT);
     crate::println!("Description is: {}", crate::RELEASE_DESCRIPTION);
     crate::println!("Stepping is: {}", detect_stepping());
     let slot_mgr = bao1x_hal::acram::SlotManager::new();
@@ -169,12 +180,13 @@ pub fn audit() {
     let b0_pk: &SignatureInFlash = unsafe { b0_pk_ptr.as_ref().unwrap() };
     let boot0_used = unsafe {
         core::slice::from_raw_parts(
-            (bao1x_api::BOOT0_START + UNSIGNED_LEN) as *const u8,
-            b0_pk.sealed_data.signed_len as usize,
+            (bao1x_api::BOOT0_START + SIGBLOCK_LEN) as *const u8,
+            b0_pk.sealed_data.signed_len as usize - (SIGBLOCK_LEN - UNSIGNED_LEN),
         )
     };
-    // only the portion that's protected by signature
+    // only the portion that's strictly reproducible
     hash_region(boot0_used, "boot0 code only");
+    report_toolchain(b0_pk, "boot0 baobit toolchain");
 
     let boot1_region = unsafe {
         core::slice::from_raw_parts(
@@ -184,6 +196,18 @@ pub fn audit() {
     };
     // includes free space
     hash_region(boot1_region, "boot1 partition");
+
+    let b1_pk_ptr = bao1x_api::BOOT1_START as *const SignatureInFlash;
+    let b1_pk: &SignatureInFlash = unsafe { b1_pk_ptr.as_ref().unwrap() };
+    let boot1_used = unsafe {
+        core::slice::from_raw_parts(
+            (bao1x_api::BOOT1_START + SIGBLOCK_LEN) as *const u8,
+            b1_pk.sealed_data.signed_len as usize - (SIGBLOCK_LEN - UNSIGNED_LEN),
+        )
+    };
+    // only the portion that's strictly reproducible
+    hash_region(boot1_used, "boot1 code only");
+    report_toolchain(b1_pk, "boot1 baobit toolchain");
 
     // detailed state checks
     let mut secure = true;
