@@ -60,8 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let do_version = env::args().filter(|x| x == "--no-timestamp").count() == 0;
     let git_describe_opt = get_flag("--git-describe")?.first().cloned();
     let git_rev_opt = get_flag("--git-rev")?.first().cloned();
-    let baobit_commit_opt = get_flag("--baobit-commit")?.first().cloned();
-    generate_version(do_version, git_describe_opt.clone(), baobit_commit_opt.clone());
+    generate_version(do_version, git_describe_opt.clone());
     if let Some(desc) = git_describe_opt {
         builder.set_git_describe(desc);
     }

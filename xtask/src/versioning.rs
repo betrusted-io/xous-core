@@ -27,11 +27,7 @@ fn write_if_changed(path: &str, new_data: &[u8]) {
     vfile.write_all(new_data).expect(&format!("couldn't write to {}", path));
 }
 
-pub(crate) fn generate_version(
-    add_timestamp: bool,
-    forced_version: Option<String>,
-    baobit_commit: Option<String>,
-) {
+pub(crate) fn generate_version(add_timestamp: bool, forced_version: Option<String>) {
     let gitver = {
         if let Some(ver) = forced_version {
             ver.as_bytes().to_vec()
@@ -77,17 +73,7 @@ pub(crate) fn generate_version(
     .expect("couldn't add our semver");
     new_data.extend_from_slice(&semver_code);
 
-    // Baochip versioning is just SEMVER + BAOBIT_COMMIT. Now that
-    // the semver_code has been added to new_data, we can extend it with the Baobit commit.
-    if let Some(ref commit) = baobit_commit {
-        writeln!(semver_code, "pub const BAOBIT_COMMIT: &'static str = \"{}\";", commit)
-            .expect("couldn't add baobit commit");
-    } else {
-        // For builds that aren't built in the reproducible environment, the baobit commit is unspecified
-        writeln!(semver_code, "pub const BAOBIT_COMMIT: &'static str = \"unspecified\";")
-            .expect("couldn't add baobit commit placeholder");
-    }
-
+    // Baochip versioning is just SEMVER
     write_if_changed(version_file, &new_data);
     write_if_changed(boot0_version_file, &semver_code);
     write_if_changed(boot1_version_file, &semver_code);
