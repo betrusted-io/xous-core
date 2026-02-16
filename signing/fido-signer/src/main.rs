@@ -43,6 +43,10 @@ struct Args {
     /// Function code e.g. partition - if provided, creates a uf2 file
     #[arg(short = 'p', long = "function-code", value_name = "CODE")]
     function_code: Option<String>,
+
+    /// Hash to embed in the signature (hex string)
+    #[arg(short = 'b', long = "baobit-hash", value_name = "HASH")]
+    baobit_hash: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -57,6 +61,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Parse command line arguments
     let args = Args::parse();
+
+    let baobit_hash: Option<[u8; 20]> = args.baobit_hash.as_deref().map(|hex_str| {
+        let vec = hex::decode(hex_str).expect("invalid hex string");
+        vec.try_into().expect("Baobit hash must be exactly 20 bytes")
+    });
 
     // Load and parse the credential file
     let credential_data = fs::read_to_string(&args.credential_file)
@@ -100,6 +109,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         sig.as_mut().copy_from_slice(&file[offset..offset + size_of::<SignatureInFlash>()]);
         if sig.sealed_data.magic == bao1x_api::signatures::MAGIC_NUMBER {
             is_bao1x = true;
+            // inject the baobit hash here, if it is specified
+            if let Some(toolchain) = baobit_hash {
+                patch_hash_in_file(&file_path, &toolchain, offset)?;
+            }
+            // Re-read the file so we hash the patched contents
+            let file = fs::read(&file_path)
+                .map_err(|e| format!("Failed to re-read file '{}': {}", file_path.display(), e))?;
             let mut h: Sha512 = Sha512::new();
             // hash the sealed region
             h.update(&file[offset + SignatureInFlash::sealed_data_offset()..]);
@@ -206,6 +222,22 @@ fn patch_signature_in_file(
     }
     signature_struct.aad[..auth_data.len()].copy_from_slice(&auth_data);
     signature_struct.aad_len = auth_data.len() as u32;
+
+    write_header_to_file(&mut file, &signature_struct, offset)?;
+
+    Ok(())
+}
+
+fn patch_hash_in_file(
+    file_path: &PathBuf,
+    hash: &[u8],
+    offset: usize,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Open file with read and write permissions
+    let mut file = OpenOptions::new().read(true).write(true).open(file_path)?;
+
+    let mut signature_struct = read_header_from_file(&mut file, offset)?;
+    signature_struct.sealed_data.toolchain.copy_from_slice(&hash);
 
     write_header_to_file(&mut file, &signature_struct, offset)?;
 
