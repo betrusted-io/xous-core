@@ -614,6 +614,7 @@ dependencies = [
  "critical-section",
  "digest 0.10.7",
  "ed25519-dalek-bao1x",
+ "hex 0.4.3",
  "hex-literal 1.0.0",
  "linked_list_allocator",
  "riscv",
