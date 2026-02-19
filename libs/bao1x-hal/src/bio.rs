@@ -218,6 +218,14 @@ impl<'a> BioApi<'a> for Bio {
             .map_err(|e| <xous::Error as Into<BioError>>::into(e))?;
         Ok(())
     }
+
+    fn debug(&self, core: BioCore) {
+        send_message(
+            self.conn,
+            Message::new_blocking_scalar(BioOp::Debug.to_usize().unwrap(), core as usize, 0, 0, 0),
+        )
+        .unwrap();
+    }
 }
 
 #[cfg(feature = "std")]

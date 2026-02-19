@@ -668,6 +668,23 @@ impl<'a> BioApi<'a> for BioSharedState {
         }
         Ok(())
     }
+
+    fn debug(&self, core: BioCore) {
+        match core {
+            BioCore::Core0 => {
+                crate::println!("DBG_{:?}: {:x}", core, self.bio.r(utralib::utra::bio_bdma::SFR_DBG0))
+            }
+            BioCore::Core1 => {
+                crate::println!("DBG_{:?}: {:x}", core, self.bio.r(utralib::utra::bio_bdma::SFR_DBG1))
+            }
+            BioCore::Core2 => {
+                crate::println!("DBG_{:?}: {:x}", core, self.bio.r(utralib::utra::bio_bdma::SFR_DBG2))
+            }
+            BioCore::Core3 => {
+                crate::println!("DBG_{:?}: {:x}", core, self.bio.r(utralib::utra::bio_bdma::SFR_DBG3))
+            }
+        }
+    }
 }
 
 #[rustfmt::skip]

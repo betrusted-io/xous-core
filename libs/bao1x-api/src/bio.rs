@@ -100,6 +100,8 @@ pub trait BioApi<'a> {
 
     /// Returns a version code for the underlying hardware.
     fn get_version(&self) -> u32;
+
+    fn debug(&self, core: BioCore);
 }
 
 #[macro_export]
@@ -126,6 +128,7 @@ macro_rules! bio_code {
         }
 
         core::arch::global_asm!(
+            ".option arch, +m",
             ".align 4",
             concat!(".globl ", stringify!($name_start)),
             concat!(stringify!($name_start), ":"),
@@ -163,6 +166,8 @@ pub enum BioOp {
     CheckResourcesBatch,
     ClaimDynamicPin,
     ReleaseDynamicPin,
+
+    Debug,
 
     InvalidCall,
 }
