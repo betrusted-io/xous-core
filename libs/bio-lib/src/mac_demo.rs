@@ -5,6 +5,10 @@ use bao1x_hal::bio::{Bio, CoreCsr};
 use utralib::utra::bio_bdma;
 
 // This demo is not compatible with baosec because it uses FIFO0
+// Note: this demo is more or less deprecated. The original purpose of it was
+// to demonstrate how to do a multiply despite the toolchain refusing to emit
+// `mul` instructions. But, I have since figured out how to fix that, and
+// you can now just use `mul` as one might expect to be able to do.
 
 pub struct MacDemo {
     bio_ss: Bio,
@@ -105,10 +109,7 @@ bio_code!(mac_code, MAC_START, MAC_END,
   "31:",
     "addi a0, a0, -1",  // decrement arg counter
     "mv t1, x16",       // fetch vector value: note, we can't multiply directly from a FIFO because while the multi-cycle multiply runs, the FIFO keeps draining
-    // "mul  t0, a1, t1",  // multiply
-    // "mul  x5, x11, x6", // Translation of above to x-style registers.
-    // The mul instruction is converted into a `.word`` because Rust refuses to emit `mul` instructions for global_asm!
-    ".word 0x026582b3",
+    "mul  x5, x11, x6",
     "add  a2, t0, a2",  // accumulate
     "j    30b"          // loop
 );

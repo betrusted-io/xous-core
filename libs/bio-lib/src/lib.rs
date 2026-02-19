@@ -34,6 +34,7 @@
 //! - x31 r/-  [31:30] -> core ID; [29:0] -> cpu clocks since reset
 
 pub mod av_trng;
+pub mod c;
 pub mod captouch;
 pub mod mac_demo;
 pub mod ws2812;
