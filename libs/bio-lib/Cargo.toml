@@ -12,3 +12,19 @@ bao1x-hal = { path = "../../libs/bao1x-hal", features = ["std"] }
 bao1x-api = { path = "../../libs/bao1x-api" }
 bitbybit = "1.4.0"
 arbitrary-int = "1.2"
+
+[features]
+# C generated
+c-math-test = []
+
+# hand coded
+mac-demo = []
+ws2812 = []
+captouch = []
+av-trng = []
+
+# This shouldn't be a default - but provided so that code automation
+# targets can easily crawl the whole library with a single flag.
+all = ["c-math-test", "mac-demo", "ws2812", "captouch", "av-trng"]
+
+default = []
