@@ -49,7 +49,7 @@ impl MacDemo {
         // claim core resource and initialize it
         let resource_grant = bio_ss.claim_resources(&Self::resource_spec())?;
         let config = CoreConfig { clock_mode: bao1x_api::bio::ClockMode::FixedDivider(0, 0) };
-        bio_ss.init_core(resource_grant.cores[0], &mac_code(), 0, config)?;
+        bio_ss.init_core(resource_grant.cores[0], mac_code(), config)?;
         bio_ss.set_core_run_state(&resource_grant, true);
 
         // safety: fifo1 and fifo2 are stored in this object so they aren't Drop'd before the object is
