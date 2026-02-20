@@ -5,6 +5,25 @@ use bao1x_hal::bio::{Bio, CoreCsr};
 use math_test::*;
 use utralib::utra::bio_bdma;
 
+/// Number of fractional bits in the Q20.12 fixed-point format.
+const FRAC_BITS: u32 = 12;
+const FRAC_SCALE: i32 = 1 << FRAC_BITS; // 4096
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Fp(pub i32);
+
+impl Fp {
+    pub fn from_int(x: i32) -> Self { Self(x << FRAC_BITS) }
+
+    pub fn from_float(x: f32) -> Self { Self((x * FRAC_SCALE as f32 + 0.5) as i32) }
+
+    pub fn to_int(self) -> i32 { self.0 >> FRAC_BITS }
+
+    pub fn to_float(self) -> f32 { self.0 as f32 / FRAC_SCALE as f32 }
+
+    /// Wrap a raw i32 coming directly off the hardware register.
+    pub fn from_raw(raw: i32) -> Self { Self(raw) }
+}
+
 pub struct MathTest {
     bio_ss: Bio,
     // handles have to be kept around or else the underlying CSR is dropped
@@ -44,7 +63,7 @@ impl MathTest {
         // claim core resource and initialize it
         let resource_grant = bio_ss.claim_resources(&Self::resource_spec())?;
         let config = CoreConfig { clock_mode: bao1x_api::bio::ClockMode::FixedDivider(0, 0) };
-        bio_ss.init_core(resource_grant.cores[0], &math_test_bio_code(), 0, config)?;
+        bio_ss.init_core(resource_grant.cores[0], math_test_bio_code(), config)?;
         bio_ss.set_core_run_state(&resource_grant, true);
 
         // safety: fifo1 and fifo2 are stored in this object so they aren't Drop'd before the object is
@@ -66,7 +85,8 @@ impl MathTest {
     pub fn test_cos(&mut self) {
         for i in (0..360).step_by(4) {
             // self.bio_ss.debug(self.resource_grant.cores[0]);
-            self.tx.csr.wo(bio_bdma::SFR_TXF0, i);
+            let arg = Fp::from_int(i);
+            self.tx.csr.wo(bio_bdma::SFR_TXF0, arg.0 as u32);
             // let mut dbg_count: usize = 0;
             while self.rx.csr.rf(bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) == 0 {
                 /*
@@ -76,13 +96,14 @@ impl MathTest {
                 dbg_count = dbg_count.saturating_add(1);
                 */
             }
-            let result = self.rx.csr.r(bio_bdma::SFR_RXF1) as i32 + 11; // result should be -10 to 10
+            let result = self.rx.csr.r(bio_bdma::SFR_RXF1) as i32; // result should be 0..20
+            let result_f32 = Fp::from_raw(result);
             let mut line = String::new();
-            for _ in 0..result {
+            for _ in 0..((result_f32.to_float() * 20.0f32) as usize) {
                 line.push(' ');
             }
             line.push('*');
-            log::info!("{:3},{:2}:{}", i, result, line);
+            log::info!("{:3},{:2.3}:{}", i, result_f32.to_float(), line);
         }
     }
 }

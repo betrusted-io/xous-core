@@ -1,7 +1,7 @@
-use bao1x_api::bio_code;
+use bao1x_api::bio_code_aligned;
 
 #[rustfmt::skip]
-bio_code!(math_test_bio_code, BM_MATH_TEST_BIO_START, BM_MATH_TEST_BIO_END,
+bio_code_aligned!(math_test_bio_code, BM_MATH_TEST_BIO_START, BM_MATH_TEST_BIO_END,
     "20:", // _start: @_start
     // --- inline asm begin ---
     "lui	sp, 1",
@@ -14,79 +14,83 @@ bio_code!(math_test_bio_code, BM_MATH_TEST_BIO_START, BM_MATH_TEST_BIO_END,
     "sw	s1, 36(sp)", // 4-byte Folded Spill
     "lui	a1, 6",
     "lui	a3, 3",
-    "li	ra, 1",
-    "lui	s0, 1048396",
+    "li	t2, 1",
+    "lui	s1, 1048396",
     "li	t0, -1",
     "lui	a4, 699051",
-    "lui	a5, 0xa2f06",
-    "lui    a2, 0x9",
-    "slli   a2, a2, 4",
-    "add    a5, a2, a5",
-    "lui	a0, 2",
-    "lui	s1, 1048574",
-    "addi	a2, a1, 1160",
-    "sw	a2, 12(sp)", // 4-byte Folded Spill
-    "addi	a2, a3, 580",
-    "sw	a2, 32(sp)", // 4-byte Folded Spill
-    "addi	a2, a4, -1365",
-    "sw	a2, 4(sp)", // 4-byte Folded Spill
+    // ERRATA BUG1 patch: lui	a5, 667542 (B1:phantom-rs1)
+    "lui a5, 0xa2f06",
+    "sw t0, -4(sp)",
+    "addi t0, zero, 9",
+    "slli t0, t0, 4",
+    "slli t0, t0, 12",
+    "add a5, a5, t0",
+    "lw t0, -4(sp)",
+    "lui	a2, 2",
+    "lui	a0, 1048574",
+    "addi	s0, a1, 1160",
+    "sw	s0, 12(sp)", // 4-byte Folded Spill
+    "addi	a3, a3, 580",
+    "sw	a3, 32(sp)", // 4-byte Folded Spill
+    "addi	a3, a4, -1365",
+    "sw	a3, 4(sp)", // 4-byte Folded Spill
     "addi	a1, a1, 1159",
     "sw	a1, 16(sp)", // 4-byte Folded Spill
     "addi	a1, a5, 1317",
     "sw	a1, 8(sp)", // 4-byte Folded Spill
-    "addi	a0, a0, -1757",
-    "sw	a0, 28(sp)", // 4-byte Folded Spill
-    "addi	t1, s1, 1758",
+    "addi	a1, a2, -1757",
+    "sw	a1, 28(sp)", // 4-byte Folded Spill
+    "addi	ra, a0, 1758",
     "22:", // .LBB1_1: =>This Loop Header: Depth=1
     // Child Loop BB1_2 Depth 2
     // Child Loop BB1_4 Depth 2
     // Child Loop BB1_16 Depth 2
     // Child Loop BB1_18 Depth 2
     "li	a3, 0",
-    "li	s1, 0",
+    "li	s0, 0",
     // --- inline asm begin ---
     "mv	a1, x16",
     // --- inline asm end ---
-    "slli	a1, a1, 12",
     "lw	a0, 32(sp)", // 4-byte Folded Reload
     // --- inline asm begin ---
     "mulh	a4, a1, a0",
     "mul	a1, a1, a0",
     // --- inline asm end ---
     "srli	a1, a1, 12",
-    "slli	a4, a4, 19",
-    "slli	a4, a4, 1",
-    "or	t2, a4, a1",
+    // ERRATA BUG2 patch: slli	a4, a4, 20 (shamt=20)
+    "slli a4, a4, 19",
+    "slli a4, a4, 1",
+    "or	t1, a4, a1",
     "srai	a4, a4, 31",
-    "xor	a1, t2, a4",
-    "sub	a4, a1, a4",
-    "li	a5, 31",
+    "xor	a5, t1, a4",
+    "sub	a5, a5, a4",
+    "li	a4, 31",
     "23:", // .LBB1_2: Parent Loop BB1_1 Depth=1
     // =>  This Inner Loop Header: Depth=2
     "slli	a3, a3, 1",
-    "srl	a1, a4, a5",
-    "sll	a0, ra, a5",
-    "addi	a5, a5, -1",
+    "srl	a1, a5, a4",
+    "sll	a0, t2, a4",
+    "addi	a4, a4, -1",
     "andi	a1, a1, 1",
     "or	a1, a1, a3",
     "srli	a3, a3, 14",
     "sltiu	a3, a3, 45",
     "addi	a3, a3, -1",
     "and	a0, a0, a3",
-    "and	a3, a3, s0",
-    "or	s1, s1, a0",
+    "and	a3, a3, s1",
+    "or	s0, s0, a0",
     "add	a3, a3, a1",
-    "bne	a5, t0, 23b",
+    "bne	a4, t0, 23b",
     // in Loop: Header=BB1_1 Depth=1
     "li	a1, 0",
-    "li	a4, 0",
-    "slli	a5, a3, 12",
+    "li	a5, 0",
+    "slli	a4, a3, 12",
     "li	a3, 31",
     "24:", // .LBB1_4: Parent Loop BB1_1 Depth=1
     // =>  This Inner Loop Header: Depth=2
     "slli	a1, a1, 1",
-    "srl	a0, a5, a3",
-    "sll	a2, ra, a3",
+    "srl	a0, a4, a3",
+    "sll	a2, t2, a3",
     "addi	a3, a3, -1",
     "andi	a0, a0, 1",
     "or	a0, a0, a1",
@@ -94,14 +98,14 @@ bio_code!(math_test_bio_code, BM_MATH_TEST_BIO_START, BM_MATH_TEST_BIO_END,
     "sltiu	a1, a1, 45",
     "addi	a1, a1, -1",
     "and	a2, a2, a1",
-    "and	a1, a1, s0",
-    "or	a4, a4, a2",
+    "and	a1, a1, s1",
+    "or	a5, a5, a2",
     "add	a1, a1, a0",
     "bne	a3, t0, 24b",
     // in Loop: Header=BB1_1 Depth=1
-    "slli	s1, s1, 12",
-    "or	a4, a4, s1",
-    "bgez	t2, 25f",
+    "slli	a4, s0, 12",
+    "or	a4, a4, a5",
+    "bgez	t1, 25f",
     // in Loop: Header=BB1_1 Depth=1
     "neg	a4, a4",
     "25:", // .LBB1_7: in Loop: Header=BB1_1 Depth=1
@@ -142,150 +146,146 @@ bio_code!(math_test_bio_code, BM_MATH_TEST_BIO_START, BM_MATH_TEST_BIO_END,
     "sub	a3, a0, a1",
     "29:", // .LBB1_15: in Loop: Header=BB1_1 Depth=1
     "sw	a1, 24(sp)", // 4-byte Folded Spill
-    "li	ra, 0",
-    "li	s1, 0",
+    "li	t2, 0",
+    "li	s0, 0",
     "slli	a3, a3, 6",
     "srai	a0, a3, 31",
     "sw	a3, 20(sp)", // 4-byte Folded Spill
-    "xor	a4, a3, a0",
-    "sub	a4, a4, a0",
+    "xor	a5, a3, a0",
+    "sub	a5, a5, a0",
     "li	a3, 31",
-    "li	s0, 1",
+    "li	s1, 1",
     "lui	a1, 2",
     "30:", // .LBB1_16: Parent Loop BB1_1 Depth=1
     // =>  This Inner Loop Header: Depth=2
-    "slli	ra, ra, 1",
-    "srl	a0, a4, a3",
-    "addi	t2, a1, -1758",
-    "sll	a2, s0, a3",
+    "slli	t2, t2, 1",
+    "srl	a0, a5, a3",
+    "addi	t1, a1, -1758",
+    "sll	a2, s1, a3",
     "addi	a3, a3, -1",
     "andi	a0, a0, 1",
-    "or	a0, a0, ra",
-    "sltu	a5, ra, t2",
-    "addi	a5, a5, -1",
-    "and	a2, a2, a5",
-    "and	a5, a5, t1",
-    "or	s1, s1, a2",
-    "add	ra, a5, a0",
+    "or	a0, a0, t2",
+    "sltu	a4, t2, t1",
+    "addi	a4, a4, -1",
+    "and	a2, a2, a4",
+    "and	a4, a4, ra",
+    "or	s0, s0, a2",
+    "add	t2, a4, a0",
     "bne	a3, t0, 30b",
     // in Loop: Header=BB1_1 Depth=1
-    "li	a5, 0",
     "li	a4, 0",
-    "slli	ra, ra, 12",
+    "li	a5, 0",
+    "slli	t2, t2, 12",
     "li	a3, 31",
     "31:", // .LBB1_18: Parent Loop BB1_1 Depth=1
     // =>  This Inner Loop Header: Depth=2
-    "slli	a5, a5, 1",
-    "srl	a0, ra, a3",
-    "sll	a2, s0, a3",
+    "slli	a4, a4, 1",
+    "srl	a0, t2, a3",
+    "sll	a2, s1, a3",
     "addi	a3, a3, -1",
     "andi	a0, a0, 1",
-    "or	a0, a0, a5",
-    "sltu	a5, a5, t2",
-    "addi	a5, a5, -1",
-    "and	a2, a2, a5",
-    "and	a5, a5, t1",
-    "or	a4, a4, a2",
-    "add	a5, a5, a0",
+    "or	a0, a0, a4",
+    "sltu	a4, a4, t1",
+    "addi	a4, a4, -1",
+    "and	a2, a2, a4",
+    "and	a4, a4, ra",
+    "or	a5, a5, a2",
+    "add	a4, a4, a0",
     "bne	a3, t0, 31b",
     // in Loop: Header=BB1_1 Depth=1
-    "slli	a3, s1, 12",
-    "or	a3, a3, a4",
+    "slli	a3, s0, 12",
+    "or	a3, a3, a5",
     "lw	a1, 24(sp)", // 4-byte Folded Reload
-    "addi   sp, sp, -4",
-    "lw	a0, 24(sp)", // 4-byte Folded Reload
-    "addi   sp, sp, 4",
+    // ERRATA BUG2 patch: lw	a0, 20(sp) (offset=20,bits[4:0]=20)  // 4-byte Folded Reload
+    "addi sp, sp, -4",
+    "lw a0, 24(sp)",
+    "addi sp, sp, 4",
     "bgez	a0, 32f",
     // in Loop: Header=BB1_1 Depth=1
     "neg	a3, a3",
     "32:", // .LBB1_21: in Loop: Header=BB1_1 Depth=1
-    "lui	s0, 1048396",
-    "li	ra, 1",
-    "srai	a4, a3, 12",
-    "li	a5, 63",
-    "bge	a5, a4, 33f",
+    "lui	s1, 1048396",
+    "li	t2, 1",
+    "srai	a5, a3, 12",
+    "li	s0, 63",
+    "lui	a4, 1",
+    "bge	s0, a5, 33f",
     // in Loop: Header=BB1_1 Depth=1
     "lui	a3, 1",
-    "bge	a4, a5, 34f",
+    "bge	a5, s0, 34f",
     "j	35f",
     "33:", // .LBB1_23: in Loop: Header=BB1_1 Depth=1
-    "slli	a3, a3, 19",
-    "slli	a3, a3, 1",
-    "srli	a3, a3, 19",
-    "srli	a3, a3, 1",
-    "blt	a4, a5, 35f",
+    // ERRATA BUG2 patch: slli	a3, a3, 20 (shamt=20)
+    "slli a3, a3, 19",
+    "slli a3, a3, 1",
+    // ERRATA BUG2 patch: srli	a3, a3, 20 (shamt=20)
+    "srli a3, a3, 19",
+    "srli a3, a3, 1",
+    "blt	a5, s0, 35f",
     "34:", // .LBB1_24: in Loop: Header=BB1_1 Depth=1
-    "li	a4, 63",
+    "li	a5, 63",
     "35:", // .LBB1_25: in Loop: Header=BB1_1 Depth=1
-    "slli	a4, a4, 1",
+    "slli	a5, a5, 1",
     "lui	a0, %hi(37f)",
     "addi	a0, a0, %lo(37f)",
-    "add	a4, a4, a0",
-    "lh	a0, 0(a4)",
-    "lh	a2, 2(a4)",
+    "add	a5, a5, a0",
+    "lh	a0, 0(a5)",
+    "lh	a2, 2(a5)",
     "sub	a2, a2, a0",
     // --- inline asm begin ---
-    "mulh	a4, a2, a3",
+    "mulh	a5, a2, a3",
     "mul	a2, a2, a3",
     // --- inline asm end ---
     "srli	a2, a2, 12",
-    "slli	a4, a4, 19",
-    "slli	a4, a4, 1",
-    "or	a2, a2, a4",
+    // ERRATA BUG2 patch: slli	a5, a5, 20 (shamt=20)
+    "slli a5, a5, 19",
+    "slli a5, a5, 1",
+    "or	a2, a2, a5",
     "add	a3, a2, a0",
     "lw	a0, 28(sp)", // 4-byte Folded Reload
     "blt	a1, a0, 36f",
     // in Loop: Header=BB1_1 Depth=1
     "neg	a3, a3",
     "36:", // .LBB1_27: in Loop: Header=BB1_1 Depth=1
-    "lui	a1, 10",
+    "add	a3, a3, a4",
     // --- inline asm begin ---
-    "mulh	a0, a3, a1",
-    "mul	a1, a3, a1",
-    // --- inline asm end ---
-    "srli	a1, a1, 12",
-    "slli	a0, a0, 19",
-    "slli	a0, a0, 1",
-    "or	a0, a0, a1",
-    "srai	a0, a0, 12",
-    // --- inline asm begin ---
-    "mv	x17, a0",
+    "mv	x17, a3",
     // --- inline asm end ---
     "j	22b",
     // --- rodata: cos_table (65 entries, 33 words) ---
     ".p2align 1",
     "37:", // cos_table
-    ".word 0x10001000", // [0] 4096, 4096
-    ".word 0x0ffe0fff", // [4] 4095, 4094
-    ".word 0x0ffa0ffc", // [8] 4092, 4090
-    ".word 0x0ff30ff7", // [12] 4087, 4083
-    ".word 0x0fe90fee", // [16] 4078, 4073
-    ".word 0x0fdc0fe3", // [20] 4067, 4060
-    ".word 0x0fcc0fd4", // [24] 4052, 4044
-    ".word 0x0fb90fc3", // [28] 4035, 4025
-    ".word 0x0fa30fae", // [32] 4014, 4003
-    ".word 0x0f8a0f97", // [36] 3991, 3978
-    ".word 0x0f6e0f7c", // [40] 3964, 3950
-    ".word 0x0f4f0f5f", // [44] 3935, 3919
-    ".word 0x0f2d0f3e", // [48] 3902, 3885
-    ".word 0x0f080f1b", // [52] 3867, 3848
-    ".word 0x0edf0ef4", // [56] 3828, 3807
-    ".word 0x0eb40eca", // [60] 3786, 3764
-    ".word 0x0e860e9d", // [64] 3741, 3718
-    ".word 0x0e550e6e", // [68] 3694, 3669
-    ".word 0x0e210e3b", // [72] 3643, 3617
-    ".word 0x0deb0e06", // [76] 3590, 3563
-    ".word 0x0db20dcf", // [80] 3535, 3506
-    ".word 0x0d770d95", // [84] 3477, 3447
-    ".word 0x0d3a0d59", // [88] 3417, 3386
-    ".word 0x0cfa0d1a", // [92] 3354, 3322
-    ".word 0x0cb80cd9", // [96] 3289, 3256
-    ".word 0x0c740c96", // [100] 3222, 3188
-    ".word 0x0c2e0c51", // [104] 3153, 3118
-    ".word 0x0be60c0a", // [108] 3082, 3046
-    ".word 0x0b9c0bc1", // [112] 3009, 2972
-    ".word 0x0b510b77", // [116] 2935, 2897
-    ".word 0x0b040b2b", // [120] 2859, 2820
-    ".word 0x0ab60add", // [124] 2781, 2742
-    ".word 0x00000a8e" // [128] 2702
+    ".word 0x0fff1000", // [0] 4096, 4095
+    ".word 0x0ff50ffb", // [4] 4091, 4085
+    ".word 0x0fe10fec", // [8] 4076, 4065
+    ".word 0x0fc40fd4", // [12] 4052, 4036
+    ".word 0x0f9c0fb1", // [16] 4017, 3996
+    ".word 0x0f6c0f85", // [20] 3973, 3948
+    ".word 0x0f310f50", // [24] 3920, 3889
+    ".word 0x0eee0f11", // [28] 3857, 3822
+    ".word 0x0ea10ec8", // [32] 3784, 3745
+    ".word 0x0e4b0e77", // [36] 3703, 3659
+    ".word 0x0dec0e1c", // [40] 3612, 3564
+    ".word 0x0d850db9", // [44] 3513, 3461
+    ".word 0x0d150d4e", // [48] 3406, 3349
+    ".word 0x0c9d0cda", // [52] 3290, 3229
+    ".word 0x0c1e0c5e", // [56] 3166, 3102
+    ".word 0x0b970bdb", // [60] 3035, 2967
+    ".word 0x0b080b50", // [64] 2896, 2824
+    ".word 0x0a730abf", // [68] 2751, 2675
+    ".word 0x09d80a26", // [72] 2598, 2520
+    ".word 0x09370988", // [76] 2440, 2359
+    ".word 0x088f08e4", // [80] 2276, 2191
+    ".word 0x07e3083a", // [84] 2106, 2019
+    ".word 0x0732078b", // [88] 1931, 1842
+    ".word 0x067c06d7", // [92] 1751, 1660
+    ".word 0x05c2061f", // [96] 1567, 1474
+    ".word 0x05050564", // [100] 1380, 1285
+    ".word 0x044404a5", // [104] 1189, 1092
+    ".word 0x038103e3", // [108] 995, 897
+    ".word 0x02bc031f", // [112] 799, 700
+    ".word 0x01f50259", // [116] 601, 501
+    ".word 0x012d0191", // [120] 401, 301
+    ".word 0x006500c9", // [124] 201, 101
+    ".word 0x00000000" // [128] 0
 );
