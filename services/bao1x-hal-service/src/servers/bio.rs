@@ -33,7 +33,11 @@ fn bio_service(clk_freq: u32) {
                 };
                 let mut config = buf.to_original::<CoreInitRkyv, _>().unwrap();
                 log::trace!("initing with {:x?}", config.config);
-                match bio_ss.init_core(config.core, &config.code, config.offset, config.config) {
+                match bio_ss.init_core(
+                    config.core,
+                    (&config.code[..config.code_len], config.pad_word),
+                    config.config,
+                ) {
                     Ok(freq) => {
                         config.actual_freq = freq;
                         config.result = BioError::None;
