@@ -76,6 +76,11 @@ impl<'a> ShellCmdApi<'a> for Test {
                         log::info!("{}", line);
                     }
                 }
+                #[cfg(feature = "bio-math-test")]
+                "cos" => {
+                    let mut math = bio_lib::c::math_test::MathTest::new().unwrap();
+                    math.test_cos();
+                }
                 "env" => {
                     log::info!("{:?}", std::env::vars());
                 }
