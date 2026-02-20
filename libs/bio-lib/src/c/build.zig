@@ -2,108 +2,36 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    const optimize = b.standardOptimizeOption(.{});
-
-    const linker_script = b.option(
-        []const u8,
-        "linker",
-        "Path to linker script (optional)",
-    );
-
-    // Module name for the "dis" step: e.g. -Dmodule=math_test
-    // Defaults to "test" to match the legacy layout.
+    // -Dmodule=<n>: subdirectory to compile. Expects <n>/main.c to exist.
     const module_name = b.option(
         []const u8,
         "module",
-        "Subdirectory module to compile (e.g. math_test). " ++
-            "Expects <module>/main.c to exist.",
+        "Subdirectory module to compile (e.g. math_test). Expects <module>/main.c to exist.",
     ) orelse "test";
 
-    // -- RV32IMC target with x16-x31 reserved -------------------------
-    //
-    // The reserve_x* features tell LLVM's register allocator to never
-    // use these registers. This is the reliable way to reserve registers
-    // -- the -ffixed-xN C flags depend on the clang driver translating
-    // them into +reserve_xN target features, which zig cc may not do
-    // correctly when invoked as a system command.
-    const target = b.resolveTargetQuery(.{
-        .cpu_arch = .riscv32,
-        .os_tag = .freestanding,
-        .abi = .none,
-        .cpu_model = .{ .explicit = &std.Target.riscv.cpu.generic_rv32 },
-        .cpu_features_add = blk: {
-            var features = std.Target.Cpu.Feature.Set.empty;
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.m));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.c));
-            // Reserve x16-x31 for coprocessor use (FIFOs, special regs).
-            // This prevents the compiler from using these registers for
-            // general-purpose allocation, which would conflict with the
-            // inline asm in bio.h that reads/writes them directly.
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x16));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x17));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x18));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x19));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x20));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x21));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x22));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x23));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x24));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x25));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x26));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x27));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x28));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x29));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x30));
-            features.addFeature(@intFromEnum(std.Target.riscv.Feature.reserve_x31));
-            break :blk features;
-        },
-    });
+    // -Dasm-only=true: emit .s file but skip running clang2rustasm.py
+    const asm_only = b.option(
+        bool,
+        "asm-only",
+        "Stop after emitting .s; do not run clang2rustasm.py",
+    ) orelse false;
 
-    // -- Build the firmware ELF (uses the selected module) ------------
-    const exe = b.addExecutable(.{
-        .name = "firmware",
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-
-    // main.c lives inside the module subdirectory
     const main_c_path = b.pathJoin(&.{ module_name, "main.c" });
-    exe.root_module.addCSourceFile(.{
-        .file = b.path(main_c_path),
-        .flags = c_flags,
-    });
 
-    // Headers: module dir first (bio.h, fp.h, etc.), then top-level include/
-    exe.root_module.addIncludePath(b.path(module_name));
-    exe.root_module.addIncludePath(b.path("include"));
-
-    // -- Linker script ------------------------------------------------
-    if (linker_script) |ld| {
-        exe.setLinkerScript(b.path(ld));
-    }
-
-    b.installArtifact(exe);
-
-    // -- "zig build dis -Dmodule=<n>" - emit assembly -----------------
-    // Output: zig-out/<module_name>.s
+    // -- Step 1: emit assembly ----------------------------------------
     //
-    // This invokes "zig cc -S" as a separate system command, so it does
-    // NOT inherit the target features from the resolveTargetQuery above.
-    // We must pass the reserve features explicitly via -mcpu.
-    const dis_step = b.step("dis", "Generate assembly from C source");
-
+    // Invokes "zig cc -S" as a separate system command. Target features
+    // (RV32IMC + x16-x31 reserved) are passed explicitly via -mcpu since
+    // we are driving the compiler directly rather than via addExecutable.
     const dis_cmd = b.addSystemCommand(&.{
         b.graph.zig_exe,
         "cc",
-        "-S", // stop after compilation, emit assembly
+        "-S",
         "-fverbose-asm",
         "-o",
     });
     dis_cmd.has_side_effects = true;
 
-    // The output filename is the module name with a .s extension.
     const out_s_name = b.fmt("{s}.s", .{module_name});
     const dis_output = dis_cmd.addOutputFileArg(out_s_name);
 
@@ -120,27 +48,44 @@ pub fn build(b: *std.Build) void {
             "+reserve_x24+reserve_x25+reserve_x26+reserve_x27" ++
             "+reserve_x28+reserve_x29+reserve_x30+reserve_x31",
     });
-    // Include paths for the compiler invocation
     dis_cmd.addArg(b.fmt("-I{s}", .{module_name}));
     dis_cmd.addArg("-Iinclude");
     dis_cmd.addArgs(c_flags);
 
-    // Install the .s file into zig-out/ at the top level.
     const install_dis = b.addInstallFile(dis_output, out_s_name);
-    dis_step.dependOn(&install_dis.step);
+    install_dis.step.dependOn(&dis_cmd.step);
+
+    // -- Step 2: convert assembly to Rust inline asm ------------------
+    //
+    // Runs: python3 clang2rustasm.py <module_name>
+    // The script lives next to build.zig. Skipped when -Dasm-only=true.
+    const py_cmd = b.addSystemCommand(&.{
+        "python3",
+        b.pathFromRoot("clang2rustasm.py"),
+        module_name,
+    });
+    py_cmd.has_side_effects = true;
+    py_cmd.step.dependOn(&install_dis.step);
+
+    // -- Default step: full pipeline or asm-only ----------------------
+    //
+    // Plain "zig build -Dmodule=math_test" runs the full pipeline.
+    // Add "-Dasm-only=true" to stop after the .s file.
+    if (asm_only) {
+        b.default_step.dependOn(&install_dis.step);
+    } else {
+        b.default_step.dependOn(&py_cmd.step);
+    }
 }
 
 // ---------------------------------------------------------------------
-// C compiler flags shared by both the ELF build and the dis step.
+// C compiler flags for the dis step.
 //
-// Note: register reservation is NOT done here via -ffixed-xN because
-// zig cc does not reliably translate those into LLVM +reserve_xN
-// features. Instead, reservation is handled via:
-//   - cpu_features_add in the target query (ELF build)
-//   - the -mcpu string (dis step)
-// The -ffixed-xN flags are kept as a belt-and-suspenders measure in
-// case a future zig version starts honoring them, but they are not
-// the primary mechanism.
+// Note: register reservation is primarily handled via the -mcpu string
+// (+reserve_xN features) passed to zig cc above. The -ffixed-xN flags
+// below are belt-and-suspenders in case a future zig version starts
+// translating them into LLVM target features, but they are not the
+// primary mechanism and may be silently ignored today.
 // ---------------------------------------------------------------------
 const c_flags = &[_][]const u8{
     "-std=c11",
