@@ -70,3 +70,88 @@ level flags, configured by the host; writes to bits [31:24] are ignored.
 
 Core ID & debug:
 - x31 r/-  [31:30] -> core ID; [29:0] -> cpu clocks since reset
+
+### ERRATUM
+
+BUG 1: ("phantom rs1"): For lui/auipc/jal (U&J type instructions),
+the 5-bit field at instruction bits [19:15] is not gated off. If that field
+decodes to register 16-19 (x16-x19) for just these instruction types,
+a spurious pending read is made from the corresponding FIFO,
+which affects correctnes and can block execution.
+
+BUG 2: ("phantom rs2"): For non-R/S/B-type instructions, the 5-bit
+field at instruction bits [24:20] should be gated off but isn't.
+When that field equals 20 (0b10100), a spurious `quantum` signal
+triggers, which can affect the instruction fetch pipeline.
+
+For coders compiling from C, these erratum are transparently
+patched by the `clang2rustasm.py` script. Thus these erratum
+are primarily a challenge to coders hand-writing in assembly.
+
+For assembly hand-coders, there is a script called `erratum_check.py`
+which will inspect code inside a `bio_code!` macro for patterns
+that match the above bugs. It can also auto-patch, if you so desire,
+using `--autopatch`.
+
+#### Examples
+
+The primary pitfalls happen in dealing with immediates, as follows.
+
+Bug 1 example:
+
+`lui a1, 0xa2f96`
+
+Here, the `9` in the second digit of `0xa2f96` translates to register
+number x18, which triggers the bug. The fix is to create the constant
+with a sequence such as:
+
+```
+lui a1, 0xa2f06
+lui a2, 0x9      # can't use 0x90 because that triggers the bug
+slli a2, a2, 4   # shift 0x9 into place
+add a1, a1, a2   # Final result. Note that a2 is side-effected.
+```
+
+Bug 2 example:
+
+`slli x1, x2, 20`
+
+Workaround (splitting the shift):
+
+`slli x1, x2, 19`
+`slli x1, x1, 1`
+
+Add, xor, andi, ori are also affected, and the fix requires
+using a temporary variable to compose an intermediate.
+
+Loads are affected, but not stores. Loads with an offset of
+20 (or containing any coding of 0x14 in the bit field) are
+worked around by pre-decrementing the source register, adding
+the the decrement to the offset, and then re-incrementing the
+source register.
+
+#### Root Cause
+
+The root cause was a misunderstanding of the register field
+decoders in the PicoRV. I got confused over the register names
+and when I checked for gating, I looked at the output variables
+of the register file, and not the input. Turns out the inputs
+to the register file are very simple:
+
+```
+			decoded_rs1 <= mem_rdata_latched[19:15];
+			decoded_rs2 <= mem_rdata_latched[24:20];
+```
+
+The good news is that on the write-side, there is an additional
+signal that detects writes, so the bug is not triggered for write
+pattern. While hand-coded test cases were used to check the function
+of the implementation, coverage was limited. Realistic code-freeze
+dates would have informed deeper investment in automated test tooling, but,
+management issues are not the topic of this readme.
+
+The hardware fix would be to extract the intermediate signals that indicate
+the decoded instruction type and use them to gate the `quantum`
+and FIFO access lines. However, this would require a full mask
+spin and at a couple million dollars. That's just not going to happen;
+thus, I get to live with owning this bug for the rest of my life.
