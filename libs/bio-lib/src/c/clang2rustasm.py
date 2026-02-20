@@ -18,6 +18,8 @@ Options:
     -o FILE           Override output file path
 """
 
+# python3 .\clang2rustasm.py math_test
+
 import argparse
 import re
 import sys
@@ -69,6 +71,7 @@ DATA_DIRECTIVE_WIDTH = {
     ".long":  4,
 }
 
+WARNINGS = []
 
 # ============================================================================
 # Argument parsing and path resolution
@@ -494,6 +497,784 @@ def convert_line(line, label_map, label_positions, current_line_idx):
 
 
 # ============================================================================
+# Pass 3: BIO errata patching
+#
+# Two classes of hardware bugs in the BIO decoder:
+#
+# BUG 1 ("phantom rs1"): For lui/auipc/jal, the 5-bit field at
+#   instruction bits [19:15] is not gated off. If that field decodes
+#   to register 16-19 (x16-x19) for just these instruction types,
+#   a spurious pending read is made from the corresponding FIFO.
+#   For U-type (lui/auipc), bits [19:15] = imm[7:3].
+#   For J-type (jal), bits [19:15] = imm[10:6] (after J-encoding shuffle).
+#   Fix: decompose the immediate so the problematic bits are avoided,
+#   using a temp register saved/restored via stack.
+#
+# BUG 2 ("phantom rs2"): For non-R/S/B-type instructions, the 5-bit
+#   field at instruction bits [24:20] should be gated off but isn't.
+#   When that field equals 20 (0b10100), a spurious `quantum` signal
+#   triggers, which can affect the instruction fetch pipeline.
+#   Affected formats:
+#     - I-type (addi, andi, ori, etc.): bits [24:20] = imm[4:0]
+#     - I-type loads (lw, lh, lb, etc.): bits [24:20] = offset[4:0]
+#     - I-type shifts (slli, srli, srai): bits [24:20] = shamt[4:0]
+#     - U-type (lui, auipc): bits [24:20] = imm[8:4]
+#     - J-type (jal): bits [24:20] = imm[4:0] (after J-encoding shuffle)
+#   Fix: varies by instruction type - decompose shifts, adjust offsets
+#   for loads/stores, split immediates for ALU ops, etc.
+#
+# The patching runs after convert_line (Pass 2) and before format_output.
+# Each instruction is parsed, checked against the dispatch table, and
+# potentially expanded into a multi-instruction sequence.
+# ============================================================================
+
+# Temp register used for errata workarounds.  We save/restore via stack.
+# Stack save/restore is safe so long as:
+#   - The stack is set up (which it is by the C entry point)
+#   - There are no interrupts or concurrency (and no interrupts are possible
+#     in this implementation as they are not implemented)
+ERRATA_TEMP = "t0"
+ERRATA_STACK_OFFSET = -4  # known safe: lower 5 bits = 0b11100, not 20; will not recursively trigger Bug 2
+
+def _parse_instruction(instr_str):
+    """
+    Parse an instruction string into (mnemonic, [operands]).
+    Handles both regular "add a0, a1, a2" and memory "lw a0, 4(sp)" forms.
+    Returns (mnemonic, operands_list) or (None, []) if not parseable.
+    """
+    if instr_str is None:
+        return None, []
+    s = instr_str.strip()
+    # Labels (e.g. "20:") are not instructions
+    if re.match(r'^\d+:', s):
+        return None, []
+    # Directives
+    if s.startswith('.'):
+        return None, []
+    parts = s.split(None, 1)
+    if not parts:
+        return None, []
+    mnemonic = parts[0].lower()
+    if len(parts) == 1:
+        return mnemonic, []
+    operands = [op.strip() for op in parts[1].split(',')]
+    return mnemonic, operands
+
+
+def _parse_mem_operand(operand):
+    """
+    Parse a memory operand like "4(sp)" or "-8(x2)".
+    Returns (offset_int, base_reg_str) or (None, None) if not a memory operand.
+    Also handles "%lo(32f)(a5)" style - returns None for those (relocation).
+    """
+    m = re.match(r'^(-?\d+)\((\w+)\)$', operand)
+    if m:
+        return int(m.group(1)), m.group(2)
+    return None, None
+
+
+def _imm_to_int(s):
+    """Parse an immediate string (decimal or 0x hex) to int. Returns None on failure."""
+    s = s.strip()
+    try:
+        return int(s, 0)
+    except (ValueError, TypeError):
+        return None
+
+
+def _has_relocation(instr_str):
+    """Check if instruction contains a relocation like %hi(...) or %lo(...)."""
+    return '%' in instr_str if instr_str else False
+
+
+# --------------------------------------------------------------------------
+# Bug 1: U/J-type "phantom rs1" in bits [19:15]
+# --------------------------------------------------------------------------
+
+# The problematic register numbers for Bug 1
+BUG1_BAD_REGS = {16, 17, 18, 19}
+
+def _u_type_phantom_rs1(imm20):
+    """
+    For U-type (lui/auipc), check if bits [19:15] of the encoded instruction
+    would decode to a problematic register.
+    U-type encoding: imm[19:0] is placed in instruction bits [31:12].
+    So instruction bits [19:15] = imm[7:3].
+    """
+    field = (imm20 >> 3) & 0x1F
+    return field in BUG1_BAD_REGS
+
+
+def _j_type_phantom_rs1(imm21):
+    """
+    For J-type (jal), check bits [19:15] of the encoded instruction.
+    J-type encoding shuffles the immediate:
+      inst[31]    = imm[20]
+      inst[30:21] = imm[10:1]
+      inst[20]    = imm[11]
+      inst[19:12] = imm[19:12]
+    So instruction bits [19:15] = imm[19:15].
+    """
+    field = (imm21 >> 15) & 0x1F
+    return field in BUG1_BAD_REGS
+
+
+def _u_type_phantom_rs2(imm20):
+    """
+    Bug 2 for U-type: check bits [24:20] of the encoded instruction.
+    inst bits [24:20] = imm[12:8].
+    """
+    field = (imm20 >> 8) & 0x1F
+    return field == 20
+
+
+def _j_type_phantom_rs2(imm21):
+    """
+    Bug 2 for J-type (jal): check bits [24:20] of the encoded instruction.
+    J-type: inst[30:21] = imm[10:1], inst[20] = imm[11]
+    So inst bits [24:20] = {imm[3:1], imm[11], imm[20]}... actually let me
+    work this out properly.
+    inst[24] = imm[4], inst[23] = imm[3], inst[22] = imm[2], inst[21] = imm[1],
+    inst[20] = imm[11].
+    So the 5-bit field = (imm[4:1] << 1) | imm[11].
+    Wait, no. inst[30:21] = imm[10:1]. So:
+      inst[24] = imm[4]
+      inst[23] = imm[3]
+      inst[22] = imm[2]
+      inst[21] = imm[1]
+      inst[20] = imm[11]
+    field = (imm >> 1) & 0xF  -> gives imm[4:1], shift left 1
+    field = ((imm >> 1) & 0xF) << 1 | ((imm >> 11) & 1)
+    """
+    field = (((imm21 >> 1) & 0xF) << 1) | ((imm21 >> 11) & 1)
+    return field == 20
+
+
+# --------------------------------------------------------------------------
+# Bug 2: bits [24:20] = 20 for I-type instructions
+# --------------------------------------------------------------------------
+
+def _i_type_imm_has_bug2(imm12):
+    """
+    For I-type, bits [24:20] = imm[4:0].
+    Check if lower 5 bits of the sign-extended 12-bit immediate = 20.
+    """
+    # Sign extend to get the actual encoding bits
+    if imm12 < 0:
+        encoded = imm12 & 0xFFF
+    else:
+        encoded = imm12 & 0xFFF
+    return (encoded & 0x1F) == 20
+
+
+# --------------------------------------------------------------------------
+# Patch generation helpers
+# --------------------------------------------------------------------------
+
+def _save_temp():
+    """Emit instruction to save temp register to stack."""
+    return f"sw {ERRATA_TEMP}, {ERRATA_STACK_OFFSET}(sp)"
+
+def _restore_temp():
+    """Emit instruction to restore temp register from stack."""
+    return f"lw {ERRATA_TEMP}, {ERRATA_STACK_OFFSET}(sp)"
+
+
+def _make_errata_comment(original, bug_id, detail=""):
+    """Create a comment describing the errata patch."""
+    extra = f" ({detail})" if detail else ""
+    return f"// ERRATA BUG{bug_id} patch: {original}{extra}"
+
+def _build_constant_in_reg(temp_reg, diff):
+    """
+    Build instructions to load `diff` into temp_reg, where diff is the
+    bits we cleared from a U-type immediate.
+
+    Returns (safe_lui_imm, [instructions to build diff in temp_reg]).
+    The caller does: lui rd, safe_lui_imm; then these instructions; then add rd, rd, temp_reg.
+
+    We need to be careful that our generated instructions don't themselves
+    trigger the bugs.
+    """
+    instrs = []
+
+    if diff == 0:
+        # Nothing to fix up - the safe_base is already correct
+        return []
+
+    # Find the lowest set bit and highest set bit of diff
+    # to determine the best shift strategy
+    lowest_bit = (diff & -diff).bit_length() - 1  # position of lowest set bit
+    shifted_val = diff >> lowest_bit  # the core value we need to create
+
+    # Strategy: load shifted_val with lui/addi if small enough, then shift left.
+    #   NB: shifted_val itself must not trigger bugs when loaded.
+    # Since shifted_val comes from cleared fields of a 20-bit value, it should
+    # be small enough for addi (12-bit signed: -2048..2047).
+    if shifted_val < 2048:
+        # addi temp, zero, shifted_val -- check this doesn't trigger bug 2
+        if _i_type_imm_has_bug2(shifted_val):
+            # Split: load (shifted_val - 1), then addi 1
+            instrs.append(f"addi {temp_reg}, zero, {shifted_val - 1}")
+            instrs.append(f"addi {temp_reg}, {temp_reg}, 1")
+        else:
+            instrs.append(f"addi {temp_reg}, zero, {shifted_val}")
+
+        # Now shift left to get the full diff
+        # Be careful: slli with shamt=20 triggers bug 2!
+        remaining_shift = lowest_bit
+        while remaining_shift > 0:
+            if remaining_shift >= 20:
+                # Can't do slli by 20, split into 19 + remainder
+                instrs.append(f"slli {temp_reg}, {temp_reg}, 19")
+                remaining_shift -= 19
+            elif _i_type_imm_has_bug2(remaining_shift):
+                # remaining_shift has lower 5 bits = 20, split
+                instrs.append(f"slli {temp_reg}, {temp_reg}, {remaining_shift - 1}")
+                instrs.append(f"slli {temp_reg}, {temp_reg}, 1")
+                remaining_shift = 0
+            else:
+                instrs.append(f"slli {temp_reg}, {temp_reg}, {remaining_shift}")
+                remaining_shift = 0
+    else:
+        # Larger value - use lui for the shifted_val itself
+        # This is a recursive-ish problem, but in practice diff should be small
+        # since we only cleared 5 or 10 bits from a 20-bit value.
+        # Fallback: build bit by bit with shifts and ORs.
+        # For now, use addi with sign extension tricks.
+        # shifted_val fits in 20 bits since diff is 20 bits.
+        if shifted_val < (1 << 20):
+            # Use lui + addi
+            upper = shifted_val >> 12
+            lower = shifted_val & 0xFFF
+            if lower >= 0x800:
+                upper += 1
+                lower = lower - 0x1000  # sign-extend correction
+            # Check upper for bug 1/2
+            if not _u_type_phantom_rs1(upper) and not _u_type_phantom_rs2(upper):
+                instrs.append(f"lui {temp_reg}, {upper}")
+                if lower != 0:
+                    if _i_type_imm_has_bug2(lower):
+                        instrs.append(f"addi {temp_reg}, {temp_reg}, {lower - 1}")
+                        instrs.append(f"addi {temp_reg}, {temp_reg}, 1")
+                    else:
+                        instrs.append(f"addi {temp_reg}, {temp_reg}, {lower}")
+            else:
+                # Extremely unlikely edge case - just use small steps
+                instrs.append(f"addi {temp_reg}, zero, {(shifted_val >> 10) & 0x7FF}")
+                instrs.append(f"slli {temp_reg}, {temp_reg}, 10")
+                rest = shifted_val & 0x3FF
+                if rest:
+                    instrs.append(f"addi {temp_reg}, {temp_reg}, {rest}")
+
+            # Shift left
+            remaining_shift = lowest_bit
+            while remaining_shift > 0:
+                chunk = min(remaining_shift, 19) if remaining_shift >= 20 else remaining_shift
+                if _i_type_imm_has_bug2(chunk):
+                    instrs.append(f"slli {temp_reg}, {temp_reg}, {chunk - 1}")
+                    instrs.append(f"slli {temp_reg}, {temp_reg}, 1")
+                else:
+                    instrs.append(f"slli {temp_reg}, {temp_reg}, {chunk}")
+                remaining_shift -= chunk
+
+    return instrs
+
+
+# --------------------------------------------------------------------------
+# Instruction-specific patch functions
+#
+# Each returns either None (no patch needed) or a list of
+# (instruction_str, comment_str_or_None) tuples to replace the original.
+# --------------------------------------------------------------------------
+
+def _patch_lui(mnemonic, operands, original_instr):
+    """Patch lui rd, imm20 for Bug 1 and Bug 2."""
+    if len(operands) != 2:
+        return None
+    rd = operands[0]
+    imm = _imm_to_int(operands[1])
+    if imm is None:
+        return None  # relocation or label ref, can't analyze statically
+
+    imm20 = imm & 0xFFFFF
+
+    has_bug1 = _u_type_phantom_rs1(imm20)
+    has_bug2 = _u_type_phantom_rs2(imm20)
+
+    if not has_bug1 and not has_bug2:
+        return None  # safe
+
+    bugs = []
+    if has_bug1:
+        bugs.append("B1:phantom-rs1")
+    if has_bug2:
+        bugs.append("B2:bits24:20=20")
+    bug_desc = "+".join(bugs)
+
+    # Build fixup instructions
+    safe_imm20 = imm20
+    if has_bug1:
+        safe_imm20 = safe_imm20 & ~(0x1F << 3)
+    if has_bug2:
+        safe_imm20 = safe_imm20 & ~(0x1F << 8)
+
+    diff = (imm20 - safe_imm20) & 0xFFFFF
+    fixup_instrs = _build_constant_in_reg(ERRATA_TEMP, diff)
+
+    result = []
+    comment = _make_errata_comment(original_instr, "1+2" if (has_bug1 and has_bug2) else ("1" if has_bug1 else "2"), bug_desc)
+    result.append((None, comment))
+
+    # Step 1: lui with safe immediate (may be 0, that's fine)
+    if safe_imm20 != 0:
+        result.append((f"lui {rd}, 0x{safe_imm20:x}", None))
+    else:
+        # If safe immediate is 0, just start with zero in rd
+        result.append((f"addi {rd}, zero, 0", None))
+
+    # Step 2: save temp, build fixup, add, restore
+    if diff != 0:
+        result.append((_save_temp(), None))
+        for fi in fixup_instrs:
+            result.append((fi, None))
+        # The fixup value in ERRATA_TEMP is the raw diff; since lui shifts
+        # by 12, and our diff is in the "lui immediate" domain, we need to
+        # shift it left by 12 to match what lui would have placed.
+        result.append((f"slli {ERRATA_TEMP}, {ERRATA_TEMP}, 12", None))
+        result.append((f"add {rd}, {rd}, {ERRATA_TEMP}", None))
+        result.append((_restore_temp(), None))
+
+    return result
+
+
+def _patch_auipc(mnemonic, operands, original_instr):
+    """
+    Patch auipc rd, imm20 for Bug 1 and Bug 2.
+    auipc is trickier because it adds to PC. We can't simply decompose
+    the immediate because the PC-relative semantics change.
+
+    Strategy: Use a safe auipc with zeroed problematic bits, then fix up
+    the difference using temp register arithmetic.
+    The fixup is a constant (diff << 12) added to rd.
+    """
+    if len(operands) != 2:
+        return None
+    rd = operands[0]
+    imm = _imm_to_int(operands[1])
+    if imm is None:
+        return None  # relocation, can't patch statically
+
+    imm20 = imm & 0xFFFFF
+
+    has_bug1 = _u_type_phantom_rs1(imm20)
+    has_bug2 = _u_type_phantom_rs2(imm20)
+
+    if not has_bug1 and not has_bug2:
+        return None
+
+    bugs = []
+    if has_bug1:
+        bugs.append("B1:phantom-rs1")
+    if has_bug2:
+        bugs.append("B2:bits24:20=20")
+    bug_desc = "+".join(bugs)
+
+    safe_imm20 = imm20
+    if has_bug1:
+        safe_imm20 = safe_imm20 & ~(0x1F << 3)
+    if has_bug2:
+        safe_imm20 = safe_imm20 & ~(0x1F << 8)
+
+    diff = (imm20 - safe_imm20) & 0xFFFFF
+
+    result = []
+    comment = _make_errata_comment(original_instr, "1+2" if (has_bug1 and has_bug2) else ("1" if has_bug1 else "2"), bug_desc)
+    result.append((None, comment))
+
+    # auipc with safe immediate - this captures PC correctly
+    result.append((f"auipc {rd}, 0x{safe_imm20:x}", None))
+
+    if diff != 0:
+        # Add the missing (diff << 12) using temp
+        result.append((_save_temp(), None))
+        fixup_instrs = _build_constant_in_reg(ERRATA_TEMP, diff)
+        for fi in fixup_instrs:
+            result.append((fi, None))
+
+        result.append((f"slli {ERRATA_TEMP}, {ERRATA_TEMP}, 12", None))
+        result.append((f"add {rd}, {rd}, {ERRATA_TEMP}", None))
+        result.append((_restore_temp(), None))
+
+    return result
+
+
+def _patch_jal(mnemonic, operands, original_instr):
+    """
+    Patch jal rd, offset for Bug 1 and Bug 2.
+    jal is PC-relative so we can't trivially decompose.
+
+    Simply emit a warning when this case is encountered. It is only triggered when
+    when the final binary output - after the labels are resolved - has a value
+    of 20 in the immediate field, e.g. "jal x1, 20" (*not* '20f', literally the value
+    20).
+
+    This is a rare edge case - emit a warning to review - if it triggers,
+    the fix is to just insert a NOP after the JAL instruction, and
+    the label will have shifted to avoid triggering the bug.
+    """
+    # jal can be "jal rd, offset" or pseudo "jal offset" (rd=ra)
+    if len(operands) == 1:
+        # Pseudo form: jal target
+        return None  # likely a label, can't analyze
+    if len(operands) != 2:
+        return None
+    rd = operands[0]
+    imm = _imm_to_int(operands[1])
+    if imm is None:
+        return None  # label reference, can't analyze statically
+
+    imm21 = imm & 0x1FFFFF
+
+    has_bug1 = _j_type_phantom_rs1(imm21)
+    has_bug2 = _j_type_phantom_rs2(imm21)
+
+    if not has_bug1 and not has_bug2:
+        return None
+
+    # For jal with a numeric offset that hits the bug, replace with
+    # auipc + jalr (which are I-type and won't trigger bug 1).
+    # jalr rd, offset(temp) -- but we need to compute the right split.
+    # Actually since jal is rare with numeric immediates in compiler output,
+    # just emit a warning comment for now.
+    bugs = []
+    if has_bug1:
+        bugs.append("B1:phantom-rs1")
+    if has_bug2:
+        bugs.append("B2:bits24:20=20")
+    bug_desc = "+".join(bugs)
+
+    result = []
+    result.append((None, _make_errata_comment(original_instr, "1/2", bug_desc)))
+    result.append((None, "// WARNING: jal with numeric immediate - manual review needed"))
+    result.append((original_instr, None))
+    WARNINGS.append("JAL with numeric intermediate detected - manual review for type 2 bug needed")
+    return result
+
+
+def _patch_shift_imm(mnemonic, operands, original_instr):
+    """
+    Patch slli/srli/srai rd, rs1, shamt where shamt's encoding triggers Bug 2.
+    For shifts, bits [24:20] = shamt. Bug triggers when shamt & 0x1F == 20.
+    For RV32, shamt is 0-31, so this means shamt == 20.
+
+    Fix: split into two shifts that sum to the original shamt.
+    e.g. slli a0, a0, 20 -> slli a0, a0, 19; slli a0, a0, 1
+    """
+    if len(operands) != 3:
+        return None
+    rd, rs1, shamt_str = operands
+    shamt = _imm_to_int(shamt_str)
+    if shamt is None:
+        return None
+    if (shamt & 0x1F) != 20:
+        return None
+
+    result = []
+    result.append((None, _make_errata_comment(original_instr, "2", f"shamt={shamt}")))
+    # Split: (shamt - 1) + 1.  shamt-1 = 19, which is safe (19 & 0x1F = 19 != 20)
+    result.append((f"{mnemonic} {rd}, {rs1}, {shamt - 1}", None))
+    result.append((f"{mnemonic} {rd}, {rd}, 1", None))
+    return result
+
+
+def _patch_load(mnemonic, operands, original_instr):
+    """
+    Patch load instructions (lw/lh/lb/lhu/lbu) where the offset triggers Bug 2.
+    Load is I-type: bits [24:20] = offset[4:0].
+    Bug triggers when (offset_encoding & 0x1F) == 20.
+
+    Fix: adjust the base register by -4, use offset+4 (which changes the
+    lower 5 bits), then restore the base register.
+    We use addi on the base register directly (no temp needed for this one).
+
+    If base == rd, we don't restore the base register.
+    """
+    if len(operands) != 2:
+        return None
+    rd = operands[0]
+    offset, base = _parse_mem_operand(operands[1])
+    if offset is None:
+        return None  # relocation or unparseable
+
+    offset_enc = offset & 0xFFF
+    if (offset_enc & 0x1F) != 20:
+        return None
+
+    # Find an adjustment that makes the new offset safe.
+    # Try small adjustments: -4, +4, -8, +8, etc.
+    # Pretty sure that -4 covers all the cases, but might as well check just in case.
+    for adj in [-4, 4, -8, 8, -12, 12, -16, 16]:
+        new_offset = offset - adj  # because we addi base by +adj, effective offset decreases
+        # Original: lw rd, offset(base)  -> rd = mem[base + offset]
+        # Patched:  addi base, base, delta
+        #           lw rd, (offset - delta)(base)  -> rd = mem[base + delta + offset - delta] = mem[base + offset]
+        #           addi base, base, -delta
+        new_offset = offset - adj
+        new_offset_enc = new_offset & 0xFFF
+        if (new_offset_enc & 0x1F) != 20:
+            # Also check that adj and -adj are safe for addi
+            adj_enc = adj & 0xFFF
+            neg_adj_enc = (-adj) & 0xFFF
+            if (adj_enc & 0x1F) != 20 and (neg_adj_enc & 0x1F) != 20:
+                # Also check the new offset is within I-type range (-2048..2047)
+                if -2048 <= new_offset <= 2047:
+                    delta = adj
+                    break
+    else:
+        # Shouldn't happen with the range of adjustments we try, but fallback
+        delta = -4
+        new_offset = offset + 4
+
+    result = []
+    result.append((None, _make_errata_comment(original_instr, "2", f"offset={offset},bits[4:0]={offset_enc & 0x1F}")))
+
+    if rd == base:
+        # rd == base: the value is clobbered, so we don't need to restore the delta
+        result.append((f"addi {ERRATA_TEMP}, {base}, {delta}", None))
+        result.append((f"{mnemonic} {rd}, {new_offset}({ERRATA_TEMP})", None))
+    else:
+        result.append((f"addi {base}, {base}, {delta}", None))
+        result.append((f"{mnemonic} {rd}, {new_offset}({base})", None))
+        result.append((f"addi {base}, {base}, {-delta}", None))
+
+    return result
+
+
+def _patch_store(mnemonic, operands, original_instr):
+    """
+    Patch store instructions (sw/sh/sb) where the offset triggers Bug 2.
+    Store is S-type: bits [24:20] = rs2 (the source register).
+    Since bits [24:20] in S-type is a register field, and the hardware
+    correctly handles register encodings in R/S/B-type, stores do NOT
+    trigger Bug 2 via the rs2 field.
+
+    However, we should still check: the S-type immediate is split across
+    bits [31:25] (imm[11:5]) and bits [11:7] (imm[4:0]). Neither of these
+    overlaps with bits [24:20], so the offset itself doesn't cause Bug 2.
+
+    Therefore: stores don't need Bug 2 patching. This function exists
+    as a dispatch entry that returns None (no patch) for documentation.
+    """
+    return None
+
+
+def _patch_i_type_alu(mnemonic, operands, original_instr):
+    """
+    Patch I-type ALU instructions (addi, andi, ori, xori, slti, sltiu)
+    where the immediate triggers Bug 2.
+    I-type: bits [24:20] = imm[4:0]. Bug when (imm_encoding & 0x1F) == 20.
+
+    Fix depends on the operation:
+    - addi: split into two adds, e.g. addi rd, rs1, 20 -> addi rd, rs1, 19; addi rd, rd, 1
+    - andi: need temp. andi rd, rs1, imm -> save temp; addi temp, zero, imm; and rd, rs1, temp; restore
+    - ori:  same as andi but with or
+    - xori: same with xor
+    - slti/sltiu: need temp. use addi to load imm into temp, then slt/sltu.
+    """
+    if len(operands) != 3:
+        return None
+    rd, rs1, imm_str = operands
+    imm = _imm_to_int(imm_str)
+    if imm is None:
+        return None
+
+    imm_enc = imm & 0xFFF
+    if (imm_enc & 0x1F) != 20:
+        return None
+
+    result = []
+    result.append((None, _make_errata_comment(original_instr, "2", f"imm={imm},bits[4:0]={imm_enc & 0x1F}")))
+
+    if mnemonic == 'addi':
+        # Split: addi rd, rs1, (imm-1); addi rd, rd, 1
+        new_imm = imm - 1
+        new_enc = new_imm & 0xFFF
+        if (new_enc & 0x1F) == 20:
+            # Very unlikely but handle: use +1 then -2 split instead
+            new_imm = imm + 1
+            result.append((f"addi {rd}, {rs1}, {new_imm}", None))
+            result.append((f"addi {rd}, {rd}, -1", None))
+        else:
+            result.append((f"addi {rd}, {rs1}, {new_imm}", None))
+            result.append((f"addi {rd}, {rd}, 1", None))
+    elif mnemonic in ('andi', 'ori', 'xori'):
+        # Load immediate into temp, use R-type operation
+        r_type_op = {'andi': 'and', 'ori': 'or', 'xori': 'xor'}[mnemonic]
+        result.append((_save_temp(), None))
+        # Build the immediate in temp - addi from zero
+        if (imm_enc & 0x1F) == 20:
+            # imm itself triggers bug 2 in addi, so split the load
+            result.append((f"addi {ERRATA_TEMP}, zero, {imm - 1}", None))
+            result.append((f"addi {ERRATA_TEMP}, {ERRATA_TEMP}, 1", None))
+        else:
+            result.append((f"addi {ERRATA_TEMP}, zero, {imm}", None))
+        result.append((f"{r_type_op} {rd}, {rs1}, {ERRATA_TEMP}", None))
+        result.append((_restore_temp(), None))
+    elif mnemonic in ('slti', 'sltiu'):
+        r_type_op = {'slti': 'slt', 'sltiu': 'sltu'}[mnemonic]
+        result.append((_save_temp(), None))
+        result.append((f"addi {ERRATA_TEMP}, zero, {imm - 1}", None))
+        result.append((f"addi {ERRATA_TEMP}, {ERRATA_TEMP}, 1", None))
+        result.append((f"{r_type_op} {rd}, {rs1}, {ERRATA_TEMP}", None))
+        result.append((_restore_temp(), None))
+    else:
+        WARNINGS.append(f"Unhandled I-type opcode: {mnemonic}; manual review needed!")
+        return None  # unknown I-type ALU, skip
+
+    return result
+
+
+def _patch_jalr(mnemonic, operands, original_instr):
+    """
+    Patch jalr rd, offset(rs1) where offset triggers Bug 2.
+    jalr is I-type: bits [24:20] = offset[4:0].
+    Bug when (offset_encoding & 0x1F) == 20.
+
+    Fix: adjust rs1, use modified offset, restore rs1.
+    Same approach as load patching.
+    Edge case: rd == rs1 means we need temp register approach.
+    """
+    if len(operands) != 2:
+        return None
+    rd = operands[0]
+    offset, rs1 = _parse_mem_operand(operands[1])
+    if offset is None:
+        return None
+
+    offset_enc = offset & 0xFFF
+    if (offset_enc & 0x1F) != 20:
+        return None
+
+    delta = -4
+    new_offset = offset + 4
+    new_offset_enc = new_offset & 0xFFF
+    if (new_offset_enc & 0x1F) == 20:
+        delta = -8
+        new_offset = offset + 8
+
+    result = []
+    result.append((None, _make_errata_comment(original_instr, "2", f"offset={offset}")))
+
+    if rd == rs1:
+        # Can't modify rs1 and restore it (jalr changes rd which is also rs1)
+        result.append((_save_temp(), None))
+        result.append((f"addi {ERRATA_TEMP}, {rs1}, {delta}", None))
+        result.append((f"jalr {rd}, {new_offset}({ERRATA_TEMP})", None))
+        result.append((_restore_temp(), None))
+    else:
+        result.append((f"addi {rs1}, {rs1}, {delta}", None))
+        result.append((f"jalr {rd}, {new_offset}({rs1})", None))
+        result.append((f"addi {rs1}, {rs1}, {-delta}", None))
+
+    return result
+
+
+# --------------------------------------------------------------------------
+# Dispatch table
+# --------------------------------------------------------------------------
+
+ERRATA_DISPATCH = {
+    # U-type: Bug 1 (phantom rs1) + Bug 2 (phantom rs2)
+    'lui':    _patch_lui,
+    'auipc':  _patch_auipc,
+
+    # J-type: Bug 1 + Bug 2 - actually just emits warnings
+    'jal':    _patch_jal,
+
+    # I-type shifts: Bug 2 (shamt in bits [24:20])
+    'slli':   _patch_shift_imm,
+    'srli':   _patch_shift_imm,
+    'srai':   _patch_shift_imm,
+
+    # I-type loads: Bug 2 (offset[4:0] in bits [24:20])
+    'lw':     _patch_load,
+    'lh':     _patch_load,
+    'lb':     _patch_load,
+    'lhu':    _patch_load,
+    'lbu':    _patch_load,
+
+    # I-type ALU: Bug 2 (imm[4:0] in bits [24:20])
+    'addi':   _patch_i_type_alu,
+    'andi':   _patch_i_type_alu,
+    'ori':    _patch_i_type_alu,
+    'xori':   _patch_i_type_alu,
+    'slti':   _patch_i_type_alu,
+    'sltiu':  _patch_i_type_alu,
+
+    # I-type jump: Bug 2 (offset[4:0] in bits [24:20])
+    'jalr':   _patch_jalr,
+
+    # S-type stores: bits [24:20] = rs2 (register), hardware handles correctly
+    'sw':     _patch_store,
+    'sh':     _patch_store,
+    'sb':     _patch_store,
+}
+
+
+def apply_errata_patches(converted_lines):
+    """
+    Pass 3: Walk the converted instruction list and apply errata patches.
+
+    Input:  list of (instruction_str_or_None, comment_or_None)
+    Output: new list with problematic instructions expanded into safe sequences.
+
+    Also returns a count of patches applied for diagnostics.
+    """
+    patched = []
+    patch_count = 0
+
+    for instr, comment in converted_lines:
+        if instr is None:
+            patched.append((instr, comment))
+            continue
+
+        # Skip instructions with relocations - can't analyze statically
+        if _has_relocation(instr):
+            patched.append((instr, comment))
+            continue
+
+        mnemonic, operands = _parse_instruction(instr)
+        if mnemonic is None:
+            patched.append((instr, comment))
+            continue
+
+        patch_fn = ERRATA_DISPATCH.get(mnemonic)
+        if patch_fn is None:
+            # Not in dispatch table - pass through
+            patched.append((instr, comment))
+            continue
+
+        patch_result = patch_fn(mnemonic, operands, instr)
+        if patch_result is None:
+            # Checked, no bug triggered
+            patched.append((instr, comment))
+        else:
+            # Replace with patched sequence
+            # Preserve the original comment on the first real instruction
+            for pi, (p_instr, p_comment) in enumerate(patch_result):
+                if pi == 0 and p_instr is None and comment:
+                    # Merge original comment with errata comment
+                    merged = f"{p_comment}  {comment}" if p_comment else comment
+                    patched.append((None, merged))
+                else:
+                    patched.append((p_instr, p_comment))
+            patch_count += 1
+
+    return patched, patch_count
+
+
+# ============================================================================
 # Format the final macro output
 # ============================================================================
 
@@ -517,9 +1298,14 @@ def format_output(fn_name, start_label, end_label, converted_lines, data_objects
            .word 0x...     <- packed 32-bit words
     """
     parts = []
-    parts.append("use bao1x_api::bio_code;\n")
+    # C-sourced routines use the "aligned" format for BIO libraries - just in case
+    # absolute references are made to code, as would be the case in a `static` variable.
+    # C-routines that are `static`-free could use `bio_code` and save the alignment
+    # overhead, but the cost of confusing new programmers is not worth the savings
+    # of a few kiB of code space.
+    parts.append("use bao1x_api::bio_code_aligned;\n")
     parts.append("#[rustfmt::skip]")
-    parts.append(f"bio_code!({fn_name}, {start_label}, {end_label},")
+    parts.append(f"bio_code_aligned!({fn_name}, {start_label}, {end_label},")
 
     # ---- Code ----
     filtered = [(instr, comment) for instr, comment in converted_lines
@@ -643,6 +1429,9 @@ def main():
     while converted and converted[-1] == (None, None):
         converted.pop()
 
+    # Pass 3: apply coprocessor errata patches
+    converted, errata_count = apply_errata_patches(converted)
+
     result = format_output(fn_name, start_label, end_label, converted, data_objects, label_map)
 
     with open(output_path, "w") as f:
@@ -656,6 +1445,11 @@ def main():
     print(f"  instructions: {num_instrs}", file=sys.stderr)
     func_labels = [n for n in label_map if not n.startswith('.') and n not in data_names]
     print(f"  functions found: {len(func_labels)} ({', '.join(func_labels)})", file=sys.stderr)
+    if errata_count:
+        print(f"  errata patches:  {errata_count}", file=sys.stderr)
+    if len(WARNINGS) > 0:
+        for warning in WARNINGS:
+            print(warning)
 
 
 if __name__ == "__main__":
