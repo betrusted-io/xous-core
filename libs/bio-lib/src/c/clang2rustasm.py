@@ -18,8 +18,6 @@ Options:
     -o FILE           Override output file path
 """
 
-# python3 .\clang2rustasm.py math_test
-
 import argparse
 import re
 import sys
