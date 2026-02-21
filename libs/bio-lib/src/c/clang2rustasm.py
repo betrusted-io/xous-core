@@ -237,13 +237,21 @@ class DataObject:
         return f"DataObject({self.name!r}, align={self.align}, {len(self.entries)} entries)"
 
 
-def extract_rodata(lines):
+def _extract_raw_objects(lines):
     """
-    Walk the file and collect all data objects from .rodata* sections.
-    Returns list of DataObject in source order.
+    Walk the file and collect all data objects from .rodata*, .bss*, and .data*
+    sections.  Returns list of DataObject in source order.
+
+    Handles:
+      - .rodata*  sections: initialised read-only data (.byte/.half/.word etc.)
+      - .bss*     sections: zero-initialised data (.zero N)
+      - .data*    sections: initialised writable data (.byte/.half/.word etc.)
+      - .set alias directives inside these sections are silently ignored
+        (the aliased symbol shares storage with the primary label).
     """
     objects = []
-    in_rodata = False
+    _set_aliases_out = {}     # filled by .set lines; read by caller via return value
+    in_data_section = False   # True while inside a .rodata*, .bss*, or .data* section
     current_section = None
     current_obj = None
     pending_align = 1
@@ -260,23 +268,37 @@ def extract_rodata(lines):
         if is_strip_section(stripped):
             continue
 
+        # .set alias, base[+offset] -- collect for later splitting.
+        # These don't allocate storage; they name a sub-region of the parent.
+        set_m = re.match(r'\.set\s+(\w+),\s*(\S+)', stripped)
+        if set_m:
+            alias  = set_m.group(1)
+            target = set_m.group(2)
+            off_m  = re.match(r'^([.\w]+)\+?(\d*)$', target)
+            if off_m:
+                base   = off_m.group(1)
+                offset = int(off_m.group(2)) if off_m.group(2) else 0
+                _set_aliases_out[alias] = (base, offset)
+            continue
+
         # Section transitions
         if stripped.startswith(".section"):
             if current_obj is not None:
                 objects.append(current_obj)
                 current_obj = None
 
-            if ".rodata" in stripped:
-                in_rodata = True
-                m = re.match(r'\.section\s+([^\s,]+)', stripped)
-                current_section = m.group(1) if m else ".rodata"
+            m = re.match(r'\.section\s+([^\s,]+)', stripped)
+            sec_name = m.group(1) if m else ""
+            if ".rodata" in sec_name or ".bss" in sec_name or ".data" in sec_name:
+                in_data_section = True
+                current_section = sec_name
                 pending_align = 1
             else:
-                in_rodata = False
+                in_data_section = False
                 current_section = None
             continue
 
-        if not in_rodata:
+        if not in_data_section:
             continue
 
         # Alignment hint before the label
@@ -290,8 +312,9 @@ def extract_rodata(lines):
         if any(stripped.startswith(d) for d in skip_obj_directives):
             continue
 
-        # Object label: starts a new DataObject
-        obj_label = re.match(r'^([a-zA-Z_]\w*)\s*:', stripped)
+        # Object label: starts a new DataObject.
+        # Matches both plain names (foo:) and .L-prefixed locals (.L_MergedGlobals:).
+        obj_label = re.match(r'^(\.L\w+|[a-zA-Z_]\w*)\s*:', stripped)
         if obj_label:
             if current_obj is not None:
                 objects.append(current_obj)
@@ -306,6 +329,14 @@ def extract_rodata(lines):
 
         # Data directives inside an object
         if current_obj is not None:
+            # .zero N  -- emit N zero bytes (common in .bss sections)
+            zero_m = re.match(r'\.zero\s+(\d+)', stripped)
+            if zero_m:
+                n_bytes = int(zero_m.group(1))
+                for _ in range(n_bytes):
+                    current_obj.entries.append((1, 0))
+                continue
+
             for directive, width in DATA_DIRECTIVE_WIDTH.items():
                 if stripped.startswith(directive):
                     rest = stripped[len(directive):].strip()
@@ -323,8 +354,89 @@ def extract_rodata(lines):
     if current_obj is not None:
         objects.append(current_obj)
 
-    return objects
+    return objects, _set_aliases_out
 
+
+
+def extract_rodata(lines):
+    """
+    Extract all data objects from .rodata*, .bss*, and .data* sections,
+    then split each object at any .set alias offsets so that every aliased
+    sub-region gets its own DataObject (and therefore its own numeric label).
+
+    Returns (objects, alias_label_map) where:
+      objects         -- list of DataObject in source order
+      alias_label_map -- dict mapping (base_name, byte_offset) -> alias_name
+                         for every .set directive found, used by replace_reloc
+                         to resolve %hi(base+N) -> %hi(alias_label)
+    """
+    raw_objects, set_aliases = _extract_raw_objects(lines)
+
+    # Build alias_label_map: (base_name, offset) -> alias_name
+    # Also includes (base_name, 0) for the base label itself.
+    alias_label_map = {}
+    for alias, (base, offset) in set_aliases.items():
+        alias_label_map[(base, offset)] = alias
+
+    # For each DataObject that has aliases at non-zero offsets, split it.
+    # We emit one DataObject per contiguous sub-region between split points.
+    #
+    # Example: .L_MergedGlobals (72 bytes), aliases at offset 0 (render_buf)
+    # and offset 32 (led_buf) -> two DataObjects:
+    #   DataObject(".L_MergedGlobals", entries[0:32])   <- 32 zero bytes
+    #   DataObject("led_buf",          entries[32:72])  <- 40 zero bytes
+    #
+    # The base object keeps its original name (first split point = offset 0),
+    # subsequent splits use the alias name.
+    result_objects = []
+
+    for obj in raw_objects:
+        # Find all aliases that refer to this object, sorted by offset
+        splits = sorted(
+            (offset, alias)
+            for (base, offset), alias in alias_label_map.items()
+            if base == obj.name
+        )
+
+        # Always include offset 0 under the object's own name if not already there
+        split_offsets = {off for off, _ in splits}
+        if 0 not in split_offsets:
+            splits = [(0, obj.name)] + splits
+        else:
+            # Replace the offset-0 alias with the original object name
+            splits = [(off, (obj.name if off == 0 else alias)) for off, alias in splits]
+
+        splits.sort()
+
+        if len(splits) <= 1:
+            # No meaningful splits -- emit as-is under original name
+            result_objects.append(obj)
+            continue
+
+        # Convert entries to a flat byte list for slicing
+        byte_list = []
+        for width, val in obj.entries:
+            mask = (1 << (width * 8)) - 1
+            v = val & mask
+            for _ in range(width):
+                byte_list.append(v & 0xFF)
+                v >>= 8
+
+        total_bytes = len(byte_list)
+
+        for i, (start_off, name) in enumerate(splits):
+            end_off = splits[i + 1][0] if i + 1 < len(splits) else total_bytes
+            chunk = byte_list[start_off:end_off]
+            # Re-encode as (1, byte) entries
+            entries = [(1, b) for b in chunk]
+            result_objects.append(DataObject(
+                name    = name,
+                align   = obj.align if start_off == 0 else 1,
+                entries = entries,
+                section = obj.section,
+            ))
+
+    return result_objects, alias_label_map
 
 # ============================================================================
 # Pack data entries into .word (32-bit) lines
@@ -338,6 +450,7 @@ def pack_to_words(entries):
     """
     Convert a list of (width_bytes, int_value) entries into a list of
     32-bit unsigned integers, little-endian packed.
+    Entries are packed little-endian byte by byte, then grouped into 32-bit words.
     """
     byte_buf = []
     for width, val in entries:
@@ -359,6 +472,7 @@ def pack_to_words(entries):
              | (byte_buf[i+3] << 24))
         words.append(w)
     return words
+
 
 
 # ============================================================================
@@ -407,7 +521,7 @@ def build_label_map(code_labels, data_objects, label_base):
 # Pass 2: Convert individual code lines
 # ============================================================================
 
-def convert_line(line, label_map, label_positions, current_line_idx):
+def convert_line(line, label_map, label_positions, current_line_idx, alias_label_map=None):
     """
     Convert a single code line to its Rust inline-asm string equivalent.
     Returns (instruction_string_or_None, comment_or_None).
@@ -466,18 +580,75 @@ def convert_line(line, label_map, label_positions, current_line_idx):
         instr = instr[: comment_match.start()].strip()
 
     # Replace %hi(label) and %lo(label) with numeric forward-ref equivalents.
+    # Also handles %lo(label+offset) and %hi(label+offset) forms produced by
+    # clang for symbols like ".L_MergedGlobals+4".
     # Data labels are always forward refs; code labels use position comparison.
     def replace_reloc(m):
-        kind  = m.group(1)
-        lname = m.group(2)
+        kind   = m.group(1)
+        lname  = m.group(2)
+        offset_str = m.group(3) or ""  # e.g. "+4", "-8", or ""
+        offset_val = int(offset_str) if offset_str else 0
+
+        # If this is a base+offset reference and we have a .set alias that
+        # lands exactly at that offset, resolve directly to the alias label.
+        # This avoids emitting %hi(Nf+32) which is invalid in Rust inline asm.
+        if alias_label_map and offset_val != 0:
+            alias = alias_label_map.get((lname, offset_val))
+            if alias and alias in label_map:
+                num  = label_map[alias]
+                lpos = label_positions.get(alias, current_line_idx + 1)
+                ref  = f"{num}f" if lpos > current_line_idx else f"{num}b"
+                return f"%{kind}({ref})"   # no offset -- alias IS the label
+
         if lname in label_map:
             num  = label_map[lname]
             lpos = label_positions.get(lname, current_line_idx + 1)
             ref  = f"{num}f" if lpos > current_line_idx else f"{num}b"
+            if offset_str:
+                # No alias covers this offset -- warn and emit bare ref
+                # (the +N form is invalid in inline asm; caller should add
+                # -fno-merge-globals or restructure to avoid this)
+                WARNINGS.append(
+                    f"WARNING: %{kind}({lname}{offset_str}) has no .set alias -- "
+                    f"emitting bare %{kind}({ref}), offset {offset_str} dropped"
+                )
             return f"%{kind}({ref})"
         return m.group(0)
 
-    instr = re.sub(r'%(\w+)\(([a-zA-Z_]\w*)\)', replace_reloc, instr)
+    # Pattern: %reloc(label_name[+/-offset]?)
+    #   group 1: reloc kind  (hi, lo, ...)
+    #   group 2: label name  (may start with .L)
+    #   group 3: optional offset suffix (+4, -8, ...)
+    instr = re.sub(
+        r'%(\w+)\((\.L\w+|[a-zA-Z_]\w*)([+\-]\d+)?\)',
+        replace_reloc,
+        instr,
+    )
+
+    # Special-case `call` and `tail` pseudo-instructions.
+    # These require a *bare symbol name*, so numeric local-label references
+    # like "27b" are rejected by the assembler.  When the target is a known
+    # label we expand:
+    #   call  foo  ->  jal  ra, NNf/b
+    #   tail  foo  ->  jal  zero, NNf/b   (tail-call: no return-address save)
+    # Both pseudo-instructions assemble to two real instructions in the
+    # general case, but within the tight range of a single bio_code block
+    # the single-instruction jal is always sufficient and correct.
+    call_tail_match = re.match(
+        r'^(call|tail)\s+([a-zA-Z_]\w*)\s*$', instr, re.IGNORECASE
+    )
+    if call_tail_match:
+        pseudo    = call_tail_match.group(1).lower()
+        lname     = call_tail_match.group(2)
+        if lname in label_map:
+            num  = label_map[lname]
+            lpos = label_positions.get(lname, current_line_idx + 1)
+            ref  = f"{num}f" if lpos > current_line_idx else f"{num}b"
+            rd   = "ra" if pseudo == "call" else "zero"
+            instr = f"jal\t{rd}, {ref}"
+            # comment already captured; skip generic label replacement
+            instr = replace_registers(instr)
+            return instr, comment
 
     # Replace plain label references (branches, jumps, address loads).
     # Longest names first to avoid partial matches.
@@ -1391,8 +1562,8 @@ def main():
         print(f"Error: no code found in {input_path}", file=sys.stderr)
         sys.exit(1)
 
-    # Pass 1b: extract rodata
-    data_objects = extract_rodata(lines)
+    # Pass 1b: extract rodata / bss / data, splitting at .set alias offsets
+    data_objects, alias_label_map = extract_rodata(lines)
 
     # Build unified label map
     code_label_positions = collect_all_labels(code_lines)
@@ -1421,7 +1592,7 @@ def main():
     # Pass 2: convert code lines
     converted = []
     for i, line in enumerate(code_lines):
-        instr, comment = convert_line(line, label_map, all_label_positions, i)
+        instr, comment = convert_line(line, label_map, all_label_positions, i, alias_label_map)
         if instr is not None or comment is not None:
             converted.append((instr, comment))
 
