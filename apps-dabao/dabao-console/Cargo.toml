@@ -42,7 +42,8 @@ board-dabao = [
     "bio-lib/captouch",
 ]
 bio-math-test = ["bio-lib/c-math-test"]
+bio-wheel-test = ["bio-lib/c-colorwheel"]
 ctap-bringup = []
 usb = []
 aestests = ["aes"]
-default = ["usb", "bio-math-test"]
+default = ["usb", "bio-math-test", "bio-wheel-test"]
