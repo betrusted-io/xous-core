@@ -27,6 +27,8 @@ pub fn build(b: *std.Build) void {
         b.graph.zig_exe,
         "cc",
         "-S",
+        // jump tables can't be translated in Rust assembly
+        "-fno-jump-tables",
         "-fverbose-asm",
         "-o",
     });
@@ -42,7 +44,10 @@ pub fn build(b: *std.Build) void {
         // Pack the reserve features directly into the -mcpu string.
         // This bypasses any issues with -ffixed-xN not being translated
         // into LLVM target features by the zig cc driver.
-        "-mcpu=generic_rv32+m+c" ++
+        //
+        // Also note there is no hardware div support, just mul: so +zmmul allows
+        // mul's to be emitted, but not divs.
+        "-mcpu=generic_rv32+zmmul+c" ++
             "+reserve_x16+reserve_x17+reserve_x18+reserve_x19" ++
             "+reserve_x20+reserve_x21+reserve_x22+reserve_x23" ++
             "+reserve_x24+reserve_x25+reserve_x26+reserve_x27" ++
