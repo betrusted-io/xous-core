@@ -5,7 +5,7 @@ use bao1x_hal::bio::{Bio, CoreCsr};
 use math_test::*;
 use utralib::utra::bio_bdma;
 
-use super::Fp;
+use crate::c::FpQ20_12;
 
 pub struct MathTest {
     bio_ss: Bio,
@@ -68,7 +68,7 @@ impl MathTest {
     pub fn test_cos(&mut self) {
         for i in (0..360).step_by(4) {
             // self.bio_ss.debug(self.resource_grant.cores[0]);
-            let arg = Fp::from_int(i);
+            let arg = FpQ20_12::from_int(i);
             self.tx.csr.wo(bio_bdma::SFR_TXF0, arg.0 as u32);
             // let mut dbg_count: usize = 0;
             while self.rx.csr.rf(bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) == 0 {
@@ -80,7 +80,7 @@ impl MathTest {
                 */
             }
             let result = self.rx.csr.r(bio_bdma::SFR_RXF1) as i32; // result should be 0..20
-            let result_f32 = Fp::from_raw(result);
+            let result_f32 = FpQ20_12::from_raw(result);
             let mut line = String::new();
             for _ in 0..((result_f32.to_float() * 20.0f32) as usize) {
                 line.push(' ');
