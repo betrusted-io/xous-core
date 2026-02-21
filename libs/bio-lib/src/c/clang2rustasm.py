@@ -1562,6 +1562,22 @@ def main():
         print(f"Error: no code found in {input_path}", file=sys.stderr)
         sys.exit(1)
 
+    # Check: if any code calls a division helper (__divsi3, __udivsi3, etc.),
+    # the implementation must also be present in the .s file (as a label definition).
+    # A bare "call __divsi3" without the function body means softdiv.h was not included.
+    raw_text = "".join(lines)
+    div_helpers = re.findall(r'(?:call|j|jal)\s+(__(?:u?div|u?mod)si3)\b', raw_text)
+    if div_helpers:
+        defined_labels = set(re.findall(r'^(\w+)\s*:', raw_text, re.MULTILINE))
+        missing = set(div_helpers) - defined_labels
+        if missing:
+            print(
+                'Error: Compiled code relies on division. '
+                'Please include "softdiv.h" in your program.',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
     # Pass 1b: extract rodata / bss / data, splitting at .set alias offsets
     data_objects, alias_label_map = extract_rodata(lines)
 
