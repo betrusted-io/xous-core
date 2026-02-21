@@ -1,14 +1,12 @@
 #include <stdint.h>
-#include "fp.h"
+#include "fp_q12.h"
 #include "bio.h"
 
 void main(void) {
     int32_t in;
     fp_t arg;
 
-    // fp_t state = FP_FROM_INT(1);
-    // fp_t a;
-    // computes fifo1 <- cosine(fifo0), where the value presented is in degrees
+    // computes fifo1 <- cosine(fifo0) + 1.0, where the value presented is in degrees as an FP value
     while (1) {
         in = pop_fifo0();
 
@@ -17,13 +15,6 @@ void main(void) {
         arg = fp_div(arg, FP_FROM_INT(180));
         arg = fp_add(fp_cos(arg), FP_FROM_INT(1));
 
-        /*
-        arg = FP_FROM_INT(in);
-        a = fp_mul(arg, FP_FROM_INT(2));
-        a = fp_add(state, a);
-        result = fp_div(a, state);
-        state = arg;
-        */
         push_fifo1(arg);
     }
 }

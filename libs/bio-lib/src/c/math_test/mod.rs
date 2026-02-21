@@ -5,24 +5,7 @@ use bao1x_hal::bio::{Bio, CoreCsr};
 use math_test::*;
 use utralib::utra::bio_bdma;
 
-/// Number of fractional bits in the Q20.12 fixed-point format.
-const FRAC_BITS: u32 = 12;
-const FRAC_SCALE: i32 = 1 << FRAC_BITS; // 4096
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Fp(pub i32);
-
-impl Fp {
-    pub fn from_int(x: i32) -> Self { Self(x << FRAC_BITS) }
-
-    pub fn from_float(x: f32) -> Self { Self((x * FRAC_SCALE as f32 + 0.5) as i32) }
-
-    pub fn to_int(self) -> i32 { self.0 >> FRAC_BITS }
-
-    pub fn to_float(self) -> f32 { self.0 as f32 / FRAC_SCALE as f32 }
-
-    /// Wrap a raw i32 coming directly off the hardware register.
-    pub fn from_raw(raw: i32) -> Self { Self(raw) }
-}
+use super::Fp;
 
 pub struct MathTest {
     bio_ss: Bio,
