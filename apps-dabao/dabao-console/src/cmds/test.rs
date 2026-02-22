@@ -76,6 +76,19 @@ impl<'a> ShellCmdApi<'a> for Test {
                         log::info!("{}", line);
                     }
                 }
+                #[cfg(feature = "bio-math-test")]
+                "cos" => {
+                    let mut math = bio_lib::c::math_test::MathTest::new().unwrap();
+                    math.test_cos();
+                }
+                #[cfg(feature = "bio-wheel-test")]
+                "wheel" => {
+                    let mut wheel =
+                        bio_lib::c::colorwheel::Colorwheel::new(arbitrary_int::u5::from_u8(5), 12, 2, None)
+                            .unwrap();
+                    // run forever, code blocks here
+                    wheel.run(None);
+                }
                 "env" => {
                     log::info!("{:?}", std::env::vars());
                 }

@@ -33,7 +33,12 @@
 //! Core ID & debug:
 //! - x31 r/-  [31:30] -> core ID; [29:0] -> cpu clocks since reset
 
+#[cfg(feature = "av-trng")]
 pub mod av_trng;
+pub mod c;
+#[cfg(feature = "captouch")]
 pub mod captouch;
+#[cfg(feature = "mac-demo")]
 pub mod mac_demo;
+#[cfg(feature = "ws2812")]
 pub mod ws2812;

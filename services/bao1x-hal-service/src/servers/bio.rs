@@ -33,7 +33,11 @@ fn bio_service(clk_freq: u32) {
                 };
                 let mut config = buf.to_original::<CoreInitRkyv, _>().unwrap();
                 log::trace!("initing with {:x?}", config.config);
-                match bio_ss.init_core(config.core, &config.code, config.offset, config.config) {
+                match bio_ss.init_core(
+                    config.core,
+                    (&config.code[..config.code_len], config.pad_word),
+                    config.config,
+                ) {
                     Ok(freq) => {
                         config.actual_freq = freq;
                         config.result = BioError::None;
@@ -51,6 +55,42 @@ fn bio_service(clk_freq: u32) {
                 if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
                     let core = scalar.arg1;
                     bio_ss.de_init_core(core.into()).unwrap();
+                }
+            }
+
+            BioOp::Debug => {
+                if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
+                    let core = BioCore::from(scalar.arg1);
+                    match core {
+                        BioCore::Core0 => {
+                            log::info!(
+                                "DBG_{:?}: {:x}",
+                                core,
+                                bio_ss.bio.r(utralib::utra::bio_bdma::SFR_DBG0)
+                            )
+                        }
+                        BioCore::Core1 => {
+                            log::info!(
+                                "DBG_{:?}: {:x}",
+                                core,
+                                bio_ss.bio.r(utralib::utra::bio_bdma::SFR_DBG1)
+                            )
+                        }
+                        BioCore::Core2 => {
+                            log::info!(
+                                "DBG_{:?}: {:x}",
+                                core,
+                                bio_ss.bio.r(utralib::utra::bio_bdma::SFR_DBG2)
+                            )
+                        }
+                        BioCore::Core3 => {
+                            log::info!(
+                                "DBG_{:?}: {:x}",
+                                core,
+                                bio_ss.bio.r(utralib::utra::bio_bdma::SFR_DBG3)
+                            )
+                        }
+                    }
                 }
             }
 

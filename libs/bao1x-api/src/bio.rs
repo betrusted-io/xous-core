@@ -32,8 +32,7 @@ pub trait BioApi<'a> {
     fn init_core(
         &mut self,
         core: BioCore,
-        code: &[u8],
-        offset: usize,
+        code: (&[u8], Option<u32>),
         config: CoreConfig,
     ) -> Result<Option<u32>, BioError>;
 
@@ -100,6 +99,8 @@ pub trait BioApi<'a> {
 
     /// Returns a version code for the underlying hardware.
     fn get_version(&self) -> u32;
+
+    fn debug(&self, core: BioCore);
 }
 
 #[macro_export]
@@ -114,19 +115,64 @@ pub trait BioApi<'a> {
 ///   The macro is unable to derive names of functions or identifiers for labels
 ///   due to the partially hygienic macro rules of Rust, so you have to come
 ///   up with a list of unique names by yourself.
+///
+///   The macro has a convenience routine that returns a tuple of `(&[u8], None)`. The
+///   pad word specifier for this macro is always `None`.
 macro_rules! bio_code {
     ($fn_name:ident, $name_start:ident, $name_end:ident, $($item:expr),*) => {
-        pub fn $fn_name() -> &'static [u8] {
+        pub fn $fn_name() -> (&'static [u8], Option<u32>) {
             extern "C" {
                 static $name_start: *const u8;
                 static $name_end: *const u8;
             }
             // skip the first 4 bytes, as they contain the loading offset
-            unsafe { core::slice::from_raw_parts($name_start.add(4), ($name_end as usize) - ($name_start as usize) - 4)}
+            (unsafe { core::slice::from_raw_parts($name_start.add(4), ($name_end as usize) - ($name_start as usize) - 4)}, None)
         }
 
         core::arch::global_asm!(
+            ".option arch, +m",
             ".align 4",
+            concat!(".globl ", stringify!($name_start)),
+            concat!(stringify!($name_start), ":"),
+            ".word .",
+            $($item),*
+            , ".align 4",
+            concat!(".globl ", stringify!($name_end)),
+            concat!(stringify!($name_end), ":"),
+            ".word .",
+        );
+    };
+}
+
+#[macro_export]
+/// Same as `bio_code` except this forces the block to be aligned to 4096 byte boundaries.
+/// The main utility of this is that labels for loads/stores are correct (modulo the 4-byte header,
+/// which is fixed by replacing it with a NOP).
+///
+/// Code that only contains relative jumps should *not* use this because it ends up wasting 4096 bytes
+/// in the executable, which really adds up if you have a whole bunch of small 64-byte-ish BIO snippets
+/// in a library and you're throwing away 4000 bytes of padding per routine.
+///
+/// In particular: this macro was designed to accommodate specifically C-compiled code that uses `static`
+/// variables to reference tables compiled into the code, which invokes absolute addressing.
+///
+/// The macro has a convenience routine that returns a tuple of `(&[u8], Some(0x33))`. The
+/// pad word specifier is a NOP, that is used to replace the identifier that place-holds the offset
+/// of the code in the ROM image, such that the copied code to BIO RAM has the same page-level offset.
+macro_rules! bio_code_aligned {
+    ($fn_name:ident, $name_start:ident, $name_end:ident, $($item:expr),*) => {
+        pub fn $fn_name() -> (&'static [u8], Option<u32>) {
+            extern "C" {
+                static $name_start: *const u8;
+                static $name_end: *const u8;
+            }
+            // skip the first 4 bytes, as they contain the loading offset
+            (unsafe { core::slice::from_raw_parts($name_start.add(4), ($name_end as usize) - ($name_start as usize) - 4)}, Some(0x33))
+        }
+
+        core::arch::global_asm!(
+            ".option arch, +m",
+            ".align 12",
             concat!(".globl ", stringify!($name_start)),
             concat!(stringify!($name_start), ":"),
             ".word .",
@@ -164,6 +210,8 @@ pub enum BioOp {
     ClaimDynamicPin,
     ReleaseDynamicPin,
 
+    Debug,
+
     InvalidCall,
 }
 
@@ -174,9 +222,11 @@ pub enum BioOp {
 pub struct CoreInitRkyv {
     pub core: BioCore,
     pub offset: usize,
+    pub pad_word: Option<u32>,
     pub actual_freq: Option<u32>,
     pub config: CoreConfig,
     pub code: [u8; 4096],
+    pub code_len: usize,
     pub result: BioError,
 }
 

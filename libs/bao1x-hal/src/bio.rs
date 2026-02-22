@@ -34,19 +34,22 @@ impl<'a> BioApi<'a> for Bio {
     fn init_core(
         &mut self,
         core: BioCore,
-        code: &[u8],
-        offset: usize,
+        code: (&[u8], Option<u32>),
         config: CoreConfig,
     ) -> Result<Option<u32>, BioError> {
         let mut config = CoreInitRkyv {
             core,
-            offset,
+            offset: 0,
+            pad_word: None,
             actual_freq: None,
             config,
             code: [0u8; 4096],
+            code_len: 0,
             result: BioError::Uninit,
         };
-        config.code[..code.len()].copy_from_slice(code);
+        config.code[..code.0.len()].copy_from_slice(code.0);
+        config.code_len = code.0.len();
+        config.pad_word = code.1;
         // this should automatically allocate 2 pages because the sizeof() type of CoreInitRkyv is over 4096
         let mut buf = Buffer::into_buf(config).unwrap();
         buf.lend_mut(self.conn, BioOp::InitCore.to_u32().unwrap())
@@ -217,6 +220,14 @@ impl<'a> BioApi<'a> for Bio {
         buf.lend(self.conn, BioOp::IrqConfig.to_u32().unwrap())
             .map_err(|e| <xous::Error as Into<BioError>>::into(e))?;
         Ok(())
+    }
+
+    fn debug(&self, core: BioCore) {
+        send_message(
+            self.conn,
+            Message::new_blocking_scalar(BioOp::Debug.to_usize().unwrap(), core as usize, 0, 0, 0),
+        )
+        .unwrap();
     }
 }
 

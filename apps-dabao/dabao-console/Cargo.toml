@@ -37,8 +37,13 @@ board-dabao = [
     "bao1x-hal/board-dabao",
     # "bao1x-hal/debug-print-uart",
     "usb-bao1x/board-dabao",
+    # default BIO libs
+    "bio-lib/ws2812",
+    "bio-lib/captouch",
 ]
+bio-math-test = ["bio-lib/c-math-test"]
+bio-wheel-test = ["bio-lib/c-colorwheel"]
 ctap-bringup = []
 usb = []
 aestests = ["aes"]
-default = ["usb"]
+default = ["usb", "bio-math-test", "bio-wheel-test"]
