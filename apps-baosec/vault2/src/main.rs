@@ -379,40 +379,9 @@ fn main() -> ! {
                 allow_totp_rendering.store(true, Ordering::SeqCst);
                 vault_ui.redraw();
             }
-            Some(VaultOp::MenuTotpMode) => {
-                *mode.lock().unwrap() = VaultMode::Totp;
-                // reload DB on mode switch
-                xous::send_message(
-                    actions_conn,
-                    xous::Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0),
-                )
-                .ok();
-                vault_ui.refresh_draw_list();
-                allow_totp_rendering.store(true, Ordering::SeqCst);
-                xous::send_message(
-                    pump_conn,
-                    xous::Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0),
-                )
-                .expect("couldn't start the pumper");
-                vault_ui.redraw();
-            }
-            Some(VaultOp::MenuPwMode) => {
-                {
-                    // lock needs to go out of scope so we don't hang the later ops
-                    *mode.lock().unwrap() = VaultMode::Password;
-                }
-                allow_totp_rendering.store(false, Ordering::SeqCst);
-                // reload DB on mode switch
-                xous::send_message(
-                    actions_conn,
-                    xous::Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0),
-                )
-                .ok();
-                vault_ui.redraw();
-            }
             Some(VaultOp::KeyPress) => xous::msg_scalar_unpack!(msg, k1, _k2, _k3, _k4, {
                 let k = char::from_u32(k1 as u32).unwrap_or('\u{0000}');
-                log::debug!("key {}", k);
+                log::info!("key {}", k);
                 if menu_active {
                     menu_mgr.key_press(k);
                 } else {
@@ -435,7 +404,61 @@ fn main() -> ! {
                             vault_ui.redraw();
                         }
                         '→' => {
-                            vault_ui.nav(NavDir::Reserved);
+                            let current_mode = *mode.lock().unwrap();
+                            match current_mode {
+                                VaultMode::Password => {
+                                    {
+                                        *mode.lock().unwrap() = VaultMode::Totp;
+                                    }
+                                    // reload DB on mode switch
+                                    xous::send_message(
+                                        actions_conn,
+                                        xous::Message::new_blocking_scalar(
+                                            ActionOp::ReloadDb.to_usize().unwrap(),
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                        ),
+                                    )
+                                    .ok();
+                                    vault_ui.refresh_draw_list();
+                                    allow_totp_rendering.store(true, Ordering::SeqCst);
+                                    xous::send_message(
+                                        pump_conn,
+                                        xous::Message::new_scalar(
+                                            PumpOp::Pump.to_usize().unwrap(),
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                        ),
+                                    )
+                                    .expect("couldn't start the pumper");
+                                    vault_ui.redraw();
+                                }
+                                VaultMode::Totp => {
+                                    {
+                                        // lock needs to go out of scope so we don't hang the later ops
+                                        *mode.lock().unwrap() = VaultMode::Password;
+                                    }
+                                    allow_totp_rendering.store(false, Ordering::SeqCst);
+                                    // reload DB on mode switch
+                                    xous::send_message(
+                                        actions_conn,
+                                        xous::Message::new_blocking_scalar(
+                                            ActionOp::ReloadDb.to_usize().unwrap(),
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                        ),
+                                    )
+                                    .ok();
+                                    vault_ui.redraw();
+                                }
+                            }
+
                             vault_ui.redraw();
                         }
                         '🔥' => {
