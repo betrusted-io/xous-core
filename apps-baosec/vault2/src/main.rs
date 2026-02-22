@@ -105,8 +105,6 @@ fn main() -> ! {
     // Protects access to the openSK PDDB entries from simultaneous readout on the UX while OpenSK is updating
     let opensk_mutex = Arc::new(Mutex::new(0));
     let allow_host = Arc::new(AtomicBool::new(false));
-    // storage for lefty mode
-    let lefty_mode = Arc::new(AtomicBool::new(false));
 
     let mut vault_ui = VaultUi::new(&xns, conn, item_lists.clone(), mode.clone());
 
@@ -229,14 +227,13 @@ fn main() -> ! {
         let allow_host = allow_host.clone();
         let opensk_mutex = opensk_mutex.clone();
         let conn = conn.clone();
-        let lefty_mode = lefty_mode.clone();
         move || {
             let mut vendor_session = VendorSession::default();
             // block until the PDDB is mounted
             let pddb = pddb::Pddb::new();
             pddb.is_mounted_blocking();
 
-            let env = XousEnv::new(conn, lefty_mode); // lefty_mode is now owned by env
+            let env = XousEnv::new(conn);
             let mut ctap = vault2::Ctap::new(env, Instant::now());
             loop {
                 match ctap.env().main_hid_connection().u2f_wait_incoming() {
