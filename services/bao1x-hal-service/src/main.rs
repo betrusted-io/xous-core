@@ -96,10 +96,10 @@ fn try_alloc(ifram_allocs: &mut Vec<Option<Sender>>, size: usize, sender: Sender
         } else {
             if free_start.is_some() {
                 log::trace!("Adding unallocated page at {} to length", index);
-                found_len += 1;
                 if found_len >= size_pages {
                     break;
                 }
+                found_len += 1;
             } else {
                 log::trace!("Starting allocation search at {}", index);
                 free_start = Some(index);
@@ -615,6 +615,12 @@ fn main() {
                         os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, if timer_run { 1 } else { 0 });
                     }
                 }
+                HalOpcode::UpdatePerclk => {
+                    if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
+                        let new_perclk = scalar.arg1 as u32;
+                        i2c.update_perclk(new_perclk);
+                    }
+                }
                 HalOpcode::InvalidCall => {
                     log::error!("Invalid opcode received: {:?}", msg_opt);
                 }
@@ -632,6 +638,9 @@ fn main() {
     // claim BIO, based on the platform
     servers::trng::start_trng_service();
     servers::rtc::start_rtc_service();
+
+    // start the remaining services
+    servers::others::start_peri_service(clk_mgr.get_per());
 
     let tt = ticktimer::Ticktimer::new().unwrap();
     // placeholder - we can put an actual service here but for now just sleep the main thread.

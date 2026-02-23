@@ -75,7 +75,10 @@ pub struct I2cDriver<'a> {
     #[allow(dead_code)] // used in bao1x
     channel: I2cChannel,
     divider: u16,
+    // cached value of perclk
     perclk_freq: u32,
+    // cached value of our clock setting
+    i2c_freq: u32,
     pub ifram: IframRange,
     tx_buf: &'static mut [u8],
     tx_buf_phys: &'static mut [u8],
@@ -197,6 +200,7 @@ impl<'a> I2cDriver<'a> {
             seq_len: 0,
             pending: I2cPending::Idle,
             perclk_freq,
+            i2c_freq,
         };
         i2c.send_cmd_list(&[I2cCmd::Config(divider)]);
         i2c
@@ -205,6 +209,12 @@ impl<'a> I2cDriver<'a> {
     pub fn set_freq(&mut self, freq_hz: u32) {
         // divide-by-4 is an empirical observation
         self.divider = ((self.perclk_freq / (freq_hz * 4)).min(u16::MAX as u32)) as u16;
+        self.i2c_freq = freq_hz;
+    }
+
+    pub fn update_perclk(&mut self, perclk_freq: u32) {
+        self.perclk_freq = perclk_freq;
+        self.set_freq(self.i2c_freq);
     }
 
     // always blocks

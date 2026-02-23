@@ -2,6 +2,7 @@ pub mod api;
 pub mod trng;
 
 use bao1x_api::*;
+use bao1x_hal::udma::{AdcExtChannel, AdcSource};
 use num_traits::*;
 use xous::{Message, send_message};
 use xous_api_susres::api::Opcode as SusresOp;
@@ -125,6 +126,58 @@ impl UdmaGlobalConfig for UdmaGlobal {
             Ok(xous::Result::Scalar5(_, value, _, _, _)) => value as u32,
             _ => panic!("Unhandled response on irq_status_bits"),
         }
+    }
+}
+
+pub struct Adc {
+    conn: xous::CID,
+}
+impl Adc {
+    pub fn new() -> Self {
+        let xns = xous_names::XousNames::new().unwrap();
+        let conn =
+            xns.request_connection(SERVER_NAME_BAO1X_OTHERS).expect("Couldn't connect to bao1x HAL server");
+        Adc { conn }
+    }
+
+    /// Averaging can range from 1..1024. Out of range values are silently converted to in-range values
+    /// based on saturating logic. None for averaging translates to 1.
+    ///
+    /// For analog channels, the measurement goes from 0..1.208v. There is some nonlinearity observed below
+    /// 0.2V, so the "sweet spot" is 0.2V-1.2V.
+    pub fn read_raw(&self, channel: AdcSource, averaging: Option<u16>) -> u16 {
+        let averaging =
+            averaging.unwrap_or(1).min(1).max((bao1x_hal::udma::ADC_RX_BUF_SIZE / size_of::<u32>()) as u16);
+        match xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                PeripheralOpcode::ReadAdcChannel.to_usize().unwrap(),
+                channel.to_usize(),
+                averaging as usize,
+                0,
+                0,
+            ),
+        ) {
+            Ok(xous::Result::Scalar5(_, value, _, _, _)) => value as u16,
+            _ => panic!("Unhandled response on Adc::read_raw"),
+        }
+    }
+
+    /// Safety: this method does no checks for concurrent use of the analog channels.
+    /// It is up to the caller to ensure that ADC0-3 (mapped to PA4-7) have no conflicts
+    /// with other I/O functions.
+    pub unsafe fn enable_channel(&self, channel: AdcExtChannel) {
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                PeripheralOpcode::EnableChannel.to_usize().unwrap(),
+                channel.into(),
+                0,
+                0,
+                0,
+            ),
+        )
+        .ok();
     }
 }
 
