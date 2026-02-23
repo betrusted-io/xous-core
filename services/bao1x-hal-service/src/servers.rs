@@ -4,6 +4,7 @@ pub mod keyboard;
 #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
 mod baosec_hw;
 pub mod bio;
+pub mod others;
 pub mod rtc;
 pub mod susres;
 pub mod trng;

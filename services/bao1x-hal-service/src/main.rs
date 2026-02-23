@@ -4,10 +4,7 @@ mod servers;
 use std::pin::Pin;
 
 use bao1x_api::*;
-use bao1x_hal::{
-    iox::Iox,
-    udma::{AdcSource, GlobalConfig},
-};
+use bao1x_hal::{iox::Iox, udma::GlobalConfig};
 use bitfield::*;
 use num_traits::*;
 use udma::UdmaGlobalConfig;
@@ -280,11 +277,6 @@ fn main() {
         // Up to 8 slots where we can populate interrupt mappings in the hardware
         // The index of the array corresponds to the slot.
         let mut irq_table: [Option<IrqLocalRegistration>; 8] = [None; 8];
-
-        // allocate the ADC
-        udma_global.clock_on(PeriphId::Adc);
-        // safety: clocks are turned on, and we can assume PERCLK is configured at boot
-        let mut adc = unsafe { bao1x_hal::udma::Adc::new(bao1x_api::PERCLK) };
 
         let mut msg_opt = None;
         log::debug!("Starting main loop");
@@ -627,17 +619,6 @@ fn main() {
                     if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
                         let new_perclk = scalar.arg1 as u32;
                         i2c.update_perclk(new_perclk);
-                        adc.update_perclk(new_perclk);
-                    }
-                }
-                HalOpcode::ReadAdcChannel => {
-                    if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
-                        let channel = AdcSource::from_usize(scalar.arg1);
-                        // sets to at least 1, even if the arg is 0
-                        // max averaging is limited by the size of the ADC buffer
-                        let averaging =
-                            scalar.arg2.max(1).min(bao1x_hal::udma::ADC_RX_BUF_SIZE / size_of::<u32>());
-                        scalar.arg1 = adc.read_raw_averaged(channel, averaging) as usize;
                     }
                 }
                 HalOpcode::InvalidCall => {
@@ -657,6 +638,9 @@ fn main() {
     // claim BIO, based on the platform
     servers::trng::start_trng_service();
     servers::rtc::start_rtc_service();
+
+    // start the remaining services
+    servers::others::start_peri_service(clk_mgr.get_per());
 
     let tt = ticktimer::Ticktimer::new().unwrap();
     // placeholder - we can put an actual service here but for now just sleep the main thread.
