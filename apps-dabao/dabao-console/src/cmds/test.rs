@@ -89,6 +89,28 @@ impl<'a> ShellCmdApi<'a> for Test {
                     // run forever, code blocks here
                     wheel.run(None);
                 }
+                "temp" => {
+                    let adc = bao1x_hal_service::Adc::new();
+                    let raw_temp = adc.read_raw(bao1x_hal::udma::AdcSource::Temperature, Some(8));
+                    log::info!(
+                        "raw: {}, temp: {}",
+                        raw_temp,
+                        bao1x_hal::udma::Adc::raw_to_temp_celsius(raw_temp)
+                    );
+                }
+                "adc" => {
+                    let adc = bao1x_hal_service::Adc::new();
+                    // safety - we have manually checked there are no conflicts with this mapping
+                    unsafe { adc.enable_channel(bao1x_hal::udma::AdcExtChannel::Adc0) };
+                    loop {
+                        let raw = adc.read_raw(
+                            bao1x_hal::udma::AdcSource::Ext(bao1x_hal::udma::AdcExtChannel::Adc0),
+                            Some(8),
+                        );
+                        log::info!("raw: {} volts: {:.3}V", raw, bao1x_hal::udma::Adc::raw_to_voltage(raw));
+                        std::thread::sleep(std::time::Duration::from_millis(500));
+                    }
+                }
                 "env" => {
                     log::info!("{:?}", std::env::vars());
                 }
