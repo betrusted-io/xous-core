@@ -98,6 +98,26 @@ pub enum AdcSource {
     Ext(AdcExtChannel),
 }
 
+impl AdcSource {
+    pub fn to_usize(self) -> usize {
+        match self {
+            AdcSource::Temperature => 0,
+            AdcSource::Ext(ch) => 1 + ch as usize, // 1..=4
+        }
+    }
+
+    pub fn from_usize(val: usize) -> AdcSource {
+        match val {
+            0 => AdcSource::Temperature,
+            1 => AdcSource::Ext(AdcExtChannel::Pa04),
+            2 => AdcSource::Ext(AdcExtChannel::Pa05),
+            3 => AdcSource::Ext(AdcExtChannel::Pa06),
+            4 => AdcSource::Ext(AdcExtChannel::Pa07),
+            _ => unimplemented!("AdcSource::from_usize: invalid value {}", val),
+        }
+    }
+}
+
 /// Target ADC conversion clock in kHz.  The divider is computed from `perclk`
 /// so that adc_clk lands as close to this as possible within the valid
 /// 200–1600 kHz range.
@@ -107,7 +127,7 @@ const ADC_TARGET_CLK_KHZ: u32 = 1_000;
 const ADC_MIN_DATA_COUNT: u32 = 14;
 
 /// The ADC is RX-only; the entire IFRAM page is the receive buffer.
-const ADC_RX_BUF_SIZE: usize = 4096;
+pub const ADC_RX_BUF_SIZE: usize = 4096;
 
 // ============================================================================
 // Driver
