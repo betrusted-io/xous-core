@@ -80,13 +80,29 @@ pub mod cr_adc {
 #[repr(usize)]
 pub enum AdcExtChannel {
     /// PA04 / ADC0
-    Pa04 = 0,
+    Adc0 = 0,
     /// PA05 / ADC1
-    Pa05 = 1,
+    Adc1 = 1,
     /// PA06 / ADC2
-    Pa06 = 2,
+    Adc2 = 2,
     /// PA07 / ADC3
-    Pa07 = 3,
+    Adc3 = 3,
+}
+
+impl From<AdcExtChannel> for usize {
+    fn from(ch: AdcExtChannel) -> usize { ch as usize }
+}
+
+impl From<usize> for AdcExtChannel {
+    fn from(val: usize) -> AdcExtChannel {
+        match val {
+            0 => AdcExtChannel::Adc0,
+            1 => AdcExtChannel::Adc1,
+            2 => AdcExtChannel::Adc2,
+            3 => AdcExtChannel::Adc3,
+            _ => unimplemented!("AdcExtChannel value out of range: {}", val),
+        }
+    }
 }
 
 /// ADC measurement source.
@@ -109,10 +125,10 @@ impl AdcSource {
     pub fn from_usize(val: usize) -> AdcSource {
         match val {
             0 => AdcSource::Temperature,
-            1 => AdcSource::Ext(AdcExtChannel::Pa04),
-            2 => AdcSource::Ext(AdcExtChannel::Pa05),
-            3 => AdcSource::Ext(AdcExtChannel::Pa06),
-            4 => AdcSource::Ext(AdcExtChannel::Pa07),
+            1 => AdcSource::Ext(AdcExtChannel::Adc0),
+            2 => AdcSource::Ext(AdcExtChannel::Adc1),
+            3 => AdcSource::Ext(AdcExtChannel::Adc2),
+            4 => AdcSource::Ext(AdcExtChannel::Adc3),
             _ => unimplemented!("AdcSource::from_usize: invalid value {}", val),
         }
     }
@@ -262,7 +278,14 @@ impl Adc {
     // --- Delays -------------------------------------------------------------
 
     #[cfg(feature = "std")]
-    fn delay_us(us: u64) { std::thread::sleep(std::time::Duration::from_micros(us)); }
+    fn delay_us(us: u64) {
+        if us < 1000 {
+            // less than 1ms is not reliable in std
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        } else {
+            std::thread::sleep(std::time::Duration::from_micros(us));
+        }
+    }
 
     /// Bare-metal delay stub.
     #[cfg(not(feature = "std"))]
