@@ -96,10 +96,10 @@ fn try_alloc(ifram_allocs: &mut Vec<Option<Sender>>, size: usize, sender: Sender
         } else {
             if free_start.is_some() {
                 log::trace!("Adding unallocated page at {} to length", index);
-                found_len += 1;
                 if found_len >= size_pages {
                     break;
                 }
+                found_len += 1;
             } else {
                 log::trace!("Starting allocation search at {}", index);
                 free_start = Some(index);
