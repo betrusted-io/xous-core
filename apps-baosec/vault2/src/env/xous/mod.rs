@@ -1,7 +1,6 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 use std::io::{Read, Write};
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
@@ -95,13 +94,12 @@ pub struct XousEnv {
     modals: Modals,
     last_user_presence_request: Option<Instant>,
     ctap1_cid: xous::CID,
-    lefty_mode: Arc<AtomicBool>,
 }
 
 impl XousEnv {
     /// Returns the unique instance of the Xous environment.
     /// Blocks until the PDDB is mounted
-    pub fn new(conn: xous::CID, lefty_mode: Arc<AtomicBool>) -> Self {
+    pub fn new(conn: xous::CID) -> Self {
         // We rely on `take_storage` to ensure that this function is called only once.
         let storage = XousStorage {};
         let store = Store::new(storage).ok().unwrap();
@@ -201,7 +199,6 @@ impl XousEnv {
 
         std::thread::spawn({
             let main_cid = conn.clone();
-            let lefty_mode = lefty_mode.clone();
             move || {
                 let xns = xous_names::XousNames::new().unwrap();
                 let pddb = pddb::Pddb::new();
@@ -252,10 +249,7 @@ impl XousEnv {
                                     continue;
                                 } else {
                                     let key = kbhit.load(Ordering::SeqCst);
-                                    if key != 0
-                                        && ((!lefty_mode.load(Ordering::SeqCst) && (key != 0x11))
-                                            || (lefty_mode.load(Ordering::SeqCst) && (key != 0x14)))
-                                    {
+                                    if key != 0 && key != '↓' as u32 {
                                         // approved
                                         log::trace!("approved");
                                         request.approved = true;
@@ -272,9 +266,7 @@ impl XousEnv {
                                         )
                                         .ok();
                                         modals.dynamic_notification_close().ok();
-                                    } else if (!lefty_mode.load(Ordering::SeqCst) && (key == 0x11))
-                                        || (lefty_mode.load(Ordering::SeqCst) && (key == 0x14))
-                                    {
+                                    } else if key == '↓' as u32 {
                                         // denied
                                         log::trace!("denied");
                                         request.approved = false;
@@ -306,18 +298,10 @@ impl XousEnv {
                                                 log::info!("countdown: {}", new_remaining);
                                                 last_remaining = new_remaining;
                                                 let mut to_request_str = request_str.to_string();
-                                                to_request_str.push_str(&format!(
-                                                    "\n\n⚠   {}{}   ⚠\n",
-                                                    last_remaining,
-                                                    t!("vault.fido.countdown", locales::LANG)
-                                                ));
+                                                to_request_str.push_str(&format!("{}s", last_remaining,));
                                                 modals
                                                     .dynamic_notification_update(
-                                                        Some(if lefty_mode.load(Ordering::SeqCst) {
-                                                            t!("vault.u2freq_lefty", locales::LANG)
-                                                        } else {
-                                                            t!("vault.u2freq", locales::LANG)
-                                                        }),
+                                                        Some(t!("vault2.fido.get_assertion", locales::LANG)),
                                                         Some(&to_request_str),
                                                     )
                                                     .unwrap();
@@ -437,11 +421,7 @@ impl XousEnv {
 
                                 modals
                                     .dynamic_notification(
-                                        Some(if lefty_mode.load(Ordering::SeqCst) {
-                                            t!("vault.u2freq_lefty", locales::LANG)
-                                        } else {
-                                            t!("vault.u2freq", locales::LANG)
-                                        }),
+                                        Some(t!("vault2.fido.get_assertion", locales::LANG)),
                                         Some(&to_request_str),
                                     )
                                     .unwrap();
@@ -619,7 +599,6 @@ impl XousEnv {
             modals: modals::Modals::new(&xns).unwrap(),
             last_user_presence_request: None,
             ctap1_cid,
-            lefty_mode,
         }
     }
 
@@ -689,16 +668,7 @@ impl UserPresence for XousEnv {
         let reason = reason.unwrap_or(String::new());
         let kbhit = Arc::new(AtomicU32::new(0));
         let expiration = Instant::now().checked_add(timeout).expect("duration bug");
-        self.modals
-            .dynamic_notification(
-                Some(if self.lefty_mode.load(Ordering::SeqCst) {
-                    t!("vault.u2freq_lefty", locales::LANG)
-                } else {
-                    t!("vault.u2freq", locales::LANG)
-                }),
-                None,
-            )
-            .unwrap();
+        self.modals.dynamic_notification(None, Some(&reason)).unwrap();
         // start the keyboard hit listener thread
         let _ = std::thread::spawn({
             let token = self.modals.token().clone();
@@ -722,25 +692,12 @@ impl UserPresence for XousEnv {
 
         let mut last_remaining = u64::MAX;
         loop {
-            let mut request_str = String::from(&reason);
             let remaining = expiration.duration_since(Instant::now()).as_secs();
             if last_remaining != remaining {
                 log::info!("countdown: {}", remaining);
                 // only update the UX once per second
-                request_str.push_str(&format!(
-                    "\n\n⚠   {}{}   ⚠\n",
-                    remaining,
-                    t!("vault.fido.countdown", locales::LANG)
-                ));
                 self.modals
-                    .dynamic_notification_update(
-                        Some(if self.lefty_mode.load(Ordering::SeqCst) {
-                            t!("vault.u2freq_lefty", locales::LANG)
-                        } else {
-                            t!("vault.u2freq", locales::LANG)
-                        }),
-                        Some(&request_str),
-                    )
+                    .dynamic_notification_update(None, Some(&format!("{}\n{}s", reason, remaining)))
                     .unwrap();
                 last_remaining = remaining;
             }
@@ -751,21 +708,12 @@ impl UserPresence for XousEnv {
                 return Err(UserPresenceError::Timeout);
             }
             let key_hit = kbhit.load(Ordering::SeqCst);
-            if key_hit != 0
-                && (
-                    // approve
-                    (!self.lefty_mode.load(Ordering::SeqCst) && (key_hit != 0x11)) // 0x11 is the F1 key
-                || (self.lefty_mode.load(Ordering::SeqCst) && (key_hit != 0x14))
-                    // 0x14 is the F4 key
-                )
-            {
+            if key_hit != 0 && key_hit != '↓' as u32 {
+                // approve
                 self.modals.dynamic_notification_close().ok();
                 return Ok(());
-            } else if
-            // deny
-            (!self.lefty_mode.load(Ordering::SeqCst) && (key_hit == 0x11))
-                || (self.lefty_mode.load(Ordering::SeqCst) && (key_hit == 0x14))
-            {
+            } else if key_hit == '↓' as u32 {
+                // deny
                 self.modals.dynamic_notification_close().ok();
                 return Err(UserPresenceError::Declined);
             }

@@ -38,8 +38,6 @@ pub(crate) enum VaultOp {
     MenuAutotypeRate,
     MenuLeftyMode,
     MenuDone,
-    MenuTotpMode,
-    MenuPwMode,
 
     BasisChange,
 
