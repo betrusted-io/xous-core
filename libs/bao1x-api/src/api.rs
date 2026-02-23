@@ -40,6 +40,8 @@ pub enum HalOpcode {
     ConfigureUdmaEvent = 8,
     // blocking scalar
     UdmaIrqStatusBits = 16,
+    // blocking scalar
+    UpdatePerclk = 18,
 
     /// I2C operations
     I2c = 9,
@@ -51,16 +53,10 @@ pub enum HalOpcode {
     ConfigureIoxIrq = 11,
     IrqLocalHandler = 12,
 
+    /// Adc operations
+    // blocking scalar
+    ReadAdcChannel = 32,
+
     /// Manipulate the OS timer
     SetPreemptionState = 64,
-
-    /// Behavior opcode base
-    #[cfg(feature = "bio")]
-    BehaviorBase0 = 0x1000,
-    #[cfg(feature = "bio")]
-    BehaviorBase1 = 0x2000,
-    #[cfg(feature = "bio")]
-    BehaviorBase2 = 0x3000,
-    #[cfg(feature = "bio")]
-    BehaviorBase3 = 0x4000,
 }
