@@ -2,6 +2,7 @@ pub mod api;
 pub mod trng;
 
 use bao1x_api::*;
+use bao1x_hal::udma::AdcSource;
 use num_traits::*;
 use xous::{Message, send_message};
 use xous_api_susres::api::Opcode as SusresOp;
@@ -124,6 +125,38 @@ impl UdmaGlobalConfig for UdmaGlobal {
         ) {
             Ok(xous::Result::Scalar5(_, value, _, _, _)) => value as u32,
             _ => panic!("Unhandled response on irq_status_bits"),
+        }
+    }
+}
+
+pub struct Adc {
+    conn: xous::CID,
+}
+impl Adc {
+    pub fn new() -> Self {
+        let xns = xous_names::XousNames::new().unwrap();
+        let conn =
+            xns.request_connection(SERVER_NAME_BAO1X_HAL).expect("Couldn't connect to bao1x HAL server");
+        Adc { conn }
+    }
+
+    /// Averaging can range from 1..1024. Out of range values are silently converted to in-range values
+    /// based on saturating logic. None for averaging translates to 1.
+    pub fn read_raw(&self, channel: AdcSource, averaging: Option<u16>) -> u16 {
+        let averaging =
+            averaging.unwrap_or(1).min(1).max((bao1x_hal::udma::ADC_RX_BUF_SIZE / size_of::<u32>()) as u16);
+        match xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                HalOpcode::ReadAdcChannel.to_usize().unwrap(),
+                channel.to_usize(),
+                averaging as usize,
+                0,
+                0,
+            ),
+        ) {
+            Ok(xous::Result::Scalar5(_, value, _, _, _)) => value as u16,
+            _ => panic!("Unhandled response on Adc::read_raw"),
         }
     }
 }
