@@ -53,10 +53,18 @@ pub enum HalOpcode {
     ConfigureIoxIrq = 11,
     IrqLocalHandler = 12,
 
-    /// Adc operations
-    // blocking scalar
-    ReadAdcChannel = 32,
-
     /// Manipulate the OS timer
     SetPreemptionState = 64,
+}
+
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+#[repr(usize)]
+pub enum PeripheralOpcode {
+    InvalidCall = 0,
+    UpdatePerclk = 1,
+
+    /// Adc operations
+    // blocking scalar
+    ReadAdcChannel = 0x100,
+    EnableChannel = 0x101,
 }

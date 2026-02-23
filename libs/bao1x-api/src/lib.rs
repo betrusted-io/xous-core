@@ -49,6 +49,10 @@ pub const SERVER_NAME_KBD: &str = "_Matrix keyboard driver_";
 /// Do not change this constant, it is hard-coded into libraries in order to break
 /// circular dependencies on the IFRAM block.
 pub const SERVER_NAME_BAO1X_HAL: &str = "_bao1x-SoC HAL_";
+/// Server for peripherals that *also* depend on the core Bao1x HAL. These have to
+/// be in a separate server to avoid lock-up issues of the server depending on itself
+/// for services.
+pub const SERVER_NAME_BAO1X_OTHERS: &str = "_HAL-everthing-else_";
 
 /// Number of boots to trigger the 'audit' command. It's set to be bigger than 1, because
 /// the chip tester may power cycle the chip during the provisioning process before the
