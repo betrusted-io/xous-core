@@ -137,6 +137,8 @@ fn map_keypress(kp: KeyPress) -> char {
         // by mapping "fire" to the center key, we get a UI-specific action key without invoking
         // shell commands in the background unintentionally.
         KeyPress::Center => '🔥',
+        #[cfg(feature = "accel-kbd")]
+        KeyPress::Accel => '⏯',
         _ => '\u{0000}',
     }
 }
@@ -466,6 +468,7 @@ fn keyboard_service() {
                     if kpc_aoint.kpc.r(utra::dkpc::SFR_SR1) != 0 {
                         let sr1 = unsafe { kpc_aoint.kpc.base().add(8).read_volatile() };
                         let key_down = bao1x_hal::board::kpc_sr1_to_key(sr1);
+                        log::info!("{:?}", key_down);
                         key_tracker.register_key_down(key_down, now);
                         if key_down != KeyPress::Invalid {
                             kc.push(map_keypress(key_down))
