@@ -378,7 +378,7 @@ fn main() -> ! {
             }
             Some(VaultOp::KeyPress) => xous::msg_scalar_unpack!(msg, k1, _k2, _k3, _k4, {
                 let k = char::from_u32(k1 as u32).unwrap_or('\u{0000}');
-                log::info!("key {}", k);
+                log::debug!("key {:x}", k1);
                 if menu_active {
                     menu_mgr.key_press(k);
                 } else {
@@ -488,6 +488,9 @@ fn main() -> ! {
                             .ok();
                             vault_ui.refresh_draw_list();
                             vault_ui.redraw();
+                        }
+                        '⏯' => {
+                            log::info!("accel event");
                         }
                         _ => {
                             log::trace!("unhandled key {}", k);

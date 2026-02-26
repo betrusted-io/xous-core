@@ -73,6 +73,7 @@ board-baosec = [
     "ux-api/std",
 ] # USB form factor token
 # "lite" variant of baosec. Shares the same basic flags but some things remapped when this is added.
+accel-kbd = []
 oem-baosec-lite = ["sensor-lis2dh12"]
 
 loader-baosec = [
