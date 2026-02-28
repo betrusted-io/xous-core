@@ -18,6 +18,8 @@ use num_traits::ToPrimitive;
 use xous::MemoryRange;
 
 use crate::IoxPort;
+#[cfg(feature = "std")]
+use crate::bio_resources::ResourceSpec;
 
 pub const BIO_SERVER_NAME: &'static str = "_BIO server_";
 
@@ -399,6 +401,22 @@ impl Default for IoConfig {
             snap_inputs: None,
             snap_outputs: None,
         }
+    }
+}
+#[cfg(feature = "std")]
+impl IoConfig {
+    pub fn from_resource_spec(spec: &ResourceSpec, mode: &Option<IoConfigMode>) -> Result<Self, String> {
+        let mut mask: u32 = 0;
+        for &pin in spec.static_pins.iter() {
+            if pin > 31 {
+                return Err(format!("Pin {} exceeds maximum bit position of 31", pin));
+            }
+            mask |= 1u32 << pin;
+        }
+        let mut ret = IoConfig::default();
+        ret.mapped = mask;
+        ret.mode = mode.unwrap_or(IoConfigMode::Overwrite);
+        Ok(ret)
     }
 }
 
