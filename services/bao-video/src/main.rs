@@ -621,6 +621,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                     // stop on the next frame.
                                     if let Some(mut envelope) = qr_request.take() {
                                         let metadata = format!("{:?}", meta);
+                                        #[cfg(not(feature = "hosted-baosec"))]
                                         if content.starts_with("test://") {
                                             log::info!(
                                                 "{}{},{}",
