@@ -71,11 +71,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .required(false)
                 .help("Explicit git describe version for swap signing (e.g., 'v0.10.0-19-g0d934e1'). If not specified, uses git describe."),
         )
+        .arg(
+            Arg::with_name("empty-loader")
+            .long("empty-loader")
+            .required(false)
+            .help("When specified, creates a short loader file with all 0's as data. Used for resetting device state in CI testing.")
+        )
         .get_matches();
 
     let mut process_names = ProcessNames::new();
 
     let mut pid: u32 = 1;
+
+    if matches.is_present("empty-loader") {
+        let empty_uf2 = "empty.uf2";
+        let empty = vec![0u8; 16384];
+        let uf2_blob =
+            bin_to_uf2(&empty, bao1x_api::BAOCHIP_1X_UF2_FAMILY, bao1x_api::common::LOADER_START as _)?;
+        let mut f =
+            File::create(empty_uf2).unwrap_or_else(|_| panic!("Couldn't create output file {}", empty_uf2));
+        f.write(&uf2_blob)?;
+        println!("Created empty UF2 at {}", empty_uf2);
+        return Ok(());
+    }
 
     let anti_rollback = if let Some(arb) = matches.value_of("antirollback") {
         parse_u32(arb).map_err(|_| String::from("Antirollback should be a number"))?
