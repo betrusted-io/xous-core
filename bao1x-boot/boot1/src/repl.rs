@@ -398,7 +398,7 @@ impl Repl {
 
                 // this routine is used to initialize baosec products - sets the board type and
                 // erases the off-chip FLASH
-                use bao1x_api::{baosec::PDDB_LEN, baosec::PDDB_ORIGIN};
+                use bao1x_api::baosec::PDDB_ORIGIN;
                 use bao1x_hal::{
                     board::SPINOR_BULK_ERASE_SIZE,
                     ifram::IframRange,
@@ -446,8 +446,15 @@ impl Repl {
                     return Err(Error::help("Supported SPI device not found. Aborting operation."));
                 }
 
-                crate::println!("Erasing from {:x}-{:x}...", 0, PDDB_ORIGIN + PDDB_LEN);
-                for addr in (0..PDDB_ORIGIN + PDDB_LEN).step_by(SPINOR_BULK_ERASE_SIZE as usize) {
+                crate::println!("Erasing headers...");
+                for addr in (0..SPINOR_BULK_ERASE_SIZE as usize * 2).step_by(SPINOR_BULK_ERASE_SIZE as usize)
+                {
+                    crate::println!("  {:x}...", addr);
+                    flash_spim.flash_erase_block(addr, SPINOR_BULK_ERASE_SIZE as usize);
+                }
+                for addr in (PDDB_ORIGIN..PDDB_ORIGIN + SPINOR_BULK_ERASE_SIZE as usize * 2)
+                    .step_by(SPINOR_BULK_ERASE_SIZE as usize)
+                {
                     crate::println!("  {:x}...", addr);
                     flash_spim.flash_erase_block(addr, SPINOR_BULK_ERASE_SIZE as usize);
                 }
@@ -485,15 +492,13 @@ impl Repl {
                 #[cfg(not(feature = "oem-baosec-lite"))]
                 {
                     crate::println!("{}BOOT1.SETBOARD,{}", BOOKEND_START, BOOKEND_END);
-                    crate::println!("Board type set to baosec, rebooting so boot1 can provision keys!");
+                    crate::println!("Board type set to baosec");
                 }
                 #[cfg(feature = "oem-baosec-lite")]
                 {
-                    crate::println!("Board type set to baosec-lite, rebooting so boot1 can provision keys!");
+                    crate::println!("Board type set to baosec-lite");
                     crate::println!("{}BOOT1.SETBOARD-LITE,{}", BOOKEND_START, BOOKEND_END);
                 }
-                let mut rcurst = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
-                rcurst.wo(utra::sysctrl::SFR_RCURST0, 0x55AA);
             }
             "ifr" => {
                 // safety: the IFR region is aligned and exists here. It is sealed by hardware in USER mode,
