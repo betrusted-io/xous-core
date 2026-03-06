@@ -621,6 +621,14 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                     // stop on the next frame.
                                     if let Some(mut envelope) = qr_request.take() {
                                         let metadata = format!("{:?}", meta);
+                                        if content.starts_with("test://") {
+                                            log::info!(
+                                                "{}{},{}",
+                                                bao1x_hal::board::BOOKEND_START,
+                                                content,
+                                                bao1x_hal::board::BOOKEND_END
+                                            );
+                                        }
                                         let acquisition =
                                             QrAcquisition { content: Some(content), meta: Some(metadata) };
                                         let mut response = unsafe {
