@@ -813,6 +813,7 @@ fn wrapped_main() -> ! {
                             false
                         }
                     }
+                    let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
                     match pddb_os.ensure_password() {
                         PasswordState::Correct => {
                             // The behavior in gen2 is mount-or-format: no user approval
@@ -820,7 +821,7 @@ fn wrapped_main() -> ! {
                             // of data corruption but I think this is the "right" user experience
                             if !try_mount(&mut pddb_os, &mut basis_cache, &mut basis_monitor_notifications) {
                                 log::warn!("PDDB not formatted - formatting the PDDB!");
-                                pddb_os.pddb_format(false, None).expect("couldn't format PDDB");
+                                pddb_os.pddb_format(false, Some(&modals)).expect("couldn't format PDDB");
                                 if !try_mount(
                                     &mut pddb_os,
                                     &mut basis_cache,
@@ -832,7 +833,7 @@ fn wrapped_main() -> ! {
                         }
                         PasswordState::Uninit => {
                             log::warn!("PDDB not formatted - formatting the PDDB!");
-                            pddb_os.pddb_format(false, None).expect("couldn't format PDDB");
+                            pddb_os.pddb_format(false, Some(&modals)).expect("couldn't format PDDB");
                             if !try_mount(&mut pddb_os, &mut basis_cache, &mut basis_monitor_notifications) {
                                 panic!("Couldn't format & mount PDDB");
                             }
@@ -842,7 +843,7 @@ fn wrapped_main() -> ! {
                         }
                         PasswordState::Incorrect(_failcount) => {
                             log::warn!("PDDB formatted, but keys rotated. Formatting PDDB!");
-                            pddb_os.pddb_format(false, None).expect("couldn't format PDDB");
+                            pddb_os.pddb_format(false, Some(&modals)).expect("couldn't format PDDB");
                             if !try_mount(&mut pddb_os, &mut basis_cache, &mut basis_monitor_notifications) {
                                 panic!("Couldn't format & mount PDDB");
                             }
