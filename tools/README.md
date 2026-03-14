@@ -80,7 +80,52 @@ For more about `i18n_helper.py` please see the locales [README](../locales/READM
 
 ## Testing
 
-_TBD_
+### Running `pddbci.py` (PDDB Regression Tests)
+
+`pddbci.py` drives the PDDB regression suite. It calls `cargo xtask pddb-ci`
+to generate test images and then runs `pddbdbg.py` to verify them. The
+analysis step requires Python 3 and several third-party packages.
+
+#### 1. Create a Python virtual environment
+
+```sh
+# From the repository root
+python3 -m venv venv
+source venv/bin/activate
+```
+
+#### 2. Install system build tools
+
+`pyaesni` is a native extension compiled from source. Make sure `cmake`
+and `yasm` are installed on your system before proceeding.
+
+#### 3. Install Python dependencies
+
+`pyaesni` must be installed from its Git repository (the PyPI tarball is
+missing build files):
+
+```sh
+pip install pycryptodome cryptography six
+pip install git+https://github.com/painor/pyaesni.git
+```
+
+#### 4. Run the regression tests
+
+Choose the `--name` of a database image from `tools/pddb-images`
+
+```sh
+# From the repository root, with the venv active
+python3 tools/pddbci.py --name full
+```
+
+The `--runs` flag controls iteration count (default 501). Use a smaller
+value for a quick smoke test:
+
+```sh
+python3 tools/pddbci.py --name full --runs 5
+```
+
+You can adjust verbosity with `--loglevel DEBUG`.
 
 ## Contribution Guidelines
 
