@@ -1511,7 +1511,7 @@ impl Builder {
 pub fn cargo() -> String { env::var("CARGO").unwrap_or_else(|_| "cargo".to_string()) }
 
 pub fn project_root() -> PathBuf {
-    Path::new(&env!("CARGO_MANIFEST_DIR")).ancestors().nth(1).unwrap().to_path_buf()
+    Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set — this binary must be run via cargo")).ancestors().nth(1).unwrap().to_path_buf()
 }
 
 use std::fs::File;
