@@ -94,14 +94,39 @@
                            'std::env::var("GIT_REV").map(|s| std::process::Output { status: std::process::ExitStatus::default(), stdout: s.into_bytes(), stderr: vec![] }).unwrap_or_else(|_| Command::new("git").args(&["rev-parse", "HEAD"]).output().expect("Failed to execute command"))'
         '';
 
+        # Merge vendor directories so a single config covers both the root
+        # and locales Cargo.lock files.
+        mergedVendor = pkgs.runCommand "merged-vendor-cargo-deps" {} ''
+          # Recreate directory structure with real dirs, symlinking crates
+          for dir in ${vendoredDeps}/*/; do
+            name=$(basename "$dir")
+            mkdir -p "$out/$name"
+            for crate in "$dir"/*; do
+              ln -s "$crate" "$out/$name/$(basename "$crate")"
+            done
+          done
+
+          # Add locales-only crates into matching source dirs
+          for dir in ${vendoredLocalesDeps}/*/; do
+            name=$(basename "$dir")
+            mkdir -p "$out/$name"
+            for crate in "$dir"/*; do
+              crate_name=$(basename "$crate")
+              if [ ! -e "$out/$name/$crate_name" ]; then
+                ln -s "$crate" "$out/$name/$crate_name"
+              fi
+            done
+          done
+
+          # Generate config.toml pointing to merged paths
+          sed "s|${vendoredDeps}|$out|g" ${vendoredDeps}/config.toml > $out/config.toml
+        '';
+
         # Configure cargo to use vendored deps (separate file, merged via --config)
         configureVendoring = ''
           mkdir -p .cargo
-          cat ${vendoredDeps}/config.toml > .cargo/vendor-config.toml
+          cat ${mergedVendor}/config.toml > .cargo/vendor-config.toml
           printf '\n[net]\noffline = true\n' >> .cargo/vendor-config.toml
-          mkdir -p locales/.cargo
-          cat ${vendoredLocalesDeps}/config.toml > locales/.cargo/vendor-config.toml
-          printf '\n[net]\noffline = true\n' >> locales/.cargo/vendor-config.toml
         '';
 
         # Common environment for reproducible Rust builds
@@ -183,17 +208,10 @@
 
           mkdir -p .cargo
 
-          # Write vendor config as a separate file (gitignored)
-          cat ${vendoredDeps}/config.toml > .cargo/vendor-config.toml
+          # Write merged vendor config covering both root and locales deps
+          cat ${mergedVendor}/config.toml > .cargo/vendor-config.toml
           printf '\n[net]\noffline = true\n' >> .cargo/vendor-config.toml
-          echo "Wrote .cargo/vendor-config.toml"
-
-          if [ -d "locales" ]; then
-            mkdir -p locales/.cargo
-            cat ${vendoredLocalesDeps}/config.toml > locales/.cargo/vendor-config.toml
-            printf '\n[net]\noffline = true\n' >> locales/.cargo/vendor-config.toml
-            echo "Wrote locales/.cargo/vendor-config.toml"
-          fi
+          echo "Wrote .cargo/vendor-config.toml (merged root + locales deps)"
         '';
 
         nightlyRustToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain:
