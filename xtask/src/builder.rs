@@ -184,6 +184,7 @@ pub(crate) struct Builder {
     detached_app_features: Vec<String>,
     git_describe: Option<String>,
     git_rev: Option<String>,
+    cargo_configs: Vec<String>,
 }
 
 impl Builder {
@@ -219,7 +220,13 @@ impl Builder {
             detached_app_features: Vec::new(),
             git_describe: None,
             git_rev: None,
+            cargo_configs: Vec::new(),
         }
+    }
+
+    pub fn set_cargo_configs(&mut self, configs: Vec<String>) -> &mut Builder {
+        self.cargo_configs = configs;
+        self
     }
 
     pub fn set_git_describe(&mut self, git_describe: String) -> &mut Builder {
@@ -675,7 +682,7 @@ impl Builder {
             }
             println!();
             // build
-            let status = Command::new(cargo()).current_dir(project_root()).args(&local_args).status()?;
+            let status = cargo(&self.cargo_configs).current_dir(project_root()).args(&local_args).status()?;
             if !status.success() {
                 return Err("Local build failed".into());
             }
@@ -700,7 +707,7 @@ impl Builder {
                 }
                 println!(" {} {}", name, version);
                 // build
-                let status = Command::new(cargo())
+                let status = cargo(&self.cargo_configs)
                     .current_dir(project_root())
                     .args([&remote_args[..], &[name, "--version", version].to_vec()[..]].concat())
                     .status()?;
@@ -906,7 +913,7 @@ impl Builder {
                     print!(" {}", arg);
                 }
                 println!();
-                let status = Command::new(cargo()).current_dir(dir).args(&hosted_args).status()?;
+                let status = cargo(&self.cargo_configs).current_dir(dir).args(&hosted_args).status()?;
                 if !status.success() {
                     return Err("cargo run failed to launch hosted mode".into());
                 }
@@ -985,7 +992,7 @@ impl Builder {
                 presign_file
                     .push(format!("{}-presign.img", self.loader.name().unwrap_or("baremetal".to_string())));
 
-                let status = Command::new(cargo())
+                let status = cargo(&self.cargo_configs)
                     .current_dir(project_root())
                     .args([
                         "run",
@@ -1021,7 +1028,7 @@ impl Builder {
                         Some(gd) => vec!["--git-describe", gd],
                         None => vec![],
                     };
-                    Command::new(cargo())
+                    cargo(&self.cargo_configs)
                         .current_dir(project_root())
                         .args([
                             "run",
@@ -1080,7 +1087,7 @@ impl Builder {
 
             // ------ if targeting renode, regenerate the Platform file -----
             if self.run_svd2repl {
-                Command::new(cargo())
+                cargo(&self.cargo_configs)
                     .current_dir(project_root())
                     .args([
                         "run",
@@ -1116,7 +1123,7 @@ impl Builder {
             loader_bin.push("loader.bin");
             let mut loader_presign = output_bundle.parent().unwrap().to_owned();
             loader_presign.push("loader_presign.bin");
-            let status = Command::new(cargo())
+            let status = cargo(&self.cargo_configs)
                 .current_dir(project_root())
                 .args([
                     "run",
@@ -1139,7 +1146,7 @@ impl Builder {
                 None => vec![],
             };
             let status = if self.utra_target.contains("bao1x") {
-                Command::new(cargo())
+                cargo(&self.cargo_configs)
                     .current_dir(project_root())
                     .args([
                         "run",
@@ -1166,7 +1173,7 @@ impl Builder {
                     .args(&git_describe_args)
                     .status()?
             } else {
-                Command::new(cargo())
+                cargo(&self.cargo_configs)
                     .current_dir(project_root())
                     .args([
                         "run",
@@ -1195,7 +1202,7 @@ impl Builder {
             xous_img_path.push("xous.img");
 
             let status = if self.utra_target.contains("bao1x") {
-                Command::new(cargo())
+                cargo(&self.cargo_configs)
                     .current_dir(project_root())
                     .args([
                         "run",
@@ -1223,7 +1230,7 @@ impl Builder {
                     .args(&git_describe_args)
                     .status()?
             } else {
-                Command::new(cargo())
+                cargo(&self.cargo_configs)
                     .current_dir(project_root())
                     .args([
                         "run",
@@ -1357,7 +1364,7 @@ impl Builder {
             args.push(git_describe);
         }
 
-        let status = Command::new(cargo()).current_dir(project_root()).args(&args).status()?;
+        let status = cargo(&self.cargo_configs).current_dir(project_root()).args(&args).status()?;
 
         if !status.success() {
             return Err("cargo build failed".into());
@@ -1391,7 +1398,7 @@ impl Builder {
         let detached_offset =
             format!("{}", bao1x_api::offsets::dabao::APP_RRAM_START - bao1x_api::offsets::KERNEL_START);
         args.push(&detached_offset);
-        let status = Command::new(cargo()).current_dir(project_root()).args(&args).status()?;
+        let status = cargo(&self.cargo_configs).current_dir(project_root()).args(&args).status()?;
 
         if !status.success() {
             return Err("cargo build failed".into());
@@ -1404,7 +1411,7 @@ impl Builder {
             Some(gd) => vec!["--git-describe", gd],
             None => vec![],
         };
-        Command::new(cargo())
+        cargo(&self.cargo_configs)
             .current_dir(project_root())
             .args([
                 "run",
@@ -1508,7 +1515,13 @@ impl Builder {
     }
 }
 
-pub fn cargo() -> String { env::var("CARGO").unwrap_or_else(|_| "cargo".to_string()) }
+pub fn cargo(configs: &[String]) -> Command {
+    let mut cmd = Command::new(env::var("CARGO").unwrap_or_else(|_| "cargo".to_string()));
+    for path in configs {
+        cmd.args(["--config", path]);
+    }
+    cmd
+}
 
 pub fn project_root() -> PathBuf {
     Path::new(&env!("CARGO_MANIFEST_DIR")).ancestors().nth(1).unwrap().to_path_buf()
