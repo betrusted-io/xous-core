@@ -401,7 +401,10 @@ pub(crate) fn wycheproof_import(cargo_configs: &[String]) -> Result<(), crate::D
     Ok(())
 }
 
-pub(crate) fn track_language_changes(last_lang: &str, cargo_configs: &[String]) -> Result<(), crate::DynError> {
+pub(crate) fn track_language_changes(
+    last_lang: &str,
+    cargo_configs: &[String],
+) -> Result<(), crate::DynError> {
     let last_config = "target/LAST_LANG";
     let mut contents = String::new();
 

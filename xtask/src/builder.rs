@@ -1518,13 +1518,27 @@ impl Builder {
 pub fn cargo(configs: &[String]) -> Command {
     let mut cmd = Command::new(env::var("CARGO").unwrap_or_else(|_| "cargo".to_string()));
     for path in configs {
-        cmd.args(["--config", path]);
+        // Resolve relative paths against the project root so they stay valid
+        // when cargo is invoked from a subdirectory.
+        let abs_path = if Path::new(path).is_relative() {
+            project_root().join(path).to_string_lossy().into_owned()
+        } else {
+            path.to_owned()
+        };
+        cmd.args(["--config", &abs_path]);
     }
     cmd
 }
 
 pub fn project_root() -> PathBuf {
-    Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set — this binary must be run via cargo")).ancestors().nth(1).unwrap().to_path_buf()
+    Path::new(
+        &std::env::var("CARGO_MANIFEST_DIR")
+            .expect("CARGO_MANIFEST_DIR not set — this binary must be run via cargo"),
+    )
+    .ancestors()
+    .nth(1)
+    .unwrap()
+    .to_path_buf()
 }
 
 use std::fs::File;
