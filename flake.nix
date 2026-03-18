@@ -3,7 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/078d69f03934859a181e81ba987c2bb033eebfc5";
-    flake-utils.url = "github:numtide/flake-utils/11707dc2f618dd54ca8739b309ec4fc024de578b";
+    flake-parts.url = "github:hercules-ci/flake-parts";
     crane.url = "github:ipetkov/crane/0314e365877a85c9e5758f9ea77a9972afbb4c21";
     rust-overlay = {
       url = "github:oxalica/rust-overlay/e9bcd12156a577ac4e47d131c14dc0293cc9c8c2";
@@ -16,10 +16,10 @@
   };
 
   outputs =
-    {
+    inputs@{
       self,
       nixpkgs,
-      flake-utils,
+      flake-parts,
       rust-xous,
       rust-overlay,
       crane,
@@ -41,268 +41,271 @@
 
       xousVersion = "v${gitTag}-${sinceTagRevCount}-g${gitHash}";
     in
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = import nixpkgs {
-          inherit system;
-          overlays = [
-            rust-overlay.overlays.default
-            rust-xous.overlays.default
-          ];
-        };
-        craneLib = (crane.mkLib pkgs).overrideToolchain pkgs.rustToolchainXous;
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
 
-        # Clean source to only include cargo-relevant files
-        src = craneLib.cleanCargoSource self;
-
-        # Vendor all dependencies (including git deps) - this runs in a FOD with network access
-        vendoredDeps = craneLib.vendorCargoDeps {
-          inherit src;
-        };
-
-        # Vendor locales dependencies separately (it has its own Cargo.lock)
-        localesSrc = pkgs.lib.cleanSourceWith {
-          src = self;
-          filter = path: type:
-            (pkgs.lib.hasInfix "/locales/" path) ||
-            (pkgs.lib.hasSuffix "/locales" path) ||
-            (baseNameOf path == "Cargo.toml" && dirOf path == toString self + "/locales") ||
-            (baseNameOf path == "Cargo.lock" && dirOf path == toString self + "/locales");
-        };
-
-        vendoredLocalesDeps = craneLib.vendorCargoDeps {
-          src = self + "/locales";
-        };
-
-        # Common postPatch to replace SemVer::from_git() with hardcoded version
-        patchSemver = ''
-          substituteInPlace tools/src/sign_image.rs \
-            --replace-fail 'SemVer::from_git()?.into()' '"${xousVersion}".parse::<SemVer>().unwrap().into()'
-        '';
-
-        # Patch versioning.rs to use XOUS_VERSION env var instead of git describe
-        patchVersioning = ''
-          substituteInPlace xtask/src/versioning.rs \
-            --replace-fail 'let gitver = output.stdout;' \
-                           'let gitver = std::env::var("XOUS_VERSION").map(|s| s.into_bytes()).unwrap_or(output.stdout);'
-        '';
-
-        # Patch swap_writer.rs to use GIT_REV env var instead of running git
-        patchSwapWriter = ''
-          substituteInPlace tools/src/swap_writer.rs \
-            --replace-fail 'Command::new("git").args(&["rev-parse", "HEAD"]).output().expect("Failed to execute command")' \
-                           'std::env::var("GIT_REV").map(|s| std::process::Output { status: std::process::ExitStatus::default(), stdout: s.into_bytes(), stderr: vec![] }).unwrap_or_else(|_| Command::new("git").args(&["rev-parse", "HEAD"]).output().expect("Failed to execute command"))'
-        '';
-
-        # Merge vendor directories so a single config covers both the root
-        # and locales Cargo.lock files.
-        mergedVendor = pkgs.runCommand "merged-vendor-cargo-deps" {} ''
-          # Recreate directory structure with real dirs, symlinking crates
-          for dir in ${vendoredDeps}/*/; do
-            name=$(basename "$dir")
-            mkdir -p "$out/$name"
-            for crate in "$dir"/*; do
-              ln -s "$crate" "$out/$name/$(basename "$crate")"
-            done
-          done
-
-          # Add locales-only crates into matching source dirs
-          for dir in ${vendoredLocalesDeps}/*/; do
-            name=$(basename "$dir")
-            mkdir -p "$out/$name"
-            for crate in "$dir"/*; do
-              crate_name=$(basename "$crate")
-              if [ ! -e "$out/$name/$crate_name" ]; then
-                ln -s "$crate" "$out/$name/$crate_name"
-              fi
-            done
-          done
-
-          # Generate config.toml pointing to merged paths
-          sed "s|${vendoredDeps}|$out|g" ${vendoredDeps}/config.toml > $out/config.toml
-        '';
-
-        # Configure cargo to use vendored deps (separate file, merged via --config)
-        configureVendoring = ''
-          mkdir -p .cargo
-          cat ${mergedVendor}/config.toml > .cargo/vendor-config.toml
-          printf '\n[net]\noffline = true\n' >> .cargo/vendor-config.toml
-        '';
-
-        # Common environment for reproducible Rust builds
-        reproducibleRustEnv = ''
-          export HOME=$PWD
-          export CARGO_HOME=$PWD/.cargo
-          mkdir -p $CARGO_HOME
-          export XOUS_VERSION="${xousVersion}"
-          # Git revision for swap_writer.rs (uses last 16 hex chars of full hash)
-          export GIT_REV="${gitRevFull}"
-          export CARGO_INCREMENTAL=0
-          export RUSTFLAGS="-C codegen-units=1 --remap-path-prefix=$PWD=/build"
-          export SOURCE_DATE_EPOCH=1
-        '';
-
-        # Helper to create build derivations
-        mkXousBuild = { pname, xtaskCmd, targetDir ? "riscv32imac-unknown-none-elf" }:
-          pkgs.stdenv.mkDerivation {
-            inherit pname;
-            version = "0.1.0";
-            src = self;  # Use full source for xtask builds
-            nativeBuildInputs = [ pkgs.rustToolchainXous ];
-
-            postPatch = patchSemver + patchVersioning + patchSwapWriter;
-
-            configurePhase = configureVendoring;
-
-            buildPhase = ''
-              ${reproducibleRustEnv}
-              cargo xtask ${xtaskCmd} --config .cargo/vendor-config.toml --no-verify
-            '';
-
-            installPhase = ''
-              mkdir -p $out
-              cp target/${targetDir}/release/*.uf2 $out/ || true
-              cp target/${targetDir}/release/*.img $out/ || true
-              cp target/${targetDir}/release/*.bin $out/ || true
-            '';
-          };
-
-        dabao-helloworld = mkXousBuild {
-          pname = "dabao-helloworld";
-          xtaskCmd = "dabao helloworld";
-          targetDir = "riscv32imac-unknown-xous-elf";
-        };
-
-        bao1x-boot0 = mkXousBuild {
-          pname = "bao1x-boot0";
-          xtaskCmd = "bao1x-boot0";
-        };
-
-        bao1x-alt-boot1 = mkXousBuild {
-          pname = "bao1x-alt-boot1";
-          xtaskCmd = "bao1x-alt-boot1";
-        };
-
-        bao1x-boot1 = mkXousBuild {
-          pname = "bao1x-boot1";
-          xtaskCmd = "bao1x-boot1";
-        };
-
-        bao1x-baremetal-dabao = mkXousBuild {
-          pname = "bao1x-baremetal-dabao";
-          xtaskCmd = "bao1x-baremetal-dabao";
-        };
-
-        baosec = mkXousBuild {
-          pname = "baosec";
-          xtaskCmd = "baosec";
-          targetDir = "riscv32imac-unknown-xous-elf";
-        };
-
-        # Script to configure cargo vendoring in the current project directory
-        vendorSetup = pkgs.writeShellScriptBin "xous-vendor-setup" ''
-          if [ ! -f "Cargo.toml" ]; then
-            echo "Error: not in xous-core project root" >&2
-            exit 1
-          fi
-
-          mkdir -p .cargo
-
-          # Write merged vendor config covering both root and locales deps
-          cat ${mergedVendor}/config.toml > .cargo/vendor-config.toml
-          printf '\n[net]\noffline = true\n' >> .cargo/vendor-config.toml
-          echo "Wrote .cargo/vendor-config.toml (merged root + locales deps)"
-        '';
-
-        nightlyRustToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain:
-          toolchain.default.override {
-            extensions = [ "rustfmt" ];
-          }
-        );
-      in
-      {
-        packages = {
-          # Main packages
-          inherit dabao-helloworld bao1x-boot0 bao1x-alt-boot1 bao1x-boot1 bao1x-baremetal-dabao baosec;
-
-          # bootloader stage 1
-          boot1 = pkgs.runCommand "boot1" {} ''
-            mkdir -p $out
-            cp -r ${bao1x-boot1}/* ${bao1x-alt-boot1}/* $out
-          '';
-
-          # Combined bootloader package (boot0 + boot1)
-          bootloader = pkgs.runCommand "bootloader" {} ''
-            mkdir -p $out
-            cp -r ${bao1x-boot0}/* ${bao1x-boot1}/* ${bao1x-alt-boot1}/* $out
-          '';
-
-          # CI dependency caching - bundles shared dependencies
-          ci-deps = pkgs.symlinkJoin {
-            name = "xous-ci-deps";
-            paths = [
-              pkgs.rustToolchainXous
-              vendoredDeps
+      perSystem = { system, ... }:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            overlays = [
+              rust-overlay.overlays.default
+              rust-xous.overlays.default
             ];
           };
+          craneLib = (crane.mkLib pkgs).overrideToolchain pkgs.rustToolchainXous;
 
-          # Aliases
-          dabao = dabao-helloworld;
-          baremetal = bao1x-baremetal-dabao;
+          # Clean source to only include cargo-relevant files
+          src = craneLib.cleanCargoSource self;
 
-          default = dabao-helloworld;
-        };
-
-        devShells = {
-          default = pkgs.mkShell {
-            packages = [ pkgs.rustToolchainXous vendorSetup ];
-            shellHook = ''
-              # Generate vendor config for offline builds
-              xous-vendor-setup
-
-              echo "──────────────────────────────────────────────────────────────"
-              echo "Xous development environment"
-              echo "  $(rustc --version)"
-              echo "  xous-core ${xousVersion}"
-              echo ""
-              echo "Installed Rust targets:"
-              ls "$(rustc --print sysroot)/lib/rustlib" | grep -v -E '^(etc|src)$' | sed 's/^/  • /'
-              echo ""
-              echo "Build commands:"
-              echo "  • nix build .#dabao-helloworld"
-              echo "  • nix build .#baosec"
-              echo "  • nix build .#bao1x-baremetal-dabao"
-              echo "  • nix build .#bao1x-boot0"
-              echo "  • nix build .#bao1x-boot1"
-              echo "  • nix build .#bao1x-alt-boot1"
-              echo ""
-              echo "Aliases:"
-              echo "  • nix build .#dabao       (dabao-helloworld)"
-              echo "  • nix build .#baremetal   (bao1x-baremetal-dabao)"
-              echo "  • nix build .#boot1       (bao1x-boot1 + bao1x-alt-boot1)"
-              echo "  • nix build .#bootloader  (bao1x-boot0 bao1x-boot1 + bao1x-alt-boot1)""
-              echo ""
-              echo "For formatting checks, use: nix develop .#nightly"
-              echo "──────────────────────────────────────────────────────────────"
-            '';
+          # Vendor all dependencies (including git deps) - this runs in a FOD with network access
+          vendoredDeps = craneLib.vendorCargoDeps {
+            inherit src;
           };
 
-          nightly = pkgs.mkShell {
-            packages = [ nightlyRustToolchain ];
-            shellHook = ''
-              echo "──────────────────────────────────────────────────────────────"
-              echo "Xous nightly development environment"
-              echo "  $(rustc --version)"
-              echo "  $(cargo --version)"
-              echo "  xous-core ${xousVersion}"
-              echo ""
-              echo "Formatting commands:"
-              echo "  • cargo fmt --check"
-              echo "  • cargo fmt"
-              echo "──────────────────────────────────────────────────────────────"
+          # Vendor locales dependencies separately (it has its own Cargo.lock)
+          localesSrc = pkgs.lib.cleanSourceWith {
+            src = self;
+            filter = path: type:
+              (pkgs.lib.hasInfix "/locales/" path) ||
+              (pkgs.lib.hasSuffix "/locales" path) ||
+              (baseNameOf path == "Cargo.toml" && dirOf path == toString self + "/locales") ||
+              (baseNameOf path == "Cargo.lock" && dirOf path == toString self + "/locales");
+          };
+
+          vendoredLocalesDeps = craneLib.vendorCargoDeps {
+            src = self + "/locales";
+          };
+
+          # Common postPatch to replace SemVer::from_git() with hardcoded version
+          patchSemver = ''
+            substituteInPlace tools/src/sign_image.rs \
+              --replace-fail 'SemVer::from_git()?.into()' '"${xousVersion}".parse::<SemVer>().unwrap().into()'
+          '';
+
+          # Patch versioning.rs to use XOUS_VERSION env var instead of git describe
+          patchVersioning = ''
+            substituteInPlace xtask/src/versioning.rs \
+              --replace-fail 'let gitver = output.stdout;' \
+                             'let gitver = std::env::var("XOUS_VERSION").map(|s| s.into_bytes()).unwrap_or(output.stdout);'
+          '';
+
+          # Patch swap_writer.rs to use GIT_REV env var instead of running git
+          patchSwapWriter = ''
+            substituteInPlace tools/src/swap_writer.rs \
+              --replace-fail 'Command::new("git").args(&["rev-parse", "HEAD"]).output().expect("Failed to execute command")' \
+                             'std::env::var("GIT_REV").map(|s| std::process::Output { status: std::process::ExitStatus::default(), stdout: s.into_bytes(), stderr: vec![] }).unwrap_or_else(|_| Command::new("git").args(&["rev-parse", "HEAD"]).output().expect("Failed to execute command"))'
+          '';
+
+          # Merge vendor directories so a single config covers both the root
+          # and locales Cargo.lock files.
+          mergedVendor = pkgs.runCommand "merged-vendor-cargo-deps" {} ''
+            # Recreate directory structure with real dirs, symlinking crates
+            for dir in ${vendoredDeps}/*/; do
+              name=$(basename "$dir")
+              mkdir -p "$out/$name"
+              for crate in "$dir"/*; do
+                ln -s "$crate" "$out/$name/$(basename "$crate")"
+              done
+            done
+
+            # Add locales-only crates into matching source dirs
+            for dir in ${vendoredLocalesDeps}/*/; do
+              name=$(basename "$dir")
+              mkdir -p "$out/$name"
+              for crate in "$dir"/*; do
+                crate_name=$(basename "$crate")
+                if [ ! -e "$out/$name/$crate_name" ]; then
+                  ln -s "$crate" "$out/$name/$crate_name"
+                fi
+              done
+            done
+
+            # Generate config.toml pointing to merged paths
+            sed "s|${vendoredDeps}|$out|g" ${vendoredDeps}/config.toml > $out/config.toml
+          '';
+
+          # Configure cargo to use vendored deps (separate file, merged via --config)
+          configureVendoring = ''
+            mkdir -p .cargo
+            cat ${mergedVendor}/config.toml > .cargo/vendor-config.toml
+            printf '\n[net]\noffline = true\n' >> .cargo/vendor-config.toml
+          '';
+
+          # Common environment for reproducible Rust builds
+          reproducibleRustEnv = ''
+            export HOME=$PWD
+            export CARGO_HOME=$PWD/.cargo
+            mkdir -p $CARGO_HOME
+            export XOUS_VERSION="${xousVersion}"
+            # Git revision for swap_writer.rs (uses last 16 hex chars of full hash)
+            export GIT_REV="${gitRevFull}"
+            export CARGO_INCREMENTAL=0
+            export RUSTFLAGS="-C codegen-units=1 --remap-path-prefix=$PWD=/build"
+            export SOURCE_DATE_EPOCH=1
+          '';
+
+          # Helper to create build derivations
+          mkXousBuild = { pname, xtaskCmd, targetDir ? "riscv32imac-unknown-none-elf" }:
+            pkgs.stdenv.mkDerivation {
+              inherit pname;
+              version = "0.1.0";
+              src = self;  # Use full source for xtask builds
+              nativeBuildInputs = [ pkgs.rustToolchainXous ];
+
+              postPatch = patchSemver + patchVersioning + patchSwapWriter;
+
+              configurePhase = configureVendoring;
+
+              buildPhase = ''
+                ${reproducibleRustEnv}
+                cargo xtask ${xtaskCmd} --config .cargo/vendor-config.toml --no-verify
+              '';
+
+              installPhase = ''
+                mkdir -p $out
+                cp target/${targetDir}/release/*.uf2 $out/ || true
+                cp target/${targetDir}/release/*.img $out/ || true
+                cp target/${targetDir}/release/*.bin $out/ || true
+              '';
+            };
+
+          dabao-helloworld = mkXousBuild {
+            pname = "dabao-helloworld";
+            xtaskCmd = "dabao helloworld";
+            targetDir = "riscv32imac-unknown-xous-elf";
+          };
+
+          bao1x-boot0 = mkXousBuild {
+            pname = "bao1x-boot0";
+            xtaskCmd = "bao1x-boot0";
+          };
+
+          bao1x-alt-boot1 = mkXousBuild {
+            pname = "bao1x-alt-boot1";
+            xtaskCmd = "bao1x-alt-boot1";
+          };
+
+          bao1x-boot1 = mkXousBuild {
+            pname = "bao1x-boot1";
+            xtaskCmd = "bao1x-boot1";
+          };
+
+          bao1x-baremetal-dabao = mkXousBuild {
+            pname = "bao1x-baremetal-dabao";
+            xtaskCmd = "bao1x-baremetal-dabao";
+          };
+
+          baosec = mkXousBuild {
+            pname = "baosec";
+            xtaskCmd = "baosec";
+            targetDir = "riscv32imac-unknown-xous-elf";
+          };
+
+          # Script to configure cargo vendoring in the current project directory
+          vendorSetup = pkgs.writeShellScriptBin "xous-vendor-setup" ''
+            if [ ! -f "Cargo.toml" ]; then
+              echo "Error: not in xous-core project root" >&2
+              exit 1
+            fi
+
+            mkdir -p .cargo
+
+            # Write merged vendor config covering both root and locales deps
+            cat ${mergedVendor}/config.toml > .cargo/vendor-config.toml
+            printf '\n[net]\noffline = true\n' >> .cargo/vendor-config.toml
+            echo "Wrote .cargo/vendor-config.toml (merged root + locales deps)"
+          '';
+
+          nightlyRustToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain:
+            toolchain.default.override {
+              extensions = [ "rustfmt" ];
+            }
+          );
+        in
+        {
+          packages = {
+            # Main packages
+            inherit dabao-helloworld bao1x-boot0 bao1x-alt-boot1 bao1x-boot1 bao1x-baremetal-dabao baosec;
+
+            # bootloader stage 1
+            boot1 = pkgs.runCommand "boot1" {} ''
+              mkdir -p $out
+              cp -r ${bao1x-boot1}/* ${bao1x-alt-boot1}/* $out
             '';
+
+            # Combined bootloader package (boot0 + boot1)
+            bootloader = pkgs.runCommand "bootloader" {} ''
+              mkdir -p $out
+              cp -r ${bao1x-boot0}/* ${bao1x-boot1}/* ${bao1x-alt-boot1}/* $out
+            '';
+
+            # CI dependency caching - bundles shared dependencies
+            ci-deps = pkgs.symlinkJoin {
+              name = "xous-ci-deps";
+              paths = [
+                pkgs.rustToolchainXous
+                vendoredDeps
+              ];
+            };
+
+            # Aliases
+            dabao = dabao-helloworld;
+            baremetal = bao1x-baremetal-dabao;
+
+            default = dabao-helloworld;
+          };
+
+          devShells = {
+            default = pkgs.mkShell {
+              packages = [ pkgs.rustToolchainXous vendorSetup ];
+              shellHook = ''
+                # Generate vendor config for offline builds
+                xous-vendor-setup
+
+                echo "──────────────────────────────────────────────────────────────"
+                echo "Xous development environment"
+                echo "  $(rustc --version)"
+                echo "  xous-core ${xousVersion}"
+                echo ""
+                echo "Installed Rust targets:"
+                ls "$(rustc --print sysroot)/lib/rustlib" | grep -v -E '^(etc|src)$' | sed 's/^/  • /'
+                echo ""
+                echo "Build commands:"
+                echo "  • nix build .#dabao-helloworld"
+                echo "  • nix build .#baosec"
+                echo "  • nix build .#bao1x-baremetal-dabao"
+                echo "  • nix build .#bao1x-boot0"
+                echo "  • nix build .#bao1x-boot1"
+                echo "  • nix build .#bao1x-alt-boot1"
+                echo ""
+                echo "Aliases:"
+                echo "  • nix build .#dabao       (dabao-helloworld)"
+                echo "  • nix build .#baremetal   (bao1x-baremetal-dabao)"
+                echo "  • nix build .#boot1       (bao1x-boot1 + bao1x-alt-boot1)"
+                echo "  • nix build .#bootloader  (bao1x-boot0 bao1x-boot1 + bao1x-alt-boot1)""
+                echo ""
+                echo "For formatting checks, use: nix develop .#nightly"
+                echo "──────────────────────────────────────────────────────────────"
+              '';
+            };
+
+            nightly = pkgs.mkShell {
+              packages = [ nightlyRustToolchain ];
+              shellHook = ''
+                echo "──────────────────────────────────────────────────────────────"
+                echo "Xous nightly development environment"
+                echo "  $(rustc --version)"
+                echo "  $(cargo --version)"
+                echo "  xous-core ${xousVersion}"
+                echo ""
+                echo "Formatting commands:"
+                echo "  • cargo fmt --check"
+                echo "  • cargo fmt"
+                echo "──────────────────────────────────────────────────────────────"
+              '';
+            };
           };
         };
-      }
-    );
+    };
 }
