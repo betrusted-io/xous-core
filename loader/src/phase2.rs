@@ -330,7 +330,9 @@ pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables) {
     }
     #[cfg(all(feature = "debug-print", not(feature = "verilator-only")))]
     // print the kernel's page table mappings as a sanity check on the loader
-    debug::print_pagetable(cfg.processes[0].satp);
+    if VDBG {
+        debug::print_pagetable(cfg.processes[0].satp);
+    }
 
     // Mark pages used by suspend/resume, otherwise they will be handed out to userspace.
     // However, when not doing suspend/resume, it's safe to hand this out because it's always zeroized
