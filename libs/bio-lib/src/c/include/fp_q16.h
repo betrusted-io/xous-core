@@ -50,16 +50,59 @@ typedef int32_t fp_t;
 #define FP_FROM_FLOAT(x) ((fp_t)((x) * FP_ONE + 0.5f))
 #define FP_TO_FLOAT(x)   ((float)(x) / FP_ONE)
 
+#define FIX16_OVERFLOW    0x80000000
+#define FIX16_MAXIMUM  0x7FFFFFFF /*!< the maximum value of fp_t */
+#define FIX16_MINIMUM  0x80000000 /*!< the minimum value of fp_t */
+
 /* --- Arithmetic --- */
 
 static inline fp_t fp_add(fp_t a, fp_t b)
 {
-    return a + b;
+	// Use unsigned integers because overflow with signed integers is
+	// an undefined operation (http://www.airs.com/blog/archives/120).
+	uint32_t _a = a, _b = b;
+	uint32_t sum = _a + _b;
+
+	// Overflow can only happen if sign of a == sign of b, and then
+	// it causes sign of sum != sign of a.
+	if (!((_a ^ _b) & 0x80000000) && ((_a ^ sum) & 0x80000000))
+		return (fp_t) FIX16_OVERFLOW;
+
+	return sum;
 }
 
 static inline fp_t fp_sub(fp_t a, fp_t b)
 {
-    return a - b;
+	uint32_t _a = a, _b = b;
+	uint32_t diff = _a - _b;
+
+	// Overflow can only happen if sign of a != sign of b, and then
+	// it causes sign of diff != sign of a.
+	if (((_a ^ _b) & 0x80000000) && ((_a ^ diff) & 0x80000000))
+		return (fp_t) FIX16_OVERFLOW;
+
+	return diff;
+}
+
+/* Saturating arithmetic */
+static inline fp_t fp_sadd(fp_t a, fp_t b)
+{
+	fp_t result = fp_add(a, b);
+
+	if (result == (fp_t) FIX16_OVERFLOW)
+		return (a >= 0) ? FIX16_MAXIMUM : FIX16_MINIMUM;
+
+	return result;
+}
+
+static inline fp_t fp_ssub(fp_t a, fp_t b)
+{
+	fp_t result = fp_sub(a, b);
+
+	if (result == (fp_t) FIX16_OVERFLOW)
+		return (a >= 0) ? FIX16_MAXIMUM : FIX16_MINIMUM;
+
+	return result;
 }
 
 /*
@@ -77,52 +120,75 @@ static inline fp_t fp_mul(fp_t a, fp_t b)
     return (fp_t)(result >> FP_FRAC_BITS);
 }
 
-/*
- * u32_divrem - unsigned 32-bit shift-and-subtract divider.
- *
- * 32 iterations of: shift one bit of the dividend into the partial
- * remainder, subtract the divisor if it fits, record the quotient bit.
- * No hardware divide instruction required.
- */
-static inline uint32_t u32_divrem(uint32_t dividend, uint32_t divisor,
-                                  uint32_t *remainder)
+fp_t fp_div(fp_t a, fp_t b)
 {
-    uint32_t quotient = 0;
-    uint32_t rem      = 0;
-    int      i;
+	// This uses the basic binary restoring division algorithm.
+	// It appears to be faster to do the whole division manually than
+	// trying to compose a 64-bit divide out of 32-bit divisions on
+	// platforms without hardware divide.
 
-    for (i = 31; i >= 0; i--) {
-        rem = (rem << 1) | ((dividend >> i) & 1);
-        if (rem >= divisor) {
-            rem      -= divisor;
-            quotient |= (1u << i);
-        }
-    }
+	if (b == 0)
+		return FIX16_MINIMUM;
 
-    if (remainder) *remainder = rem;
-    return quotient;
-}
+	uint32_t remainder = (a >= 0) ? a : (-a);
+	uint32_t divider = (b >= 0) ? b : (-b);
 
-/*
- * fp_div - signed fixed-point division, no hardware divide.
- *
- * Works in two passes through u32_divrem:
- *   pass 1: integer quotient and remainder of |a| / |b|
- *   pass 2: fractional bits from (remainder << FP_FRAC_BITS) / |b|
- * Sign is restored at the end.
- */
-static inline fp_t fp_div(fp_t a, fp_t b)
-{
-    int32_t  sign = ((a ^ b) < 0) ? -1 : 1;
-    uint32_t ua   = (uint32_t)(a < 0 ? -a : a);
-    uint32_t ub   = (uint32_t)(b < 0 ? -b : b);
-    uint32_t q, r;
-    fp_t     res;
+	uint32_t quotient = 0;
+	uint32_t bit = 0x10000;
 
-    q   = u32_divrem(ua, ub, &r);
-    res = (fp_t)((q << FP_FRAC_BITS) | u32_divrem(r << FP_FRAC_BITS, ub, NULL));
+	/* The algorithm requires D >= R */
+	while (divider < remainder)
+	{
+		divider <<= 1;
+		bit <<= 1;
+	}
 
-    return sign < 0 ? -res : res;
+	if (!bit)
+		return FIX16_OVERFLOW;
+
+	if (divider & 0x80000000)
+	{
+		// Perform one step manually to avoid overflows later.
+		// We know that divider's bottom bit is 0 here.
+		if (remainder >= divider)
+		{
+				quotient |= bit;
+				remainder -= divider;
+		}
+		divider >>= 1;
+		bit >>= 1;
+	}
+
+	/* Main division loop */
+	while (bit && remainder)
+	{
+		if (remainder >= divider)
+		{
+				quotient |= bit;
+				remainder -= divider;
+		}
+
+		remainder <<= 1;
+		bit >>= 1;
+	}
+
+	if (remainder >= divider)
+	{
+		quotient++;
+	}
+
+	fp_t result = quotient;
+
+	/* Figure out the sign of result */
+	if ((a ^ b) & 0x80000000)
+	{
+		if (result == (fp_t) FIX16_MINIMUM)
+				return FIX16_OVERFLOW;
+
+		result = -result;
+	}
+
+	return result;
 }
 
 /* --- CORDIC cosine --- */
