@@ -217,6 +217,15 @@
             echo "Wrote .cargo/vendor-config.toml (merged root + locales deps)"
           '';
 
+          # Wrapper that injects --git-describe and --git-rev so builds work
+          # without git tags (containers, shallow clones, CI).
+          xousBuild = pkgs.writeShellScriptBin "xous-build" ''
+            exec cargo xtask "$@" \
+              --config .cargo/vendor-config.toml \
+              --git-describe "${xousVersion}" \
+              --git-rev "${gitRevFull}"
+          '';
+
           nightlyRustToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain:
             toolchain.default.override {
               extensions = [ "rustfmt" ];
@@ -289,6 +298,30 @@
                 echo "──────────────────────────────────────────────────────────────"
               '';
             };
+
+          # For containerized / sandboxed environments without git tags
+          container = pkgs.mkShell {
+            packages = [ pkgs.rustToolchainXous vendorSetup xousBuild ];
+            env = {
+              XOUS_VERSION = xousVersion;
+              GIT_REV = gitRevFull;
+            };
+            shellHook = ''
+              # Generate vendor config for offline builds
+              xous-vendor-setup
+
+              echo "──────────────────────────────────────────────────────────────"
+              echo "Xous container development environment"
+              echo "  $(rustc --version)"
+              echo "  xous-core ${xousVersion}"
+              echo ""
+              echo "Use xous-build instead of cargo xtask to inject version info:"
+              echo "  • xous-build dabao"
+              echo "  • xous-build baosec"
+              echo "  • xous-build bao1x-boot0"
+              echo "──────────────────────────────────────────────────────────────"
+            '';
+          };
 
             nightly = pkgs.mkShell {
               packages = [ nightlyRustToolchain ];
