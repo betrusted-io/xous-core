@@ -4,6 +4,8 @@
  * Format: configurable Q format via FP_FRAC_BITS
  * Default: Q20.12 (20 integer bits, 12 fractional bits)
  *
+ * TODO: division routine is sus. Need to test & revisit.
+ *
  * Representation: signed 32-bit integer
  * Range (Q20.12): -524288.0 to +524287.9998
  * Resolution:      1/4096 ~= 0.000244
