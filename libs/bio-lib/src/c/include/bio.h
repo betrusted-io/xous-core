@@ -115,6 +115,8 @@ static inline __attribute__((always_inline)) void clear_event_bits(uint32_t mask
     __asm__ volatile ("mv x29, %0" : : "r"(mask) : "memory");
 }
 
+#define FIFO_EVENT_MASK(fifo_number, slot_number) (((1 << slot_number) << (fifo_number * 2)) << 24)
+
 // Debug
 static inline __attribute__((always_inline)) uint32_t core_id() {
     uint32_t a;
