@@ -470,6 +470,15 @@ fn boot_sequence(
     _perclk_freq: u32,
     detached_app: bool,
 ) -> ! {
+    #[cfg(feature = "board-baosec")]
+    let mut iox = bao1x_hal::iox::Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
+    #[cfg(feature = "board-baosec")]
+    let mut udma_global = bao1x_hal::udma::GlobalConfig::new();
+    #[cfg(feature = "board-baosec")]
+    let mut oled = crate::platform::oled_init(&mut iox, &mut udma_global, _perclk_freq);
+    #[cfg(feature = "board-baosec")]
+    crate::platform::progress_bar(&mut oled, 0);
+
     // Store the initial boot config on the stack.  We don't know
     // where in heap this memory will go.
     #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
@@ -525,8 +534,19 @@ fn boot_sequence(
         // cold boot path
         println!("No suspend marker found, doing a cold boot!");
         clear_ram(&mut cfg);
-        phase_1(&mut cfg, detached_app);
-        phase_2(&mut cfg, env_variables);
+
+        #[cfg(feature = "board-baosec")]
+        {
+            phase_1(&mut cfg, detached_app, Some(&mut oled));
+            phase_2(&mut cfg, env_variables, Some(&mut oled));
+            crate::platform::progress_bar(&mut oled, 100);
+        }
+        #[cfg(not(feature = "board-baosec"))]
+        {
+            phase_1(&mut cfg, detached_app, None);
+            phase_2(&mut cfg, env_variables, None);
+        }
+
         #[cfg(any(feature = "debug-print", feature = "swap"))]
         if VDBG || SDBG {
             check_load(&mut cfg);

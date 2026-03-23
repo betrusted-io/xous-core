@@ -30,7 +30,7 @@ pub struct InitialProcess {
 /// We don't memorize the allocated results (in part because we don't have malloc/alloc to stick
 /// the table, and we don't know a priori how big it will be); we simply memorize the maximum extent,
 /// after which we allocate the book-keeping tables.
-pub fn phase_1(cfg: &mut BootConfig, detached_app: bool) {
+pub fn phase_1(cfg: &mut BootConfig, detached_app: bool, fb: Option<&mut dyn ux_api::minigfx::FrameBuffer>) {
     // Allocate space for the stack pointer.
     // The bootloader should have placed the stack pointer at the end of RAM
     // prior to jumping to our program. Reserve space for the stack, so that it does not smash
@@ -161,7 +161,7 @@ pub fn phase_1(cfg: &mut BootConfig, detached_app: bool) {
     // Copy the processes to RAM, if requested.
     if !cfg.no_copy {
         println!("Copying processes");
-        copy_processes(cfg);
+        copy_processes(cfg, fb);
     }
     // activate this to debug stack-smashing during copy_process(). The RPT is the first structure that gets
     // smashed if the stack overflows! It should be all 0's if the stack did not overrun.
@@ -499,9 +499,10 @@ impl TagType {
 
 /// Copy program data from the SPI flash into newly-allocated RAM
 /// located at the end of memory space.
-fn copy_processes(cfg: &mut BootConfig) {
+fn copy_processes(cfg: &mut BootConfig, mut fb: Option<&mut dyn ux_api::minigfx::FrameBuffer>) {
     let mut _pid = 1;
-    for tag in cfg.args.iter() {
+    let arg_len = cfg.args.iter().count();
+    for (i, tag) in cfg.args.iter().enumerate() {
         let tag_type = TagType::from(tag.name);
         match tag_type {
             TagType::IniF | TagType::IniE => {
@@ -878,6 +879,14 @@ fn copy_processes(cfg: &mut BootConfig) {
                 }
             }
             _ => {}
+        }
+        if let Some(ref mut fb) = fb {
+            let start = 5;
+            let end = 70;
+            let increment = (end - start) / arg_len;
+            let _percentage = start + increment * i;
+            #[cfg(feature = "board-baosec")]
+            crate::platform::progress_bar(*fb, _percentage);
         }
     }
 }

@@ -1,3 +1,4 @@
+use ux_api::minigfx::FrameBuffer;
 #[cfg(feature = "swap")]
 use xous::arch::{SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR};
 
@@ -9,7 +10,7 @@ use crate::{env::EnvVariables, *};
 ///
 /// Set up all the page tables, allocating new root page tables for SATPs and corresponding
 /// sub-pages starting from the base of previously copied process data.
-pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables) {
+pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables, mut fb: Option<&mut dyn FrameBuffer>) {
     let args = cfg.args;
 
     // This is the offset in RAM where programs are loaded from.
@@ -41,7 +42,8 @@ pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables) {
     #[cfg(feature = "bao1x")]
     trng.setup_raw_generation(32); // this is safe to call multiple times to affirm the TRNG state
 
-    for tag in args.iter() {
+    let arg_len = args.iter().count();
+    for (i, tag) in args.iter().enumerate() {
         let mut env_header = crate::env::EnvHeader::default();
         #[allow(unused_mut)]
         let mut pid_env = env_variables.clone();
@@ -103,6 +105,14 @@ pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables) {
                 );
             }
             process_offset -= load_size_rounded;
+        }
+        if let Some(ref mut fb) = fb {
+            let start = 70;
+            let end = 95;
+            let increment = (end - start) / arg_len;
+            let _percentage = start + increment * i;
+            #[cfg(feature = "board-baosec")]
+            crate::platform::progress_bar(*fb, _percentage);
         }
     }
 
