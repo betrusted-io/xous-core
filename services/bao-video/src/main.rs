@@ -861,6 +861,12 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         scalar.arg1 = 1;
                     }
                 }
+                #[cfg(feature = "board-baosec")]
+                GfxOpcode::BaosecBitmap => {
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let bitmap = buffer.to_original::<BaosecBitmap, _>().unwrap();
+                    display.render_bitmap(bitmap);
+                }
                 GfxOpcode::Quit => break,
                 _ => {
                     // This is perfectly normal because not all opcodes are handled by all platforms.
