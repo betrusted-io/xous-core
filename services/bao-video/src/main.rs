@@ -870,6 +870,13 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     let bitmap = buffer.to_original::<BaosecBitmap, _>().unwrap();
                     display.render_bitmap(bitmap);
                 }
+                #[cfg(feature = "board-baosec")]
+                GfxOpcode::Brightness => {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
+                        let brightness = scalar.arg1.min(255) as u8;
+                        display.brightness(brightness);
+                    }
+                }
                 GfxOpcode::Quit => break,
                 _ => {
                     // This is perfectly normal because not all opcodes are handled by all platforms.

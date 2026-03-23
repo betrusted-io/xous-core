@@ -110,6 +110,8 @@ pub enum GfxOpcode {
     #[cfg(feature = "board-baosec")]
     /// This call is specific and highly optimized to the display on Baosec
     BaosecBitmap,
+    #[cfg(feature = "board-baosec")]
+    Brightness,
 
     /// Gutter for invalid calls
     InvalidCall,

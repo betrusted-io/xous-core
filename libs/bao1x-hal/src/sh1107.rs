@@ -14,6 +14,9 @@ pub const PAGE: u8 = ROW as u8 / 8;
 // IFRAM space reserved for UDMA channel commands
 const SIDEBAND_LEN: usize = 256;
 
+// 0x4f is a bit too bright
+pub const DEFAULT_BRIGHTNESS: u8 = 0x3f;
+
 pub struct MainThreadToken(());
 impl MainThreadToken {
     pub fn new() -> Self { MainThreadToken(()) }
@@ -465,7 +468,7 @@ impl<'a> Oled128x128<'a> {
             SetDCDCSettings(0x0),
             SetStartLine(0),
             SetDisplayOffset(0),
-            SetContrastControl(0x3f), // was 0x4f, was a bit too bright
+            SetContrastControl(DEFAULT_BRIGHTNESS),
             SetAddressMode(AddressMode::Column),
             SetSegmentReMap(false),
             SetCOMScanDirection(Direction::Inverted),
@@ -511,6 +514,11 @@ impl<'a> Oled128x128<'a> {
         // de-assert reset
         crate::board::assert_periph_reset(self.iox, false);
         self.powerdown = false;
+    }
+
+    pub fn brightness(&mut self, level: u8) {
+        let bytes = Command::SetContrastControl(level).encode();
+        self.send_command(bytes);
     }
 
     #[cfg(feature = "std")]
