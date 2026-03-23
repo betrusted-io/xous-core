@@ -56,6 +56,7 @@ hosted-baosec = ["bao1x-emu", "ux-api/hosted-baosec", "no-gam"]
 # temporary feature - remove after we have properly created a camera control API
 autotest = []
 
+with-logo = []
 bao1x = ["utralib/bao1x", "blitstr2/bao1x"]
 b64-export = ["base64"]
 default = [
