@@ -14,6 +14,9 @@ pub const PAGE: u8 = ROW as u8 / 8;
 // IFRAM space reserved for UDMA channel commands
 const SIDEBAND_LEN: usize = 256;
 
+// 0x4f is a bit too bright
+pub const DEFAULT_BRIGHTNESS: u8 = 0x3f;
+
 pub struct MainThreadToken(());
 impl MainThreadToken {
     pub fn new() -> Self { MainThreadToken(()) }
@@ -465,7 +468,7 @@ impl<'a> Oled128x128<'a> {
             SetDCDCSettings(0x0),
             SetStartLine(0),
             SetDisplayOffset(0),
-            SetContrastControl(0x3f), // was 0x4f, was a bit too bright
+            SetContrastControl(DEFAULT_BRIGHTNESS),
             SetAddressMode(AddressMode::Column),
             SetSegmentReMap(false),
             SetCOMScanDirection(Direction::Inverted),
@@ -511,6 +514,61 @@ impl<'a> Oled128x128<'a> {
         // de-assert reset
         crate::board::assert_periph_reset(self.iox, false);
         self.powerdown = false;
+    }
+
+    pub fn brightness(&mut self, level: u8) {
+        let bytes = Command::SetContrastControl(level).encode();
+        self.send_command(bytes);
+    }
+
+    #[cfg(feature = "std")]
+    pub fn render_bitmap(&mut self, bitmap: ux_api::service::api::BaosecBitmap) {
+        const W: isize = WIDTH as _;
+        const H: isize = LINES as _;
+
+        // Clamp bounding box to valid bitmap dimensions.
+        // If br > 128, truncate. If tl < 0, clamp to 0.
+        let src_x0 = bitmap.bounding_box.tl.x.max(0);
+        let src_y0 = bitmap.bounding_box.tl.y.max(0);
+        let src_x1 = bitmap.bounding_box.br.x.min(W);
+        let src_y1 = bitmap.bounding_box.br.y.min(H);
+
+        for src_y in src_y0..src_y1 {
+            // Map this bitmap row to its destination row in the framebuffer.
+            let dst_y = src_y + bitmap.top_left.y;
+
+            // Skip rows that land outside the framebuffer.
+            if dst_y < 0 || dst_y >= H {
+                continue;
+            }
+
+            for src_x in src_x0..src_x1 {
+                // Map this bitmap column to its destination column.
+                let dst_x = src_x + bitmap.top_left.x;
+
+                // Skip columns that land outside the framebuffer.
+                if dst_x < 0 || dst_x >= W {
+                    continue;
+                }
+
+                // --- read source bit ---
+                let src_linear = (src_x + src_y * W) as usize;
+                let src_word = src_linear >> 5; // / 32
+                let src_shift = src_linear & 0x1F; // % 32
+                let on = (bitmap.bits[src_word] >> src_shift) & 1;
+
+                // --- write destination bit ---
+                let dst_linear = (dst_x + dst_y * W) as usize;
+                let dst_word = dst_linear >> 5;
+                let dst_shift = dst_linear & 0x1F;
+
+                if on != 0 {
+                    self.buffer[dst_word] |= 1 << dst_shift;
+                } else {
+                    self.buffer[dst_word] &= !(1 << dst_shift);
+                }
+            }
+        }
     }
 }
 

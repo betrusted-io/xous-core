@@ -92,6 +92,7 @@ impl MiniElf {
         let mut current_page_addr: usize = 0;
         let mut previous_addr: usize = 0;
         let mut last_mapped_xip = 0;
+        #[cfg(feature = "swap")]
         let mut last_mapped_swap_virt = 0; // track the last virtual address mapped to swap, to catch gaps
         let image_phys_base = allocator.base_addr as usize + self.load_offset as usize;
         // It is a requirement that the image generator lay out the artifacts on disk such that

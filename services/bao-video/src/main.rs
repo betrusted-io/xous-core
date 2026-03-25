@@ -236,9 +236,12 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     // but it'll do the job 90% of the time and it's way better than having none at all.
     let is_panic = Arc::new(AtomicBool::new(false));
 
-    // ---- boot logo
-    display.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
-    display.redraw();
+    // ---- Baochip boot logo, if enabled
+    #[cfg(feature = "with-logo")]
+    {
+        display.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
+        display.redraw();
+    }
 
     // This is safe because the SPIM is finished with initialization, and the handler is
     // Mutex-protected.
@@ -859,6 +862,19 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     if let Some(scalar) = msg.body.scalar_message_mut() {
                         // ack the message if it's a blocking scalar
                         scalar.arg1 = 1;
+                    }
+                }
+                #[cfg(feature = "board-baosec")]
+                GfxOpcode::BaosecBitmap => {
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let bitmap = buffer.to_original::<BaosecBitmap, _>().unwrap();
+                    display.render_bitmap(bitmap);
+                }
+                #[cfg(feature = "board-baosec")]
+                GfxOpcode::Brightness => {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
+                        let brightness = scalar.arg1.min(255) as u8;
+                        display.brightness(brightness);
                     }
                 }
                 GfxOpcode::Quit => break,

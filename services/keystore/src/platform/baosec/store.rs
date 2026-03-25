@@ -384,4 +384,6 @@ impl KeyStore {
             BootWaitCoding::Disable => Ok(false),
         }
     }
+
+    pub fn is_developer(&self) -> bool { self.owc.get(bao1x_api::DEVELOPER_MODE).unwrap() != 0 }
 }

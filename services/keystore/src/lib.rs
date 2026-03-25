@@ -192,6 +192,22 @@ impl Keystore {
             _ => unimplemented!(),
         }
     }
+
+    pub fn is_developer(&self) -> Result<bool, xous::Error> {
+        match xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(Opcode::IsDeveloper.to_usize().unwrap(), 0, 0, 0, 0),
+        )? {
+            xous::Result::Scalar5(_, is_developer, _, _, _) => {
+                if is_developer == 0 {
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            _ => unimplemented!(),
+        }
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
