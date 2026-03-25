@@ -7,7 +7,7 @@ use xous::arch::{SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR};
 use crate::swap::*;
 use crate::{env::EnvVariables, *};
 // define an uninhabited stub type for boards without framebuffers
-#[cfg(any(feature = "board-dabao"))]
+#[cfg(not(any(feature = "board-baosec", feature = "board-baosor")))]
 pub trait FrameBuffer {}
 
 /// Phase 2 bootloader

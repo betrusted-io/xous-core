@@ -7,7 +7,7 @@ use ux_api::minigfx::FrameBuffer;
 pub use crate::platform::atsama5d27::load::InitialProcess;
 use crate::*;
 // define an uninhabited stub type for boards without framebuffers
-#[cfg(any(feature = "board-dabao"))]
+#[cfg(not(any(feature = "board-baosec", feature = "board-baosor")))]
 pub trait FrameBuffer {}
 
 #[repr(C)]
