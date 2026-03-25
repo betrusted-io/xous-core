@@ -21,6 +21,7 @@ pub enum Opcode {
     // ----- below are non-cryptographic opcodes but used to manipulate sensitive state -----
     /// Set bootwait parameters
     Bootwait = 4096,
+    IsDeveloper = 4097,
 
     /// Used to map unknown opcodes
     InvalidCall = 65535,

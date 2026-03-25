@@ -72,6 +72,11 @@ pub fn keystore(sid: SID) -> ! {
                     }
                 }
             }
+            Opcode::IsDeveloper => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    if store.is_developer() { scalar.arg1 = 0 } else { scalar.arg1 = 1 }
+                }
+            }
             Opcode::InvalidCall => {
                 log::error!("Invalid call in keystore: {:?}", opcode);
             }
