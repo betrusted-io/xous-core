@@ -1,3 +1,4 @@
+#[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
 use ux_api::minigfx::FrameBuffer;
 #[cfg(feature = "swap")]
 use xous::arch::{SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR};
@@ -5,12 +6,15 @@ use xous::arch::{SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR};
 #[cfg(feature = "swap")]
 use crate::swap::*;
 use crate::{env::EnvVariables, *};
+// define an uninhabited stub type for boards without framebuffers
+#[cfg(any(feature = "board-dabao"))]
+pub trait FrameBuffer {}
 
 /// Phase 2 bootloader
 ///
 /// Set up all the page tables, allocating new root page tables for SATPs and corresponding
 /// sub-pages starting from the base of previously copied process data.
-pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables, mut fb: Option<&mut dyn FrameBuffer>) {
+pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables, mut _fb: Option<&mut dyn FrameBuffer>) {
     let args = cfg.args;
 
     // This is the offset in RAM where programs are loaded from.
@@ -42,8 +46,9 @@ pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables, mut fb: Option
     #[cfg(feature = "bao1x")]
     trng.setup_raw_generation(32); // this is safe to call multiple times to affirm the TRNG state
 
+    #[cfg(feature = "board-baosec")]
     let arg_len = args.iter().count();
-    for (i, tag) in args.iter().enumerate() {
+    for (_i, tag) in args.iter().enumerate() {
         let mut env_header = crate::env::EnvHeader::default();
         #[allow(unused_mut)]
         let mut pid_env = env_variables.clone();
@@ -106,13 +111,13 @@ pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables, mut fb: Option
             }
             process_offset -= load_size_rounded;
         }
-        if let Some(ref mut fb) = fb {
+        #[cfg(feature = "board-baosec")]
+        if let Some(ref mut fb) = _fb {
             let start = 70;
             let end = 95;
             let increment = (end - start) / arg_len;
-            let _percentage = start + increment * i;
-            #[cfg(feature = "board-baosec")]
-            crate::platform::progress_bar(*fb, _percentage);
+            let percentage = start + increment * _i;
+            crate::platform::progress_bar(*fb, percentage);
         }
     }
 
