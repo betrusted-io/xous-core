@@ -15,8 +15,15 @@ pub enum Opcode {
     AesOracle = 4,
     /// initiate key wrapper operation
     AesKwp = 5,
-    /// Ephemeral secret operations
-    EphemeralOp = 256,
+    /// Ephemeral secret operations. Split into MSB/LSB pairs, because we want to strictly use
+    /// scalar messages only for this. This helps to ensure to leakage of secrets to memory pages
+    /// (there is some risk of stack spillage, but this at least reduces the attack surface).
+    /// The ephemeral secret is 192 bits long - so the `Scalar` operation is split into 1x control
+    /// word, and 3x 32 bit words that transmit the secret.
+    Ephemeral = 256,
+    /// Flag operations
+    GetFlags = 512,
+    SetFlags = 513,
 
     // ----- below are non-cryptographic opcodes but used to manipulate sensitive state -----
     /// Set bootwait parameters
@@ -25,4 +32,12 @@ pub enum Opcode {
 
     /// Used to map unknown opcodes
     InvalidCall = 65535,
+}
+
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+pub enum EphemeralOp {
+    GetLsb,
+    SetLsb,
+    GetMsb,
+    SetMsb,
 }

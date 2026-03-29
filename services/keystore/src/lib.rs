@@ -1,3 +1,4 @@
+use bao1x_api::BackupFlags;
 pub use cipher::{
     BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt, BlockSizeUser, ParBlocksSizeUser,
     consts::U16, generic_array::GenericArray, inout::InOut,
@@ -207,6 +208,99 @@ impl Keystore {
             }
             _ => unimplemented!(),
         }
+    }
+
+    pub fn set_flags(&self, flags: BackupFlags) -> Result<(), xous::Error> {
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::SetFlags.to_usize().unwrap(),
+                flags.raw_value() as usize,
+                0,
+                0,
+                0,
+            ),
+        )
+        .map(|_| ())
+    }
+
+    pub fn get_flags(&self) -> Result<BackupFlags, xous::Error> {
+        match xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(Opcode::GetFlags.to_usize().unwrap(), 0, 0, 0, 0),
+        )? {
+            xous::Result::Scalar5(_, flags, _, _, _) => Ok(BackupFlags::new_with_raw_value(flags as u32)),
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn set_ephemeral_key(&self, key: &[u8; bao1x_hal::buram::KEY_LEN]) -> Result<(), xous::Error> {
+        let offset = 0;
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::Ephemeral.to_usize().unwrap(),
+                EphemeralOp::SetLsb.to_usize().unwrap(),
+                u32::from_le_bytes(key[offset..offset + 4].try_into().unwrap()) as usize,
+                u32::from_le_bytes(key[offset + 4..offset + 8].try_into().unwrap()) as usize,
+                u32::from_le_bytes(key[offset + 8..offset + 12].try_into().unwrap()) as usize,
+            ),
+        )
+        .map(|_| ())?;
+
+        let offset = bao1x_hal::buram::KEY_LEN / 2;
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::Ephemeral.to_usize().unwrap(),
+                EphemeralOp::SetMsb.to_usize().unwrap(),
+                u32::from_le_bytes(key[offset..offset + 4].try_into().unwrap()) as usize,
+                u32::from_le_bytes(key[offset + 4..offset + 8].try_into().unwrap()) as usize,
+                u32::from_le_bytes(key[offset + 8..offset + 12].try_into().unwrap()) as usize,
+            ),
+        )
+        .map(|_| ())
+    }
+
+    pub fn get_ephemeral_key(&self) -> Result<[u8; bao1x_hal::buram::KEY_LEN], xous::Error> {
+        let mut key = [0u8; bao1x_hal::buram::KEY_LEN];
+        let offset = 0;
+        match xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::Ephemeral.to_usize().unwrap(),
+                EphemeralOp::GetLsb.to_usize().unwrap(),
+                0,
+                0,
+                0,
+            ),
+        )? {
+            xous::Result::Scalar5(_, _, arg2, arg3, arg4) => {
+                key[offset..offset + 4].copy_from_slice(&arg2.to_le_bytes());
+                key[offset + 4..offset + 8].copy_from_slice(&arg3.to_le_bytes());
+                key[offset + 8..offset + 12].copy_from_slice(&arg4.to_le_bytes());
+            }
+            _ => unimplemented!(),
+        }
+        let offset = bao1x_hal::buram::KEY_LEN / 2;
+        match xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::Ephemeral.to_usize().unwrap(),
+                EphemeralOp::GetMsb.to_usize().unwrap(),
+                0,
+                0,
+                0,
+            ),
+        )? {
+            xous::Result::Scalar5(_, _, arg2, arg3, arg4) => {
+                key[offset..offset + 4].copy_from_slice(&arg2.to_le_bytes());
+                key[offset + 4..offset + 8].copy_from_slice(&arg3.to_le_bytes());
+                key[offset + 8..offset + 12].copy_from_slice(&arg4.to_le_bytes());
+            }
+            _ => unimplemented!(),
+        }
+        Ok(key)
     }
 }
 
