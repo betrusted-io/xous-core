@@ -219,10 +219,10 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // needed after reset for the display to initialize
     if let Some(ref mut sh1107) = oled {
         // show the boot logo
-        sh1107.init();
+        sh1107.init().ok();
         delay(100);
         sh1107.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
-        sh1107.draw();
+        sh1107.draw().ok();
         delay(150);
     } else {
         delay(250);
@@ -450,5 +450,5 @@ pub fn marquee(sh1107: &mut Oled128x128, msg: &str) {
         bao1x_hal::sh1107::Mono::White.into(),
         bao1x_hal::sh1107::Mono::Black.into(),
     );
-    sh1107.draw();
+    sh1107.draw().ok();
 }

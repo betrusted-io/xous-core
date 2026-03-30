@@ -364,6 +364,7 @@ pub fn usb_ep1_bulk_out_complete(
                                             None,
                                         ),
                                         false,
+                                        ((100_000_000 / 2) / 2_000_000) as u8,
                                     ),
                                     &iox,
                                 )
