@@ -151,11 +151,12 @@ impl<'a> Oled128x128 {
 }
 
 impl FrameBuffer for Oled128x128 {
-    fn draw(&mut self) {
+    fn draw(&mut self) -> Result<(), xous::Error> {
         for (index, pixel) in self.native_buffer.lock().unwrap().iter_mut().enumerate() {
             *pixel =
                 if (self.buffer[index / 32] & (1 << (index % 32))) != 0 { DARK_COLOUR } else { LIGHT_COLOUR }
         }
+        Ok(())
     }
 
     fn clear(&mut self) { self.buffer_mut().fill(0xFFFF_FFFF); }
