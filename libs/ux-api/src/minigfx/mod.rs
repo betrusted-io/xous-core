@@ -47,7 +47,7 @@ pub trait FrameBuffer {
     /// and background colors for a color theme.
     fn xor_pixel(&mut self, p: Point);
     /// Swaps the drawable buffer to the screen and sends it to the hardware
-    fn draw(&mut self);
+    fn draw(&mut self) -> Result<(), xous::Error>;
     /// Clears the drawable buffer
     fn clear(&mut self);
     /// Returns the size of the frame buffer as a Point
@@ -68,7 +68,7 @@ impl FrameBuffer for DynFb<'_> {
 
     fn get_pixel(&self, p: Point) -> Option<ColorNative> { self.0.get_pixel(p) }
 
-    fn draw(&mut self) { self.0.draw(); }
+    fn draw(&mut self) -> Result<(), xous::Error> { self.0.draw() }
 
     fn clear(&mut self) { self.0.clear(); }
 

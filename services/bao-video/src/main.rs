@@ -227,9 +227,10 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let hal = Hal::new();
 
     let mut display = Oled128x128::new(main_thread_token, bao1x_api::PERCLK, &iox, &udma_global);
-    display.init();
+    // these unwrap because if we have a time-out at this stage, it's likely a hardware problem
+    display.init().unwrap();
     display.clear();
-    display.draw();
+    display.draw().unwrap();
 
     // ---- panic handler - set up early so we can see panics quickly
     // install the graphical panic handler. It won't catch really early panics, or panics in this crate,
@@ -522,7 +523,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                 )
                             };
                             response.replace(acquisition).unwrap();
-                            display.pop();
+                            display
+                                .pop()
+                                .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
                             hal.set_preemption(true);
                         }
                         // forward messages on to listeners iff we don't have an active modal
@@ -603,7 +606,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                             Mono::White.into(),
                             Mono::Black.into(),
                         );
-                        display.draw();
+                        display
+                            .draw()
+                            .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
                         let mut img =
                             rqrr::PreparedImage::prepare_from_greyscale(IMAGE_WIDTH, IMAGE_HEIGHT, |x, y| {
                                 frame[y * IMAGE_WIDTH + x]
@@ -641,7 +646,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                             )
                                         };
                                         response.replace(acquisition).unwrap();
-                                        display.pop();
+                                        display.pop().unwrap_or_else(|_| {
+                                            display_timeout_handler(&udma_global, &mut display)
+                                        });
                                         #[cfg(not(feature = "hosted-baosec"))]
                                         hal.set_preemption(true);
                                     } else {
@@ -685,7 +692,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         );
                     }
 
-                    display.draw();
+                    display.draw().unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
 
                     // clear the front buffer
                     display.clear();
@@ -762,7 +769,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 GfxOpcode::Flush => {
                     if qr_request.is_none() {
                         log::trace!("***gfx flush*** redraw##");
-                        display.redraw();
+                        display
+                            .redraw()
+                            .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
                     }
                 }
                 GfxOpcode::Clear => {
@@ -797,7 +806,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 GfxOpcode::DrawSleepScreen => {
                     if let Some(_scalar) = msg.body.scalar_message() {
                         display.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
-                        display.redraw();
+                        display
+                            .redraw()
+                            .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
                     } else {
                         panic!("Incorrect message type");
                     }
@@ -805,7 +816,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 GfxOpcode::DrawBootLogo => {
                     if let Some(_scalar) = msg.body.scalar_message() {
                         display.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
-                        display.redraw();
+                        display
+                            .redraw()
+                            .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
                     } else {
                         panic!("Incorrect message type");
                     }
@@ -833,7 +846,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     // no failure if it's not
                 }
                 GfxOpcode::Pop => {
-                    display.pop();
+                    display.pop().unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
                     if let Some(scalar) = msg.body.scalar_message_mut() {
                         // ack the message if it's a blocking scalar
                         scalar.arg1 = 1;
@@ -857,8 +870,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     // safety: this is safe because we call init() a prescribed delay after power-up
                     unsafe { display.powerup() };
                     tt.sleep_ms(5).ok();
-                    display.init();
-                    display.pop();
+                    display.init().unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
+                    display.pop().unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
                     if let Some(scalar) = msg.body.scalar_message_mut() {
                         // ack the message if it's a blocking scalar
                         scalar.arg1 = 1;
@@ -874,7 +887,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 GfxOpcode::Brightness => {
                     if let Some(scalar) = msg.body.scalar_message_mut() {
                         let brightness = scalar.arg1.min(255) as u8;
-                        display.brightness(brightness);
+                        display
+                            .brightness(brightness)
+                            .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
                     }
                 }
                 GfxOpcode::Quit => break,
@@ -893,4 +908,10 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     xous::destroy_server(sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
+}
+
+fn display_timeout_handler(udma_global: &UdmaGlobal, display: &mut Oled128x128) {
+    log::info!("resetting display spim block");
+    udma_global.reset(PeriphId::from(bao1x_hal::board::get_display_pins().0));
+    display.reinit_spi();
 }

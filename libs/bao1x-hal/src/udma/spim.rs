@@ -476,7 +476,7 @@ impl Spim {
         &self.ifram.as_phys_slice()[..self.tx_buf_len_bytes / size_of::<T>()]
     }
 
-    fn send_cmd_list(&mut self, cmds: &[SpimCmd]) {
+    pub fn send_cmd_list(&mut self, cmds: &[SpimCmd]) {
         for cmd_chunk in cmds.chunks(SPIM_CMD_BUF_LEN_BYTES / size_of::<u32>()) {
             for (src, dst) in cmd_chunk.iter().zip(self.cmd_buf_mut().iter_mut()) {
                 *dst = (*src).into();

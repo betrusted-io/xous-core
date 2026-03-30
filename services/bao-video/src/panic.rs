@@ -57,6 +57,7 @@ pub(crate) fn panic_handler_thread(
             Option<CommandSet>,
         ),
         bool,
+        u8,
     ),
 ) {
     thread::spawn({
@@ -111,7 +112,7 @@ pub(crate) fn panic_handler_thread(
                         }
                     }
 
-                    display.draw();
+                    display.draw().ok();
                     append_string("~Guru Meditation~", &mut display);
                 }
                 let body = match msg.body.memory_message() {
@@ -138,7 +139,7 @@ pub(crate) fn panic_handler_thread(
                         &mut display,
                     );
                 }
-                display.draw();
+                display.draw().ok();
             }
         }
     });
