@@ -912,6 +912,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
 fn display_timeout_handler(udma_global: &UdmaGlobal, display: &mut Oled128x128) {
     log::info!("resetting display spim block");
-    udma_global.reset(PeriphId::from(bao1x_hal::board::get_display_pins().0));
-    display.reinit_spi();
+    #[cfg(feature = "board-baosec")]
+    {
+        udma_global.reset(PeriphId::from(bao1x_hal::board::get_display_pins().0));
+        display.reinit_spi();
+    }
 }

@@ -234,6 +234,7 @@ impl Keystore {
         }
     }
 
+    #[cfg(feature = "bao1x")]
     pub fn set_ephemeral_key(&self, key: &[u8; bao1x_hal::buram::KEY_LEN]) -> Result<(), xous::Error> {
         let offset = 0;
         xous::send_message(
@@ -262,6 +263,7 @@ impl Keystore {
         .map(|_| ())
     }
 
+    #[cfg(feature = "bao1x")]
     pub fn get_ephemeral_key(&self) -> Result<[u8; bao1x_hal::buram::KEY_LEN], xous::Error> {
         let mut key = [0u8; bao1x_hal::buram::KEY_LEN];
         let offset = 0;
