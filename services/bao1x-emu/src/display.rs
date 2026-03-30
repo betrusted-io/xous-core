@@ -126,7 +126,7 @@ impl<'a> Oled128x128 {
 
     pub fn screen_size(&self) -> Point { Point::new(WIDTH, LINES) }
 
-    pub fn redraw(&mut self) { self.draw(); }
+    pub fn redraw(&mut self) -> Result<(), xous::Error> { self.draw() }
 
     pub fn blit_screen(&mut self, bmp: &[u32]) { self.buffer.copy_from_slice(bmp); }
 
@@ -136,26 +136,28 @@ impl<'a> Oled128x128 {
 
     pub fn stash(&mut self) { self.stash.copy_from_slice(&self.buffer); }
 
-    pub fn pop(&mut self) {
+    pub fn pop(&mut self) -> Result<(), xous::Error> {
         self.buffer.copy_from_slice(&self.stash);
-        self.redraw();
+        self.redraw()
     }
 
-    pub fn send_command<'b, U>(&'b mut self, _cmd: U)
+    pub fn send_command<'b, U>(&'b mut self, _cmd: U) -> Result<(), xous::Error>
     where
         U: IntoIterator<Item = u8> + 'b,
     {
+        Ok(())
     }
 
-    pub fn init(&mut self) {}
+    pub fn init(&mut self) -> Result<(), xous::Error> { Ok(()) }
 }
 
 impl FrameBuffer for Oled128x128 {
-    fn draw(&mut self) {
+    fn draw(&mut self) -> Result<(), xous::Error> {
         for (index, pixel) in self.native_buffer.lock().unwrap().iter_mut().enumerate() {
             *pixel =
                 if (self.buffer[index / 32] & (1 << (index % 32))) != 0 { DARK_COLOUR } else { LIGHT_COLOUR }
         }
+        Ok(())
     }
 
     fn clear(&mut self) { self.buffer_mut().fill(0xFFFF_FFFF); }

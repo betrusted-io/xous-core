@@ -168,10 +168,10 @@ pub fn early_init_hw() -> u32 {
             &mut iox,
             &mut udma_global,
         );
-        sh1107.init();
+        sh1107.init().ok();
         sh1107.buffer_mut().fill(0xFFFF_FFFF);
         sh1107.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
-        sh1107.draw();
+        sh1107.draw().ok();
     }
 
     #[cfg(feature = "board-dabao")]
@@ -228,10 +228,10 @@ pub fn oled_init<'a>(
         iox,
         udma_global,
     );
-    sh1107.init();
+    sh1107.init().ok();
     sh1107.buffer_mut().fill(0xFFFF_FFFF);
     sh1107.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
-    sh1107.draw();
+    sh1107.draw().ok();
     sh1107
 }
 
@@ -415,5 +415,5 @@ pub fn progress_bar(fb: &mut dyn FrameBuffer, progress: usize) {
             false,
         );
     }
-    fb.0.draw();
+    fb.0.draw().ok();
 }

@@ -183,6 +183,7 @@ pub struct Oled128x128<'a> {
     powerdown: bool,
     power_port: IoxPort,
     power_pin: u8,
+    clk_div: u8,
 }
 
 impl<'a> Oled128x128<'a> {
@@ -267,7 +268,17 @@ impl<'a> Oled128x128<'a> {
             power_port,
             power_pin,
             powerdown: false,
+            clk_div: ((perclk_freq / 2) / 2_000_000) as u8,
         }
+    }
+
+    // used to recover a wedged SPI interface
+    pub fn reinit_spi(&mut self) {
+        self.spim.send_cmd_list(&[crate::udma::SpimCmd::Config(
+            SpimClkPol::LeadingEdgeRise,
+            SpimClkPha::CaptureOnLeading,
+            self.clk_div,
+        )]);
     }
 
     /// This should only be called to initialize the panic handler with its own
@@ -300,8 +311,9 @@ impl<'a> Oled128x128<'a> {
             Option<CommandSet>,
         ),
         bool,
+        u8,
     ) {
-        (self.spim.into_raw_parts(), self.powerdown)
+        (self.spim.into_raw_parts(), self.powerdown, self.clk_div)
     }
 
     /// Creates a clone of the display handle. This is only safe if the handles are used in a
@@ -331,6 +343,7 @@ impl<'a> Oled128x128<'a> {
                 Option<CommandSet>,
             ),
             bool,
+            u8,
         ),
         iox: &'a T,
     ) -> Self
@@ -354,6 +367,7 @@ impl<'a> Oled128x128<'a> {
                 command_set,
             ),
             powerdown,
+            clk_div,
         ) = display_parts;
         // compile them into a new object
         let mut spim = unsafe {
@@ -398,6 +412,7 @@ impl<'a> Oled128x128<'a> {
             powerdown,
             power_pin,
             power_port,
+            clk_div,
         }
     }
 
@@ -407,7 +422,7 @@ impl<'a> Oled128x128<'a> {
 
     pub fn screen_size(&self) -> Point { Point::new(WIDTH, LINES) }
 
-    pub fn redraw(&mut self) { self.draw(); }
+    pub fn redraw(&mut self) -> Result<(), xous::Error> { self.draw() }
 
     pub fn blit_screen(&mut self, bmp: &[u32]) { self.buffer.copy_from_slice(bmp); }
 
@@ -417,21 +432,21 @@ impl<'a> Oled128x128<'a> {
 
     pub fn stash(&mut self) { self.stash.copy_from_slice(&self.buffer); }
 
-    pub fn pop(&mut self) {
+    pub fn pop(&mut self) -> Result<(), xous::Error> {
         self.buffer.copy_from_slice(&self.stash);
-        self.redraw();
+        self.redraw()
     }
 
     fn set_data(&self) { self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::High); }
 
     fn set_command(&self) { self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::Low); }
 
-    pub fn send_command<'b, U>(&'b mut self, cmd: U)
+    pub fn send_command<'b, U>(&'b mut self, cmd: U) -> Result<(), xous::Error>
     where
         U: IntoIterator<Item = u8> + 'b,
     {
         if self.powerdown {
-            return;
+            return Ok(());
         }
         self.set_command();
         let total_buf_len = self.buffer.len() * size_of::<u32>();
@@ -451,16 +466,18 @@ impl<'a> Oled128x128<'a> {
                 .txrx_data_async_from_parts::<u8>(total_buf_len, len, true, false)
                 .expect("Couldn't initiate oled command");
         }
-        self.spim.txrx_await(false).unwrap_or_else(|_e| {
-            #[cfg(feature = "std")]
-            log::error!("txrx err {:?}", _e);
-            &[]
-        });
+        self.spim
+            .txrx_await(false)
+            .inspect_err(|_| {
+                #[cfg(feature = "std")]
+                log::error!("timeout in send_command");
+            })
+            .map(|_| ())
     }
 
-    pub fn init(&mut self) {
+    pub fn init(&mut self) -> Result<(), xous::Error> {
         if self.powerdown {
-            return;
+            return Ok(());
         }
         use Command::*;
         let init_sequence = [
@@ -483,17 +500,18 @@ impl<'a> Oled128x128<'a> {
 
         for command in init_sequence {
             let bytes = command.encode();
-            self.send_command(bytes);
+            self.send_command(bytes)?;
         }
         // clear the frame buffer
         self.buffer_mut().fill(0xFFFF_FFFF);
-        self.draw();
+        self.draw()?;
 
         let display_on = [DisplayOnOff(DisplayState::On)];
         for command in display_on {
             let bytes = command.encode();
-            self.send_command(bytes);
+            self.send_command(bytes)?;
         }
+        Ok(())
     }
 
     pub fn powerdown(&mut self) {
@@ -516,9 +534,9 @@ impl<'a> Oled128x128<'a> {
         self.powerdown = false;
     }
 
-    pub fn brightness(&mut self, level: u8) {
+    pub fn brightness(&mut self, level: u8) -> Result<(), xous::Error> {
         let bytes = Command::SetContrastControl(level).encode();
-        self.send_command(bytes);
+        self.send_command(bytes)
     }
 
     #[cfg(feature = "std")]
@@ -574,10 +592,10 @@ impl<'a> Oled128x128<'a> {
 
 impl<'a> FrameBuffer for Oled128x128<'a> {
     /// Copies the SRAM buffer to IFRAM and then transfers that over SPI
-    fn draw(&mut self) {
+    fn draw(&mut self) -> Result<(), xous::Error> {
         self.hw_buf.copy_from_slice(&self.buffer);
         if self.powerdown {
-            return;
+            return Ok(());
         }
         let chunk_size = 16;
         let chunks = self.buffer().len() * size_of::<u32>() / chunk_size;
@@ -588,8 +606,8 @@ impl<'a> FrameBuffer for Oled128x128<'a> {
             // the transaction is done before the data is done transmitting, and we have to
             // toggle set_data() only after the physical transaction is done, not after the
             // the last UDMA action has been queued.
-            self.send_command(Command::SetPageAddress(0).encode());
-            self.send_command(Command::SetColumnAddress(page as u8).encode());
+            self.send_command(Command::SetPageAddress(0).encode())?;
+            self.send_command(Command::SetColumnAddress(page as u8).encode())?;
             // wait for commands to finish before toggling set_data
             // self.spim.tx_data_await(false);
             // crate::println!("Send page {}, offset {:x}", page, page * chunk_size);
@@ -600,12 +618,12 @@ impl<'a> FrameBuffer for Oled128x128<'a> {
                     .txrx_data_async_from_parts::<u8>(page * chunk_size, chunk_size, true, false)
                     .expect("Couldn't initiate oled data transfer");
             }
-            self.spim.txrx_await(false).unwrap_or_else(|_e| {
+            self.spim.txrx_await(false).inspect_err(|_| {
                 #[cfg(feature = "std")]
-                log::error!("txrx err {:?}", _e);
-                &[]
-            });
+                log::error!("timeout in draw");
+            })?;
         }
+        Ok(())
     }
 
     fn clear(&mut self) { self.buffer_mut().fill(0xFFFF_FFFF); }
