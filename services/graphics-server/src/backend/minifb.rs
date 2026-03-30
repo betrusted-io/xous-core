@@ -237,7 +237,10 @@ impl FrameBuffer for XousDisplay {
     }
 
     /// Swaps the drawable buffer to the screen and sends it to the hardware
-    fn draw(&mut self) { self.redraw(); }
+    fn draw(&mut self) -> Result<(), xous::Error> {
+        self.redraw();
+        Ok(())
+    }
 
     /// Clears the drawable buffer
     fn clear(&mut self) {
