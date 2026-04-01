@@ -444,7 +444,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 #[cfg(not(feature = "hosted-baosec"))]
                 GfxOpcode::AcquireQr => {
                     if qr_request.is_none() {
-                        display.stash(); // save a copy of the UI
+                        // display.stash(); // save a copy of the UI
                         // this will defer response until later
                         qr_request = msg_opt.take();
 
@@ -589,6 +589,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                 None,
                                 None,
                             );
+                            continue;
                         }
                     }
 
@@ -624,10 +625,18 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                         Mono::White.into(),
                                         Mono::Black.into(),
                                     );
+                                    display.draw().unwrap_or_else(|_| {
+                                        display_timeout_handler(&udma_global, &mut display)
+                                    });
                                     // this take will cause the QR response to be routed to the sender since
                                     // the Message `Drop`s. It will also cause the sampling of the camera to
                                     // stop on the next frame.
                                     if let Some(mut envelope) = qr_request.take() {
+                                        /*
+                                        display.pop().unwrap_or_else(|_| {
+                                            display_timeout_handler(&udma_global, &mut display)
+                                        })
+                                        */
                                         let metadata = format!("{:?}", meta);
                                         #[cfg(not(feature = "hosted-baosec"))]
                                         if content.starts_with("test://") {
@@ -646,11 +655,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                             )
                                         };
                                         response.replace(acquisition).unwrap();
-                                        display.pop().unwrap_or_else(|_| {
-                                            display_timeout_handler(&udma_global, &mut display)
-                                        });
                                         #[cfg(not(feature = "hosted-baosec"))]
                                         hal.set_preemption(true);
+                                        continue;
                                     } else {
                                         log::info!("meta: {:?}", meta);
                                         log::info!("************ {} ***********", content);
