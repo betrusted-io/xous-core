@@ -444,6 +444,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 #[cfg(not(feature = "hosted-baosec"))]
                 GfxOpcode::AcquireQr => {
                     if qr_request.is_none() {
+                        // reset camera UDMA block
+                        udma_global.reset(PeriphId::Cam);
+
                         // display.stash(); // save a copy of the UI
                         // this will defer response until later
                         qr_request = msg_opt.take();
