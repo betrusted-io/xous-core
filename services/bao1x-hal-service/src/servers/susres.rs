@@ -180,15 +180,48 @@ fn susres_service() {
 
                         use bao1x_api::bio::BioApi;
                         let mut bio = bao1x_hal::bio::Bio::new();
+
                         // hard-coded to the value of the external crystal - this is a hardware
                         // reference value that should never change; eg, USB doesn't work if this
                         // isn't 48 MHz.
-                        bio.update_bio_freq(48_000_000);
+                        let fclk_fd_backup = clk_mgr.fclk_fd();
+
+                        // TODO: this is a hack to get past some issue with clock rate changes
+                        //
+                        // In theory:
+                        //   - the set_clk_fd(0xff) call should reset the fclk divider to 1:1
+                        //   - this would mean the bio_freq is getting 48MHz
+                        // In practice:
+                        //   - the fd seems "stuck" at /2 for fd settings from 0xff-0x3f
+                        //      - so the pulse width outputs on BIO is the same for 0xff, 0x7f, 0x3f
+                        //   - if I reduce reduce fd setting to 0x1f, then, I can see the clock rate is 1/8th
+                        // What has been tried:
+                        //   - Forcing the clocks to a fixed 0xFF setting regardless of input - I can see that
+                        //     BIO clocks, after wfi, are incorrect in this case. Which means that set_fclk_fd
+                        //     is "getting through"
+                        //   - Adding wait states, etc. around the CGUSET call does not seem to change the
+                        //     situation
+                        //
+                        // The compromise for now is to detect the "fast_bio" setting at init by heuristically
+                        // looking at the fd_backup field, and then specifying an offset frequency to the
+                        // update_bio_freq that results in the correct waveform.
+                        //
+                        // Possible cause:
+                        //   - The update_bio_freq routine is being "too clever" and compensating for the fd
+                        //     setting. But it seems like the routine just takes the putative fclk setting as
+                        //     the argument to update_bio_freq(), I don't see any compensation happening...
+                        if fclk_fd_backup == 0xff {
+                            bio.update_bio_freq(48_000_000);
+                        } else {
+                            bio.update_bio_freq(24_000_000);
+                        }
+                        clk_mgr.set_fclk_fd(0xff); // set divider to 1:1 ratio
                         clk_mgr.wfi();
 
                         // ~~~ time passes, but we're on carbonite so we don't notice ~~~
 
                         clk_mgr.restore_wfi();
+                        clk_mgr.set_fclk_fd(fclk_fd_backup); // restore the FD before restoring potentially fast PLL setting
                         bio.update_bio_freq(clk_mgr.fclk);
 
                         // when wfi() returns, it means we've resumed

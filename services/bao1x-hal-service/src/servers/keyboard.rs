@@ -52,6 +52,7 @@ pub fn handler(_irq_no: usize, arg: *mut usize) {
 }
 
 #[cfg(feature = "board-baosec")]
+#[derive(Debug)]
 struct KeypressTimestamp {
     pub kp: KeyPress,
     pub next_repeat_time: u64,
@@ -64,7 +65,7 @@ struct KeyTracker {
 }
 #[cfg(feature = "board-baosec")]
 impl KeyTracker {
-    pub fn new() -> Self { KeyTracker { rate_ms: KEYUP_DELAY_MS as usize, delay_ms: 500, keys: Vec::new() } }
+    pub fn new() -> Self { KeyTracker { rate_ms: KEYUP_DELAY_MS as usize, delay_ms: 1000, keys: Vec::new() } }
 
     pub fn register_key_down(&mut self, key: KeyPress, ts: u64) {
         if let Some(entry) = self.keys.iter_mut().find(|e| e.kp == key) {
@@ -90,8 +91,10 @@ impl KeyTracker {
         for key in keys {
             // search for key not in keys vector; create a new entry with next repeat equal
             // to now, so it gets emitted immediately
-            if !self.keys.iter().any(|e| e.kp == *key) {
-                self.keys.push(KeypressTimestamp { kp: *key, next_repeat_time: now });
+            if *key != KeyPress::Invalid && *key != KeyPress::None {
+                if !self.keys.iter().any(|e| e.kp == *key) {
+                    self.keys.push(KeypressTimestamp { kp: *key, next_repeat_time: now });
+                }
             }
         }
 
@@ -460,6 +463,7 @@ fn keyboard_service() {
                     let mut kc: Vec<char> = Vec::new();
                     let now = tt.elapsed_ms();
                     if now - last_key_event > KEYUP_DELAY_MS {
+                        log::debug!("clearing key tracker");
                         key_tracker.clear_keys();
                     }
                     last_key_event = now;
@@ -468,9 +472,9 @@ fn keyboard_service() {
                     if kpc_aoint.kpc.r(utra::dkpc::SFR_SR1) != 0 {
                         let sr1 = unsafe { kpc_aoint.kpc.base().add(8).read_volatile() };
                         let key_down = bao1x_hal::board::kpc_sr1_to_key(sr1);
-                        log::info!("{:?}", key_down);
-                        key_tracker.register_key_down(key_down, now);
-                        if key_down != KeyPress::Invalid {
+                        log::debug!("{:?}", key_down);
+                        if key_down != KeyPress::Invalid && key_down != KeyPress::None {
+                            key_tracker.register_key_down(key_down, now);
                             kc.push(map_keypress(key_down))
                         }
                     }
