@@ -1,7 +1,9 @@
 use bao1x_api::BackupFlags;
+use bao1x_hal::acram::{MAX_ONEWAY_COUNTERS, OneWayErr};
 use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
 use bao1x_hal::rram::Reram;
 use keystore_api::*;
+use num_traits::*;
 use xous::SID;
 use xous_ipc::Buffer;
 
@@ -117,6 +119,39 @@ pub fn keystore(sid: SID) -> ! {
             Opcode::IsDeveloper => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
                     if store.is_developer() { scalar.arg1 = 0 } else { scalar.arg1 = 1 }
+                }
+            }
+            Opcode::IncOneWayCounter => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    if [scalar.arg2, scalar.arg3, scalar.arg4] == OWC_MAGIC_INC
+                        && scalar.arg1 < MAX_ONEWAY_COUNTERS
+                    {
+                        match unsafe { store.owc.inc(scalar.arg1) } {
+                            Ok(_) => {
+                                scalar.arg1 = OneWayErr::None.to_usize().unwrap();
+                            }
+                            Err(e) => scalar.arg1 = e.to_usize().unwrap(),
+                        }
+                    } else {
+                        scalar.arg1 = OneWayErr::InternalError.to_usize().unwrap();
+                    }
+                }
+            }
+            Opcode::GetOneWayCounter => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    if [scalar.arg2, scalar.arg3, scalar.arg4] == OWC_MAGIC_GET
+                        && scalar.arg1 < MAX_ONEWAY_COUNTERS
+                    {
+                        match store.owc.get(scalar.arg1) {
+                            Ok(val) => {
+                                scalar.arg1 = OneWayErr::None.to_usize().unwrap();
+                                scalar.arg2 = val as usize;
+                            }
+                            Err(e) => scalar.arg1 = e.to_usize().unwrap(),
+                        }
+                    } else {
+                        scalar.arg1 = OneWayErr::InternalError.to_usize().unwrap();
+                    }
                 }
             }
             Opcode::InvalidCall => {

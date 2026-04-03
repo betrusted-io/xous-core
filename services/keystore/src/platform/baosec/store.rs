@@ -21,7 +21,7 @@ const KEY_LEN: usize = bao1x_api::SLOT_ELEMENT_LEN_BYTES;
 
 pub struct KeyStore {
     slot_mgr: SlotManager,
-    owc: OneWayCounter,
+    pub owc: OneWayCounter,
     master_key: Option<[u8; KEY_LEN]>,
 }
 
