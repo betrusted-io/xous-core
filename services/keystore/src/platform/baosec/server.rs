@@ -1,5 +1,5 @@
-use bao1x_api::BackupFlags;
-use bao1x_hal::acram::{MAX_ONEWAY_COUNTERS, OneWayErr};
+use bao1x_api::{BackupFlags, OneWayErr};
+use bao1x_hal::acram::MAX_ONEWAY_COUNTERS;
 use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
 use bao1x_hal::rram::Reram;
 use keystore_api::*;

@@ -1,4 +1,4 @@
-use bao1x_api::{BackupFlags, OneWayEncoding};
+use bao1x_api::{BackupFlags, OneWayEncoding, OneWayErr};
 pub use cipher::{
     BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt, BlockSizeUser, ParBlocksSizeUser,
     consts::U16, generic_array::GenericArray, inout::InOut,
@@ -9,8 +9,6 @@ use xous::CID;
 use xous_ipc::Buffer;
 pub(crate) type BatchBlocks = GenericArray<Block, U16>;
 use std::convert::TryInto;
-
-use bao1x_hal::acram::*;
 
 #[derive(Debug)] // there is no confidential information in the external structure; it's safe to Debug it
 pub struct Keystore {

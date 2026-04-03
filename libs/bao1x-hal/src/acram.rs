@@ -7,9 +7,9 @@
 //! In the case of baremetal targets of course everything is mapped, so these
 //! restrictions are not a concern.
 
-use bao1x_api::OneWayEncoding;
 use bao1x_api::bollard;
 use bao1x_api::offsets::*;
+use bao1x_api::{OneWayEncoding, OneWayErr};
 #[cfg(feature = "std")]
 use xous::MemoryRange;
 
@@ -29,17 +29,6 @@ pub const ONEWAY_MAX_VALUE: u32 = 10_0000;
 /// Maximum number of times the one way counter can be incremented in
 /// a single boot attempt.
 pub const ONEWAY_MAX_DELTA: u32 = 512;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum OneWayErr {
-    OutOfBounds,
-    IncFail,
-    InvalidCoding,
-    // used to report messaging errors in xous environments
-    InternalError,
-    // used to indicate things are OK in xous environments
-    None,
-}
 
 pub struct OneWayCounter {
     #[cfg(feature = "std")]
