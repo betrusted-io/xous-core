@@ -32,6 +32,23 @@ By participating in this project you agree to abide by the
 (please read the full text so that you can understand what actions will and
 will not be tolerated).
 
+## AI-Assisted Project Contributions
+
+- You may use AI assistance for contributing to this project in accordance with these principles of accountability and transparency.
+
+### Accountability
+
+- When you submit a contribution, you represent that you are the author and that you are fully accountable for the entirety of the contribution.
+- You are responsible for your contribution, including vouching for the quality, license compliance, and utility of your submission.
+- Using AI assistance in your contribution does not relieve you of the responsibility to ensure that your contribution meets project standards; your contributions must be modular, reviewable, and clearly explainable.
+
+### Transparency
+
+- You **must** disclose the use of AI tools when a significant part of the contribution is generated without changes.
+- You **should** disclose the use of AI tools where it might be helpful to the maintainer reviewing your contribution. 
+- Using AI tools to correct grammar and spelling does not require disclosure.
+- Make your disclosure in your commit message as a trailer; e.g. `Assisted-by: ChatGPTv5`
+
 ## Contribution Workflow
 
 This is an overview of the contribution workflow:
