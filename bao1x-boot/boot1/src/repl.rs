@@ -7,6 +7,7 @@ use bao1x_api::pubkeys::BOOT0_TO_BOOT1;
 #[allow(unused_imports)]
 use bao1x_api::*;
 use bao1x_hal::acram::{OneWayCounter, SlotManager};
+use bao1x_hal::board::PDDB_LEN;
 use bao1x_hal::hardening::{Csprng, skipping_enabled};
 use utralib::*;
 
@@ -390,11 +391,15 @@ impl Repl {
                 // ... and all was null and void!
             }
             "baosec-init" => {
-                if !matches!(args.as_slice(), [s] if s == "confirm") {
-                    return Err(Error::help(
-                        "Usage: 'baosec-init confirm'. WARNING: erases external storage!",
-                    ));
-                }
+                let full = match args.as_slice() {
+                    [s] if s == "confirm" => false,
+                    [s, f] if s == "confirm" && f == "full" => true,
+                    _ => {
+                        return Err(Error::help(
+                            "Usage: 'baosec-init confirm [full]'. WARNING: erases external storage!",
+                        ));
+                    }
+                };
 
                 // this routine is used to initialize baosec products - sets the board type and
                 // erases the off-chip FLASH
@@ -452,8 +457,10 @@ impl Repl {
                     crate::println!("  {:x}...", addr);
                     flash_spim.flash_erase_block(addr, SPINOR_BULK_ERASE_SIZE as usize);
                 }
-                for addr in (PDDB_ORIGIN..PDDB_ORIGIN + SPINOR_BULK_ERASE_SIZE as usize * 2)
-                    .step_by(SPINOR_BULK_ERASE_SIZE as usize)
+                let pddb_erase_len =
+                    if full { PDDB_LEN as usize } else { SPINOR_BULK_ERASE_SIZE as usize * 2 };
+                for addr in
+                    (PDDB_ORIGIN..PDDB_ORIGIN + pddb_erase_len).step_by(SPINOR_BULK_ERASE_SIZE as usize)
                 {
                     crate::println!("  {:x}...", addr);
                     flash_spim.flash_erase_block(addr, SPINOR_BULK_ERASE_SIZE as usize);

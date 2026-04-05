@@ -18,7 +18,10 @@ pub const SPINOR_ERASE_SIZE: u32 = bao1x_api::offsets::baosec::SPINOR_ERASE_SIZE
 pub const SPINOR_BULK_ERASE_SIZE: u32 = bao1x_api::offsets::baosec::SPINOR_BULK_ERASE_SIZE;
 pub const SPINOR_LEN: u32 = bao1x_api::offsets::baosec::SPI_FLASH_LEN as _;
 pub const PDDB_LOC: u32 = bao1x_api::offsets::baosec::PDDB_ORIGIN as _;
+#[cfg(not(feature = "oem-baosec-lite"))]
 pub const PDDB_LEN: u32 = bao1x_api::offsets::baosec::PDDB_LEN as _;
+#[cfg(feature = "oem-baosec-lite")]
+pub const PDDB_LEN: u32 = 2560 * 1024; // 2.5MiB length
 
 // Define the virtual region that memory-mapped FLASH should go to
 // top 8 megs are reserved for staging updates, backups, etc.

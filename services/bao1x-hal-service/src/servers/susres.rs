@@ -215,13 +215,14 @@ fn susres_service() {
                         } else {
                             bio.update_bio_freq(24_000_000);
                         }
-                        clk_mgr.set_fclk_fd(0xff); // set divider to 1:1 ratio
+                        // clk_mgr.set_fclk_fd(0xff); // set divider to 1:1 ratio
                         clk_mgr.wfi();
 
                         // ~~~ time passes, but we're on carbonite so we don't notice ~~~
 
+                        // clk_mgr.set_fclk_fd(fclk_fd_backup); // restore the FD before restoring potentially
+                        // fast PLL setting
                         clk_mgr.restore_wfi();
-                        clk_mgr.set_fclk_fd(fclk_fd_backup); // restore the FD before restoring potentially fast PLL setting
                         bio.update_bio_freq(clk_mgr.fclk);
 
                         // when wfi() returns, it means we've resumed
