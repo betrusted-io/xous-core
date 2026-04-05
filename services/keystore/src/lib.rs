@@ -1,4 +1,4 @@
-use bao1x_api::BackupFlags;
+use bao1x_api::{BackupFlags, OneWayEncoding, OneWayErr};
 pub use cipher::{
     BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt, BlockSizeUser, ParBlocksSizeUser,
     consts::U16, generic_array::GenericArray, inout::InOut,
@@ -232,6 +232,83 @@ impl Keystore {
             xous::Result::Scalar5(_, flags, _, _, _) => Ok(BackupFlags::new_with_raw_value(flags as u32)),
             _ => unimplemented!(),
         }
+    }
+
+    /// Marked as `unsafe` because the offset needs to be correct. It's recommended to use
+    /// `inc_owc_coded()` where possible. This function is necessary for the cases that don't
+    /// fit into the `encode_oneway` mechanism, e.g. key revocations, etc.
+    ///
+    /// All you have to do to be safe is no be super-sure you got the offset right.
+    #[cfg(feature = "owc-inc")]
+    pub unsafe fn inc_owc(&self, offset: usize) -> Result<(), OneWayErr> {
+        let result = xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::IncOneWayCounter.to_usize().unwrap(),
+                offset,
+                OWC_MAGIC_INC[0],
+                OWC_MAGIC_INC[1],
+                OWC_MAGIC_INC[2],
+            ),
+        );
+        match result {
+            Ok(xous::Result::Scalar5(_, arg1, _arg2, _arg3, _arg4)) => {
+                match num_traits::FromPrimitive::from_usize(arg1) {
+                    Some(OneWayErr::None) => Ok(()),
+                    Some(e) => Err(e),
+                    _ => Err(OneWayErr::InternalError),
+                }
+            }
+            _ => Err(OneWayErr::InternalError),
+        }
+    }
+
+    /// Automatically increments the correct slot based on the OFFSET encoded in the definition
+    #[cfg(feature = "owc-inc")]
+    pub fn inc_owc_coded<T>(&self) -> Result<(), OneWayErr>
+    where
+        T: OneWayEncoding,
+        T::Error: core::fmt::Debug,
+    {
+        let offset: usize = T::OFFSET;
+        if offset < MAX_ONEWAY_COUNTERS {
+            unsafe { self.inc_owc(offset) }
+        } else {
+            Err(OneWayErr::OutOfBounds)
+        }
+    }
+
+    pub fn get_owc(&self, offset: usize) -> Result<u32, OneWayErr> {
+        let result = xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::GetOneWayCounter.to_usize().unwrap(),
+                offset,
+                OWC_MAGIC_GET[0],
+                OWC_MAGIC_GET[1],
+                OWC_MAGIC_GET[2],
+            ),
+        );
+        match result {
+            Ok(xous::Result::Scalar5(_id, arg1, arg2, _arg3, _arg4)) => {
+                match num_traits::FromPrimitive::from_usize(arg1) {
+                    Some(OneWayErr::None) => Ok(arg2 as u32),
+                    Some(e) => Err(e),
+                    _ => Err(OneWayErr::InternalError),
+                }
+            }
+            _ => Err(OneWayErr::InternalError),
+        }
+    }
+
+    pub fn get_owc_decoded<T>(&self) -> Result<T, OneWayErr>
+    where
+        T: OneWayEncoding,
+        T: TryFrom<u32>,
+        T::Error: core::fmt::Debug,
+    {
+        let raw = self.get_owc(T::OFFSET)?;
+        T::try_from(raw).map_err(|_| OneWayErr::InvalidCoding)
     }
 
     #[cfg(feature = "bao1x")]

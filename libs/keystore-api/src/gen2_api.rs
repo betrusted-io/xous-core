@@ -24,6 +24,9 @@ pub enum Opcode {
     /// Flag operations
     GetFlags = 512,
     SetFlags = 513,
+    /// One way counter operations
+    GetOneWayCounter = 768,
+    IncOneWayCounter = 769,
 
     // ----- below are non-cryptographic opcodes but used to manipulate sensitive state -----
     /// Set bootwait parameters
@@ -41,3 +44,8 @@ pub enum EphemeralOp {
     GetMsb,
     SetMsb,
 }
+
+/// Series of magic numbers not meant for cryptographic authentication,
+/// but for detecting fat-fingered API implementations.
+pub const OWC_MAGIC_GET: [usize; 3] = [0x2b46_2ab3, 0xf7e3_1b59, 0x7bba_d222];
+pub const OWC_MAGIC_INC: [usize; 3] = [0xeb5d_fc81, 0x8b6d_6a90, 0xf720_491a];
