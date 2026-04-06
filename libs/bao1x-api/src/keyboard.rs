@@ -91,6 +91,10 @@ pub enum KeyboardOpcode {
 
     /// a blocking key listener - blocks until a key is hit
     BlockingKeyListener = 9,
+
+    /// change orientation, and thus key mapping of directional keys. Behavior
+    /// depends on the hardware type selected.
+    SetOrientation = 128,
 }
 
 // this structure is used to register a keyboard listener.
@@ -197,6 +201,20 @@ impl Keyboard {
         send_message(
             self.conn,
             Message::new_scalar(KeyboardOpcode::InjectKey.to_usize().unwrap(), c as u32 as usize, 0, 0, 0),
+        )
+        .unwrap();
+    }
+
+    pub fn flip_orientation(&self, flipped: bool) {
+        send_message(
+            self.conn,
+            Message::new_scalar(
+                KeyboardOpcode::SetOrientation.to_usize().unwrap(),
+                if flipped { 1 } else { 0 },
+                0,
+                0,
+                0,
+            ),
         )
         .unwrap();
     }

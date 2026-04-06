@@ -112,6 +112,8 @@ pub enum GfxOpcode {
     BaosecBitmap,
     #[cfg(feature = "board-baosec")]
     Brightness,
+    #[cfg(feature = "board-baosec")]
+    FlipScreen,
 
     /// Gutter for invalid calls
     InvalidCall,

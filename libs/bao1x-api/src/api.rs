@@ -52,6 +52,7 @@ pub enum HalOpcode {
     /// Configure Iox IRQ
     ConfigureIoxIrq = 11,
     IrqLocalHandler = 12,
+    UpdateIoxIrq = 13,
 
     /// Manipulate the OS timer
     SetPreemptionState = 64,
