@@ -902,6 +902,14 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                             .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
                     }
                 }
+                #[cfg(feature = "board-baosec")]
+                GfxOpcode::FlipScreen => {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
+                        display
+                            .flip_vertical(scalar.arg1 != 0)
+                            .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display))
+                    }
+                }
                 GfxOpcode::Quit => break,
                 _ => {
                     // This is perfectly normal because not all opcodes are handled by all platforms.

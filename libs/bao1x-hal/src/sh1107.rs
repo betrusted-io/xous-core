@@ -514,6 +514,22 @@ impl<'a> Oled128x128<'a> {
         Ok(())
     }
 
+    pub fn flip_vertical(&mut self, flip: bool) -> Result<(), xous::Error> {
+        use Command::*;
+        let cmds = if flip {
+            // flipped
+            [SetSegmentReMap(true), SetCOMScanDirection(Direction::Normal)]
+        } else {
+            // normal
+            [SetSegmentReMap(false), SetCOMScanDirection(Direction::Inverted)]
+        };
+        for c in cmds {
+            let bytes = c.encode();
+            self.send_command(bytes)?;
+        }
+        Ok(())
+    }
+
     pub fn powerdown(&mut self) {
         self.powerdown = true;
         // assert reset
