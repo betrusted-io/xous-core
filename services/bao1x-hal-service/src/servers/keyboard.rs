@@ -62,10 +62,18 @@ struct KeyTracker {
     pub rate_ms: usize,
     pub delay_ms: usize,
     pub keys: Vec<KeypressTimestamp>,
+    pub orientation_flipped: bool,
 }
 #[cfg(feature = "board-baosec")]
 impl KeyTracker {
-    pub fn new() -> Self { KeyTracker { rate_ms: KEYUP_DELAY_MS as usize, delay_ms: 1000, keys: Vec::new() } }
+    pub fn new() -> Self {
+        KeyTracker {
+            rate_ms: KEYUP_DELAY_MS as usize,
+            delay_ms: 1000,
+            keys: Vec::new(),
+            orientation_flipped: false,
+        }
+    }
 
     pub fn register_key_down(&mut self, key: KeyPress, ts: u64) {
         if let Some(entry) = self.keys.iter_mut().find(|e| e.kp == key) {
@@ -113,11 +121,13 @@ impl KeyTracker {
     /// Returns any keys that should have repeat key-press events generated
     pub fn get_repeats(&mut self, now: u64) -> Vec<char> {
         let mut kps = Vec::new();
-        for key in self.keys.iter_mut() {
-            if now >= key.next_repeat_time {
-                kps.push(map_keypress(key.kp));
+        // use index-based iteration to avoid borrow checker issue on map_keypress() call
+        for i in 0..self.keys.len() {
+            if now >= self.keys[i].next_repeat_time {
+                let kp = self.keys[i].kp;
+                kps.push(self.map_keypress(kp));
                 // rebasing off of now prevents keys from "lagging on" in case of UI delay
-                key.next_repeat_time = now + self.rate_ms as u64;
+                self.keys[i].next_repeat_time = now + self.rate_ms as u64;
             }
         }
         kps
@@ -126,23 +136,47 @@ impl KeyTracker {
     pub fn keys_pressed(&self) -> usize { self.keys.len() }
 
     pub fn clear_keys(&mut self) { self.keys.clear(); }
-}
-#[cfg(feature = "board-baosec")]
-fn map_keypress(kp: KeyPress) -> char {
-    match kp {
-        KeyPress::Down => '↓',
-        KeyPress::Up => '↑',
-        KeyPress::Left => '←',
-        KeyPress::Right => '→',
-        KeyPress::Select => '∴',
-        // "Fire" is used as the mapping for the center instead of carriage return ('\r' (0xd))
-        // because carriage return is reserved for the shell to indicate the end of line. Thus
-        // by mapping "fire" to the center key, we get a UI-specific action key without invoking
-        // shell commands in the background unintentionally.
-        KeyPress::Center => '🔥',
-        #[cfg(feature = "accel-kbd")]
-        KeyPress::Accel => '⏯',
-        _ => '\u{0000}',
+
+    pub fn map_keypress(&self, kp: KeyPress) -> char {
+        match kp {
+            KeyPress::Down => {
+                if self.orientation_flipped {
+                    '↑'
+                } else {
+                    '↓'
+                }
+            }
+            KeyPress::Up => {
+                if self.orientation_flipped {
+                    '↓'
+                } else {
+                    '↑'
+                }
+            }
+            KeyPress::Left => {
+                if self.orientation_flipped {
+                    '→'
+                } else {
+                    '←'
+                }
+            }
+            KeyPress::Right => {
+                if self.orientation_flipped {
+                    '←'
+                } else {
+                    '→'
+                }
+            }
+            KeyPress::Select => '∴',
+            // "Fire" is used as the mapping for the center instead of carriage return ('\r' (0xd))
+            // because carriage return is reserved for the shell to indicate the end of line. Thus
+            // by mapping "fire" to the center key, we get a UI-specific action key without invoking
+            // shell commands in the background unintentionally.
+            KeyPress::Center => '🔥',
+            #[cfg(feature = "accel-kbd")]
+            KeyPress::Accel => '⏯',
+            _ => '\u{0000}',
+        }
     }
 }
 
@@ -475,7 +509,7 @@ fn keyboard_service() {
                         log::debug!("{:?}", key_down);
                         if key_down != KeyPress::Invalid && key_down != KeyPress::None {
                             key_tracker.register_key_down(key_down, now);
-                            kc.push(map_keypress(key_down))
+                            kc.push(key_tracker.map_keypress(key_down))
                         }
                     }
                     // the keys_pressed() check is necessary because the interrupt will fire *before* a key
@@ -540,6 +574,12 @@ fn keyboard_service() {
                     }
                 } else {
                     log::warn!("Unhandled interrupt: {:x}", pending);
+                }
+            }),
+            Some(KeyboardOpcode::SetOrientation) => msg_scalar_unpack!(msg, _flipped, _, _, _, {
+                #[cfg(feature = "board-baosec")]
+                {
+                    key_tracker.orientation_flipped = _flipped != 0;
                 }
             }),
             None => {
