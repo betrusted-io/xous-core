@@ -1,4 +1,7 @@
 #[cfg(feature = "std")]
+use std::ops::Not;
+
+#[cfg(feature = "std")]
 use num_traits::ToPrimitive;
 
 #[cfg(feature = "std")]
@@ -64,6 +67,18 @@ impl From<u32> for IoxValue {
     fn from(value: u32) -> Self { if value == 0 { IoxValue::Low } else { IoxValue::High } }
 }
 
+#[cfg(feature = "std")]
+impl Not for IoxValue {
+    type Output = IoxValue;
+
+    fn not(self) -> Self::Output {
+        match self {
+            IoxValue::Low => IoxValue::High,
+            IoxValue::High => IoxValue::Low,
+        }
+    }
+}
+
 /// Use a trait that will allow us to share code between both `std` and `no-std` implementations
 pub trait IoSetup {
     fn setup_pin(
@@ -93,7 +108,21 @@ pub trait IoIrq {
     /// with `server` and the opcode number `usize` when an IRQ is detected on the port/pin.
     /// The active state of the IRQ is defined by `active`; the transition edge from inactive
     /// to active is when the event is generated.
-    fn set_irq_pin(&self, port: IoxPort, pin: u8, active: IoxValue, server: &str, opcode: usize);
+    ///
+    /// Returns Some(index) which is required for future API calls to modify IRQ pin parameters.
+    /// If `None` is returned, the IRQ is unavailable (due a resource conflict, or exhausting of
+    /// interrupt routing slots - there are only 8 available in the hardware).
+    fn set_irq_pin(
+        &self,
+        port: IoxPort,
+        pin: u8,
+        active: IoxValue,
+        server: &str,
+        opcode: usize,
+    ) -> Option<usize>;
+
+    /// `index` is the returned value from `set_irq_pin()`
+    fn update_irq_pin(&self, server: &str, index: usize, active: Option<IoxValue>, opcode: Option<usize>);
 }
 
 #[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
@@ -118,6 +147,17 @@ pub struct IoxIrqRegistration {
     pub port: IoxPort,
     pub pin: u8,
     pub active: IoxValue,
+    pub index: Option<usize>,
+}
+
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug)]
+#[cfg(feature = "std")]
+pub struct IoxIrqUpdate {
+    pub server: String,
+    pub opcode: Option<usize>,
+    pub active: Option<IoxValue>,
+    pub index: usize,
 }
 
 #[cfg(feature = "std")]
@@ -325,9 +365,24 @@ impl IoGpio for IoxHal {
 
 #[cfg(feature = "std")]
 impl IoIrq for IoxHal {
-    fn set_irq_pin(&self, port: IoxPort, pin: u8, active: IoxValue, server: &str, opcode: usize) {
-        let msg = IoxIrqRegistration { server: server.to_owned(), opcode, port, pin, active };
+    fn set_irq_pin(
+        &self,
+        port: IoxPort,
+        pin: u8,
+        active: IoxValue,
+        server: &str,
+        opcode: usize,
+    ) -> Option<usize> {
+        let msg = IoxIrqRegistration { server: server.to_owned(), opcode, port, pin, active, index: None };
+        let mut buf = xous_ipc::Buffer::into_buf(msg).unwrap();
+        buf.lend_mut(self.conn, HalOpcode::ConfigureIoxIrq as u32).expect("Couldn't set up IRQ");
+        let ret: IoxIrqRegistration = buf.to_original().unwrap();
+        ret.index
+    }
+
+    fn update_irq_pin(&self, server: &str, index: usize, active: Option<IoxValue>, opcode: Option<usize>) {
+        let msg = IoxIrqUpdate { server: server.to_owned(), opcode, active, index };
         let buf = xous_ipc::Buffer::into_buf(msg).unwrap();
-        buf.lend(self.conn, HalOpcode::ConfigureIoxIrq as u32).expect("Couldn't set up IRQ");
+        buf.lend(self.conn, HalOpcode::UpdateIoxIrq as u32).expect("Couldn't update IRQ");
     }
 }
