@@ -34,7 +34,7 @@ bitfield! {
 fn irq_select_from_port(port: IoxPort, pin: u8) -> u32 { (port as u32) * 16 + pin as u32 }
 fn find_first_none<T>(arr: &[Option<T>]) -> Option<usize> { arr.iter().position(|item| item.is_none()) }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 #[allow(dead_code)]
 struct IrqLocalRegistration {
     pub cid: xous::CID,
@@ -42,6 +42,7 @@ struct IrqLocalRegistration {
     pub port: IoxPort,
     pub pin: u8,
     pub active: IoxValue,
+    pub server: String,
 }
 
 struct IrqHandler {
@@ -274,9 +275,12 @@ fn main() {
         .expect("couldn't claim Iox interrupt");
         irq.irq_csr.wo(utralib::utra::irqarray10::EV_PENDING, 0xFFFF_FFFF);
         irq.irq_csr.wfo(utralib::utra::irqarray10::EV_ENABLE_IOXIRQ, 1);
-        // Up to 8 slots where we can populate interrupt mappings in the hardware
-        // The index of the array corresponds to the slot.
-        let mut irq_table: [Option<IrqLocalRegistration>; 8] = [None; 8];
+        // This is an [Option; 8] instead of a Vec because in hardware we have only
+        // 8 slots where we can populate interrupt mappings in the hardware. Each slot's
+        // index maps 1:1 to a hardware register offset. Thus as interrupts are de-allocated,
+        // we don't want the indices to change - in this case, Vec is not the right object,
+        // we want a static array defined like this.
+        let mut irq_table: [Option<IrqLocalRegistration>; 8] = [const { None }; 8];
 
         let mut msg_opt = None;
         log::debug!("Starting main loop");
@@ -399,12 +403,12 @@ fn main() {
                     }
                 }
                 HalOpcode::ConfigureIoxIrq => {
-                    let buf = unsafe {
+                    let mut buf = unsafe {
                         xous_ipc::Buffer::from_memory_message(
-                            msg_opt.as_mut().unwrap().body.memory_message().unwrap(),
+                            msg_opt.as_mut().unwrap().body.memory_message_mut().unwrap(),
                         )
                     };
-                    let registration = buf.to_original::<IoxIrqRegistration, _>().unwrap();
+                    let mut registration = buf.to_original::<IoxIrqRegistration, _>().unwrap();
                     log::info!("Got registration request: {:?}", registration);
                     if let Some(index) = find_first_none(&irq_table) {
                         // create the reverse-lookup registration
@@ -417,6 +421,7 @@ fn main() {
                             port: registration.port,
                             pin: registration.pin,
                             active: registration.active,
+                            server: registration.server.to_owned(),
                         };
                         irq_table[index] = Some(local_reg);
 
@@ -429,6 +434,7 @@ fn main() {
                             IoxValue::High => int_cr.set_mode(IntMode::RisingEdge as u32),
                         }
                         int_cr.set_enable(true);
+                        int_cr.set_wakeup(true);
                         // safety: the index and offset are mapped to the intended range because the index is
                         // bounded by the size of irq_table, and the offset comes from the generated header
                         // file.
@@ -448,8 +454,51 @@ fn main() {
                                 .add(index)
                                 .write_volatile(int_cr.0);
                         }
+                        registration.index = Some(index);
+
+                        buf.replace(registration).unwrap();
                     } else {
                         panic!("Ran out of Iox interrupt slots: maximum 8 available");
+                    }
+                }
+                HalOpcode::UpdateIoxIrq => {
+                    let buf = unsafe {
+                        xous_ipc::Buffer::from_memory_message(
+                            msg_opt.as_ref().unwrap().body.memory_message().unwrap(),
+                        )
+                    };
+                    let update = buf.to_original::<IoxIrqUpdate, _>().unwrap();
+                    log::debug!("Got IRQ update request: {:?}", update);
+                    if let Some(Some(reg)) = irq_table.get_mut(update.index) {
+                        if reg.server == update.server {
+                            if let Some(active) = update.active {
+                                reg.active = active;
+                                // fetch the interrupt control register value
+                                let mut int_cr = IntCr(unsafe {
+                                    iox.csr
+                                        .base()
+                                        .add(utralib::utra::iox::SFR_INTCR_CRINT0.offset())
+                                        .add(update.index)
+                                        .read_volatile()
+                                });
+                                // update the edge option
+                                match active {
+                                    IoxValue::Low => int_cr.set_mode(IntMode::FallingEdge as u32),
+                                    IoxValue::High => int_cr.set_mode(IntMode::RisingEdge as u32),
+                                }
+                                // commit
+                                unsafe {
+                                    iox.csr
+                                        .base()
+                                        .add(utralib::utra::iox::SFR_INTCR_CRINT0.offset())
+                                        .add(update.index)
+                                        .write_volatile(int_cr.0);
+                                }
+                            }
+                            if let Some(opcode) = update.opcode {
+                                reg.opcode = opcode;
+                            }
+                        }
                     }
                 }
                 HalOpcode::IrqLocalHandler => {
@@ -462,7 +511,7 @@ fn main() {
                         for bitpos in 0..8 {
                             // the bit position is flipped versus register order in memory
                             if ((irq_flag << (bitpos as u32)) & 0x80) != 0 {
-                                if let Some(local_reg) = irq_table[bitpos] {
+                                if let Some(local_reg) = &irq_table[bitpos] {
                                     found = true;
                                     // interrupts are "Best effort" and can gracefully fail if the receiver
                                     // has been overwhelmed by too many
