@@ -22,6 +22,8 @@ pub const PERCLK_HZ: u32 = 100_000_000;
 pub const HCLK_HZ: u32 = 200_000_000;
 pub const ICLK_HZ: u32 = 100_000_000;
 pub const PCLK_HZ: u32 = 50_000_000;
+pub const XTAL0: u32 = 48_000_000;
+pub const OSC: u32 = 32_000_000;
 
 #[bitfield(u32)]
 #[derive(PartialEq, Eq, Debug)]
@@ -300,6 +302,7 @@ pub fn divide_ratio_to_fd(ratio: f32, round_freq_up: bool) -> u8 {
 #[cfg(feature = "std")]
 pub struct ClockManagerImpl {
     pub vco_freq: u32,
+    pub clktop: u32,
     pub fclk: u32,
     pub aclk: u32,
     pub hclk: u32,
@@ -325,6 +328,8 @@ pub struct ClockManagerImpl {
 #[cfg(feature = "std")]
 impl ClockManagerImpl {
     pub fn new() -> Result<Self, xous::Error> {
+        use utralib::generated::utra;
+
         let sysctrl_mem = xous::map_memory(
             xous::MemoryAddress::new(utra::sysctrl::HW_SYSCTRL_BASE),
             None,
@@ -356,22 +361,29 @@ impl ClockManagerImpl {
         let vco_freq =
             if fracen { ((48 * n + (48 * frac) / (1 << 24)) / m) * MHZ } else { ((48 * n) / m) * MHZ };
         let pll0_freq = vco_freq / (1 + q0) / (1 + q1);
+        // check the clock muxes to select the right source for clktop
+        let mux0 = sysctrl.r(utra::sysctrl::SFR_CGUSEL0) & 0x1;
+        let mux1 = sysctrl.r(utra::sysctrl::SFR_CGUSEL1) & 0x1;
+        let clktop = if mux0 == 1 { pll0_freq }
+            else if mux1 == 1 { XTAL0 }
+            else { OSC };
         let fclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0) & 0xFF;
         let aclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1) & 0xFF;
         let hclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2) & 0xFF;
         let iclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3) & 0xFF;
         let pclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4) & 0xFF;
 
-        let fclk = divide_by_fd(fclk_fd, pll0_freq);
-        let aclk = divide_by_fd(aclk_fd, pll0_freq);
-        let hclk = divide_by_fd(hclk_fd, pll0_freq);
-        let iclk = divide_by_fd(iclk_fd, pll0_freq);
-        let pclk = divide_by_fd(pclk_fd, pll0_freq);
+        let fclk = divide_by_fd(fclk_fd, clktop);
+        let aclk = divide_by_fd(aclk_fd, clktop);
+        let hclk = divide_by_fd(hclk_fd, clktop);
+        let iclk = divide_by_fd(iclk_fd, clktop);
+        let pclk = divide_by_fd(pclk_fd, clktop);
         log::info!("fracen: {:?}", fracen);
         // perclk has an extra /2 applied to it
-        log::info!("perclk: {:x}, pll0_freq {}", sysctrl.r(utra::sysctrl::SFR_CGUFDPER), pll0_freq);
+        let clkpketop = clktop;
+        log::info!("perclk: {:x}, clkpketop {}", sysctrl.r(utra::sysctrl::SFR_CGUFDPER), clkpketop);
         let perclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFDPER) & 0xFF;
-        let perclk = divide_by_fd(perclk_fd, pll0_freq) / 2;
+        let perclk = divide_by_fd(perclk_fd, clkpketop) / 2;
 
         /*
         log::info!("m: {} n: {} q1: {} q0: {} frac: {}, fracen: {:?}", m, n, q1, q0, frac, fracen);
@@ -393,6 +405,7 @@ impl ClockManagerImpl {
 
         Ok(Self {
             vco_freq,
+            clktop,
             fclk,
             aclk,
             hclk,
@@ -426,19 +439,26 @@ impl ClockManagerImpl {
         let vco_freq =
             if fracen { ((48 * n + (48 * frac) / (1 << 24)) / m) * MHZ } else { ((48 * n) / m) * MHZ };
         let pll0_freq = vco_freq / (1 + q0) / (1 + q1);
+        // check the clock muxes to select the right source for clktop
+        let mux0 = self.sysctrl.r(utra::sysctrl::SFR_CGUSEL0) & 0x1;
+        let mux1 = self.sysctrl.r(utra::sysctrl::SFR_CGUSEL1) & 0x1;
+        let clktop = if mux0 == 1 { pll0_freq }
+            else if mux1 == 1 { XTAL0 }
+            else { OSC };
         let fclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0) & 0xFF;
         let aclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1) & 0xFF;
         let hclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2) & 0xFF;
         let iclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3) & 0xFF;
         let pclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4) & 0xFF;
 
-        self.fclk = divide_by_fd(fclk_fd, pll0_freq);
-        self.aclk = divide_by_fd(aclk_fd, pll0_freq);
-        self.hclk = divide_by_fd(hclk_fd, pll0_freq);
-        self.iclk = divide_by_fd(iclk_fd, pll0_freq);
-        self.pclk = divide_by_fd(pclk_fd, pll0_freq);
+        self.fclk = divide_by_fd(fclk_fd, clktop);
+        self.aclk = divide_by_fd(aclk_fd, clktop);
+        self.hclk = divide_by_fd(hclk_fd, clktop);
+        self.iclk = divide_by_fd(iclk_fd, clktop);
+        self.pclk = divide_by_fd(pclk_fd, clktop);
+        let clkpketop = clktop;
         let perclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFDPER) & 0xFF;
-        self.perclk = divide_by_fd(perclk_fd, pll0_freq) / 2;
+        self.perclk = divide_by_fd(perclk_fd, clkpketop) / 2;
     }
 
     pub fn fclk_fd(&self) -> u8 { (self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0) & 0xFF) as u8 }
