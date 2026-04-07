@@ -22,7 +22,9 @@ fn rtc_code_to_ms(rtc_code: u32, rollovers: u32) -> i64 {
 }
 
 fn ms_to_rtc_code(ms: i64) -> (u32, u32) {
-    assert!(ms > 0, "can't set alarm to negative times");
+    assert!(ms >= 0, "can't set alarm to negative times");
+    // multiply before dividing to avoid losing sub-second precision.
+    // ms * 1024 is safe vs i64 overflow for any realistic UTC timestamp.
     let codes = (ms * 1024) / 1000;
     let rtc_code = (codes & 0xFFFF_FFFF) as u32;
     let rollovers = (codes >> 32) as u32;
@@ -170,8 +172,7 @@ fn rtc_service() -> ! {
                     let (rtc_code, rollovers) = ms_to_rtc_code(utc_time_ms);
 
                     // don't allow alarms that are too close to the current time, the system is not
-                    // precise enough to handle. currently set to 2 seconds (2048 ticks). Also,
-                    // this doesn't handle the rollover case correctly!
+                    // precise enough to handle. currently set to 2 seconds (2048 ticks).
                     assert!(
                         rtc_code - rtc_val_atomic > 2048,
                         "Edge case: need handling for alarm time too close to RTC time"
@@ -183,10 +184,33 @@ fn rtc_service() -> ! {
                         rtc_val_atomic
                     );
 
-                    rtc.wo(MR, rtc_code); // set the target
-                    rtc.wo(IMSC, 1); // enable the interrupt
-                    // return rollovers to wakeup
-                    scalar.arg1 = rollovers as usize;
+                    match rollovers {
+                        0 => {
+                            // Normal case: wakeup fits within the current RTC counter range
+                            rtc.wo(MR, rtc_code);
+                            rtc.wo(IMSC, 1);
+                            scalar.arg1 = 0;
+                        }
+                        1 => {
+                            // One rollover: set MR to the post-rollover target. The counter will wrap
+                            // past 0 and fire when it reaches rtc_code. Caller receives 1 so it knows
+                            // a rollover is in flight and can validate on wakeup.
+                            log::debug!(
+                                "wakeup spans one rollover, setting post-rollover target {}",
+                                rtc_code
+                            );
+                            rtc.wo(MR, rtc_code);
+                            rtc.wo(IMSC, 1);
+                            scalar.arg1 = 1;
+                        }
+                        _ => {
+                            // Multiple rollovers: we can't represent this in hardware directly.
+                            // Don't arm the interrupt — return the rollover count so the outer
+                            // handler can schedule intermediate wakeups and track remaining rollovers.
+                            log::warn!("wakeup requires {} rollovers, punting to outer handler", rollovers);
+                            scalar.arg1 = rollovers as usize;
+                        }
+                    }
                 }
             }
             Some(TimeOp::ClearWakeup) => {
