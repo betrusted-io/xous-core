@@ -358,6 +358,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             // builder.add_feature("modal-testing");
         }
+        Some("dabao-emu") => {
+            // Minimal hosted-mode emulator matching the dabao board's service set.
+            // Dabao has no display, camera, PDDB, or swap — just console + USB + I2C.
+            let bao_pkgs = [
+                "xous-ticktimer",
+                "keystore",
+                "xous-log",
+                "xous-names",
+                "usb-bao1x",
+                "bao1x-emu",
+                "bao-console",
+                "modals",
+            ];
+            builder.target_hosted_dabao().add_services(&bao_pkgs).add_apps(&get_cratespecs());
+
+            // safe because xtask is single-threaded - the build to setup the emulation run is strictly
+            // single-threaded the read of the variable will be multi-threaded, but it will be set
+            // by that point in time.
+            unsafe {
+                std::env::set_var("UUID", "1234567812345678123456781234567812345678123456781234567812345678");
+            }
+        }
         Some("pddb-ci") => {
             builder
                 .target_hosted()
@@ -996,6 +1018,7 @@ Hardware images:
 Hosted emulation:
  run                     Run user image in hosted mode with release flags. [cratespecs] are apps
  baosec-emu              Run user image in hosted mode but for the baosec target
+ dabao-emu               Run user image in hosted mode for the minimal dabao target
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors). [cratespecs] ignored.
  pddb-btest              PDDB stress tester for secret basis creation/deletion [cratespecs] ignored.
  hosted-debug            Run user image in hosted mode with debug flags. [cratespecs] are apps

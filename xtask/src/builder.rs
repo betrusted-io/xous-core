@@ -345,6 +345,17 @@ impl Builder {
         self
     }
 
+    /// Configure for hosted mode with dabao target (minimal baochip board)
+    pub fn target_hosted_dabao(&mut self) -> &mut Builder {
+        self.loader = CrateSpec::None;
+        self.target = None;
+        self.target_kernel = None;
+        self.stream = BuildStream::Release;
+        self.utra_target = "hosted-dabao".to_string();
+        self.run_svd2repl = false;
+        self
+    }
+
     /// Configure for renode targets
     pub fn target_renode(&mut self) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
@@ -808,6 +819,9 @@ impl Builder {
             self.kernel_features.push(format!("utralib/{}", &self.utra_target));
             self.loader_features.push("bao1x".into());
             self.loader_features.push(format!("utralib/{}", &self.utra_target));
+        } else if self.utra_target.contains("hosted-dabao") {
+            self.features.push("hosted-dabao".into());
+            self.kernel_features.push("hosted".into());
         } else if self.utra_target.contains("hosted-baosec") {
             self.features.push("hosted-baosec".into());
             self.kernel_features.push("hosted".into());

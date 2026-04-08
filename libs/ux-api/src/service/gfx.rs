@@ -839,7 +839,7 @@ impl Gfx {
         .map(|_| ())
     }
 
-    #[cfg(feature = "hosted-baosec")]
+    #[cfg(feature = "hosted-bao")]
     pub fn acquire_qr(&self) -> Result<QrAcquisition, xous::Error> {
         let dummy = "otpauth://totp/ACME%20Co:john.doe@email.com?secret=HXDMVJECJJWSRB3HWIZR4IFUGFTMXBOZ&issuer=ACME%20Co&algorithm=SHA1&digits=6&period=30".to_string();
         // just return some dummy data

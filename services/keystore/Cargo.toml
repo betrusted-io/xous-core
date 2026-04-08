@@ -91,11 +91,13 @@ board-baosec = [
 ] # USB form factor token
 loader-baosec = []
 test-baosec = []
-hosted-baosec = [
+hosted-bao = [
     "keystore-api/gen2",
     "modals/no-gam",
     "aes",
-] # emulated hardware on x86 platform
+] # common hosted-mode emulation for baochip targets
+hosted-baosec = ["hosted-bao"]
+hosted-dabao = ["hosted-bao"]
 board-baosor = [
     "utralib/bao1x",
     "keystore-api/gen2",

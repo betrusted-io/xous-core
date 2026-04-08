@@ -7637,6 +7637,7 @@ name = "xous-log"
 version = "0.1.28"
 dependencies = [
  "bao1x-hal",
+ "libc",
  "log",
  "num-derive 0.4.2",
  "num-traits",

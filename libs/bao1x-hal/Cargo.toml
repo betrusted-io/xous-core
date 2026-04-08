@@ -89,7 +89,9 @@ kernel-baosec = ["utralib/bao1x", "kernel"]
 kernel-baosor = ["utralib/bao1x", "kernel"]
 kernel-dabao = ["utralib/bao1x", "kernel"]
 test-baosec = ["ux-api/loader-baosec", "camera-gc2145"]
-hosted-baosec = ["std"] # emulated hardware on x86 platform
+hosted-bao = ["std"] # common hosted-mode emulation for baochip targets
+hosted-baosec = ["hosted-bao"]
+hosted-dabao = ["hosted-bao"]
 board-baosor = [
     "std",
     "camera-gc2145",
