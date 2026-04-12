@@ -274,6 +274,30 @@ impl ClockManager {
         }
     }
 
+    /// Attempts to set fclk to the requested frequency. Returns a Some(u32) with
+    /// the set frequency, or a None if it can't be achieved with the existing code.
+    pub fn set_fclk(&self, fclk: u32) -> Option<u32> {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                SusresOp::PlatformSpecific.to_usize().unwrap(),
+                ClockOp::SetFclk.to_usize().unwrap(),
+                fclk as usize,
+                0,
+                0,
+            ),
+        ) {
+            Ok(xous::Result::Scalar2(ok, freq)) => {
+                if ok != 0 {
+                    Some(freq as u32)
+                } else {
+                    None
+                }
+            }
+            _ => unimplemented!(),
+        }
+    }
+
     pub fn get_aclk(&self) -> u32 {
         match send_message(
             self.conn,

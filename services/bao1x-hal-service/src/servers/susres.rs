@@ -1,5 +1,7 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
+use bao1x_api::divide_by_fd;
+use bao1x_hal::clocks::fd_from_frequency;
 use num_traits::*;
 use utralib::*;
 use xous::{CID, Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, sender::Sender};
@@ -377,7 +379,7 @@ fn susres_service() {
                 }),
                 Some(Opcode::Quit) => break,
                 Some(Opcode::PlatformSpecific) => {
-                    msg_blocking_scalar_unpack!(msg, op, _arg2, _arg3, _arg4, {
+                    msg_blocking_scalar_unpack!(msg, op, arg2, _arg3, _arg4, {
                         let platform_op = FromPrimitive::from_usize(op);
                         match platform_op {
                             Some(ClockOp::GetVco) => {
@@ -406,6 +408,20 @@ fn susres_service() {
                                 clk_mgr.deep_sleep();
                                 xous::return_scalar(msg.sender, 1).ok();
                                 // system is shut down after this point, no code runs
+                            }
+                            Some(ClockOp::SetFclk) => {
+                                const MAX_DEVIATION: f32 = 0.1;
+                                let requested_freq = arg2;
+                                let new_fd = fd_from_frequency(requested_freq as u32, clk_mgr.vco_freq);
+                                let achieved_freq = divide_by_fd(new_fd, clk_mgr.vco_freq);
+                                if (1.0 - (achieved_freq as f32 / requested_freq as f32)).abs()
+                                    < MAX_DEVIATION
+                                {
+                                    clk_mgr.set_fclk_fd(new_fd as u8);
+                                    xous::return_scalar2(msg.sender, 1, achieved_freq as usize).unwrap();
+                                } else {
+                                    xous::return_scalar2(msg.sender, 0, 0).unwrap();
+                                }
                             }
                             _ => panic!("Incorrect PlatformOp"),
                         }
