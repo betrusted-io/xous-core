@@ -613,6 +613,11 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         display
                             .draw()
                             .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
+                        #[cfg(feature = "eternal-scan")]
+                        {
+                            display.clear();
+                            continue;
+                        }
                         let mut img =
                             rqrr::PreparedImage::prepare_from_greyscale(IMAGE_WIDTH, IMAGE_HEIGHT, |x, y| {
                                 frame[y * IMAGE_WIDTH + x]
