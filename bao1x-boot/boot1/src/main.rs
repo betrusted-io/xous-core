@@ -18,8 +18,8 @@ use core::{
 };
 
 use bao1x_api::{BoardTypeCoding, BootWaitCoding, bollard};
-use bao1x_hal::hardening::*;
 use bao1x_hal::{board::KeyPress, iox::Iox, usb::driver::UsbDeviceState};
+use bao1x_hal::{buram::BackupManager, hardening::*};
 use bao1x_hal::{sh1107::Oled128x128, udma::GlobalConfig};
 use critical_section::Mutex;
 use platform::*;
@@ -175,7 +175,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
 
     // Below is our first divergence out of boot1, and thus, all security checks must happen above
     // this line!
-    if boot_wait == BootWaitCoding::Disable && current_key.is_none() {
+    // If warm boot, always go straight to booting - don't override with key press.
+    let bu = BackupManager::new();
+    if bu.get_flags().warm_boot() || (boot_wait == BootWaitCoding::Disable && current_key.is_none()) {
         // diverges if there is code to run
         try_boot(false, &mut csprng);
         // or_die == false means the rest of this gets run if there is no valid image

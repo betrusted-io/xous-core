@@ -7,6 +7,7 @@ use bao1x_api::keyboard::*;
 use bao1x_hal::board::KeyPress;
 #[cfg(feature = "board-baosec")]
 use bao1x_hal::kpc_aoint::{AoIntStatus, KpcAoInt};
+use bao1x_hal_service::Rtc;
 use num_traits::*;
 #[cfg(feature = "board-baosec")]
 use utralib::utra::irqarray2;
@@ -264,9 +265,9 @@ fn keyboard_service() {
     let kbd_sid = xns.register_name(bao1x_api::SERVER_NAME_KBD, None).expect("can't register server");
 
     #[cfg(feature = "board-baosec")]
+    let kbd_conn = xous::connect(kbd_sid).unwrap();
+    #[cfg(feature = "board-baosec")]
     {
-        let kbd_conn = xous::connect(kbd_sid).unwrap();
-
         let kpc_int = u4::new(bao1x_hal::kpc_aoint::IrqMapping::AoInt as u8);
         kpc_aoint.add_irq_notifier(IrqNotification {
             bit: kpc_int,
@@ -274,12 +275,35 @@ fn keyboard_service() {
             opcode: KeyboardOpcode::HandlerTrigger.to_usize().unwrap(),
             args: [0, 0, 0, 0],
         });
+        // clear any leftovers from prior configs - this bank is a little tricky because it has wakeup events
+        // on it
+        kpc_aoint.irq.wo(utra::irqarray2::EV_ENABLE, 0);
+        kpc_aoint.irq.wo(utra::irqarray2::EV_PENDING, 0xFFFF_FFFF);
         // feels like a bit of an abstraction violation, but I don't know how much the other interrupts
         // require edge-triggered handling
         kpc_aoint.irq.wo(utra::irqarray2::EV_EDGE_TRIGGERED, 1 << kpc_int.as_u32());
         kpc_aoint.irq.wo(utra::irqarray2::EV_POLARITY, 1 << kpc_int.as_u32());
         kpc_aoint.modify_irq_ena(kpc_int, true);
     }
+    /*
+    #[cfg(feature = "board-baosec")]
+    {
+        let kpc_int = u4::new(bao1x_hal::kpc_aoint::IrqMapping::AoWakeup as u8);
+        kpc_aoint.add_irq_notifier(IrqNotification {
+            bit: kpc_int,
+            conn: kbd_conn,
+            opcode: KeyboardOpcode::WakeupHandler.to_usize().unwrap(),
+            args: [0, 0, 0, 0],
+        });
+        // feels like a bit of an abstraction violation, but I don't know how much the other interrupts
+        // require edge-triggered handling
+        let d = kpc_aoint.irq.r(utra::irqarray2::EV_EDGE_TRIGGERED);
+        kpc_aoint.irq.wo(utra::irqarray2::EV_EDGE_TRIGGERED, 1 << kpc_int.as_u32() | d);
+        let d = kpc_aoint.irq.r(utra::irqarray2::EV_POLARITY);
+        kpc_aoint.irq.wo(utra::irqarray2::EV_POLARITY, 1 << kpc_int.as_u32() | d);
+        kpc_aoint.modify_irq_ena(kpc_int, true);
+    }
+    */
 
     #[cfg(feature = "board-baosec")]
     let tt = ticktimer::Ticktimer::new().unwrap();
@@ -324,6 +348,7 @@ fn keyboard_service() {
         }
     });
 
+    let rtc = Rtc::new();
     #[cfg(feature = "board-baosec")]
     let mut key_tracker = KeyTracker::new();
     #[cfg(feature = "board-baosec")]
@@ -493,7 +518,23 @@ fn keyboard_service() {
             }),
             #[cfg(feature = "board-baosec")]
             Some(KeyboardOpcode::HandlerTrigger) => msg_scalar_unpack!(msg, pending, _, _, _, {
+                log::debug!("kbd pending: {:x}", pending);
                 if pending & (1 << bao1x_hal::kpc_aoint::IrqMapping::AoInt as usize) != 0 {
+                    let fr = AoIntStatus::new_with_raw_value(kpc_aoint.ao.r(utra::ao_sysctrl::SFR_AOFR));
+                    log::debug!("fr: {:x}", fr.raw_value());
+                    // RTC interrupts also fire this interrupt. Handle and clear the RTC interrupt.
+                    if fr.rtc_interrupt() {
+                        rtc.clear_wakeup();
+                        kpc_aoint.ao.wo(utra::ao_sysctrl::SFR_AOFR, fr.raw_value());
+                        for &(listener_conn, listener_op) in listeners.iter() {
+                            xous::try_send_message(
+                                listener_conn,
+                                xous::Message::new_scalar(listener_op, '⏰' as u32 as usize, 0, 0, 0),
+                            )
+                            .ok();
+                        }
+                        continue;
+                    }
                     let mut kc: Vec<char> = Vec::new();
                     let now = tt.elapsed_ms();
                     if now - last_key_event > KEYUP_DELAY_MS {
@@ -523,7 +564,6 @@ fn keyboard_service() {
                     }
 
                     // clear the FR bits
-                    let fr = AoIntStatus::new_with_raw_value(kpc_aoint.ao.r(utra::ao_sysctrl::SFR_AOFR));
                     kpc_aoint.ao.wo(utra::ao_sysctrl::SFR_AOFR, fr.raw_value());
 
                     // add any repeat keys to the key response array

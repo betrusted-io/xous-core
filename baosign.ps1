@@ -16,7 +16,10 @@ param(
     [string]$CredentialFile = "beta.json",
 
     [Parameter(Mandatory = $false)]
-    [string]$Target = "bunnie@10.0.245.50:code/csp-tool/"
+    [string]$Target = "bunnie@10.0.245.50:code/csp-tool/",
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Local
 )
 
 # Configuration
@@ -26,47 +29,47 @@ $SIGNING_DIR = ".\signing\fido-signer"
 # Define configurations and their associated images with function codes
 # Modify these mappings according to your actual image names and function codes
 $configurations = @{
-    "bootloader" = @(
+    "bootloader"  = @(
         @{ Image = "bao1x-boot0.img"; FunctionCode = "boot0" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
         @{ Image = "bao1x-boot1.img"; FunctionCode = "boot1" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
         @{ Image = "bao1x-alt-boot1.img"; FunctionCode = "loader" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" }
     )
-    "baremetal"  = @(
+    "baremetal"   = @(
         @{ Image = "baremetal.img"; FunctionCode = "baremetal" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" }
     )
-    "dabao"      = @(
+    "dabao"       = @(
         @{ Image = "loader.bin"; FunctionCode = "loader" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
         @{ Image = "xous.img"; FunctionCode = "kernel" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
         @{ Image = "apps.img"; FunctionCode = "app" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
     )
-    "baosec"     = @(
+    "baosec"      = @(
         @{ Image = "loader.bin"; FunctionCode = "loader" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
         @{ Image = "xous.img"; FunctionCode = "kernel" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
         @{ Image = "swap.img"; FunctionCode = "swap" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
     )
-    "baosec-lite"     = @(
+    "baosec-lite" = @(
         @{ Image = "loader.bin"; FunctionCode = "loader" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
         @{ Image = "xous.img"; FunctionCode = "kernel" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
         @{ Image = "swap.img"; FunctionCode = "swap" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
         @{ Image = "bao1x-boot1.img"; FunctionCode = "boot1" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
         @{ Image = "bao1x-alt-boot1.img"; FunctionCode = "loader" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" }
     )
-    "kernel"     = @(
+    "kernel"      = @(
         @{ Image = "xous.img"; FunctionCode = "kernel" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
     )
-    "loader"     = @(
+    "loader"      = @(
         @{ Image = "loader.bin"; FunctionCode = "loader" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
     )
-    "swap"       = @(
+    "swap"        = @(
         @{ Image = "swap.img"; FunctionCode = "swap" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
     )
-    "apps"       = @(
+    "apps"        = @(
         @{ Image = "apps.img"; FunctionCode = "app" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
     )
-    "boot1"      = @(
+    "boot1"       = @(
         @{ Image = "bao1x-boot1.img"; FunctionCode = "boot1" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" }
     )
-    "alt-boot1"  = @(
+    "alt-boot1"   = @(
         @{ Image = "bao1x-alt-boot1.img"; FunctionCode = "baremetal" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" }
     )
 }
@@ -193,6 +196,7 @@ foreach ($imageSpec in $selectedConfig) {
 
         Write-Status "Signing image..."
         Write-Status "Command: $($cargoCmd -join ' ')"
+        Write-Status "Target SSH: $(if ($Local) { '(skipped, --Local mode)' } else { $TARGET })"
 
         # Execute the signing command
         & cargo run -- --credential-file "..\credentials\$CredentialFile" --file "..\..\$imagePath" --function-code $functionCode 2>&1 | Tee-Object -Variable result
@@ -218,20 +222,26 @@ foreach ($imageSpec in $selectedConfig) {
             }
 
             # Copy files to SSH target
-            Write-Status "Copying files to remote host..."
-
-            $imgCopySuccess = Copy-ToSSH -LocalPath $imagePath -RemoteTarget $TARGET
-            $uf2CopySuccess = Copy-ToSSH -LocalPath $uf2Path -RemoteTarget $TARGET
-
-            if ($imgCopySuccess -and $uf2CopySuccess) {
+            if ($Local) {
+                Write-Warning "Skipping remote copy (--Local flag set)"
                 Write-Success "Completed processing: $imageName"
                 $successfulImages++
             }
             else {
-                Write-Warning "Partial completion for: $imageName (signing OK, copy failed)"
-                $failedImages++
-            }
+                Write-Status "Copying files to remote host..."
 
+                $imgCopySuccess = Copy-ToSSH -LocalPath $imagePath -RemoteTarget $TARGET
+                $uf2CopySuccess = Copy-ToSSH -LocalPath $uf2Path -RemoteTarget $TARGET
+
+                if ($imgCopySuccess -and $uf2CopySuccess) {
+                    Write-Success "Completed processing: $imageName"
+                    $successfulImages++
+                }
+                else {
+                    Write-Warning "Partial completion for: $imageName (signing OK, copy failed)"
+                    $failedImages++
+                }
+            }
         }
         else {
             Write-Error "Failed to sign image: $imageName"
