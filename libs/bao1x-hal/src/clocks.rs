@@ -46,6 +46,19 @@ pub struct PmuControl {
     pmu_0p8v_dig_hv_ena: bool,
 }
 
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub enum ClockOp {
+    GetVco,
+    GetFclk,
+    GetAclk,
+    GetHclk,
+    GetIclk,
+    GetPclk,
+    GetPer,
+    SetFclk,
+    DeepSleep,
+}
+
 /// Requires:
 /// `freq_hz`: target frequency of PLL - generally it is 2x of the CPU clock frequency
 /// `daric_cgu`: Pointer to SYSCTL_BASE - for setting clocks

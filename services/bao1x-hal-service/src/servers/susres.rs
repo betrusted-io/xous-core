@@ -5,8 +5,9 @@ use utralib::*;
 use xous::{CID, Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, sender::Sender};
 use xous_api_susres::*;
 use xous_ipc::Buffer;
+use bao1x_api::divide_by_fd;
+use bao1x_hal::clocks::{fd_from_frequency,ClockOp};
 
-use crate::api::ClockOp;
 
 static TIMEOUT_TIME: AtomicU32 = AtomicU32::new(5000);
 
@@ -376,7 +377,7 @@ fn susres_service() {
                 }),
                 Some(Opcode::Quit) => break,
                 Some(Opcode::PlatformSpecific) => {
-                    msg_blocking_scalar_unpack!(msg, op, _arg2, _arg3, _arg4, {
+                    msg_blocking_scalar_unpack!(msg, op, arg2, _arg3, _arg4, {
                         let platform_op = FromPrimitive::from_usize(op);
                         match platform_op {
                             Some(ClockOp::GetVco) => {
@@ -399,6 +400,21 @@ fn susres_service() {
                             }
                             Some(ClockOp::GetPer) => {
                                 xous::return_scalar(msg.sender, clk_mgr.perclk as usize).unwrap()
+                            }
+                            Some(ClockOp::SetFclk) => {
+                                const MAX_DEVIATION: f32 = 0.05;
+                                let requested_freq = arg2 as u32;
+                                let fclk_fd = fd_from_frequency(requested_freq, clk_mgr.clktop);
+                                let achievable_freq = divide_by_fd(fclk_fd, clk_mgr.clktop);
+                                if (1.0 - (achievable_freq as f32 / requested_freq as f32)).abs() < MAX_DEVIATION {
+                                    clk_mgr.set_fclk_fd(fclk_fd as u8);
+                                    clk_mgr.update_clocks();
+                                    log::info!("Changed fclk to {}", clk_mgr.fclk);
+                                    xous::return_scalar2(msg.sender, 1, achievable_freq as usize).unwrap();
+                                } else {
+                                    // let user know closest achievable frequency
+                                    xous::return_scalar2(msg.sender, 0, achievable_freq as usize).unwrap();
+                                }
                             }
                             Some(ClockOp::DeepSleep) => {
                                 log::info!("entering deep sleep");

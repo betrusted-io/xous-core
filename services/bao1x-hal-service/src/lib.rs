@@ -3,11 +3,10 @@ pub mod trng;
 
 use bao1x_api::*;
 use bao1x_hal::udma::{AdcExtChannel, AdcSource};
+use bao1x_hal::clocks::ClockOp;
 use num_traits::*;
 use xous::{Message, send_message};
 use xous_api_susres::api::Opcode as SusresOp;
-
-use crate::api::ClockOp;
 
 pub struct UdmaGlobal {
     conn: xous::CID,
