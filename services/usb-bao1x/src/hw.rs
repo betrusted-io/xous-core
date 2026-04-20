@@ -162,7 +162,7 @@ impl<'a> Bao1xUsb<'a> {
 
     /// Process an unplug event - only valid on baosec, because dabao doesn't have a battery and unplugging
     /// it would power it down.
-    #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
+    #[cfg(all(feature = "board-baosec"))]
     pub fn unplug(&mut self) {
         // disable all interrupts so we can safely go through initialization routines
         self.irq_csr.wo(utra::irqarray1::EV_ENABLE, 0);
