@@ -3,6 +3,7 @@ use std::cell::RefCell;
 #[cfg(feature = "bao1x")]
 use bao1x_hal_service::trng;
 use gam::{EXPECTED_APP_CONTEXTS, EXPECTED_BOOT_CONTEXTS};
+use subtle::ConstantTimeEq;
 
 /*
     Authentication tokens to the GAM are created on a first-come, first-serve basis,
@@ -117,7 +118,9 @@ impl<'a> TokenManager {
     }
 
     pub(crate) fn is_token_valid(&self, token: [u32; 4]) -> bool {
-        self.tokens.iter().find(|&namedtoken| namedtoken.token == token).is_some()
+        // Constant-time comparison: tokens are 128-bit capabilities; a
+        // non-CT compare leaks prefix information through timing.
+        self.tokens.iter().any(|namedtoken| bool::from(namedtoken.token.ct_eq(&token)))
     }
 
     pub(crate) fn find_token(&self, name: &str) -> Option<[u32; 4]> {
@@ -131,7 +134,7 @@ impl<'a> TokenManager {
 
     pub(crate) fn lookup_name(&self, token: &[u32; 4]) -> Option<String> {
         for entry in self.tokens.iter() {
-            if entry.token == *token {
+            if bool::from(entry.token.ct_eq(token)) {
                 return Some(entry.name.to_string());
             }
         }

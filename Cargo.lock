@@ -2688,6 +2688,7 @@ dependencies = [
  "qrcode",
  "rkyv 0.8.8",
  "sha2",
+ "subtle",
  "trng",
  "tts-frontend",
  "utralib 0.1.27",
