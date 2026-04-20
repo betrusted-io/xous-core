@@ -8,6 +8,7 @@ use core::num::NonZeroUsize;
 
 use aes::Aes256;
 use aes::cipher::{BlockDecrypt, BlockEncrypt};
+use subtle::ConstantTimeEq;
 use cipher::generic_array::GenericArray;
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::{EdwardsPoint, edwards::CompressedEdwardsY};
@@ -1642,7 +1643,7 @@ impl<'a> RootKeys {
                                     {
                                         Ok(verify) => {
                                             log::debug!("got bip39 verification: {:x?}", verify);
-                                            if &verify == &pcache.fpga_key {
+                                            if bool::from(verify.as_slice().ct_eq(&pcache.fpga_key)) {
                                                 log::debug!("verify succeeded");
                                                 modals
                                                     .show_notification(
