@@ -87,6 +87,16 @@ def main():
                     # passing = False # not a fail, because it's the test condition that's wrong, not the code
                     passing = 'OOM'
                     proc.kill()
+                if "lack of free space" in realtime_output:
+                    err_log.append(realtime_output)
+                    logging.debug("ran out of space")
+                    passing = 'OOM'
+                    proc.kill()
+                if "no free pages" in realtime_output:
+                    err_log.append(realtime_output)
+                    logging.debug("ran out of space")
+                    passing = 'OOM'
+                    proc.kill()
                 if 'Decryption auth error' in realtime_output:
                     err_log.append(realtime_output)
                     logging.debug("decryption auth error")
