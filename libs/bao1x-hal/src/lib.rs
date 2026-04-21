@@ -60,6 +60,8 @@ pub mod rtc;
 pub mod sigcheck;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod sram_trim;
+#[cfg(not(feature = "hosted-baosec"))]
+pub mod wdt;
 
 #[inline(always)]
 pub fn cache_flush() {

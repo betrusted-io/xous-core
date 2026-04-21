@@ -532,6 +532,11 @@ impl<'a> Oled128x128<'a> {
 
     pub fn powerdown(&mut self) {
         self.powerdown = true;
+        let powoff = [Command::DisplayOnOff(DisplayState::Off)];
+        for command in powoff {
+            let bytes = command.encode();
+            self.send_command(bytes).ok();
+        }
         // assert reset
         crate::board::assert_periph_reset(self.iox, true);
         self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::Low);
