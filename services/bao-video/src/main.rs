@@ -521,6 +521,11 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 }
                 GfxOpcode::KeyPress => {
                     if let Some(scalar) = msg.body.scalar_message() {
+                        let k = char::from_u32(scalar.arg1 as u32).unwrap_or('\u{0000}');
+                        if k == '🔽' || k == '🔼' {
+                            // ignore accelerometer reports
+                            continue;
+                        }
                         #[cfg(not(feature = "hosted-baosec"))]
                         // any key press will abort QR acquisition by taking the qr_request.
                         if let Some(mut envelope) = qr_request.take() {
