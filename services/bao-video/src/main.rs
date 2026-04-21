@@ -522,29 +522,28 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 GfxOpcode::KeyPress => {
                     if let Some(scalar) = msg.body.scalar_message() {
                         let k = char::from_u32(scalar.arg1 as u32).unwrap_or('\u{0000}');
-                        if k == '🔽' || k == '🔼' {
-                            // ignore accelerometer reports
-                            continue;
-                        }
                         #[cfg(not(feature = "hosted-baosec"))]
-                        // any key press will abort QR acquisition by taking the qr_request.
-                        if let Some(mut envelope) = qr_request.take() {
-                            let acquisition = QrAcquisition { content: None, meta: None };
-                            let mut response = unsafe {
-                                xous_ipc::Buffer::from_memory_message_mut(
-                                    envelope.body.memory_message_mut().unwrap(),
-                                )
-                            };
-                            response.replace(acquisition).unwrap();
-                            if orientation == DisplayOrientation::UpsideDown {
+                        // ignore accelerometer reports
+                        if !(k == '🔽' || k == '🔼') {
+                            // any key press will abort QR acquisition by taking the qr_request.
+                            if let Some(mut envelope) = qr_request.take() {
+                                let acquisition = QrAcquisition { content: None, meta: None };
+                                let mut response = unsafe {
+                                    xous_ipc::Buffer::from_memory_message_mut(
+                                        envelope.body.memory_message_mut().unwrap(),
+                                    )
+                                };
+                                response.replace(acquisition).unwrap();
+                                if orientation == DisplayOrientation::UpsideDown {
+                                    display.flip_vertical(true).unwrap_or_else(|_| {
+                                        display_timeout_handler(&udma_global, &mut display)
+                                    })
+                                }
                                 display
-                                    .flip_vertical(true)
-                                    .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display))
+                                    .pop()
+                                    .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
+                                hal.set_preemption(true);
                             }
-                            display
-                                .pop()
-                                .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
-                            hal.set_preemption(true);
                         }
                         // forward messages on to listeners iff we don't have an active modal
                         if modal_queue.len() == 0 {
@@ -942,7 +941,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 #[cfg(feature = "board-baosec")]
                 GfxOpcode::FlipScreen => {
                     if let Some(scalar) = msg.body.scalar_message_mut() {
-                        log::info!("gfx flip");
+                        log::debug!("gfx flip");
                         if scalar.arg1 != 0 {
                             orientation = DisplayOrientation::UpsideDown;
                         } else {
