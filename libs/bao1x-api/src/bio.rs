@@ -51,6 +51,10 @@ pub trait BioApi<'a> {
     /// that the clocks may have changed.
     fn update_bio_freq(&mut self, freq: u32) -> u32;
 
+    /// Called before frequency changes to activate any application-specific callbacks
+    /// to avoid glitches.
+    fn prep_freq_change(&mut self);
+
     /// Returns the frequency, in Hz, of the incoming clock to the BIO cores.
     fn get_bio_freq(&self) -> u32;
 
@@ -192,6 +196,7 @@ pub enum BioOp {
     InitCore,
     DeInitCore,
     UpdateBioFreq,
+    PrepFreqChange,
     GetCoreFreq,
     GetBioFreq,
     CoreState,

@@ -210,6 +210,7 @@ fn susres_service() {
                         //   - The update_bio_freq routine is being "too clever" and compensating for the fd
                         //     setting. But it seems like the routine just takes the putative fclk setting as
                         //     the argument to update_bio_freq(), I don't see any compensation happening...
+                        bio.prep_freq_change();
                         if fclk_fd_backup == 0xff {
                             bio.update_bio_freq(48_000_000);
                         } else {
@@ -222,6 +223,7 @@ fn susres_service() {
 
                         // clk_mgr.set_fclk_fd(fclk_fd_backup); // restore the FD before restoring potentially
                         // fast PLL setting
+                        bio.prep_freq_change();
                         clk_mgr.restore_wfi();
                         bio.update_bio_freq(clk_mgr.fclk);
 
