@@ -48,6 +48,7 @@ will not be tolerated).
 - You **should** disclose the use of AI tools where it might be helpful to the maintainer reviewing your contribution. 
 - Using AI tools to correct grammar and spelling does not require disclosure.
 - Make your disclosure in your commit message as a trailer; e.g. `Assisted-by: ChatGPTv5`
+- Use the tag "AI" on pull requests that were primarily generated or guided by AI tools
 
 ## Contribution Workflow
 
