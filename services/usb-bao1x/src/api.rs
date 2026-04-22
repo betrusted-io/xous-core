@@ -4,7 +4,7 @@
 pub(crate) const SERVER_NAME_USB_DEVICE: &'static str = "_Xous USB device driver_";
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
-pub(crate) enum Opcode {
+pub enum Opcode {
     /// Returns the link status
     LinkStatus = 0,
     /// Send a keyboard code

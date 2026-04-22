@@ -70,14 +70,11 @@ use xous_ipc::Buffer;
 pub const IMAGE_WIDTH: usize = 256;
 pub const IMAGE_HEIGHT: usize = 240;
 
-// Next steps for performance improvement:
-//
-// Improve qr::mapping -> point_from_hv_lines such that we're not just deriving the HV
-// lines from the the edges of the finder regions, we're also using the very edge of
-// the whole QR code itself to guide the line. This will improve the intersection point
-// so that we can accurately hit the "fourth corner". At the moment it's sort of a
-// luck of the draw if the interpolation hits exactly right, or if we're roughly a module
-// off from ideal, which causes the data around that point to be interpreted incorrectly.
+#[derive(PartialEq, Eq, Clone, Copy)]
+enum DisplayOrientation {
+    Normal,
+    UpsideDown,
+}
 
 #[cfg(feature = "b64-export")]
 #[allow(dead_code)]
@@ -412,6 +409,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
 
     // ---- main loop variables
     let screen_clip = Rectangle::new(Point::new(0, 0), display.screen_size());
+    let screen_size = display.screen_size(); // make a copy so the borrow checker doesn't complain
 
     // this will kick the hardware into the QR code scanning routine automatically. Eventually
     // this needs to be turned into a call that can invoke and abort the QR code scanning.
@@ -433,6 +431,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let mut bw_thresh: u8 = 128;
     let mut qr_request: Option<xous::MessageEnvelope> = None;
     let mut kbd_listeners: Vec<(CID, usize)> = Vec::new();
+    #[allow(unused_mut)]
+    let mut orientation = DisplayOrientation::Normal;
     loop {
         if !is_panic.load(Ordering::Relaxed) {
             xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
@@ -505,31 +505,47 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                             log::error!("test image failed to decode, this shouldn't happen!");
                         }
 
-                        // now start acquisition
-                        cam.capture_async();
                         // turning off preemption makes camera acquisition smoother; the OS will naturally try
                         // to schedule other tasks between camera frames after each
                         // CamIrq interrupt
                         hal.set_preemption(false);
+                        // fix orientation if it's upside down
+                        if orientation == DisplayOrientation::UpsideDown {
+                            display
+                                .flip_vertical(false)
+                                .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display))
+                        }
+                        // now start acquisition
+                        cam.capture_async();
                     }
                     // if qr_request is already pending, ignore any new acquisition requests
                 }
                 GfxOpcode::KeyPress => {
                     if let Some(scalar) = msg.body.scalar_message() {
                         #[cfg(not(feature = "hosted-baosec"))]
-                        // any key press will abort QR acquisition by taking the qr_request.
-                        if let Some(mut envelope) = qr_request.take() {
-                            let acquisition = QrAcquisition { content: None, meta: None };
-                            let mut response = unsafe {
-                                xous_ipc::Buffer::from_memory_message_mut(
-                                    envelope.body.memory_message_mut().unwrap(),
-                                )
-                            };
-                            response.replace(acquisition).unwrap();
-                            display
-                                .pop()
-                                .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
-                            hal.set_preemption(true);
+                        let k = char::from_u32(scalar.arg1 as u32).unwrap_or('\u{0000}');
+                        #[cfg(not(feature = "hosted-baosec"))]
+                        // ignore accelerometer reports
+                        if !(k == '🔽' || k == '🔼') {
+                            // any key press will abort QR acquisition by taking the qr_request.
+                            if let Some(mut envelope) = qr_request.take() {
+                                let acquisition = QrAcquisition { content: None, meta: None };
+                                let mut response = unsafe {
+                                    xous_ipc::Buffer::from_memory_message_mut(
+                                        envelope.body.memory_message_mut().unwrap(),
+                                    )
+                                };
+                                response.replace(acquisition).unwrap();
+                                if orientation == DisplayOrientation::UpsideDown {
+                                    display.flip_vertical(true).unwrap_or_else(|_| {
+                                        display_timeout_handler(&udma_global, &mut display)
+                                    })
+                                }
+                                display
+                                    .pop()
+                                    .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
+                                hal.set_preemption(true);
+                            }
                         }
                         // forward messages on to listeners iff we don't have an active modal
                         if modal_queue.len() == 0 {
@@ -609,6 +625,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                             Point::new(0, 0),
                             Mono::White.into(),
                             Mono::Black.into(),
+                            orientation == DisplayOrientation::UpsideDown,
+                            screen_size,
                         );
                         display
                             .draw()
@@ -632,6 +650,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                         Point::new(0, 0),
                                         Mono::White.into(),
                                         Mono::Black.into(),
+                                        orientation == DisplayOrientation::UpsideDown,
+                                        screen_size,
                                     );
                                     display.draw().unwrap_or_else(|_| {
                                         display_timeout_handler(&udma_global, &mut display)
@@ -663,6 +683,11 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                             )
                                         };
                                         response.replace(acquisition).unwrap();
+                                        if orientation == DisplayOrientation::UpsideDown {
+                                            display.flip_vertical(true).unwrap_or_else(|_| {
+                                                display_timeout_handler(&udma_global, &mut display)
+                                            })
+                                        }
                                         #[cfg(not(feature = "hosted-baosec"))]
                                         hal.set_preemption(true);
                                         continue;
@@ -675,6 +700,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                             Point::new(0, 0),
                                             Mono::White.into(),
                                             Mono::Black.into(),
+                                            orientation == DisplayOrientation::UpsideDown,
+                                            screen_size,
                                         );
                                         gfx::msg(
                                             &mut display,
@@ -682,6 +709,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                             Point::new(0, 64),
                                             Mono::White.into(),
                                             Mono::Black.into(),
+                                            orientation == DisplayOrientation::UpsideDown,
+                                            screen_size,
                                         );
                                     }
                                 }
@@ -693,6 +722,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                         Point::new(0, 0),
                                         Mono::White.into(),
                                         Mono::Black.into(),
+                                        orientation == DisplayOrientation::UpsideDown,
+                                        screen_size,
                                     );
                                 }
                             }
@@ -704,6 +735,8 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                             Point::new(0, 0),
                             Mono::White.into(),
                             Mono::Black.into(),
+                            orientation == DisplayOrientation::UpsideDown,
+                            screen_size,
                         );
                     }
 
@@ -910,9 +943,20 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 #[cfg(feature = "board-baosec")]
                 GfxOpcode::FlipScreen => {
                     if let Some(scalar) = msg.body.scalar_message_mut() {
-                        display
-                            .flip_vertical(scalar.arg1 != 0)
-                            .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display))
+                        log::debug!("gfx flip");
+                        if scalar.arg1 != 0 {
+                            orientation = DisplayOrientation::UpsideDown;
+                        } else {
+                            orientation = DisplayOrientation::Normal;
+                        }
+                        if qr_request.is_none() {
+                            display
+                                .flip_vertical(scalar.arg1 != 0)
+                                .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
+                            display
+                                .redraw()
+                                .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
+                        }
                     }
                 }
                 GfxOpcode::Quit => break,
@@ -933,6 +977,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     xous::terminate_process(0)
 }
 
+#[allow(unused_variables)]
 fn display_timeout_handler(udma_global: &UdmaGlobal, display: &mut Oled128x128) {
     log::info!("resetting display spim block");
     #[cfg(feature = "board-baosec")]

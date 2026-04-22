@@ -244,15 +244,15 @@ pub struct Typesetter {
 impl Typesetter {
     pub fn setup(s: &str, extent: &Point, base_style: &GlyphStyle, insertion_point: Option<usize>) -> Self {
         let bb = ClipRect::new(0, 0, extent.x, extent.y);
-        let mut space = style_glyph(' ', base_style);
+        let mut space = style_glyph(locales::LANG, ' ', base_style);
         space.kern = 0;
-        let mut ellipsis = style_glyph('…', base_style);
+        let mut ellipsis = style_glyph(locales::LANG, '…', base_style);
         ellipsis.kern = 0;
 
         #[cfg(not(feature = "bao1x"))]
-        let mut large_space = style_glyph(' ', &GlyphStyle::Cjk);
+        let mut large_space = style_glyph(locales::LANG, ' ', &GlyphStyle::Cjk);
         #[cfg(feature = "bao1x")]
-        let mut large_space = style_glyph(' ', &GlyphStyle::Tall);
+        let mut large_space = style_glyph(locales::LANG, ' ', &GlyphStyle::Tall);
 
         if cfg!(feature = "bao1x") {
             large_space.wide = glyph_to_height_hint(GlyphStyle::Tall) as u8;
@@ -396,8 +396,11 @@ impl Typesetter {
                 //    line for it.
                 // 5. The evolving word fits a line but doesn't fit this line, and there is no more space at
                 //    all.
-                let mut gs =
-                    if ch != '\t' { style_glyph(ch, &self.base_style) } else { self.large_space.clone() };
+                let mut gs = if ch != '\t' {
+                    style_glyph(locales::LANG, ch, &self.base_style)
+                } else {
+                    self.large_space.clone()
+                };
                 if self.is_insert_point() {
                     gs.insert = true;
                 }
@@ -636,26 +639,4 @@ fn tsw_debug(tsw: &TypesetWord) {
         s.push(gs.ch);
     }
     log::info!("{} @ {},{}+{}={}", &s, tsw.origin.x, tsw.origin.y, tsw.height, tsw.origin.y + tsw.height);
-}
-
-/// Find glyph for char using latin regular, emoji, ja, zh, and kr font data
-pub fn style_glyph(ch: char, base_style: &GlyphStyle) -> GlyphSprite {
-    match locales::LANG {
-        "zh" => {
-            style_wrapper!(zh_rules, base_style, ch)
-        }
-        "jp" => {
-            style_wrapper!(jp_rules, base_style, ch)
-        }
-        "kr" => {
-            style_wrapper!(kr_rules, base_style, ch)
-        }
-        "en-tts" => {
-            style_wrapper!(en_audio_rules, base_style, ch)
-        }
-        // default to English rules
-        _ => {
-            style_wrapper!(english_rules, base_style, ch)
-        }
-    }
 }
