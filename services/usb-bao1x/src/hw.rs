@@ -47,7 +47,7 @@ pub struct Bao1xUsb<'a> {
         >,
     >,
     // storage for hid_packets to expatriate from the interrupt handler
-    pub hid_packet: Option<[u8; 64]>,
+    pub hid_packet: VecDeque<[u8; 64]>,
     pub serial_port: SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]>,
     // holds one HS packet - must be statically allocated in IRQ handler. Valid length is
     // passed as part of the interrupt recovery message.
@@ -117,7 +117,7 @@ impl<'a> Bao1xUsb<'a> {
             fido_tx_queue: RefCell::new(VecDeque::new()),
             kbd_tx_queue: RefCell::new(VecDeque::new()),
             irq_req: None,
-            hid_packet: None,
+            hid_packet: VecDeque::with_capacity(4),
             serial_port,
             serial_rx: [0u8; SERIAL_MAX_PACKET_SIZE],
             double_lock: AtomicBool::new(false),
@@ -299,7 +299,7 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                     match class.device::<RawFido<'_, _>, _>().read_report() {
                         Ok(u2f_report) => {
                             // crate::println!("got report {:x?}", u2f_report);
-                            usb.hid_packet = Some(u2f_report.packet);
+                            usb.hid_packet.push_back(u2f_report.packet);
                             xous::try_send_message(
                                 usb.conn,
                                 Message::new_scalar(Opcode::IrqFidoRx.to_usize().unwrap(), 0, 0, 0, 0),

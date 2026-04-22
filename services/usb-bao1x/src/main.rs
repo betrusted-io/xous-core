@@ -414,7 +414,7 @@ pub(crate) fn main_hw() -> ! {
                 }
             }
             Opcode::IrqFidoRx => {
-                if let Some(raw_report) = cu.hid_packet.take() {
+                if let Some(raw_report) = cu.hid_packet.pop_front() {
                     let u2f_report = HIDReport(raw_report);
                     if let Some(mut listener) = fido_listener.take() {
                         let mut response = unsafe {
