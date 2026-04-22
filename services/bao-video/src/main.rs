@@ -431,6 +431,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let mut bw_thresh: u8 = 128;
     let mut qr_request: Option<xous::MessageEnvelope> = None;
     let mut kbd_listeners: Vec<(CID, usize)> = Vec::new();
+    #[allow(unused_mut)]
     let mut orientation = DisplayOrientation::Normal;
     loop {
         if !is_panic.load(Ordering::Relaxed) {
@@ -521,6 +522,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 }
                 GfxOpcode::KeyPress => {
                     if let Some(scalar) = msg.body.scalar_message() {
+                        #[cfg(not(feature = "hosted-baosec"))]
                         let k = char::from_u32(scalar.arg1 as u32).unwrap_or('\u{0000}');
                         #[cfg(not(feature = "hosted-baosec"))]
                         // ignore accelerometer reports
@@ -975,6 +977,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     xous::terminate_process(0)
 }
 
+#[allow(unused_variables)]
 fn display_timeout_handler(udma_global: &UdmaGlobal, display: &mut Oled128x128) {
     log::info!("resetting display spim block");
     #[cfg(feature = "board-baosec")]
