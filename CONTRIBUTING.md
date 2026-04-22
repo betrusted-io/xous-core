@@ -50,6 +50,11 @@ will not be tolerated).
 - Make your disclosure in your commit message as a trailer; e.g. `Assisted-by: ChatGPTv5`
 - Use the tag "AI" on pull requests that were primarily generated or guided by AI tools
 
+### Scope and Cadence
+- Prefer one concern per PR. Bug fixes, refactors, and documentation updates belong in separate PRs even when they touch the same file.
+- For mechanical changes that span many files or services (e.g. pattern sweeps), split into per-target PRs and open no more than two per week so review stays tractable.
+- Before a large or cross-cutting change, open an issue or discussion first to align on scope.
+
 ## Contribution Workflow
 
 This is an overview of the contribution workflow:
