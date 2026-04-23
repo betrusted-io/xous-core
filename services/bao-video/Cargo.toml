@@ -35,6 +35,11 @@ base64 = { version = "0.22.1", optional = true }
 
 locales = { path = "../../locales" }
 
+# diffusion dithering
+rand = { version = "0.8.5", features = ["getrandom"] }
+rand_core = "0.6.4"
+getrandom = "=0.2.12"
+
 [features]
 no-gam = ["modals/no-gam"]
 gfx-testing = []
