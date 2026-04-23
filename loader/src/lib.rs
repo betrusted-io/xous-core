@@ -45,7 +45,7 @@ pub const GUARD_MEMORY_BYTES: usize = 3 * crate::PAGE_SIZE;
 #[cfg(all(feature = "swap", not(feature = "resume"), not(feature = "bao1x")))]
 pub const GUARD_MEMORY_BYTES: usize = 8 * crate::PAGE_SIZE;
 #[cfg(all(feature = "swap", not(feature = "resume"), feature = "bao1x"))]
-pub const GUARD_MEMORY_BYTES: usize = 8 * crate::PAGE_SIZE;
+pub const GUARD_MEMORY_BYTES: usize = 9 * crate::PAGE_SIZE;
 /// Amount of space for loader stack plus clean suspend, with swap. +1 page cost for the loading bar graphics
 #[cfg(all(feature = "swap", feature = "resume"))]
 pub const GUARD_MEMORY_BYTES: usize = 9 * crate::PAGE_SIZE; // 1 extra page for clean suspend
