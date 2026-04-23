@@ -932,6 +932,15 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     display.render_bitmap(bitmap);
                 }
                 #[cfg(feature = "board-baosec")]
+                GfxOpcode::BaosecBitmapDiffuse => {
+                    use rand::Rng;
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let bitmap = buffer.to_original::<BaosecBitmap, _>().unwrap();
+                    display
+                        .render_bitmap_diffuse(&bitmap, 10, rand::thread_rng().gen::<u64>())
+                        .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
+                }
+                #[cfg(feature = "board-baosec")]
                 GfxOpcode::Brightness => {
                     if let Some(scalar) = msg.body.scalar_message_mut() {
                         let brightness = scalar.arg1.min(255) as u8;
