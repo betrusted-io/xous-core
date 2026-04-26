@@ -26,6 +26,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "alloc",
 ] }
 modals = { path = "../modals", optional = true }
+susres = { package = "xous-api-susres", path = "../../api/xous-api-susres" }
 
 # QR decoding
 libm = { version = "0.2.8" }
