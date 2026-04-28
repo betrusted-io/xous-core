@@ -47,6 +47,9 @@ pub enum ChatOp {
     UpdateBusy,
     /// Force update the busy bar, without rate throttling. Internal opcode.
     UpdateBusyForced,
+    /// Set rendering flags (e.g. AuthorFlag::Right) on a named Author in the
+    /// current Dialogue. The author is created if absent.
+    SetAuthorFlags,
     /// exit the application
     Quit,
 }
@@ -87,6 +90,12 @@ pub struct Post {
     pub timestamp: u64,
     pub text: String,
     pub attach_url: Option<String>,
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug)]
+pub struct AuthorFlagsUpdate {
+    pub author: String,
+    pub flags: u16,
 }
 
 /// Events are sent to the Chat App when key things occur in the Chat UI

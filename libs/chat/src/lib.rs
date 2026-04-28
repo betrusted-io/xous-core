@@ -183,6 +183,29 @@ impl Chat {
         }
     }
 
+    /// Set rendering flags on a named Author in the current Dialogue.
+    ///
+    /// Used by chat apps that want non-default per-author rendering. For
+    /// example, a 1:1 messaging app sets `AuthorFlag::Right` on the local
+    /// "me" author so outgoing bubbles render right-aligned. The author is
+    /// created if absent, so this can be called before any post by that
+    /// author has arrived.
+    ///
+    /// Default behavior (flags=0) is unchanged for callers that never invoke
+    /// this method.
+    pub fn set_author_flags(
+        &self,
+        author: &str,
+        flags: enumset::EnumSet<api::AuthorFlag>,
+    ) -> Result<(), Error> {
+        let payload =
+            api::AuthorFlagsUpdate { author: String::from(author), flags: flags.as_u16() };
+        match Buffer::into_buf(payload) {
+            Ok(buf) => buf.send(self.cid, ChatOp::SetAuthorFlags as u32).map(|_| ()),
+            Err(_) => Err(xous::Error::InternalError),
+        }
+    }
+
     /// Show some user help
     pub fn help(&self) {
         xous::send_message(self.cid, xous::Message::new_scalar(ChatOp::Help as usize, 0, 0, 0, 0))
@@ -466,6 +489,16 @@ pub fn server(
                     None => None,
                 };
                 ui.dialogue_set(dialogue.dict.as_str(), dialogue_key.as_deref());
+            }
+            Some(ChatOp::SetAuthorFlags) => {
+                log::info!("ChatOp::SetAuthorFlags");
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let req = buffer.to_original::<AuthorFlagsUpdate, _>().unwrap();
+                let flags = enumset::EnumSet::<AuthorFlag>::from_u16(req.flags);
+                ui.set_author_flags(&req.author, flags);
+                if allow_redraw {
+                    ui.redraw().ok();
+                }
             }
             Some(ChatOp::GamChangeFocus) => {
                 log::info!("ChatOp::GamChangeFocus");

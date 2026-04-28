@@ -7,10 +7,12 @@ use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
 
 use author::Author;
+use enumset::EnumSet;
 use gam::Gam;
 use post::Post;
 use rkyv::{Archive, Deserialize, Serialize};
 
+use crate::api::AuthorFlag;
 use crate::ui::VisualProperties;
 use crate::{default_textview, now};
 
@@ -186,6 +188,28 @@ impl Dialogue {
     ///
     /// * `id` - the index of the required Author
     pub fn author(&self, id: u16) -> Option<&Author> { self.authors.get(&id) }
+
+    /// Set rendering flags on a named Author. Creates the Author if absent.
+    ///
+    /// Returns true if the flags were applied; false if the author table is
+    /// already at capacity and a new author could not be allocated.
+    ///
+    /// # Arguments
+    ///
+    /// * `author` - the name of the Author to update (e.g. "me")
+    /// * `flags` - the rendering flags to set (replaces any prior flags)
+    pub fn set_author_flags(&mut self, author: &str, flags: EnumSet<AuthorFlag>) -> bool {
+        match self.author_id(author) {
+            Some(id) => match self.authors.get_mut(&id) {
+                Some(a) => {
+                    a.flags_set(flags);
+                    true
+                }
+                None => false,
+            },
+            None => false,
+        }
+    }
 
     /// Return Some<author_id> by Author name, or None.
     ///

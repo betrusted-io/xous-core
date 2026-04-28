@@ -373,6 +373,19 @@ impl Ui {
         Ok(())
     }
 
+    /// Set rendering flags on a named Author in the current Dialogue.
+    /// No-op if no Dialogue is currently loaded.
+    pub fn set_author_flags(&mut self, author: &str, flags: enumset::EnumSet<crate::api::AuthorFlag>) {
+        match &mut self.dialogue {
+            Some(dialogue) => {
+                if !dialogue.set_author_flags(author, flags) {
+                    log::warn!("failed to set flags on author '{}': table at capacity", author);
+                }
+            }
+            None => log::warn!("set_author_flags: no Dialogue loaded; ignoring"),
+        }
+    }
+
     /// Delete a Post from the current Dialogue
     ///
     /// TODO: implement post_delete()
