@@ -42,3 +42,5 @@ pub mod captouch;
 pub mod mac_demo;
 #[cfg(feature = "ws2812")]
 pub mod ws2812;
+#[cfg(feature = "dali")]
+pub mod dali;
