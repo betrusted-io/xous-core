@@ -1,10 +1,12 @@
 use arbitrary_int::{Number, u4, u6};
+
 use super::DaliOpError;
 
 /* Overview:
  *
  * Two-layer structure allows user-facing functions of form (address, command) or (command, data) that work
- * with all possible input combinations while preventing misformed frames. Alternative would be nested enums.
+ * with all possible input combinations while preventing misformed frames. Alternative would be nested
+ * enums.
  *
  * User-facing structures:
  *   Address byte:
@@ -41,6 +43,7 @@ pub enum Address {
     GroupAddress(u4),
 }
 
+#[rustfmt::skip]
 #[derive(Clone, Copy, Debug)]
 pub enum Command {
 // Arc power control commands
@@ -182,7 +185,7 @@ pub enum Command {
     QueryManufacturerSpecificMode = 166, // * (part of Dali-2)
     QueryNextDeviceType           = 167, // *
     QueryExtendedFadeTime         = 168, // *
-    QueryControlGearFailure      = 169, // *
+    QueryControlGearFailure       = 169, // *
     // Reserved                 170-175
     QueryLevelScene0              = 176, // 0xb0
     QueryLevelScene1              = 177,
@@ -210,6 +213,7 @@ pub enum Command {
 // Extended Commands            224-255
 }
 
+#[rustfmt::skip]
 #[derive(Clone, Copy, Debug)]
 pub enum Part207LedDriver {
     ReferenceSystemPower          = 224,
@@ -239,6 +243,7 @@ pub enum Part207LedDriver {
     QueryExtendedVersionNumber    = 255,
 }
 
+#[rustfmt::skip]
 #[derive(Clone, Copy, Debug)]
 pub enum SpecialCommand101 {
 // Recommended to send Initialize and Randomize twice.
@@ -264,6 +269,7 @@ pub enum SpecialCommand101 {
     // Reserved             15
 }
 
+#[rustfmt::skip]
 #[derive(Clone, Copy, Debug)]
 pub enum SpecialCommand110 {
     EnableDeviceType           = 0, // #272 - maybe selects function of Extended***Set-commands?
@@ -297,7 +303,7 @@ pub enum GroupBit {
 #[derive(Clone, Copy, Debug)]
 pub enum CommandBit {
     DirectArcPowerCommand = 0,
-    OtherCommand= 1,
+    OtherCommand = 1,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -312,9 +318,7 @@ pub struct BackwardFrame(pub u8);
 // Trait for ForwardFrame constructor
 pub trait AddrByte {
     fn to_bits(&self) -> u8;
-    fn set_group_bit(&self) -> GroupBit {
-        GroupBit::GroupAddress
-    }
+    fn set_group_bit(&self) -> GroupBit { GroupBit::GroupAddress }
 }
 
 impl AddrByte for Address {
@@ -325,6 +329,7 @@ impl AddrByte for Address {
             Address::GroupAddress(grp) => grp.as_u8() << 1,
         }
     }
+
     fn set_group_bit(&self) -> GroupBit {
         match self {
             Address::ShortAddress(_) => GroupBit::ShortAddress,
@@ -350,36 +355,34 @@ impl AddrByte for SpecialCommand110 {
 // Trait for ForwardFrame constructor
 pub trait DataByte {
     fn to_bits(&self) -> u8;
-    fn set_command_bit(&self) -> CommandBit {
-        CommandBit::OtherCommand
-    }
+    fn set_command_bit(&self) -> CommandBit { CommandBit::OtherCommand }
 }
 
 impl DataByte for Brightness {
     fn to_bits(&self) -> u8 { self.0 }
-    fn set_command_bit(&self) -> CommandBit {
-        CommandBit::DirectArcPowerCommand
-    }
+
+    fn set_command_bit(&self) -> CommandBit { CommandBit::DirectArcPowerCommand }
 }
-impl DataByte for SpCmdData        { fn to_bits(&self) -> u8 { self.0 } }
-impl DataByte for Command          { fn to_bits(&self) -> u8 { *self as u8 } }
-impl DataByte for Part207LedDriver { fn to_bits(&self) -> u8 { *self as u8 } }
+impl DataByte for SpCmdData {
+    fn to_bits(&self) -> u8 { self.0 }
+}
+impl DataByte for Command {
+    fn to_bits(&self) -> u8 { *self as u8 }
+}
+impl DataByte for Part207LedDriver {
+    fn to_bits(&self) -> u8 { *self as u8 }
+}
 
 impl ForwardFrame {
-    pub fn new (address: impl AddrByte, data: impl DataByte) -> Self  {
+    pub fn new(address: impl AddrByte, data: impl DataByte) -> Self {
         let group_bit = address.set_group_bit();
         let address_bits = address.to_bits();
         let command_bit = data.set_command_bit();
         let address_byte = (group_bit as u8) << 7 | address_bits | command_bit as u8;
-        Self {
-            address_byte,
-            data_byte: data.to_bits(),
-        }
+        Self { address_byte, data_byte: data.to_bits() }
     }
 
-    pub fn to_bits (&self) -> u16 {
-        (self.address_byte as u16) << 8 | self.data_byte as u16
-    }
+    pub fn to_bits(&self) -> u16 { (self.address_byte as u16) << 8 | self.data_byte as u16 }
 }
 
 // User-facing trait to send special commands
@@ -390,47 +393,38 @@ pub trait SpecialCommand {
 impl SpecialCommand for SpecialCommand101 {
     fn match_data_byte(&self, data: SpecCmdData) -> Result<SpCmdData, DaliOpError> {
         match self {
-            SpecialCommand101::Terminate |
-            SpecialCommand101::Randomize |
-            SpecialCommand101::Compare |
-            SpecialCommand101::Withdraw |
-            SpecialCommand101::QueryShortAddress |
-            SpecialCommand101::PhysicalSelection |
-            SpecialCommand101::Ping  => {
-                match data {
-                    SpecCmdData::None => Ok(SpCmdData(0)),
-                    _ => Err(DaliOpError::WrongDataByteForCommand),
-                }
+            SpecialCommand101::Terminate
+            | SpecialCommand101::Randomize
+            | SpecialCommand101::Compare
+            | SpecialCommand101::Withdraw
+            | SpecialCommand101::QueryShortAddress
+            | SpecialCommand101::PhysicalSelection
+            | SpecialCommand101::Ping => match data {
+                SpecCmdData::None => Ok(SpCmdData(0)),
+                _ => Err(DaliOpError::WrongDataByteForCommand),
             },
-            SpecialCommand101::ProgramShortAddress |
-            SpecialCommand101::VerifyShortAddress => {
-                match data {
-                    SpecCmdData::Address(addr) => {
-                        let byte = addr.as_u8() << 1 | 0b0000_0001;
-                        Ok(SpCmdData(byte))
-                    }
-                    _ => Err(DaliOpError::WrongDataByteForCommand),
+            SpecialCommand101::ProgramShortAddress | SpecialCommand101::VerifyShortAddress => match data {
+                SpecCmdData::Address(addr) => {
+                    let byte = addr.as_u8() << 1 | 0b0000_0001;
+                    Ok(SpCmdData(byte))
                 }
+                _ => Err(DaliOpError::WrongDataByteForCommand),
             },
-            SpecialCommand101::Initialize => {
-                match data {
-                    SpecCmdData::InitializeBroadcast => Ok(SpCmdData(0b0000_0000)),
-                    SpecCmdData::InitializeShortAddress(addr) => {
-                        let byte = addr.as_u8() << 1 | 0b0000_0001;
-                        Ok(SpCmdData(byte))
-                    },
-                    SpecCmdData::InitializeDeviceWithoutShortAddress => Ok(SpCmdData(0b1111_1111)),
-                    _ => Err(DaliOpError::WrongDataByteForCommand),
+            SpecialCommand101::Initialize => match data {
+                SpecCmdData::InitializeBroadcast => Ok(SpCmdData(0b0000_0000)),
+                SpecCmdData::InitializeShortAddress(addr) => {
+                    let byte = addr.as_u8() << 1 | 0b0000_0001;
+                    Ok(SpCmdData(byte))
                 }
+                SpecCmdData::InitializeDeviceWithoutShortAddress => Ok(SpCmdData(0b1111_1111)),
+                _ => Err(DaliOpError::WrongDataByteForCommand),
             },
-            SpecialCommand101::DataTransferRegister0 |
-            SpecialCommand101::SearchAddressH |
-            SpecialCommand101::SearchAddressM |
-            SpecialCommand101::SearchAddressL => {
-                match data {
-                    SpecCmdData::Data(data) => Ok(SpCmdData(data)),
-                    _ => Err(DaliOpError::WrongDataByteForCommand),
-                }
+            SpecialCommand101::DataTransferRegister0
+            | SpecialCommand101::SearchAddressH
+            | SpecialCommand101::SearchAddressM
+            | SpecialCommand101::SearchAddressL => match data {
+                SpecCmdData::Data(data) => Ok(SpCmdData(data)),
+                _ => Err(DaliOpError::WrongDataByteForCommand),
             },
         }
     }
@@ -452,66 +446,67 @@ impl StdCommand for Command {}
 impl StdCommand for Part207LedDriver {}
 
 // Information to decode backward frames
+#[rustfmt::skip]
 pub mod bitflags {
     pub mod std {
         pub mod status_info {
-            pub const STATUS_OF_CONTROL_GEAR: u8      = 1;
-            pub const LAMP_FAILURE: u8                = 2;
-            pub const LAMP_ARC_POWER_ON: u8           = 3;
-            pub const QUERY_LIMIT_ERROR: u8           = 4;
-            pub const FADE_RUNNING: u8                = 5;
-            pub const QUERY_RESET_STATE: u8           = 6;
-            pub const QUERY_MISSING_SHORT_ADDRESS: u8 = 7;
-            pub const QUERY_POWER_FAILURE: u8         = 8;
+            pub const STATUS_OF_CONTROL_GEAR: u8      = 0x01;
+            pub const LAMP_FAILURE: u8                = 0x02;
+            pub const LAMP_ARC_POWER_ON: u8           = 0x04;
+            pub const QUERY_LIMIT_ERROR: u8           = 0x08;
+            pub const FADE_RUNNING: u8                = 0x10;
+            pub const QUERY_RESET_STATE: u8           = 0x20;
+            pub const QUERY_MISSING_SHORT_ADDRESS: u8 = 0x40;
+            pub const QUERY_POWER_FAILURE: u8         = 0x80;
         }
         pub mod lamp_failure {
-            pub const SHORT_CIRCUIT: u8            = 1;
-            pub const OPEN_CIRCUIT: u8             = 2;
-            pub const LOAD_DECREASE: u8            = 3;
-            pub const LOAD_INCREASE: u8            = 4;
-            pub const CURRENT_PROTECTOR_ACTIVE: u8 = 5;
+            pub const SHORT_CIRCUIT: u8            = 0x01;
+            pub const OPEN_CIRCUIT: u8             = 0x02;
+            pub const LOAD_DECREASE: u8            = 0x04;
+            pub const LOAD_INCREASE: u8            = 0x08;
+            pub const CURRENT_PROTECTOR_ACTIVE: u8 = 0x10;
         }
     }
     pub mod part_207_led_driver {
         pub mod gear_type {
-            pub const LED_POWER_SUPPLY_INTEGRATED: u8 = 1;
-            pub const LED_MODULE_INTEGRATED: u8       = 2;
-            pub const AC_SUPPLY_POSSIBLE: u8          = 3;
-            pub const DC_SUPPLY_POSSIBLE: u8          = 4;
+            pub const LED_POWER_SUPPLY_INTEGRATED: u8 = 0x01;
+            pub const LED_MODULE_INTEGRATED: u8       = 0x02;
+            pub const AC_SUPPLY_POSSIBLE: u8          = 0x04;
+            pub const DC_SUPPLY_POSSIBLE: u8          = 0x08;
             // Bits 4-7 unused
         }
         pub mod possible_operating_mode {
-            pub const PWM_MODE_IS_POSSIBLE: u8          = 1;
-            pub const AM_MODE_IS_POSSIBLE: u8           = 2;
-            pub const OUTPUT_IS_CURRENT_CONTROLLED: u8  = 3;
-            pub const HIGH_CURRENT_PULSE_MODE: u8       = 4;
+            pub const PWM_MODE_IS_POSSIBLE: u8          = 0x01;
+            pub const AM_MODE_IS_POSSIBLE: u8           = 0x02;
+            pub const OUTPUT_IS_CURRENT_CONTROLLED: u8  = 0x04;
+            pub const HIGH_CURRENT_PULSE_MODE: u8       = 0x08;
             // Bits 4-7 unused
         }
         pub mod features {
-            pub const SHORT_CIRCUIT_DETECTION_CAN_BE_QUERIED: u8              = 1;
-            pub const OPEN_CIRCUIT_DETECTION_CAN_BE_QUERIED: u8               = 2;
-            pub const DETECTION_OF_LOAD_DECREASE_CAN_BE_QUERIED: u8           = 3;
-            pub const DETECTION_OF_LOAD_INCREASE_CAN_BE_QUERIED: u8           = 4;
-            pub const CURRENT_PROTECTOR_IS_IMPLEMENTED_AND_CAN_BE_QUERIED: u8 = 5;
-            pub const THERMAL_SHUTDOWN: u8                                    = 6;
-            pub const LIGHT_LEVEL_REDUCTION_DUE_TO_OVERTEMPERATURE: u8        = 7;
-            pub const PHYSICAL_SELECTION_IS_SUPPORTED: u8                     = 8;
+            pub const SHORT_CIRCUIT_DETECTION_CAN_BE_QUERIED: u8              = 0x01;
+            pub const OPEN_CIRCUIT_DETECTION_CAN_BE_QUERIED: u8               = 0x02;
+            pub const DETECTION_OF_LOAD_DECREASE_CAN_BE_QUERIED: u8           = 0x04;
+            pub const DETECTION_OF_LOAD_INCREASE_CAN_BE_QUERIED: u8           = 0x08;
+            pub const CURRENT_PROTECTOR_IS_IMPLEMENTED_AND_CAN_BE_QUERIED: u8 = 0x10;
+            pub const THERMAL_SHUTDOWN: u8                                    = 0x20;
+            pub const LIGHT_LEVEL_REDUCTION_DUE_TO_OVERTEMPERATURE: u8        = 0x40;
+            pub const PHYSICAL_SELECTION_IS_SUPPORTED: u8                     = 0x80;
         }
         pub mod failure_modes {
-            pub const SHORT_CIRCUIT_DETECTION_CAN_BE_QUERIED: u8               = 1;
-            pub const OPEN_CIRCUIT_DETECTION_CAN_BE_QUERIED: u8                = 2;
-            pub const DETECTION_OF_LOAD_DECREASE_CAN_BE_QUERIED: u8            = 3;
-            pub const DETECTION_OF_LOAD_INCREASE_CAN_BE_QUERIED: u8            = 4;
-            pub const CURRENT_PROTECTOR_IS_IMPLEMENTED_AND_CAN_BE_QUERIED: u8  = 5;
-            pub const THERMAL_SHUTDOWN: u8                                     = 6;
-            // Bit 7-8 unused
+            pub const SHORT_CIRCUIT_DETECTION_CAN_BE_QUERIED: u8               = 0x01;
+            pub const OPEN_CIRCUIT_DETECTION_CAN_BE_QUERIED: u8                = 0x02;
+            pub const DETECTION_OF_LOAD_DECREASE_CAN_BE_QUERIED: u8            = 0x04;
+            pub const DETECTION_OF_LOAD_INCREASE_CAN_BE_QUERIED: u8            = 0x08;
+            pub const CURRENT_PROTECTOR_IS_IMPLEMENTED_AND_CAN_BE_QUERIED: u8  = 0x10;
+            pub const THERMAL_SHUTDOWN: u8                                     = 0x20;
+            // Bit 6-7 unused
         }
         pub mod operating_mode {
-            pub const PWM_MODE_ACTIVE: u8                       = 1;
-            pub const AM_MODE_ACTIVE: u8                        = 2;
-            pub const OUTPUT_IS_CURRENT_CONTROLLED: u8          = 3;
-            pub const HIGH_CURRENT_PULSE_MODE_ACTIVE: u8        = 4;
-            pub const NON_LOGARITHMIC_DIMMING_CURVE_ACTIVE: u8  = 5;
+            pub const PWM_MODE_ACTIVE: u8                       = 0x01;
+            pub const AM_MODE_ACTIVE: u8                        = 0x02;
+            pub const OUTPUT_IS_CURRENT_CONTROLLED: u8          = 0x04;
+            pub const HIGH_CURRENT_PULSE_MODE_ACTIVE: u8        = 0x08;
+            pub const NON_LOGARITHMIC_DIMMING_CURVE_ACTIVE: u8  = 0x10;
             // Bits 5-7 unused
         }
     }

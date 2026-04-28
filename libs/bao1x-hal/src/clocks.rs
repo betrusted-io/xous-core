@@ -377,9 +377,13 @@ impl ClockManagerImpl {
         // check the clock muxes to select the right source for clktop
         let mux0 = sysctrl.r(utra::sysctrl::SFR_CGUSEL0) & 0x1;
         let mux1 = sysctrl.r(utra::sysctrl::SFR_CGUSEL1) & 0x1;
-        let clktop = if mux0 == 1 { pll0_freq }
-            else if mux1 == 1 { XTAL0 }
-            else { OSC };
+        let clktop = if mux0 == 1 {
+            pll0_freq
+        } else if mux1 == 1 {
+            XTAL0
+        } else {
+            OSC
+        };
         let fclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0) & 0xFF;
         let aclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1) & 0xFF;
         let hclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2) & 0xFF;
@@ -455,9 +459,13 @@ impl ClockManagerImpl {
         // check the clock muxes to select the right source for clktop
         let mux0 = self.sysctrl.r(utra::sysctrl::SFR_CGUSEL0) & 0x1;
         let mux1 = self.sysctrl.r(utra::sysctrl::SFR_CGUSEL1) & 0x1;
-        let clktop = if mux0 == 1 { pll0_freq }
-            else if mux1 == 1 { XTAL0 }
-            else { OSC };
+        let clktop = if mux0 == 1 {
+            pll0_freq
+        } else if mux1 == 1 {
+            XTAL0
+        } else {
+            OSC
+        };
         let fclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0) & 0xFF;
         let aclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1) & 0xFF;
         let hclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2) & 0xFF;

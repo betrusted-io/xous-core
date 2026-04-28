@@ -38,9 +38,9 @@ pub mod av_trng;
 pub mod c;
 #[cfg(feature = "captouch")]
 pub mod captouch;
+#[cfg(feature = "dali")]
+pub mod dali;
 #[cfg(feature = "mac-demo")]
 pub mod mac_demo;
 #[cfg(feature = "ws2812")]
 pub mod ws2812;
-#[cfg(feature = "dali")]
-pub mod dali;

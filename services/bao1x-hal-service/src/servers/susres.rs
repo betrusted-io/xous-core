@@ -1,13 +1,12 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
+use bao1x_api::divide_by_fd;
+use bao1x_hal::clocks::{ClockOp, fd_from_frequency};
 use num_traits::*;
 use utralib::*;
 use xous::{CID, Message, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, sender::Sender};
 use xous_api_susres::*;
 use xous_ipc::Buffer;
-use bao1x_api::divide_by_fd;
-use bao1x_hal::clocks::{fd_from_frequency,ClockOp};
-
 
 static TIMEOUT_TIME: AtomicU32 = AtomicU32::new(5000);
 
@@ -406,7 +405,9 @@ fn susres_service() {
                                 let requested_freq = arg2 as u32;
                                 let fclk_fd = fd_from_frequency(requested_freq, clk_mgr.clktop);
                                 let achievable_freq = divide_by_fd(fclk_fd, clk_mgr.clktop);
-                                if (1.0 - (achievable_freq as f32 / requested_freq as f32)).abs() < MAX_DEVIATION {
+                                if (1.0 - (achievable_freq as f32 / requested_freq as f32)).abs()
+                                    < MAX_DEVIATION
+                                {
                                     clk_mgr.set_fclk_fd(fclk_fd as u8);
                                     clk_mgr.update_clocks();
                                     log::info!("Changed fclk to {}", clk_mgr.fclk);

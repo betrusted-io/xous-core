@@ -1,25 +1,20 @@
+#[allow(unused)] // time::Duration is needed in send_read but the compiler doesn't realize it
+use std::time::{Duration, Instant};
+
 use arbitrary_int::{Number, u5};
 use bao1x_api::bio::*;
 use bao1x_api::bio_code;
 use bao1x_api::bio_resources::*;
 use bao1x_hal::bio::{Bio, CoreCsr};
 use bao1x_hal::clocks::ClockOp;
-use num_traits::cast::{ToPrimitive};
-#[allow(unused)] // time::Duration is needed in send_read but the compiler doesn't realize it
-use std::time::{Duration, Instant};
+use num_traits::cast::ToPrimitive;
 use utralib::generated::utra::bio_bdma;
 use xous_api_susres::api::Opcode as SusresOp;
 
 mod protocol;
 use protocol::*;
 pub use protocol::{
-    Address,
-    Brightness,
-    Command,
-    Part207LedDriver,
-    SpecialCommand101,
-    SpecialCommand110,
-    SpecCmdData,
+    Address, Brightness, Command, Part207LedDriver, SpecCmdData, SpecialCommand101, SpecialCommand110,
     bitflags,
 };
 
@@ -29,7 +24,7 @@ pub use protocol::{
  * Dali stands for Digitally Addressable Lighting Interface and is a standard for controlling building
  * lighting. The naming convention is a bit confusing:
  *
- *   Application controller   A bus master, used to control lighting: that's what this library is form
+ *   Application controller   A bus master, used to control lighting: that's what this library is for
  *   Control gear             A device directly controlling lights, e.g. an LED driver
  *   Control device           An input device, e.g. a light sensor or a dimmer
  *
@@ -53,8 +48,8 @@ pub use protocol::{
  *
  * Limitations of this library:
  *  1) It's not been tested with actual devices.
- *  2) Not all device types are implemented. To add a new device type, implement an enum with trait DataByte,
- *     equivalent to Extension207LedDriver.
+ *  2) Not all device types are implemented. To add a new device type, implement an enum with trait
+ *     DataByte, equivalent to Extension207LedDriver.
  *  3) DALI-2 adds support for control devices such as sensors and dimmers, which are not supported.
  *  4) Only synchronous functions at this point.
  *
@@ -110,8 +105,8 @@ impl From<ResourceError> for DaliSetupError {
 
 #[derive(PartialEq)]
 pub enum InvertTx {
-    // A level shifter for interfacing with the bus may invert the signal (e.g. a transistor pulling the line
-    // low on a high pin ) or not (e.g. an opto-isolator).
+    // A level shifter for interfacing with the bus may invert the signal (e.g. a transistor pulling the
+    // line low on a high pin ) or not (e.g. an opto-isolator).
     True,
     False,
 }
@@ -126,13 +121,10 @@ pub struct DaliConfig {
 #[allow(unused)] // never used, says the compiler
 impl DaliConfig {
     pub fn new(rx_pin: u5, tx_pin: u5) -> Result<Self, DaliSetupError> {
-        if rx_pin == tx_pin { return Err(DaliSetupError::TxRxPinsIdentical); }
-        Ok(Self {
-            rx_pin,
-            tx_pin,
-            io_mode: IoConfigMode::Overwrite,
-            inverts: InvertTx::False,
-        })
+        if rx_pin == tx_pin {
+            return Err(DaliSetupError::TxRxPinsIdentical);
+        }
+        Ok(Self { rx_pin, tx_pin, io_mode: IoConfigMode::Overwrite, inverts: InvertTx::False })
     }
 }
 
@@ -176,15 +168,14 @@ impl Drop for Dali {
 }
 
 impl Dali {
-    pub fn new(config: DaliConfig) -> Result<Dali, DaliSetupError>
-    {
-
+    pub fn new(config: DaliConfig) -> Result<Dali, DaliSetupError> {
         let rx_pin = config.rx_pin;
         let tx_pin = config.tx_pin;
         // Lower fclk speed to allow longer quantum intervals, any freqency below 157MHz works
         let requested_frequency = 140_000_000;
         let xns = xous_names::XousNames::new().unwrap();
-        let conn = xns.request_connection_blocking(xous_api_susres::api::SERVER_NAME_SUSRES)
+        let conn = xns
+            .request_connection_blocking(xous_api_susres::api::SERVER_NAME_SUSRES)
             .expect("Can't connect to Susres server");
         let result = xous::send_message(
             conn,
@@ -194,11 +185,14 @@ impl Dali {
                 requested_frequency as usize,
                 0,
                 0,
-            ));
+            ),
+        );
         match result {
             Ok(xous::Result::Scalar2(ok, _freq)) => {
-                if ok == 0 { return Err(DaliSetupError::CantChangeFclk); }
-            },
+                if ok == 0 {
+                    return Err(DaliSetupError::CantChangeFclk);
+                }
+            }
             _ => return Err(DaliSetupError::CantChangeFclk),
         };
 
@@ -207,9 +201,8 @@ impl Dali {
         let resource_grant = bio_ss.claim_resources(&Dali::resource_spec())?;
         log::debug!("granted to Dali: {:?}", resource_grant);
         // configure cores
-        let config_rx = CoreConfig {
-            clock_mode: bao1x_api::bio::ClockMode::ExternalPin(BioPin::new(rx_pin.as_u8()))
-        };
+        let config_rx =
+            CoreConfig { clock_mode: bao1x_api::bio::ClockMode::ExternalPin(BioPin::new(rx_pin.as_u8())) };
         let config_tx = CoreConfig { clock_mode: bao1x_api::bio::ClockMode::TargetFreqFrac(2400) };
         let rx_kernel = dali_rx_kernel();
         let tx_kernel = dali_tx_kernel();
@@ -219,7 +212,9 @@ impl Dali {
         bio_ss.claim_dynamic_pin(rx_pin.as_u8(), &Dali::resource_spec().claimer)?;
         bio_ss.claim_dynamic_pin(tx_pin.as_u8(), &Dali::resource_spec().claimer)?;
         let mut io_config = IoConfig::default();
-        if config.inverts == InvertTx::True { io_config.o_inv = 1 << tx_pin.as_u32(); }
+        if config.inverts == InvertTx::True {
+            io_config.o_inv = 1 << tx_pin.as_u32();
+        }
         io_config.mapped = (1 << rx_pin.as_u32()) | (1 << tx_pin.as_u32());
         io_config.mode = config.io_mode;
         bio_ss.setup_io_config(io_config).unwrap();
@@ -263,8 +258,11 @@ impl Dali {
         }
     }
 
-    fn send_sync(&mut self, address_byte: impl AddrByte, data_byte: impl DataByte) ->
-        Result<(), DaliOpError> {
+    fn send_sync(
+        &mut self,
+        address_byte: impl AddrByte,
+        data_byte: impl DataByte,
+    ) -> Result<(), DaliOpError> {
         self.empty_read_queue();
         let cmd = ForwardFrame::new(address_byte, data_byte).to_bits();
         log::debug!("sending: {:08b}_{:08b}", cmd >> 8, cmd & 0xff);
@@ -278,94 +276,110 @@ impl Dali {
         }
     }
 
-    fn send_read(&mut self, address_byte: impl AddrByte, data_byte: impl DataByte) ->
-        Result<BackwardFrame, DaliOpError> {
-            let _ = self.send_sync(address_byte, data_byte)?;
-            let now = Instant::now();
-            // wait time
-            //   (last bit transition   -> value pushed onto FIFO)                --
-            //   value pushed onto FIFO -> end of stop bits                      1250us
-            //   end of stop bits       -> max. var. delay for backward frames   9166us
-            while self.rx.csr.rf(bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) == 0 &&
-                now.elapsed().as_micros() < 10416 {}
-            // due to min. delay for backward frames and their length, it's unlikely a transmission finishes
-            // before the end of this timeout
-            let read = if self.rx.csr.rf(bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) != 0 {
-                // message received -> read
-                self.rx.csr.r(bio_bdma::SFR_RXF1) & 0x0000_00ff
-            } else if self.rx.csr.rf(bio_bdma::SFR_EVENT_STATUS_SFR_EVENT_STATUS) & 0b11 == 0 {
-                // line busy, external source -> wait for message
-                while self.rx.csr.rf(bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) == 0 {};
-                self.rx.csr.r(bio_bdma::SFR_RXF1) & 0x0000_00ff
-            } else {
-                // line idle -> timeout
-                // line busy, tx core is sending -> timeout
-                0
-            };
-            if read == 0 {
-                log::debug!("received: --timeout--");
-            } else {
-                log::debug!("received: {:08b}_{:08b}_{:08b}_{:08b}",
-                    (read >> 24), (read >> 16) & 0xff, (read >> 8) & 0xff, read & 0xff
-                );
-            }
-            return Ok(BackwardFrame(read as u8))
+    fn send_read(
+        &mut self,
+        address_byte: impl AddrByte,
+        data_byte: impl DataByte,
+    ) -> Result<BackwardFrame, DaliOpError> {
+        let _ = self.send_sync(address_byte, data_byte)?;
+        let now = Instant::now();
+        // wait time
+        //   (last bit transition   -> value pushed onto FIFO)                --
+        //   value pushed onto FIFO -> end of stop bits                      1250us
+        //   end of stop bits       -> max. var. delay for backward frames   9166us
+        while self.rx.csr.rf(bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) == 0
+            && now.elapsed().as_micros() < 10416
+        {}
+        // due to min. delay for backward frames and their length, it's unlikely a transmission finishes
+        // before the end of this timeout
+        let read = if self.rx.csr.rf(bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) != 0 {
+            // message received -> read
+            self.rx.csr.r(bio_bdma::SFR_RXF1) & 0x0000_00ff
+        } else if self.rx.csr.rf(bio_bdma::SFR_EVENT_STATUS_SFR_EVENT_STATUS) & 0b11 == 0 {
+            // line busy, external source -> wait for message
+            while self.rx.csr.rf(bio_bdma::SFR_FLEVEL_PCLK_REGFIFO_LEVEL1) == 0 {}
+            self.rx.csr.r(bio_bdma::SFR_RXF1) & 0x0000_00ff
+        } else {
+            // line idle -> timeout
+            // line busy, tx core is sending -> timeout
+            0
+        };
+        if read == 0 {
+            log::debug!("received: --timeout--");
+        } else {
+            log::debug!(
+                "received: {:08b}_{:08b}_{:08b}_{:08b}",
+                (read >> 24),
+                (read >> 16) & 0xff,
+                (read >> 8) & 0xff,
+                read & 0xff
+            );
+        }
+        return Ok(BackwardFrame(read as u8));
     }
 
-    pub fn set_brightness(&mut self, address: Address, brightness: Brightness) ->
-        Result<(), DaliOpError> {
-            _ = self.send_sync(address, brightness)?;
-            Ok(())
+    pub fn set_brightness(&mut self, address: Address, brightness: Brightness) -> Result<(), DaliOpError> {
+        _ = self.send_sync(address, brightness)?;
+        Ok(())
     }
 
-    pub fn send_command(&mut self, address: Address, command: impl StdCommand + DataByte) ->
-        Result<(), DaliOpError> {
-            _ = self.send_sync(address, command)?;
-            Ok(())
+    pub fn send_command(
+        &mut self,
+        address: Address,
+        command: impl StdCommand + DataByte,
+    ) -> Result<(), DaliOpError> {
+        _ = self.send_sync(address, command)?;
+        Ok(())
     }
 
-    pub fn query_command_value(&mut self, address: Address, command: impl StdCommand + DataByte) ->
-        Result<u8, DaliOpError> {
-            let response = self.send_read(address, command)?;
-            Ok(response.0)
+    pub fn query_command_value(
+        &mut self,
+        address: Address,
+        command: impl StdCommand + DataByte,
+    ) -> Result<u8, DaliOpError> {
+        let response = self.send_read(address, command)?;
+        Ok(response.0)
     }
 
-    pub fn query_command_bool(&mut self, address: Address, command: impl StdCommand + DataByte) ->
-        Result<bool, DaliOpError> {
-            let response = self.send_read(address, command)?;
-            if response.0 != 0 {
-                Ok(true)
-            } else {
-                Ok(false)
-            }
+    pub fn query_command_bool(
+        &mut self,
+        address: Address,
+        command: impl StdCommand + DataByte,
+    ) -> Result<bool, DaliOpError> {
+        let response = self.send_read(address, command)?;
+        if response.0 != 0 { Ok(true) } else { Ok(false) }
     }
 
-    pub fn send_special_command<Trait: SpecialCommand + AddrByte>
-        (&mut self, command: Trait, data: SpecCmdData) -> Result<(), DaliOpError> {
-            let data_byte = command.match_data_byte(data)?;
-            _ = self.send_sync(command, data_byte)?;
-            Ok(())
+    pub fn send_special_command<Trait: SpecialCommand + AddrByte>(
+        &mut self,
+        command: Trait,
+        data: SpecCmdData,
+    ) -> Result<(), DaliOpError> {
+        let data_byte = command.match_data_byte(data)?;
+        _ = self.send_sync(command, data_byte)?;
+        Ok(())
     }
 
-    pub fn query_special_command_value<Trait: SpecialCommand + AddrByte>
-        (&mut self, command: Trait, data: SpecCmdData) -> Result<u8, DaliOpError> {
-            let data_byte = command.match_data_byte(data)?;
-            let response = self.send_read(command, data_byte)?;
-            Ok(response.0)
+    pub fn query_special_command_value<Trait: SpecialCommand + AddrByte>(
+        &mut self,
+        command: Trait,
+        data: SpecCmdData,
+    ) -> Result<u8, DaliOpError> {
+        let data_byte = command.match_data_byte(data)?;
+        let response = self.send_read(command, data_byte)?;
+        Ok(response.0)
     }
 
-    pub fn query_special_command_bool<Trait: SpecialCommand + AddrByte>
-        (&mut self, command: Trait, data: SpecCmdData) -> Result<bool, DaliOpError> {
-            let data_byte = command.match_data_byte(data)?;
-            let response = self.send_read(command, data_byte)?;
-            if response.0 != 0 {
-                Ok(true)
-            } else {
-                Ok(false)
-            }
+    pub fn query_special_command_bool<Trait: SpecialCommand + AddrByte>(
+        &mut self,
+        command: Trait,
+        data: SpecCmdData,
+    ) -> Result<bool, DaliOpError> {
+        let data_byte = command.match_data_byte(data)?;
+        let response = self.send_read(command, data_byte)?;
+        if response.0 != 0 { Ok(true) } else { Ok(false) }
     }
 }
-
 
 #[rustfmt::skip]
 bio_code!(dali_rx_kernel, DALI_RX_START, DALI_RX_END,
