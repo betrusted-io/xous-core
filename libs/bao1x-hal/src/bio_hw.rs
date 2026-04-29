@@ -502,6 +502,10 @@ impl<'a> BioApi<'a> for BioSharedState {
         prev_freq
     }
 
+    fn prep_freq_change(&mut self) {
+        // at the hw level, there's nothing to do; a handler at the `std` level is invoked instead
+    }
+
     unsafe fn get_core_handle(&self, _fifo: Fifo) -> Result<Option<CoreHandle>, BioError> {
         unimplemented!("This is managed by the main loop server, not the hardware interface");
     }

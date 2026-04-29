@@ -134,6 +134,11 @@ impl<'a> Oled128x128 {
         unimplemented!("devboot feature does not exist on this platform");
     }
 
+    pub fn flip_vertical(&mut self, _flip: bool) -> Result<(), xous::Error> {
+        log::warn!("flipping not implemented");
+        Ok(())
+    }
+
     pub fn stash(&mut self) { self.stash.copy_from_slice(&self.buffer); }
 
     pub fn pop(&mut self) -> Result<(), xous::Error> {

@@ -309,6 +309,16 @@ pub(crate) fn main_hw() -> ! {
                     // log::warn!("Received an interrupt but no actual event reported");
                 }
             },
+            #[cfg(all(feature = "board-baosec", feature = "oem-baosec-lite"))]
+            Opcode::PmicIrq => {
+                use bao1x_hal::axp2101::VbusIrq;
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let vbus_irq = VbusIrq::from(scalar.arg1);
+                    if vbus_irq == VbusIrq::Remove {
+                        cu.unplug();
+                    }
+                }
+            }
             Opcode::U2fRxDeferred => {
                 // notify the event listener, if any
                 if observer_conn.is_some() && observer_op.is_some() {
@@ -404,7 +414,7 @@ pub(crate) fn main_hw() -> ! {
                 }
             }
             Opcode::IrqFidoRx => {
-                if let Some(raw_report) = cu.hid_packet.take() {
+                if let Some(raw_report) = cu.hid_packet.pop_front() {
                     let u2f_report = HIDReport(raw_report);
                     if let Some(mut listener) = fido_listener.take() {
                         let mut response = unsafe {
@@ -432,6 +442,11 @@ pub(crate) fn main_hw() -> ! {
                 let mut buffer =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
+                if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                    u2f_ipc.code = U2fCode::Hangup;
+                    buffer.replace(u2f_ipc).unwrap();
+                    continue;
+                }
                 if fido_listener_pid == msg.sender.pid() {
                     let mut u2f_msg = RawFidoReport::default();
                     assert_eq!(u2f_ipc.code, U2fCode::Tx, "Expected U2fCode::Tx in wrapper");
@@ -450,6 +465,10 @@ pub(crate) fn main_hw() -> ! {
             }
             Opcode::SendKeyCode => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
+                    if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                        continue;
+                    }
+
                     let code0 = scalar.arg1;
                     let code1 = scalar.arg2;
                     let code2 = scalar.arg3;
@@ -493,6 +512,12 @@ pub(crate) fn main_hw() -> ! {
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
                 let mut sent = 0;
+                if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                    log::warn!("Aborting send, no USB configured");
+                    usb_send.sent = Some(0);
+                    buffer.replace(usb_send).unwrap();
+                    continue;
+                }
 
                 // check keymap on every call because we may need to toggle this for e.g. plugging
                 // into a new host with a different map
@@ -696,6 +721,9 @@ pub(crate) fn main_hw() -> ! {
                 serial_listener.take();
             }
             Opcode::SerialFlush => msg_scalar_unpack!(msg, _, _, _, _, {
+                if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                    continue;
+                }
                 // this will hardware flush any pending items in usb_serial driver
                 cu.serial_port.flush().ok();
                 // this tries to return any data that's pending within the main loop's buffers
@@ -738,6 +766,9 @@ pub(crate) fn main_hw() -> ! {
                 }
             }),
             Opcode::SerialSendData => {
+                if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                    continue;
+                }
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let data = buffer.to_original::<UsbSerialBinary, _>().unwrap();
                 let mut total_sent = 0;
@@ -791,7 +822,7 @@ pub(crate) fn main_hw() -> ! {
                 break;
             }
             _ => {
-                unimplemented!(
+                log::warn!(
                     "Opcode {:?} not implemented for this version of the USB stack: {:?}",
                     opcode,
                     msg
