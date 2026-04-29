@@ -364,6 +364,8 @@ impl UsbHid {
         )
         .unwrap();
     }
+
+    pub fn cid(&self) -> xous::CID { self.conn }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
