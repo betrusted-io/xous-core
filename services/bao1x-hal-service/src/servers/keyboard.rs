@@ -489,7 +489,7 @@ fn keyboard_service() {
                                 ),
                             )
                             .unwrap_or_else(|_| {
-                                log::info!("Input overflow, dropping keys!");
+                                log::info!("Input overflow to {}, dropping keys!", conn);
                                 xous::Result::Ok
                             });
                         }

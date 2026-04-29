@@ -210,6 +210,7 @@ fn susres_service() {
                         //   - The update_bio_freq routine is being "too clever" and compensating for the fd
                         //     setting. But it seems like the routine just takes the putative fclk setting as
                         //     the argument to update_bio_freq(), I don't see any compensation happening...
+                        bio.prep_freq_change();
                         if fclk_fd_backup == 0xff {
                             bio.update_bio_freq(48_000_000);
                         } else {
@@ -222,6 +223,7 @@ fn susres_service() {
 
                         // clk_mgr.set_fclk_fd(fclk_fd_backup); // restore the FD before restoring potentially
                         // fast PLL setting
+                        bio.prep_freq_change();
                         clk_mgr.restore_wfi();
                         bio.update_bio_freq(clk_mgr.fclk);
 
@@ -377,7 +379,14 @@ fn susres_service() {
                 }),
                 Some(Opcode::Quit) => break,
                 Some(Opcode::PlatformSpecific) => {
-                    msg_blocking_scalar_unpack!(msg, op, _arg2, _arg3, _arg4, {
+                    if let xous::Message::BlockingScalar(xous::ScalarMessage {
+                        id: _id,
+                        arg1: op,
+                        arg2: _arg2,
+                        arg3: _arg3,
+                        arg4: _arg4,
+                    }) = msg.body
+                    {
                         let platform_op = FromPrimitive::from_usize(op);
                         match platform_op {
                             Some(ClockOp::GetVco) => {
@@ -401,15 +410,26 @@ fn susres_service() {
                             Some(ClockOp::GetPer) => {
                                 xous::return_scalar(msg.sender, clk_mgr.perclk as usize).unwrap()
                             }
+                            _ => panic!("Incorrect PlatformOp"),
+                        }
+                    }
+                    if let xous::Message::Scalar(xous::ScalarMessage {
+                        id: _id,
+                        arg1: op,
+                        arg2: _arg2,
+                        arg3: _arg3,
+                        arg4: _arg4,
+                    }) = msg.body
+                    {
+                        let platform_op = FromPrimitive::from_usize(op);
+                        match platform_op {
                             Some(ClockOp::DeepSleep) => {
-                                log::info!("entering deep sleep");
                                 clk_mgr.deep_sleep();
-                                xous::return_scalar(msg.sender, 1).ok();
                                 // system is shut down after this point, no code runs
                             }
                             _ => panic!("Incorrect PlatformOp"),
                         }
-                    })
+                    }
                 }
                 None => {
                     log::error!("couldn't convert opcode");

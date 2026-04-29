@@ -20,7 +20,7 @@ namespace Antmicro.Renode.Peripherals.Timers.Betrusted
         public LiteX_Timer_32(Machine machine, long frequency) : base(machine)
         {
             IRQ = new GPIO();
-            innerTimer = new LimitTimer(machine.ClockSource, frequency, this, "LiteXTimer32", eventEnabled: true, autoUpdate: true);
+            innerTimer = new LimitTimer(machine.ClockSource, (ulong)frequency, this, "LiteXTimer32", eventEnabled: true, autoUpdate: true);
             innerTimer.LimitReached += delegate
             {
                 this.Log(LogLevel.Noisy, "Limit reached");
