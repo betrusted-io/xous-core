@@ -293,10 +293,7 @@ fn layout(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, sty
             top_tv.invert = true;
             // specify a clip rect that's the biggest possible allowed. If we don't do this, the current
             // canvas bounds are used, and the operation will fail if the text has to get bigger.
-            top_tv.clip_rect = Some(Rectangle::new(
-                Point::new(0, 0),
-                Point::new(current_bounds.x, LINES - 2 * modal.line_height),
-            ));
+            top_tv.clip_rect = Some(Rectangle::new(Point::new(0, 0), current_bounds));
             write!(top_tv.text, "{}", top_str).unwrap();
 
             log::trace!("posting top tv: {:?}", top_tv);
@@ -340,10 +337,7 @@ fn layout(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, sty
         bot_tv.invert = true;
         // specify a clip rect that's the biggest possible allowed. If we don't do this, the current canvas
         // bounds are used, and the operation will fail if the text has to get bigger.
-        bot_tv.clip_rect = Some(Rectangle::new(
-            Point::new(0, 0),
-            Point::new(current_bounds.x, LINES - 2 * modal.line_height),
-        ));
+        bot_tv.clip_rect = Some(Rectangle::new(Point::new(0, 0), current_bounds));
         write!(bot_tv.text, "{}", bot_str).unwrap();
 
         log::trace!("posting bot tv: {:?}", bot_tv);

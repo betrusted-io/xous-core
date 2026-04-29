@@ -134,6 +134,14 @@ impl<'a> BioApi<'a> for Bio {
         }
     }
 
+    fn prep_freq_change(&mut self) {
+        send_message(
+            self.conn,
+            Message::new_blocking_scalar(BioOp::PrepFreqChange.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .ok();
+    }
+
     fn get_bio_freq(&self) -> u32 {
         match send_message(
             self.conn,

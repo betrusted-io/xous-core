@@ -80,6 +80,29 @@ impl From<u8> for VbusIrq {
     }
 }
 
+impl From<VbusIrq> for usize {
+    fn from(v: VbusIrq) -> usize {
+        match v {
+            VbusIrq::None => 0,
+            VbusIrq::Insert => 1,
+            VbusIrq::Remove => 2,
+            VbusIrq::InsertAndRemove => 3,
+        }
+    }
+}
+
+impl From<usize> for VbusIrq {
+    fn from(v: usize) -> VbusIrq {
+        match v {
+            0 => VbusIrq::None,
+            1 => VbusIrq::Insert,
+            2 => VbusIrq::Remove,
+            3 => VbusIrq::InsertAndRemove,
+            _ => VbusIrq::None, // infallible: unknown values collapse to None
+        }
+    }
+}
+
 #[repr(u8)]
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum WhichLdo {

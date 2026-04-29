@@ -61,3 +61,28 @@ pub fn glyph_height_hint(g: GlyphStyle) -> usize {
         GlyphStyle::Tall => 19,
     }
 }
+
+/// Find glyph for char using latin regular, emoji, ja, zh, and kr font data
+pub fn style_glyph(locale: &'static str, ch: char, base_style: &GlyphStyle) -> GlyphSprite {
+    match locale {
+        #[cfg(feature = "zh")]
+        "zh" => {
+            style_wrapper!(zh_rules, base_style, ch)
+        }
+        #[cfg(feature = "ja")]
+        "jp" => {
+            style_wrapper!(jp_rules, base_style, ch)
+        }
+        #[cfg(feature = "kr")]
+        "kr" => {
+            style_wrapper!(kr_rules, base_style, ch)
+        }
+        "en-tts" => {
+            style_wrapper!(en_audio_rules, base_style, ch)
+        }
+        // default to English rules
+        _ => {
+            style_wrapper!(english_rules, base_style, ch)
+        }
+    }
+}
