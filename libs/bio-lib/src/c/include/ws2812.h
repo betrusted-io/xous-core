@@ -42,11 +42,8 @@ void ws2812c(uint32_t pin, uint32_t *strip, uint32_t len) {
                 wait_quantum();
                 wait_quantum();
                 wait_quantum();
-                // 5 lo
+                // 2 lo
                 clear_gpio_pins_n(antimask);
-                wait_quantum();
-                wait_quantum();
-                wait_quantum();
                 wait_quantum();
                 wait_quantum();
             }
