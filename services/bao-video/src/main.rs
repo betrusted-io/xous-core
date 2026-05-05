@@ -948,6 +948,11 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         display
                             .brightness(brightness)
                             .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
+                    } else if let Some(scalar) = msg.body.scalar_message() {
+                        let brightness = scalar.arg1.min(255) as u8;
+                        display
+                            .brightness(brightness)
+                            .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
                     }
                 }
                 #[cfg(feature = "board-baosec")]
