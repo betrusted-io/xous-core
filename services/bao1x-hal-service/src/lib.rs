@@ -369,20 +369,4 @@ impl ClockManager {
             _ => unimplemented!(),
         }
     }
-
-    pub fn reset_reason(&self) -> bao1x_api::ResetReason {
-        match send_message(
-            self.conn,
-            Message::new_blocking_scalar(
-                SusresOp::PlatformSpecific.to_usize().unwrap(),
-                ClockOp::ResetReason.to_usize().unwrap(),
-                0,
-                0,
-                0,
-            ),
-        ) {
-            Ok(xous::Result::Scalar1(reason)) => bao1x_api::ResetReason::new_with_raw_value(reason as u32),
-            _ => unimplemented!(),
-        }
-    }
 }

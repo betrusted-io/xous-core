@@ -37,5 +37,4 @@ pub enum ClockOp {
     GetPclk,
     GetPer,
     DeepSleep,
-    ResetReason,
 }
