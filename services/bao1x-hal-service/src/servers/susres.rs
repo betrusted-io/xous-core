@@ -410,6 +410,10 @@ fn susres_service() {
                             Some(ClockOp::GetPer) => {
                                 xous::return_scalar(msg.sender, clk_mgr.perclk as usize).unwrap()
                             }
+                            Some(ClockOp::ResetReason) => {
+                                xous::return_scalar(msg.sender, clk_mgr.reset_reason().raw_value() as usize)
+                                    .unwrap()
+                            }
                             _ => panic!("Incorrect PlatformOp"),
                         }
                     }
