@@ -297,7 +297,11 @@ pub struct Resolver {
 impl Resolver {
     pub fn new(xns: &xous_names::XousNames) -> Resolver {
         let trng = trng::Trng::new(&xns).unwrap();
+        #[cfg(target_os = "windows")]
+        let socket = UdpSocket::bind("0.0.0.0:0").expect("couldn't create socket for DNS resolver");
+        #[cfg(not(target_os = "windows"))]
         let local_port = (49152 + trng.get_u32().unwrap() % 16384) as u16;
+        #[cfg(not(target_os = "windows"))]
         let socket = UdpSocket::bind(format!("0.0.0.0:{}", local_port))
             .expect("couldn't create socket for DNS resolver");
         let timeout = Duration::from_millis(10_000); // 10 seconds for DNS to resolve by default

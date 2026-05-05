@@ -140,6 +140,17 @@ fn main() {
     let sid = xns.register_name(bao1x_api::SERVER_NAME_BAO1X_HAL, None).expect("can't register server");
     let self_cid = xous::connect(sid).expect("couldn't create self-connection");
 
+    servers::susres::start_susres_service();
+
+    // these two servers need to start so that update_perclk calls can succeed
+    let clk_mgr = bao1x_hal_service::ClockManager::new();
+    servers::i2c::start_i2c_service();
+    servers::others::start_peri_service(clk_mgr.get_per());
+    let i2c_conn =
+        xns.request_connection(SERVER_NAME_BAO1X_I2C).expect("Couldn't connect to bao1x I2C server");
+    let peri_conn =
+        xns.request_connection(SERVER_NAME_BAO1X_OTHERS).expect("Couldn't connect to bao1x misc peri server");
+
     std::thread::spawn(move || {
         let mut ifram_allocs = [Vec::new(), Vec::new()];
         // code is written assuming the IFRAM blocks have the same size. Since this is fixed in
@@ -180,40 +191,6 @@ fn main() {
         let iox = Iox::new(iox_page.as_ptr() as *mut u32);
 
         let udma_global = GlobalConfig::new();
-
-        // Note: the I2C handler can be put into a separate thread if we need the main
-        // HAL server to not block while a large I2C transaction is being handled. For
-        // now this is all placed into a single thread. However, if we ever had a situation
-        // where, for example, you had to do a compound I2C transaction and flip a GPIO pin
-        // in the middle of that transaction in order for the set of I2C transactions to
-        // complete, this implementation would deadlock as it would block on the I2C transaction
-        // before handling the GPIO request.
-        let i2c_channel = bao1x_hal::board::setup_i2c_pins(&iox);
-        udma_global.clock_on(PeriphId::from(i2c_channel));
-        let i2c_pages = xous::syscall::map_memory(
-            xous::MemoryAddress::new(bao1x_hal::board::I2C_IFRAM_ADDR),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't claim I2C IFRAM page");
-
-        let i2c_ifram = unsafe {
-            bao1x_hal::ifram::IframRange::from_raw_parts(
-                bao1x_hal::board::I2C_IFRAM_ADDR,
-                i2c_pages.as_ptr() as usize,
-                i2c_pages.len(),
-            )
-        };
-        let mut i2c = unsafe {
-            bao1x_hal::udma::I2cDriver::new_with_ifram(
-                i2c_channel,
-                400_000,
-                bao1x_api::PERCLK,
-                i2c_ifram,
-                &udma_global,
-            )
-        };
 
         // os timer initializations
         let ostimer_csr = xous::syscall::map_memory(
@@ -622,40 +599,6 @@ fn main() {
                         udma_global.reset(periph);
                     }
                 }
-                HalOpcode::I2c => {
-                    let mut buf = unsafe {
-                        xous_ipc::Buffer::from_memory_message_mut(
-                            msg_opt.as_mut().unwrap().body.memory_message_mut().unwrap(),
-                        )
-                    };
-                    let mut list = buf.to_original::<I2cTransactions, _>().expect("I2c message format error");
-                    for transaction in list.transactions.iter_mut() {
-                        match transaction.i2c_type {
-                            I2cTransactionType::Write => {
-                                match i2c.i2c_write(
-                                    transaction.device,
-                                    transaction.address,
-                                    &transaction.data,
-                                ) {
-                                    Ok(result) => transaction.result = result,
-                                    _ => transaction.result = I2cResult::Nack,
-                                }
-                            }
-                            I2cTransactionType::Read | I2cTransactionType::ReadRepeatedStart => {
-                                match i2c.i2c_read(
-                                    transaction.device,
-                                    transaction.address,
-                                    &mut transaction.data,
-                                    transaction.i2c_type == I2cTransactionType::ReadRepeatedStart,
-                                ) {
-                                    Ok(result) => transaction.result = result,
-                                    _ => transaction.result = I2cResult::Nack,
-                                }
-                            }
-                        }
-                    }
-                    buf.replace(list).expect("I2c message format error");
-                }
                 HalOpcode::SetPreemptionState => {
                     // this is done as a blocking message because we want confirmation that
                     // this bit has been set before entering a critical section.
@@ -666,8 +609,29 @@ fn main() {
                 }
                 HalOpcode::UpdatePerclk => {
                     if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
-                        let new_perclk = scalar.arg1 as u32;
-                        i2c.update_perclk(new_perclk);
+                        // forward to peri block
+                        xous::send_message(
+                            peri_conn,
+                            xous::Message::new_blocking_scalar(
+                                PeripheralOpcode::UpdatePerclk.to_usize().unwrap(),
+                                scalar.arg1,
+                                0,
+                                0,
+                                0,
+                            ),
+                        )
+                        .ok();
+                        xous::send_message(
+                            i2c_conn,
+                            xous::Message::new_blocking_scalar(
+                                I2cOpcode::UpdatePerclk.to_usize().unwrap(),
+                                scalar.arg1,
+                                0,
+                                0,
+                                0,
+                            ),
+                        )
+                        .ok();
                     }
                 }
                 HalOpcode::InvalidCall => {
@@ -677,23 +641,17 @@ fn main() {
         }
     });
 
-    servers::keyboard::start_keyboard_service();
-
-    servers::susres::start_susres_service();
-
-    let clk_mgr = bao1x_hal_service::ClockManager::new();
     servers::bio::start_bio_service(clk_mgr.get_fclk());
+
+    servers::keyboard::start_keyboard_service();
 
     // claim BIO, based on the platform
     servers::trng::start_trng_service();
     servers::rtc::start_rtc_service();
 
-    // start the remaining services
-    servers::others::start_peri_service(clk_mgr.get_per());
-
-    let tt = ticktimer::Ticktimer::new().unwrap();
+    let dummy_sid = xous::create_server().unwrap();
     // placeholder - we can put an actual service here but for now just sleep the main thread.
     loop {
-        tt.sleep_ms(10_000).ok();
+        let _ = xous::receive_message(dummy_sid);
     }
 }

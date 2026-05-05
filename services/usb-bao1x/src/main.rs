@@ -108,7 +108,7 @@ pub(crate) fn main_hw() -> ! {
     assert!(
         bao1x_hal::usb::driver::CRG_UDC_TOTAL_MEM_LEN <= bao1x_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000
     );
-    log::info!(
+    log::debug!(
         "total memory len: {:x}, allocated: {:x}",
         bao1x_hal::usb::driver::CRG_UDC_TOTAL_MEM_LEN,
         bao1x_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000
@@ -122,21 +122,19 @@ pub(crate) fn main_hw() -> ! {
     .expect("couldn't allocate IRQ1 pages");
     let usb = AtomicCsr::new(usb_mapping.as_ptr() as *mut u32);
     let irq_csr = AtomicCsr::new(irq_range.as_ptr() as *mut u32);
-    log::info!("IRQ1 csr: {:x} -> {:x}", utra::irqarray1::HW_IRQARRAY1_BASE, unsafe {
+    log::debug!("IRQ1 csr: {:x} -> {:x}", utra::irqarray1::HW_IRQARRAY1_BASE, unsafe {
         irq_csr.base() as usize
     });
 
-    log::info!("making hw object");
     let mut corigine_usb =
         unsafe { CorigineUsb::new(ifram_range.as_ptr() as usize, usb.clone(), irq_csr.clone()) };
-    log::info!("reset..");
     corigine_usb.reset(); // initial reset of the core; we want some time to pass before doing the next items
 
     // safety: this is only safe because we will actually claim the IRQ after all the initializations are
     // done, and we promise not to enable interrupts until that time, either.
     unsafe {
         corigine_usb.irq_claimed();
-        log::info!("claimed irq");
+        log::debug!("claimed irq");
     }
     let cw = CorigineWrapper::new(corigine_usb);
     let usb_alloc = UsbBusAllocator::new(cw.clone());
@@ -279,7 +277,7 @@ pub(crate) fn main_hw() -> ! {
     iox.set_gpio_pin_dir(se0_port, se0_pin, bao1x_api::IoxDir::Input); // release SE0 state, allowing for enumeration
     // NOTE: if SE0 is required, the KPC has to be un-configured to allow the SE0 I/O to actually be driven
 
-    log::info!("Entering main loop");
+    log::debug!("Entering main loop");
 
     let mut msg_opt = None;
     loop {

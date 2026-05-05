@@ -75,7 +75,6 @@ impl KeyStore {
     }
 
     pub fn ensure_system_init(&mut self, rram: &mut Reram) {
-        log::info!("System setup not yet done. Initializing secret identifiers...");
         // debug coreuser status
         /*
         let coreuser_range = xous::map_memory(
@@ -90,6 +89,7 @@ impl KeyStore {
         */
 
         if self.owc.get(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0 {
+            log::info!("System setup not yet done. Initializing secret identifiers...");
             self.system_init_inner(rram);
         }
     }

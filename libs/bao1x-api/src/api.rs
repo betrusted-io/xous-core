@@ -43,9 +43,6 @@ pub enum HalOpcode {
     // blocking scalar
     UpdatePerclk = 18,
 
-    /// I2C operations
-    I2c = 9,
-
     /// Peripheral reset
     PeriphReset = 10,
 
@@ -68,4 +65,12 @@ pub enum PeripheralOpcode {
     // blocking scalar
     ReadAdcChannel = 0x100,
     EnableChannel = 0x101,
+}
+
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+#[repr(usize)]
+pub enum I2cOpcode {
+    InvalidCall = 0,
+    Transaction,
+    UpdatePerclk,
 }
