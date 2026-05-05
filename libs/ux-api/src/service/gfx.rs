@@ -825,6 +825,15 @@ impl Gfx {
     }
 
     #[cfg(feature = "board-baosec")]
+    pub fn brightness_nonblocking(&self, level: u8) {
+        xous::try_send_message(
+            self.conn,
+            Message::new_scalar(GfxOpcode::Brightness.to_usize().unwrap(), level as usize, 0, 0, 0),
+        )
+        .ok();
+    }
+
+    #[cfg(feature = "board-baosec")]
     pub fn flip_screen(&self, flip: bool) -> Result<(), xous::Error> {
         send_message(
             self.conn,
