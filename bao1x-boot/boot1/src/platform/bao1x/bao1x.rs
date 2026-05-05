@@ -447,6 +447,23 @@ pub fn early_init(mut board_type: bao1x_api::BoardTypeCoding) -> (bao1x_api::Boa
     crate::debug::USE_CONSOLE.store(true, core::sync::atomic::Ordering::SeqCst);
     crate::println!("boot1 udma console up, CPU @ {}MHz!", fclk_freq / 2_000_000);
 
+    #[cfg(feature = "oem-baosec-lite")]
+    {
+        // only enable WDT if we're not plugged in to a host
+        if iox.get_gpio_pin_value(bao1x_api::IoxPort::PA, 4) == bao1x_api::IoxValue::Low {
+            // enable watchdog timer at a very conservative timeout - main purpose is to ensure battery
+            // does not wear down in case a user accidentally leaves the device in bootloader mode
+            let mut wdt = bao1x_hal::wdt::Wdt::new();
+            // nominal 50MHz pclk estimated - 60 seconds - plenty of time to boot and have the WDT loop start
+            wdt.enable((50_000_000 / 2) * 60, true);
+            crate::println!("Power not detected: WDT enabled");
+        } else {
+            // if we're plugged in, don't enable WDT - user might be developing on the device, and
+            // holding the device intentionally in bootloader mode
+            crate::println!("Power detected: skipping WDT enable");
+        }
+    }
+
     (board_type, perclk)
 }
 
