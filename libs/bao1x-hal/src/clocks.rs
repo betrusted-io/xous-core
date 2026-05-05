@@ -367,9 +367,9 @@ impl ClockManagerImpl {
         let hclk = divide_by_fd(hclk_fd, pll0_freq);
         let iclk = divide_by_fd(iclk_fd, pll0_freq);
         let pclk = divide_by_fd(pclk_fd, pll0_freq);
-        log::info!("fracen: {:?}", fracen);
+        log::debug!("fracen: {:?}", fracen);
         // perclk has an extra /2 applied to it
-        log::info!("perclk: {:x}, pll0_freq {}", sysctrl.r(utra::sysctrl::SFR_CGUFDPER), pll0_freq);
+        log::debug!("perclk: {:x}, pll0_freq {}", sysctrl.r(utra::sysctrl::SFR_CGUFDPER), pll0_freq);
         let perclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFDPER) & 0xFF;
         let perclk = divide_by_fd(perclk_fd, pll0_freq) / 2;
 
@@ -748,6 +748,10 @@ impl ClockManagerImpl {
             // low connects DCDC2 to the chip
             self.iox.set_gpio_pin_value(self.dcdc2_io.0, self.dcdc2_io.1, bao1x_api::IoxValue::Low);
         }
+    }
+
+    pub fn reset_reason(&self) -> bao1x_api::ResetReason {
+        bao1x_api::ResetReason::new_with_raw_value(self.sysctrl.r(utra::sysctrl::SFR_RCUSRCFR))
     }
 }
 
