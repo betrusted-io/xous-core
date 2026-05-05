@@ -85,6 +85,13 @@ impl KeyTracker {
         }
     }
 
+    /// This is a filter that causes some keys to not be repeatable. In particular,
+    /// we don't want to trigger on the middle menu button or the "action" button if they
+    /// are held down - we jut want to repeat on the left/right/up/down keys
+    pub fn is_repeating(&self, key: KeyPress) -> bool {
+        key == KeyPress::Left || key == KeyPress::Right || key == KeyPress::Up || key == KeyPress::Down
+    }
+
     /// Processes the current keys pressed, at the current time stamp
     pub fn update_key_down(&mut self, keys: &[KeyPress], now: u64) {
         // Handle the case that key A is held down, then key B is held down simultaneously,
@@ -126,7 +133,9 @@ impl KeyTracker {
         for i in 0..self.keys.len() {
             if now >= self.keys[i].next_repeat_time {
                 let kp = self.keys[i].kp;
-                kps.push(self.map_keypress(kp));
+                if self.is_repeating(kp) {
+                    kps.push(self.map_keypress(kp));
+                }
                 // rebasing off of now prevents keys from "lagging on" in case of UI delay
                 self.keys[i].next_repeat_time = now + self.rate_ms as u64;
             }
