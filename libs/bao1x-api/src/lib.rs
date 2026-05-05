@@ -53,6 +53,7 @@ pub const SERVER_NAME_BAO1X_HAL: &str = "_bao1x-SoC HAL_";
 /// be in a separate server to avoid lock-up issues of the server depending on itself
 /// for services.
 pub const SERVER_NAME_BAO1X_OTHERS: &str = "_HAL-everthing-else_";
+pub const SERVER_NAME_BAO1X_I2C: &str = "_bao1x-i2c_";
 
 /// Number of boots to trigger the 'audit' command. It's set to be bigger than 1, because
 /// the chip tester may power cycle the chip during the provisioning process before the
