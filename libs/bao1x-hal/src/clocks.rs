@@ -749,10 +749,6 @@ impl ClockManagerImpl {
             self.iox.set_gpio_pin_value(self.dcdc2_io.0, self.dcdc2_io.1, bao1x_api::IoxValue::Low);
         }
     }
-
-    pub fn reset_reason(&self) -> bao1x_api::ResetReason {
-        bao1x_api::ResetReason::new_with_raw_value(self.sysctrl.r(utra::sysctrl::SFR_RCUSRCFR))
-    }
 }
 
 #[inline(always)]
