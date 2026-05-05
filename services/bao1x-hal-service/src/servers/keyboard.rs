@@ -366,6 +366,7 @@ fn keyboard_service() {
                 let kr = buffer.as_flat::<KeyboardRegistration, _>().unwrap();
                 match xns.request_connection_blocking(kr.server_name.as_str()) {
                     Ok(cid) => {
+                        log::info!("keyboard listener {} -> {}", kr.server_name, cid);
                         listeners.push((cid, <u32 as From<u32>>::from(kr.listener_op_id.into()) as usize));
                     }
                     Err(e) => {
