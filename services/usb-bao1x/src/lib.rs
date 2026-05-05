@@ -258,7 +258,7 @@ impl UsbHid {
             self.conn,
             Message::new_scalar(Opcode::SerialHookConsole.to_usize().unwrap(), 0, 0, 0, 0),
         )
-        .unwrap();
+        .ok();
     }
 
     pub fn serial_clear_input_hooks(&self) {
