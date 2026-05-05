@@ -207,6 +207,16 @@ impl Wdt {
         }
     }
 
+    /// reveals the internal CSR address for the WDT. The recipient of this address must promise
+    /// not to do any concurrent access with the donor; the primary purpose of this method is to
+    /// provide a method for moving the CSR between threads
+    pub unsafe fn to_raw(&self) -> usize { self.csr.base() as usize }
+
+    /// create a WDT from an internal CSR address. The caller must guarantee that the donor
+    /// of the address has released the address, and also that the address is in fact a valid
+    /// mapping for the WDT.
+    pub unsafe fn from_raw(mem: usize) -> Self { Wdt { csr: CSR::new(mem as *mut u32) } }
+
     // -- Lock helpers ---------------------------------------------------------
 
     #[inline]
