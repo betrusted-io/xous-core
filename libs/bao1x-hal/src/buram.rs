@@ -1,7 +1,7 @@
 use core::ops::Range;
 
 const KEY_RANGE: Range<usize> = 2..8;
-const KEY_LEN: usize = range_len(KEY_RANGE) * size_of::<u32>();
+pub const KEY_LEN: usize = range_len(KEY_RANGE) * size_of::<u32>();
 const HASH_LOC: usize = 0;
 const FLAGS_LOC: usize = 1;
 

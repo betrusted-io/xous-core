@@ -769,6 +769,85 @@ impl Gfx {
         }
     }
 
+    #[cfg(feature = "board-baosec")]
+    pub fn bitmap(
+        &self,
+        bitmap: &[u32],
+        top_left: Option<Point>,
+        bounding_box: Option<Rectangle>,
+    ) -> Result<(), xous::Error> {
+        let mut bmp = BaosecBitmap {
+            bits: [0u32; 512],
+            top_left: top_left.unwrap_or(Point::new(0, 0)),
+            bounding_box: bounding_box.unwrap_or(Rectangle {
+                tl: Point::new(0, 0),
+                // br is *exclusive*
+                br: Point::new(128, 128),
+                style: DrawStyle { fill_color: None, stroke_color: None, stroke_width: 0 },
+            }),
+        };
+        bmp.bits[..bitmap.len().min(512)].copy_from_slice(&bitmap[..bitmap.len().min(512)]);
+        let mut buf = Buffer::into_buf(bmp).unwrap();
+        buf.lend_mut(self.conn, GfxOpcode::BaosecBitmap.to_u32().unwrap())?;
+        Ok(())
+    }
+
+    #[cfg(feature = "board-baosec")]
+    pub fn bitmap_diffusion(
+        &self,
+        bitmap: &[u32],
+        top_left: Option<Point>,
+        bounding_box: Option<Rectangle>,
+    ) -> Result<(), xous::Error> {
+        let mut bmp = BaosecBitmap {
+            bits: [0u32; 512],
+            top_left: top_left.unwrap_or(Point::new(0, 0)),
+            bounding_box: bounding_box.unwrap_or(Rectangle {
+                tl: Point::new(0, 0),
+                // br is *exclusive*
+                br: Point::new(128, 128),
+                style: DrawStyle { fill_color: None, stroke_color: None, stroke_width: 0 },
+            }),
+        };
+        bmp.bits[..bitmap.len().min(512)].copy_from_slice(&bitmap[..bitmap.len().min(512)]);
+        let mut buf = Buffer::into_buf(bmp).unwrap();
+        buf.lend_mut(self.conn, GfxOpcode::BaosecBitmapDiffuse.to_u32().unwrap())?;
+        Ok(())
+    }
+
+    #[cfg(feature = "board-baosec")]
+    pub fn brightness(&self, level: u8) -> Result<(), xous::Error> {
+        send_message(
+            self.conn,
+            Message::new_blocking_scalar(GfxOpcode::Brightness.to_usize().unwrap(), level as usize, 0, 0, 0),
+        )
+        .map(|_| ())
+    }
+
+    #[cfg(feature = "board-baosec")]
+    pub fn brightness_nonblocking(&self, level: u8) {
+        xous::try_send_message(
+            self.conn,
+            Message::new_scalar(GfxOpcode::Brightness.to_usize().unwrap(), level as usize, 0, 0, 0),
+        )
+        .ok();
+    }
+
+    #[cfg(feature = "board-baosec")]
+    pub fn flip_screen(&self, flip: bool) -> Result<(), xous::Error> {
+        send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                GfxOpcode::FlipScreen.to_usize().unwrap(),
+                if flip { 1 } else { 0 },
+                0,
+                0,
+                0,
+            ),
+        )
+        .map(|_| ())
+    }
+
     #[cfg(feature = "hosted-baosec")]
     pub fn acquire_qr(&self) -> Result<QrAcquisition, xous::Error> {
         let dummy = "otpauth://totp/ACME%20Co:john.doe@email.com?secret=HXDMVJECJJWSRB3HWIZR4IFUGFTMXBOZ&issuer=ACME%20Co&algorithm=SHA1&digits=6&period=30".to_string();

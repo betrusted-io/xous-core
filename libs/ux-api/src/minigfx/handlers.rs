@@ -424,28 +424,23 @@ pub fn render_qr<T: FrameBuffer>(
         let total_width = qr_render.width as isize + QUIET_MODULES * 2;
         let module_width = (window_width / total_width).max(1) as isize;
         let left_edge = if module_width * total_width < window_width {
-            (window_width - (module_width * total_width)) as isize / 2
+            (window_width - module_width * total_width) as isize / 2
         } else {
             0
         };
 
-        const USE_TOP_LEFT: bool = false;
-        let tl = if USE_TOP_LEFT { qr_render.top_left } else { Point::new(0, 0) };
+        let tl = qr_render.top_left;
 
         // draw a white background over the rendering area
-        let r = Rectangle::new_with_style(
-            Point::from((left_edge, tl.y)),
-            screen_clip.unwrap_or(screensize).br,
-            DrawStyle::new(PixelColor::Light, PixelColor::Light, 1),
-        );
+        let mut r = screensize.clone();
+        r.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
         op::rectangle(display, r, screen_clip.into(), false);
 
         // now raster in the modules
-        // TODO: on dense codes, the dark colors are over-sized by a pixel. Figure this out.
-        // TODO: on smaller than optimal codes, align the QR code into the center of the screen.
         let mut line_top_left =
-            Point::new(left_edge + module_width * QUIET_MODULES, tl.y + module_width * QUIET_MODULES);
-        let dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 0);
+            Point::new(left_edge + tl.x + module_width * QUIET_MODULES, tl.y + module_width * QUIET_MODULES);
+        let dark = DrawStyle { fill_color: Some(PixelColor::Dark), stroke_color: None, stroke_width: 0 };
+        // log::info!("left edge: {} module width: {}", left_edge, module_width);
         for line in qr_render.modules.chunks(qr_render.width) {
             for (i, &module) in line.iter().enumerate() {
                 if module {

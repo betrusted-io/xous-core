@@ -18,7 +18,7 @@ pub mod signatures;
 pub use offsets::*;
 pub mod clocks;
 pub mod pubkeys;
-use arbitrary_int::u31;
+use arbitrary_int::u30;
 use bitbybit::bitfield;
 pub use clocks::*;
 pub mod bio;
@@ -53,6 +53,7 @@ pub const SERVER_NAME_BAO1X_HAL: &str = "_bao1x-SoC HAL_";
 /// be in a separate server to avoid lock-up issues of the server depending on itself
 /// for services.
 pub const SERVER_NAME_BAO1X_OTHERS: &str = "_HAL-everthing-else_";
+pub const SERVER_NAME_BAO1X_I2C: &str = "_bao1x-i2c_";
 
 /// Number of boots to trigger the 'audit' command. It's set to be bigger than 1, because
 /// the chip tester may power cycle the chip during the provisioning process before the
@@ -65,8 +66,13 @@ pub const AUTO_AUDIT_LIMIT: u32 = 3;
 #[bitfield(u32)]
 #[derive(PartialEq, Eq, Debug)]
 pub struct BackupFlags {
-    #[bits(1..=31, rw)]
-    reserved: u31,
+    #[bits(2..=31, rw)]
+    reserved: u30,
+    /// When true, the system has previously booted. This is reserved for OS-level management. It is
+    /// not automatically managed by the bootloader. However, after an AORST_N, the flag should be `false`
+    /// by hardware design.
+    #[bit(1, rw)]
+    warm_boot: bool,
     /// When `false`, indicates that the time in the RTC register is not synchronized to the offset
     /// that is read from disk. Upon first encounter with an external time source, the offset should
     /// be captured and recorded to disk.

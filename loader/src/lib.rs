@@ -43,12 +43,12 @@ pub const APP_UART_IFRAM_ADDR: usize = bao1x_hal::board::APP_UART_IFRAM_ADDR;
 pub const GUARD_MEMORY_BYTES: usize = 3 * crate::PAGE_SIZE;
 /// Amount of space for loader stack only, with swap
 #[cfg(all(feature = "swap", not(feature = "resume"), not(feature = "bao1x")))]
-pub const GUARD_MEMORY_BYTES: usize = 7 * crate::PAGE_SIZE;
+pub const GUARD_MEMORY_BYTES: usize = 9 * crate::PAGE_SIZE;
 #[cfg(all(feature = "swap", not(feature = "resume"), feature = "bao1x"))]
-pub const GUARD_MEMORY_BYTES: usize = 7 * crate::PAGE_SIZE;
-/// Amount of space for loader stack plus clean suspend, with swap
+pub const GUARD_MEMORY_BYTES: usize = 9 * crate::PAGE_SIZE;
+/// Amount of space for loader stack plus clean suspend, with swap. +1 page cost for the loading bar graphics
 #[cfg(all(feature = "swap", feature = "resume"))]
-pub const GUARD_MEMORY_BYTES: usize = 8 * crate::PAGE_SIZE; // 1 extra page for clean suspend
+pub const GUARD_MEMORY_BYTES: usize = 10 * crate::PAGE_SIZE; // 1 extra page for clean suspend
 
 #[cfg(feature = "swap")]
 pub const SWAPPER_PID: u8 = 2;

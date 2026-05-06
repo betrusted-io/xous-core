@@ -18,7 +18,10 @@ pub const SPINOR_ERASE_SIZE: u32 = bao1x_api::offsets::baosec::SPINOR_ERASE_SIZE
 pub const SPINOR_BULK_ERASE_SIZE: u32 = bao1x_api::offsets::baosec::SPINOR_BULK_ERASE_SIZE;
 pub const SPINOR_LEN: u32 = bao1x_api::offsets::baosec::SPI_FLASH_LEN as _;
 pub const PDDB_LOC: u32 = bao1x_api::offsets::baosec::PDDB_ORIGIN as _;
+#[cfg(not(feature = "oem-baosec-lite"))]
 pub const PDDB_LEN: u32 = bao1x_api::offsets::baosec::PDDB_LEN as _;
+#[cfg(feature = "oem-baosec-lite")]
+pub const PDDB_LEN: u32 = 2560 * 1024; // 2.5MiB length
 
 // Define the virtual region that memory-mapped FLASH should go to
 // top 8 megs are reserved for staging updates, backups, etc.
@@ -461,8 +464,8 @@ pub fn kpc_sr0_to_key(raw_event: u32) -> [KeyPress; 4] {
                 0 => KeyPress::Down,
                 1 => KeyPress::Select,
                 2 => KeyPress::Up,
-                4 => KeyPress::Right,
-                5 => KeyPress::Left,
+                4 => KeyPress::Left,
+                5 => KeyPress::Right,
                 6 => KeyPress::Center,
                 #[cfg(feature = "accel-kbd")]
                 9 => KeyPress::Accel,
@@ -489,8 +492,8 @@ pub fn kpc_sr1_to_key(raw_event: u32) -> KeyPress {
         0x10 => KeyPress::Down,
         0x11 => KeyPress::Select,
         0x12 => KeyPress::Up,
-        0x14 => KeyPress::Right,
-        0x15 => KeyPress::Left,
+        0x14 => KeyPress::Left,
+        0x15 => KeyPress::Right,
         0x16 => KeyPress::Center,
         #[cfg(feature = "accel-kbd")]
         0x19 => KeyPress::Accel,

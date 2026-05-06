@@ -95,34 +95,6 @@ fn main() {
                     log::info!("Udma periph reset of {:?}", periph);
                 }
             }
-            HalOpcode::I2c => {
-                let mut buf = unsafe {
-                    xous_ipc::Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let mut list = buf.to_original::<I2cTransactions, _>().expect("I2c message format error");
-                for transaction in list.transactions.iter_mut() {
-                    match transaction.i2c_type {
-                        I2cTransactionType::Write => {
-                            log::info!(
-                                "I2C write of {:x?} to device at {:x}, addr {:x}",
-                                transaction.data,
-                                transaction.device,
-                                transaction.address
-                            );
-                            transaction.result = I2cResult::Ack(transaction.data.len());
-                        }
-                        I2cTransactionType::Read | I2cTransactionType::ReadRepeatedStart => {
-                            log::info!(
-                                "I2C read from device at {:x}, addr {:x}; returning garbage",
-                                transaction.device,
-                                transaction.address,
-                            );
-                            transaction.result = I2cResult::Ack(transaction.data.len());
-                        }
-                    }
-                }
-                buf.replace(list).expect("I2c message format error");
-            }
             HalOpcode::InvalidCall => {
                 log::error!("Invalid opcode received: {:?}", msg);
             }
@@ -134,8 +106,4 @@ fn main() {
             }
         }
     }
-    xns.unregister_server(sid).unwrap();
-    xous::destroy_server(sid).unwrap();
-    log::trace!("quitting");
-    xous::terminate_process(0)
 }

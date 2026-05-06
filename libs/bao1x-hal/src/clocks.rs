@@ -2,6 +2,8 @@ use bao1x_api::find_pll_params;
 #[cfg(all(feature = "std", feature = "board-baosec"))]
 use bao1x_api::{IoxHal, IoxPort};
 use bitbybit::bitfield;
+#[cfg(not(feature = "std"))]
+use num_traits::float::FloatCore;
 use utralib::*;
 
 #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
@@ -270,6 +272,31 @@ pub fn divide_by_fd(fd: u32, in_freq_hz: u32) -> u32 {
     out_freq_khz * 1_000
 }
 
+/// Returns the floating point number to multiply the VCO frequency by to get the
+/// resulting frequency. i.e. if the FCO is at 700 MHz, the net frequency is
+/// equal to `(700_000_000f32 * fd_to_ratio()) as u32`
+pub fn fd_to_ratio(fd: u32) -> f32 { (fd as f32 + 1.0) / (FD_MAX as f32) }
+
+/// when `round_freq_up` is `true`, the resulting divider will result in a frequency that is
+/// rounded up from the target ratio, if it can't be perfectly achieved.
+///
+/// Otherwise, the result will round to the next lowest frequency that can be achieved.
+///
+/// Note that any divide ratio > 1.0 will result in a divide ration of 1.0: this is a
+/// *divide* ratio, not a multiplier. It can only strictly result in frequency that are lower
+/// than the input.
+///
+/// This will never return a result that causes the clock to stop. So any divisors smaller
+/// than 1/128 will result in a divisor of 1/128.
+pub fn divide_ratio_to_fd(ratio: f32, round_freq_up: bool) -> u8 {
+    let target_div = ((FD_MAX as f32 * ratio) - 1.0).max(1.0);
+    if round_freq_up {
+        (target_div.floor() as u32).min(255) as u8
+    } else {
+        (target_div.ceil() as u32).min(255) as u8
+    }
+}
+
 #[cfg(feature = "std")]
 pub struct ClockManagerImpl {
     pub vco_freq: u32,
@@ -340,9 +367,9 @@ impl ClockManagerImpl {
         let hclk = divide_by_fd(hclk_fd, pll0_freq);
         let iclk = divide_by_fd(iclk_fd, pll0_freq);
         let pclk = divide_by_fd(pclk_fd, pll0_freq);
-        log::info!("fracen: {:?}", fracen);
+        log::debug!("fracen: {:?}", fracen);
         // perclk has an extra /2 applied to it
-        log::info!("perclk: {:x}, pll0_freq {}", sysctrl.r(utra::sysctrl::SFR_CGUFDPER), pll0_freq);
+        log::debug!("perclk: {:x}, pll0_freq {}", sysctrl.r(utra::sysctrl::SFR_CGUFDPER), pll0_freq);
         let perclk_fd = sysctrl.r(utra::sysctrl::SFR_CGUFDPER) & 0xFF;
         let perclk = divide_by_fd(perclk_fd, pll0_freq) / 2;
 
@@ -412,6 +439,56 @@ impl ClockManagerImpl {
         self.pclk = divide_by_fd(pclk_fd, pll0_freq);
         let perclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFDPER) & 0xFF;
         self.perclk = divide_by_fd(perclk_fd, pll0_freq) / 2;
+    }
+
+    pub fn fclk_fd(&self) -> u8 { (self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0) & 0xFF) as u8 }
+
+    pub fn aclk_fd(&self) -> u8 { (self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1) & 0xFF) as u8 }
+
+    pub fn hclk_fd(&self) -> u8 { (self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2) & 0xFF) as u8 }
+
+    pub fn iclk_fd(&self) -> u8 { (self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3) & 0xFF) as u8 }
+
+    pub fn pclk_fd(&self) -> u8 { (self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4) & 0xFF) as u8 }
+
+    pub fn set_fclk_fd(&mut self, fd: u8) {
+        self.sysctrl.wo(
+            utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0,
+            self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0) & !0xFF | fd as u32,
+        );
+        self.sysctrl.wo(utra::sysctrl::SFR_CGUSET, 0x32);
+    }
+
+    pub fn set_aclk_fd(&mut self, fd: u8) {
+        self.sysctrl.wo(
+            utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1,
+            self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1) & !0xFF | fd as u32,
+        );
+        self.sysctrl.wo(utra::sysctrl::SFR_CGUSET, 0x32);
+    }
+
+    pub fn set_hclk_fd(&mut self, fd: u8) {
+        self.sysctrl.wo(
+            utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2,
+            self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2) & !0xFF | fd as u32,
+        );
+        self.sysctrl.wo(utra::sysctrl::SFR_CGUSET, 0x32);
+    }
+
+    pub fn set_iclk_fd(&mut self, fd: u8) {
+        self.sysctrl.wo(
+            utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3,
+            self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3) & !0xFF | fd as u32,
+        );
+        self.sysctrl.wo(utra::sysctrl::SFR_CGUSET, 0x32);
+    }
+
+    pub fn set_pclk_fd(&mut self, fd: u8) {
+        self.sysctrl.wo(
+            utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4,
+            self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4) & !0xFF | fd as u32,
+        );
+        self.sysctrl.wo(utra::sysctrl::SFR_CGUSET, 0x32);
     }
 
     /// Safety: this pulls out the hardware base for the susres block. The receiver of this
@@ -671,6 +748,10 @@ impl ClockManagerImpl {
             // low connects DCDC2 to the chip
             self.iox.set_gpio_pin_value(self.dcdc2_io.0, self.dcdc2_io.1, bao1x_api::IoxValue::Low);
         }
+    }
+
+    pub fn reset_reason(&self) -> bao1x_api::ResetReason {
+        bao1x_api::ResetReason::new_with_raw_value(self.sysctrl.r(utra::sysctrl::SFR_RCUSRCFR))
     }
 }
 

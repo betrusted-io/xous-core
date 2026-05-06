@@ -15,6 +15,9 @@ fn bio_service(clk_freq: u32) {
 
     let mut resource_tracker = ResourceTracker::new();
 
+    #[cfg(feature = "oem-baosec-lite")]
+    let led_conn = xns.request_connection_blocking("_oem_led_").unwrap();
+
     let mut bio_ss = bio_hw::BioSharedState::new(clk_freq);
     let mut msg_opt = None;
     loop {
@@ -122,6 +125,14 @@ fn bio_service(clk_freq: u32) {
                     let new_freq = scalar.arg1;
                     // returns the old freq
                     scalar.arg1 = bio_ss.update_bio_freq(new_freq as u32) as usize;
+                }
+            }
+
+            BioOp::PrepFreqChange => {
+                if let Some(_scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
+                    // pause rendering while the clock transitions, avoiding 'bright glitches'
+                    #[cfg(feature = "oem-baosec-lite")]
+                    xous::send_message(led_conn, xous::Message::new_blocking_scalar(128, 0, 0, 0, 0)).ok();
                 }
             }
 

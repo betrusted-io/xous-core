@@ -15,13 +15,37 @@ pub enum Opcode {
     AesOracle = 4,
     /// initiate key wrapper operation
     AesKwp = 5,
-    /// Ephemeral secret operations
-    EphemeralOp = 256,
+    /// Ephemeral secret operations. Split into MSB/LSB pairs, because we want to strictly use
+    /// scalar messages only for this. This helps to ensure to leakage of secrets to memory pages
+    /// (there is some risk of stack spillage, but this at least reduces the attack surface).
+    /// The ephemeral secret is 192 bits long - so the `Scalar` operation is split into 1x control
+    /// word, and 3x 32 bit words that transmit the secret.
+    Ephemeral = 256,
+    /// Flag operations
+    GetFlags = 512,
+    SetFlags = 513,
+    /// One way counter operations
+    GetOneWayCounter = 768,
+    IncOneWayCounter = 769,
 
     // ----- below are non-cryptographic opcodes but used to manipulate sensitive state -----
     /// Set bootwait parameters
     Bootwait = 4096,
+    IsDeveloper = 4097,
 
     /// Used to map unknown opcodes
     InvalidCall = 65535,
 }
+
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+pub enum EphemeralOp {
+    GetLsb,
+    SetLsb,
+    GetMsb,
+    SetMsb,
+}
+
+/// Series of magic numbers not meant for cryptographic authentication,
+/// but for detecting fat-fingered API implementations.
+pub const OWC_MAGIC_GET: [usize; 3] = [0x2b46_2ab3, 0xf7e3_1b59, 0x7bba_d222];
+pub const OWC_MAGIC_INC: [usize; 3] = [0xeb5d_fc81, 0x8b6d_6a90, 0xf720_491a];

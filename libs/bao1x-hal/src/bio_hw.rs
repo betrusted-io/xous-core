@@ -3,10 +3,7 @@ use arbitrary_int::Number;
 use bao1x_api::IoxHal;
 use bao1x_api::{bio::*, bio_code};
 use utra::bio_bdma;
-use utralib::{
-    utra::bio_bdma::{SFR_ELEVEL_FIFO_EVENT_LEVEL0, SFR_IRQMASK_0},
-    *,
-};
+use utralib::{utra::bio_bdma::*, *};
 
 #[cfg(not(feature = "std"))]
 use crate::iox::Iox;
@@ -505,6 +502,10 @@ impl<'a> BioApi<'a> for BioSharedState {
         prev_freq
     }
 
+    fn prep_freq_change(&mut self) {
+        // at the hw level, there's nothing to do; a handler at the `std` level is invoked instead
+    }
+
     unsafe fn get_core_handle(&self, _fifo: Fifo) -> Result<Option<CoreHandle>, BioError> {
         unimplemented!("This is managed by the main loop server, not the hardware interface");
     }
@@ -624,15 +625,16 @@ impl<'a> BioApi<'a> for BioSharedState {
 
     fn setup_fifo_event_triggers(&mut self, config: FifoEventConfig) -> Result<(), BioError> {
         let event_offset = config.which.to_usize_checked() * 2 + config.trigger_slot.raw_value() as usize;
-        assert!(event_offset <= 7, "Computed event offset is invalid");
-        // safety: this is safe because which is bounds checked with to_usize_checked() and the
-        // implementation of arbitrary_int that encodes trigger_slot is also bounds checked. The assert
-        // above also helps confirm a lack of logic bugs.
-        unsafe {
-            self.bio
-                .base()
-                .add(SFR_ELEVEL_FIFO_EVENT_LEVEL0.offset() + event_offset)
-                .write_volatile(config.level.level().as_u32());
+        match event_offset {
+            0 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL0, config.level.level().as_u32()),
+            1 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL1, config.level.level().as_u32()),
+            2 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL2, config.level.level().as_u32()),
+            3 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL3, config.level.level().as_u32()),
+            4 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL4, config.level.level().as_u32()),
+            5 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL5, config.level.level().as_u32()),
+            6 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL6, config.level.level().as_u32()),
+            7 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL7, config.level.level().as_u32()),
+            _ => unimplemented!("Computed event offset is invalid"),
         }
         let mask = 1u32 << event_offset as u32;
         let mut lt_gt_eq_set = 0u32;

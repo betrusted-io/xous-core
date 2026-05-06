@@ -21,7 +21,7 @@ const KEY_LEN: usize = bao1x_api::SLOT_ELEMENT_LEN_BYTES;
 
 pub struct KeyStore {
     slot_mgr: SlotManager,
-    owc: OneWayCounter,
+    pub owc: OneWayCounter,
     master_key: Option<[u8; KEY_LEN]>,
 }
 
@@ -75,7 +75,6 @@ impl KeyStore {
     }
 
     pub fn ensure_system_init(&mut self, rram: &mut Reram) {
-        log::info!("System setup not yet done. Initializing secret identifiers...");
         // debug coreuser status
         /*
         let coreuser_range = xous::map_memory(
@@ -90,6 +89,7 @@ impl KeyStore {
         */
 
         if self.owc.get(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() == 0 {
+            log::info!("System setup not yet done. Initializing secret identifiers...");
             self.system_init_inner(rram);
         }
     }
@@ -384,4 +384,6 @@ impl KeyStore {
             BootWaitCoding::Disable => Ok(false),
         }
     }
+
+    pub fn is_developer(&self) -> bool { self.owc.get(bao1x_api::DEVELOPER_MODE).unwrap() != 0 }
 }

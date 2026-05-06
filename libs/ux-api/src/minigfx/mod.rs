@@ -36,7 +36,7 @@ use crate::platform;
 /// Abstract trait for a FrameBuffer. Slower than native manipulation
 /// of the [u8] contents of a frame buffer, but more portable.
 pub trait FrameBuffer {
-    /// Puts a pixel of ColorNative at x, y. (0, 0) is defined as the lower left corner.
+    /// Puts a pixel of ColorNative at x, y. (0, 0) is defined as the top left corner.
     fn put_pixel(&mut self, p: Point, color: ColorNative);
     /// For higher-performance loops that have guaranteed bounds checking in the point location.
     unsafe fn put_pixel_unchecked(&mut self, p: Point, on: ColorNative);
@@ -47,13 +47,34 @@ pub trait FrameBuffer {
     /// and background colors for a color theme.
     fn xor_pixel(&mut self, p: Point);
     /// Swaps the drawable buffer to the screen and sends it to the hardware
-    fn draw(&mut self);
+    fn draw(&mut self) -> Result<(), xous::Error>;
     /// Clears the drawable buffer
     fn clear(&mut self);
     /// Returns the size of the frame buffer as a Point
     fn dimensions(&self) -> Point;
     /// Returns a raw pointer to the frame buffer
     unsafe fn raw_mut(&mut self) -> &mut platform::FbRaw;
+}
+
+// Newtype wrapping the FrameBuffer, to allow for sized passing of the object around
+pub struct DynFb<'a>(pub &'a mut dyn FrameBuffer);
+
+impl FrameBuffer for DynFb<'_> {
+    fn put_pixel(&mut self, p: Point, c: ColorNative) { self.0.put_pixel(p, c) }
+
+    fn xor_pixel(&mut self, p: Point) { self.0.xor_pixel(p) }
+
+    unsafe fn put_pixel_unchecked(&mut self, p: Point, on: ColorNative) { self.0.put_pixel_unchecked(p, on); }
+
+    fn get_pixel(&self, p: Point) -> Option<ColorNative> { self.0.get_pixel(p) }
+
+    fn draw(&mut self) -> Result<(), xous::Error> { self.0.draw() }
+
+    fn clear(&mut self) { self.0.clear(); }
+
+    fn dimensions(&self) -> Point { self.0.dimensions() }
+
+    unsafe fn raw_mut(&mut self) -> &mut platform::FbRaw { self.0.raw_mut() }
 }
 
 /// A TypesetWord is a Word that has beet turned into sprites and placed at a specific location on the canvas,

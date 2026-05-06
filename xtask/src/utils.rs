@@ -371,12 +371,12 @@ pub(crate) fn ensure_compiler(
 }
 
 /// Regenerate the locales files. This is only done when the command is explicitly run.
-pub(crate) fn generate_locales() -> Result<(), std::io::Error> {
+pub(crate) fn generate_locales(cargo_configs: &[String]) -> Result<(), std::io::Error> {
     let ts = filetime::FileTime::from_system_time(std::time::SystemTime::now());
     filetime::set_file_mtime("locales/src/lib.rs", ts)?;
     let mut path = project_root();
     path.push("locales");
-    let status = Command::new(cargo()).current_dir(path).args(["build", "--package", "locales"]).status()?;
+    let status = cargo(cargo_configs).current_dir(path).args(["build", "--package", "locales"]).status()?;
     if !status.success() {
         return Err(std::io::Error::new(std::io::ErrorKind::Other, "Couldn't generate the locales"));
     }
@@ -384,10 +384,10 @@ pub(crate) fn generate_locales() -> Result<(), std::io::Error> {
 }
 
 /// Import the Wycheproof test vectors
-pub(crate) fn wycheproof_import() -> Result<(), crate::DynError> {
+pub(crate) fn wycheproof_import(cargo_configs: &[String]) -> Result<(), crate::DynError> {
     let input_file = "tools/wycheproof-import/x25519_test.json";
     let output_file = "services/shellchat/src/cmds/x25519_test.bin";
-    let status = Command::new(cargo())
+    let status = cargo(cargo_configs)
         .current_dir(project_root())
         .args(["run", "--package", "wycheproof-import", "--", input_file, output_file])
         .status()?;
@@ -401,7 +401,10 @@ pub(crate) fn wycheproof_import() -> Result<(), crate::DynError> {
     Ok(())
 }
 
-pub(crate) fn track_language_changes(last_lang: &str) -> Result<(), crate::DynError> {
+pub(crate) fn track_language_changes(
+    last_lang: &str,
+    cargo_configs: &[String],
+) -> Result<(), crate::DynError> {
     let last_config = "target/LAST_LANG";
     let mut contents = String::new();
 
@@ -416,7 +419,7 @@ pub(crate) fn track_language_changes(last_lang: &str) -> Result<(), crate::DynEr
         println!("Locale language changed to {}", last_lang);
         let mut file = OpenOptions::new().create(true).write(true).truncate(true).open(last_config).unwrap();
         write!(file, "{}", last_lang).unwrap();
-        generate_locales()?
+        generate_locales(cargo_configs)?
     } else {
         println!("No change to the target locale language of {}", contents);
     }

@@ -35,17 +35,17 @@ fn susres_service() {
 
     let mut clk_mgr = bao1x_hal::clocks::ClockManagerImpl::new().unwrap();
     let measured = clk_mgr.measured_freqs();
-    log::info!("computed frequencies:");
-    log::info!("  vco: {}", clk_mgr.vco_freq);
-    log::info!("  fclk: {}", clk_mgr.fclk);
-    log::info!("  aclk: {}", clk_mgr.aclk);
-    log::info!("  hclk: {}", clk_mgr.hclk);
-    log::info!("  iclk: {}", clk_mgr.iclk);
-    log::info!("  pclk: {}", clk_mgr.pclk);
-    log::info!("  per: {}", clk_mgr.perclk);
-    log::info!("measured frequencies:");
+    log::debug!("computed frequencies:");
+    log::debug!("  vco: {}", clk_mgr.vco_freq);
+    log::debug!("  fclk: {}", clk_mgr.fclk);
+    log::debug!("  aclk: {}", clk_mgr.aclk);
+    log::debug!("  hclk: {}", clk_mgr.hclk);
+    log::debug!("  iclk: {}", clk_mgr.iclk);
+    log::debug!("  pclk: {}", clk_mgr.pclk);
+    log::debug!("  per: {}", clk_mgr.perclk);
+    log::debug!("measured frequencies:");
     for (name, freq) in measured {
-        log::info!("  {}: {} MHz", name, freq);
+        log::debug!("  {}: {} MHz", name, freq);
     }
     let hal = bao1x_hal_service::Hal::new();
 
@@ -180,14 +180,50 @@ fn susres_service() {
 
                         use bao1x_api::bio::BioApi;
                         let mut bio = bao1x_hal::bio::Bio::new();
+
                         // hard-coded to the value of the external crystal - this is a hardware
                         // reference value that should never change; eg, USB doesn't work if this
                         // isn't 48 MHz.
-                        bio.update_bio_freq(48_000_000);
+                        let fclk_fd_backup = clk_mgr.fclk_fd();
+
+                        // TODO: this is a hack to get past some issue with clock rate changes
+                        //
+                        // In theory:
+                        //   - the set_clk_fd(0xff) call should reset the fclk divider to 1:1
+                        //   - this would mean the bio_freq is getting 48MHz
+                        // In practice:
+                        //   - the fd seems "stuck" at /2 for fd settings from 0xff-0x3f
+                        //      - so the pulse width outputs on BIO is the same for 0xff, 0x7f, 0x3f
+                        //   - if I reduce reduce fd setting to 0x1f, then, I can see the clock rate is 1/8th
+                        // What has been tried:
+                        //   - Forcing the clocks to a fixed 0xFF setting regardless of input - I can see that
+                        //     BIO clocks, after wfi, are incorrect in this case. Which means that set_fclk_fd
+                        //     is "getting through"
+                        //   - Adding wait states, etc. around the CGUSET call does not seem to change the
+                        //     situation
+                        //
+                        // The compromise for now is to detect the "fast_bio" setting at init by heuristically
+                        // looking at the fd_backup field, and then specifying an offset frequency to the
+                        // update_bio_freq that results in the correct waveform.
+                        //
+                        // Possible cause:
+                        //   - The update_bio_freq routine is being "too clever" and compensating for the fd
+                        //     setting. But it seems like the routine just takes the putative fclk setting as
+                        //     the argument to update_bio_freq(), I don't see any compensation happening...
+                        bio.prep_freq_change();
+                        if fclk_fd_backup == 0xff {
+                            bio.update_bio_freq(48_000_000);
+                        } else {
+                            bio.update_bio_freq(24_000_000);
+                        }
+                        // clk_mgr.set_fclk_fd(0xff); // set divider to 1:1 ratio
                         clk_mgr.wfi();
 
                         // ~~~ time passes, but we're on carbonite so we don't notice ~~~
 
+                        // clk_mgr.set_fclk_fd(fclk_fd_backup); // restore the FD before restoring potentially
+                        // fast PLL setting
+                        bio.prep_freq_change();
                         clk_mgr.restore_wfi();
                         bio.update_bio_freq(clk_mgr.fclk);
 
@@ -343,7 +379,14 @@ fn susres_service() {
                 }),
                 Some(Opcode::Quit) => break,
                 Some(Opcode::PlatformSpecific) => {
-                    msg_blocking_scalar_unpack!(msg, op, _arg2, _arg3, _arg4, {
+                    if let xous::Message::BlockingScalar(xous::ScalarMessage {
+                        id: _id,
+                        arg1: op,
+                        arg2: _arg2,
+                        arg3: _arg3,
+                        arg4: _arg4,
+                    }) = msg.body
+                    {
                         let platform_op = FromPrimitive::from_usize(op);
                         match platform_op {
                             Some(ClockOp::GetVco) => {
@@ -367,15 +410,30 @@ fn susres_service() {
                             Some(ClockOp::GetPer) => {
                                 xous::return_scalar(msg.sender, clk_mgr.perclk as usize).unwrap()
                             }
+                            Some(ClockOp::ResetReason) => {
+                                xous::return_scalar(msg.sender, clk_mgr.reset_reason().raw_value() as usize)
+                                    .unwrap()
+                            }
+                            _ => panic!("Incorrect PlatformOp"),
+                        }
+                    }
+                    if let xous::Message::Scalar(xous::ScalarMessage {
+                        id: _id,
+                        arg1: op,
+                        arg2: _arg2,
+                        arg3: _arg3,
+                        arg4: _arg4,
+                    }) = msg.body
+                    {
+                        let platform_op = FromPrimitive::from_usize(op);
+                        match platform_op {
                             Some(ClockOp::DeepSleep) => {
-                                log::info!("entering deep sleep");
                                 clk_mgr.deep_sleep();
-                                xous::return_scalar(msg.sender, 1).ok();
                                 // system is shut down after this point, no code runs
                             }
                             _ => panic!("Incorrect PlatformOp"),
                         }
-                    })
+                    }
                 }
                 None => {
                     log::error!("couldn't convert opcode");

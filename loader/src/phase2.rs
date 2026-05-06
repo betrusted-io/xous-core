@@ -1,15 +1,20 @@
+#[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
+use ux_api::minigfx::FrameBuffer;
 #[cfg(feature = "swap")]
 use xous::arch::{SWAP_CFG_VADDR, SWAP_COUNT_VADDR, SWAP_PT_VADDR};
 
 #[cfg(feature = "swap")]
 use crate::swap::*;
 use crate::{env::EnvVariables, *};
+// define an uninhabited stub type for boards without framebuffers
+#[cfg(not(any(feature = "board-baosec", feature = "board-baosor")))]
+pub trait FrameBuffer {}
 
 /// Phase 2 bootloader
 ///
 /// Set up all the page tables, allocating new root page tables for SATPs and corresponding
 /// sub-pages starting from the base of previously copied process data.
-pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables) {
+pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables, mut _fb: Option<&mut dyn FrameBuffer>) {
     let args = cfg.args;
 
     // This is the offset in RAM where programs are loaded from.
@@ -41,7 +46,9 @@ pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables) {
     #[cfg(feature = "bao1x")]
     trng.setup_raw_generation(32); // this is safe to call multiple times to affirm the TRNG state
 
-    for tag in args.iter() {
+    #[cfg(feature = "board-baosec")]
+    let arg_len = args.iter().count();
+    for (_i, tag) in args.iter().enumerate() {
         let mut env_header = crate::env::EnvHeader::default();
         #[allow(unused_mut)]
         let mut pid_env = env_variables.clone();
@@ -103,6 +110,14 @@ pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables) {
                 );
             }
             process_offset -= load_size_rounded;
+        }
+        #[cfg(feature = "board-baosec")]
+        if let Some(ref mut fb) = _fb {
+            let start = 70;
+            let end = 95;
+            let increment = (end - start) / arg_len;
+            let percentage = start + increment * _i;
+            crate::platform::progress_bar(*fb, percentage);
         }
     }
 
@@ -330,7 +345,9 @@ pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables) {
     }
     #[cfg(all(feature = "debug-print", not(feature = "verilator-only")))]
     // print the kernel's page table mappings as a sanity check on the loader
-    debug::print_pagetable(cfg.processes[0].satp);
+    if VDBG {
+        debug::print_pagetable(cfg.processes[0].satp);
+    }
 
     // Mark pages used by suspend/resume, otherwise they will be handed out to userspace.
     // However, when not doing suspend/resume, it's safe to hand this out because it's always zeroized

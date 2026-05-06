@@ -107,6 +107,16 @@ pub enum GfxOpcode {
     PowerDown,
     #[cfg(feature = "board-baosec")]
     PowerUp,
+    #[cfg(feature = "board-baosec")]
+    /// This call is specific and highly optimized to the display on Baosec
+    BaosecBitmap,
+    #[cfg(feature = "board-baosec")]
+    /// This call is specific and highly optimized to the display on Baosec
+    BaosecBitmapDiffuse,
+    #[cfg(feature = "board-baosec")]
+    Brightness,
+    #[cfg(feature = "board-baosec")]
+    FlipScreen,
 
     /// Gutter for invalid calls
     InvalidCall,
@@ -153,4 +163,15 @@ pub struct QrRender {
 pub struct KeyboardRegistration {
     pub server_name: String,
     pub listener_op_id: usize,
+}
+
+#[cfg(feature = "board-baosec")]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
+pub struct BaosecBitmap {
+    // exactly enough for a 128x128 black and white display = 2048 bytes
+    pub bits: [u32; 512],
+    // top left corner of the bitmap
+    pub top_left: crate::minigfx::Point,
+    // bounding box of the bitmap - if we want only a portion of the bitmap to be drawn
+    pub bounding_box: crate::minigfx::Rectangle,
 }

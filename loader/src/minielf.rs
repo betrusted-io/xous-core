@@ -92,6 +92,8 @@ impl MiniElf {
         let mut current_page_addr: usize = 0;
         let mut previous_addr: usize = 0;
         let mut last_mapped_xip = 0;
+        #[cfg(feature = "swap")]
+        let mut last_mapped_swap_virt = 0; // track the last virtual address mapped to swap, to catch gaps
         let image_phys_base = allocator.base_addr as usize + self.load_offset as usize;
         // It is a requirement that the image generator lay out the artifacts on disk such that
         // the page offsets line up for XIP sections. This assert confirms this necessary pre-condition.
@@ -365,7 +367,21 @@ impl MiniElf {
                     allocator.map_page(tt, map_phys_addr, virt_page, flags, pid as XousPid);
                     #[cfg(feature = "swap")]
                     if ini_type == IniType::IniS {
+                        // add a check for the case that the virt_page skipped an address since the last
+                        // mapping: this can happen if there is a gap between sections that exceeds a page
+                        // size.
+                        if last_mapped_swap_virt != 0 && virt_page - last_mapped_swap_virt > PAGE_SIZE {
+                            let skip_pages = (virt_page - last_mapped_swap_virt) / PAGE_SIZE - 1;
+                            if VDBG {
+                                println!(
+                                    "  Skipping {} swap pages due to gap in incoming MiniELF!",
+                                    skip_pages
+                                );
+                            }
+                            allocator.last_swap_page += skip_pages;
+                        }
                         allocator.map_swap(allocator.last_swap_page * 0x1000, virt_page, pid);
+                        last_mapped_swap_virt = virt_page;
                         allocator.last_swap_page += 1;
                     }
                     last_mapped_xip = virt_page;

@@ -18,8 +18,8 @@ use core::{
 };
 
 use bao1x_api::{BoardTypeCoding, BootWaitCoding, bollard};
-use bao1x_hal::hardening::*;
 use bao1x_hal::{board::KeyPress, iox::Iox, usb::driver::UsbDeviceState};
+use bao1x_hal::{buram::BackupManager, hardening::*};
 use bao1x_hal::{sh1107::Oled128x128, udma::GlobalConfig};
 use critical_section::Mutex;
 use platform::*;
@@ -175,7 +175,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
 
     // Below is our first divergence out of boot1, and thus, all security checks must happen above
     // this line!
-    if boot_wait == BootWaitCoding::Disable && current_key.is_none() {
+    // If warm boot, always go straight to booting - don't override with key press.
+    let bu = BackupManager::new();
+    if bu.get_flags().warm_boot() || (boot_wait == BootWaitCoding::Disable && current_key.is_none()) {
         // diverges if there is code to run
         try_boot(false, &mut csprng);
         // or_die == false means the rest of this gets run if there is no valid image
@@ -219,10 +221,10 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // needed after reset for the display to initialize
     if let Some(ref mut sh1107) = oled {
         // show the boot logo
-        sh1107.init();
+        sh1107.init().ok();
         delay(100);
         sh1107.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
-        sh1107.draw();
+        sh1107.draw().ok();
         delay(150);
     } else {
         delay(250);
@@ -450,5 +452,5 @@ pub fn marquee(sh1107: &mut Oled128x128, msg: &str) {
         bao1x_hal::sh1107::Mono::White.into(),
         bao1x_hal::sh1107::Mono::Black.into(),
     );
-    sh1107.draw();
+    sh1107.draw().ok();
 }

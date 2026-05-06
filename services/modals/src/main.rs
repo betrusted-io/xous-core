@@ -139,7 +139,7 @@ fn wrapped_main() -> ! {
         Some("Placeholder"),
         None,
         DEFAULT_STYLE,
-        8,
+        4,
     );
     #[cfg(any(feature = "hosted-baosec", feature = "bao1x"))]
     let mut renderer_modal = Modal::new(
@@ -148,7 +148,7 @@ fn wrapped_main() -> ! {
         Some("Placeholder"),
         None,
         DEFAULT_STYLE,
-        8,
+        4,
     );
     #[cfg(any(feature = "hosted-baosec", feature = "bao1x"))]
     {

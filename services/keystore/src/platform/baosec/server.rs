@@ -1,6 +1,9 @@
+use bao1x_api::{BackupFlags, OneWayErr};
+use bao1x_hal::acram::MAX_ONEWAY_COUNTERS;
 use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
 use bao1x_hal::rram::Reram;
 use keystore_api::*;
+use num_traits::*;
 use xous::SID;
 use xous_ipc::Buffer;
 
@@ -52,9 +55,50 @@ pub fn keystore(sid: SID) -> ! {
                 store.aes_kwp(&mut kwp).expect("couldn't wrap key");
                 buffer.replace(kwp).unwrap();
             }
-            Opcode::EphemeralOp => {
-                // this will use the backup_mgr to store ephemeral secrets
-                todo!()
+            Opcode::Ephemeral => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let ephemeral_op: EphemeralOp =
+                        num_traits::FromPrimitive::from_usize(scalar.arg1).expect("invalid ephemeral op");
+                    let offset = match ephemeral_op {
+                        EphemeralOp::GetLsb | EphemeralOp::SetLsb => 0,
+                        EphemeralOp::GetMsb | EphemeralOp::SetMsb => bao1x_hal::buram::KEY_LEN / 2,
+                    };
+                    match ephemeral_op {
+                        EphemeralOp::SetLsb | EphemeralOp::SetMsb => {
+                            let mut key = backup_mgr.get_backup_key();
+                            key[offset..offset + 4].copy_from_slice(&scalar.arg2.to_le_bytes());
+                            key[offset + 4..offset + 8].copy_from_slice(&scalar.arg3.to_le_bytes());
+                            key[offset + 8..offset + 12].copy_from_slice(&scalar.arg4.to_le_bytes());
+                            // zeroize
+                            scalar.arg1 = 0;
+                            scalar.arg2 = 0;
+                            scalar.arg3 = 0;
+                            scalar.arg4 = 0;
+                            backup_mgr.set_backup_key(key);
+                        }
+                        EphemeralOp::GetLsb | EphemeralOp::GetMsb => {
+                            let key = backup_mgr.get_backup_key();
+                            scalar.arg2 =
+                                u32::from_le_bytes(key[offset..offset + 4].try_into().unwrap()) as usize;
+                            scalar.arg3 =
+                                u32::from_le_bytes(key[offset + 4..offset + 8].try_into().unwrap()) as usize;
+                            scalar.arg4 =
+                                u32::from_le_bytes(key[offset + 8..offset + 12].try_into().unwrap()) as usize;
+                        }
+                    }
+                }
+            }
+            Opcode::GetFlags => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let flags = backup_mgr.get_flags();
+                    scalar.arg1 = flags.raw_value() as usize;
+                }
+            }
+            Opcode::SetFlags => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let flag = BackupFlags::new_with_raw_value(scalar.arg1 as u32);
+                    backup_mgr.set_flags(flag);
+                }
             }
             Opcode::Bootwait => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
@@ -69,6 +113,44 @@ pub fn keystore(sid: SID) -> ! {
                             }
                         }
                         _ => panic!("Couldn't set bootwait"),
+                    }
+                }
+            }
+            Opcode::IsDeveloper => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    if store.is_developer() { scalar.arg1 = 0 } else { scalar.arg1 = 1 }
+                }
+            }
+            Opcode::IncOneWayCounter => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    if [scalar.arg2, scalar.arg3, scalar.arg4] == OWC_MAGIC_INC
+                        && scalar.arg1 < MAX_ONEWAY_COUNTERS
+                    {
+                        match unsafe { store.owc.inc(scalar.arg1) } {
+                            Ok(_) => {
+                                scalar.arg1 = OneWayErr::None.to_usize().unwrap();
+                            }
+                            Err(e) => scalar.arg1 = e.to_usize().unwrap(),
+                        }
+                    } else {
+                        scalar.arg1 = OneWayErr::InternalError.to_usize().unwrap();
+                    }
+                }
+            }
+            Opcode::GetOneWayCounter => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    if [scalar.arg2, scalar.arg3, scalar.arg4] == OWC_MAGIC_GET
+                        && scalar.arg1 < MAX_ONEWAY_COUNTERS
+                    {
+                        match store.owc.get(scalar.arg1) {
+                            Ok(val) => {
+                                scalar.arg1 = OneWayErr::None.to_usize().unwrap();
+                                scalar.arg2 = val as usize;
+                            }
+                            Err(e) => scalar.arg1 = e.to_usize().unwrap(),
+                        }
+                    } else {
+                        scalar.arg1 = OneWayErr::InternalError.to_usize().unwrap();
                     }
                 }
             }

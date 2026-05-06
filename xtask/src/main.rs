@@ -67,6 +67,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(rev) = git_rev_opt {
         builder.set_git_rev(rev);
     }
+    let cargo_configs = get_flag("--config")?;
+    builder.set_cargo_configs(cargo_configs.clone());
     if do_version {
         builder.add_feature("timestamp");
     };
@@ -184,7 +186,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for feature in features {
         builder.add_feature(&feature);
         if feature.starts_with("xous/lang-") {
-            track_language_changes(&feature)?;
+            track_language_changes(&feature, &cargo_configs)?;
             language_set = true;
         }
     }
@@ -203,7 +205,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if !language_set {
         // the default language is english
-        track_language_changes("en")?;
+        track_language_changes("en", &cargo_configs)?;
     }
     let gdb_stub = env::args().filter(|x| x == "--gdb-stub").count() != 0;
     if gdb_stub {
@@ -361,6 +363,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .target_hosted()
                 .add_services(&user_pkgs)
                 .add_feature("pddb/ci")
+                .add_feature("pddb/pddbtest")
+                .add_feature("pddb/autobasis")
                 .add_feature("pddb/deterministic");
         }
         Some("pddb-btest") => {
@@ -622,7 +626,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             local_args.push("artybio");
 
             let status =
-                std::process::Command::new(cargo()).current_dir(project_root()).args(&local_args).status()?;
+                cargo(&cargo_configs).current_dir(project_root()).args(&local_args).status()?;
             if !status.success() {
                 return Err("Baremetal build failed".into());
             }
@@ -862,8 +866,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // ---- other single-purpose commands ----
-        Some("generate-locales") => generate_locales()?,
-        Some("wycheproof-import") => wycheproof_import()?,
+        Some("generate-locales") => generate_locales(&cargo_configs)?,
+        Some("wycheproof-import") => wycheproof_import(&cargo_configs)?,
         Some("dummy-template") => generate_app_menus(&Vec::new()),
         task => {
             if let Some(task) = task {
