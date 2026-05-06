@@ -96,7 +96,7 @@ def main():
         timeout = 20 # reset the timeout after the first run to something shorter, now that any potential compilation step is done
 
         proc = subprocess.Popen(
-            [sys.executable, './tools/pddbdbg.py', '--name', args.name],
+            [sys.executable, './tools/pddbdbg.py', '--name', args.name, '--ci'],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             encoding='utf-8',

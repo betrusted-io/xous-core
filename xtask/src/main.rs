@@ -363,6 +363,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .target_hosted()
                 .add_services(&user_pkgs)
                 .add_feature("pddb/ci")
+                .add_feature("pddb/pddbtest")
+                .add_feature("pddb/autobasis")
                 .add_feature("pddb/deterministic");
         }
         Some("pddb-btest") => {
