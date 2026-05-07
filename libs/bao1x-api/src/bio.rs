@@ -52,8 +52,8 @@ pub trait BioApi<'a> {
     fn update_bio_freq(&mut self, freq: u32) -> u32;
 
     /// Called before frequency changes to activate any application-specific callbacks
-    /// to avoid glitches.
-    fn prep_freq_change(&mut self);
+    /// to avoid glitches. `into_wfi` specifies if we're about to enter a WFI state.
+    fn prep_freq_change(&mut self, into_wfi: bool);
 
     /// Returns the frequency, in Hz, of the incoming clock to the BIO cores.
     fn get_bio_freq(&self) -> u32;

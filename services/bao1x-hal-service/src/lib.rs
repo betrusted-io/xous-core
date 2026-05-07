@@ -95,7 +95,7 @@ impl Hal {
                 0,
             ),
         )
-        .expect("Couldn't setup preemption state");
+        .ok();
     }
 }
 

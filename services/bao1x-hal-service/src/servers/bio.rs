@@ -132,7 +132,11 @@ fn bio_service(clk_freq: u32) {
                 if let Some(_scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
                     // pause rendering while the clock transitions, avoiding 'bright glitches'
                     #[cfg(feature = "oem-baosec-lite")]
-                    xous::send_message(led_conn, xous::Message::new_blocking_scalar(128, 0, 0, 0, 0)).ok();
+                    xous::send_message(
+                        led_conn,
+                        xous::Message::new_blocking_scalar(128, _scalar.arg1, 0, 0, 0),
+                    )
+                    .ok();
                 }
             }
 

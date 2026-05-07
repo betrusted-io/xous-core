@@ -134,10 +134,16 @@ impl<'a> BioApi<'a> for Bio {
         }
     }
 
-    fn prep_freq_change(&mut self) {
+    fn prep_freq_change(&mut self, into_wfi: bool) {
         send_message(
             self.conn,
-            Message::new_blocking_scalar(BioOp::PrepFreqChange.to_usize().unwrap(), 0, 0, 0, 0),
+            Message::new_blocking_scalar(
+                BioOp::PrepFreqChange.to_usize().unwrap(),
+                if into_wfi { 1 } else { 0 },
+                0,
+                0,
+                0,
+            ),
         )
         .ok();
     }

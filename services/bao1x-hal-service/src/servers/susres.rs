@@ -1,4 +1,5 @@
 use core::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, atomic::AtomicBool};
 
 use num_traits::*;
 use utralib::*;
@@ -51,7 +52,9 @@ fn susres_service() {
 
     let timeout_sid = xous::create_server().unwrap();
     let timeout_outgoing_conn = xous::connect(timeout_sid).unwrap();
+    let timeout_pending = Arc::new(AtomicBool::new(false));
     std::thread::spawn({
+        let timeout_pending = timeout_pending.clone();
         let timeout_sid = timeout_sid.clone();
         // safety: this thread will read-only from the susres timer fields, and thus its operations
         // are thread-safe
@@ -70,21 +73,30 @@ fn susres_service() {
                 }
                 let start = get_hw_time(&hw);
                 let timeout = TIMEOUT_TIME.load(Ordering::Relaxed); // ignore updates to timeout once we're waiting
+                let mut reached_timeout = true;
                 while ((get_hw_time(&hw) - start) as u32) < timeout {
                     // log::info!("delta t: {}", (get_hw_time(hw) - start) as u32);
                     xous::yield_slice();
+                    if !timeout_pending.load(Ordering::SeqCst) {
+                        // remember the check here so we don't have inconsistent state with the send_message
+                        // later
+                        reached_timeout = false;
+                        break;
+                    }
                 }
-                log::trace!("HW timeout reached");
-                send_message(
-                    susres_conn,
-                    Message::new_scalar(Opcode::SuspendTimeout.to_usize().unwrap(), 0, 0, 0, 0),
-                )
-                .ok();
+
+                if reached_timeout {
+                    log::trace!("HW timeout reached");
+                    send_message(
+                        susres_conn,
+                        Message::new_scalar(Opcode::SuspendTimeout.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .ok();
+                }
             }
         }
     });
     let mut suspend_requested: Option<Sender> = None;
-    let mut timeout_pending = false;
     let mut reboot_requested: bool = false;
     let mut allow_suspend = true;
 
@@ -173,10 +185,14 @@ fn susres_service() {
                     }
                     // note: we must have at least one `Last` subscriber for this logic to work!
                     if all_ready && current_op_order == xous_api_susres::SuspendOrder::Last {
+                        // this stops the timeout timer from going
+                        timeout_pending.store(false, Ordering::SeqCst);
+                        // allow the state to propagate to the timer
+                        xous::yield_slice();
+
                         // turn off preemption
                         hal.set_preemption(false);
                         log::info!("all callbacks reporting in, doing suspend");
-                        timeout_pending = false;
 
                         use bao1x_api::bio::BioApi;
                         let mut bio = bao1x_hal::bio::Bio::new();
@@ -210,35 +226,29 @@ fn susres_service() {
                         //   - The update_bio_freq routine is being "too clever" and compensating for the fd
                         //     setting. But it seems like the routine just takes the putative fclk setting as
                         //     the argument to update_bio_freq(), I don't see any compensation happening...
-                        bio.prep_freq_change();
-                        if fclk_fd_backup == 0xff {
-                            bio.update_bio_freq(48_000_000);
-                        } else {
-                            bio.update_bio_freq(24_000_000);
-                        }
-                        // clk_mgr.set_fclk_fd(0xff); // set divider to 1:1 ratio
+                        bio.prep_freq_change(true);
+                        bio.update_bio_freq(48_000_000);
                         clk_mgr.wfi();
 
                         // ~~~ time passes, but we're on carbonite so we don't notice ~~~
 
-                        // clk_mgr.set_fclk_fd(fclk_fd_backup); // restore the FD before restoring potentially
+                        bio.prep_freq_change(false);
+                        clk_mgr.set_fclk_fd(fclk_fd_backup); // restore the FD for fclk, as it is side-effected by WFI
                         // fast PLL setting
-                        bio.prep_freq_change();
                         clk_mgr.restore_wfi();
                         bio.update_bio_freq(clk_mgr.fclk);
 
                         // when wfi() returns, it means we've resumed
                         let sender = suspend_requested
                             .take()
-                            .expect("suspend was requested, but no requestor is on record!");
+                            .expect("suspend_requested was checked to be Some() at entry to the loop, but now somehow it's now None!");
 
                         log_server::resume(); // log server is a special case, in order to avoid circular dependencies
 
                         // this now allows all other threads to commence
                         log::info!("low-level resume done, restoring execution");
                         for pid in gated_pids.drain(..) {
-                            xous::return_scalar(pid, 0)
-                                .expect("couldn't return dummy message to unblock execution");
+                            xous::return_scalar(pid, 0).ok();
                         }
                         // restore preemption
                         hal.set_preemption(true);
@@ -265,13 +275,16 @@ fn susres_service() {
                     }
                 }),
                 Some(Opcode::SuspendRequest) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    log::info!("registered suspend listeners:");
+                    log::debug!("registered suspend listeners:");
                     for sub in suspend_subscribers.iter() {
-                        log::info!("{:?}", sub);
+                        log::debug!("{:?}", sub);
                     }
-                    // if the 2-second timeout is still pending from a previous suspend, deny the suspend
+                    // if the timeout is still pending from a previous suspend, deny the suspend
                     // request. ...just don't suspend that quickly after resuming???
-                    if allow_suspend && !timeout_pending {
+                    //
+                    // note that short-circuit eval means timeout_pending is not side-effected if
+                    // allow_spend is false. Do not change the order of these operations!
+                    if allow_suspend && !timeout_pending.swap(true, Ordering::SeqCst) {
                         suspend_requested = Some(msg.sender);
 
                         // clear the ready to suspend flag and failed to suspend flag
@@ -279,11 +292,10 @@ fn susres_service() {
                             sub.ready_to_suspend = false;
                             sub.failed_to_suspend = false;
                         }
-                        // do we want to start the timeout before or after sending the notifications? hmm. 🤔
-                        timeout_pending = true;
-                        // any message to this server will trigger it - it only has one function
-                        send_message(timeout_outgoing_conn, Message::new_scalar(0, 0, 0, 0, 0))
-                            .expect("couldn't initiate timeout before suspend!");
+
+                        // any message to the timeout server will trigger it - it only has one function
+                        xous::try_send_message(timeout_outgoing_conn, Message::new_scalar(0, 0, 0, 0, 0))
+                            .ok();
 
                         current_op_order = xous_api_susres::SuspendOrder::Early;
                         let mut at_least_one_event_sent = false;
@@ -305,12 +317,11 @@ fn susres_service() {
                     }
                 }),
                 Some(Opcode::SuspendTimeout) => {
-                    if timeout_pending {
+                    if timeout_pending.swap(false, Ordering::SeqCst) {
                         // record which tokens had not reported in
                         for sub in suspend_subscribers.iter_mut() {
                             sub.failed_to_suspend = !sub.ready_to_suspend;
                         }
-                        timeout_pending = false;
                         log::warn!(
                             "Suspend timed out, forcing an unclean suspend at stage {:?}",
                             current_op_order
@@ -330,20 +341,22 @@ fn susres_service() {
                             }
                         }
 
-                        let sender = suspend_requested
-                            .take()
-                            .expect("suspend was requested, but no requestor is on record!");
                         for pid in gated_pids.drain(..) {
                             xous::return_scalar(pid, 0)
                                 .expect("couldn't return dummy message to unblock execution");
                         }
 
                         // this unblocks the requestor of the suspend
-                        xous::return_scalar(sender, 0).ok();
+                        if let Some(sender) = suspend_requested.take() {
+                            xous::return_scalar(sender, 0).ok();
+                        } else {
+                            log::error!("Suspend requester disappeared - race condition somewhere!");
+                        }
                     } else {
-                        log::info!("clean suspend timeout received, ignoring");
+                        log::warn!("clean suspend timeout received, ignoring");
                         // this means we did a clean suspend, we've resumed, and the timeout came back after
-                        // the resume just ignore the message.
+                        // the resume just ignore the message. It's a warning because this message should,
+                        // in practice, never be generated due to the timeout_pending semaphore.
                     }
                 }
                 Some(Opcode::WasSuspendClean) => msg_blocking_scalar_unpack!(msg, token, _, _, _, {
@@ -448,7 +461,7 @@ fn send_event(
     order: xous_api_susres::SuspendOrder,
 ) -> (bool, xous_api_susres::SuspendOrder) {
     let mut at_least_one_event_sent = false;
-    log::info!("Sending suspend to {:?} stage", order);
+    log::debug!("Sending suspend to {:?} stage", order);
     /*
     // abortive attempt to get suspend to shut down the system. Doesn't work, results in a panic because too many messages are still moving around.
     #[cfg(not(target_os = "xous"))]
