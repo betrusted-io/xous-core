@@ -7,15 +7,15 @@ use bao1x_api::{IoxDir, IoxEnable, IoxFunction, PeripheralOpcode, SERVER_NAME_BA
 use bao1x_hal::udma::{Adc, AdcExtChannel, AdcSource};
 use bao1x_hal_service::UdmaGlobal;
 
-pub fn start_peri_service(clk_freq: u32) {
+pub fn start_peri_service() {
     let _ = std::thread::spawn({
         move || {
-            peri_service(clk_freq);
+            peri_service();
         }
     });
 }
 
-fn peri_service(clk_freq: u32) -> ! {
+fn peri_service() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     // claim the server name
     let sid = xns.register_name(SERVER_NAME_BAO1X_OTHERS, None).unwrap();
@@ -23,8 +23,9 @@ fn peri_service(clk_freq: u32) -> ! {
     let iox = crate::iox::IoxHal::new();
     let udma_global = UdmaGlobal::new();
     udma_global.udma_clock_config(bao1x_api::PeriphId::Adc, true);
+    let clk_mgr = bao1x_hal_service::ClockManager::new();
     // safety: clocks are turned on, and perclk already configured as so
-    let mut adc = unsafe { Adc::new(clk_freq) };
+    let mut adc = unsafe { Adc::new(clk_mgr.get_per()) };
 
     let mut msg_opt = None;
 

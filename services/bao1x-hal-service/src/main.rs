@@ -143,15 +143,11 @@ fn main() {
     servers::susres::start_susres_service();
 
     // these two servers need to start so that update_perclk calls can succeed
-    let clk_mgr = bao1x_hal_service::ClockManager::new();
     servers::i2c::start_i2c_service();
-    servers::others::start_peri_service(clk_mgr.get_per());
-    let i2c_conn =
-        xns.request_connection(SERVER_NAME_BAO1X_I2C).expect("Couldn't connect to bao1x I2C server");
-    let peri_conn =
-        xns.request_connection(SERVER_NAME_BAO1X_OTHERS).expect("Couldn't connect to bao1x misc peri server");
+    servers::others::start_peri_service();
 
     std::thread::spawn(move || {
+        let xns = xous_names::XousNames::new().unwrap();
         let mut ifram_allocs = [Vec::new(), Vec::new()];
         // code is written assuming the IFRAM blocks have the same size. Since this is fixed in
         // hardware, it's a good assumption; but the assert is put here in case we port this to
@@ -258,6 +254,12 @@ fn main() {
         // we don't want the indices to change - in this case, Vec is not the right object,
         // we want a static array defined like this.
         let mut irq_table: [Option<IrqLocalRegistration>; 8] = [const { None }; 8];
+
+        let i2c_conn =
+            xns.request_connection(SERVER_NAME_BAO1X_I2C).expect("Couldn't connect to bao1x I2C server");
+        let peri_conn = xns
+            .request_connection(SERVER_NAME_BAO1X_OTHERS)
+            .expect("Couldn't connect to bao1x misc peri server");
 
         let mut msg_opt = None;
         log::debug!("Starting main loop");
@@ -641,7 +643,7 @@ fn main() {
         }
     });
 
-    servers::bio::start_bio_service(clk_mgr.get_fclk());
+    servers::bio::start_bio_service();
 
     servers::keyboard::start_keyboard_service();
 
