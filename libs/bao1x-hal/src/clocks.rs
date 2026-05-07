@@ -637,7 +637,9 @@ impl ClockManagerImpl {
         self.sysctrl.wo(utra::sysctrl::SFR_CGUSET, 0x32);
         wfi_debug("internal osc");
         // don't divide fclk -- allows BIO to keep operating at 48MHz rate
-        self.sysctrl.wo(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0, 0x0700_01ff);
+        self.sysctrl.wo(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0, 0x0000_ffff);
+        self.sysctrl.wo(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0, 0x0000_ffff);
+        self.sysctrl.wo(utra::sysctrl::SFR_CGUSET, 0x32);
 
         // lower core voltage to 0.7v
         self.ao_sysctrl.wo(utra::ao_sysctrl::SFR_PMUTRM0CSR, 0x08420002);
