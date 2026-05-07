@@ -8,7 +8,6 @@ use core::num::NonZeroUsize;
 
 use aes::Aes256;
 use aes::cipher::{BlockDecrypt, BlockEncrypt};
-use subtle::ConstantTimeEq;
 use cipher::generic_array::GenericArray;
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::{EdwardsPoint, edwards::CompressedEdwardsY};
@@ -23,6 +22,7 @@ use precursor_hal::board::*;
 use rand_core::RngCore;
 use root_keys::key2bits::*;
 use sha2::{Digest, Sha256, Sha512_256Sw, Sha512Hw, Sha512Sw};
+use subtle::ConstantTimeEq;
 use utralib::generated::*;
 use ux_api::service::api::BulkRead;
 use xous_semver::SemVer;
