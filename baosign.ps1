@@ -9,7 +9,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("baremetal", "dabao", "baosec", "bootloader", "kernel", "loader", "swap", "apps", "boot1", "alt-boot1", "baosec-lite")]
+    [ValidateSet("baremetal", "dabao", "baosec", "bootloader", "kernel", "loader", "swap", "apps", "boot1", "alt-boot1", "baosec-lite", "os")]
     [string]$Config,
 
     [Parameter(Mandatory = $false)]
@@ -53,6 +53,10 @@ $configurations = @{
         @{ Image = "swap.img"; FunctionCode = "swap" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
         @{ Image = "bao1x-boot1.img"; FunctionCode = "boot1" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" },
         @{ Image = "bao1x-alt-boot1.img"; FunctionCode = "loader" ; TargetDir = "target\riscv32imac-unknown-none-elf\release" }
+    )
+    "os"          = @(
+        @{ Image = "xous.img"; FunctionCode = "kernel" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
+        @{ Image = "swap.img"; FunctionCode = "swap" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
     )
     "kernel"      = @(
         @{ Image = "xous.img"; FunctionCode = "kernel" ; TargetDir = "target\riscv32imac-unknown-xous-elf\release" }
