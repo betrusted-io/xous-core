@@ -2,13 +2,13 @@ use bao1x_api::bio::*;
 use bao1x_api::bio_resources::*;
 use bao1x_hal::bio_hw;
 
-pub fn start_bio_service(clk_freq: u32) {
+pub fn start_bio_service() {
     std::thread::spawn(move || {
-        bio_service(clk_freq);
+        bio_service();
     });
 }
 
-fn bio_service(clk_freq: u32) {
+fn bio_service() {
     let xns = xous_names::XousNames::new().unwrap();
     // claim the server name
     let sid = xns.register_name(BIO_SERVER_NAME, None).unwrap();
@@ -18,7 +18,8 @@ fn bio_service(clk_freq: u32) {
     #[cfg(feature = "oem-baosec-lite")]
     let led_conn = xns.request_connection_blocking("_oem_led_").unwrap();
 
-    let mut bio_ss = bio_hw::BioSharedState::new(clk_freq);
+    let clk_mgr = bao1x_hal_service::ClockManager::new();
+    let mut bio_ss = bio_hw::BioSharedState::new(clk_mgr.get_fclk());
     let mut msg_opt = None;
     loop {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
