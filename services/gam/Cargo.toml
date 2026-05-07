@@ -46,6 +46,7 @@ miniz_oxide = "0.4.4"
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 sha2 = { version = "0.10.8" }
 digest = "0.9.0"
+subtle = { version = "2.6", default-features = false }
 
 utralib = { version = "0.1.27", optional = true, default-features = false }
 
