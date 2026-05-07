@@ -828,12 +828,16 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
 
             let start = {
                 ArchProcess::with_inner_mut(|process_inner| {
-                    if process_inner.mem_heap_size + delta > process_inner.mem_heap_max {
+                    let new_size = process_inner
+                        .mem_heap_size
+                        .checked_add(delta)
+                        .ok_or(xous_kernel::Error::OutOfMemory)?;
+                    if new_size > process_inner.mem_heap_max {
                         return Err(xous_kernel::Error::OutOfMemory);
                     }
 
                     let start = process_inner.mem_heap_base + process_inner.mem_heap_size;
-                    process_inner.mem_heap_size += delta;
+                    process_inner.mem_heap_size = new_size;
                     Ok(start as *mut u8)
                 })?
             };
