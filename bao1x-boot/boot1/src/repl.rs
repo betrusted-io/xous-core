@@ -257,6 +257,67 @@ impl Repl {
                     return Err(Error::help("skipping [check | enable | disable]"));
                 }
             }
+            #[cfg(feature = "qe-debug")]
+            "qe" => {
+                use bao1x_hal::{
+                    ifram::IframRange,
+                    iox::Iox,
+                    udma::{Spim, *},
+                };
+                let perclk = 100_000_000;
+                let udma_global = GlobalConfig::new();
+
+                // setup the I/O pins
+                let iox = Iox::new(utralib::generated::HW_IOX_BASE as *mut u32);
+                let channel = bao1x_hal::board::setup_memory_pins(&iox);
+                udma_global.clock_on(PeriphId::from(channel));
+                // safety: this is safe because clocks have been set up
+                let mut flash_spim = unsafe {
+                    Spim::new_with_ifram(
+                        channel,
+                        // has to be half the clock frequency reaching the block, but
+                        // run it as fast
+                        // as we can run perclk
+                        perclk / 4,
+                        perclk / 2,
+                        SpimClkPol::LeadingEdgeRise,
+                        SpimClkPha::CaptureOnLeading,
+                        SpimCs::Cs0,
+                        0,
+                        0,
+                        None,
+                        256 + 16, /* just enough space to send commands + programming
+                                   * page */
+                        4096,
+                        Some(6),
+                        Some(SpimMode::Standard), // guess Standard
+                        IframRange::from_raw_parts(
+                            bao1x_hal::board::SPIM_FLASH_IFRAM_ADDR,
+                            bao1x_hal::board::SPIM_FLASH_IFRAM_ADDR,
+                            4096 * 2,
+                        ),
+                    )
+                };
+                let init_id = flash_spim.identify_flash_reset_qpi();
+                crate::println!("boot id: {:x}", init_id);
+                // turn off QPI mode, in case it was set from a reboot in a bad state
+                flash_spim.mem_qpi_mode(false);
+
+                // sanity check: read ID
+                let flash_id = flash_spim.mem_read_id_flash();
+                crate::println!("flash ID (init): {:x}", flash_id);
+                flash_spim.mem_qpi_mode(true);
+
+                // re-check the ID to confirm we entered QPI mode correctly
+                let flash_id = flash_spim.mem_read_id_flash();
+                crate::println!("QPI flash ID: {:x}", flash_id);
+                flash_spim.mem_qpi_mode(false);
+                let flash_id = flash_spim.mem_read_id_flash();
+                crate::println!("SPI flash ID: {:x}", flash_id);
+                flash_spim.mem_qpi_mode(true);
+                let flash_id = flash_spim.mem_read_id_flash();
+                crate::println!("QPI flash ID: {:x}", flash_id);
+            }
             #[cfg(feature = "test-clock-skipping")]
             "bogomips" => {
                 crate::println!("start test");
