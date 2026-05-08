@@ -20,7 +20,7 @@ pub fn init() -> Output {
 }
 
 impl Output {
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> ! {
         use std::io::Write;
         loop {
             match self.rx.recv_timeout(std::time::Duration::from_millis(50)) {

@@ -344,6 +344,5 @@ fn main() -> ! {
     xous::create_thread_1(reader_thread, &mut writer as *mut implementation::OutputWriter as usize)
         .expect("create reader thread");
     println!("LOG: Running the output");
-    output.run();
-    panic!("LOG: Exited");
+    output.run()
 }
