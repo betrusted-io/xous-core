@@ -20,7 +20,7 @@ pub fn init() -> Output {
 impl Output {
     pub fn get_writer(&self) -> OutputWriter { OutputWriter {} }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> ! {
         loop {
             xous::wait_event();
         }

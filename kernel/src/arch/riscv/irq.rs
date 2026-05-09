@@ -555,6 +555,8 @@ pub extern "C" fn trap_handler(
             println!("Program suspended. You may inspect it using gdb.");
         }
         #[cfg(not(feature = "gdb-stub"))]
+        println!("Process {:?} terminated", pid);
+        #[cfg(not(feature = "gdb-stub"))]
         ss.terminate_process(pid).expect("couldn't terminate current process");
         crate::syscall::reset_switchto_caller();
     });

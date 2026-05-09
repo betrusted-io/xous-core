@@ -1013,6 +1013,8 @@ impl Spim {
     /// we try to auto-ID the parts and configure them to behave as much like the Macronix defaults.
     pub fn identify_flash_reset_qpi(&mut self) -> u32 {
         let mut id = self.mem_read_id_flash();
+        #[cfg(feature = "qe-debug")]
+        crate::println!("ifrq id {:x}", id);
         if !bao1x_api::SPI_FLASH_IDS.contains(&(id & 0xFF_FF_FF)) {
             for command_set in ALL_COMMAND_SETS {
                 self.mode = SpimMode::Quad;
@@ -1448,6 +1450,8 @@ impl Spim {
             self.mem_read_id_flash();
         }
         let sr = self.flash_read_status_register();
+        #[cfg(feature = "qe-debug")]
+        crate::println!("sr: {:x}", sr);
         let qe_set = match self.command_set {
             Some(CommandSet::Macronix) => 0b0100_0000 & sr != 0,
             Some(CommandSet::Xtx) | Some(CommandSet::Zetta) | Some(CommandSet::Puya) => {
@@ -1459,18 +1463,28 @@ impl Spim {
             }
         };
         if qe_set {
+            #[cfg(feature = "qe-debug")]
+            crate::println!("qe is set");
             // nothing to do, it's already set
             return;
         }
-
+        #[cfg(feature = "qe-debug")]
+        crate::println!("setting qe");
         match self.command_set.unwrap() {
             CommandSet::Macronix => {
                 self.mem_write_status_register(0b0100_0000 | (sr & 0xFF) as u8, ((sr & 0xFF00) >> 8) as u8);
             }
-            CommandSet::Xtx | CommandSet::Zetta | CommandSet::Puya => {
+            CommandSet::Xtx | CommandSet::Zetta => {
+                self.mem_param_set(true, 0x31, &[((sr & 0xFF00 >> 8) as u8) | 0b0000_0010]);
+            }
+            CommandSet::Puya => {
                 self.mem_param_set(true, 0x31, &[((sr & 0xFF00 >> 8) as u8) | 0b0000_0010]);
             }
         }
+        #[cfg(feature = "qe-debug")]
+        let sr = self.flash_read_status_register();
+        #[cfg(feature = "qe-debug")]
+        crate::println!("sr: {:x}", sr);
     }
 
     fn flash_wren(&mut self) {
