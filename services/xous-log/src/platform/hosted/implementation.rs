@@ -25,7 +25,7 @@ impl Output {
         loop {
             match self.rx.recv_timeout(std::time::Duration::from_millis(50)) {
                 Ok(msg) => match msg {
-                    ControlMessage::Exit => break,
+                    ControlMessage::Exit => panic!("Logger exit reached"),
                     ControlMessage::Text(s) => print!("{}", s),
                     ControlMessage::Byte(s) => {
                         let mut handle = self.stdout.lock();
