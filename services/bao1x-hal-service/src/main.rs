@@ -255,11 +255,11 @@ fn main() {
         // we want a static array defined like this.
         let mut irq_table: [Option<IrqLocalRegistration>; 8] = [const { None }; 8];
 
-        let i2c_conn =
-            xns.request_connection(SERVER_NAME_BAO1X_I2C).expect("Couldn't connect to bao1x I2C server");
-        let peri_conn = xns
-            .request_connection(SERVER_NAME_BAO1X_OTHERS)
-            .expect("Couldn't connect to bao1x misc peri server");
+        // defer these connections until required by the UpdatePerClk call. This prevents
+        // race conditions on startup, as both i2c and peri rely on the loop below running
+        // to complete their initializations.
+        let mut i2c_conn: Option<xous::CID> = None;
+        let mut peri_conn: Option<xous::CID> = None;
 
         let mut msg_opt = None;
         log::debug!("Starting main loop");
@@ -611,9 +611,20 @@ fn main() {
                 }
                 HalOpcode::UpdatePerclk => {
                     if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
+                        // lazily fill in these connections on demand. This prevents race conditions on
+                        // process startup.
+                        let i2c_cid = i2c_conn.get_or_insert_with(|| {
+                            xns.request_connection_blocking(SERVER_NAME_BAO1X_I2C)
+                                .expect("Couldn't connect to bao1x I2C server")
+                        });
+                        let peri_cid = peri_conn.get_or_insert_with(|| {
+                            xns.request_connection_blocking(SERVER_NAME_BAO1X_OTHERS)
+                                .expect("Couldn't connect to bao1x misc peri server")
+                        });
+
                         // forward to peri block
                         xous::send_message(
-                            peri_conn,
+                            *peri_cid,
                             xous::Message::new_blocking_scalar(
                                 PeripheralOpcode::UpdatePerclk.to_usize().unwrap(),
                                 scalar.arg1,
@@ -624,7 +635,7 @@ fn main() {
                         )
                         .ok();
                         xous::send_message(
-                            i2c_conn,
+                            *i2c_cid,
                             xous::Message::new_blocking_scalar(
                                 I2cOpcode::UpdatePerclk.to_usize().unwrap(),
                                 scalar.arg1,
