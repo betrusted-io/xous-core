@@ -2184,6 +2184,7 @@ impl SystemServices {
 
     /// Terminate the given process. Returns the process' parent PID.
     pub fn terminate_process(&mut self, target_pid: PID) -> Result<PID, xous_kernel::Error> {
+        println!("terminate_process: {:?}", target_pid);
         // To terminate a process, we must perform the following:
         //
         // 1. If we have any client connections, remove them.
