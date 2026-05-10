@@ -50,7 +50,7 @@ usbd-serial = { git = "https://github.com/betrusted-io/usbd-serial.git", branch 
 #     "max-packet-size-512",
 # ] }
 
-# OpenPGP CCID (Galdralag crates live alongside this repo per docs/galdralag layout).
+# OpenPGP CCID (sibling-repo layout: OpenPGP firmware crates alongside this workspace).
 baochip-openpgp = { path = "../../libs/baochip-openpgp", optional = true }
 usb-personality = { path = "../../../Galdralag-firmware/crates/usb-personality", optional = true, features = ["provisioning-personality"] }
 trng = { path = "../trng", optional = true }

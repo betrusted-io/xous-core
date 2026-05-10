@@ -163,9 +163,9 @@ opt-level = "s" # z,s: Optimize for size instead of performance; 1 for easier de
 
 # prefer hardware-accelerated versions of services
 [patch.crates-io]
-# Galdr vault stack uses a no-default-features-friendly `subtle` vendored in Galdralag-firmware.
+# OpenPGP/GnuPG-related vault stack uses a no-default-features-friendly `subtle` vendored in the sibling firmware tree.
 # Cargo cannot `[patch]` path-only dependencies (e.g. baochip-openpgp -> bao1x-hal paths); use
-# `libs/baochip-openpgp` for sibling-layout HAL/TRNG paths instead of editing Galdralag crates.
+# `libs/baochip-openpgp` for sibling-layout HAL/TRNG paths instead of editing upstream OpenPGP firmware crates.
 subtle = { path = "../Galdralag-firmware/crates/subtle-vendored" }
 sha2 = { git = "https://github.com/betrusted-io/hashes.git", branch = "sha2-v0.10.8-xous" }
 # sha2 = { path = "../hashes/sha2" }

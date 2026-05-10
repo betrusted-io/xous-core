@@ -1,15 +1,15 @@
-# Standalone xous-core shim for `baochip-openpgp`: same crate name/version as under Galdralag-firmware,
+# Standalone xous-core shim for `baochip-openpgp`: same crate name/version as under the sibling OpenPGP firmware tree,
 # with Xous HAL/TRNG paths rooted in this workspace. Source is the sibling crate's `src/lib.rs`.
 #
 # Cargo does not support `[patch]` overrides for path-only dependencies (only crates.io/git sources).
-# Use this package for sibling checkouts; Galdralag nested `xous-core` uses `crates/baochip-openpgp` unchanged.
+# Use this package for sibling checkouts; nested `xous-core` in that firmware tree uses `crates/baochip-openpgp` unchanged.
 
 [package]
 name = "baochip-openpgp"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0"
-description = "Xous Baochip RRAM + TRNG wiring for OpenPgpVaultBackend / CCID (Galdralag)"
+description = "Xous Baochip RRAM + TRNG wiring for OpenPgpVaultBackend / CCID (OpenPGP)"
 
 [lib]
 path = "../../../Galdralag-firmware/crates/baochip-openpgp/src/lib.rs"
