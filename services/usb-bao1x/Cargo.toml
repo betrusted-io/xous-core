@@ -50,6 +50,11 @@ usbd-serial = { git = "https://github.com/betrusted-io/usbd-serial.git", branch 
 #     "max-packet-size-512",
 # ] }
 
+# OpenPGP CCID (Galdralag crates live alongside this repo per docs/galdralag layout).
+baochip-openpgp = { path = "../../libs/baochip-openpgp", optional = true }
+usb-personality = { path = "../../../Galdralag-firmware/crates/usb-personality", optional = true, features = ["provisioning-personality"] }
+trng = { path = "../trng", optional = true }
+
 [features]
 bao1x = []
 board-baosec = [
@@ -79,5 +84,9 @@ usbd-debug = ["usb-device/baochip-debug", "debug-print-usb"]
 
 prototyping = [
 ] # temporary feature-out for figuring out the code; remove this if you don't recognize it anymore
+
+# OpenPGP smartcard via USB CCID (`baochip-openpgp`); use `ccid-openpgp-dev` for env-based master key and PINs.
+ccid-openpgp = ["baochip-openpgp", "usb-personality", "trng"]
+ccid-openpgp-dev = ["ccid-openpgp", "baochip-openpgp/dev-provisioning"]
 
 default = []

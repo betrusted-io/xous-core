@@ -142,9 +142,24 @@ cargo test -p usb-bao1x --features board-dabao,ccid-openpgp 2>/dev/null || true
 cargo check --workspace --exclude xtask
 ```
 
+When documenting results (for example in `docs/CCID_TEST_REPORT.md`), describe
+failures accurately:
+
+- **board-dabao / `--target riscv32imac-unknown-xous-elf`:** Run
+  `cargo xtask install-toolkit` first so the Xous sysroot is installed. Without
+  it, `error[E0463]: can't find crate for \`core\`` is **expected** (missing
+  target std / sysroot), not a defect in the CCID changes.
+- **`cargo check --workspace --exclude xtask`:** Requires the system HIDAPI
+  development package — e.g. Debian/Ubuntu `libhidapi-hidraw-dev` or the distro
+  equivalent — because `apps/vault/tools/vaultbackup-rs` pulls in `hidapi`.
+  Missing `hidapi-hidraw.pc` / pkg-config failures are **unrelated to CCID**.
+
 If a test binary cannot be built for the embedded target, `cargo check` passing
-is sufficient. Do not proceed to the commit step until all four commands complete
-without errors or warnings.
+for the intended triple is sufficient. Do not proceed to the commit step until
+the `usb-bao1x` checks succeed **after** satisfying prerequisites (Xous sysroot,
+HIDAPI dev package where applicable). Failures that match the environment notes
+above must be documented as setup limits, not CCID regressions, until those
+prerequisites are installed and the commands are re-run.
 
 ---
 

@@ -1,11 +1,15 @@
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::VecDeque;
+#[cfg(feature = "ccid-openpgp")]
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, compiler_fence};
 use std::sync::atomic::{AtomicPtr, Ordering};
 
 use bao1x_hal::usb::driver::*;
 use bao1x_hal::usb::utra::*;
+#[cfg(feature = "ccid-openpgp")]
+use bao1x_hal::rram::Reram;
 use num_traits::*;
 use usb_device::class_prelude::*;
 use usb_device::device::UsbDevice;
@@ -22,6 +26,11 @@ use xous_usb_hid::device::keyboard::{NKROBootKeyboard, NKROBootKeyboardConfig};
 use xous_usb_hid::page::Keyboard;
 use xous_usb_hid::prelude::UsbHidClass;
 use xous_usb_hid::prelude::*;
+
+#[cfg(feature = "ccid-openpgp")]
+use usb_personality::ccid::CcidClass;
+#[cfg(feature = "ccid-openpgp")]
+use usb_personality::openpgp::OpenPgpCcidDispatcher;
 
 use crate::api::Opcode;
 
@@ -57,6 +66,14 @@ pub struct Bao1xUsb<'a> {
     // from the interrupt handler.
     pub double_lock: AtomicBool,
     pub led_state: KeyboardLedsReport,
+    #[cfg(feature = "ccid-openpgp")]
+    pub ccid: CcidClass<
+        'a,
+        CorigineWrapper,
+        OpenPgpCcidDispatcher<baochip_openpgp::BaochipVaultBackend>,
+    >,
+    #[cfg(feature = "ccid-openpgp")]
+    pub openpgp_rram: Rc<RefCell<Reram>>,
 }
 
 impl<'a> Bao1xUsb<'a> {
@@ -67,6 +84,12 @@ impl<'a> Bao1xUsb<'a> {
         cw: CorigineWrapper,
         usb_alloc: &'a UsbBusAllocator<CorigineWrapper>,
         serial_number: &'a String,
+        #[cfg(feature = "ccid-openpgp")] ccid: CcidClass<
+            'a,
+            CorigineWrapper,
+            OpenPgpCcidDispatcher<baochip_openpgp::BaochipVaultBackend>,
+        >,
+        #[cfg(feature = "ccid-openpgp")] openpgp_rram: Rc<RefCell<Reram>>,
     ) -> Self {
         let class = UsbHidClassBuilder::new()
             .add_device(NKROBootKeyboardConfig::default())
@@ -122,6 +145,10 @@ impl<'a> Bao1xUsb<'a> {
             serial_rx: [0u8; SERIAL_MAX_PACKET_SIZE],
             double_lock: AtomicBool::new(false),
             led_state: KeyboardLedsReport::default(),
+            #[cfg(feature = "ccid-openpgp")]
+            ccid,
+            #[cfg(feature = "ccid-openpgp")]
+            openpgp_rram,
         }
     }
 
@@ -174,6 +201,8 @@ impl<'a> Bao1xUsb<'a> {
 
         // reset all shared data structures
         self.device.force_reset().ok();
+        #[cfg(feature = "ccid-openpgp")]
+        self.ccid.reset();
         self.fido_tx_queue = RefCell::new(VecDeque::new());
         self.kbd_tx_queue = RefCell::new(VecDeque::new());
         self.irq_req = None;
@@ -269,13 +298,23 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                             ready.store(false, Ordering::SeqCst);
                         }
                         usb.wrapper.address_is_set.store(false, Ordering::SeqCst);
+                        #[cfg(feature = "ccid-openpgp")]
+                        usb.ccid.reset();
                     }
                 }
 
                 let device = usb.device.borrow_mut();
                 let class = usb.class.borrow_mut();
                 let serial = usb.serial_port.borrow_mut();
-                if device.poll(&mut [class, serial as &mut dyn UsbClass<_>]) {
+                #[cfg(not(feature = "ccid-openpgp"))]
+                let polled = device.poll(&mut [class, serial as &mut dyn UsbClass<_>]);
+                #[cfg(feature = "ccid-openpgp")]
+                let polled = device.poll(&mut [
+                    class,
+                    serial as &mut dyn UsbClass<_>,
+                    &mut usb.ccid as &mut dyn UsbClass<_>,
+                ]);
+                if polled {
                     if let Ok(count) = serial.read(&mut usb.serial_rx) {
                         xous::try_send_message(
                             usb.conn,

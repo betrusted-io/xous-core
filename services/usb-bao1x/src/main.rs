@@ -5,6 +5,10 @@ mod hw;
 #[cfg(not(target_os = "xous"))]
 mod main_hosted;
 mod mappings;
+#[cfg(all(target_os = "xous", feature = "ccid-openpgp"))]
+mod ccid;
+#[cfg(all(target_os = "xous", feature = "ccid-openpgp"))]
+mod provisioning;
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 #[cfg(target_os = "xous")]
@@ -145,7 +149,38 @@ pub(crate) fn main_hw() -> ! {
     //    another crate that implements the USB stack which can't handle Box'd structures.
     //  - It is safe to call `.init()` repeatedly because within `init()` we have an atomic bool that tracks
     //    if the interrupt handler has been hooked, and ignores further requests to hook it.
-    let mut cu = Box::new(Bao1xUsb::new(usb.clone(), irq_csr.clone(), cid, cw, &usb_alloc, &serial_number));
+    #[cfg(not(feature = "ccid-openpgp"))]
+    let mut cu = Box::new(Bao1xUsb::new(
+        usb.clone(),
+        irq_csr.clone(),
+        cid,
+        cw,
+        &usb_alloc,
+        &serial_number,
+    ));
+
+    #[cfg(feature = "ccid-openpgp")]
+    let mut cu = Box::new({
+        let (ccid, openpgp_rram) = crate::ccid::build_ccid_and_rram(
+            &xns,
+            &usb,
+            &irq_csr,
+            &cw,
+            &usb_alloc,
+            serial_number.as_str(),
+        )
+        .expect("OpenPGP CCID init failed");
+        Bao1xUsb::new(
+            usb.clone(),
+            irq_csr.clone(),
+            cid,
+            cw,
+            &usb_alloc,
+            &serial_number,
+            ccid,
+            openpgp_rram,
+        )
+    });
     cu.init();
 
     // Serial driver variables

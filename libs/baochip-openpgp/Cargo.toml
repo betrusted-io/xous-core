@@ -1,0 +1,39 @@
+# Standalone xous-core shim for `baochip-openpgp`: same crate name/version as under Galdralag-firmware,
+# with Xous HAL/TRNG paths rooted in this workspace. Source is the sibling crate's `src/lib.rs`.
+#
+# Cargo does not support `[patch]` overrides for path-only dependencies (only crates.io/git sources).
+# Use this package for sibling checkouts; Galdralag nested `xous-core` uses `crates/baochip-openpgp` unchanged.
+
+[package]
+name = "baochip-openpgp"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0"
+description = "Xous Baochip RRAM + TRNG wiring for OpenPgpVaultBackend / CCID (Galdralag)"
+
+[lib]
+path = "../../../Galdralag-firmware/crates/baochip-openpgp/src/lib.rs"
+
+[dependencies]
+galdr-core = { path = "../../../Galdralag-firmware/crates/galdr-core" }
+galdr-vault = { path = "../../../Galdralag-firmware/crates/vault" }
+pin-policy = { path = "../../../Galdralag-firmware/crates/pin-policy" }
+usb-personality = { path = "../../../Galdralag-firmware/crates/usb-personality", features = ["provisioning-personality"] }
+rand_core = { version = "0.6", default-features = false }
+
+[target.'cfg(target_os = "xous")'.dependencies]
+xous = "0.9.70"
+xous-names = { package = "xous-api-names", version = "0.9.71" }
+utralib = { version = "0.1.27", default-features = false, features = ["std", "bao1x"] }
+bao1x-hal = { path = "../bao1x-hal", features = ["std"] }
+bao1x-api = { path = "../bao1x-api", features = ["std"] }
+trng = { path = "../../services/trng" }
+
+[features]
+default = []
+dev-provisioning = []
+trng-pin-fallback = []
+board-dabao = []
+
+[lints.rust]
+unsafe_code = "allow"
