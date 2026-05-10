@@ -155,7 +155,7 @@ Each commit must have:
 - Subject line: imperative mood, 50 characters or fewer, no trailing period
 - Blank second line
 - Body: what and why, wrapped at 72 characters, references `Closes #875`
-- DCO sign-off: `Signed-off-by:email `
+- DCO sign-off: `Signed-off-by: Supermagnum`
 - AI disclosure trailer: `Assisted-by: cursor`
 
 The pull request must:
