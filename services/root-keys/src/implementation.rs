@@ -22,6 +22,7 @@ use precursor_hal::board::*;
 use rand_core::RngCore;
 use root_keys::key2bits::*;
 use sha2::{Digest, Sha256, Sha512_256Sw, Sha512Hw, Sha512Sw};
+use subtle::ConstantTimeEq;
 use utralib::generated::*;
 use ux_api::service::api::BulkRead;
 use xous_semver::SemVer;
@@ -1642,7 +1643,7 @@ impl<'a> RootKeys {
                                     {
                                         Ok(verify) => {
                                             log::debug!("got bip39 verification: {:x?}", verify);
-                                            if &verify == &pcache.fpga_key {
+                                            if bool::from(verify.as_slice().ct_eq(&pcache.fpga_key)) {
                                                 log::debug!("verify succeeded");
                                                 modals
                                                     .show_notification(

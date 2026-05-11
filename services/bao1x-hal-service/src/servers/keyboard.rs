@@ -7,6 +7,7 @@ use bao1x_api::keyboard::*;
 use bao1x_hal::board::KeyPress;
 #[cfg(feature = "board-baosec")]
 use bao1x_hal::kpc_aoint::{AoIntStatus, KpcAoInt};
+use bao1x_hal_service::Rtc;
 use num_traits::*;
 #[cfg(feature = "board-baosec")]
 use utralib::utra::irqarray2;
@@ -62,10 +63,18 @@ struct KeyTracker {
     pub rate_ms: usize,
     pub delay_ms: usize,
     pub keys: Vec<KeypressTimestamp>,
+    pub orientation_flipped: bool,
 }
 #[cfg(feature = "board-baosec")]
 impl KeyTracker {
-    pub fn new() -> Self { KeyTracker { rate_ms: KEYUP_DELAY_MS as usize, delay_ms: 1000, keys: Vec::new() } }
+    pub fn new() -> Self {
+        KeyTracker {
+            rate_ms: KEYUP_DELAY_MS as usize,
+            delay_ms: 1000,
+            keys: Vec::new(),
+            orientation_flipped: false,
+        }
+    }
 
     pub fn register_key_down(&mut self, key: KeyPress, ts: u64) {
         if let Some(entry) = self.keys.iter_mut().find(|e| e.kp == key) {
@@ -74,6 +83,13 @@ impl KeyTracker {
         } else {
             self.keys.push(KeypressTimestamp { kp: key, next_repeat_time: ts + self.delay_ms as u64 });
         }
+    }
+
+    /// This is a filter that causes some keys to not be repeatable. In particular,
+    /// we don't want to trigger on the middle menu button or the "action" button if they
+    /// are held down - we jut want to repeat on the left/right/up/down keys
+    pub fn is_repeating(&self, key: KeyPress) -> bool {
+        key == KeyPress::Left || key == KeyPress::Right || key == KeyPress::Up || key == KeyPress::Down
     }
 
     /// Processes the current keys pressed, at the current time stamp
@@ -113,11 +129,15 @@ impl KeyTracker {
     /// Returns any keys that should have repeat key-press events generated
     pub fn get_repeats(&mut self, now: u64) -> Vec<char> {
         let mut kps = Vec::new();
-        for key in self.keys.iter_mut() {
-            if now >= key.next_repeat_time {
-                kps.push(map_keypress(key.kp));
+        // use index-based iteration to avoid borrow checker issue on map_keypress() call
+        for i in 0..self.keys.len() {
+            if now >= self.keys[i].next_repeat_time {
+                let kp = self.keys[i].kp;
+                if self.is_repeating(kp) {
+                    kps.push(self.map_keypress(kp));
+                }
                 // rebasing off of now prevents keys from "lagging on" in case of UI delay
-                key.next_repeat_time = now + self.rate_ms as u64;
+                self.keys[i].next_repeat_time = now + self.rate_ms as u64;
             }
         }
         kps
@@ -126,23 +146,47 @@ impl KeyTracker {
     pub fn keys_pressed(&self) -> usize { self.keys.len() }
 
     pub fn clear_keys(&mut self) { self.keys.clear(); }
-}
-#[cfg(feature = "board-baosec")]
-fn map_keypress(kp: KeyPress) -> char {
-    match kp {
-        KeyPress::Down => '↓',
-        KeyPress::Up => '↑',
-        KeyPress::Left => '←',
-        KeyPress::Right => '→',
-        KeyPress::Select => '∴',
-        // "Fire" is used as the mapping for the center instead of carriage return ('\r' (0xd))
-        // because carriage return is reserved for the shell to indicate the end of line. Thus
-        // by mapping "fire" to the center key, we get a UI-specific action key without invoking
-        // shell commands in the background unintentionally.
-        KeyPress::Center => '🔥',
-        #[cfg(feature = "accel-kbd")]
-        KeyPress::Accel => '⏯',
-        _ => '\u{0000}',
+
+    pub fn map_keypress(&self, kp: KeyPress) -> char {
+        match kp {
+            KeyPress::Down => {
+                if self.orientation_flipped {
+                    '↑'
+                } else {
+                    '↓'
+                }
+            }
+            KeyPress::Up => {
+                if self.orientation_flipped {
+                    '↓'
+                } else {
+                    '↑'
+                }
+            }
+            KeyPress::Left => {
+                if self.orientation_flipped {
+                    '→'
+                } else {
+                    '←'
+                }
+            }
+            KeyPress::Right => {
+                if self.orientation_flipped {
+                    '←'
+                } else {
+                    '→'
+                }
+            }
+            KeyPress::Select => '∴',
+            // "Fire" is used as the mapping for the center instead of carriage return ('\r' (0xd))
+            // because carriage return is reserved for the shell to indicate the end of line. Thus
+            // by mapping "fire" to the center key, we get a UI-specific action key without invoking
+            // shell commands in the background unintentionally.
+            KeyPress::Center => '🔥',
+            #[cfg(feature = "accel-kbd")]
+            KeyPress::Accel => '⏯',
+            _ => '\u{0000}',
+        }
     }
 }
 
@@ -230,9 +274,9 @@ fn keyboard_service() {
     let kbd_sid = xns.register_name(bao1x_api::SERVER_NAME_KBD, None).expect("can't register server");
 
     #[cfg(feature = "board-baosec")]
+    let kbd_conn = xous::connect(kbd_sid).unwrap();
+    #[cfg(feature = "board-baosec")]
     {
-        let kbd_conn = xous::connect(kbd_sid).unwrap();
-
         let kpc_int = u4::new(bao1x_hal::kpc_aoint::IrqMapping::AoInt as u8);
         kpc_aoint.add_irq_notifier(IrqNotification {
             bit: kpc_int,
@@ -240,12 +284,35 @@ fn keyboard_service() {
             opcode: KeyboardOpcode::HandlerTrigger.to_usize().unwrap(),
             args: [0, 0, 0, 0],
         });
+        // clear any leftovers from prior configs - this bank is a little tricky because it has wakeup events
+        // on it
+        kpc_aoint.irq.wo(utra::irqarray2::EV_ENABLE, 0);
+        kpc_aoint.irq.wo(utra::irqarray2::EV_PENDING, 0xFFFF_FFFF);
         // feels like a bit of an abstraction violation, but I don't know how much the other interrupts
         // require edge-triggered handling
         kpc_aoint.irq.wo(utra::irqarray2::EV_EDGE_TRIGGERED, 1 << kpc_int.as_u32());
         kpc_aoint.irq.wo(utra::irqarray2::EV_POLARITY, 1 << kpc_int.as_u32());
         kpc_aoint.modify_irq_ena(kpc_int, true);
     }
+    /*
+    #[cfg(feature = "board-baosec")]
+    {
+        let kpc_int = u4::new(bao1x_hal::kpc_aoint::IrqMapping::AoWakeup as u8);
+        kpc_aoint.add_irq_notifier(IrqNotification {
+            bit: kpc_int,
+            conn: kbd_conn,
+            opcode: KeyboardOpcode::WakeupHandler.to_usize().unwrap(),
+            args: [0, 0, 0, 0],
+        });
+        // feels like a bit of an abstraction violation, but I don't know how much the other interrupts
+        // require edge-triggered handling
+        let d = kpc_aoint.irq.r(utra::irqarray2::EV_EDGE_TRIGGERED);
+        kpc_aoint.irq.wo(utra::irqarray2::EV_EDGE_TRIGGERED, 1 << kpc_int.as_u32() | d);
+        let d = kpc_aoint.irq.r(utra::irqarray2::EV_POLARITY);
+        kpc_aoint.irq.wo(utra::irqarray2::EV_POLARITY, 1 << kpc_int.as_u32() | d);
+        kpc_aoint.modify_irq_ena(kpc_int, true);
+    }
+    */
 
     #[cfg(feature = "board-baosec")]
     let tt = ticktimer::Ticktimer::new().unwrap();
@@ -290,6 +357,7 @@ fn keyboard_service() {
         }
     });
 
+    let rtc = Rtc::new();
     #[cfg(feature = "board-baosec")]
     let mut key_tracker = KeyTracker::new();
     #[cfg(feature = "board-baosec")]
@@ -307,6 +375,7 @@ fn keyboard_service() {
                 let kr = buffer.as_flat::<KeyboardRegistration, _>().unwrap();
                 match xns.request_connection_blocking(kr.server_name.as_str()) {
                     Ok(cid) => {
+                        log::info!("keyboard listener {} -> {}", kr.server_name, cid);
                         listeners.push((cid, <u32 as From<u32>>::from(kr.listener_op_id.into()) as usize));
                     }
                     Err(e) => {
@@ -430,7 +499,7 @@ fn keyboard_service() {
                                 ),
                             )
                             .unwrap_or_else(|_| {
-                                log::info!("Input overflow, dropping keys!");
+                                log::info!("Input overflow to {}, dropping keys!", conn);
                                 xous::Result::Ok
                             });
                         }
@@ -459,7 +528,23 @@ fn keyboard_service() {
             }),
             #[cfg(feature = "board-baosec")]
             Some(KeyboardOpcode::HandlerTrigger) => msg_scalar_unpack!(msg, pending, _, _, _, {
+                log::debug!("kbd pending: {:x}", pending);
                 if pending & (1 << bao1x_hal::kpc_aoint::IrqMapping::AoInt as usize) != 0 {
+                    let fr = AoIntStatus::new_with_raw_value(kpc_aoint.ao.r(utra::ao_sysctrl::SFR_AOFR));
+                    log::debug!("fr: {:x}", fr.raw_value());
+                    // RTC interrupts also fire this interrupt. Handle and clear the RTC interrupt.
+                    if fr.rtc_interrupt() {
+                        rtc.clear_wakeup();
+                        kpc_aoint.ao.wo(utra::ao_sysctrl::SFR_AOFR, fr.raw_value());
+                        for &(listener_conn, listener_op) in listeners.iter() {
+                            xous::try_send_message(
+                                listener_conn,
+                                xous::Message::new_scalar(listener_op, '⏰' as u32 as usize, 0, 0, 0),
+                            )
+                            .ok();
+                        }
+                        continue;
+                    }
                     let mut kc: Vec<char> = Vec::new();
                     let now = tt.elapsed_ms();
                     if now - last_key_event > KEYUP_DELAY_MS {
@@ -475,7 +560,7 @@ fn keyboard_service() {
                         log::debug!("{:?}", key_down);
                         if key_down != KeyPress::Invalid && key_down != KeyPress::None {
                             key_tracker.register_key_down(key_down, now);
-                            kc.push(map_keypress(key_down))
+                            kc.push(key_tracker.map_keypress(key_down))
                         }
                     }
                     // the keys_pressed() check is necessary because the interrupt will fire *before* a key
@@ -489,7 +574,6 @@ fn keyboard_service() {
                     }
 
                     // clear the FR bits
-                    let fr = AoIntStatus::new_with_raw_value(kpc_aoint.ao.r(utra::ao_sysctrl::SFR_AOFR));
                     kpc_aoint.ao.wo(utra::ao_sysctrl::SFR_AOFR, fr.raw_value());
 
                     // add any repeat keys to the key response array
@@ -540,6 +624,12 @@ fn keyboard_service() {
                     }
                 } else {
                     log::warn!("Unhandled interrupt: {:x}", pending);
+                }
+            }),
+            Some(KeyboardOpcode::SetOrientation) => msg_scalar_unpack!(msg, _flipped, _, _, _, {
+                #[cfg(feature = "board-baosec")]
+                {
+                    key_tracker.orientation_flipped = _flipped != 0;
                 }
             }),
             None => {

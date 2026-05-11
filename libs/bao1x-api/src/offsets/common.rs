@@ -20,6 +20,17 @@ pub const RRAM_STORAGE_LEN: usize = 0x3D_A000;
 pub const SWAP_START_UF2: usize = 0x7000_0000;
 pub const SWAP_UF2_LEN: usize = 0x0800_0000; // 128 MiB
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub enum OneWayErr {
+    OutOfBounds,
+    IncFail,
+    InvalidCoding,
+    // used to report messaging errors in xous environments
+    InternalError,
+    // used to indicate things are OK in xous environments
+    None,
+}
+
 // Define a trait with just the offset
 pub trait OneWayEncoding: TryFrom<u32> {
     const OFFSET: usize;

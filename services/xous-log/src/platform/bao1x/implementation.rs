@@ -11,13 +11,13 @@ use bao1x_hal::udma;
 #[cfg(not(feature = "gdb-stub"))]
 use utralib::generated::*;
 
-pub struct Output {}
+pub struct Output {
+    // This element is not used, but rather it prevents the interrupt handler from going out of scope.
+    _uart_irq: Pin<Box<bao1x_hal::udma::UartIrq>>,
+}
 
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 pub static mut UART_DMA_TX_BUF_VIRT: *mut u8 = 0x0000_0000 as *mut u8;
-
-#[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
-pub static mut UART_IRQ: Option<Pin<Box<bao1x_hal::udma::UartIrq>>> = None;
 
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 pub static KBD_CONN: AtomicU32 = AtomicU32::new(0);
@@ -36,7 +36,7 @@ pub fn init() -> Output {
         crate::platform::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() as _
     };
     #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
-    {
+    let uart_irq = {
         // Note: for the TX buf, we allocate a pre-reserved portion of IFRAM as our
         // DMA buffer. We do *not* use the IFRAM allocator in `bao1x-hal-service` because
         // we want to avoid a circular dependency between the logging crate and
@@ -53,13 +53,14 @@ pub fn init() -> Output {
         unsafe { UART_DMA_TX_BUF_VIRT = tx_buf_region.as_mut_ptr() as *mut u8 };
 
         let mut uart_irq = Box::pin(bao1x_hal::udma::UartIrq::new());
+        // ensure the irqs are disabled so we can fully init before moving on
+        uart_irq.rx_irq_ena(udma::UartChannel::Uart2, false);
         // safety: This is safe because uart_irq is committed into a `static mut` variable that
         // ensures that its lifetime is `static`
         unsafe {
             Pin::as_mut(&mut uart_irq).register_handler(udma::UartChannel::Uart2, uart_handler);
         }
         uart_irq.rx_irq_ena(udma::UartChannel::Uart2, true);
-        unsafe { UART_IRQ = Some(uart_irq) };
         let mut udma_uart = unsafe {
             udma::Uart::get_handle(
                 crate::platform::debug::DEFAULT_UART_ADDR as usize,
@@ -68,7 +69,9 @@ pub fn init() -> Output {
             )
         };
         udma_uart.setup_async_read();
-    }
+        uart_irq.rx_irq_ena(udma::UartChannel::Uart2, true);
+        uart_irq
+    };
     #[cfg(all(feature = "bao1x", feature = "hwsim"))]
     let uart = xous::syscall::map_memory(
         xous::MemoryAddress::new(utra::duart::HW_DUART_BASE),
@@ -85,7 +88,7 @@ pub fn init() -> Output {
     println!("Mapped UART @ {:08x}", uart.as_ptr() as usize);
     println!("Process: map success!");
 
-    Output {}
+    Output { _uart_irq: uart_irq }
 }
 
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
@@ -125,7 +128,7 @@ fn uart_handler(_irq_no: usize, _arg: *mut usize) {
 impl Output {
     pub fn get_writer(&self) -> OutputWriter { OutputWriter {} }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> ! {
         loop {
             xous::wait_event();
         }

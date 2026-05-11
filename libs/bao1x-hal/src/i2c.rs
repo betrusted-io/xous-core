@@ -9,7 +9,7 @@ impl I2c {
     pub fn new() -> Self {
         let xns = xous_api_names::XousNames::new().unwrap();
         let conn = xns
-            .request_connection(bao1x_api::SERVER_NAME_BAO1X_HAL)
+            .request_connection(bao1x_api::SERVER_NAME_BAO1X_I2C)
             .expect("Couldn't connect to bao1x HAL server");
         I2c { conn }
     }
@@ -18,7 +18,7 @@ impl I2c {
     /// No further I2C requests may happen while this is processing.
     pub fn i2c_transactions(&self, list: I2cTransactions) -> Result<I2cTransactions, xous::Error> {
         let mut buf = Buffer::into_buf(list).map_err(|_| xous::Error::InternalError)?;
-        buf.lend_mut(self.conn, HalOpcode::I2c as u32)?;
+        buf.lend_mut(self.conn, I2cOpcode::Transaction as u32)?;
         buf.to_original()
     }
 }

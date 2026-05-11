@@ -1,5 +1,30 @@
+use bitbybit::bitfield;
+
 pub const FREQ_OSC_MHZ: u32 = 48;
 const FD_MAX: u32 = 256;
+
+#[bitfield(u32)]
+#[derive(PartialEq, Eq, Debug)]
+pub struct ResetReason {
+    #[bit(8, r)]
+    chip_reset: bool,
+    #[bit(7, r)]
+    voltage_detetor_reset: bool,
+    #[bit(6, r)]
+    security_reset: bool,
+    #[bit(5, r)]
+    sw_chip_reset: bool,
+    #[bit(4, r)]
+    xrst_pad: bool,
+    #[bit(3, r)]
+    sys_reset: bool,
+    #[bit(2, r)]
+    cms_reset: bool,
+    #[bit(1, r)]
+    wdt_reset: bool,
+    #[bit(0, r)]
+    sw_core_reset: bool,
+}
 
 /// This takes in the FD input frequency (the frequency to be divided) in MHz
 /// and the fd value, and returns the resulting divided frequency.

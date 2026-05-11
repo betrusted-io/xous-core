@@ -32,6 +32,29 @@ By participating in this project you agree to abide by the
 (please read the full text so that you can understand what actions will and
 will not be tolerated).
 
+## AI-Assisted Project Contributions
+
+- You may use AI assistance for contributing to this project in accordance with these principles of accountability and transparency.
+
+### Accountability
+
+- When you submit a contribution, you represent that you are the author and that you are fully accountable for the entirety of the contribution.
+- You are responsible for your contribution, including vouching for the quality, license compliance, and utility of your submission.
+- Using AI assistance in your contribution does not relieve you of the responsibility to ensure that your contribution meets project standards; your contributions must be modular, reviewable, and clearly explainable.
+
+### Transparency
+
+- You **must** disclose the use of AI tools when a significant part of the contribution is generated without changes.
+- You **should** disclose the use of AI tools where it might be helpful to the maintainer reviewing your contribution. 
+- Using AI tools to correct grammar and spelling does not require disclosure.
+- Make your disclosure in your commit message as a trailer; e.g. `Assisted-by: ChatGPTv5`
+- Use the tag "AI" on pull requests that were primarily generated or guided by AI tools
+
+### Scope and Cadence
+- Prefer one concern per PR. Bug fixes, refactors, and documentation updates belong in separate PRs even when they touch the same file.
+- For mechanical changes that span many files or services (e.g. pattern sweeps), split into per-target PRs and open no more than two per week so review stays tractable.
+- Before a large or cross-cutting change, open an issue or discussion first to align on scope.
+
 ## Contribution Workflow
 
 This is an overview of the contribution workflow:

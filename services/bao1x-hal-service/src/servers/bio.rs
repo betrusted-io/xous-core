@@ -2,20 +2,24 @@ use bao1x_api::bio::*;
 use bao1x_api::bio_resources::*;
 use bao1x_hal::bio_hw;
 
-pub fn start_bio_service(clk_freq: u32) {
+pub fn start_bio_service() {
     std::thread::spawn(move || {
-        bio_service(clk_freq);
+        bio_service();
     });
 }
 
-fn bio_service(clk_freq: u32) {
+fn bio_service() {
     let xns = xous_names::XousNames::new().unwrap();
     // claim the server name
     let sid = xns.register_name(BIO_SERVER_NAME, None).unwrap();
 
     let mut resource_tracker = ResourceTracker::new();
 
-    let mut bio_ss = bio_hw::BioSharedState::new(clk_freq);
+    #[cfg(feature = "oem-baosec-lite")]
+    let led_conn = xns.request_connection_blocking("_oem_led_").unwrap();
+
+    let clk_mgr = bao1x_hal_service::ClockManager::new();
+    let mut bio_ss = bio_hw::BioSharedState::new(clk_mgr.get_fclk());
     let mut msg_opt = None;
     loop {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
@@ -122,6 +126,18 @@ fn bio_service(clk_freq: u32) {
                     let new_freq = scalar.arg1;
                     // returns the old freq
                     scalar.arg1 = bio_ss.update_bio_freq(new_freq as u32) as usize;
+                }
+            }
+
+            BioOp::PrepFreqChange => {
+                if let Some(_scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
+                    // pause rendering while the clock transitions, avoiding 'bright glitches'
+                    #[cfg(feature = "oem-baosec-lite")]
+                    xous::send_message(
+                        led_conn,
+                        xous::Message::new_blocking_scalar(128, _scalar.arg1, 0, 0, 0),
+                    )
+                    .ok();
                 }
             }
 

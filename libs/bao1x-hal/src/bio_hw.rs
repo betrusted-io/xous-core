@@ -405,10 +405,12 @@ impl BioSharedState {
                 // mask in the core that is now listening to the clock
                 let existing_extclk = self.bio.rf(bio_bdma::SFR_EXTCLOCK_USE_EXTCLK);
                 self.bio.rmwf(bio_bdma::SFR_EXTCLOCK_USE_EXTCLK, (1 << core as u32) | existing_extclk);
-                crate::println!("core: {:?} - extclock {:x}", core, self.bio.r(bio_bdma::SFR_EXTCLOCK));
+                // crate::println!("core: {:?} - extclock {:x}", core, self.bio.r(bio_bdma::SFR_EXTCLOCK));
                 return None;
             }
         };
+        #[cfg(feature = "std")]
+        log::debug!("config: {:?}, int {}, fraq {}, actual {}", config, div_int, div_frac, actual_freq);
         let sfr_value = (div_int as u32) << 16 | (div_frac as u32) << 8;
         match core {
             BioCore::Core0 => {
@@ -494,12 +496,18 @@ impl<'a> BioApi<'a> for BioSharedState {
     fn update_bio_freq(&mut self, freq: u32) -> u32 {
         let prev_freq = self.fclk_freq_hz;
         self.fclk_freq_hz = freq;
+        #[cfg(feature = "std")]
+        log::debug!("new freq: {}, old freq: {}", freq, prev_freq);
         for (i, config) in self.core_config.clone().iter().enumerate() {
             if let Some(config) = config {
                 self.apply_config(config, i.into());
             }
         }
         prev_freq
+    }
+
+    fn prep_freq_change(&mut self, _wfi: bool) {
+        // at the hw level, there's nothing to do; a handler at the `std` level is invoked instead
     }
 
     unsafe fn get_core_handle(&self, _fifo: Fifo) -> Result<Option<CoreHandle>, BioError> {

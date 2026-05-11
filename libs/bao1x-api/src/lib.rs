@@ -32,8 +32,9 @@ pub const BAOCHIP_1X_UF2_FAMILY: u32 = 0xa7d7_6373;
 // density 18, memory type 20, mfg ID C2 ==> MX25L128833F
 // density 38, memory type 25, mfg ID C2 ==> MX25U12832F
 // mfg ID 0b ==> XT25Q64FWOIGT cost down option (8MiB)
-// mfg ID ba ==> ZD25Q64B super-cost down option (8MiB)
-pub const SPI_FLASH_IDS: [u32; 4] = [0x1820c2, 0x3825c2, 0x17600b, 0x1732ba];
+// mfg ID ba ==> ZD25Q64B super-cost down option (8MiB / 3.3V)
+// mfg ID 85 ==> PY25Q64HA (8MiB / 3.3V)
+pub const SPI_FLASH_IDS: [u32; 5] = [0x1820c2, 0x3825c2, 0x17600b, 0x1732ba, 0x172085];
 // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
 pub const RAM_IDS: [u32; 3] = [0x5D9D, 0x559d, 0x5D0D];
 
@@ -53,6 +54,7 @@ pub const SERVER_NAME_BAO1X_HAL: &str = "_bao1x-SoC HAL_";
 /// be in a separate server to avoid lock-up issues of the server depending on itself
 /// for services.
 pub const SERVER_NAME_BAO1X_OTHERS: &str = "_HAL-everthing-else_";
+pub const SERVER_NAME_BAO1X_I2C: &str = "_bao1x-i2c_";
 
 /// Number of boots to trigger the 'audit' command. It's set to be bigger than 1, because
 /// the chip tester may power cycle the chip during the provisioning process before the

@@ -17,6 +17,12 @@ pub enum TimeOp {
     /// Query to see if timezone and time relative to UTC have been set.
     WallClockTimeInit = 6,
 
+    // Below are ops used by implementations, these can be modified/updated
     /// Serialize the internal state for storage across reboots
     GetState = 1024,
+    /// Sets a wakeup alarm. Returns # of RTC rollover events that must
+    /// elapse before the alarm is actually valid.
+    SetWakeup = 1025,
+    /// Clears any pending alarm
+    ClearWakeup = 1026,
 }

@@ -34,7 +34,7 @@ bitfield! {
 fn irq_select_from_port(port: IoxPort, pin: u8) -> u32 { (port as u32) * 16 + pin as u32 }
 fn find_first_none<T>(arr: &[Option<T>]) -> Option<usize> { arr.iter().position(|item| item.is_none()) }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 #[allow(dead_code)]
 struct IrqLocalRegistration {
     pub cid: xous::CID,
@@ -42,6 +42,7 @@ struct IrqLocalRegistration {
     pub port: IoxPort,
     pub pin: u8,
     pub active: IoxValue,
+    pub server: String,
 }
 
 struct IrqHandler {
@@ -139,7 +140,14 @@ fn main() {
     let sid = xns.register_name(bao1x_api::SERVER_NAME_BAO1X_HAL, None).expect("can't register server");
     let self_cid = xous::connect(sid).expect("couldn't create self-connection");
 
+    servers::susres::start_susres_service();
+
+    // these two servers need to start so that update_perclk calls can succeed
+    servers::i2c::start_i2c_service();
+    servers::others::start_peri_service();
+
     std::thread::spawn(move || {
+        let xns = xous_names::XousNames::new().unwrap();
         let mut ifram_allocs = [Vec::new(), Vec::new()];
         // code is written assuming the IFRAM blocks have the same size. Since this is fixed in
         // hardware, it's a good assumption; but the assert is put here in case we port this to
@@ -179,40 +187,6 @@ fn main() {
         let iox = Iox::new(iox_page.as_ptr() as *mut u32);
 
         let udma_global = GlobalConfig::new();
-
-        // Note: the I2C handler can be put into a separate thread if we need the main
-        // HAL server to not block while a large I2C transaction is being handled. For
-        // now this is all placed into a single thread. However, if we ever had a situation
-        // where, for example, you had to do a compound I2C transaction and flip a GPIO pin
-        // in the middle of that transaction in order for the set of I2C transactions to
-        // complete, this implementation would deadlock as it would block on the I2C transaction
-        // before handling the GPIO request.
-        let i2c_channel = bao1x_hal::board::setup_i2c_pins(&iox);
-        udma_global.clock_on(PeriphId::from(i2c_channel));
-        let i2c_pages = xous::syscall::map_memory(
-            xous::MemoryAddress::new(bao1x_hal::board::I2C_IFRAM_ADDR),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't claim I2C IFRAM page");
-
-        let i2c_ifram = unsafe {
-            bao1x_hal::ifram::IframRange::from_raw_parts(
-                bao1x_hal::board::I2C_IFRAM_ADDR,
-                i2c_pages.as_ptr() as usize,
-                i2c_pages.len(),
-            )
-        };
-        let mut i2c = unsafe {
-            bao1x_hal::udma::I2cDriver::new_with_ifram(
-                i2c_channel,
-                400_000,
-                bao1x_api::PERCLK,
-                i2c_ifram,
-                &udma_global,
-            )
-        };
 
         // os timer initializations
         let ostimer_csr = xous::syscall::map_memory(
@@ -274,9 +248,18 @@ fn main() {
         .expect("couldn't claim Iox interrupt");
         irq.irq_csr.wo(utralib::utra::irqarray10::EV_PENDING, 0xFFFF_FFFF);
         irq.irq_csr.wfo(utralib::utra::irqarray10::EV_ENABLE_IOXIRQ, 1);
-        // Up to 8 slots where we can populate interrupt mappings in the hardware
-        // The index of the array corresponds to the slot.
-        let mut irq_table: [Option<IrqLocalRegistration>; 8] = [None; 8];
+        // This is an [Option; 8] instead of a Vec because in hardware we have only
+        // 8 slots where we can populate interrupt mappings in the hardware. Each slot's
+        // index maps 1:1 to a hardware register offset. Thus as interrupts are de-allocated,
+        // we don't want the indices to change - in this case, Vec is not the right object,
+        // we want a static array defined like this.
+        let mut irq_table: [Option<IrqLocalRegistration>; 8] = [const { None }; 8];
+
+        // defer these connections until required by the UpdatePerClk call. This prevents
+        // race conditions on startup, as both i2c and peri rely on the loop below running
+        // to complete their initializations.
+        let mut i2c_conn: Option<xous::CID> = None;
+        let mut peri_conn: Option<xous::CID> = None;
 
         let mut msg_opt = None;
         log::debug!("Starting main loop");
@@ -399,12 +382,12 @@ fn main() {
                     }
                 }
                 HalOpcode::ConfigureIoxIrq => {
-                    let buf = unsafe {
+                    let mut buf = unsafe {
                         xous_ipc::Buffer::from_memory_message(
-                            msg_opt.as_mut().unwrap().body.memory_message().unwrap(),
+                            msg_opt.as_mut().unwrap().body.memory_message_mut().unwrap(),
                         )
                     };
-                    let registration = buf.to_original::<IoxIrqRegistration, _>().unwrap();
+                    let mut registration = buf.to_original::<IoxIrqRegistration, _>().unwrap();
                     log::info!("Got registration request: {:?}", registration);
                     if let Some(index) = find_first_none(&irq_table) {
                         // create the reverse-lookup registration
@@ -417,6 +400,7 @@ fn main() {
                             port: registration.port,
                             pin: registration.pin,
                             active: registration.active,
+                            server: registration.server.to_owned(),
                         };
                         irq_table[index] = Some(local_reg);
 
@@ -429,6 +413,7 @@ fn main() {
                             IoxValue::High => int_cr.set_mode(IntMode::RisingEdge as u32),
                         }
                         int_cr.set_enable(true);
+                        int_cr.set_wakeup(true);
                         // safety: the index and offset are mapped to the intended range because the index is
                         // bounded by the size of irq_table, and the offset comes from the generated header
                         // file.
@@ -448,8 +433,51 @@ fn main() {
                                 .add(index)
                                 .write_volatile(int_cr.0);
                         }
+                        registration.index = Some(index);
+
+                        buf.replace(registration).unwrap();
                     } else {
                         panic!("Ran out of Iox interrupt slots: maximum 8 available");
+                    }
+                }
+                HalOpcode::UpdateIoxIrq => {
+                    let buf = unsafe {
+                        xous_ipc::Buffer::from_memory_message(
+                            msg_opt.as_ref().unwrap().body.memory_message().unwrap(),
+                        )
+                    };
+                    let update = buf.to_original::<IoxIrqUpdate, _>().unwrap();
+                    log::debug!("Got IRQ update request: {:?}", update);
+                    if let Some(Some(reg)) = irq_table.get_mut(update.index) {
+                        if reg.server == update.server {
+                            if let Some(active) = update.active {
+                                reg.active = active;
+                                // fetch the interrupt control register value
+                                let mut int_cr = IntCr(unsafe {
+                                    iox.csr
+                                        .base()
+                                        .add(utralib::utra::iox::SFR_INTCR_CRINT0.offset())
+                                        .add(update.index)
+                                        .read_volatile()
+                                });
+                                // update the edge option
+                                match active {
+                                    IoxValue::Low => int_cr.set_mode(IntMode::FallingEdge as u32),
+                                    IoxValue::High => int_cr.set_mode(IntMode::RisingEdge as u32),
+                                }
+                                // commit
+                                unsafe {
+                                    iox.csr
+                                        .base()
+                                        .add(utralib::utra::iox::SFR_INTCR_CRINT0.offset())
+                                        .add(update.index)
+                                        .write_volatile(int_cr.0);
+                                }
+                            }
+                            if let Some(opcode) = update.opcode {
+                                reg.opcode = opcode;
+                            }
+                        }
                     }
                 }
                 HalOpcode::IrqLocalHandler => {
@@ -462,7 +490,7 @@ fn main() {
                         for bitpos in 0..8 {
                             // the bit position is flipped versus register order in memory
                             if ((irq_flag << (bitpos as u32)) & 0x80) != 0 {
-                                if let Some(local_reg) = irq_table[bitpos] {
+                                if let Some(local_reg) = &irq_table[bitpos] {
                                     found = true;
                                     // interrupts are "Best effort" and can gracefully fail if the receiver
                                     // has been overwhelmed by too many
@@ -573,40 +601,6 @@ fn main() {
                         udma_global.reset(periph);
                     }
                 }
-                HalOpcode::I2c => {
-                    let mut buf = unsafe {
-                        xous_ipc::Buffer::from_memory_message_mut(
-                            msg_opt.as_mut().unwrap().body.memory_message_mut().unwrap(),
-                        )
-                    };
-                    let mut list = buf.to_original::<I2cTransactions, _>().expect("I2c message format error");
-                    for transaction in list.transactions.iter_mut() {
-                        match transaction.i2c_type {
-                            I2cTransactionType::Write => {
-                                match i2c.i2c_write(
-                                    transaction.device,
-                                    transaction.address,
-                                    &transaction.data,
-                                ) {
-                                    Ok(result) => transaction.result = result,
-                                    _ => transaction.result = I2cResult::Nack,
-                                }
-                            }
-                            I2cTransactionType::Read | I2cTransactionType::ReadRepeatedStart => {
-                                match i2c.i2c_read(
-                                    transaction.device,
-                                    transaction.address,
-                                    &mut transaction.data,
-                                    transaction.i2c_type == I2cTransactionType::ReadRepeatedStart,
-                                ) {
-                                    Ok(result) => transaction.result = result,
-                                    _ => transaction.result = I2cResult::Nack,
-                                }
-                            }
-                        }
-                    }
-                    buf.replace(list).expect("I2c message format error");
-                }
                 HalOpcode::SetPreemptionState => {
                     // this is done as a blocking message because we want confirmation that
                     // this bit has been set before entering a critical section.
@@ -617,8 +611,40 @@ fn main() {
                 }
                 HalOpcode::UpdatePerclk => {
                     if let Some(scalar) = msg_opt.as_mut().unwrap().body.scalar_message_mut() {
-                        let new_perclk = scalar.arg1 as u32;
-                        i2c.update_perclk(new_perclk);
+                        // lazily fill in these connections on demand. This prevents race conditions on
+                        // process startup.
+                        let i2c_cid = i2c_conn.get_or_insert_with(|| {
+                            xns.request_connection_blocking(SERVER_NAME_BAO1X_I2C)
+                                .expect("Couldn't connect to bao1x I2C server")
+                        });
+                        let peri_cid = peri_conn.get_or_insert_with(|| {
+                            xns.request_connection_blocking(SERVER_NAME_BAO1X_OTHERS)
+                                .expect("Couldn't connect to bao1x misc peri server")
+                        });
+
+                        // forward to peri block
+                        xous::send_message(
+                            *peri_cid,
+                            xous::Message::new_blocking_scalar(
+                                PeripheralOpcode::UpdatePerclk.to_usize().unwrap(),
+                                scalar.arg1,
+                                0,
+                                0,
+                                0,
+                            ),
+                        )
+                        .ok();
+                        xous::send_message(
+                            *i2c_cid,
+                            xous::Message::new_blocking_scalar(
+                                I2cOpcode::UpdatePerclk.to_usize().unwrap(),
+                                scalar.arg1,
+                                0,
+                                0,
+                                0,
+                            ),
+                        )
+                        .ok();
                     }
                 }
                 HalOpcode::InvalidCall => {
@@ -628,23 +654,17 @@ fn main() {
         }
     });
 
+    servers::bio::start_bio_service();
+
     servers::keyboard::start_keyboard_service();
-
-    servers::susres::start_susres_service();
-
-    let clk_mgr = bao1x_hal_service::ClockManager::new();
-    servers::bio::start_bio_service(clk_mgr.get_fclk());
 
     // claim BIO, based on the platform
     servers::trng::start_trng_service();
     servers::rtc::start_rtc_service();
 
-    // start the remaining services
-    servers::others::start_peri_service(clk_mgr.get_per());
-
-    let tt = ticktimer::Ticktimer::new().unwrap();
+    let dummy_sid = xous::create_server().unwrap();
     // placeholder - we can put an actual service here but for now just sleep the main thread.
     loop {
-        tt.sleep_ms(10_000).ok();
+        let _ = xous::receive_message(dummy_sid);
     }
 }

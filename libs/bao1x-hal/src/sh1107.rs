@@ -514,8 +514,29 @@ impl<'a> Oled128x128<'a> {
         Ok(())
     }
 
+    pub fn flip_vertical(&mut self, flip: bool) -> Result<(), xous::Error> {
+        use Command::*;
+        let cmds = if flip {
+            // flipped
+            [SetSegmentReMap(true), SetCOMScanDirection(Direction::Normal)]
+        } else {
+            // normal
+            [SetSegmentReMap(false), SetCOMScanDirection(Direction::Inverted)]
+        };
+        for c in cmds {
+            let bytes = c.encode();
+            self.send_command(bytes)?;
+        }
+        Ok(())
+    }
+
     pub fn powerdown(&mut self) {
         self.powerdown = true;
+        let powoff = [Command::DisplayOnOff(DisplayState::Off)];
+        for command in powoff {
+            let bytes = command.encode();
+            self.send_command(bytes).ok();
+        }
         // assert reset
         crate::board::assert_periph_reset(self.iox, true);
         self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::Low);
@@ -587,6 +608,170 @@ impl<'a> Oled128x128<'a> {
                 }
             }
         }
+    }
+
+    /// A diffusion-transition effect courtesy of Claude Sonnet 4.6. Query fed in `render_bitmap` code
+    /// and asked for a variant that does a "diffusive dither" transition. Applied largely without changes;
+    /// the main change was adjusting the seed to be passed, in instead of fixed, so the transition can be
+    /// different every call.
+    #[cfg(feature = "std")]
+    pub fn render_bitmap_diffuse(
+        &mut self,
+        bitmap: &ux_api::service::api::BaosecBitmap,
+        frames: usize,
+        seed: u64,
+    ) -> Result<(), xous::Error> {
+        use std::collections::VecDeque;
+
+        const W: isize = WIDTH as isize;
+        const H: isize = LINES as isize;
+
+        // -- 1. Build per-pixel metadata for the destination region --------------
+        //
+        // We work in framebuffer linear-index space (0..WIDTH*LINES).
+        // Three bitmasks, each 512 u32 words == 16 384 bits == one bit per pixel.
+
+        let mut in_region = [0u32; 512]; // 1 = this fb pixel is touched by the bitmap
+        let mut target_bit = [0u32; 512]; // desired final value for pixels in region
+        let mut settled = [0u32; 512]; // 1 = pixel already written this transition
+
+        // Clamp the source bounding box (mirrors render_bitmap).
+        let src_x0 = bitmap.bounding_box.tl.x.max(0);
+        let src_y0 = bitmap.bounding_box.tl.y.max(0);
+        let src_x1 = bitmap.bounding_box.br.x.min(W);
+        let src_y1 = bitmap.bounding_box.br.y.min(H);
+
+        let mut total: usize = 0;
+
+        for src_y in src_y0..src_y1 {
+            let dst_y = src_y + bitmap.top_left.y;
+            if dst_y < 0 || dst_y >= H {
+                continue;
+            }
+            for src_x in src_x0..src_x1 {
+                let dst_x = src_x + bitmap.top_left.x;
+                if dst_x < 0 || dst_x >= W {
+                    continue;
+                }
+
+                let src_lin = (src_x + src_y * W) as usize;
+                let dst_lin = (dst_x + dst_y * W) as usize;
+
+                in_region[dst_lin >> 5] |= 1 << (dst_lin & 31);
+                total += 1;
+
+                let bit = (bitmap.bits[src_lin >> 5] >> (src_lin & 31)) & 1;
+                if bit != 0 {
+                    target_bit[dst_lin >> 5] |= 1 << (dst_lin & 31);
+                }
+            }
+        }
+
+        if total == 0 || frames == 0 {
+            return Ok(());
+        }
+
+        // -- 2. Collect region pixel indices for random seeding ------------------
+
+        let mut region_pixels: Vec<usize> = Vec::with_capacity(total);
+        for i in 0..(WIDTH as usize * LINES as usize) {
+            if (in_region[i >> 5] >> (i & 31)) & 1 != 0 {
+                region_pixels.push(i);
+            }
+        }
+
+        // -- 3. Tiny xorshift-64 RNG (no std::collections dependency needed) -----
+
+        let mut rng: u64 = seed ^ total as u64;
+        macro_rules! rand {
+            () => {{
+                rng ^= rng << 13;
+                rng ^= rng >> 7;
+                rng ^= rng << 17;
+                rng
+            }};
+        }
+
+        // -- 4. Diffusion loop ----------------------------------------------------
+
+        let pixels_per_frame = (total / frames).max(1);
+
+        // Scatter a handful of seeds so diffusion starts from multiple origins.
+        let mut frontier: VecDeque<usize> = VecDeque::new();
+        let n_seeds = (total / 32).clamp(1, 64);
+        for _ in 0..n_seeds {
+            let dl = region_pixels[(rand!() as usize) % total];
+            if (settled[dl >> 5] >> (dl & 31)) & 1 == 0 {
+                settled[dl >> 5] |= 1 << (dl & 31);
+                frontier.push_back(dl);
+            }
+        }
+
+        let mut committed: usize = 0;
+
+        while committed < total {
+            let mut this_frame: usize = 0;
+
+            while this_frame < pixels_per_frame {
+                // If the frontier runs dry, plant a new random seed.
+                if frontier.is_empty() {
+                    let mut planted = false;
+                    for _ in 0..64 {
+                        let dl = region_pixels[(rand!() as usize) % total];
+                        if (settled[dl >> 5] >> (dl & 31)) & 1 == 0 {
+                            settled[dl >> 5] |= 1 << (dl & 31);
+                            frontier.push_back(dl);
+                            planted = true;
+                            break;
+                        }
+                    }
+                    if !planted {
+                        break;
+                    } // all pixels settled
+                }
+
+                // -- commit the next frontier pixel -------------------------------
+                let dl = frontier.pop_front().unwrap();
+
+                let on = (target_bit[dl >> 5] >> (dl & 31)) & 1;
+                if on != 0 {
+                    self.buffer[dl >> 5] |= 1 << (dl & 31);
+                } else {
+                    self.buffer[dl >> 5] &= !(1 << (dl & 31));
+                }
+                this_frame += 1;
+
+                // -- expand to unsettled cardinal neighbours in the region ---------
+                let dst_x = (dl % WIDTH as usize) as isize;
+                let dst_y = (dl / WIDTH as usize) as isize;
+
+                for (nx, ny) in
+                    [(dst_x - 1, dst_y), (dst_x + 1, dst_y), (dst_x, dst_y - 1), (dst_x, dst_y + 1)]
+                {
+                    if nx < 0 || nx >= W || ny < 0 || ny >= H {
+                        continue;
+                    }
+                    let ndl = (nx + ny * W) as usize;
+                    if (in_region[ndl >> 5] >> (ndl & 31)) & 1 == 0 {
+                        continue;
+                    }
+                    if (settled[ndl >> 5] >> (ndl & 31)) & 1 != 0 {
+                        continue;
+                    }
+                    settled[ndl >> 5] |= 1 << (ndl & 31);
+                    frontier.push_back(ndl);
+                }
+            }
+
+            committed += this_frame;
+            if this_frame > 0 {
+                self.redraw()?;
+            }
+            if this_frame == 0 {
+                break;
+            } // guard against impossible stuck state
+        }
+        Ok(())
     }
 }
 

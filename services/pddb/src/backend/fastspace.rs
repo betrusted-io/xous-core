@@ -96,8 +96,8 @@ pub(crate) struct SpaceUpdate {
     // this checksum is "weak" but we are protecting against two scenarios:
     // 1. partially written SpaceUpdate record (so the last bytes or so are FF)
     // 2. a malicious attacker
-    // In the case of (1), the occurence should be diminishingly small (expected to never happen, maybe
-    // a very unstable system that's "blinking" power constantly would have it occure a few times)
+    // In the case of (1), the occurrence should be diminishingly small (expected to never happen, maybe
+    // a very unstable system that's "blinking" power constantly would have it occur a few times)
     // In the case of (2), an attacker has a chance of generating a collision, but the result is
     // also unlikely to generate a valid PhysAddr, and if it does, the consequence is some valid data
     // being treated as free space and getting erased (data loss, not disclosure).

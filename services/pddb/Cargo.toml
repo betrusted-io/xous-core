@@ -108,6 +108,7 @@ board-baosec = [
     "keystore/board-baosec",
     "aes/bao1x",
 ] # USB form factor token
+oem-baosec-lite = []
 hosted-baosec = [
     "gen2",
     "bao1x-emu",

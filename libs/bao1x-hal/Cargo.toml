@@ -110,6 +110,7 @@ debug-print-uart = ["debug-print"]
 debug-countermeasures = []
 debug-wfi = []
 security = ["sigcheck"]
+qe-debug = []
 
 udma-stress-test = [
 ] # For RTL simulation testing - aggravates a key corner case

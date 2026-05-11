@@ -4,9 +4,12 @@ pub mod trng;
 use bao1x_api::*;
 use bao1x_hal::clocks::ClockOp;
 use bao1x_hal::udma::{AdcExtChannel, AdcSource};
+use chrono::{DateTime, Offset, TimeZone, Utc};
 use num_traits::*;
 use xous::{Message, send_message};
 use xous_api_susres::api::Opcode as SusresOp;
+
+use crate::api::{TIME_SERVER_PUBLIC, TimeOp};
 
 pub struct UdmaGlobal {
     conn: xous::CID,
@@ -93,7 +96,7 @@ impl Hal {
                 0,
             ),
         )
-        .expect("Couldn't setup preemption state");
+        .ok();
     }
 }
 
@@ -128,6 +131,70 @@ impl UdmaGlobalConfig for UdmaGlobal {
     }
 }
 
+pub struct Rtc {
+    conn: xous::CID,
+}
+impl Rtc {
+    pub fn new() -> Self {
+        let conn = xous::connect(xous::SID::from_bytes(TIME_SERVER_PUBLIC).unwrap()).unwrap();
+        Rtc { conn }
+    }
+
+    pub fn set_time<Tz: TimeZone>(&self, datetime: DateTime<Tz>) {
+        let utc_time = datetime.with_timezone(&Utc);
+        log::info!("Time (UTC): {}", utc_time);
+        let since_epoch_ms = utc_time.timestamp_millis();
+        xous::send_message(
+            self.conn,
+            xous::Message::new_scalar(
+                TimeOp::SetUtcTimeMs.to_usize().unwrap(),
+                ((since_epoch_ms >> 32) & 0xFFFF_FFFF) as usize,
+                (since_epoch_ms & 0xFFFF_FFFF) as usize,
+                0,
+                0,
+            ),
+        )
+        .ok();
+        let offset_ms = (datetime.offset().fix().local_minus_utc() as i64) * 1000;
+        xous::send_message(
+            self.conn,
+            xous::Message::new_scalar(
+                TimeOp::SetTzOffsetMs.to_usize().unwrap(),
+                (((offset_ms as u64) >> 32) & 0xFFFF_FFFF) as usize,
+                (offset_ms & 0xFFFF_FFFF) as usize,
+                0,
+                0,
+            ),
+        )
+        .ok();
+    }
+
+    pub fn set_wakeup<Tz: TimeZone>(&self, alarm: DateTime<Tz>) -> Result<usize, xous::Error> {
+        let utc_alarm = alarm.with_timezone(&Utc);
+        let ts_utc_ms = utc_alarm.timestamp_millis();
+        match xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                TimeOp::SetWakeup.to_usize().unwrap(),
+                ((ts_utc_ms >> 32) & 0xFFFF_FFFF) as usize,
+                (ts_utc_ms & 0xFFFF_FFFF) as usize,
+                0,
+                0,
+            ),
+        ) {
+            Ok(xous::Result::Scalar5(_op, epochs, _, _, _)) => Ok(epochs),
+            _ => Err(xous::Error::InternalError),
+        }
+    }
+
+    pub fn clear_wakeup(&self) {
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(TimeOp::ClearWakeup.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .unwrap();
+    }
+}
 pub struct Adc {
     conn: xous::CID,
 }
@@ -300,6 +367,22 @@ impl ClockManager {
             ),
         ) {
             Ok(xous::Result::Scalar1(clk)) => clk as u32,
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn reset_reason(&self) -> bao1x_api::ResetReason {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                SusresOp::PlatformSpecific.to_usize().unwrap(),
+                ClockOp::ResetReason.to_usize().unwrap(),
+                0,
+                0,
+                0,
+            ),
+        ) {
+            Ok(xous::Result::Scalar1(reason)) => bao1x_api::ResetReason::new_with_raw_value(reason as u32),
             _ => unimplemented!(),
         }
     }
