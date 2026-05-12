@@ -478,9 +478,8 @@ impl ClockManagerImpl {
         self.hclk = divide_by_fd(hclk_fd, clktop);
         self.iclk = divide_by_fd(iclk_fd, clktop);
         self.pclk = divide_by_fd(pclk_fd, clktop);
-        let clkpketop = clktop;
         let perclk_fd = self.sysctrl.r(utra::sysctrl::SFR_CGUFDPER) & 0xFF;
-        self.perclk = divide_by_fd(perclk_fd, clkpketop) / 2;
+        self.perclk = divide_by_fd(perclk_fd, clktop) / 2;
     }
 
     pub fn fclk_fd(&self) -> u8 { (self.sysctrl.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0) & 0xFF) as u8 }
