@@ -123,14 +123,10 @@ function Copy-ToSSH {
         [string]$LocalPath,
         [string]$RemoteTarget
     )
-
     if (Test-Path $LocalPath) {
         try {
-            # Using scp for file transfer
-            $scpCommand = "scp `"$LocalPath`" `"$RemoteTarget`""
             Write-Status "  Copying: $LocalPath -> $RemoteTarget"
-
-            $result = Invoke-Expression $scpCommand 2>&1
+            $result = & scp $LocalPath $RemoteTarget 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Success "  Successfully copied: $(Split-Path $LocalPath -Leaf)"
                 return $true
