@@ -1,14 +1,14 @@
 mod api;
+#[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+mod ccid_store;
+#[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+mod ccid_transport;
 mod debug;
 #[cfg(target_os = "xous")]
 mod hw;
 #[cfg(not(target_os = "xous"))]
 mod main_hosted;
 mod mappings;
-#[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
-mod ccid_transport;
-#[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
-mod ccid_store;
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 #[cfg(target_os = "xous")]
@@ -47,10 +47,14 @@ pub(crate) fn main_hw() -> ! {
     use core::convert::TryFrom;
     use core::num::NonZeroU8;
     use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+    #[cfg(feature = "ccid-openpgp")]
+    use std::cell::RefCell;
     use std::collections::VecDeque;
     // Install a local panic handler
     #[cfg(feature = "debug-print-usb")]
     use std::panic;
+    #[cfg(feature = "ccid-openpgp")]
+    use std::rc::Rc;
     use std::sync::Arc;
 
     use api::*;
@@ -68,10 +72,6 @@ pub(crate) fn main_hw() -> ! {
     use xous_ipc::Buffer;
     use xous_usb_hid::device::fido::RawFidoReport;
     use xous_usb_hid::page::Keyboard;
-    #[cfg(feature = "ccid-openpgp")]
-    use std::rc::Rc;
-    #[cfg(feature = "ccid-openpgp")]
-    use std::cell::RefCell;
 
     #[cfg(feature = "usbd-debug")]
     bao1x_hal::claim_duart();
@@ -165,14 +165,7 @@ pub(crate) fn main_hw() -> ! {
     let prov_capture = Arc::new(core::sync::atomic::AtomicBool::new(need_pin_provision));
 
     #[cfg(not(feature = "ccid-openpgp"))]
-    let mut cu = Box::new(Bao1xUsb::new(
-        usb.clone(),
-        irq_csr.clone(),
-        cid,
-        cw,
-        &usb_alloc,
-        &serial_number,
-    ));
+    let mut cu = Box::new(Bao1xUsb::new(usb.clone(), irq_csr.clone(), cid, cw, &usb_alloc, &serial_number));
 
     #[cfg(feature = "ccid-openpgp")]
     let mut cu = Box::new({

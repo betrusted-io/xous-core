@@ -7,12 +7,11 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 
 use num_traits::ToPrimitive;
-
+use usb_device::Result as UsbResult;
+use usb_device::UsbError;
 use usb_device::class::UsbClass;
 use usb_device::class_prelude::*;
 use usb_device::descriptor::DescriptorWriter;
-use usb_device::Result as UsbResult;
-use usb_device::UsbError;
 
 use crate::api::Opcode;
 
@@ -124,17 +123,18 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
         g.tx_pending = !g.tx_buf.is_empty();
     }
 
-    fn drain_complete_messages(g: &mut CcidTransportInner, complete_rx: &RefCell<VecDeque<Vec<u8>>>, notify_cid: xous::CID) {
+    fn drain_complete_messages(
+        g: &mut CcidTransportInner,
+        complete_rx: &RefCell<VecDeque<Vec<u8>>>,
+        notify_cid: xous::CID,
+    ) {
         loop {
             if g.rx_assembly.len() < 10 {
                 break;
             }
-            let dw_len = u32::from_le_bytes([
-                g.rx_assembly[1],
-                g.rx_assembly[2],
-                g.rx_assembly[3],
-                g.rx_assembly[4],
-            ]) as usize;
+            let dw_len =
+                u32::from_le_bytes([g.rx_assembly[1], g.rx_assembly[2], g.rx_assembly[3], g.rx_assembly[4]])
+                    as usize;
             let total = 10usize.saturating_add(dw_len);
             if total > CCID_WIRE_MAX {
                 g.rx_assembly.clear();
@@ -206,9 +206,7 @@ impl<'a, B: UsbBus> UsbClass<B> for CcidTransportClass<'a, B> {
         self.complete_rx.borrow_mut().clear();
     }
 
-    fn poll(&mut self) {
-        self.poll_bulk_in();
-    }
+    fn poll(&mut self) { self.poll_bulk_in(); }
 
     fn endpoint_out(&mut self, addr: EndpointAddress) {
         if addr != self.bulk_out.address() {

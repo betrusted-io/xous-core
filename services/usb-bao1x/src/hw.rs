@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 #[cfg(feature = "ccid-openpgp")]
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, compiler_fence, AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering, compiler_fence};
 
 use bao1x_hal::usb::driver::*;
 use bao1x_hal::usb::utra::*;
@@ -26,10 +26,9 @@ use xous_usb_hid::page::Keyboard;
 use xous_usb_hid::prelude::UsbHidClass;
 use xous_usb_hid::prelude::*;
 
+use crate::api::Opcode;
 #[cfg(feature = "ccid-openpgp")]
 use crate::ccid_transport::CcidTransportClass;
-
-use crate::api::Opcode;
 
 #[cfg(feature = "ccid-openpgp")]
 pub(crate) fn make_ccid_transport<'a>(
@@ -106,7 +105,12 @@ impl<'a> Bao1xUsb<'a> {
         usb_alloc: &'a UsbBusAllocator<CorigineWrapper>,
         serial_number: &'a String,
         #[cfg(feature = "ccid-openpgp")] ccid: CcidTransportClass<'a, CorigineWrapper>,
-        #[cfg(feature = "ccid-openpgp")] provision_serial: SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]>,
+        #[cfg(feature = "ccid-openpgp")] provision_serial: SerialPort<
+            'a,
+            CorigineWrapper,
+            [u8; 1024],
+            [u8; 1024],
+        >,
         #[cfg(feature = "ccid-openpgp")] ccid_rx: Rc<RefCell<VecDeque<Vec<u8>>>>,
         #[cfg(feature = "ccid-openpgp")] prov_lines: Rc<RefCell<VecDeque<Vec<u8>>>>,
         #[cfg(feature = "ccid-openpgp")] prov_capture_enabled: Arc<AtomicBool>,
@@ -404,7 +408,13 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                                         usb.prov_lines.borrow_mut().push_back(line);
                                         xous::try_send_message(
                                             usb.conn,
-                                            Message::new_scalar(Opcode::IrqProvSerialRx.to_usize().unwrap(), 0, 0, 0, 0),
+                                            Message::new_scalar(
+                                                Opcode::IrqProvSerialRx.to_usize().unwrap(),
+                                                0,
+                                                0,
+                                                0,
+                                                0,
+                                            ),
                                         )
                                         .ok();
                                     } else if b >= 0x20 {
