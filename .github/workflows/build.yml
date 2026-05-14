@@ -15,6 +15,7 @@ jobs:
     name: Setup Rust
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         task: ["bao1x-boot0", "bao1x-boot1", "bao1x-alt-boot1", "bao1x-baremetal-dabao", "dabao", "baosec", "hosted-bao1x-ci", "hosted-ci", "renode-image"]
     steps:
@@ -31,7 +32,7 @@ jobs:
       - name: Fetch tags
         run: git fetch --prune --unshallow --tags
 
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
 
       - name: Install RISC-V toolkit
         run: cargo xtask install-toolkit --force --no-verify
