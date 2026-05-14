@@ -5,10 +5,10 @@ mod hw;
 #[cfg(not(target_os = "xous"))]
 mod main_hosted;
 mod mappings;
-#[cfg(all(target_os = "xous", feature = "ccid-openpgp"))]
-mod ccid;
-#[cfg(all(target_os = "xous", feature = "ccid-openpgp"))]
-mod provisioning;
+#[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+mod ccid_transport;
+#[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+mod ccid_store;
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 #[cfg(target_os = "xous")]
@@ -68,6 +68,10 @@ pub(crate) fn main_hw() -> ! {
     use xous_ipc::Buffer;
     use xous_usb_hid::device::fido::RawFidoReport;
     use xous_usb_hid::page::Keyboard;
+    #[cfg(feature = "ccid-openpgp")]
+    use std::rc::Rc;
+    #[cfg(feature = "ccid-openpgp")]
+    use std::cell::RefCell;
 
     #[cfg(feature = "usbd-debug")]
     bao1x_hal::claim_duart();
@@ -149,6 +153,17 @@ pub(crate) fn main_hw() -> ! {
     //    another crate that implements the USB stack which can't handle Box'd structures.
     //  - It is safe to call `.init()` repeatedly because within `init()` we have an atomic bool that tracks
     //    if the interrupt handler has been hooked, and ignores further requests to hook it.
+    #[cfg(feature = "ccid-openpgp")]
+    let pddb = pddb::Pddb::new();
+    #[cfg(feature = "ccid-openpgp")]
+    let need_pin_provision = !crate::ccid_store::is_ccid_provisioned(&pddb);
+    #[cfg(feature = "ccid-openpgp")]
+    let ccid_rx_q = Rc::new(RefCell::new(VecDeque::new()));
+    #[cfg(feature = "ccid-openpgp")]
+    let prov_lines_q = Rc::new(RefCell::new(VecDeque::new()));
+    #[cfg(feature = "ccid-openpgp")]
+    let prov_capture = Arc::new(core::sync::atomic::AtomicBool::new(need_pin_provision));
+
     #[cfg(not(feature = "ccid-openpgp"))]
     let mut cu = Box::new(Bao1xUsb::new(
         usb.clone(),
@@ -161,15 +176,8 @@ pub(crate) fn main_hw() -> ! {
 
     #[cfg(feature = "ccid-openpgp")]
     let mut cu = Box::new({
-        let (ccid, openpgp_rram) = crate::ccid::build_ccid_and_rram(
-            &xns,
-            &usb,
-            &irq_csr,
-            &cw,
-            &usb_alloc,
-            serial_number.as_str(),
-        )
-        .expect("OpenPGP CCID init failed");
+        let ccid = hw::make_ccid_transport(&usb_alloc, ccid_rx_q.clone(), cid);
+        let provision_serial = hw::make_provisioning_serial(&usb_alloc);
         Bao1xUsb::new(
             usb.clone(),
             irq_csr.clone(),
@@ -178,7 +186,10 @@ pub(crate) fn main_hw() -> ! {
             &usb_alloc,
             &serial_number,
             ccid,
-            openpgp_rram,
+            provision_serial,
+            ccid_rx_q,
+            prov_lines_q,
+            prov_capture.clone(),
         )
     });
     cu.init();
@@ -195,6 +206,14 @@ pub(crate) fn main_hw() -> ! {
     let mut fido_listener_pid: Option<NonZeroU8> = None;
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
     let mut fido_rx_queue: VecDeque<[u8; 64]> = VecDeque::new();
+
+    #[cfg(feature = "ccid-openpgp")]
+    let mut ccid_listener_pid: Option<NonZeroU8> = None;
+    #[cfg(feature = "ccid-openpgp")]
+    let mut ccid_listener: Option<xous::MessageEnvelope> = None;
+    /// First provisioning line (user), when awaiting second line (admin).
+    #[cfg(feature = "ccid-openpgp")]
+    let mut prov_user_line: Option<Vec<u8>> = None;
 
     let mut autotype_delay_ms = 30;
 
@@ -495,6 +514,97 @@ pub(crate) fn main_hw() -> ! {
                     u2f_ipc.code = U2fCode::Denied;
                 }
                 buffer.replace(u2f_ipc).unwrap();
+            }
+            #[cfg(feature = "ccid-openpgp")]
+            Opcode::CcidRxDeferred => {
+                if ccid_listener_pid.is_none() {
+                    ccid_listener_pid = msg.sender.pid();
+                }
+                if ccid_listener_pid == msg.sender.pid() {
+                    if let Some(frame) = cu.ccid_rx.borrow_mut().pop_front() {
+                        let mut response = unsafe {
+                            Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                        };
+                        let mut buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                        assert_eq!(buf.code, CcidCode::RxWait, "Expected CcidCode::RxWait");
+                        buf.data = frame;
+                        buf.code = CcidCode::RxAck;
+                        response.replace(buf).unwrap();
+                    } else {
+                        ccid_listener = msg_opt.take();
+                    }
+                } else {
+                    let mut buffer =
+                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    let mut ipc = buffer.to_original::<CcidMsgIpc, _>().unwrap();
+                    ipc.code = CcidCode::Denied;
+                    buffer.replace(ipc).unwrap();
+                }
+            }
+            #[cfg(feature = "ccid-openpgp")]
+            Opcode::CcidRxTimeout => {}
+            #[cfg(feature = "ccid-openpgp")]
+            Opcode::IrqCcidRx => {
+                if let Some(mut listener) = ccid_listener.take() {
+                    if let Some(frame) = cu.ccid_rx.borrow_mut().pop_front() {
+                        let mut response = unsafe {
+                            Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                        };
+                        let mut deferred_buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                        assert_eq!(deferred_buf.code, CcidCode::RxWait);
+                        deferred_buf.data = frame;
+                        deferred_buf.code = CcidCode::RxAck;
+                        response.replace(deferred_buf).unwrap();
+                    } else {
+                        ccid_listener = Some(listener);
+                    }
+                }
+            }
+            #[cfg(feature = "ccid-openpgp")]
+            Opcode::IrqProvSerialRx => {
+                if let Some(l) = cu.prov_lines.borrow_mut().pop_front() {
+                    if prov_user_line.is_none() {
+                        log::info!("CCID provision: first line stored (len {}), send second line", l.len());
+                        prov_user_line = Some(l);
+                    } else if let Some(u) = prov_user_line.take() {
+                        match crate::ccid_store::save_provisioned_pins(&pddb, &u, &l) {
+                            Ok(()) => {
+                                log::info!("CCID provision: saved to PDDB, resetting USB");
+                                prov_capture.store(false, Ordering::SeqCst);
+                                #[cfg(feature = "board-baosec")]
+                                cu.unplug();
+                                #[cfg(not(feature = "board-baosec"))]
+                                {
+                                    let _ = cu.device.force_reset();
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("CCID provision store failed: {:?}", e);
+                                prov_user_line = Some(u);
+                            }
+                        }
+                    }
+                }
+            }
+            #[cfg(feature = "ccid-openpgp")]
+            Opcode::CcidTx => {
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut ipc = buffer.to_original::<CcidMsgIpc, _>().unwrap();
+                if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                    ipc.code = CcidCode::Hangup;
+                    buffer.replace(ipc).unwrap();
+                    continue;
+                }
+                if ipc.code != CcidCode::Tx {
+                    ipc.code = CcidCode::Denied;
+                    buffer.replace(ipc).unwrap();
+                    continue;
+                }
+                let data = core::mem::take(&mut ipc.data);
+                cu.ccid.enqueue_response(data);
+                ipc.code = CcidCode::TxAck;
+                buffer.replace(ipc).unwrap();
             }
             Opcode::SendKeyCode => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
