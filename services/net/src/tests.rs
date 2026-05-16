@@ -721,6 +721,12 @@ fn test_read_with_timeout() {
 // The upper bound is intentionally generous (3000ms for a 500ms timeout)
 // to avoid CI flakes on slow runners, but tight enough to catch the
 // pre-fix behavior (5-90s). Refs xas#16, xas#22.
+//
+// NOTE: For a `cargo test`-runnable companion test that pins down the
+// underlying scheduling decisions (deadline-cap and reaper-gating)
+// without needing Renode/hardware, see `libs/net-scheduling`. Those
+// pure-helper unit tests cover the two algorithm changes that this
+// integration test exercises end-to-end.
 #[test]
 #[cfg_attr(target_env = "sgx", ignore)] // FIXME: https://github.com/fortanix/rust-sgx/issues/31
 fn test_read_timeout_quiet_socket_fires_in_bound() {

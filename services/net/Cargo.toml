@@ -28,6 +28,7 @@ com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f
 modals = { path = "../modals" }
 locales = { path = "../../locales" }
 precursor-hal = { path = "../../libs/precursor-hal" }
+net-scheduling = { path = "../../libs/net-scheduling" }
 
 utralib = { version = "0.1.27", optional = true, default-features = false }
 

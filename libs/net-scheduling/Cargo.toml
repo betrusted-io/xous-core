@@ -1,0 +1,10 @@
+[package]
+name = "net-scheduling"
+version = "0.1.0"
+edition = "2021"
+description = "Pure scheduling helpers for services/net's main pump loop. Extracted so the deadline and reaper-gating decisions can be unit-tested without the full Xous IPC + smoltcp + modals stack."
+
+[dependencies]
+
+[features]
+default = []

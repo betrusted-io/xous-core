@@ -121,6 +121,27 @@ pub struct WorkerState {
     pub time_replica: u64, // this is just to help with debugging, nothing else
 }
 
+/// Returns true if any of the per-call expiry queues currently has a slot
+/// carrying a user-supplied `expiry`. Used by the NetPump arm to inform
+/// `net_scheduling::should_run_reapers` (the result is informational —
+/// the post-fix invariant is to always run the reapers regardless, but the
+/// flag is threaded through to keep the helper signature symmetric with
+/// `next_wake_deadline_ms`'s expiry-walk so future maintainers can see
+/// the same queue set on both sides).
+fn has_pending_user_expiries(
+    tcp_rx_waiting: &[Option<WaitingSocket>],
+    tcp_tx_waiting: &[Option<WaitingSocket>],
+    tcp_peek_waiting: &[Option<WaitingSocket>],
+    udp_rx_waiting: &[Option<UdpStdState>],
+) -> bool {
+    tcp_rx_waiting
+        .iter()
+        .chain(tcp_tx_waiting.iter())
+        .chain(tcp_peek_waiting.iter())
+        .any(|s| s.as_ref().and_then(|w| w.expiry).is_some())
+        || udp_rx_waiting.iter().any(|s| s.as_ref().and_then(|u| u.expiry).is_some())
+}
+
 fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
     com_int_list.clear();
     com_int_list.push(ComIntSources::WlanIpConfigUpdate);
@@ -371,17 +392,18 @@ fn main() -> ! {
         }
         let now = timer.elapsed_ms();
         let timestamp = Instant::from_millis(now as i64);
-        let mut deadline = match iface.poll_at(timestamp, &sockets) {
-            Some(poll_at) if timestamp < poll_at => poll_at - timestamp,
-            _ => Duration::from_millis(NET_DEFAULT_POLL_MS),
-        };
-        // Cap the deadline by the soonest pending tcp_{rx,tx,peek}_waiting
-        // and udp_rx_waiting expiry. Without this cap, smoltcp's poll_at
-        // can push the next wake-up far into the future on a quiet socket
-        // — and the rx/tx/peek/udp_rx reapers (in the NetPump arm) won't
-        // run until that wake fires, so per-call timeouts encoded by
-        // libstd's set_{read,write}_timeout would silently miss their
-        // configured deadline. Refs xas#16, xas#22.
+        // Compute the next-wake deadline: smoltcp's poll_at, but capped by
+        // the soonest pending tcp_{rx,tx,peek}_waiting and udp_rx_waiting
+        // expiry. Without this cap, smoltcp's poll_at can push the next
+        // wake-up far into the future on a quiet socket — and the
+        // rx/tx/peek/udp_rx reapers (in the NetPump arm) won't run until
+        // that wake fires, so per-call timeouts encoded by libstd's
+        // set_{read,write}_timeout would silently miss their configured
+        // deadline. The cap walk and the smoltcp-vs-default fallback are
+        // implemented in `net-scheduling::next_wake_deadline_ms` so they
+        // can be unit-tested without spinning up the full IPC + smoltcp
+        // stack. Refs PR #26, xas#16, xas#22.
+        let smoltcp_poll_at_ms = iface.poll_at(timestamp, &sockets).map(|i| i.total_millis() as u64);
         let tcp_expiries = tcp_rx_waiting
             .iter()
             .chain(tcp_tx_waiting.iter())
@@ -389,18 +411,13 @@ fn main() -> ! {
             .filter_map(|slot| slot.as_ref().and_then(|w| w.expiry.map(|e| e.get())));
         let udp_expiries =
             udp_rx_waiting.iter().filter_map(|slot| slot.as_ref().and_then(|u| u.expiry));
-        for expiry_ms in tcp_expiries.chain(udp_expiries) {
-            let until_expiry = if expiry_ms > now {
-                Duration::from_millis(expiry_ms - now)
-            } else {
-                // Already past expiry — wake immediately so the reaper can fire.
-                Duration::from_millis(0)
-            };
-            if until_expiry < deadline {
-                deadline = until_expiry;
-            }
-        }
-        let msg_or_timeout = core_rx.recv_timeout(std::time::Duration::from_millis(deadline.millis()));
+        let deadline_ms = net_scheduling::next_wake_deadline_ms(
+            smoltcp_poll_at_ms,
+            tcp_expiries.chain(udp_expiries),
+            now,
+            NET_DEFAULT_POLL_MS,
+        );
+        let msg_or_timeout = core_rx.recv_timeout(std::time::Duration::from_millis(deadline_ms));
         let mut msg = match msg_or_timeout {
             Ok(m) => m,
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
@@ -1287,19 +1304,35 @@ fn main() -> ! {
                 log::trace!("NetPump");
                 let now = timer.elapsed_ms();
                 let timestamp = Instant::from_millis(now as i64);
-                let _smoltcp_changed = iface.poll(timestamp, &mut device, &mut sockets);
+                let smoltcp_changed = iface.poll(timestamp, &mut device, &mut sockets);
                 // The body below runs unconditionally so the tcp_{rx,tx,peek}_waiting
-                // reapers always get a chance to check per-call expiries set via
-                // libstd's `set_{read,write}_timeout` (encoded into `body.offset` by
-                // the libstd shim, materialized as `WaitingSocket.expiry` by the
-                // std_tcp_{rx,tx,peek} handlers). Previously this arm did
+                // and udp_rx_waiting reapers always get a chance to check per-call
+                // expiries set via libstd's `set_{read,write}_timeout` (encoded into
+                // `body.offset` by the libstd shim, materialized as
+                // `WaitingSocket.expiry` / `UdpStdState.expiry` by the std_tcp_*
+                // and std_udp_rx handlers). Previously this arm did
                 // `if !iface.poll(...) { continue; }`, which silently skipped the
                 // reapers whenever smoltcp had no state change. On a half-closed
                 // peer (server fired Close, no further packets in either direction)
                 // smoltcp returns false and never delivered the user-supplied
                 // timeout — reads blocked the full TCP retransmit budget (~89s)
-                // instead of the configured 5s. Refs xas#16, xas#22.
-                if _smoltcp_changed {
+                // instead of the configured 5s. The gate decision is centralised in
+                // `net_scheduling::should_run_reapers` so it can be unit-tested
+                // alongside the deadline-cap. Refs PR #26, xas#16, xas#22.
+                let _run_reapers = net_scheduling::should_run_reapers(
+                    smoltcp_changed,
+                    has_pending_user_expiries(
+                        &tcp_rx_waiting,
+                        &tcp_tx_waiting,
+                        &tcp_peek_waiting,
+                        &udp_rx_waiting,
+                    ),
+                );
+                debug_assert!(
+                    _run_reapers,
+                    "post-fix invariant: reapers must always run on NetPump"
+                );
+                if smoltcp_changed {
                     log::debug!("Socket readiness changed");
                 } else {
                     log::trace!("No change to socket readiness; continuing to reapers");
