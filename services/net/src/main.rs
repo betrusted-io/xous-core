@@ -371,10 +371,30 @@ fn main() -> ! {
         }
         let now = timer.elapsed_ms();
         let timestamp = Instant::from_millis(now as i64);
-        let deadline = match iface.poll_at(timestamp, &sockets) {
+        let mut deadline = match iface.poll_at(timestamp, &sockets) {
             Some(poll_at) if timestamp < poll_at => poll_at - timestamp,
             _ => Duration::from_millis(NET_DEFAULT_POLL_MS),
         };
+        // Cap the deadline by the soonest pending tcp_{rx,tx,peek}_waiting
+        // expiry. Without this cap, smoltcp's poll_at can push the next
+        // wake-up far into the future on a quiet socket — and the rx/tx
+        // reapers (in the NetPump arm) won't run until that wake fires,
+        // so per-call timeouts encoded by libstd's set_{read,write}_timeout
+        // would silently miss their configured deadline. Refs xas#16, xas#22.
+        for slot in tcp_rx_waiting.iter().chain(tcp_tx_waiting.iter()).chain(tcp_peek_waiting.iter()) {
+            if let Some(WaitingSocket { expiry: Some(exp), .. }) = slot {
+                let expiry_ms = exp.get();
+                let until_expiry = if expiry_ms > now {
+                    Duration::from_millis(expiry_ms - now)
+                } else {
+                    // Already past expiry — wake immediately so the reaper can fire.
+                    Duration::from_millis(0)
+                };
+                if until_expiry < deadline {
+                    deadline = until_expiry;
+                }
+            }
+        }
         let msg_or_timeout = core_rx.recv_timeout(std::time::Duration::from_millis(deadline.millis()));
         let mut msg = match msg_or_timeout {
             Ok(m) => m,
@@ -1262,12 +1282,22 @@ fn main() -> ! {
                 log::trace!("NetPump");
                 let now = timer.elapsed_ms();
                 let timestamp = Instant::from_millis(now as i64);
-                if !iface.poll(timestamp, &mut device, &mut sockets) {
-                    // nothing to do, continue on.
-                    log::debug!("No change to socket readiness");
-                    continue;
-                } else {
+                let _smoltcp_changed = iface.poll(timestamp, &mut device, &mut sockets);
+                // The body below runs unconditionally so the tcp_{rx,tx,peek}_waiting
+                // reapers always get a chance to check per-call expiries set via
+                // libstd's `set_{read,write}_timeout` (encoded into `body.offset` by
+                // the libstd shim, materialized as `WaitingSocket.expiry` by the
+                // std_tcp_{rx,tx,peek} handlers). Previously this arm did
+                // `if !iface.poll(...) { continue; }`, which silently skipped the
+                // reapers whenever smoltcp had no state change. On a half-closed
+                // peer (server fired Close, no further packets in either direction)
+                // smoltcp returns false and never delivered the user-supplied
+                // timeout — reads blocked the full TCP retransmit budget (~89s)
+                // instead of the configured 5s. Refs xas#16, xas#22.
+                if _smoltcp_changed {
                     log::debug!("Socket readiness changed");
+                } else {
+                    log::trace!("No change to socket readiness; continuing to reapers");
                 }
 
                 // Connect calls take time to establish. This block checks to see if connections

@@ -705,6 +705,64 @@ fn test_read_with_timeout() {
     drop(listener);
 }
 
+// Regression: per-call read timeout must fire close to the configured value
+// even when no packets are flowing on the socket. Pre-fix, the rx_waiting
+// reaper at services/net/src/main.rs::Opcode::NetPump was gated behind
+// `iface.poll() == true` and the upstream wake-up deadline was driven by
+// smoltcp's poll_at without considering user expiries — so on a quiet
+// established TCP connection (peer accepted but never wrote, or peer
+// half-closed) reads would block the full TCP retransmit budget (~89s on
+// Precursor PVT2 wlan) instead of the configured 5s. xas hit this
+// repeatedly during WS sends to chat.signal.org, where the WS reader
+// thread holds the WebSocket mutex during a 5s read; the writer was
+// blocked behind it for 80-90s per send attempt, manifesting as
+// `Protocol(SendAfterClosing)` after retransmit budget exhaustion.
+//
+// The upper bound is intentionally generous (3000ms for a 500ms timeout)
+// to avoid CI flakes on slow runners, but tight enough to catch the
+// pre-fix behavior (5-90s). Refs xas#16, xas#22.
+#[test]
+#[cfg_attr(target_env = "sgx", ignore)] // FIXME: https://github.com/fortanix/rust-sgx/issues/31
+fn test_read_timeout_quiet_socket_fires_in_bound() {
+    let addr = next_test_ip4();
+    let listener = t!(TcpListener::bind(&addr));
+
+    let mut stream = t!(TcpStream::connect(&("localhost", addr.port())));
+    // Hold the accepted side open without writing — leaves the connection
+    // in Established with no traffic flowing. This is the scenario where
+    // smoltcp's `iface.poll()` returns false on subsequent polls, so any
+    // bug that gates the rx_waiting reaper on poll() would manifest here.
+    let _other_end = t!(listener.accept()).0;
+
+    t!(stream.set_read_timeout(Some(Duration::from_millis(500))));
+
+    let mut buf = [0; 10];
+    let start = Instant::now();
+    let kind = stream.read_exact(&mut buf).err().expect("expected error").kind();
+    let elapsed = start.elapsed();
+
+    assert!(
+        kind == ErrorKind::WouldBlock || kind == ErrorKind::TimedOut,
+        "unexpected error kind: {:?} (expected WouldBlock or TimedOut)",
+        kind
+    );
+    assert!(
+        elapsed >= Duration::from_millis(450),
+        "read returned suspiciously fast: {:?} (configured 500ms)",
+        elapsed
+    );
+    assert!(
+        elapsed < Duration::from_millis(3000),
+        "read returned far too late: {:?} (configured 500ms; pre-fix would block ~5-90s on \
+         a quiet socket because the rx_waiting reaper was gated behind iface.poll() == true). \
+         See xas#16, xas#22.",
+        elapsed
+    );
+
+    drop(_other_end);
+    drop(listener);
+}
+
 // Ensure the `set_read_timeout` and `set_write_timeout` calls return errors
 // when passed zero Durations
 #[test]
