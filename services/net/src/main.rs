@@ -376,23 +376,28 @@ fn main() -> ! {
             _ => Duration::from_millis(NET_DEFAULT_POLL_MS),
         };
         // Cap the deadline by the soonest pending tcp_{rx,tx,peek}_waiting
-        // expiry. Without this cap, smoltcp's poll_at can push the next
-        // wake-up far into the future on a quiet socket — and the rx/tx
-        // reapers (in the NetPump arm) won't run until that wake fires,
-        // so per-call timeouts encoded by libstd's set_{read,write}_timeout
-        // would silently miss their configured deadline. Refs xas#16, xas#22.
-        for slot in tcp_rx_waiting.iter().chain(tcp_tx_waiting.iter()).chain(tcp_peek_waiting.iter()) {
-            if let Some(WaitingSocket { expiry: Some(exp), .. }) = slot {
-                let expiry_ms = exp.get();
-                let until_expiry = if expiry_ms > now {
-                    Duration::from_millis(expiry_ms - now)
-                } else {
-                    // Already past expiry — wake immediately so the reaper can fire.
-                    Duration::from_millis(0)
-                };
-                if until_expiry < deadline {
-                    deadline = until_expiry;
-                }
+        // and udp_rx_waiting expiry. Without this cap, smoltcp's poll_at
+        // can push the next wake-up far into the future on a quiet socket
+        // — and the rx/tx/peek/udp_rx reapers (in the NetPump arm) won't
+        // run until that wake fires, so per-call timeouts encoded by
+        // libstd's set_{read,write}_timeout would silently miss their
+        // configured deadline. Refs xas#16, xas#22.
+        let tcp_expiries = tcp_rx_waiting
+            .iter()
+            .chain(tcp_tx_waiting.iter())
+            .chain(tcp_peek_waiting.iter())
+            .filter_map(|slot| slot.as_ref().and_then(|w| w.expiry.map(|e| e.get())));
+        let udp_expiries =
+            udp_rx_waiting.iter().filter_map(|slot| slot.as_ref().and_then(|u| u.expiry));
+        for expiry_ms in tcp_expiries.chain(udp_expiries) {
+            let until_expiry = if expiry_ms > now {
+                Duration::from_millis(expiry_ms - now)
+            } else {
+                // Already past expiry — wake immediately so the reaper can fire.
+                Duration::from_millis(0)
+            };
+            if until_expiry < deadline {
+                deadline = until_expiry;
             }
         }
         let msg_or_timeout = core_rx.recv_timeout(std::time::Duration::from_millis(deadline.millis()));
