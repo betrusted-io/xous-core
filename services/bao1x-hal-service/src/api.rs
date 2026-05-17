@@ -26,16 +26,3 @@ pub enum TimeOp {
     /// Clears any pending alarm
     ClearWakeup = 1026,
 }
-
-#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum ClockOp {
-    GetVco,
-    GetFclk,
-    GetAclk,
-    GetHclk,
-    GetIclk,
-    GetPclk,
-    GetPer,
-    DeepSleep,
-    ResetReason,
-}
