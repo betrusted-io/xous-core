@@ -26,5 +26,7 @@ xous-api-susres = { path = "../../api/xous-api-susres" }
 minifb = "0.26.0"
 
 [features]
-hosted-baosec = []
+hosted-bao = []
+hosted-baosec = ["hosted-bao"]
+hosted-dabao = ["hosted-bao"]
 default = ["hosted-baosec"]

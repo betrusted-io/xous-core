@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[macro_use]
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod debug;
 #[cfg(feature = "axp2101")]
 pub mod axp2101;
@@ -10,55 +10,55 @@ pub mod bmp180;
 pub mod board;
 #[cfg(feature = "camera-gc2145")]
 pub mod gc2145;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod ifram;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod iox;
 #[cfg(feature = "camera-ov2640")]
 pub mod ov2640;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod sce;
 #[cfg(feature = "display-sh1107")]
 pub mod sh1107;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod shared_csr;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod udma;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod usb;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub use shared_csr::*;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod acram;
 // this implements the abstract library calls for BIO
-#[cfg(all(feature = "std", not(feature = "hosted-baosec")))]
+#[cfg(all(feature = "std", not(feature = "hosted-bao")))]
 pub mod bio;
 // this implements the no-std hardware interfaces for BIO
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod bio_hw;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod buram;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod clocks;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod coreuser;
 #[cfg(feature = "security")]
 pub mod hardening;
 #[cfg(feature = "std")]
 pub mod i2c;
-#[cfg(all(not(feature = "hosted-baosec"), feature = "std"))]
+#[cfg(all(not(feature = "hosted-bao"), feature = "std"))]
 pub mod kpc_aoint;
 #[cfg(all(feature = "sensor-lis2dh12", feature = "std"))]
 pub mod lis2dh12;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod mbox;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod rram;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod rtc;
 #[cfg(feature = "security")]
 pub mod sigcheck;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 pub mod sram_trim;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod wdt;
@@ -117,7 +117,7 @@ pub unsafe fn read_sp() -> usize {
 /// DUART is first-come, first-served in Xous environment. This stub
 /// can be called early in a server's initialization process so that it can get
 /// exclusive access to the DUART (assuming the kernel is configured to relinquish it)
-#[cfg(all(feature = "std", not(feature = "hosted-baosec")))]
+#[cfg(all(feature = "std", not(feature = "hosted-bao")))]
 pub fn claim_duart() {
     crate::println!("PID {} got duart", xous::process::id());
 }
