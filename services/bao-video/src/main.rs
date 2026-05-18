@@ -432,6 +432,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let mut bw_thresh: u8 = 128;
     let mut qr_request: Option<xous::MessageEnvelope> = None;
     let mut kbd_listeners: Vec<(CID, usize)> = Vec::new();
+    let cam_started = Arc::new(AtomicBool::new(false));
     #[allow(unused_mut)]
     let mut orientation = DisplayOrientation::Normal;
     loop {
@@ -445,41 +446,6 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 #[cfg(not(feature = "hosted-baosec"))]
                 GfxOpcode::AcquireQr => {
                     if qr_request.is_none() {
-                        // reset camera UDMA block
-                        udma_global.reset(PeriphId::Cam);
-
-                        // display.stash(); // save a copy of the UI
-                        // this will defer response until later
-                        qr_request = msg_opt.take();
-
-                        // power up the camera
-                        // starts MCLK
-                        iox.setup_pin(
-                            cam_clk.0,
-                            cam_clk.1,
-                            Some(IoxDir::Output),
-                            Some(IoxFunction::AF3),
-                            None,
-                            None,
-                            Some(IoxEnable::Disable),
-                            Some(IoxDriveStrength::Drive8mA),
-                        );
-                        timer.wo(utra::pwm::REG_CH_EN, 1);
-                        timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 1);
-                        tt.sleep_ms(2).ok(); // wait for camera to clock-up
-                        // bring camera out of powerdown
-                        iox.set_gpio_pin_value(cam_pdwn.0, cam_pdwn.1, IoxValue::Low);
-                        tt.sleep_ms(3).ok(); // wait for camera to power-up
-                        let (pid, mid) = cam.read_id(&mut i2c);
-                        log::info!("Camera pid {:x}, mid {:x}", pid, mid);
-                        cam.init(&mut i2c, bao1x_api::camera::Resolution::Res320x240);
-                        tt.sleep_ms(1).ok();
-
-                        let (cols, _rows) = cam.resolution();
-                        let border = (cols - IMAGE_WIDTH) / 2;
-                        cam.set_slicing((border, 0), (cols - border, IMAGE_HEIGHT));
-                        log::info!("320x240 resolution setup with 256x240 slicing");
-
                         // decode dummy data - what this does is load the swapped out QR decoding logic, thus
                         // improving the latency of the decoder on the "first hit". The sole purpose of this
                         // is to improve the user experience during scanning.
@@ -505,18 +471,84 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         } else {
                             log::error!("test image failed to decode, this shouldn't happen!");
                         }
-
-                        // turning off preemption makes camera acquisition smoother; the OS will naturally try
-                        // to schedule other tasks between camera frames after each
-                        // CamIrq interrupt
-                        hal.set_preemption(false);
                         // fix orientation if it's upside down
                         if orientation == DisplayOrientation::UpsideDown {
                             display
                                 .flip_vertical(false)
                                 .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display))
                         }
-                        // now start acquisition
+
+                        // reset camera UDMA block
+                        udma_global.reset(PeriphId::Cam);
+
+                        // display.stash(); // save a copy of the UI
+                        // this will defer response until later
+                        qr_request = msg_opt.take();
+
+                        // power up the camera
+                        // starts MCLK
+                        iox.setup_pin(
+                            cam_clk.0,
+                            cam_clk.1,
+                            Some(IoxDir::Output),
+                            Some(IoxFunction::AF3),
+                            None,
+                            None,
+                            Some(IoxEnable::Disable),
+                            Some(IoxDriveStrength::Drive8mA),
+                        );
+                        timer.wo(utra::pwm::REG_CH_EN, 1);
+                        timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 1);
+                        tt.sleep_ms(5).ok(); // wait for camera to clock-up
+                        // bring camera out of powerdown
+                        iox.set_gpio_pin_value(cam_pdwn.0, cam_pdwn.1, IoxValue::Low);
+                        tt.sleep_ms(10).ok(); // wait for camera to power-up
+                        let (pid, mid) = cam.read_id(&mut i2c);
+                        log::info!("Camera pid {:x}, mid {:x}", pid, mid);
+                        cam.init(&mut i2c, bao1x_api::camera::Resolution::Res320x240);
+                        tt.sleep_ms(5).ok();
+
+                        let (cols, _rows) = cam.resolution();
+                        let border = (cols - IMAGE_WIDTH) / 2;
+                        cam.set_slicing((border, 0), (cols - border, IMAGE_HEIGHT));
+                        log::info!("320x240 resolution setup with 256x240 slicing");
+
+                        cam_started.store(false, Ordering::SeqCst);
+
+                        // start watchdog to make sure camera is running
+                        let _ = std::thread::spawn({
+                            let cid = cid.clone();
+                            let cam_started = cam_started.clone();
+                            move || {
+                                let hal = Hal::new();
+                                let start = std::time::Instant::now();
+                                while !cam_started.load(Ordering::SeqCst)
+                                    && std::time::Instant::now().duration_since(start).as_millis() < 600
+                                {
+                                    std::thread::sleep(std::time::Duration::from_millis(30));
+                                }
+                                if !cam_started.load(Ordering::SeqCst) {
+                                    // force an IRQ into the pipe to start the camera
+                                    xous::try_send_message(
+                                        cid,
+                                        xous::Message::new_scalar(
+                                            GfxOpcode::CamIrq.to_usize().unwrap(),
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                        ),
+                                    )
+                                    .ok();
+                                }
+                                // turning off preemption makes camera acquisition smoother; the OS will
+                                // naturally try to schedule other tasks
+                                // between camera frames after each CamIrq interrupt
+                                hal.set_preemption(false);
+                            }
+                        });
+
+                        // now start an acquisition
                         cam.capture_async();
                     }
                     // if qr_request is already pending, ignore any new acquisition requests
@@ -567,6 +599,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     }
                 }
                 GfxOpcode::CamIrq => {
+                    cam_started.store(true, Ordering::SeqCst);
                     // copy the camera data to our FB
                     let fb: &[u32] = cam.rx_buf();
                     // fb is an array of IMAGE_WIDTH x IMAGE_HEIGHT x u16
