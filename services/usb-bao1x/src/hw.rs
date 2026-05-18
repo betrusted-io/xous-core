@@ -57,6 +57,7 @@ pub struct Bao1xUsb<'a> {
     // from the interrupt handler.
     pub double_lock: AtomicBool,
     pub led_state: KeyboardLedsReport,
+    pub irq_serviced: AtomicBool,
 }
 
 impl<'a> Bao1xUsb<'a> {
@@ -122,6 +123,7 @@ impl<'a> Bao1xUsb<'a> {
             serial_rx: [0u8; SERIAL_MAX_PACKET_SIZE],
             double_lock: AtomicBool::new(false),
             led_state: KeyboardLedsReport::default(),
+            irq_serviced: AtomicBool::new(false),
         }
     }
 
@@ -355,6 +357,7 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                 while let Some(u2f_msg) = usb.fido_tx_queue.borrow_mut().pop_front() {
                     u2f.write_report(&u2f_msg).ok();
                 }
+                usb.irq_serviced.store(true, Ordering::SeqCst);
             }
             Some(UsbIrqReq::KbdTx) => {
                 let keyboard = composite.device::<NKROBootKeyboard<'_, _>, _>();
