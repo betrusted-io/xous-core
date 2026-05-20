@@ -237,18 +237,21 @@ impl FilteredListView {
         // step 1. binary search to find if the criteria is even anywhere in the list.
         match self.list.binary_search_by(|probe| probe.sortable_name.partial_cmp(criteria).unwrap()) {
             Ok(mut index) | Err(mut index) => {
-                if !self.list[index].name.to_lowercase().starts_with(criteria) {
+                // `binary_search_by` returns `Err(insertion_point)` in `0..=len`, so
+                // `Err(len)` is legitimate when the criteria sorts past every entry.
+                // Guard the index before dereferencing.
+                if index >= self.list.len()
+                    || !self.list[index].name.to_lowercase().starts_with(criteria)
+                {
                     self.filter_range = None
                 } else {
                     // step 2. we have to go backwards in the list because if we have several matches, we are
                     // not guaranteed to be at the first match. Find that first match with a linear search.
                     //ts[2] = tt.elapsed_ms();
-                    while index.saturating_sub(1) > 0 {
-                        if self.list[index - 1].name.to_lowercase().starts_with(criteria) {
-                            index -= 1;
-                        } else {
-                            break;
-                        }
+                    while index > 0
+                        && self.list[index - 1].name.to_lowercase().starts_with(criteria)
+                    {
+                        index -= 1;
                     }
                     // the index now starts at the range of matches. Find the end of matches with another
                     // linear search.
