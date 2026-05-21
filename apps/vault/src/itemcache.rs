@@ -237,9 +237,7 @@ impl FilteredListView {
         // step 1. binary search to find if the criteria is even anywhere in the list.
         match self.list.binary_search_by(|probe| probe.sortable_name.partial_cmp(criteria).unwrap()) {
             Ok(mut index) | Err(mut index) => {
-                // `binary_search_by` returns `Err(insertion_point)` in `0..=len`, so
-                // `Err(len)` is legitimate when the criteria sorts past every entry.
-                // Guard the index before dereferencing.
+                // `Err(len)` is a valid insertion point - guard before indexing.
                 if index >= self.list.len()
                     || !self.list[index].name.to_lowercase().starts_with(criteria)
                 {
@@ -546,10 +544,6 @@ mod tests {
         ListItem::new(name.into(), String::new(), false, guid.into(), 0, 0)
     }
 
-    // Regression for the `Err(len)` out-of-bounds: a criteria that sorts past
-    // every entry must not panic. binary_search_by returns Err(insertion_point)
-    // in 0..=len, and `Err(len)` is legitimate when the criteria sorts past
-    // every existing element.
     #[test]
     fn filter_criteria_past_end_does_not_panic() {
         let mut v = FilteredListView::new();
@@ -560,11 +554,6 @@ mod tests {
         assert_eq!(v.filter_len(), 0);
     }
 
-    // Regression for the backwards-walk off-by-one (`while index.saturating_sub(1) > 0`,
-    // which is equivalent to `while index > 1` and excludes list[0]).
-    // Three items share a sortable_name; binary_search_by("ab") lands on the
-    // midpoint (Ok(1)) and the backwards walk must reach list[0] for
-    // filter_range to cover all three.
     #[test]
     fn filter_walk_back_includes_index_zero() {
         let mut v = FilteredListView::new();
