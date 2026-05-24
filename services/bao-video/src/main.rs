@@ -433,6 +433,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let mut qr_request: Option<xous::MessageEnvelope> = None;
     let mut kbd_listeners: Vec<(CID, usize)> = Vec::new();
     let cam_started = Arc::new(AtomicBool::new(false));
+    let mut dry_run = false;
     #[allow(unused_mut)]
     let mut orientation = DisplayOrientation::Normal;
     loop {
@@ -851,9 +852,11 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                 GfxOpcode::Flush => {
                     if qr_request.is_none() {
                         log::trace!("***gfx flush*** redraw##");
-                        display
-                            .redraw()
-                            .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
+                        if !dry_run {
+                            display
+                                .redraw()
+                                .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
+                        }
                     }
                 }
                 GfxOpcode::Clear => {
@@ -1001,10 +1004,18 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                             display
                                 .flip_vertical(scalar.arg1 != 0)
                                 .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
-                            display
-                                .redraw()
-                                .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
+                            if !dry_run {
+                                display
+                                    .redraw()
+                                    .unwrap_or_else(|_| display_timeout_handler(&udma_global, &mut display));
+                            }
                         }
+                    }
+                }
+                #[cfg(feature = "board-baosec")]
+                GfxOpcode::DryRun => {
+                    if let Some(scalar) = msg.body.scalar_message_mut() {
+                        dry_run = scalar.arg1 != 0;
                     }
                 }
                 GfxOpcode::Quit => {

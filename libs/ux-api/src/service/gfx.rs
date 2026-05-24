@@ -848,6 +848,21 @@ impl Gfx {
         .map(|_| ())
     }
 
+    #[cfg(feature = "board-baosec")]
+    pub fn dry_run(&self, dry_run: bool) -> Result<(), xous::Error> {
+        send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                GfxOpcode::DryRun.to_usize().unwrap(),
+                if dry_run { 1 } else { 0 },
+                0,
+                0,
+                0,
+            ),
+        )
+        .map(|_| ())
+    }
+
     #[cfg(feature = "hosted-baosec")]
     pub fn acquire_qr(&self) -> Result<QrAcquisition, xous::Error> {
         let dummy = "otpauth://totp/ACME%20Co:john.doe@email.com?secret=HXDMVJECJJWSRB3HWIZR4IFUGFTMXBOZ&issuer=ACME%20Co&algorithm=SHA1&digits=6&period=30".to_string();
