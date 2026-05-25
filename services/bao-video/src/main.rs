@@ -500,14 +500,14 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         );
                         timer.wo(utra::pwm::REG_CH_EN, 1);
                         timer.rmwf(utra::pwm::REG_TIM0_CMD_R_TIMER0_START, 1);
-                        tt.sleep_ms(5).ok(); // wait for camera to clock-up
+                        tt.sleep_ms(10).ok(); // wait for camera to clock-up
                         // bring camera out of powerdown
                         iox.set_gpio_pin_value(cam_pdwn.0, cam_pdwn.1, IoxValue::Low);
                         tt.sleep_ms(10).ok(); // wait for camera to power-up
                         let (pid, mid) = cam.read_id(&mut i2c);
                         log::info!("Camera pid {:x}, mid {:x}", pid, mid);
                         cam.init(&mut i2c, bao1x_api::camera::Resolution::Res320x240);
-                        tt.sleep_ms(5).ok();
+                        tt.sleep_ms(15).ok();
 
                         let (cols, _rows) = cam.resolution();
                         let border = (cols - IMAGE_WIDTH) / 2;
@@ -524,9 +524,9 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                                 let hal = Hal::new();
                                 let start = std::time::Instant::now();
                                 while !cam_started.load(Ordering::SeqCst)
-                                    && std::time::Instant::now().duration_since(start).as_millis() < 600
+                                    && std::time::Instant::now().duration_since(start).as_millis() < 3000
                                 {
-                                    std::thread::sleep(std::time::Duration::from_millis(30));
+                                    std::thread::sleep(std::time::Duration::from_millis(50));
                                 }
                                 if !cam_started.load(Ordering::SeqCst) {
                                     // force an IRQ into the pipe to start the camera
