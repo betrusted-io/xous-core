@@ -63,6 +63,7 @@ hosted-baosec = ["bao1x-emu", "ux-api/hosted-baosec", "no-gam"]
 autotest = []
 # factory feature - makes it keep on scanning forever - used for calibrating factory test jigs
 eternal-scan = []
+cam-watchdog = []
 
 with-logo = []
 bao1x = ["utralib/bao1x", "blitstr2/bao1x"]

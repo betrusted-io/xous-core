@@ -432,6 +432,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
     let mut bw_thresh: u8 = 128;
     let mut qr_request: Option<xous::MessageEnvelope> = None;
     let mut kbd_listeners: Vec<(CID, usize)> = Vec::new();
+    #[cfg(feature = "cam-watchdog")]
     let cam_started = Arc::new(AtomicBool::new(false));
     let mut dry_run = false;
     #[allow(unused_mut)]
@@ -514,9 +515,13 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                         cam.set_slicing((border, 0), (cols - border, IMAGE_HEIGHT));
                         log::info!("320x240 resolution setup with 256x240 slicing");
 
+                        #[cfg(feature = "cam-watchdog")]
                         cam_started.store(false, Ordering::SeqCst);
+                        #[cfg(not(feature = "cam-watchdog"))]
+                        hal.set_preemption(false);
 
                         // start watchdog to make sure camera is running
+                        #[cfg(feature = "cam-watchdog")]
                         let _ = std::thread::spawn({
                             let cid = cid.clone();
                             let cam_started = cam_started.clone();
@@ -600,6 +605,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     }
                 }
                 GfxOpcode::CamIrq => {
+                    #[cfg(feature = "cam-watchdog")]
                     cam_started.store(true, Ordering::SeqCst);
                     // copy the camera data to our FB
                     let fb: &[u32] = cam.rx_buf();
