@@ -882,28 +882,12 @@ impl<'a> RootKeys {
             unsafe {
                 match pw_type {
                     PasswordType::Boot => {
-                        if (*pcache_ptr).hashed_boot_pw_valid == 1 {
-                            for (&src, &dst) in digest.iter().zip((*pcache_ptr).hashed_boot_pw.iter()) {
-                                if dst != src {
-                                    return false;
-                                }
-                            }
-                            true
-                        } else {
-                            false
-                        }
+                        (*pcache_ptr).hashed_boot_pw_valid == 1
+                            && bool::from(digest.ct_eq(&(*pcache_ptr).hashed_boot_pw))
                     }
                     PasswordType::Update => {
-                        if (*pcache_ptr).hashed_update_pw_valid == 1 {
-                            for (&src, &dst) in digest.iter().zip((*pcache_ptr).hashed_update_pw.iter()) {
-                                if dst != src {
-                                    return false;
-                                }
-                            }
-                            true
-                        } else {
-                            false
-                        }
+                        (*pcache_ptr).hashed_update_pw_valid == 1
+                            && bool::from(digest.ct_eq(&(*pcache_ptr).hashed_update_pw))
                     }
                 }
             }
