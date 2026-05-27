@@ -605,7 +605,7 @@ pub fn wrapped_main(main_thread_token: MainThreadToken) -> ! {
                     }
                 }
                 GfxOpcode::CamIrq => {
-                        #[cfg(feature = "cam-watchdog")]
+                    #[cfg(feature = "cam-watchdog")]
                     cam_started.store(true, Ordering::SeqCst);
                     // copy the camera data to our FB
                     let fb: &[u32] = cam.rx_buf();
