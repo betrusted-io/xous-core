@@ -726,8 +726,12 @@ dependencies = [
  "bao1x-hal",
  "bitbybit",
  "log",
+ "num-derive 0.4.2",
+ "num-traits",
  "utralib 0.1.27",
  "xous 0.9.70 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-names",
+ "xous-api-susres 0.9.68",
  "xous-api-ticktimer",
 ]
 

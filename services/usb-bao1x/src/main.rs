@@ -488,6 +488,7 @@ pub(crate) fn main_hw() -> ! {
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
                 if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                    log::warn!("U2fTx: HANGUP");
                     u2f_ipc.code = U2fCode::Hangup;
                     buffer.replace(u2f_ipc).unwrap();
                     continue;
@@ -501,6 +502,15 @@ pub(crate) fn main_hw() -> ! {
                         cu.fido_tx_queue.borrow_mut().push_back(u2f_msg);
                     }
                     cu.sw_irq(UsbIrqReq::FidoTx);
+                    // ensure that the interrupt has happened, because the interrupt can create
+                    // concurrency issues on the fido_tx_queue if we've re-entered this function
+                    // before the interrupt has processed
+                    while !cu.irq_serviced.load(Ordering::SeqCst) {
+                        xous::yield_slice();
+                    }
+                    // clear the serviced flag here - this is OK because this is the only other thread
+                    // that can access the variable.
+                    cu.irq_serviced.store(false, Ordering::SeqCst);
                     log::debug!("enqueued U2F packet {:x?}", u2f_ipc.data);
                     u2f_ipc.code = U2fCode::TxAck;
                 } else {

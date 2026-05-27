@@ -80,20 +80,7 @@ pub struct Bao1xUsb<'a> {
     // from the interrupt handler.
     pub double_lock: AtomicBool,
     pub led_state: KeyboardLedsReport,
-    #[cfg(feature = "ccid-openpgp")]
-    pub ccid: CcidTransportClass<'a, CorigineWrapper>,
-    #[cfg(feature = "ccid-openpgp")]
-    pub provision_serial: SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]>,
-    #[cfg(feature = "ccid-openpgp")]
-    pub ccid_rx: Rc<RefCell<VecDeque<Vec<u8>>>>,
-    #[cfg(feature = "ccid-openpgp")]
-    pub prov_serial_rx: [u8; SERIAL_MAX_PACKET_SIZE],
-    #[cfg(feature = "ccid-openpgp")]
-    pub prov_line_acc: RefCell<Vec<u8>>,
-    #[cfg(feature = "ccid-openpgp")]
-    pub prov_lines: Rc<RefCell<VecDeque<Vec<u8>>>>,
-    #[cfg(feature = "ccid-openpgp")]
-    pub prov_capture_enabled: Arc<AtomicBool>,
+    pub irq_serviced: AtomicBool,
 }
 
 impl<'a> Bao1xUsb<'a> {
@@ -169,20 +156,7 @@ impl<'a> Bao1xUsb<'a> {
             serial_rx: [0u8; SERIAL_MAX_PACKET_SIZE],
             double_lock: AtomicBool::new(false),
             led_state: KeyboardLedsReport::default(),
-            #[cfg(feature = "ccid-openpgp")]
-            ccid,
-            #[cfg(feature = "ccid-openpgp")]
-            provision_serial,
-            #[cfg(feature = "ccid-openpgp")]
-            ccid_rx,
-            #[cfg(feature = "ccid-openpgp")]
-            prov_serial_rx: [0u8; SERIAL_MAX_PACKET_SIZE],
-            #[cfg(feature = "ccid-openpgp")]
-            prov_line_acc: RefCell::new(Vec::new()),
-            #[cfg(feature = "ccid-openpgp")]
-            prov_lines,
-            #[cfg(feature = "ccid-openpgp")]
-            prov_capture_enabled,
+            irq_serviced: AtomicBool::new(false),
         }
     }
 
@@ -468,6 +442,7 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                 while let Some(u2f_msg) = usb.fido_tx_queue.borrow_mut().pop_front() {
                     u2f.write_report(&u2f_msg).ok();
                 }
+                usb.irq_serviced.store(true, Ordering::SeqCst);
             }
             Some(UsbIrqReq::KbdTx) => {
                 let keyboard = composite.device::<NKROBootKeyboard<'_, _>, _>();
