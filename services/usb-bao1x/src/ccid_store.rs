@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+//! Persist CCID provisioning strings in PDDB (opaque blobs; no verification here).
+
+use std::io::{Read, Write};
+
+use pddb::Pddb;
+
+pub(crate) const CCID_DICT: &str = "usb.ccid";
+const KEY_PROVISIONED: &str = "provisioned";
+const KEY_USER_LINE: &str = "user_pin_line";
+const KEY_ADMIN_LINE: &str = "admin_pin_line";
+
+pub(crate) fn is_ccid_provisioned(pddb: &Pddb) -> bool {
+    match pddb.get(CCID_DICT, KEY_PROVISIONED, None, false, false, Some(32), None::<fn()>) {
+        Ok(mut key) => {
+            let mut buf = [0u8; 32];
+            match key.read(&mut buf) {
+                Ok(n) if n >= 4 => &buf[..n] == b"OKV1",
+                _ => false,
+            }
+        }
+        Err(_) => false,
+    }
+}
+
+pub(crate) fn save_provisioned_pins(pddb: &Pddb, user_line: &[u8], admin_line: &[u8]) -> std::io::Result<()> {
+    {
+        let mut k = pddb.get(CCID_DICT, KEY_USER_LINE, None, true, true, Some(256), None::<fn()>)?;
+        k.write_all(user_line)?;
+        k.flush()?;
+    }
+    {
+        let mut k = pddb.get(CCID_DICT, KEY_ADMIN_LINE, None, true, true, Some(256), None::<fn()>)?;
+        k.write_all(admin_line)?;
+        k.flush()?;
+    }
+    {
+        let mut k = pddb.get(CCID_DICT, KEY_PROVISIONED, None, true, true, Some(32), None::<fn()>)?;
+        k.write_all(b"OKV1")?;
+        k.flush()?;
+    }
+    pddb.sync().ok();
+    Ok(())
+}
