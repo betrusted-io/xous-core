@@ -68,6 +68,21 @@ pub enum Opcode {
     /// Interrupt-context USB stack messages
     IrqFidoRx = 768,
     IrqSerialRx = 769,
+    #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+    /// CCID transport (raw PC_to_RDR frame queued for external handler)
+    IrqCcidRx = 770,
+    #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+    /// Provisioning CDC line ready (opaque bytes, no interpretation)
+    IrqProvSerialRx = 771,
+
+    #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+    /// CCID: block until a frame is available (mirrors U2F deferred pattern)
+    CcidRxDeferred = 640,
+    #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+    CcidRxTimeout = 641,
+    #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+    /// CCID: enqueue raw RDR_to_PC bytes built by external handler
+    CcidTx = 642,
 
     #[cfg(feature = "mass-storage")]
     SetBlockDevice = 1024,
@@ -122,6 +137,25 @@ pub struct U2fMsgIpc {
     pub code: U2fCode,
     /// Specifies an optional timeout
     pub timeout_ms: Option<u64>,
+}
+
+#[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone)]
+pub struct CcidMsgIpc {
+    pub data: Vec<u8>,
+    pub code: CcidCode,
+}
+
+#[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq)]
+pub enum CcidCode {
+    Tx,
+    TxAck,
+    RxWait,
+    RxAck,
+    RxTimeout,
+    Hangup,
+    Denied,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq)]
