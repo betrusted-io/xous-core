@@ -1,8 +1,11 @@
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, compiler_fence};
-use std::sync::atomic::{AtomicPtr, Ordering};
+#[cfg(feature = "ccid-openpgp")]
+use std::rc::Rc;
+#[cfg(feature = "ccid-openpgp")]
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering, compiler_fence};
 
 use bao1x_hal::usb::driver::*;
 use bao1x_hal::usb::utra::*;
@@ -24,6 +27,26 @@ use xous_usb_hid::prelude::UsbHidClass;
 use xous_usb_hid::prelude::*;
 
 use crate::api::Opcode;
+#[cfg(feature = "ccid-openpgp")]
+use crate::ccid_transport::CcidTransportClass;
+
+#[cfg(feature = "ccid-openpgp")]
+pub(crate) fn make_ccid_transport<'a>(
+    alloc: &'a UsbBusAllocator<CorigineWrapper>,
+    complete_rx: Rc<RefCell<VecDeque<Vec<u8>>>>,
+    notify_cid: xous::CID,
+) -> CcidTransportClass<'a, CorigineWrapper> {
+    CcidTransportClass::new(alloc, complete_rx, notify_cid)
+}
+
+#[cfg(feature = "ccid-openpgp")]
+pub(crate) fn make_provisioning_serial<'a>(
+    alloc: &'a UsbBusAllocator<CorigineWrapper>,
+) -> SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]> {
+    let rx_buf = [0u8; SERIAL_MAX_PACKET_SIZE * 2];
+    let tx_buf = [0u8; SERIAL_MAX_PACKET_SIZE * 2];
+    SerialPort::new_with_store(alloc, rx_buf, tx_buf)
+}
 
 /// Maximum packet size for serial - tied to the speed of the port (HS)
 pub const SERIAL_MAX_PACKET_SIZE: usize = 512;
@@ -68,6 +91,16 @@ impl<'a> Bao1xUsb<'a> {
         cw: CorigineWrapper,
         usb_alloc: &'a UsbBusAllocator<CorigineWrapper>,
         serial_number: &'a String,
+        #[cfg(feature = "ccid-openpgp")] ccid: CcidTransportClass<'a, CorigineWrapper>,
+        #[cfg(feature = "ccid-openpgp")] provision_serial: SerialPort<
+            'a,
+            CorigineWrapper,
+            [u8; 1024],
+            [u8; 1024],
+        >,
+        #[cfg(feature = "ccid-openpgp")] ccid_rx: Rc<RefCell<VecDeque<Vec<u8>>>>,
+        #[cfg(feature = "ccid-openpgp")] prov_lines: Rc<RefCell<VecDeque<Vec<u8>>>>,
+        #[cfg(feature = "ccid-openpgp")] prov_capture_enabled: Arc<AtomicBool>,
     ) -> Self {
         let class = UsbHidClassBuilder::new()
             .add_device(NKROBootKeyboardConfig::default())
@@ -176,6 +209,11 @@ impl<'a> Bao1xUsb<'a> {
 
         // reset all shared data structures
         self.device.force_reset().ok();
+        #[cfg(feature = "ccid-openpgp")]
+        {
+            self.ccid.reset();
+            self.provision_serial.reset();
+        }
         self.fido_tx_queue = RefCell::new(VecDeque::new());
         self.kbd_tx_queue = RefCell::new(VecDeque::new());
         self.irq_req = None;
@@ -271,13 +309,27 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                             ready.store(false, Ordering::SeqCst);
                         }
                         usb.wrapper.address_is_set.store(false, Ordering::SeqCst);
+                        #[cfg(feature = "ccid-openpgp")]
+                        {
+                            usb.ccid.reset();
+                            usb.provision_serial.reset();
+                        }
                     }
                 }
 
                 let device = usb.device.borrow_mut();
                 let class = usb.class.borrow_mut();
                 let serial = usb.serial_port.borrow_mut();
-                if device.poll(&mut [class, serial as &mut dyn UsbClass<_>]) {
+                #[cfg(not(feature = "ccid-openpgp"))]
+                let polled = device.poll(&mut [class, serial as &mut dyn UsbClass<_>]);
+                #[cfg(feature = "ccid-openpgp")]
+                let polled = device.poll(&mut [
+                    class,
+                    serial as &mut dyn UsbClass<_>,
+                    &mut usb.provision_serial as &mut dyn UsbClass<_>,
+                    &mut usb.ccid as &mut dyn UsbClass<_>,
+                ]);
+                if polled {
                     if let Ok(count) = serial.read(&mut usb.serial_rx) {
                         xous::try_send_message(
                             usb.conn,
@@ -312,6 +364,39 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                             UsbError::WouldBlock => {}
                             _ => crate::println!("U2F ERR: {:?}", e),
                         },
+                    }
+
+                    #[cfg(feature = "ccid-openpgp")]
+                    {
+                        if usb.prov_capture_enabled.load(Ordering::SeqCst) {
+                            if let Ok(n) = usb.provision_serial.read(&mut usb.prov_serial_rx) {
+                                for &b in &usb.prov_serial_rx[..n] {
+                                    if b == b'\n' || b == b'\r' {
+                                        let line: Vec<u8> = {
+                                            let mut acc = usb.prov_line_acc.borrow_mut();
+                                            if acc.is_empty() {
+                                                continue;
+                                            }
+                                            std::mem::take(&mut *acc)
+                                        };
+                                        usb.prov_lines.borrow_mut().push_back(line);
+                                        xous::try_send_message(
+                                            usb.conn,
+                                            Message::new_scalar(
+                                                Opcode::IrqProvSerialRx.to_usize().unwrap(),
+                                                0,
+                                                0,
+                                                0,
+                                                0,
+                                            ),
+                                        )
+                                        .ok();
+                                    } else if b >= 0x20 {
+                                        usb.prov_line_acc.borrow_mut().push(b);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 {

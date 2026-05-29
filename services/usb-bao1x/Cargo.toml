@@ -37,18 +37,14 @@ usb-device = { git = "https://github.com/betrusted-io/usb-device.git", branch = 
     "log",
     "control-buffer-256",
 ] }
-# usb-device = { path = "../../../usb-device", features = [
-#     "log",
-#     "control-buffer-256",
-# ] }
 
 # Serial support
 usbd-serial = { git = "https://github.com/betrusted-io/usbd-serial.git", branch = "v0.1.1-betrusted", features = [
     "max-packet-size-512",
 ] }
-# usbd-serial = { path = "../../../usbd-serial", features = [
-#     "max-packet-size-512",
-# ] }
+
+# CCID USB transport + PDDB-backed provisioning strings (no OpenPGP/crypto in this service).
+pddb = { path = "../pddb", optional = true, default-features = false, features = ["mbbb"] }
 
 [features]
 bao1x = []
@@ -57,10 +53,11 @@ board-baosec = [
     "utralib/std",
     "bao1x-hal",
     "bao1x-hal-service",
+    "pddb?/board-baosec",
 ]
 oem-baosec-lite = ["bao1x-hal/oem-baosec-lite"]
 board-dabao = ["utralib/bao1x", "utralib/std", "bao1x-hal", "bao1x-hal-service"]
-hosted-baosec = ["utralib/hosted", "utralib/std", "bao1x-emu"]
+hosted-baosec = ["utralib/hosted", "utralib/std", "bao1x-emu", "pddb?/hosted-baosec"]
 # none of these other modes are actually supported, but are listed here
 # to allow direct re-use of API code
 precursor = ["utralib/precursor", "utralib/std"]
@@ -79,5 +76,8 @@ usbd-debug = ["usb-device/baochip-debug", "debug-print-usb"]
 
 prototyping = [
 ] # temporary feature-out for figuring out the code; remove this if you don't recognize it anymore
+
+# Generic USB CCID bulk transport + provisioning CDC (PDDB only). No Galdralag/OpenPGP crates.
+ccid-openpgp = ["dep:pddb"]
 
 default = []
