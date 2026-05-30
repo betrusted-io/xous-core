@@ -13,6 +13,7 @@ use utralib::generated::*;
 
 pub struct Output {
     // This element is not used, but rather it prevents the interrupt handler from going out of scope.
+    #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
     _uart_irq: Pin<Box<bao1x_hal::udma::UartIrq>>,
 }
 
@@ -88,7 +89,10 @@ pub fn init() -> Output {
     println!("Mapped UART @ {:08x}", uart.as_ptr() as usize);
     println!("Process: map success!");
 
-    Output { _uart_irq: uart_irq }
+    Output {
+        #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
+        _uart_irq: uart_irq,
+    }
 }
 
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
