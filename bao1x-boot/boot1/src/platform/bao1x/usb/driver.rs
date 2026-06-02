@@ -43,9 +43,22 @@ pub unsafe fn init_usb() {
         for (i, &b) in sn.as_bytes().iter().enumerate() {
             vsn[i % 4] ^= b;
         }
+        // 0x1b8 is the MBR disk signature per https://wiki.osdev.org/MBR_(x86)
         const MBR_DISK_SIG: usize = 0x1b8;
-        const PRIMARY_VBR_VSN: usize = 0x10043;
-        const BACKUP_VBR_VSN: usize = 0x10c43;
+        // The value of this constant depends upon the value written into the
+        // partition table. The partition start is defined here:
+        // 0x1C6: 80 00 00 00   <- LBA of partition start = 0x00000080 = 128
+        // 128 (sectors) * 512 (bytes/sector) = 0x1_0000.
+        // Starting at 0x43 there is the "BS_VolID" or "VSN" record, 4 bytes long.
+        // The backup VBR is, by spec, located at 6 sectors from the partition
+        // start. 6 * 512 = 3072 = 0xc00, hence 0x1_c000 as its base offset.
+        //
+        // The pokes below stick the same derived 4-byte value into these three
+        // fields, which helps Windows differentiate between multiple Baochip
+        // devices mounted, with a 2^16 chance of collision per the birthday
+        // paradox, given a 32-bit randomly generated ID.
+        const PRIMARY_VBR_VSN: usize = 0x1_0043;
+        const BACKUP_VBR_VSN: usize = 0x1_0c43;
         disk[MBR_DISK_SIG..MBR_DISK_SIG + 4].copy_from_slice(&vsn);
         disk[PRIMARY_VBR_VSN..PRIMARY_VBR_VSN + 4].copy_from_slice(&vsn);
         disk[BACKUP_VBR_VSN..BACKUP_VBR_VSN + 4].copy_from_slice(&vsn);
