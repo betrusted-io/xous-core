@@ -29,6 +29,28 @@ pub unsafe fn init_usb() {
         disk[offset..offset + 32].copy_from_slice(&block);
     }
 
+    // Windows uses the MBR disk signature (0x1b8) to deduplicate volumes; two boards
+    // with the same signature cannot both receive a drive letter simultaneously. Derive
+    // all three fields (MBR disk sig, primary and backup FAT VSN) from the per-device
+    // UUID so each board is unique.
+    {
+        let owc = bao1x_hal::acram::OneWayCounter::new();
+        let slot_mgr = bao1x_hal::acram::SlotManager::new();
+        let sn = bao1x_hal::usb::derive_usb_serial_number(&owc, &slot_mgr);
+        // XOR-fold all 6 serial-number bytes into 4 VSN bytes so every bit of the
+        // UUID-derived string contributes to the VSN.
+        let mut vsn = [0u8; 4];
+        for (i, &b) in sn.as_bytes().iter().enumerate() {
+            vsn[i % 4] ^= b;
+        }
+        const MBR_DISK_SIG: usize = 0x1b8;
+        const PRIMARY_VBR_VSN: usize = 0x10043;
+        const BACKUP_VBR_VSN: usize = 0x10c43;
+        disk[MBR_DISK_SIG..MBR_DISK_SIG + 4].copy_from_slice(&vsn);
+        disk[PRIMARY_VBR_VSN..PRIMARY_VBR_VSN + 4].copy_from_slice(&vsn);
+        disk[BACKUP_VBR_VSN..BACKUP_VBR_VSN + 4].copy_from_slice(&vsn);
+    }
+
     // install the interrupt handler
     // setup the stack & controller
     // irq_setup(); // this is already assumed to have been called by early_init()!
