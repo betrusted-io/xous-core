@@ -7,6 +7,7 @@ use bao1x_api::keyboard::*;
 use bao1x_hal::board::KeyPress;
 #[cfg(feature = "board-baosec")]
 use bao1x_hal::kpc_aoint::{AoIntStatus, KpcAoInt};
+#[cfg(feature = "board-baosec")]
 use bao1x_hal_service::Rtc;
 use num_traits::*;
 #[cfg(feature = "board-baosec")]
@@ -357,6 +358,7 @@ fn keyboard_service() {
         }
     });
 
+    #[cfg(feature = "board-baosec")]
     let rtc = Rtc::new();
     #[cfg(feature = "board-baosec")]
     let mut key_tracker = KeyTracker::new();
