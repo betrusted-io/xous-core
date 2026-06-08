@@ -29,7 +29,11 @@ xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branc
 bio-lib = { path = "../../libs/bio-lib" }
 arbitrary-int = "1.2"
 
-# aes testing
+# loadable BIO
+keystore = { path = "../../services/keystore", features = ["board-dabao"] }
+base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+crc32fast = "1.5.0"
+
 [features]
 bao1x = ["utralib/bao1x", "usb-bao1x/bao1x", "aes/bao1x"]
 board-dabao = [
