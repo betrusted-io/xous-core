@@ -80,7 +80,10 @@ debug-hal = ["bao1x-hal/debug-print-duart"]
 
 # Enables incrementing one way counters. Off by default because this API can be, at the very least,
 # used to grief the security layer if not worse
-owc-inc = []
+owc-inc = ["keystore-api/owc-inc"]
+
+# Enable to allow users to access the application keystore slots
+app-keys = ["keystore-api/app-keys"]
 
 board-baosec = [
     "utralib/bao1x",
@@ -109,6 +112,7 @@ board-dabao = [
     "bao1x-hal",
     "bao1x-hal-service/board-dabao",
     "bao1x-hal/security",
+    "app-keys",
 ] # Dev board form factor
 loader-dabao = []
 

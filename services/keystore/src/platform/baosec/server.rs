@@ -37,23 +37,25 @@ pub fn keystore(sid: SID) -> ! {
         log::debug!("{:?}", opcode);
         match opcode {
             Opcode::AesOracle => {
-                let mut buffer =
-                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                // as_flat saves a copy step, but we have to deserialize some enums manually
-                let mut aes_op = buffer.to_original::<AesOp, _>().unwrap();
-                // TODO: add hardening checks to the deserialization of AesOp. Can't assume the
-                // values are correct coming into this server.
-                store.aes_op(&mut aes_op).expect("couldn't perform AES op");
-                buffer.replace(aes_op).unwrap();
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
+                    // as_flat saves a copy step, but we have to deserialize some enums manually
+                    let mut aes_op = buffer.to_original::<AesOp, _>().unwrap();
+                    // TODO: add hardening checks to the deserialization of AesOp. Can't assume the
+                    // values are correct coming into this server.
+                    store.aes_op(&mut aes_op).expect("couldn't perform AES op");
+                    buffer.replace(aes_op).unwrap();
+                }
             }
             Opcode::AesKwp => {
-                let mut buffer =
-                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let mut kwp = buffer.to_original::<KeyWrapper, _>().unwrap();
-                // TODO: add hardening checks to the deserialization of AesOp. Can't assume the
-                // values are correct coming into this server.
-                store.aes_kwp(&mut kwp).expect("couldn't wrap key");
-                buffer.replace(kwp).unwrap();
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
+                    let mut kwp = buffer.to_original::<KeyWrapper, _>().unwrap();
+                    // TODO: add hardening checks to the deserialization of AesOp. Can't assume the
+                    // values are correct coming into this server.
+                    store.aes_kwp(&mut kwp).expect("couldn't wrap key");
+                    buffer.replace(kwp).unwrap();
+                }
             }
             Opcode::Ephemeral => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
@@ -121,6 +123,7 @@ pub fn keystore(sid: SID) -> ! {
                     if store.is_developer() { scalar.arg1 = 0 } else { scalar.arg1 = 1 }
                 }
             }
+            #[cfg(feature = "owc-inc")]
             Opcode::IncOneWayCounter => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
                     if [scalar.arg2, scalar.arg3, scalar.arg4] == OWC_MAGIC_INC
@@ -152,6 +155,41 @@ pub fn keystore(sid: SID) -> ! {
                     } else {
                         scalar.arg1 = OneWayErr::InternalError.to_usize().unwrap();
                     }
+                }
+            }
+            #[cfg(feature = "app-keys")]
+            Opcode::AppKeyOp => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
+                    // as_flat saves a copy step, but we have to deserialize some enums manually
+                    let mut app_key = buffer.to_original::<AppKey, _>().unwrap();
+                    match app_key {
+                        AppKey::ReadRequest { guard, index } => {
+                            if guard != APPKEY_GUARD {
+                                app_key = AppKey::InternalError;
+                            } else {
+                                match store.read_app_key(index) {
+                                    Ok(d) => app_key = AppKey::ReadResponse { data: d },
+                                    Err(xous::Error::AccessDenied) => app_key = AppKey::AccessDenied,
+                                    _ => app_key = AppKey::InternalError,
+                                }
+                            }
+                        }
+                        AppKey::Write { guard, index, data } => {
+                            if guard != APPKEY_GUARD {
+                                app_key = AppKey::InternalError
+                            } else {
+                                match store.write_app_key(&mut rram, index, data) {
+                                    Ok(_) => app_key = AppKey::Success,
+                                    Err(xous::Error::AccessDenied) => app_key = AppKey::AccessDenied,
+                                    Err(xous::Error::HardwareError) => app_key = AppKey::WriteError,
+                                    _ => app_key = AppKey::InternalError,
+                                }
+                            }
+                        }
+                        _ => app_key = AppKey::InternalError,
+                    }
+                    buffer.replace(app_key).unwrap();
                 }
             }
             Opcode::InvalidCall => {
