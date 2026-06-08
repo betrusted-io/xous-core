@@ -54,3 +54,13 @@ pub use crate::baosec::{
 
 pub const KEY_SLOTS: [SlotIndex; 6] =
     [THE_FLAG_1, ROOT_SEED, RMA_KEY, NUISANCE_KEYS_0, NUISANCE_KEYS_1, CHAFF_KEYS];
+
+// [384..=1919] are unused and available for third party use
+pub const APPLICATION: SlotIndex = crate::offsets::APPLICATION;
+
+// offsets into the application slot range for storing BIO config
+pub const APP_BIO_CLK_INDEX: usize = 0;
+pub const APP_BIO_PINS_INDEX: usize = 1;
+pub const APP_BIO_CODE_VALID: usize = 2;
+// total length is 0xf00 = 120 slots
+pub const APP_BIO_CODE_INDICES: core::ops::Range<usize> = 3..123;
