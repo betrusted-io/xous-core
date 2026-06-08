@@ -83,6 +83,9 @@ debug-hal = ["bao1x-hal/debug-print-duart"]
 owc-inc = ["keystore-api/owc-inc"]
 
 # Enable to allow users to access the application keystore slots
+# Because application keys are stored adjacent to secret keys, it's recommended to leave this
+# feature off if it's not actively being used by the target application, as it reduces the
+# potential attack surface exposed by the keystore server.
 app-keys = ["keystore-api/app-keys"]
 
 board-baosec = [
