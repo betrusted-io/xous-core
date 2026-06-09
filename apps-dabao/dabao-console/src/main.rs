@@ -4,7 +4,6 @@ mod ctap;
 mod repl;
 mod shell;
 use cmds::*;
-#[cfg(feature = "usb")]
 use usb_bao1x::UsbHid;
 
 fn main() {
@@ -20,12 +19,9 @@ fn main() {
     // spawn the shell thread
     shell::start_shell();
 
-    #[cfg(feature = "usb")]
-    {
-        tt.sleep_ms(500).ok(); // pause for the system to startup
-        let usb = UsbHid::new();
-        usb.serial_console_input_injection();
-    }
+    tt.sleep_ms(500).ok(); // pause for the system to startup
+    let usb = UsbHid::new();
+    usb.serial_console_input_injection();
 
     #[cfg(feature = "ctap-bringup")]
     {
@@ -33,8 +29,12 @@ fn main() {
         crate::ctap::ctap_test();
     }
 
-    // idle the main thread, all children are spawned
+    // This idiom creates a dummy server that blocks. This effectively parks the parent
+    // process, allowing its child threads to run without taking any CPU resources.
+    let dummy_sid = xous::create_server().unwrap();
     loop {
-        tt.sleep_ms(2_000).ok();
+        // This call blocks forever since nobody has `dummy_sid` and thus it will never
+        // receive a message.
+        let _ = xous::receive_message(dummy_sid);
     }
 }
