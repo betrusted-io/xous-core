@@ -1,3 +1,5 @@
+use std::sync::{Arc, atomic::AtomicBool};
+
 use xous::MessageEnvelope;
 
 use crate::CmdEnv;
@@ -27,13 +29,13 @@ pub(crate) struct Repl {
     env: CmdEnv,
 }
 impl Repl {
-    pub(crate) fn new(xns: &xous_names::XousNames) -> Self {
+    pub(crate) fn new(xns: &xous_names::XousNames, echo: Arc<AtomicBool>) -> Self {
         Repl {
             input: None,
             msg: None,
             history: Vec::new(),
             history_len: HISTORY_DEPTH,
-            env: CmdEnv::new(xns),
+            env: CmdEnv::new(xns, echo),
         }
     }
 

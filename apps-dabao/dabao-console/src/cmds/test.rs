@@ -15,7 +15,7 @@ impl<'a> ShellCmdApi<'a> for Test {
         let mut ret = String::new();
 
         #[allow(unused_variables)]
-        let helpstring = "test [proc] [freemem] [interrupts] [panic] [timer] [env]";
+        let helpstring = "test [proc] [freemem] [interrupts] [panic] [env]";
 
         let mut tokens = args.split(' ');
 
@@ -23,7 +23,7 @@ impl<'a> ShellCmdApi<'a> for Test {
             match sub_cmd {
                 "timer" => {
                     let start = _env.ticktimer.elapsed_ms();
-                    log::info!("Starting test");
+                    log::info!("Timer test - runs forever");
                     let mut seconds = 0;
                     loop {
                         let elapsed = _env.ticktimer.elapsed_ms() - start;
@@ -32,6 +32,9 @@ impl<'a> ShellCmdApi<'a> for Test {
                             seconds += 1;
                         }
                     }
+                }
+                "echo" => {
+                    _env.echo.store(true, std::sync::atomic::Ordering::SeqCst);
                 }
                 "panic" => {
                     log::info!("System will panic now");

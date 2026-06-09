@@ -322,15 +322,29 @@ impl Drop for BioLoader {
 impl<'a> ShellCmdApi<'a> for BioLoader {
     cmd_api!(bio);
 
-    fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
+    fn process(&mut self, args: String, env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
         let mut ret = String::new();
 
         if args == "ready" {
+            env.echo.store(false, std::sync::atomic::Ordering::SeqCst);
+            write!(ret, "OK").unwrap();
+            return Ok(Some(ret));
+        }
+
+        if args == "echo_on" {
+            env.echo.store(true, std::sync::atomic::Ordering::SeqCst);
+            write!(ret, "OK").unwrap();
+            return Ok(Some(ret));
+        }
+
+        if args == "echo_off" {
+            env.echo.store(false, std::sync::atomic::Ordering::SeqCst);
             write!(ret, "OK").unwrap();
             return Ok(Some(ret));
         }
 
         if args == "clear" {
+            env.echo.store(true, std::sync::atomic::Ordering::SeqCst);
             self.clear();
             self.store.write_app_key(APP_BIO_PINS_INDEX, &[0u8; 32]).ok();
             self.store.write_app_key(APP_BIO_CLK_INDEX, &[0u8; 32]).ok();
@@ -400,6 +414,7 @@ impl<'a> ShellCmdApi<'a> for BioLoader {
         }
 
         if args.starts_with("reload") {
+            env.echo.store(true, std::sync::atomic::Ordering::SeqCst);
             match self.reload() {
                 Ok(_) => {
                     write!(ret, "BIO load successful").unwrap();
@@ -413,6 +428,7 @@ impl<'a> ShellCmdApi<'a> for BioLoader {
         }
 
         if args.starts_with("rx") {
+            env.echo.store(true, std::sync::atomic::Ordering::SeqCst);
             self.bio_ss.debug(self.resource_grant.cores[0]);
             let arg_list: Vec<&str> = args.split_whitespace().collect();
             let iters =
@@ -439,6 +455,7 @@ impl<'a> ShellCmdApi<'a> for BioLoader {
         }
 
         if args.starts_with("tx") {
+            env.echo.store(true, std::sync::atomic::Ordering::SeqCst);
             let arg_list: Vec<&str> = args.split_whitespace().collect();
             if arg_list.len() >= 2 {
                 let s = arg_list[1].trim();
@@ -479,6 +496,7 @@ impl<'a> ShellCmdApi<'a> for BioLoader {
         }
 
         if args == "pad" {
+            env.echo.store(true, std::sync::atomic::Ordering::SeqCst);
             // Zero-fill every slot not yet received, then commit.
             // This allows the host to send only the chunks that carry real data
             // and let the device pad the remainder of the 0xf00-byte buffer.

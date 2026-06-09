@@ -48,6 +48,7 @@ board-dabao = [
 bio-math-test = ["bio-lib/c-math-test"]
 bio-wheel-test = ["bio-lib/c-colorwheel"]
 ctap-bringup = []
-usb = []
+extra-cmds = []
 aestests = ["aes"]
-default = ["usb", "bio-math-test", "bio-wheel-test"]
+
+default = []
