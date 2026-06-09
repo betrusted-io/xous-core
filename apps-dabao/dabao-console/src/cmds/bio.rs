@@ -279,7 +279,7 @@ impl BioLoader {
         for (i, chunk) in APP_BIO_CODE_INDICES.zip(code.chunks(32)) {
             self.store.write_app_key(i, chunk.try_into().unwrap()).unwrap();
         }
-        self.store.write_app_key(APP_BIO_CODE_VALID, &VALID_CODE);
+        self.store.write_app_key(APP_BIO_CODE_VALID, &VALID_CODE).ok();
         self.clear(); // clears the holding buffer for incoming code
         "SUCCESS"
     }
