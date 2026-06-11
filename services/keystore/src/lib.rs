@@ -271,7 +271,7 @@ impl Keystore {
         T::Error: core::fmt::Debug,
     {
         let offset: usize = T::OFFSET;
-        if offset < MAX_ONEWAY_COUNTERS {
+        if offset < bao1x_hal::acram::MAX_ONEWAY_COUNTERS {
             unsafe { self.inc_owc(offset) }
         } else {
             Err(OneWayErr::OutOfBounds)
