@@ -79,6 +79,7 @@ dabao-selftest = [
     "xous-bio-bdma/baremetal",
     "xous-bio-bdma/bao1x",
 ]
+factory-utils = ["ux-api/loader-baosec"]
 ci-security = []
 spim-tests = []
 redteam = ["bao1x-hal/redteam"]
