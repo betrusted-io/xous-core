@@ -143,9 +143,17 @@ impl Repl {
                 match general_purpose::STANDARD.decode(&args[0]) {
                     Ok(uf2_data) => {
                         if let Some(record) = crate::uf2::Uf2Block::from_bytes(&uf2_data) {
-                            if record.address() as usize >= bao1x_api::BAREMETAL_START
-                                && (record.address() as usize)
-                                    < utralib::HW_RERAM_MEM + bao1x_api::RRAM_STORAGE_LEN
+                            #[cfg(not(feature = "alt-boot1"))]
+                            let low_limit = bao1x_api::BAREMETAL_START;
+                            #[cfg(not(feature = "alt-boot1"))]
+                            let high_limit = utralib::HW_RERAM_MEM + bao1x_api::RRAM_STORAGE_LEN;
+                            #[cfg(feature = "alt-boot1")]
+                            let low_limit = bao1x_api::BOOT1_START;
+                            #[cfg(feature = "alt-boot1")]
+                            let high_limit = bao1x_api::BAREMETAL_START;
+
+                            if record.address() as usize >= low_limit
+                                && (record.address() as usize) < high_limit
                                 && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
                             {
                                 let mut rram = bao1x_hal::rram::Reram::new();
