@@ -49,6 +49,7 @@ print-ifr = []
 test-boot0-keys = []
 alt-boot1 = []
 test-clock-skipping = []
+uf2-spim = []
 
 oem = []
 oem-baosec-lite = ["oem", "bao1x-hal/oem-baosec-lite"]
