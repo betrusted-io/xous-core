@@ -2,6 +2,8 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+#[cfg(feature = "uf2-spim")]
+use core::convert::TryInto;
 
 use bao1x_api::pubkeys::BOOT0_TO_BOOT1;
 #[allow(unused_imports)]
@@ -10,6 +12,11 @@ use bao1x_hal::acram::{OneWayCounter, SlotManager};
 use bao1x_hal::board::PDDB_LEN;
 use bao1x_hal::hardening::{Csprng, skipping_enabled};
 use utralib::*;
+
+#[cfg(feature = "uf2-spim")]
+use crate::platform::usb::glue::{PageCallback, write_spim_page};
+#[cfg(feature = "uf2-spim")]
+use crate::platform::usb::page_defrag::PageAssembler;
 
 pub struct Error {
     pub message: Option<&'static str>,
@@ -25,11 +32,20 @@ pub struct Repl {
     do_cmd: bool,
     local_echo: bool,
     lockdown_armed: bool,
+    #[cfg(feature = "uf2-spim")]
+    serial_assembler: PageAssembler<PageCallback>,
 }
 
 impl Repl {
     pub fn new() -> Self {
-        Self { cmdline: String::new(), do_cmd: false, local_echo: true, lockdown_armed: false }
+        Self {
+            cmdline: String::new(),
+            do_cmd: false,
+            local_echo: true,
+            lockdown_armed: false,
+            #[cfg(feature = "uf2-spim")]
+            serial_assembler: PageAssembler::new(write_spim_page),
+        }
     }
 
     #[allow(dead_code)]
@@ -134,6 +150,7 @@ impl Repl {
                 let mut csprng = Csprng::new();
                 crate::boot(&iox, None, port, pin, &mut csprng);
             }
+            #[cfg(not(feature = "uf2-spim"))]
             "uf2" => {
                 use base64::{Engine as _, engine::general_purpose};
                 if args.len() != 1 {
@@ -180,6 +197,241 @@ impl Repl {
                     }
                 }
                 crate::usb::flush();
+            }
+            #[cfg(feature = "uf2-spim")]
+            "has-crc" => {
+                crate::println!("true");
+            }
+            #[cfg(feature = "uf2-spim")]
+            "uf2" => {
+                use core::sync::atomic::Ordering;
+
+                use bao1x_api::*;
+                use bao1x_hal::iox::Iox;
+                use bao1x_hal::sh1107::Oled128x128;
+                use bao1x_hal::udma::*;
+                use base64::{Engine as _, engine::general_purpose};
+
+                // Standard CRC-32 (IEEE 802.3 / zlib reflected, poly 0xEDB88320).
+                // Matches Python's zlib.crc32. Bitwise is fine for 512-byte blocks.
+                fn crc32(data: &[u8]) -> u32 {
+                    let mut crc: u32 = 0xFFFF_FFFF;
+                    for &b in data {
+                        crc ^= b as u32;
+                        for _ in 0..8 {
+                            let mask = (crc & 1).wrapping_neg();
+                            crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
+                        }
+                    }
+                    !crc
+                }
+
+                const UX_UPDATE_INTERVAL_BYTES: u32 = 0x1_0000;
+
+                use crate::{APP_BYTES, BAREMETAL_BYTES, IS_BAOSEC, KERNEL_BYTES, SWAP_BYTES};
+                const APP_RAM_ADDR: usize =
+                    utralib::HW_RERAM_MEM + bao1x_api::offsets::dabao::APP_RRAM_OFFSET;
+                const STORAGE_END_ADDR: usize = utralib::HW_RERAM_MEM + bao1x_api::RRAM_STORAGE_LEN;
+                const SWAP_END_ADDR: usize =
+                    bao1x_api::offsets::SWAP_START_UF2 + bao1x_api::offsets::SWAP_UF2_LEN;
+
+                #[cfg(not(feature = "alt-boot1"))]
+                const START_RANGE: usize = bao1x_api::BAREMETAL_START;
+                #[cfg(feature = "alt-boot1")]
+                const START_RANGE: usize = bao1x_api::BOOT1_START;
+
+                if args.len() != 2 {
+                    crate::println_d!("uf2 query malformed CRC");
+                    return Err(Error::help("uf2 [base64 data] [crc32]"));
+                }
+                match general_purpose::STANDARD.decode(&args[0]) {
+                    Ok(uf2_data) => {
+                        let actual_crc = crc32(&uf2_data);
+                        let expected_crc = u32::from_str_radix(args[1].trim(), 16).ok();
+                        if expected_crc != Some(actual_crc) {
+                            // Don't write. The sender's ACK regex won't match this line,
+                            // and it explicitly detects "CRC error" for an immediate retry.
+                            crate::println!("CRC error 0x{:08x}", actual_crc);
+                        } else if let Some(record) = crate::uf2::Uf2Block::from_bytes(&uf2_data) {
+                            #[cfg(not(feature = "alt-boot1"))]
+                            let low_limit = bao1x_api::BAREMETAL_START;
+                            #[cfg(not(feature = "alt-boot1"))]
+                            let high_limit = utralib::HW_RERAM_MEM + bao1x_api::RRAM_STORAGE_LEN;
+                            #[cfg(feature = "alt-boot1")]
+                            let low_limit = bao1x_api::BOOT1_START;
+                            #[cfg(feature = "alt-boot1")]
+                            let high_limit = bao1x_api::BAREMETAL_START;
+
+                            if record.address() as usize >= low_limit
+                                && (record.address() as usize) < high_limit
+                                && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
+                            {
+                                let mut rram = bao1x_hal::rram::Reram::new();
+                                let offset = record.address() as usize - utralib::HW_RERAM_MEM;
+                                match rram.write_slice(offset, record.data()) {
+                                    Err(e) => crate::print_d!("Write error {:?} @ {:x}", e, offset),
+                                    Ok(_) => (),
+                                };
+                                crate::println!(
+                                    "Wrote {} to 0x{:x} crc {:08x}",
+                                    record.data().len(),
+                                    record.address(),
+                                    actual_crc
+                                );
+                            } else if record.address() as usize >= bao1x_api::SWAP_START_UF2
+                                && (record.address() as usize)
+                                    < bao1x_api::SWAP_START_UF2 + bao1x_api::SWAP_UF2_LEN
+                                && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
+                            {
+                                let spim_addr = record.address() & (bao1x_api::SWAP_UF2_LEN as u32 - 1);
+                                crate::println!(
+                                    "Wrote {} to 0x{:x} crc {:08x}",
+                                    record.data().len(),
+                                    record.address(),
+                                    actual_crc
+                                );
+                                if let Err(e) = self
+                                    .serial_assembler
+                                    .add_page(spim_addr as usize, record.data().try_into().unwrap())
+                                {
+                                    crate::println!("Failed to add SPIM {:?}", e);
+                                }
+                            } else {
+                                crate::println!(
+                                    "Invalid write address {:x}, block ignored!",
+                                    record.address()
+                                );
+                            }
+
+                            let (partition, status) = if !IS_BAOSEC.load(Ordering::SeqCst) {
+                                if matches!(record.address() as usize, START_RANGE..=APP_RAM_ADDR) {
+                                    (
+                                        "core",
+                                        BAREMETAL_BYTES
+                                            .fetch_add(record.data().len() as u32, Ordering::SeqCst),
+                                    )
+                                } else if matches!(record.address() as usize, APP_RAM_ADDR..=STORAGE_END_ADDR)
+                                {
+                                    ("app", APP_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
+                                } else {
+                                    ("none", 0)
+                                }
+                            } else {
+                                if matches!(record.address() as usize, START_RANGE..=KERNEL_START) {
+                                    (
+                                        "loader",
+                                        BAREMETAL_BYTES
+                                            .fetch_add(record.data().len() as u32, Ordering::SeqCst),
+                                    )
+                                } else if matches!(record.address() as usize, KERNEL_START..=STORAGE_END_ADDR)
+                                {
+                                    (
+                                        "kernel",
+                                        KERNEL_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst),
+                                    )
+                                } else if matches!(
+                                    record.address() as usize,
+                                    bao1x_api::offsets::SWAP_START_UF2..=SWAP_END_ADDR
+                                ) {
+                                    (
+                                        "swap",
+                                        SWAP_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst),
+                                    )
+                                } else {
+                                    ("none", 0)
+                                }
+                            };
+                            if status != 0 && status % UX_UPDATE_INTERVAL_BYTES == 0 {
+                                let mut wdt = bao1x_hal::wdt::Wdt::new();
+                                wdt.feed();
+
+                                if IS_BAOSEC.load(Ordering::SeqCst) {
+                                    // conjure a pointer to the sh1107 object
+                                    let iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
+                                    let (channel, _, _, _) = bao1x_hal::board::get_display_pins();
+                                    // these parameters are copied out of the sh1107 driver. Maybe we should
+                                    // just create a convenience function
+                                    // that "just sets these" since
+                                    // hardware peripherals don't
+                                    // spontaneously move around, and when they do you'd like to have a single
+                                    // spot to maintain the changes...
+                                    let mut sh1107 = unsafe {
+                                        Oled128x128::from_raw_parts(
+                                            (
+                                                (
+                                                    match channel {
+                                                        SpimChannel::Channel0 => {
+                                                            utra::udma_spim_0::HW_UDMA_SPIM_0_BASE
+                                                        }
+                                                        SpimChannel::Channel1 => {
+                                                            utra::udma_spim_1::HW_UDMA_SPIM_1_BASE
+                                                        }
+                                                        SpimChannel::Channel2 => {
+                                                            utra::udma_spim_2::HW_UDMA_SPIM_2_BASE
+                                                        }
+                                                        SpimChannel::Channel3 => {
+                                                            utra::udma_spim_3::HW_UDMA_SPIM_3_BASE
+                                                        }
+                                                    },
+                                                    SpimCs::Cs0,
+                                                    0,
+                                                    0,
+                                                    None,
+                                                    SpimMode::Standard,
+                                                    SpimByteAlign::Disable,
+                                                    bao1x_hal::ifram::IframRange::from_raw_parts(
+                                                        bao1x_hal::board::DISPLAY_IFRAM_ADDR,
+                                                        bao1x_hal::board::DISPLAY_IFRAM_ADDR,
+                                                        4096 * 2,
+                                                    ),
+                                                    2048 + 256,
+                                                    2048,
+                                                    0,
+                                                    None,
+                                                ),
+                                                false,
+                                                ((100_000_000 / 2) / 2_000_000) as u8,
+                                            ),
+                                            &iox,
+                                        )
+                                    };
+                                    // have to restore this because the frame buffer is lost on the raw-parts
+                                    // conversion
+                                    sh1107.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
+                                    let msg = alloc::format!("{} - {}k", partition, status / 1024);
+                                    crate::marquee(&mut sh1107, &msg);
+                                } else {
+                                    crate::println_d!("{} - {}k", partition, status / 1024);
+                                }
+                            }
+                        } else {
+                            crate::println_d!("invalid u2f data");
+                        }
+                    }
+                    Err(e) => {
+                        crate::println_d!("Decode error {:?}", e);
+                        return Err(Error::help("Corrupt base64"));
+                    }
+                }
+                crate::usb::flush();
+            }
+            // callers *must* use this to flush SPIM writes after upload is done. This is NOT automatic on
+            // boot.
+            #[cfg(feature = "uf2-spim")]
+            "uf2_flush" => {
+                if self.serial_assembler.active_pages() > 0 {
+                    loop {
+                        if let Some((addr, data)) = self.serial_assembler.take_next_incomplete() {
+                            // the "holes" will just have 0 in them, which is fine for these purposes
+                            // the primary case that triggers this is when the last sector written doesn't
+                            // fill up a whole page.
+                            crate::println!("Flushing final swap page at {:x}", addr);
+                            crate::glue::write_spim_page(addr, data);
+                        } else {
+                            break;
+                        }
+                    }
+                }
             }
             "localecho" => {
                 if args.len() != 1 {
