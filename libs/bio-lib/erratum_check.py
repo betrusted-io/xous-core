@@ -515,6 +515,72 @@ def _check_jalr(mnemonic, operands, original_instr):
     return (f"B2:offset={offset}", patch)
 
 
+def _expand_li(rd, value):
+    """
+    Expand `li rd, value` into the concrete RV32I instruction sequence the
+    assembler would emit (standard hi/lo lowering). Returns a list of
+    instruction strings (unpatched).
+
+      - value fits in signed 12 bits        -> addi rd, zero, value
+      - low 12 bits are zero                 -> lui  rd, hi
+      - otherwise                            -> lui rd, hi ; addi rd, rd, lo
+
+    where lo is the sign-extended low 12 bits and hi absorbs the borrow.
+    """
+    value &= 0xFFFFFFFF
+    lo = value & 0xFFF
+    lo_signed = lo - 0x1000 if (lo & 0x800) else lo
+    hi = ((value - lo_signed) >> 12) & 0xFFFFF
+
+    if hi == 0:
+        # Fits in a single addi from zero (signed 12-bit range).
+        return [f"addi {rd}, zero, {lo_signed}"]
+
+    seq = [f"lui {rd}, 0x{hi:x}"]
+    if lo_signed != 0:
+        seq.append(f"addi {rd}, {rd}, {lo_signed}")
+    return seq
+
+
+def _check_li(mnemonic, operands, original_instr):
+    """
+    Check/patch the `li rd, imm` pseudo-instruction.
+
+    `li` is not a real instruction: the assembler lowers it to lui/addi long
+    after this script runs, so the errata live in the *expansion*, invisible
+    to a mnemonic-level scan. We reproduce that expansion here and route each
+    concrete instruction back through the existing checkers. Only if a piece
+    is actually unsafe do we report a finding; the replacement is the fully
+    expanded (and, where needed, patched) sequence.
+    """
+    if len(operands) != 2:
+        return None
+    rd = operands[0]
+    imm = _imm_to_int(operands[1])
+    if imm is None:
+        return None  # symbolic li (label/relocation) - can't analyze statically
+
+    expanded = _expand_li(rd, imm)
+
+    patched = []
+    bug_descs = []
+    for instr in expanded:
+        mn, ops = _parse_instruction(instr)
+        sub_check = ERRATA_DISPATCH.get(mn)
+        result = sub_check(mn, ops, instr) if sub_check else None
+        if result is None:
+            patched.append(instr)
+        else:
+            sub_desc, sub_patch = result
+            bug_descs.append(sub_desc)
+            patched.extend(sub_patch)
+
+    if not bug_descs:
+        return None  # expansion is entirely safe
+
+    return (f"li-expansion[{'; '.join(bug_descs)}]", patched)
+
+
 # Fence/system instructions: safe
 def _check_fence_or_system(mnemonic, operands, original_instr):
     return None
@@ -543,6 +609,7 @@ ERRATA_DISPATCH = {
     'slti':   _check_i_type_alu,
     'sltiu':  _check_i_type_alu,
     'jalr':   _check_jalr,
+    'li':     _check_li,
     'sw':     _check_store,
     'sh':     _check_store,
     'sb':     _check_store,
