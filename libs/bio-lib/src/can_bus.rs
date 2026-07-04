@@ -8,7 +8,40 @@ use bao1x_api::bio_resources::*;
 use bao1x_hal::bio::{Bio, CoreCsr};
 use utralib::generated::utra::bio_bdma;
 
-/* Can Bus data link layer stub
+/* Can Bus 2.0 Introduction
+ *
+ * This is an overview, meant to get you started, so some details are not entirely accurate.
+ *
+ * Can Bus communicates using frames. These are packages of data with a fixed structure, a variable data
+ * payload, and a checksum. Each frame consists of
+ *  - an arbitration field. If two frames start sending simultaneously, this field decides which one gets to
+ *    send and which one has to stop.
+ *  - a configuration field.
+ *  - a checksum (called CRC) that allows a receiver to see if a message has been received correctly.
+ *
+ * The arbitration field contains
+ *  - the message ID. This is not an address but a label of contents: it says something about the type of
+ *    message, not the intended recipient.
+ *  - the IDE bit, which distinguishes standard and extended frames. These have different lengths message IDs.
+ * The configuration field contains
+ *  - the DLC (data length code), which is the number of data bytes that the frame holds (can be 0-8).
+ *
+ * There are several mechanisms to ensure that either all nodes receive a correct frame, or no node does.
+ *
+ * Can bus operates on long wires (relative to its operating frequency) so transmission delays become
+ * relevant. There needs to be a mechanism to ensure that all nodes sample the same value regardless of where
+ * they are on the bus. This is done by synchronizing a digital PLL to every transmission and by allowing
+ * enough time for a signal to propagate to every node before sampling.
+ *
+ * More information:
+ * https://en.wikipedia.org/wiki/CAN_bus#CAN_2.0_(Classical_CAN)
+ * https://www.can-cia.org/can-knowledge/can-cc
+ *
+ *
+ * ===
+ *
+ *
+ * About this implementation:
  *
  * The tx core takes a preformed message, calculates a CRC, adds SOF and EOF bits and sends it while bit
  * stuffing and checking for transmission errors.
@@ -130,7 +163,42 @@ impl CanBus {
         let dbg_pin = arbitrary_int::u5::new(1);
         let flag_pin = arbitrary_int::u5::new(24); // visualize flag status
 
-        // bit timing configuration
+        /* Bit timing configuration
+         *
+         * Determines the sampling point (0%: bit start, 100%: bit end) and the synchronization jump width.
+         *
+         * An earlier sampling point allows larger oscillator tolerances for every node and slower edge
+         * transitions but requires shorter bus lengths for a given bus rate. The original specs put the
+         * sampling point close to 2/3 whereas CANopen specifies close to 90%.
+         * Can Bus was developed primarily for hardware, so setting the sample point works like this: For a
+         * given bus rate, set a number of quanta per bit, then choose how many quanta pass before sampling.
+         *
+         *  Example 1: 10 quanta, sample after 6 means a sampling point of 60%.
+         *  Example 2: 16 quanta, sample after 14 means a sampling point of 87,5%.
+         *  Example 3: 20 quanta, sample after 12 means a sampling point of 60%.
+         *
+         * Example 1 and example 3 are functionally the same, the difference doesn't matter in a software
+         * implementation.
+         *
+         * Synchronization jump width (SJW) limits the maximum adjustment per bit.
+         *
+         * Set SJW to min(4, phase_seg_1, phase_seg_2) with
+         *   phase_seg_1: quanta before sampling point - propagation delay
+         *   phase_seg_2: quanta after sampling point
+         *
+         * (Detail note: SJW needs to be large enough to compensate oscillator difference but as small as
+         * possible to precent over-correction due to random phase shifts or noise. It's practically fixed
+         * once the sampling point is set.
+         * In a lot of references, SJW is given as min(4, phase_seg_1) but that's because the original specs
+         * specify specify phase_seg_1 = phase_seg_2.)
+         *
+         * Explanation with diagrams:
+         * www.can-cia.org/fileadmin/cia/documents/publications/cnlm/december_2018/..
+         * ..18-4_p28_optimizing_can_bit_configuration_for_robustness_kent_lennartsson_kvaser.pdf
+         *
+         * "Computation of CAN Bit Timing Parameters Simplified:"
+         * https://stage.can-cia.org/fileadmin/cia/documents/proceedings/2012_taralkar.pdf
+         */
         let quanta_per_bit = 16;
         let sampling_point = 12;
         let synchronization_jump_width = 3;
