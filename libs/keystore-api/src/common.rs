@@ -86,11 +86,15 @@ impl fmt::Display for KeywrapError {
 }
 
 pub const MAX_WRAP_DATA: usize = 2048;
-/// Note regression in v0.9.9: we had to return an array type in the KeywrapError enum that
-/// has a signature for an array that is 40 bytes long, which is bigger than Rust's devire
-/// can deal with. So, unfortunately, the result of this does *not* get zeroized on drop :(
+/// Carries key material in `data` while it is wrapped/unwrapped over the keystore IPC oracle.
+///
+/// History: v0.9.9 swapped in a NIST-compliant AES-KWP and added the
+/// `KeywrapError::UpgradeToNew(([u8; 32], [u8; 40]))` migration payload. That made the old
+/// `#[zeroize(drop)]` derive unworkable (`KeywrapError` is `Copy`, so it can't carry a `Drop`,
+/// and the derive choked on the 40-byte array), so the derive was removed as a hotfix and the
+/// key material stopped being wiped on drop. The hand-written `Drop` below restores that
+/// zeroization without disturbing the migration, so unwrapped/wrapped keys do not linger in RAM.
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-// #[zeroize(drop)]
 pub struct KeyWrapper {
     pub data: [u8; MAX_WRAP_DATA + 8],
     // used to specify the length of the data used in the fixed-length array above
@@ -103,6 +107,20 @@ pub struct KeyWrapper {
     pub result: Option<KeywrapError>,
     // used by the unwrap side
     pub expected_len: u32,
+}
+
+impl Drop for KeyWrapper {
+    fn drop(&mut self) {
+        // Restores the key-zeroization that `#[zeroize(drop)]` used to provide before the
+        // v0.9.9 AES-KWP migration forced removing the derive (see the note on the struct).
+        // `data` holds the (un)wrapped key; the `UpgradeToNew` result carries the unwrapped
+        // key plus its re-wrapped form during a legacy migration.
+        self.data.zeroize();
+        if let Some(KeywrapError::UpgradeToNew((unwrapped, rewrapped))) = &mut self.result {
+            unwrapped.zeroize();
+            rewrapped.zeroize();
+        }
+    }
 }
 
 /// The Checksums structure is an array of 16-byte (128-bit) checksums that
