@@ -79,5 +79,7 @@ prototyping = [
 
 # Generic USB CCID bulk transport + provisioning CDC (PDDB only). No Galdralag/OpenPGP crates.
 ccid-openpgp = ["dep:pddb"]
+# HIL personality: echo PC_to_RDR frames on bulk IN (requires ccid-openpgp).
+ccid-echo = ["ccid-openpgp"]
 
 default = []

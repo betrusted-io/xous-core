@@ -1,10 +1,11 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 //
 //! Persist CCID provisioning strings in PDDB (opaque blobs; no verification here).
 
 use std::io::{Read, Write};
 
 use pddb::Pddb;
+use usb_bao1x::ccid_framing::is_provisioned_marker;
 
 pub(crate) const CCID_DICT: &str = "usb.ccid";
 const KEY_PROVISIONED: &str = "provisioned";
@@ -16,7 +17,7 @@ pub(crate) fn is_ccid_provisioned(pddb: &Pddb) -> bool {
         Ok(mut key) => {
             let mut buf = [0u8; 32];
             match key.read(&mut buf) {
-                Ok(n) if n >= 4 => &buf[..n] == b"OKV1",
+                Ok(n) => is_provisioned_marker(&buf[..n]),
                 _ => false,
             }
         }
