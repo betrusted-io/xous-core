@@ -14,7 +14,9 @@ use usb_device::class_prelude::*;
 use usb_device::descriptor::DescriptorWriter;
 
 use crate::api::Opcode;
-use crate::ccid_framing::{append_bulk_out, consume_tx_chunk, drain_complete_frames, next_tx_chunk, CCID_BULK_MAX_PACKET};
+use crate::ccid_framing::{
+    CCID_BULK_MAX_PACKET, append_bulk_out, consume_tx_chunk, drain_complete_frames, next_tx_chunk,
+};
 
 /// USB interface class: CCID.
 pub const USB_INTERFACE_CLASS_CCID: u8 = 0x0B;
@@ -69,9 +71,7 @@ fn ccid_class_descriptor_bytes() -> [u8; 54] {
     b
 }
 
-fn remove_tx_prefix(tx: &mut Vec<u8>, n: usize) {
-    consume_tx_chunk(tx, n);
-}
+fn remove_tx_prefix(tx: &mut Vec<u8>, n: usize) { consume_tx_chunk(tx, n); }
 
 struct CcidTransportInner {
     rx_assembly: Vec<u8>,

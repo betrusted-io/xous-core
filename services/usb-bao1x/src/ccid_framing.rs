@@ -19,12 +19,8 @@ pub fn frame_total_len(rx_assembly: &[u8]) -> Option<usize> {
     if rx_assembly.len() < CCID_HEADER_LEN {
         return None;
     }
-    let dw_len = u32::from_le_bytes([
-        rx_assembly[1],
-        rx_assembly[2],
-        rx_assembly[3],
-        rx_assembly[4],
-    ]) as usize;
+    let dw_len =
+        u32::from_le_bytes([rx_assembly[1], rx_assembly[2], rx_assembly[3], rx_assembly[4]]) as usize;
     let total = CCID_HEADER_LEN.saturating_add(dw_len);
     if total > CCID_WIRE_MAX {
         return None;
