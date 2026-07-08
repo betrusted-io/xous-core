@@ -1,0 +1,35 @@
+name: CCID HIL
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  hil:
+    name: CCID hardware-in-the-loop
+    runs-on: [self-hosted, baosec-hil]
+    steps:
+      - name: Install Python dependencies
+        run: pip install --user pyusb pyserial
+
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install RISC-V toolkit
+        run: cargo xtask install-toolkit --force --no-verify
+
+      - name: Build CCID HIL firmware
+        run: cargo xtask ccid-hil --no-verify
+
+      - name: Run CCID HIL suite
+        run: |
+          chmod +x tools/ccid_hil/*.sh
+          tools/ccid_hil/run_all.sh
+
+      - name: Upload HIL logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ccid-hil-logs
+          path: /tmp/ccid-hil-out/

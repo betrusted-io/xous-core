@@ -1,5 +1,6 @@
 #![cfg_attr(target_os = "none", no_std)]
 
+pub mod ccid_framing;
 pub mod api;
 pub use api::*;
 use num_traits::*;

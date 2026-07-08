@@ -548,18 +548,25 @@ pub(crate) fn main_hw() -> ! {
             Opcode::CcidRxTimeout => {}
             #[cfg(feature = "ccid-openpgp")]
             Opcode::IrqCcidRx => {
-                if let Some(mut listener) = ccid_listener.take() {
-                    if let Some(frame) = cu.ccid_rx.borrow_mut().pop_front() {
-                        let mut response = unsafe {
-                            Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
-                        };
-                        let mut deferred_buf = response.to_original::<CcidMsgIpc, _>().unwrap();
-                        assert_eq!(deferred_buf.code, CcidCode::RxWait);
-                        deferred_buf.data = frame;
-                        deferred_buf.code = CcidCode::RxAck;
-                        response.replace(deferred_buf).unwrap();
-                    } else {
-                        ccid_listener = Some(listener);
+                if let Some(frame) = cu.ccid_rx.borrow_mut().pop_front() {
+                    #[cfg(feature = "ccid-echo")]
+                    {
+                        cu.ccid.enqueue_response(frame);
+                    }
+                    #[cfg(not(feature = "ccid-echo"))]
+                    {
+                        if let Some(mut listener) = ccid_listener.take() {
+                            let mut response = unsafe {
+                                Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                            };
+                            let mut deferred_buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                            assert_eq!(deferred_buf.code, CcidCode::RxWait);
+                            deferred_buf.data = frame;
+                            deferred_buf.code = CcidCode::RxAck;
+                            response.replace(deferred_buf).unwrap();
+                        } else {
+                            cu.ccid_rx.borrow_mut().push_front(frame);
+                        }
                     }
                 }
             }
