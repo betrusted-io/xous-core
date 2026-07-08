@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # CCID HIL testing
 
 Hardware-in-the-loop tests for the `usb-bao1x` CCID transport (`ccid-openpgp`

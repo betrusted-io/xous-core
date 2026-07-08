@@ -2,6 +2,7 @@
 name = "usb-bao1x"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
 
 [dependencies]
 utralib = { version = "0.1.27", optional = true, default-features = false }

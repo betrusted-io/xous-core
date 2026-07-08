@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # CCID protocol and Raspberry Pi HIL setup
 
 This document describes the USB CCID transport implemented in `usb-bao1x`
