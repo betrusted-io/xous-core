@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # CCID OpenPGP test report
 
 Date: 2026-05-10  
