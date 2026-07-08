@@ -165,6 +165,223 @@ Host bulk OUT  --->  device assembles frame  --->  bulk IN echoes same bytes
 
 This validates USB descriptors, bulk endpoints, and framing only.
 
+## Testing guide
+
+This section describes how to run every test tier: without hardware (developer
+machine), on a Linux USB host (desktop or Pi), and in CI.
+
+### Prerequisites by test type
+
+| Test | Device image | Host | Required tools |
+|------|--------------|------|----------------|
+| Unit tests | none | any Linux/macOS with Rust | `cargo` |
+| Compile gates | none | Linux (CI uses Ubuntu) | `cargo xtask install-toolkit` for board target |
+| Smoke test | `ccid-hil` (has `ccid-echo`) | Linux USB host | `pyusb` |
+| HIL suite | `ccid-hil` | Linux USB host | `pyusb`, `pyserial`, `lsusb` |
+| Provisioning HIL | factory-reset device (unprovisioned) | Linux USB host | `pyserial` + above |
+| Production CCID | `baosec` with `ccid-openpgp` | Linux + OpenPGP handler | handler service (out of tree) |
+
+Build the HIL test image:
+
+```bash
+cargo xtask ccid-hil
+```
+
+Flash the resulting image to the device before any USB host test. Connect the
+device USB **data** port to the host (Pi or PC).
+
+### Tier 1: Unit tests (no hardware)
+
+From the repository root:
+
+```bash
+cargo test -p usb-bao1x --lib ccid_framing
+```
+
+Expected output ends with `7 passed`. These tests cover:
+
+- Partial-frame handling (no premature parse)
+- Valid `GetSlotStatus` frame extraction
+- Oversize `dwLength` rejection
+- Multi-packet bulk OUT reassembly
+- TX chunking at 512 bytes
+- PDDB provisioning marker (`OKV1`)
+
+### Tier 2: Compile gates (no hardware)
+
+Hosted (fast sanity check):
+
+```bash
+cargo check -p usb-bao1x --features hosted-baosec,ccid-openpgp
+```
+
+Board target (requires Xous toolkit):
+
+```bash
+cargo xtask install-toolkit --force --no-verify
+cargo check -p usb-bao1x --features board-baosec,ccid-openpgp \
+  --target riscv32imac-unknown-xous-elf
+```
+
+Full HIL image compile:
+
+```bash
+cargo xtask ccid-hil --no-verify
+```
+
+These run automatically on every PR via `.github/workflows/ccid-ci.yml`.
+
+### Tier 3: USB smoke test (hardware, ~30 seconds)
+
+Use this after flashing a `ccid-hil` image to confirm enumeration and bulk
+echo in one step.
+
+1. Install host dependencies:
+
+```bash
+pip install pyusb
+# Linux: ensure user can access USB (see udev rules below)
+```
+
+2. Confirm the device is visible:
+
+```bash
+lsusb -d 1d50:6198
+```
+
+3. Run the smoke test from the repository root:
+
+```bash
+python3 tools/ccid_smoke.py
+```
+
+**Pass criteria:**
+
+- Prints `Device enumerated.`
+- CCID descriptor shows `bcd=0110` and `protocols=0x00000002`
+- `GetSlotStatus echo OK.`
+- `XfrBlock echo OK.`
+- Final line: `PASS`
+
+Useful flags:
+
+```bash
+python3 tools/ccid_smoke.py --timeout 120        # slow enumerators
+python3 tools/ccid_smoke.py --skip-echo           # enumeration only
+python3 tools/ccid_smoke.py --vid 0x1d50 --pid 0x6197   # dabao
+```
+
+### Tier 4: Full HIL suite (hardware, ~2 minutes)
+
+Runs individual tests in sequence and writes logs to `/tmp/ccid-hil-out/`.
+
+```bash
+pip install pyusb pyserial
+chmod +x tools/ccid_hil/*.sh
+tools/ccid_hil/run_all.sh
+```
+
+| Step | Script | What it checks | Pass line |
+|------|--------|----------------|-----------|
+| 00 | `wait_device.sh` | USB device `1d50:6198` appears | `Device 1d50:6198 present` |
+| 01 | `test_enumerate.py` | CCID interface class 0x0B, descriptor fields | `HIL-01 PASS` |
+| 02 | `test_provision.py` | skipped unless `CCID_HIL_PROVISION=1` | `HIL-02 PASS` |
+| 03 | `test_echo.py` | GetSlotStatus bulk round-trip echo | `HIL-03 PASS` |
+| 04 | `test_echo.py --stress N` | N random XfrBlock echo frames | `HIL-05 PASS` |
+
+Run individual tests:
+
+```bash
+export PYTHONPATH=tools/ccid_hil
+
+python3 tools/ccid_hil/test_enumerate.py
+python3 tools/ccid_hil/test_echo.py
+python3 tools/ccid_hil/test_echo.py --stress 100
+```
+
+Environment variables:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `CCID_VID` | `1d50` | USB vendor (hex, no `0x` prefix) |
+| `CCID_PID` | `6198` | USB product ID |
+| `CCID_WAIT_TIMEOUT` | `60` | Seconds to wait for device |
+| `CCID_HIL_PROVISION` | `0` | Set to `1` to run provisioning test |
+| `CCID_HIL_STRESS` | `100` | Random echo iterations in step 04 |
+| `CCID_HIL_OUT` | `/tmp/ccid-hil-out` | Log directory |
+
+#### Provisioning test (optional)
+
+Only works on an **unprovisioned** device (PDDB `usb.ccid` / `provisioned` is not
+`OKV1`). Factory-reset or use a fresh image, then:
+
+```bash
+CCID_HIL_PROVISION=1 tools/ccid_hil/run_all.sh
+```
+
+The test opens the provisioning CDC serial port, sends two lines, and waits for
+USB re-enumeration. List serial ports if auto-detection fails:
+
+```bash
+python3 -m serial.tools.list_ports
+python3 tools/ccid_hil/test_provision.py --port /dev/ttyACM1
+```
+
+### Tier 5: CI (automated)
+
+**GitHub-hosted** (every push/PR to `main` or `dev`):
+
+- Workflow: `.github/workflows/ccid-ci.yml`
+- Runs unit tests + compile gates (no device attached)
+
+**Self-hosted Raspberry Pi** (nightly or manual dispatch):
+
+- Workflow: `.github/workflows/ccid-hil.yml`
+- Requires runner labels: `self-hosted`, `baosec-hil`
+- Device must be cabled to the Pi and flashed with a `ccid-hil` image
+- Logs uploaded as `ccid-hil-logs` artifact
+
+Trigger manually from GitHub: Actions -> CCID HIL -> Run workflow.
+
+### End-to-end test workflow on Raspberry Pi
+
+Typical bench session after initial Pi setup (see below):
+
+```bash
+cd ~/xous-core
+git pull
+source ~/ccid-venv/bin/activate
+
+# 1. Build test image (or build on desktop and copy flash artifact)
+cargo xtask ccid-hil
+
+# 2. Flash image to device (use your normal baosec flash procedure)
+
+# 3. Cable device USB to Pi, power on device
+
+# 4. Quick check
+lsusb -d 1d50:6198
+python3 tools/ccid_smoke.py
+
+# 5. Full regression
+tools/ccid_hil/run_all.sh
+
+# 6. Review logs if anything fails
+ls -la /tmp/ccid-hil-out/
+cat /tmp/ccid-hil-out/summary.log
+```
+
+### Interpreting failures
+
+| Failure | Check |
+|---------|-------|
+| `Timeout waiting for CCID device` | Cable, power, image flashed, `lsusb` output |
+| `CCID interface not found` | Image missing `ccid-openpgp`; rebuild with `ccid-hil` |
+| `echo mismatch` | Image missing `ccid-echo`; host sent before device configured |
+| `pyusb` permission error | udev rules, group membership, re-login |
+| Provisioning: no re-enumeration | Wrong serial port; device already provisioned |
+| Unit test / compile failure | Run the exact `cargo` command from CI log locally |
+
 ## Raspberry Pi HIL setup
 
 The goal is a self-contained Linux USB host that can flash a test image, wait
@@ -263,24 +480,16 @@ lsusb -d 1d50:6198 -v 2>/dev/null | grep -A2 "bInterfaceClass"
 # Expect an interface with bInterfaceClass 11 (0x0B)
 ```
 
-### Run tests manually on the Pi
-
-From the repository root:
+See [Testing guide](#testing-guide) above for step-by-step smoke and HIL
+commands. Quick reference:
 
 ```bash
 source ~/ccid-venv/bin/activate
-
-# Quick smoke test
 python3 tools/ccid_smoke.py
-
-# Full HIL suite (enumeration, echo, stress)
 tools/ccid_hil/run_all.sh
-
-# Include provisioning test (factory-reset / unprovisioned device only)
-CCID_HIL_PROVISION=1 tools/ccid_hil/run_all.sh
 ```
 
-Logs are written to `/tmp/ccid-hil-out/` by default.
+Logs: `/tmp/ccid-hil-out/`
 
 ### GitHub Actions self-hosted runner (optional)
 
@@ -307,6 +516,8 @@ successful flash, nightly runs validate transport regressions.
 | `Resource busy` on serial port | Wrong CDC port; list ports with `python3 -m serial.tools.list_ports` |
 
 ## CI summary
+
+See [Testing guide](#testing-guide) for commands. Overview:
 
 | Tier | Where | What |
 |------|-------|------|

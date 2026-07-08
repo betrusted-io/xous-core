@@ -4,7 +4,21 @@ Hardware-in-the-loop tests for the `usb-bao1x` CCID transport (`ccid-openpgp`
 feature).
 
 **Protocol reference and Raspberry Pi setup:** see
-[`docs/CCID_PROTOCOL_AND_HIL.md`](../../docs/CCID_PROTOCOL_AND_HIL.md).
+[`docs/CCID_PROTOCOL_AND_HIL.md`](../../docs/CCID_PROTOCOL_AND_HIL.md) (includes
+full testing guide).
+
+## Quick test commands
+
+```bash
+# Unit tests (no hardware)
+cargo test -p usb-bao1x --lib ccid_framing
+
+# USB smoke test (ccid-hil image required)
+python3 tools/ccid_smoke.py
+
+# Full HIL suite
+tools/ccid_hil/run_all.sh
+```
 
 ## Requirements
 
