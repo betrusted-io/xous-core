@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 //
 //! USB CCID bulk transport: assembles PC_to_RDR frames and streams RDR_to_PC replies.
 //! No APDU or OpenPGP interpretation; an external process supplies raw RDR bytes.
@@ -14,6 +14,7 @@ use usb_device::class_prelude::*;
 use usb_device::descriptor::DescriptorWriter;
 
 use crate::api::Opcode;
+use crate::ccid_framing::{append_bulk_out, consume_tx_chunk, drain_complete_frames, next_tx_chunk, CCID_BULK_MAX_PACKET};
 
 /// USB interface class: CCID.
 pub const USB_INTERFACE_CLASS_CCID: u8 = 0x0B;
@@ -39,11 +40,9 @@ const CCID_LCD_LAYOUT: u16 = 0;
 const CCID_PIN_SUPPORT: u8 = 0x00;
 const CCID_MAX_BUSY_SLOTS: u8 = 0x01;
 
-pub(crate) const CCID_BULK_MAX_PACKET: u16 = 512;
+pub(crate) const CCID_BULK_MAX_PACKET: u16 = CCID_BULK_MAX_PACKET as u16;
 const CCID_INTERRUPT_MAX_PACKET: u16 = 8;
 const CCID_INTERRUPT_INTERVAL_MS: u8 = 24;
-
-pub(crate) const CCID_WIRE_MAX: usize = 530;
 
 fn ccid_class_descriptor_bytes() -> [u8; 54] {
     let mut b = [0u8; 54];
@@ -71,11 +70,7 @@ fn ccid_class_descriptor_bytes() -> [u8; 54] {
 }
 
 fn remove_tx_prefix(tx: &mut Vec<u8>, n: usize) {
-    if n >= tx.len() {
-        tx.clear();
-        return;
-    }
-    tx.drain(..n);
+    consume_tx_chunk(tx, n);
 }
 
 struct CcidTransportInner {
@@ -103,8 +98,8 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
     ) -> Self {
         Self {
             iface: alloc.interface(),
-            bulk_out: alloc.bulk(CCID_BULK_MAX_PACKET),
-            bulk_in: alloc.bulk(CCID_BULK_MAX_PACKET),
+            bulk_out: alloc.bulk(CCID_BULK_MAX_PACKET as u16),
+            bulk_in: alloc.bulk(CCID_BULK_MAX_PACKET as u16),
             interrupt_in: alloc.interrupt(CCID_INTERRUPT_MAX_PACKET, CCID_INTERRUPT_INTERVAL_MS),
             inner: RefCell::new(CcidTransportInner {
                 rx_assembly: Vec::new(),
@@ -128,25 +123,13 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
         complete_rx: &RefCell<VecDeque<Vec<u8>>>,
         notify_cid: xous::CID,
     ) {
-        loop {
-            if g.rx_assembly.len() < 10 {
-                break;
-            }
-            let dw_len =
-                u32::from_le_bytes([g.rx_assembly[1], g.rx_assembly[2], g.rx_assembly[3], g.rx_assembly[4]])
-                    as usize;
-            let total = 10usize.saturating_add(dw_len);
-            if total > CCID_WIRE_MAX {
-                g.rx_assembly.clear();
-                break;
-            }
-            if g.rx_assembly.len() < total {
-                break;
-            }
-            let frame: Vec<u8> = g.rx_assembly[..total].to_vec();
-            g.rx_assembly.drain(..total);
-
-            complete_rx.borrow_mut().push_back(frame);
+        let new_frames = {
+            let mut q = complete_rx.borrow_mut();
+            let before = q.len();
+            drain_complete_frames(&mut g.rx_assembly, &mut *q);
+            q.len() - before
+        };
+        if new_frames > 0 {
             xous::try_send_message(
                 notify_cid,
                 xous::Message::new_scalar(Opcode::IrqCcidRx.to_usize().unwrap(), 0, 0, 0, 0),
@@ -158,11 +141,13 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
     fn poll_bulk_in(&self) {
         let chunk: Vec<u8> = {
             let g = self.inner.borrow();
-            if !g.tx_pending || g.tx_buf.is_empty() {
+            if !g.tx_pending {
                 return;
             }
-            let chunk_len = g.tx_buf.len().min(CCID_BULK_MAX_PACKET as usize);
-            g.tx_buf[..chunk_len].to_vec()
+            match next_tx_chunk(&g.tx_buf) {
+                Some(c) => c.to_vec(),
+                None => return,
+            }
         };
         match self.bulk_in.write(&chunk) {
             Ok(n) => {
@@ -218,11 +203,9 @@ impl<'a, B: UsbBus> UsbClass<B> for CcidTransportClass<'a, B> {
                 return;
             }
             let mut g = self.inner.borrow_mut();
-            if g.rx_assembly.len().saturating_add(n) > CCID_WIRE_MAX {
-                g.rx_assembly.clear();
+            if append_bulk_out(&mut g.rx_assembly, &tmp[..n]).is_err() {
                 return;
             }
-            g.rx_assembly.extend_from_slice(&tmp[..n]);
             Self::drain_complete_messages(&mut g, &*self.complete_rx, self.notify_cid);
         }
     }

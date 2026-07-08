@@ -438,6 +438,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .hosted_build_only()
                 .add_apps(&get_cratespecs());
         }
+        Some("ccid-hil") => {
+            baosec_common(&mut builder)?;
+            builder.add_feature("ccid-openpgp");
+            builder.add_feature("ccid-echo");
+        }
 
         // ------ Precursor hardware image configs ------
         Some("app-image") => {
@@ -1031,6 +1036,7 @@ Hosted emulation:
  pddb-dev                Testing for compilation errors on hardware targets on the PDDB.
  hosted-ci               Check that precursor hosted mode isn't broken
  hosted-bao1x-ci         Check that bao1x hosted mode isn't broken
+ ccid-hil                Baosec image with ccid-openpgp + ccid-echo for USB HIL testing
 
 Renode emulation:
  renode-image            Renode user image. Unspecified [cratespecs] are apps
@@ -1249,6 +1255,7 @@ fn baosec_common(builder: &mut Builder) -> std::io::Result<()> {
     // builder.add_kernel_feature("debug-swap-verbose");
     // builder.add_feature("quantum-timer"); // this isn't in bao1x..
     builder.add_kernel_feature("v2p");
+    builder.add_feature("ccid-openpgp");
     builder.target_bao1x_soc();
 
     // It is important that this is the first service added, because the swapper *must* be in PID 2

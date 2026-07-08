@@ -157,6 +157,25 @@ image offline with `pddbdbg.py`. It exits non-zero if any test fails. A cold run
 ~15 minutes on a fast host. `--loglevel DEBUG` shows the boot choreography;
 `--help` lists the timeout flags. See `services/pddb-fs-tests/README.md`.
 
+## CCID USB testing
+
+Host-side smoke and hardware-in-the-loop tests for the `usb-bao1x` CCID transport
+(`ccid-openpgp` feature) live under `tools/ccid_hil/` and `tools/ccid_smoke.py`.
+
+```sh
+# Unit tests (also run in CI via .github/workflows/ccid-ci.yml)
+cargo test -p usb-bao1x --lib ccid_framing
+
+# Manual USB smoke test (device image: cargo xtask ccid-hil)
+python3 tools/ccid_smoke.py
+
+# Full HIL suite on a Linux USB host
+tools/ccid_hil/run_all.sh
+```
+
+See `tools/ccid_hil/README.md` and `docs/CCID_PROTOCOL_AND_HIL.md` for protocol
+details and Raspberry Pi HIL setup.
+
 ## Contribution Guidelines
 
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg)](../CODE_OF_CONDUCT.md)

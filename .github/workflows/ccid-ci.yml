@@ -1,0 +1,44 @@
+name: CCID CI
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+      - dev
+
+jobs:
+  ccid-unit-and-compile:
+    name: CCID unit tests and compile gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Ubuntu dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y libxkbcommon-dev
+
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Fetch tags
+        run: git fetch --prune --unshallow --tags
+
+      - uses: Swatinem/rust-cache@v1
+
+      - name: Install RISC-V toolkit
+        run: cargo xtask install-toolkit --force --no-verify
+
+      - name: CCID framing unit tests
+        run: cargo test -p usb-bao1x --lib ccid_framing
+
+      - name: CCID hosted compile check
+        run: cargo check -p usb-bao1x --features hosted-baosec,ccid-openpgp
+
+      - name: CCID board compile check
+        run: cargo check -p usb-bao1x --features board-baosec,ccid-openpgp --target riscv32imac-unknown-xous-elf
+
+      - name: CCID HIL image compile check
+        run: cargo xtask ccid-hil --no-verify

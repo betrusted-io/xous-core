@@ -81,6 +81,20 @@ pub struct Bao1xUsb<'a> {
     pub double_lock: AtomicBool,
     pub led_state: KeyboardLedsReport,
     pub irq_serviced: AtomicBool,
+    #[cfg(feature = "ccid-openpgp")]
+    pub ccid: CcidTransportClass<'a, CorigineWrapper>,
+    #[cfg(feature = "ccid-openpgp")]
+    pub provision_serial: SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]>,
+    #[cfg(feature = "ccid-openpgp")]
+    pub ccid_rx: Rc<RefCell<VecDeque<Vec<u8>>>>,
+    #[cfg(feature = "ccid-openpgp")]
+    pub prov_lines: Rc<RefCell<VecDeque<Vec<u8>>>>,
+    #[cfg(feature = "ccid-openpgp")]
+    pub prov_capture_enabled: Arc<AtomicBool>,
+    #[cfg(feature = "ccid-openpgp")]
+    pub prov_serial_rx: [u8; SERIAL_MAX_PACKET_SIZE],
+    #[cfg(feature = "ccid-openpgp")]
+    pub prov_line_acc: RefCell<Vec<u8>>,
 }
 
 impl<'a> Bao1xUsb<'a> {
@@ -157,6 +171,20 @@ impl<'a> Bao1xUsb<'a> {
             double_lock: AtomicBool::new(false),
             led_state: KeyboardLedsReport::default(),
             irq_serviced: AtomicBool::new(false),
+            #[cfg(feature = "ccid-openpgp")]
+            ccid,
+            #[cfg(feature = "ccid-openpgp")]
+            provision_serial,
+            #[cfg(feature = "ccid-openpgp")]
+            ccid_rx,
+            #[cfg(feature = "ccid-openpgp")]
+            prov_lines,
+            #[cfg(feature = "ccid-openpgp")]
+            prov_capture_enabled,
+            #[cfg(feature = "ccid-openpgp")]
+            prov_serial_rx: [0u8; SERIAL_MAX_PACKET_SIZE],
+            #[cfg(feature = "ccid-openpgp")]
+            prov_line_acc: RefCell::new(Vec::new()),
         }
     }
 
