@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-pub mod ccid_framing;
 pub mod api;
+pub mod ccid_framing;
 pub use api::*;
 use num_traits::*;
 use packed_struct::PackedStruct;
