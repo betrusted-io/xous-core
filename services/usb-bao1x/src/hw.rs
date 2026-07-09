@@ -407,10 +407,7 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                                             }
                                             std::mem::take(&mut *acc)
                                         };
-                                        usb.prov_lines
-                                            .clone()
-                                            .borrow_mut()
-                                            .push_back(line);
+                                        usb.prov_lines.clone().borrow_mut().push_back(line);
                                         xous::try_send_message(
                                             usb.conn,
                                             Message::new_scalar(

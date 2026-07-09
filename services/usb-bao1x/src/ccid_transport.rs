@@ -7,6 +7,10 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 
 use num_traits::ToPrimitive;
+use usb_bao1x::ccid_framing::{
+    CCID_BULK_MAX_PACKET as CCID_BULK_MAX_PACKET_BYTES, append_bulk_out, consume_tx_chunk,
+    drain_complete_frames, next_tx_chunk,
+};
 use usb_device::Result as UsbResult;
 use usb_device::UsbError;
 use usb_device::class::UsbClass;
@@ -14,10 +18,6 @@ use usb_device::class_prelude::*;
 use usb_device::descriptor::DescriptorWriter;
 
 use crate::api::Opcode;
-use usb_bao1x::ccid_framing::{
-    append_bulk_out, consume_tx_chunk, drain_complete_frames, next_tx_chunk,
-    CCID_BULK_MAX_PACKET as CCID_BULK_MAX_PACKET_BYTES,
-};
 
 /// USB interface class: CCID.
 pub const USB_INTERFACE_CLASS_CCID: u8 = 0x0B;
