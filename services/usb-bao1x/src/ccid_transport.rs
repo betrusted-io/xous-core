@@ -14,8 +14,9 @@ use usb_device::class_prelude::*;
 use usb_device::descriptor::DescriptorWriter;
 
 use crate::api::Opcode;
-use crate::ccid_framing::{
-    CCID_BULK_MAX_PACKET, append_bulk_out, consume_tx_chunk, drain_complete_frames, next_tx_chunk,
+use usb_bao1x::ccid_framing::{
+    append_bulk_out, consume_tx_chunk, drain_complete_frames, next_tx_chunk,
+    CCID_BULK_MAX_PACKET as CCID_BULK_MAX_PACKET_BYTES,
 };
 
 /// USB interface class: CCID.
@@ -42,7 +43,7 @@ const CCID_LCD_LAYOUT: u16 = 0;
 const CCID_PIN_SUPPORT: u8 = 0x00;
 const CCID_MAX_BUSY_SLOTS: u8 = 0x01;
 
-pub(crate) const CCID_BULK_MAX_PACKET: u16 = CCID_BULK_MAX_PACKET as u16;
+pub(crate) const CCID_BULK_MAX_PACKET: u16 = CCID_BULK_MAX_PACKET_BYTES as u16;
 const CCID_INTERRUPT_MAX_PACKET: u16 = 8;
 const CCID_INTERRUPT_INTERVAL_MS: u8 = 24;
 
