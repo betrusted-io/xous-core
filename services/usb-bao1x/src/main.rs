@@ -204,8 +204,8 @@ pub(crate) fn main_hw() -> ! {
     let mut ccid_listener_pid: Option<NonZeroU8> = None;
     #[cfg(feature = "ccid-openpgp")]
     let mut ccid_listener: Option<xous::MessageEnvelope> = None;
-    /// First provisioning line (user), when awaiting second line (admin).
     #[cfg(feature = "ccid-openpgp")]
+    /// First provisioning line (user), when awaiting second line (admin).
     let mut prov_user_line: Option<Vec<u8>> = None;
 
     let mut autotype_delay_ms = 30;
