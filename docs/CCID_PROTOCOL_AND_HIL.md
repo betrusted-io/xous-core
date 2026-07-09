@@ -223,7 +223,7 @@ Board target (requires Xous toolkit):
 
 ```bash
 cargo xtask install-toolkit --force --no-verify
-cargo check -p usb-bao1x --features board-baosec,ccid-openpgp \
+cargo check -p usb-bao1x --features board-baosec,ccid-openpgp,bao1x \
   --target riscv32imac-unknown-xous-elf
 ```
 
