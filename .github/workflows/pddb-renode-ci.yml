@@ -162,6 +162,20 @@ jobs:
           renode-test -r "$GITHUB_WORKSPACE/renode-results" \
             emulation/tests/pddb-fs.robot
 
+      # The robot suite is one test case (boot + run + assert the sentinel
+      # stream), so its report shows "1 test". Render the actual per-test
+      # results into a standalone, fully-offline HTML (system fonts, no JS, no
+      # external requests) from the console sentinels, and strip the Google
+      # Fonts @import robot bakes into its own log.html/report.html so the whole
+      # artifact opens offline. `always()` so a red run still gets a report.
+      - name: Render self-contained per-test report
+        if: always()
+        run: |
+          python3 tools/renode_report.py target/pddb-fs-ci/console-robot.log \
+            -o renode-results/test-report.html || true
+          find renode-results -name '*.html' -exec \
+            sed -i 's#@import url("https://fonts.googleapis.com[^"]*");##g' {} + || true
+
       - name: Upload robot results
         if: always()
         uses: actions/upload-artifact@v4
@@ -170,6 +184,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
           path: |
+            renode-results/test-report.html
             renode-results/robot_output.xml
             renode-results/log.html
             renode-results/report.html
