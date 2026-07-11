@@ -31,6 +31,13 @@ name: PDDB Renode CI
 # deliberate opt-in — uncomment the block below to turn it on.
 on:
   workflow_dispatch:
+  schedule:
+    # Weekly (Mondays 06:00 UTC): keeps the suite exercised against the latest
+    # published toolkit without a per-push cost. A red weekly run means either a
+    # regression or a new toolkit that changed client-side std behavior (an
+    # XFAIL flipping to XPASS -- update the registry). Note: scheduled runs only
+    # fire from the default branch, so this activates once merged.
+    - cron: '0 6 * * 1'
   # push:
   #   branches:
   #     - dev
@@ -53,19 +60,23 @@ jobs:
           sudo apt update
           sudo apt install -y libxkbcommon-dev
 
-      # TOOLCHAIN LOCKSTEP (do NOT replace with `rustup update`): `cargo xtask
-      # install-toolkit` requires the host rustc version to exactly match a
-      # betrusted-io/rust release tag (xtask/src/utils.rs). The renode image
-      # links the xous libstd from that toolkit, and the pddb-fs-tests
-      # XFAIL registry pins CLIENT-side bugs (PFC-6/7/10, rust fork
-      # library/std/src/sys/fs/xous.rs) at this exact toolkit version. Bump
-      # this pin together with a toolkit release, then re-run the suite:
-      # client-side fixes will surface as XPASS and the registry must be
-      # updated in the same PR.
-      - name: Pin Rust toolchain
+      # Track the LATEST published toolkit rather than pinning: `cargo xtask
+      # install-toolkit` needs the host rustc to exactly match a betrusted-io/
+      # rust release tag (xtask/src/utils.rs), so resolve that repo's newest
+      # release (tag `<rustc>.<n>`, e.g. 1.97.0.1) and install the matching
+      # rustc; install-toolkit then downloads the matching toolkit. The
+      # pddb-fs-tests XFAIL registry pins CLIENT-side bugs (PFC-6/7/10, rust
+      # fork library/std/src/sys/fs/xous.rs); if a new toolkit fixes one, its
+      # test flips XFAIL -> XPASS and the run goes red until the registry is
+      # updated -- the signal that the toolchain moved. (jq is preinstalled on
+      # ubuntu-latest; the releases API is public, no token needed.)
+      - name: Resolve and install the latest betrusted-io/rust toolchain
         run: |
-          rustup toolchain install 1.96.1 --profile minimal
-          rustup default 1.96.1
+          TAG=$(curl -fsSL https://api.github.com/repos/betrusted-io/rust/releases/latest | jq -r .tag_name)
+          RUSTC_VER=$(echo "$TAG" | cut -d. -f1,2,3)
+          echo "latest betrusted-io/rust release: $TAG -> rustc $RUSTC_VER"
+          rustup toolchain install "$RUSTC_VER" --profile minimal
+          rustup default "$RUSTC_VER"
 
       - name: Checkout sources
         uses: actions/checkout@v4
