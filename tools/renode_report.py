@@ -11,7 +11,13 @@ per-test results instead: one HTML file, inline CSS, system fonts, no
 JavaScript and no external requests, so it opens offline straight from the
 downloaded artifact.
 
+The same data also renders as GitHub-flavored Markdown (`--format md`), for
+writing to `$GITHUB_STEP_SUMMARY` so the per-test results show directly on the
+Actions run page (and, on pull_request runs, in the PR) without downloading the
+artifact.
+
 Usage: python3 tools/renode_report.py <console-log> [-o report.html]
+       python3 tools/renode_report.py <console-log> --format md >> "$GITHUB_STEP_SUMMARY"
 """
 import argparse
 import html
@@ -164,17 +170,69 @@ sentinel stream; no external resources.</p>
 """
 
 
+BADGE_MD = {'PASS': '✅ PASS', 'XFAIL': '⚠️ XFAIL', 'FAIL': '❌ FAIL', 'XPASS': '❗ XPASS'}
+
+
+def render_markdown(suite, tests, done):
+    """GitHub-flavored Markdown for $GITHUB_STEP_SUMMARY / a PR comment."""
+    counts = {'PASS': 0, 'FAIL': 0, 'XFAIL': 0, 'XPASS': 0}
+    for _, s, _ in tests:
+        counts[s] = counts.get(s, 0) + 1
+    total = len(tests)
+    green = counts['FAIL'] == 0 and counts['XPASS'] == 0
+    if done is not None:
+        green = done[1] == 0 and done[3] == 0
+    head = '✅ PASS' if green else '❌ FAIL'
+
+    out = []
+    out.append('## {} — on-target Renode CI &nbsp; {}'.format(suite, head))
+    out.append('')
+    out.append('`pass={PASS}  fail={FAIL}  xfail={XFAIL}  xpass={XPASS}  '
+               'total={t}`'.format(t=total, **counts))
+    out.append('')
+    # Surface anything red up front.
+    red = [(n, s, d) for n, s, d in tests if s in ('FAIL', 'XPASS')]
+    if red:
+        out.append('### Needs attention')
+        out.append('| test | result | detail |')
+        out.append('|---|---|---|')
+        for n, s, d in red:
+            out.append('| `{}` | {} | {} |'.format(n, BADGE_MD[s], d.replace('|', '\\|')))
+        out.append('')
+
+    # Full per-test list, grouped by theme, collapsed by default.
+    themes = {}
+    for n, s, d in tests:
+        themes.setdefault(n.split('::', 1)[0] if '::' in n else '(ungrouped)', []).append((n, s, d))
+    out.append('<details><summary>All {} tests</summary>'.format(total))
+    out.append('')
+    for theme in themes:
+        items = sorted(themes[theme], key=lambda t: STATUS_ORDER.get(t[1], 9))
+        out.append('**{}** ({})'.format(theme, len(items)))
+        out.append('')
+        out.append('| test | result | detail |')
+        out.append('|---|---|---|')
+        for n, s, d in items:
+            short = n.split('::', 1)[1] if '::' in n else n
+            out.append('| `{}` | {} | {} |'.format(short, BADGE_MD[s], d.replace('|', '\\|')))
+        out.append('')
+    out.append('</details>')
+    out.append('')
+    return '\n'.join(out)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('console_log')
     ap.add_argument('-o', '--output', default='-')
+    ap.add_argument('--format', choices=['html', 'md'], default='html')
     args = ap.parse_args()
     with open(args.console_log, encoding='utf-8', errors='replace') as f:
         suite, tests, done = parse(f)
     if not tests:
         sys.stderr.write('renode_report: no TEST sentinels found in {}\n'.format(args.console_log))
         return 2
-    out = render(suite, tests, done)
+    out = render_markdown(suite, tests, done) if args.format == 'md' else render(suite, tests, done)
     if args.output == '-':
         sys.stdout.write(out)
     else:
