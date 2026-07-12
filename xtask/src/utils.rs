@@ -21,6 +21,22 @@ lazy_static! {
     ]);
 }
 
+/// GET GitHub REST `releases` JSON with optional bearer auth.
+/// In GitHub Actions, set `GITHUB_TOKEN` (see workflow) to avoid anonymous rate limits (403).
+fn github_releases_get_json(url: &str) -> Result<serde_json::Value, String> {
+    let mut req = ureq::get(url).set("Accept", "application/vnd.github.v3+json");
+    let token = std::env::var("GITHUB_TOKEN")
+        .ok()
+        .filter(|t| !t.is_empty())
+        .or_else(|| std::env::var("GH_TOKEN").ok().filter(|t| !t.is_empty()));
+    if let Some(ref t) = token {
+        req = req.set("Authorization", &format!("Bearer {}", t));
+    }
+    let j: serde_json::Value =
+        req.call().map_err(|e| format!("{}", e))?.into_json().map_err(|e| format!("{}", e))?;
+    Ok(j)
+}
+
 /// Since we use the same TARGET for all calls to `build()`,
 /// cache it inside an atomic boolean. If this is `true` then
 /// it means we can assume the check passed already.
@@ -232,15 +248,11 @@ pub(crate) fn ensure_compiler(
         let url = TOOLCHAIN_RELEASE_URLS
             .get(target)
             .ok_or_else(|| format!("Can't find toolchain URL for target {}", target))?;
-        let j: serde_json::Value = ureq::get(url)
-            .set("Accept", "application/vnd.github.v3+json")
-            .call()
-            .map_err(|e| format!("{}", e))?
-            .into_json()
-            .map_err(|e| format!("{}", e))?;
-        // let j: serde_json::Value = serde_json::from_str(CONTENT).expect("Cannot parse manifest file");
-
-        let releases = j.as_array().unwrap();
+        let j = github_releases_get_json(url)?;
+        let releases = j.as_array().ok_or_else(|| {
+            "GitHub API response was not a release list (try setting GITHUB_TOKEN in CI; check rate limits)"
+                .to_string()
+        })?;
         let mut tag_urls = std::collections::BTreeMap::new();
 
         let target_prefix = format!("{}.{}.{}", major, minor, patch);
