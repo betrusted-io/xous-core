@@ -101,6 +101,7 @@ pub(crate) fn stat_path(
     let dict_list = basis_cache.dict_list(pddb_os, basis.as_deref());
     let is_dict = dict_list.contains(stripped_path);
     let mut is_key = false;
+    let mut len = 0u64;
 
     // Find all keys that are in this dict. Ignore errors, since sometimes
     // the dict doesn't exist, which is fine.
@@ -115,6 +116,9 @@ pub(crate) fn stat_path(
         {
             if key_list.contains(key_path) {
                 is_key = true;
+                if let Ok(attr) = basis_cache.key_attributes(pddb_os, dict_path, key_path, basis.as_deref()) {
+                    len = attr.len as u64;
+                }
             }
         }
     }
@@ -127,8 +131,8 @@ pub(crate) fn stat_path(
         (false, false) => FileType::None,
     };
     writer.append(val as u8);
-    // Placeholder for file length
-    writer.append(0u64);
+    // File length: the key's true length, or 0 for dicts
+    writer.append(len);
 
     Ok(())
 }
@@ -564,6 +568,11 @@ pub(crate) fn write_key(
             .is_ok()
         {
             file.offset += length_to_write as u64;
+            // a write can grow the key; keep the handle's cached length in sync
+            // so SeekFrom::End is based on the current end, not the open-time end
+            if file.length < file.offset {
+                file.length = file.offset;
+            }
             mem.valid = xous::MemorySize::new(length_to_write);
             return Ok(());
         }
