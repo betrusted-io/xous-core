@@ -396,6 +396,8 @@ pub(crate) fn open_key(
                     );
                     crate::PddbRetcode::InternalError
                 })?;
+            // the truncate above emptied the key; don't carry the stale length forward
+            len = 0;
         }
 
         // The basis exists for sure.
