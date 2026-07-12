@@ -4,7 +4,7 @@
 # IPC -> services/pddb/src/libstd/ -> PDDB engine -> emulated SPI NOR) on a
 # betrusted-soc + betrusted-ec machine pair, which hosted-mode CI cannot reach
 # (hosted links the host's std). The image bakes in the on-target runner
-# service `services/pddb-fs-tests` (112 tests: smoke 5, rw 12,
+# service `services/pddb-fs-tests` (113 tests: smoke 6, rw 12,
 # openflags 14, dirs 15, errors 14, content 9, unsupported 10, paths 11,
 # sizes 12, concur 6, persist 4), which waits for the PDDB to mount, runs the
 # registry with each test under catch_unwind, and emits machine-parsable
@@ -12,7 +12,7 @@
 # fail=.. xfail=.. xpass=.. total=..`, `CI done`). Known product bugs are
 # pinned as XFAIL so the suite is green while still detecting regressions AND
 # accidental fixes (XPASS fails the run: update the registry).
-# Expected steady-state totals: pass=98 fail=0 xfail=14 xpass=0 total=112.
+# Expected steady-state totals: pass=99 fail=0 xfail=14 xpass=0 total=113.
 #
 # The robot suite (emulation/tests/pddb-fs.robot) drives the first-boot UX
 # (format prompt, boot PIN x2, unattended 4 MiB smalldb format) through

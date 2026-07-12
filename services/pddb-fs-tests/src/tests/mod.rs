@@ -17,9 +17,10 @@
 //!   metadata.
 //! - Most failures map to `ErrorKind::Other`, not the POSIX-specific kind. Assert `is_err()`; only assert a
 //!   specific kind for the `Unsupported` surface.
-//! - SERVER-CRASH HAZARD: truncating (`File::create` / `.truncate(true)`) over an existing key >= ~4 KiB
-//!   panics the pddb server and hangs the rest of the run (bug PFC-1). Keep any file a test re-creates under
-//!   4 KiB; the one large-case reproducer (`smoke::overwrite_shorter_large`) is deliberately disabled.
+//! - Truncating (`File::create` / `.truncate(true)`) over an existing key >= ~4 KiB used to panic the pddb
+//!   server and hang the rest of the run (bug PFC-1, fixed: the large-key truncate arm in
+//!   backend/dictionary.rs now truncates the length only); `smoke::overwrite_shorter_large` covers it as a
+//!   normal expected-pass test.
 //! - A loop of more than ~10 fs ops must `log::info!` every ~5 iterations: a successful op emits no output,
 //!   and a long silent loop trips the driver's inactivity reaper (which treats console silence as a dead
 //!   server).
