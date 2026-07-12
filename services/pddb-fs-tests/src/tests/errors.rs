@@ -255,20 +255,20 @@ pub fn metadata_len_characterization() {
     check!(fs::remove_file(&path));
 }
 
-/// Delete-while-open. services/pddb/src/libstd/mod.rs `delete_key` is
-/// SUPPOSED to mark every currently-open `FileHandle` for the removed
-/// dict/key `deleted`, and `get_fd` (used by `read_key`/`write_key`/
-/// `seek_key`) then rejects all further I/O on it with `BasisLost` -- the
-/// intended (POSIX-divergent but deliberate) xous behavior this test asserts.
+/// Delete-while-open. services/pddb/src/libstd/mod.rs `delete_key` marks
+/// every currently-open `FileHandle` for the removed dict/key `deleted`,
+/// and `get_fd` (used by `read_key`/`write_key`/`seek_key`) then rejects
+/// all further I/O on it with `BasisLost` -- the intended (POSIX-divergent
+/// but deliberate) xous behavior this test asserts.
 ///
-/// XFAIL PFC-11 (empirically discovered 2026-07-07): the marking loop never
-/// fires for ordinary std paths. `delete_key` compares `fd.basis == basis`
-/// where `basis` comes from `split_basis_and_dict` of the unlink path --
-/// `None` for any non-`:basis:`-prefixed path -- while `open_key` always
-/// records `fd.basis = Some(<actual basis>)`. So the handle is never marked:
-/// the read still errors (the key's data really is gone server-side), but
-/// the write goes through `write_key` -> `key_update`, which silently
-/// RE-CREATES the deleted key at the old path. See PFC-11.
+/// Regression pin for PFC-11 (fixed): the marking loop used to compare
+/// `fd.basis` against the raw `split_basis_and_dict` result of the unlink
+/// path -- `None` for any non-`:basis:`-prefixed path -- while `open_key`
+/// always records `fd.basis = Some(<actual basis>)`. The handle was never
+/// marked: the read still errored (the key's data really was gone
+/// server-side), but the write went through `write_key` -> `key_update`,
+/// silently RE-CREATING the deleted key at the old path. `delete_key` now
+/// resolves the effective default basis before comparing.
 pub fn delete_while_open() {
     let tmp = TmpDict::new("delete_while_open");
     let path = tmp.path("victim");
@@ -375,8 +375,4 @@ pub const XFAILS: &[(&str, &str)] = &[
     // test's comment and PFC-8.
     ("errors::key_name_length_boundary", "PFC-8"),
     ("errors::metadata_len_characterization", "PFC-5"),
-    // unlink never marks open handles `deleted` (basis-comparison dead code),
-    // so a write through the stale handle re-creates the key -- see the
-    // test's comment and PFC-11.
-    ("errors::delete_while_open", "PFC-11"),
 ];

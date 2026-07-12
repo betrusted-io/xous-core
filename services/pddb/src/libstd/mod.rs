@@ -512,10 +512,14 @@ pub(crate) fn delete_key(
         Err(crate::PddbRetcode::UnexpectedEof)
     })?;
 
+    // Open handles record a concrete basis name, so resolve a None basis the same
+    // way key_remove's select_basis(None) just did: the most recently opened basis.
+    let removed_basis = basis.or_else(|| basis_cache.basis_latest().map(|s| s.to_owned()));
+
     // Mark the entry as deleted in all remaining file handles in the entire system
     for fds in all_fds.values_mut() {
         for fd in fds.iter_mut().filter(|f| f.is_some()).map(|f| f.as_mut().unwrap()) {
-            if fd.basis == basis && fd.key == key && fd.dict == dict {
+            if fd.basis == removed_basis && fd.key == key && fd.dict == dict {
                 fd.deleted = true;
             }
         }
