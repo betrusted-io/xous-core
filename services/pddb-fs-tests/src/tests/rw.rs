@@ -129,9 +129,10 @@ pub fn io_seek_and_write() {
 
 /// Ported from upstream `file_test_io_seek_shakedown`. Exercises negative
 /// `SeekFrom::End`/`SeekFrom::Current` offsets, which is exactly PFC-3
-/// territory: the server casts the offset with `as u64` before
-/// `checked_sub`, so any negative seek errors out (services/pddb/src/
-/// libstd/mod.rs seek_key/seek_from_point). XFAIL PFC-3.
+/// territory: the server used to cast the offset with `as u64` before
+/// `checked_sub`, so any negative seek errored out (services/pddb/src/
+/// libstd/mod.rs seek_key/seek_from_point). Was XFAIL PFC-3; now pins the
+/// fix.
 pub fn io_seek_shakedown() {
     let tmp = TmpDict::new("io_seek_shakedown");
     let path = tmp.path("file");
@@ -184,8 +185,8 @@ pub fn io_eof() {
 }
 
 /// Xous-specific: a matrix of `SeekFrom::Start`-only seeks (0, mid, last
-/// byte, exactly at EOF). Never goes through the `by < 0` branch of
-/// seek_from_point, so this must pass regardless of PFC-3.
+/// byte, exactly at EOF). Never passes a negative offset to seek_from_point,
+/// so this must pass regardless of PFC-3.
 pub fn seek_start_matrix() {
     let tmp = TmpDict::new("seek_start_matrix");
     let path = tmp.path("file");
@@ -211,8 +212,9 @@ pub fn seek_start_matrix() {
 /// Xous-specific: negative `SeekFrom::End`/`SeekFrom::Current` offsets in
 /// isolation (End coverage that smoke::seek_negative_current doesn't
 /// exercise). Correct POSIX behavior: `End(-3)` on a 10-byte file lands at 7;
-/// a subsequent `Current(-5)` from 10 lands at 5. XFAIL PFC-3: the server's
-/// `by as u64` cast before `checked_sub` makes every negative offset error.
+/// a subsequent `Current(-5)` from 10 lands at 5. Was XFAIL PFC-3 (the
+/// server's `by as u64` cast before `checked_sub` made every negative offset
+/// error); now pins the fix.
 pub fn seek_negative_offsets() {
     let tmp = TmpDict::new("seek_negative_offsets");
     let path = tmp.path("file");
@@ -354,8 +356,4 @@ pub const TESTS: &[(&str, fn())] = &[
     ("rw::read_zero_length_buffer_and_empty_file", read_zero_length_buffer_and_empty_file as fn()),
 ];
 
-pub const XFAILS: &[(&str, &str)] = &[
-    ("rw::io_seek_shakedown", "PFC-3"),
-    ("rw::seek_negative_offsets", "PFC-3"),
-    ("rw::seek_end_after_write_staleness", "PFC-5"),
-];
+pub const XFAILS: &[(&str, &str)] = &[("rw::seek_end_after_write_staleness", "PFC-5")];

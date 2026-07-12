@@ -581,23 +581,14 @@ pub(crate) fn seek_key(
     let file = get_fd(fds, fd)?;
 
     fn seek_from_point(this: &mut FileHandle, point: u64, by: i64) -> Result<u64, crate::PddbRetcode> {
-        let by64 = by as u64;
         // Note that it's possible to seek past the end of a key, and in this case
         // the `offset` will be greater than the `len`. This is fine, and `len` will
-        // be updated as soon as `write()` is called.
-        if by < 0 {
-            this.offset = point.checked_sub(by64).ok_or_else(|| {
-                // std::io::Error::new(std::io::ErrorKind::InvalidInput, "cannot seek before 0")
-                log::error!("cannot seek before 0");
-                crate::PddbRetcode::UnexpectedEof
-            })?;
-        } else {
-            this.offset = point.checked_add(by64).ok_or_else(|| {
-                // std::io::Error::new(std::io::ErrorKind::InvalidInput, "seek overflowed")
-                log::error!("seek overflowed");
-                crate::PddbRetcode::UnexpectedEof
-            })?;
-        }
+        // be updated as soon as `write()` is called. `None` covers both
+        // seek-before-0 and u64 overflow.
+        this.offset = point.checked_add_signed(by).ok_or_else(|| {
+            log::error!("seek out of range");
+            crate::PddbRetcode::UnexpectedEof
+        })?;
         Ok(this.offset)
     }
 

@@ -12,7 +12,7 @@
 # fail=.. xfail=.. xpass=.. total=..`, `CI done`). Known product bugs are
 # pinned as XFAIL so the suite is green while still detecting regressions AND
 # accidental fixes (XPASS fails the run: update the registry).
-# Expected steady-state totals: pass=98 fail=0 xfail=14 xpass=0 total=112.
+# Expected steady-state totals: pass=101 fail=0 xfail=11 xpass=0 total=112.
 #
 # The robot suite (emulation/tests/pddb-fs.robot) drives the first-boot UX
 # (format prompt, boot PIN x2, unattended 4 MiB smalldb format) through
