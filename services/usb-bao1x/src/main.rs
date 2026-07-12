@@ -205,7 +205,7 @@ pub(crate) fn main_hw() -> ! {
     #[cfg(feature = "ccid-openpgp")]
     let mut ccid_listener: Option<xous::MessageEnvelope> = None;
     #[cfg(feature = "ccid-openpgp")]
-    /// First provisioning line (user), when awaiting second line (admin).
+    // First provisioning line (user), when awaiting second line (admin).
     let mut prov_user_line: Option<Vec<u8>> = None;
 
     let mut autotype_delay_ms = 30;
@@ -572,7 +572,8 @@ pub(crate) fn main_hw() -> ! {
             }
             #[cfg(feature = "ccid-openpgp")]
             Opcode::IrqProvSerialRx => {
-                if let Some(l) = cu.prov_lines.borrow_mut().pop_front() {
+                let line = cu.prov_lines.borrow_mut().pop_front();
+                if let Some(l) = line {
                     if prov_user_line.is_none() {
                         log::info!("CCID provision: first line stored (len {}), send second line", l.len());
                         prov_user_line = Some(l);
