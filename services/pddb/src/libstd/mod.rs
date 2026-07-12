@@ -179,15 +179,12 @@ pub(crate) fn list_path(
 
     // Find all dicts that match this string
     let dict_list = basis_cache.dict_list(pddb_os, basis.as_deref());
-    // Find all keys that are in this dict. Ignore errors, since sometimes
-    // the dict doesn't exist, which is fine.
-    let (key_list, _, _) = basis_cache
-        .key_list(pddb_os, dict, basis.as_deref())
-        .map_err(|e| {
-            // log::error!("unable to get key list: {:?}", e);
-            e
-        })
-        .unwrap_or_default();
+    // Find all keys that are in this dict. A missing dict is not an error yet:
+    // the root listing uses dict == "", and a ':'-hierarchy intermediate may
+    // exist only through its children (scanned below).
+    let key_list_result = basis_cache.key_list(pddb_os, dict, basis.as_deref());
+    let dict_found = key_list_result.is_ok();
+    let (key_list, _, _) = key_list_result.unwrap_or_default();
 
     let mut entries_count = 0u32;
 
@@ -217,6 +214,13 @@ pub(crate) fn list_path(
 
     // Add the count of entries
     writer.do_delayed_append(entry_len_pos, entries_count);
+
+    // A dict that no open basis contains is a genuine not-found (BasisLost is this
+    // interface's NotFound). This must stay after do_delayed_append so the reply
+    // still carries a well-formed zero count for clients that ignore the retcode.
+    if !dict_found && entries_count == 0 && !dict.is_empty() {
+        return Err(crate::PddbRetcode::BasisLost);
+    }
 
     Ok(())
 }
