@@ -4,9 +4,13 @@ pub use bao1x::*;
 pub mod avtrng;
 #[cfg(feature = "bao1x-bio")]
 pub mod bio;
+#[cfg(feature = "factory-utils")]
+pub mod bitmaps;
 #[cfg(feature = "dabao-selftest")]
 pub mod dabao_selftest;
 pub mod debug;
+#[cfg(feature = "factory-utils")]
+pub mod factory_utils;
 pub mod irq;
 #[cfg(feature = "bao1x-usb")]
 pub mod usb;

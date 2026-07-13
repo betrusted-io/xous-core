@@ -26,7 +26,12 @@ pub enum Opcode {
     SetFlags = 513,
     /// One way counter operations
     GetOneWayCounter = 768,
+    #[cfg(feature = "owc-inc")]
     IncOneWayCounter = 769,
+
+    /// Application key operations
+    #[cfg(feature = "app-keys")]
+    AppKeyOp = 1024,
 
     // ----- below are non-cryptographic opcodes but used to manipulate sensitive state -----
     /// Set bootwait parameters
@@ -49,3 +54,4 @@ pub enum EphemeralOp {
 /// but for detecting fat-fingered API implementations.
 pub const OWC_MAGIC_GET: [usize; 3] = [0x2b46_2ab3, 0xf7e3_1b59, 0x7bba_d222];
 pub const OWC_MAGIC_INC: [usize; 3] = [0xeb5d_fc81, 0x8b6d_6a90, 0xf720_491a];
+pub const APPKEY_GUARD: [u32; 4] = [0x3936_e7a6, 0xfc53_a1f7, 0xf2eb_16f3, 0xd2cc_22d9];

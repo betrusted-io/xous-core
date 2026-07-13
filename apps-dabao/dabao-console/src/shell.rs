@@ -1,5 +1,6 @@
+use std::sync::{Arc, atomic::AtomicBool};
+
 use bao1x_api::*;
-#[cfg(feature = "usb")]
 use usb_bao1x::UsbHid;
 use xous::msg_scalar_unpack;
 
@@ -32,12 +33,12 @@ fn shell() {
     let kbd = keyboard::Keyboard::new(&xns).unwrap();
     kbd.register_listener(SERVER_NAME_SHELLCHAT, ConsoleOp::Keypress.to_u32().unwrap() as usize);
 
-    let mut repl = crate::repl::Repl::new(&xns);
+    let echo = Arc::new(AtomicBool::new(true));
+    let mut repl = crate::repl::Repl::new(&xns, echo.clone());
     let mut update_repl = false;
     let mut was_callback = false;
     let mut history_index: isize = 0;
 
-    #[cfg(feature = "usb")]
     let usb = UsbHid::new();
 
     let mut input = String::new();
@@ -48,8 +49,9 @@ fn shell() {
         match console_op {
             Some(ConsoleOp::Keypress) => msg_scalar_unpack!(msg, k1, _k2, _k3, _k4, {
                 let k = char::from_u32(k1 as u32).unwrap_or('\u{0000}');
-                #[cfg(feature = "usb")]
-                usb.serial_send(&[k1 as u8]).ok();
+                if echo.load(std::sync::atomic::Ordering::SeqCst) {
+                    usb.serial_send(&[k1 as u8]).ok();
+                }
                 if k1 == 0x08 {
                     // backspace character
                     input.pop(); // returns None if empty

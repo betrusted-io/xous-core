@@ -103,7 +103,18 @@ impl Gc2145 {
     pub fn has_ifram(&self) -> bool { self.ifram.is_some() }
 
     pub fn poke(&self, i2c: &mut dyn I2cApi, adr: u8, dat: u8) {
-        i2c.i2c_write(GC2145_DEV, adr, &[dat]).expect("write failed");
+        const MAX_RETRIES: usize = 3;
+        let mut retries = 0;
+        while retries < MAX_RETRIES {
+            match i2c.i2c_write(GC2145_DEV, adr, &[dat]) {
+                Ok(_) => break,
+                Err(_e) => {
+                    #[cfg(feature = "std")]
+                    log::warn!("I2C error in camera {}/{}: {:?}", retries + 1, MAX_RETRIES, _e);
+                    retries += 1;
+                }
+            }
+        }
     }
 
     // chip does not support sequential reads

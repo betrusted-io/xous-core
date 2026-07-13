@@ -408,6 +408,13 @@ impl SlotManager {
                 .map_err(|_| AccessError::WriteError)?;
             crate::cache_flush();
         }
+        // Note: we don't report an explicit AccessDenied if the slot has the wrong permissions.
+        // If changing this for production, a full regression test *must* be done on the bootloader
+        // starting with chips that are in the factory-new state. The factory-new initialization
+        // cannot fail for any reason, and this error was made silent as an explicit decision to
+        // avoid having chips bricked due to a fat-fingering of ACLs during setup. The alternative
+        // is that chips which have an ACL issue would effectively be bricked and because of a hang on
+        // the error code returned during initialization of important resources.
 
         if self.user_id.is_accessible(&acl, &AccessType::Read) {
             // read-verify only if we have read access
@@ -415,6 +422,7 @@ impl SlotManager {
             crate::println!("rbk: {:x?}", &readback[..8]);
             if readback != value { Err(AccessError::WriteError) } else { Ok(()) }
         } else {
+            // It's valid to have a write-only slot, in which case, we can't readback verify it.
             Ok(())
         }
     }

@@ -117,6 +117,10 @@ pub enum GfxOpcode {
     Brightness,
     #[cfg(feature = "board-baosec")]
     FlipScreen,
+    /// This is used to toggle DryRun mode. The purpose of this mode is to
+    /// warm up UI routines from swap memory to improve UI latency.
+    #[cfg(feature = "board-baosec")]
+    DryRun,
 
     /// Gutter for invalid calls
     InvalidCall,
