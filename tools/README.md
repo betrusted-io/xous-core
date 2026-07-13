@@ -136,6 +136,27 @@ python3 tools/pddbci.py --name basis2 --runs 5
 
 You can adjust verbosity with `--loglevel DEBUG`.
 
+### Running `pddb-fs-ci.py` (on-target `std::fs` tests under Renode)
+
+Whereas `pddbci.py` runs the PDDB on the host, `pddb-fs-ci.py` runs the
+`services/pddb-fs-tests` suite against the real riscv32 xous libstd inside Renode,
+so it exercises the actual `std::fs`-over-PDDB code path (which hosted mode cannot,
+since hosted mode links the host's std). Requires Renode on the `PATH` and the
+`pddbdbg.py` Python dependencies above.
+
+```sh
+# From the repository root
+cargo xtask pddb-fs-ci --no-verify     # build the Renode test image (slow first time)
+python3 tools/pddb-fs-ci.py            # fresh flash: boot, format, run the suite, audit
+python3 tools/pddb-fs-ci.py --warm     # reuse the formatted flash (also checks persistence)
+```
+
+The driver boots the emulator headless, drives the first-boot PIN/format UX,
+watches the console for the per-test result lines, then quits and audits the flash
+image offline with `pddbdbg.py`. It exits non-zero if any test fails. A cold run is
+~15 minutes on a fast host. `--loglevel DEBUG` shows the boot choreography;
+`--help` lists the timeout flags. See `services/pddb-fs-tests/README.md`.
+
 ## Contribution Guidelines
 
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg)](../CODE_OF_CONDUCT.md)

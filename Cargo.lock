@@ -4426,6 +4426,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "pddb-fs-tests"
+version = "0.1.0"
+dependencies = [
+ "gam",
+ "log",
+ "modals",
+ "pddb",
+ "xous 0.9.70 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-susres 0.9.68",
+ "xous-api-ticktimer",
+]
+
+[[package]]
 name = "pem"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
