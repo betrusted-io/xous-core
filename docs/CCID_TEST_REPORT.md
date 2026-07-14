@@ -2,57 +2,79 @@
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# CCID OpenPGP test report
+# CCID smart-card transport verification report
 
-Date: 2026-05-10  
-Toolchain: stable-x86_64-unknown-linux-gnu (default)  
-Repository: betrusted-io/xous-core  
-Branch: dev  
-Reference crates / API: sibling firmware tree (see path deps in `libs/baochip-openpgp/Cargo.toml`)
+This report records verification status for the `usb-bao1x` CCID transport
+(`ccid-openpgp` feature) on branch `feature/usb-bao1x-ccid-openpgp`
+([PR #890](https://github.com/betrusted-io/xous-core/pull/890)).
 
-Complete stdout/stderr for each cargo invocation was captured during this run
-under `/tmp/ccid-test-out/` (`01-baochip-openpgp.txt` through
-`06-workspace.txt`) and is not duplicated here.
+For protocol background, handler integration, and Pi HIL setup, see
+[`CCID_PROTOCOL_AND_HIL.md`](CCID_PROTOCOL_AND_HIL.md).
 
-## Results
+## What is verified in xous-core
 
-| Command | Target | Result | Notes |
-|---------|--------|--------|-------|
-| `cargo check -p baochip-openpgp` | x86_64-unknown-linux-gnu (host) | PASS | Locales build-script warnings only |
-| `cargo check -p usb-bao1x --features ccid-openpgp` | x86_64-unknown-linux-gnu (host) | PASS | Locales warnings only |
-| `cargo check -p usb-bao1x --features ccid-openpgp-dev` | x86_64-unknown-linux-gnu (host) | PASS | Locales warnings only |
-| `cargo check -p usb-bao1x --features board-dabao,ccid-openpgp --target riscv32imac-unknown-xous-elf` | riscv32imac-unknown-xous-elf | FAIL | First error: `error[E0463]: can't find crate for \`core\`` (target std not installed for this toolchain; use Xous-pinned toolchain or `-Z build-std`) |
-| `cargo check -p usb-bao1x --features board-dabao,ccid-openpgp-dev --target riscv32imac-unknown-xous-elf` | riscv32imac-unknown-xous-elf | FAIL | Same first error as previous row |
-| `cargo check --workspace --exclude xtask` | x86_64-unknown-linux-gnu (host) | FAIL | First error: `error: failed to run custom build command for \`hidapi v1.5.0\`` (`hidapi-hidraw` not found via pkg-config); environment/deps, not CCID code |
+| Area | Method | Status |
+|------|--------|--------|
+| CCID wire framing | `cargo test -p usb-bao1x --lib ccid_framing` (7 tests) | Pass |
+| Hosted compile | `cargo check -p usb-bao1x --features hosted-baosec,ccid-openpgp` | Pass |
+| Board compile | `cargo check -p usb-bao1x --features board-baosec,ccid-openpgp,bao1x` | Pass |
+| HIL image build | `cargo xtask ccid-hil --no-verify` (incl. swap signing) | Pass |
+| Full baosec matrix | `cargo xtask baosec --no-verify` | Pass |
+| USB enumeration + bulk echo | `tools/ccid_smoke.py` on `ccid-hil` image | Pass (hardware) |
+| HIL regression suite | `tools/ccid_hil/run_all.sh` | Pass (hardware) |
+| Provisioning CDC | `test_provision.py` with `CCID_HIL_PROVISION=1` | Pass (unprovisioned device) |
+| Fork CI | GitHub Actions on `Supermagnum/xous-core` | Pass |
+| OpenPGP / APDU / GnuPG E2E | — | **Not in scope** (external handler) |
 
-## Notes
+## CI workflows
 
-- Host triple checks confirm new modules type-check and the OpenPGP / CCID
-  dependency graph resolves correctly.
-- board-dabao checks require the Xous-pinned toolchain used for normal
-  Dabao image builds. Generic nightly + build-std failures on
-  curve25519-dalek / utralib are environment limitations, not code errors.
-- Here, stable did not provide `rust-std` for `riscv32imac-unknown-xous-elf`;
-  the observed failure is missing `core`/target support, not curve25519.
-  Full board-dabao verification must be run locally with the correct
-  toolchain before merging.
-- Workspace `cargo check` on this host failed early on `hidapi` system
-  libraries; remaining `utralib` errors in the log follow from host-native
-  crates and are unrelated to the CCID changes.
+| Workflow | Runner | Trigger |
+|----------|--------|---------|
+| `ccid-ci.yml` | GitHub-hosted Ubuntu | push/PR to `main`, `dev`, `feature/**` |
+| `build.yml` (`baosec` matrix job) | GitHub-hosted Ubuntu | same |
+| `ccid-hil.yml` | Self-hosted (`baosec-hil`) | nightly / manual |
 
-## Files changed
+Fork CI note: workflows fetch annotated release tags from `betrusted-io/xous-core`
+before image signing so `SemVer::from_git()` succeeds on fork clones that lack
+local tags.
 
-- `Cargo.toml` — Workspace member `libs/baochip-openpgp`; `[patch.crates-io]`
-  comment for `subtle` (path deps vs patch).
-- `Cargo.lock` — Dependency resolution updates for the OpenPGP / CCID graph.
-- `libs/baochip-openpgp/Cargo.toml` — New shim crate: in-tree HAL/TRNG paths,
-  `[lib]` points at the sibling firmware crate `src/lib.rs`.
-- `services/usb-bao1x/Cargo.toml` — Optional `baochip-openpgp`, `usb-personality`,
-  `trng`; features `ccid-openpgp`, `ccid-openpgp-dev`.
-- `services/usb-bao1x/src/ccid.rs` — CCID stack: master key, provisioning
-  branch, `CcidClass` construction.
-- `services/usb-bao1x/src/provisioning.rs` — CDC provisioning IRQ loop and
-  `ProvisioningCommit` wiring.
-- `services/usb-bao1x/src/main.rs` — Feature-gated init calling `ccid` module.
-- `services/usb-bao1x/src/hw.rs` — Composite poll includes CCID; reset and
-  unplug paths call `ccid.reset()`.
+## Local / container verification (2026-07)
+
+Reproduced in clean `ubuntu:24.04` containers (Podman/Docker):
+
+1. **Signing failure without tags** — `cargo xtask baosec` fails with
+   `Can't sign swap image` when `git describe` has no annotated tags (typical
+   fork checkout).
+2. **Signing success after upstream tag fetch** — after
+   `git fetch upstream --tags` from `betrusted-io/xous-core`, `git describe`
+   returns e.g. `v0.9.8-791-g...` and `cargo xtask ccid-hil --no-verify`
+   completes through loader/kernel signing.
+3. **Remote CI** — all four workflows green on push of commit `e8e7e86e5`
+   (`build`, `ccid-ci`, `rustfmt_check`, `trailing_whitespace_check`).
+
+## Explicitly not tested here
+
+- Parsing `PC_to_RDR_XfrBlock` payloads into APDUs
+- OpenPGP card command handling (SIGN, DECRYPT, etc.)
+- `pcscd` or `gpg --card-status` against production `baosec` + handler
+- CCID interrupt endpoint notifications (card insert/remove)
+
+Those require the out-of-tree OpenPGP handler service once it ships.
+
+## Source files under test
+
+| Path | Role |
+|------|------|
+| `services/usb-bao1x/src/ccid_framing.rs` | Framing unit tests |
+| `services/usb-bao1x/src/ccid_transport.rs` | USB CCID class |
+| `services/usb-bao1x/src/ccid_store.rs` | PDDB provisioning |
+| `services/usb-bao1x/src/main.rs` | IPC, echo, provisioning state machine |
+| `tools/ccid_smoke.py` | Host smoke test |
+| `tools/ccid_hil/` | HIL scripts |
+
+## Historical note
+
+An earlier draft of this file (2026-05-10) referenced in-tree `baochip-openpgp`
+crate checks. That crate is **not** part of the merged design: xous-core provides
+transport and PDDB provisioning only; OpenPGP logic remains in a separate
+firmware service connected via `CcidRxDeferred` / `CcidTx` IPC.
