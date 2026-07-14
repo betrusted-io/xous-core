@@ -14,7 +14,7 @@ semantics.
 
 | Document | Contents |
 |----------|----------|
-| [`docs/CCID_PROTOCOL_AND_HIL.md`](../../docs/CCID_PROTOCOL_AND_HIL.md) | **Main reference** — smart-card/CCID background, architecture, IPC handler guide, Pi setup, full testing guide |
+| [`docs/CCID_PROTOCOL_AND_HIL.md`](../../docs/CCID_PROTOCOL_AND_HIL.md) | **Main reference** — smart-card/CCID background, architecture, IPC handler guide, **security considerations**, Pi setup, full testing guide |
 | [`docs/CCID_TEST_REPORT.md`](../../docs/CCID_TEST_REPORT.md) | Recorded verification results and CI status |
 
 ## Quick start
@@ -80,4 +80,5 @@ CCID_HIL_PROVISION=1 tools/ccid_hil/run_all.sh
 - `.github/workflows/ccid-hil.yml` — USB HIL on self-hosted runner (`baosec-hil`)
 
 The `ccid-echo` feature echoes host frames on bulk IN so transport can be tested
-without an OpenPGP handler service.
+without an OpenPGP handler service. **HIL images only — never ship `ccid-echo`
+in production** (see [security boundary](../../docs/CCID_PROTOCOL_AND_HIL.md#production-vs-hil-ccid-echo-security-boundary) in the main doc).
