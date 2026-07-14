@@ -1,0 +1,228 @@
+# PDDB std::fs regression suite under Renode emulation.
+#
+# What this exercises: the REAL xous std::fs path (riscv32 xous std -> senres
+# IPC -> services/pddb/src/libstd/ -> PDDB engine -> emulated SPI NOR) on a
+# betrusted-soc + betrusted-ec machine pair, which hosted-mode CI cannot reach
+# (hosted links the host's std). The image bakes in the on-target runner
+# service `services/pddb-fs-tests` (112 tests: smoke 5, rw 12,
+# openflags 14, dirs 15, errors 14, content 9, unsupported 10, paths 11,
+# sizes 12, concur 6, persist 4), which waits for the PDDB to mount, runs the
+# registry with each test under catch_unwind, and emits machine-parsable
+# sentinels (`TEST <name> PASS|FAIL|XFAIL|XPASS`, `FS-TESTS DONE: pass=..
+# fail=.. xfail=.. xpass=.. total=..`, `CI done`). Known product bugs are
+# pinned as XFAIL so the suite is green while still detecting regressions AND
+# accidental fixes (XPASS fails the run: update the registry).
+# Expected steady-state totals: pass=98 fail=0 xfail=14 xpass=0 total=112.
+#
+# The robot suite (emulation/tests/pddb-fs.robot) drives the first-boot UX
+# (format prompt, boot PIN x2, unattended 4 MiB smalldb format) through
+# Renode's keyboard model and asserts the sentinel stream. Timeouts in the
+# suite are VIRTUAL-time seconds, so they are host-speed independent; the
+# whole cold run is ~205 virtual seconds (~15 min wall on the reference dev
+# box). See services/pddb-fs-tests/README.md.
+#
+# Local fast loop (same image, same choreography, plus a warm-boot leg and an
+# offline flash audit): tools/pddb-fs-ci.py.
+
+name: PDDB Renode CI
+
+# Trigger policy: manual-only by default. The renode-test job costs ~30-75
+# runner-minutes per run, so enabling push/pull_request triggers on dev is a
+# deliberate opt-in — uncomment the block below to turn it on.
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly (Mondays 06:00 UTC): keeps the suite exercised against the latest
+    # published toolkit without a per-push cost. A red weekly run means either a
+    # regression or a new toolkit that changed client-side std behavior (an
+    # XFAIL flipping to XPASS -- update the registry). Note: scheduled runs only
+    # fire from the default branch, so this activates once merged.
+    - cron: '0 6 * * 1'
+  # push:
+  #   branches:
+  #     - dev
+  # pull_request:
+  #   branches:
+  #     - dev
+
+concurrency:
+  group: pddb-renode-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build pddb-fs-ci image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Install Ubuntu dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y libxkbcommon-dev
+
+      # Track the LATEST published toolkit rather than pinning: `cargo xtask
+      # install-toolkit` needs the host rustc to exactly match a betrusted-io/
+      # rust release tag (xtask/src/utils.rs), so resolve that repo's newest
+      # release (tag `<rustc>.<n>`, e.g. 1.97.0.1) and install the matching
+      # rustc; install-toolkit then downloads the matching toolkit. The
+      # pddb-fs-tests XFAIL registry pins CLIENT-side bugs (PFC-6/7/10, rust
+      # fork library/std/src/sys/fs/xous.rs); if a new toolkit fixes one, its
+      # test flips XFAIL -> XPASS and the run goes red until the registry is
+      # updated -- the signal that the toolchain moved. (jq is preinstalled on
+      # ubuntu-latest; the releases API is public, no token needed.)
+      - name: Resolve and install the latest betrusted-io/rust toolchain
+        run: |
+          TAG=$(curl -fsSL https://api.github.com/repos/betrusted-io/rust/releases/latest | jq -r .tag_name)
+          RUSTC_VER=$(echo "$TAG" | cut -d. -f1,2,3)
+          echo "latest betrusted-io/rust release: $TAG -> rustc $RUSTC_VER"
+          rustup toolchain install "$RUSTC_VER" --profile minimal
+          rustup default "$RUSTC_VER"
+
+      - name: Checkout sources
+        uses: actions/checkout@v4
+      - name: Fetch tags
+        run: git fetch --prune --unshallow --tags
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install RISC-V toolkit
+        run: cargo xtask install-toolkit --force --no-verify
+
+      - name: Clean out old target directory (in case of libstd change)
+        run: rm -rf target/*
+
+      - name: Build the pddb-fs-ci renode image
+        run: cargo xtask pddb-fs-ci --no-verify
+
+      - name: Upload image artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pddb-fs-ci-image
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            target/riscv32imac-unknown-xous-elf/release/loader.bin
+            target/riscv32imac-unknown-xous-elf/release/xous.img
+
+  renode-test:
+    name: Run pddb-fs.robot under renode-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: build
+    # pull-requests: write lets the "Comment results on the PR" step post its
+    # sticky comment when this runs on a pull_request; harmless otherwise.
+    # actions: read is required by download-artifact once permissions are set
+    # explicitly (an explicit block replaces the default token scopes).
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      # Both files land exactly where emulation/tests/pddb-fs.robot expects
+      # them (${IMAGE_DIR} = target/riscv32imac-unknown-xous-elf/release).
+      - name: Download image artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: pddb-fs-ci-image
+          path: target/riscv32imac-unknown-xous-elf/release
+
+      # PINNED dated Renode portable build (self-contained dotnet variant; no
+      # mono/dotnet host dependency). 1.16.1+20260417git9d55b4e69 is the exact
+      # build the suite was validated against locally (renode --version:
+      # "Renode v1.16.1.4499, build 9d55b4e6-202604170227"). Newer dated
+      # builds exist at https://dl.antmicro.com/projects/renode/builds/ --
+      # bump deliberately, re-validating with tools/pddb-fs-ci.py first, and
+      # do NOT switch to renode-latest (an unpinned emulator makes test
+      # regressions unattributable).
+      - name: Download and extract Renode portable
+        run: |
+          RENODE_TARBALL="renode-1.16.1+20260417git9d55b4e69.linux-portable-dotnet.tar.gz"
+          curl --fail --location --retry 5 -o /tmp/renode.tar.gz \
+            "https://dl.antmicro.com/projects/renode/builds/${RENODE_TARBALL}"
+          mkdir -p "$HOME/renode_portable"
+          tar -xzf /tmp/renode.tar.gz --strip-components=1 -C "$HOME/renode_portable"
+          echo "$HOME/renode_portable" >> "$GITHUB_PATH"
+          "$HOME/renode_portable/renode" --version
+
+      - name: Install renode-test python requirements
+        run: python3 -m pip install -r "$HOME/renode_portable/tests/requirements.txt"
+
+      # Per-run blank NOR: the flash model writes THROUGH into its backing
+      # file, so it must be a fresh scratch file, 0xFF-filled like blank NOR
+      # (128 MiB MX66UM1G45G). The robot suite's `Prepare Fresh Flash` also
+      # re-provisions this itself; this step just guarantees the directory
+      # exists and documents the contract.
+      - name: Provision fresh 0xFF flash backing file
+        run: |
+          mkdir -p target/pddb-fs-ci
+          python3 -c "open('target/pddb-fs-ci/flash-robot.bin','wb').write(b'\xff'*134217728)"
+
+      - name: Run the PDDB std::fs robot suite
+        timeout-minutes: 75
+        env:
+          # Quoted: bare YES is YAML-1.1 boolean true, which would export
+          # "true" instead of the literal string Renode's scripts look for.
+          RENODE_CI_MODE: "YES"
+        run: |
+          renode-test -r "$GITHUB_WORKSPACE/renode-results" \
+            emulation/tests/pddb-fs.robot
+
+      # The robot suite is one test case (boot + run + assert the sentinel
+      # stream), so its own report shows "1 test". Render the ACTUAL per-test
+      # results from the console sentinels, two ways: (1) Markdown into
+      # $GITHUB_STEP_SUMMARY so the breakdown shows on the run's Summary page
+      # with no download (and, on a pull_request run, is reachable from the PR
+      # check); (2) a standalone offline HTML (system fonts, no JS, no external
+      # requests) for the artifact. Also strip the Google Fonts @import robot
+      # bakes into its own HTML so the whole artifact opens offline.
+      # `always()` so a red run still reports.
+      - name: Render per-test report (step summary + offline HTML)
+        if: always()
+        run: |
+          LOG=target/pddb-fs-ci/console-robot.log
+          python3 tools/renode_report.py "$LOG" --format md -o renode-results/summary.md || true
+          cat renode-results/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+          python3 tools/renode_report.py "$LOG" -o renode-results/test-report.html || true
+          find renode-results -name '*.html' -exec \
+            sed -i 's#@import url("https://fonts.googleapis.com[^"]*");##g' {} + || true
+
+      # If/when the push/pull_request triggers above are enabled, post the same
+      # breakdown as a single sticky comment on the PR so pass/fail is visible
+      # inline. Dormant on dispatch/schedule runs. (Needs pull-requests: write,
+      # set on this job below.)
+      - name: Comment results on the PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let body;
+            try { body = fs.readFileSync('renode-results/summary.md', 'utf8'); }
+            catch (e) { core.warning('no summary.md to post'); return; }
+            const marker = '<!-- pddb-renode-ci-report -->';
+            body = marker + '\n' + body;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const prev = comments.find(c => c.body.includes(marker));
+            if (prev) await github.rest.issues.updateComment({ owner, repo, comment_id: prev.id, body });
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body });
+
+      - name: Upload robot results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pddb-renode-ci-results
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            renode-results/test-report.html
+            renode-results/robot_output.xml
+            renode-results/log.html
+            renode-results/report.html
+            renode-results/logs/
+            target/pddb-fs-ci/console-robot.log
+            target/pddb-fs-ci/kernel-robot.log

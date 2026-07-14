@@ -1,0 +1,26 @@
+[package]
+name = "pddb-fs-tests"
+version = "0.1.0"
+authors = ["Xous contributors"]
+edition = "2018"
+description = "PDDB std::fs test runner for Renode CI"
+
+# Dependency versions enforced by Cargo.lock.
+[dependencies]
+xous = "0.9.70"
+log-server = { package = "xous-api-log", version = "0.1.69" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.70" }
+xous-names = { package = "xous-api-names", version = "0.9.71" }
+log = "0.4.14"
+pddb = { path = "../pddb" }
+
+# Feature plumbing only (all of these already ride in pddb's gen1 dependency
+# tree): a standalone `cargo check -p pddb-fs-tests` must enable the target
+# features that whole-image feature unification provides in `xtask` builds.
+gam = { path = "../gam" }
+modals = { path = "../modals" }
+susres = { path = "../../api/xous-api-susres", package = "xous-api-susres" }
+
+[features]
+renode = ["pddb/renode", "gam/renode", "modals/renode", "susres/renode"]
+default = []

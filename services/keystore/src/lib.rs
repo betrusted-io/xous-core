@@ -271,7 +271,7 @@ impl Keystore {
         T::Error: core::fmt::Debug,
     {
         let offset: usize = T::OFFSET;
-        if offset < MAX_ONEWAY_COUNTERS {
+        if offset < bao1x_hal::acram::MAX_ONEWAY_COUNTERS {
             unsafe { self.inc_owc(offset) }
         } else {
             Err(OneWayErr::OutOfBounds)
@@ -380,6 +380,32 @@ impl Keystore {
             _ => unimplemented!(),
         }
         Ok(key)
+    }
+
+    #[cfg(feature = "app-keys")]
+    pub fn read_app_key(&self, index: usize) -> Result<[u8; 32], xous::Error> {
+        let app_key = AppKey::ReadRequest { guard: APPKEY_GUARD, index };
+        let mut buf = Buffer::into_buf(app_key).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::AppKeyOp.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        match buf.to_original::<AppKey, _>().unwrap() {
+            AppKey::ReadResponse { data } => Ok(data),
+            AppKey::AccessDenied => Err(xous::Error::AccessDenied),
+            _ => Err(xous::Error::InternalError),
+        }
+    }
+
+    #[cfg(feature = "app-keys")]
+    pub fn write_app_key(&self, index: usize, data: &[u8; 32]) -> Result<(), xous::Error> {
+        let mut storage = [0u8; 32];
+        storage.copy_from_slice(data);
+        let app_key = AppKey::Write { guard: APPKEY_GUARD, index, data: storage };
+        let mut buf = Buffer::into_buf(app_key).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::AppKeyOp.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        match buf.to_original::<AppKey, _>().unwrap() {
+            AppKey::Success => Ok(()),
+            AppKey::AccessDenied => Err(xous::Error::AccessDenied),
+            _ => Err(xous::Error::InternalError),
+        }
     }
 }
 

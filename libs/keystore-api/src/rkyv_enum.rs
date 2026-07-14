@@ -35,3 +35,21 @@ pub enum KeywrapError {
     /// The return tuple is: (unwrapped key, correctly wrapped key)
     UpgradeToNew(([u8; 32], [u8; 40])),
 }
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq, Copy, Clone)]
+pub enum AppKey {
+    // guard is a sequence of magic numbers that prevent fat-fingering this API
+    // it does not prevent malicious, directed attacks, but rather prevents accidents
+    Write { guard: [u32; 4], index: usize, data: [u8; 32] },
+    ReadRequest { guard: [u32; 4], index: usize },
+    ReadResponse { data: [u8; 32] },
+    Uninit,
+    AccessDenied,
+    WriteError,
+    Success,
+    InternalError,
+}
+
+impl Default for AppKey {
+    fn default() -> Self { Self::Uninit }
+}

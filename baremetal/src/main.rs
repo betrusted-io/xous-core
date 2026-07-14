@@ -99,6 +99,8 @@ pub unsafe extern "C" fn rust_entry() -> ! {
 
     #[cfg(feature = "dabao-selftest")]
     let mut self_test_ran = false;
+    #[cfg(feature = "factory-utils")]
+    let mut factory_util_run = false;
 
     #[cfg(feature = "bao1x-usb")]
     // do the main loop through either USB interface or serial port
@@ -108,6 +110,13 @@ pub unsafe extern "C" fn rust_entry() -> ! {
             if !self_test_ran {
                 crate::dabao_selftest::dabao_selftest();
                 self_test_ran = true;
+            }
+        }
+        #[cfg(feature = "factory-utils")]
+        {
+            if !factory_util_run {
+                crate::factory_utils::pddb_erase();
+                factory_util_run = true;
             }
         }
 

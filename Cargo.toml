@@ -83,6 +83,7 @@ members = [
   "apps/chat-test",
   "apps/hidv2",
   "services/libstd-test",
+  "services/pddb-fs-tests",
   "services/ffi-test",
   "services/tts",
   "services/cram-console",

@@ -386,4 +386,53 @@ impl KeyStore {
     }
 
     pub fn is_developer(&self) -> bool { self.owc.get(bao1x_api::DEVELOPER_MODE).unwrap() != 0 }
+
+    #[cfg(feature = "app-keys")]
+    pub fn read_app_key(&self, index: usize) -> Result<[u8; 32], xous::Error> {
+        use bao1x_api::common::APPLICATION;
+        let real_index = index + bao1x_api::common::APPLICATION.get_base();
+        if real_index < APPLICATION.get_base() || real_index >= APPLICATION.get_base() + APPLICATION.len() {
+            return Err(xous::Error::AccessDenied);
+        } else {
+            use bao1x_api::SlotIndex;
+
+            let slot =
+                SlotIndex::Data(real_index, bao1x_api::PartitionAccess::Open, bao1x_api::RwPerms::ReadWrite);
+            if let Ok(result) = self.slot_mgr.read(&slot) {
+                let mut storage = [0u8; 32];
+                storage.copy_from_slice(result);
+                Ok(storage)
+            } else {
+                Err(xous::Error::AccessDenied)
+            }
+        }
+    }
+
+    #[cfg(feature = "app-keys")]
+    // indices are absolute offsets
+    pub fn write_app_key(&self, rram: &mut Reram, index: usize, data: [u8; 32]) -> Result<(), xous::Error> {
+        use bao1x_api::common::APPLICATION;
+        let real_index = index + bao1x_api::common::APPLICATION.get_base();
+        if real_index < APPLICATION.get_base() || real_index >= APPLICATION.get_base() + APPLICATION.len() {
+            return Err(xous::Error::AccessDenied);
+        } else {
+            use bao1x_api::SlotIndex;
+
+            let slot =
+                SlotIndex::Data(real_index, bao1x_api::PartitionAccess::Open, bao1x_api::RwPerms::ReadWrite);
+            match self.slot_mgr.write(rram, &slot, &data) {
+                Ok(_) => {
+                    // log::info!("write success: {:?} {:x?}", slot, data);
+                    Ok(())
+                }
+                Err(e) => {
+                    log::warn!("Write app key error: {:?}", e);
+                    match e {
+                        bao1x_api::AccessError::WriteError => Err(xous::Error::HardwareError),
+                        _ => Err(xous::Error::AccessDenied),
+                    }
+                }
+            }
+        }
+    }
 }

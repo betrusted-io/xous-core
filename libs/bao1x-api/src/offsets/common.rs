@@ -300,3 +300,6 @@ pub const CLOCK_SCRAMBLE_PARAMS: SlotIndex = SlotIndex::Data(272, PartitionAcces
 //    - "end" bits [47:40] == 0x08
 //
 // Furthermore, IFR slot 0x14, bits [127:120] should have 0x3a in it to enforce write disable on boot0
+
+/// Application slots are available to end users for use, and not reserved for OS or security
+pub const APPLICATION: SlotIndex = SlotIndex::DataRange(384..1920, PartitionAccess::Open, RwPerms::ReadWrite);

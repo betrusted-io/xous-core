@@ -54,15 +54,19 @@ pub(crate) fn respond_with_error(mut env: xous::MessageEnvelope, code: NetError)
     body.valid = None;
     let s: &mut [u8] = unsafe { body.buf.as_slice_mut() };
     let mut i = s.iter_mut();
+    let code = code as u8;
 
     // Duplicate error to ensure it's seen as an error regardless of byte order/return type
     // This is necessary because errors are encoded as `u8` slices, but "good"
     // responses may be encoded as `u16` or `u32` slices.
+    //
+    // Mirror code at byte 1 (where the std-side recv path reads) in
+    // addition to byte 4 (where the std-side send path reads).
+    *i.next()? = 1;
+    *i.next()? = code;
     *i.next()? = 1;
     *i.next()? = 1;
-    *i.next()? = 1;
-    *i.next()? = 1;
-    *i.next()? = code as u8;
+    *i.next()? = code;
     *i.next()? = 0;
     *i.next()? = 0;
     *i.next()? = 0;

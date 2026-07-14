@@ -249,6 +249,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .stream(BuildStream::Debug)
                 .add_apps(&get_cratespecs());
         }
+        Some("pddb-fs-ci") => {
+            builder
+                .target_renode()
+                .add_services(&user_pkgs)
+                .add_service("pddb-fs-tests", LoaderRegion::Ram)
+                .add_services(&get_cratespecs());
+            builder.add_loader_feature("resume");
+            builder.add_feature("pddb/smalldb").add_feature("pddb/deterministic");
+        }
         Some("renode-test") => {
             builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
         }
@@ -1005,6 +1014,7 @@ Hosted emulation:
  baosec-emu              Run user image in hosted mode but for the baosec target
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors). [cratespecs] ignored.
  pddb-btest              PDDB stress tester for secret basis creation/deletion [cratespecs] ignored.
+ pddb-fs-ci              Renode image with the on-target PDDB std::fs test runner (smalldb). [cratespecs] are services
  hosted-debug            Run user image in hosted mode with debug flags. [cratespecs] are apps
  gfx-dev                 Testing mode for graphics primitives. [cratespecs] are services
  pddb-dev                Testing for compilation errors on hardware targets on the PDDB.
