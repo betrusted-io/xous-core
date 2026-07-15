@@ -8,9 +8,9 @@ This report records verification status for the `usb-bao1x` CCID transport
 (`ccid-openpgp` feature) on branch `feature/usb-bao1x-ccid-openpgp`
 ([PR #890](https://github.com/betrusted-io/xous-core/pull/890)).
 
-For protocol background, handler integration, Pi HIL setup, and **security
-considerations** (provisioning trust model, trust boundaries, host attack surface),
-see [`CCID_PROTOCOL_AND_HIL.md`](CCID_PROTOCOL_AND_HIL.md).
+For protocol background, handler integration, Pi HIL setup, **security
+considerations**, and source navigation, see [`CCID_PROTOCOL_AND_HIL.md`](CCID_PROTOCOL_AND_HIL.md)
+and [`code_map.md`](code_map.md).
 
 ## What is verified in xous-core
 
