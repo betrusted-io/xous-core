@@ -13,8 +13,9 @@ Raspberry Pi or desktop Linux host.
 **Audience:** reviewers who are not CCID experts, firmware developers wiring an
 APDU handler, and anyone setting up hardware-in-the-loop (HIL) regression tests.
 
-**Code navigation:** [`docs/code_map.md`](code_map.md) — symptom-to-source map
-for debugging and fixing CCID/provisioning issues.
+**Code navigation:** [`docs/code_map.md`](code_map.md) — debug decision tree,
+USB enumeration flow, symptom-to-source map, and host `lsusb` checks (start here
+for "device not visible" or CCID issues).
 
 ## Table of contents
 
