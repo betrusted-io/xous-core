@@ -200,9 +200,9 @@ pub(crate) fn main_hw() -> ! {
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
     let mut fido_rx_queue: VecDeque<[u8; 64]> = VecDeque::new();
 
-    #[cfg(feature = "ccid-openpgp")]
+    #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
     let mut ccid_listener_pid: Option<NonZeroU8> = None;
-    #[cfg(feature = "ccid-openpgp")]
+    #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
     let mut ccid_listener: Option<xous::MessageEnvelope> = None;
     #[cfg(feature = "ccid-openpgp")]
     // First provisioning line (user), when awaiting second line (admin).
@@ -518,7 +518,7 @@ pub(crate) fn main_hw() -> ! {
                 }
                 buffer.replace(u2f_ipc).unwrap();
             }
-            #[cfg(feature = "ccid-openpgp")]
+            #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
             Opcode::CcidRxDeferred => {
                 if ccid_listener_pid.is_none() {
                     ccid_listener_pid = msg.sender.pid();
@@ -544,7 +544,7 @@ pub(crate) fn main_hw() -> ! {
                     buffer.replace(ipc).unwrap();
                 }
             }
-            #[cfg(feature = "ccid-openpgp")]
+            #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
             Opcode::CcidRxTimeout => {}
             #[cfg(feature = "ccid-openpgp")]
             Opcode::IrqCcidRx => {
