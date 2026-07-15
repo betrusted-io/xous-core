@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-rs_errata_check.py - Check and patch RISC-V assembly errata in Rust .rs files.
+erratum_check.py - Check and patch RISC-V assembly errata in Rust .rs files.
 
 Scans Rust source files for bio_code! and bio_code_aligned! macros, extracts
 the inline assembly strings, checks each instruction for known BIO coprocessor
 errata, and optionally patches the file in-place.
 
 Usage:
-    python3 rs_errata_check.py <file.rs> [file2.rs ...]   # check only (default)
-    python3 rs_errata_check.py --autopatch <file.rs> ...   # patch in-place
+    python3 erratum_check.py <file.rs> [file2.rs ...]   # check only (default)
+    python3 erratum_check.py --autopatch <file.rs> ...   # patch in-place
 
 Errata covered:
   BUG 1 ("phantom rs1"): For lui/auipc/jal, bits [19:15] of the instruction
